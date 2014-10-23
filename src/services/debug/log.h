@@ -1,0 +1,31 @@
+/**
+* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+*
+* $COPYRIGHT$
+* $HEADER$
+*/
+
+#ifndef _SYS_LOG_H_
+#define _SYS_LOG_H_
+
+
+/**
+ * Logging levels
+ */
+typedef enum {
+    MOPSY_LOG_LEVEL_FATAL,
+    MOPSY_LOG_LEVEL_ERROR,
+    MOPSY_LOG_LEVEL_WARN,
+    MOPSY_LOG_LEVEL_INFO,
+    MOPSY_LOG_LEVEL_DEBUG,
+    MOPSY_LOG_LEVEL_TRACE,
+    MOPSY_LOG_LEVEL_TRACE_REQ,
+    MOPSY_LOG_LEVEL_TRACE_DATA,
+    MOPSY_LOG_LEVEL_TRACE_ASYNC,
+    MOPSY_LOG_LEVEL_TRACE_FUNC,
+    MOPSY_LOG_LEVEL_TRACE_POLL,
+    MOPSY_LOG_LEVEL_LAST
+} mopsy_log_level_t;
+
+
+#endif
