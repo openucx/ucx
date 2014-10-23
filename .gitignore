@@ -2,3 +2,5 @@
 .project
 .cproject
 .settings
+test/test
+libmopsy.so
