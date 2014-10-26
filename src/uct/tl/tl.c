@@ -5,7 +5,7 @@
 * $HEADER$
 */
 
-#include <uct/api/tl.h>
+#include <uct/api/uct.h>
 
 
 ucs_status_t uct_init(uct_context_h *context_p)

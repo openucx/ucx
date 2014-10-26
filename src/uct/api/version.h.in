@@ -1,0 +1,24 @@
+/**
+* Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+*
+* $COPYRIGHT$
+* $HEADER$
+*/
+
+
+#ifndef UCT_VERSION_H_
+#define UCT_VERSION_H_
+
+#define UCT_VERNO_MAJOR            @MAJOR_VERSION@
+#define UCT_VERNO_MINOR            @MINOR_VERSION@
+#define UCT_VERNO_REV              "@MICRO_VERSION@"
+#define UCT_VERNO_MICRO            @REV_COUNT@
+#define UCT_VERNO_STRIN             "@MAJOR_VERSION@.@MINOR_VERSION@.@REV_COUNT@"
+                                   
+#define UCT_MINOR_BIT              (16UL)
+#define UCT_MAJOR_BIT              (24UL)
+#define UCT_API                    ((@MAJOR_VERSION@L<<UCT_MAJOR_BIT)|(@MINOR_VERSION@L << UCT_MINOR_BIT))
+
+#define UCT_VERSION(major, minor)  (((major)<<UCT_MAJOR_BIT)|((minor)<<UCT_MINOR_BIT))
+
+#endif

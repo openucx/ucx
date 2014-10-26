@@ -8,6 +8,10 @@
 #ifndef UCT_TL_H_
 #define UCT_TL_H_
 
+#if !defined(UCT_H_)
+#  error "You should not include this header directly. Include uct.h instead."
+#endif
+
 #include "uct_def.h"
 
 #include <ucs/type/status.h>
