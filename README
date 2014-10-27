@@ -1,1 +1,7 @@
-This is the MOPSY project, the best HPC communication library ever made!
+This is the UCX project, the best HPC communication library ever made!
+
+UCX - Unified Communication X
+UCP - UCX Protocol
+UCT - UCX Transport
+UCS - UCX Services
+

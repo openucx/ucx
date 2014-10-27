@@ -1,0 +1,31 @@
+/**
+* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+*
+* $COPYRIGHT$
+* $HEADER$
+*/
+
+#ifndef UCS_DEBUG_LOG_H_
+#define UCS_DEBUG_LOG_H_
+
+
+/**
+ * Logging levels
+ */
+typedef enum {
+    UCS_LOG_LEVEL_FATAL,
+    UCS_LOG_LEVEL_ERROR,
+    UCS_LOG_LEVEL_WARN,
+    UCS_LOG_LEVEL_INFO,
+    UCS_LOG_LEVEL_DEBUG,
+    UCS_LOG_LEVEL_TRACE,
+    UCS_LOG_LEVEL_TRACE_REQ,
+    UCS_LOG_LEVEL_TRACE_DATA,
+    UCS_LOG_LEVEL_TRACE_ASYNC,
+    UCS_LOG_LEVEL_TRACE_FUNC,
+    UCS_LOG_LEVEL_TRACE_POLL,
+    UCS_LOG_LEVEL_LAST
+} ucs_log_level_t;
+
+
+#endif
