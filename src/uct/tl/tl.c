@@ -10,7 +10,7 @@
 
 ucs_status_t uct_init(uct_context_h *context_p)
 {
-    return UCS_SUCCESS;
+    return UCS_OK;
 }
 
 void uct_cleanup(uct_context_h context)

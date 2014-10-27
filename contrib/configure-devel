@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+#
+# $COPYRIGHT$
+# $HEADER$
+#
+
+#
+# UCX build for development.
+# Full logging and an runtime checks.
+#
+
+basedir=$(cd $(dirname $0) && pwd)
+$basedir/../configure \
+	--enable-gtest \
+	--with-valgrind \
+	--enable-instrumentation \
+	--enable-frame-pointer \
+	--enable-stats \
+	--enable-memtrack \
+	--enable-fault-injection \
+	--enable-debug-data \
+	"$@"

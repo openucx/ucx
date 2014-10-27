@@ -35,6 +35,6 @@ depcomp
 .dirstamp
 *.lo
 *.o
-
-
-
+src/ucs/ucs_stats_parser
+test/gtest/gtest
+build-*
