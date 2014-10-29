@@ -1,0 +1,31 @@
+
+
+* Style
+ - 4 spaces, no tabs
+ - up to 80 columns
+ - names must begin with ucp/uct/ucs
+ - single space around operators
+ - indent function arguments on column
+ - no spaces in the end-of-line
+ 
+* C++
+ - used only for unit testing
+ - lower-case class names (same as stl/boost)
+ 
+* Include order:
+  1. config.h
+  2. specific internal header
+  3. ucx headers
+  4. system headers
+
+* Doxygen
+ - all interface H/C files should have doxygen documentation.
+ 
+* Error handling
+ - all internal error codes must be ucs_status_t
+ - a function which returns error should print a log message
+ - the function which prints the log message is the first one which decides which
+   error it is. If a functions returns an error because it's callee returned 
+   erroneous ucs_status_t, it does not have to print a log message.
+
+* Logging

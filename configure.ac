@@ -3,6 +3,7 @@
 #
 # $COPYRIGHT$
 # $HEADER$
+#
 
 define([scm_r], esyscmd([sh -c "git rev-parse --short=7 HEAD"]))
 define([ucx_ver_major], 0)
@@ -51,12 +52,7 @@ AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 AC_HEADER_STDC
 LT_LIB_M
-AC_CHECK_LIB([rt], [shm_open], [], AC_MSG_ERROR([librt not found]))
-AC_SEARCH_LIBS(pthread_create, pthread)
-AC_CHECK_DECLS([F_SETOWN_EX], [], [], [#define _GNU_SOURCE 1
-#include <fcntl.h>])
-AC_CHECK_DECLS([__ppc_get_timebase_freq], [], [], [#include <sys/platform/ppc.h>])
-AC_CHECK_HEADERS([sys/platform/ppc.h])
+
 
 PKG_PROG_PKG_CONFIG
 PKG_CONFIG="pkg-config"
@@ -88,39 +84,6 @@ CXXFLAGS="$CFLAGS"
 
 
 #
-# Zlib
-#
-AC_ARG_WITH([zlib],
-            [AC_HELP_STRING([--with-zlib=DIR],
-                            [Specify path to external zlib library.])],
-            [if test "$withval" != no; then
-               if test "$withval" != yes; then
-                 ZLIB_DIR=$withval
-               fi
-             fi])
-if test -n "$ZLIB_DIR"; then
-  LDFLAGS="$LDFLAGS -L$ZLIB_DIR"
-fi
-
-
-#
-# RC Support
-#
-AC_ARG_WITH([rc],
-            [AC_HELP_STRING([--with-rc], [Compile with RC support])],
-            [],
-            [with_rc=yes])
-AM_CONDITIONAL([HAVE_TL_RC], [test "x$with_rc" != xno])
-AS_IF([test "x$with_rc" != xno], 
-      [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
-       transports="${transports},rc"])
-
-
-# Print which transports are supported
-AC_MSG_NOTICE([Supported transports: $transports])
-
-
-#
 # Debug mode
 #
 AC_ARG_ENABLE(debug,
@@ -133,90 +96,11 @@ AS_IF([test "x$enable_debug" == xyes],
 
 
 #
-# Valgrind support
+# Configure modules
 #
-AC_ARG_WITH([valgrind],
-    AC_HELP_STRING([--with-valgrind],
-                   [Enable Valgrind annotations (small runtime overhead, default NO)]),
-    [],
-    [with_valgrind=no]
-)
-AS_IF([test "x$with_valgrind" == xno],
-      [AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])
-      ],
-      [AC_CHECK_HEADER([valgrind/memcheck.h], [],
-                       [AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found, install valgrind-devel rpm.])])
-       if test -d $with_valgrind; then
-          CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
-       fi
-      ]
-)
-
-
-#
-# Zlib
-#
-AC_CHECK_LIB(z, compress2,, AC_MSG_WARN([zlib library not found]))
-
-
-#
-# Google Testing framework
-#
-GTEST_LIB_CHECK([1.5.0], [true], [true])
-
-
-#
-# Boost C++ library (if we're using gtest)
-#
-if test "x$HAVE_GTEST" = "xyes"; then
-	AX_BOOST_BASE([1.38], [],
-	              [AC_MSG_ERROR([Please install boost development libraries])])
-	AX_BOOST_THREAD
-fi
-
-
-#
-# Internal instrumentation support.
-# This option may affect perofrmance so it is off by default.
-#
-AC_ARG_ENABLE([instrumentation],
-	AS_HELP_STRING([--enable-instrumentation], [Enable instrumentation support, default: NO]),
-	[],
-	[enable_instrumentation=no])
-	
-AS_IF([test "x$enable_instrumentation" == xyes], 
-	[AC_DEFINE([HAVE_INSTRUMENTATION], [1], [Enable instrumentation])]
-	[:]
-)
-
-
-#
-# Detailed backtrace with debug information.
-# This option requires binutils-devel package.
-#
-AC_ARG_ENABLE([backtrace-detail],
-	AS_HELP_STRING([--disable-backtrace-detail], [Disable detailed backtrace support, default: NO]),
-	[],
-	[enable_backtrace_detail=yes])
-	
-AS_IF([test "x$enable_backtrace_detail" == xyes], 
-	[
-     BT=1
-     AC_CHECK_HEADER([bfd.h], [], [AC_MSG_WARN([binutils headers not found])]; BT=0)
-     AC_CHECK_HEADERS([libiberty.h libiberty/libiberty.h], [], [],
-                      [#define HAVE_DECL_BASENAME 1])
-     if test "x$ac_cv_header_libiberty_h" == "x" && test "x$ac_cv_header_libiberty_libiberty_h" == "x"; then
-         AC_MSG_WARN([binutils headers not found]); BT=0
-     fi
-	 AC_CHECK_LIB(bfd, bfd_init,  LIBS="$LIBS -lbfd", [AC_MSG_WARN([bfd library not found])];BT=0)
-	 AC_CHECK_LIB(iberty, xstrerror, LIBS="$LIBS -liberty", [AC_MSG_WARN([iberty library not found])];BT=0)
-     AC_CHECK_LIB(dl, dlopen, LIBS="$LIBS -ldl", [AC_MSG_WARN([dl library not found])];BT=0)
-     AC_CHECK_LIB(intl, main, LIBS="$LIBS -lintl", [AC_MSG_WARN([intl library not found])])
-     if test "x$BT" == "x1"; then
-         AC_DEFINE([HAVE_DETAILED_BACKTRACE], 1, [Enable detailed backtraces])
-     fi
-	]
-)
+m4_include([config/m4/sysdep.m4])
+m4_include([config/m4/ucs.m4])
+m4_include([config/m4/ib.m4])
 
 
 #
@@ -238,60 +122,6 @@ AS_IF([test "x$enable_frame_pointer" == xyes],
 
 
 #
-# Enable statistics and counters
-#
-AC_ARG_ENABLE([stats],
-	AS_HELP_STRING([--enable-stats], 
-	               [Enable statistics, useful for profiling, default: NO]),
-	[],
-	[enable_stats=no])
-	
-AS_IF([test "x$enable_stats" == xyes], 
-	  [AS_MESSAGE([enabling statistics])
-	   AC_DEFINE([ENABLE_STATS], [1], [Enable statistics])
-	   HAVE_STATS=yes],
-	  [:]
-  )
-AM_CONDITIONAL([HAVE_STATS],[test "x$HAVE_STATS" = "xyes"])
-
-
-#
-# Enable tuning params at runtime
-#
-AC_ARG_ENABLE([tuning],
-	AS_HELP_STRING([--enable-tuning], 
-	               [Enable parameter tuning in run-time, default: NO]),
-	[],
-	[enable_tuning=no])
-	
-AS_IF([test "x$enable_tuning" == xyes], 
-	  [AS_MESSAGE([enabling tuning])
-	   AC_DEFINE([ENABLE_TUNING], [1], [Enable tuning])
-	   HAVE_TUNING=yes],
-	  [:]
-  )
-AM_CONDITIONAL([HAVE_TUNING],[test "x$HAVE_TUNING" = "xyes"])
-
-
-#
-# Enable memory tracking
-#
-AC_ARG_ENABLE([memtrack],
-	AS_HELP_STRING([--enable-memtrack], 
-	               [Enable memory tracking, useful for profiling, default: NO]),
-	[],
-	[enable_memtrack=no])
-	
-AS_IF([test "x$enable_memtrack" == xyes], 
-	  [AS_MESSAGE([enabling memory tracking])
-	   AC_DEFINE([ENABLE_MEMTRACK], [1], [Enable memory tracking])
-	   HAVE_MEMTRACK=yes],
-	  [:]
-  )
-AM_CONDITIONAL([HAVE_MEMTRACK],[test "x$HAVE_MEMTRACK" = "xyes"])
-
-
-#
 # Enable fault injection code
 #
 AC_ARG_ENABLE([fault-injection],
@@ -305,30 +135,6 @@ AS_IF([test "x$enable_fault_injection" == xyes],
 	   AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
 	  [:]
   )
-
-
-#
-# Disable logging levels below INFO
-#
-AC_ARG_ENABLE([logging],
-	AS_HELP_STRING([--enable-logging],
-	               [Enable debug logging, default: YES])
-	)
-
-AS_IF([test "x$enable_logging" != xno],
-        [AC_DEFINE([UCX_MAX_LOG_LEVEL], [UCX_LOG_LEVEL_TRACE_POLL], [Highest log level])],
-        [AC_DEFINE([UCX_MAX_LOG_LEVEL], [UCX_LOG_LEVEL_INFO], [Highest log level])]
-    )
-
-
-#
-# Disable assertions
-#
-AC_ARG_ENABLE([assertions],
-	AS_HELP_STRING([--disable-assertions], 
-	               [Disable code assertions, default: NO]),
-	[],
-	[AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])])
 
 
 #
@@ -352,6 +158,11 @@ AC_ARG_ENABLE([debug-data],
 
 
 #
+# Print which transports are built
+#
+AC_MSG_NOTICE([Supported transports: $transports])
+
+#
 # Final output
 #
 AC_CONFIG_FILES([
@@ -359,6 +170,7 @@ AC_CONFIG_FILES([
                  src/ucs/Makefile
                  src/uct/Makefile
                  src/uct/api/version.h
+                 test/gtest/Makefile
                  ])
 
 AC_OUTPUT

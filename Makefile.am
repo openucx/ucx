@@ -10,7 +10,7 @@
 
 ACLOCAL_AMFLAGS = -I config/m4
 
-SUBDIRS = src/uct
+SUBDIRS = src/uct src/ucs test/gtest
 
 EXTRA_DIST =
 EXTRA_DIST += m4/gtest.m4

@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+#
+# $COPYRIGHT$
+# $HEADER$
+#
+
+#
+# UCX build for maximal performance.
+# No extra debugging or profiling code.
+#
+
+basedir=$(cd $(dirname $0) && pwd)
+$basedir/../configure \
+	--disable-logging \
+	--disable-debug \
+	--disable-assertions \
+	--disable-params-check \
+	"$@"
