@@ -1,8 +1,3 @@
-;;
-;; License goes here
-;;
-
-;;
 ;; Usage:
 ;; add our tweaks to c-mode
 ;; The basic indentation
