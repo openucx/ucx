@@ -9,7 +9,7 @@ lib_LTLIBRARIES     = libuct.la
 
 libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
-libuct_la_LIBADD   = $(LIBM)
+libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)
 
 nobase_dist_libuct_la_HEADERS = \
@@ -18,7 +18,18 @@ nobase_dist_libuct_la_HEADERS = \
 	api/uct.h \
 	api/version.h
 
-noinst_HEADERS =
+noinst_HEADERS = \
+	tl/context.h
 
 libuct_la_SOURCES = \
+	tl/context.c \
 	tl/tl.c
+
+
+if HAVE_IB
+noinst_HEADERS += \
+	ib/ib_context.h
+
+libuct_la_SOURCES += \
+	ib/ib_context.c
+endif
