@@ -51,6 +51,7 @@ noinst_HEADERS = \
 	time/timerq.h \
 	type/status.h \
 	type/callback.h \
+	type/component.h \
 	type/spinlock.h
 	
 libucs_la_SOURCES = \
@@ -73,6 +74,7 @@ libucs_la_SOURCES = \
 	time/timer_wheel.c \
 	time/timerq.c \
 	type/callback.c \
+	type/component.c \
 	type/status.c
 	
 libucstest_la_SOURCES = \

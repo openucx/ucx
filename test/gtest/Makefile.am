@@ -39,6 +39,7 @@ gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
 
 gtest_SOURCES = \
+	ucs/test_component.cc \
 	ucs/test_config.cc \
 	ucs/test_datatype.cc \
 	ucs/test_debug.cc \
