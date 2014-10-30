@@ -8,6 +8,7 @@
 #include "test_helpers.h"
 
 extern "C" {
+#include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 }
 
