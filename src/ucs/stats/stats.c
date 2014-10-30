@@ -17,6 +17,8 @@
 #include <sys/ioctl.h>
 
 
+#if ENABLE_STATS
+
 enum {
     UCS_STATS_FLAG_ON_EXIT        = UCS_BIT(0),
     UCS_STATS_FLAG_ON_TIMER       = UCS_BIT(1),
@@ -442,3 +444,24 @@ int ucs_stats_is_active()
 {
     return ucs_stats_context.flags & (UCS_STATS_FLAG_SOCKET|UCS_STATS_FLAG_STREAM);
 }
+
+#else
+
+void mxm_stats_init()
+{
+}
+
+void mxm_stats_cleanup()
+{
+}
+
+void mxm_stats_dump()
+{
+}
+
+int mxm_stats_is_active()
+{
+    return 0;
+}
+
+#endif
