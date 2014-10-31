@@ -62,17 +62,27 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max)
 
 const char *ucs_get_exe()
 {
-    static char exe[1024];
-    int ret;
+#ifdef __linux__
+  static char exe[1024];
+  int ret;
 
-    ret = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
-    if (ret < 0) {
-        exe[0] = '\0';
-    } else {
-        exe[ret] = '\0';
-    }
+  ret = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+  if (ret < 0) {
+    exe[0] = '\0';
+  } else {
+    exe[ret] = '\0';
+  }
 
-    return exe;
+  return exe;
+#elif __APPLE__
+  int ret;
+  static char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+  pid_t pid = getpid();
+
+  ret = proc_pidpath(pid, pathbuf, sizeof(pathbuf));
+
+  return (ret > 0) ? pathbuf : NULL;
+#endif /* __APPLE__ */
 }
 
 uint32_t ucs_file_checksum(const char *filename)
