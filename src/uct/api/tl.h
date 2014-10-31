@@ -61,9 +61,9 @@ struct uct_ops {
     void         (*iface_close)(uct_iface_h iface);
 
     ucs_status_t (*iface_query)(uct_iface_h iface,
-                                  uct_iface_attr_t *iface_attr);
+                                uct_iface_attr_t *iface_attr);
     ucs_status_t (*iface_get_address)(uct_iface_h iface,
-                                        uct_iface_addr_t *iface_addr);
+                                      uct_iface_addr_t *iface_addr);
 
     ucs_status_t (*ep_create)(uct_ep_h *ep_p);
     void         (*ep_destroy)(uct_ep_h ep);
