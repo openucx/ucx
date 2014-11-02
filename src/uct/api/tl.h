@@ -15,13 +15,16 @@
 #include "uct_def.h"
 
 #include <ucs/type/status.h>
+#include <sys/socket.h>
 #include <stddef.h>
+#include <sched.h>
 
 
 /**
  * Communication interface context
  */
 typedef struct uct_iface {
+    uct_tl_ops_t             *ops;
 } uct_iface_t;
 
 
@@ -29,7 +32,7 @@ typedef struct uct_iface {
  * Remote endpoint
  */
 typedef struct uct_ep {
-    uct_ops_t           *ops;
+    uct_tl_ops_t             *ops;
 } uct_ep_t;
 
 
@@ -53,11 +56,31 @@ typedef struct uct_iface_attr {
 
 
 /**
+ * Communication resource.
+ */
+typedef struct uct_resource_desc {
+    char                     tl_name[64];  /* Transport name */
+    char                     hw_name[64];  /* Hardware resource name */
+    uint64_t                 latency;      /* Latency, nanoseconds */
+    size_t                   bandwidth;    /* Bandwidth, bytes/second */
+    cpu_set_t                local_cpus;   /* Mask of CPUs near the resource */
+    socklen_t                addrlen;      /* Size of address */
+    struct sockaddr_storage  subnet_addr;  /* Subnet address. Devices which can
+                                              reach each other have same address */
+} uct_resource_desc_t;
+
+
+/**
  * Transport operations.
  */
-struct uct_ops {
+struct uct_tl_ops {
 
-    ucs_status_t (*iface_open)(uct_context_h *context, uct_iface_h *iface_p);
+    ucs_status_t (*query_resources)(uct_context_h context,
+                                    uct_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p);
+
+    ucs_status_t (*iface_open)(uct_context_h context, const char *hw_name,
+                               uct_iface_h *iface_p);
     void         (*iface_close)(uct_iface_h iface);
 
     ucs_status_t (*iface_query)(uct_iface_h iface,
@@ -80,7 +103,6 @@ struct uct_ops {
 
     ucs_status_t (*iface_flush)(uct_iface_h iface, uct_req_h *req_p,
                                   uct_completion_cb_t cb);
-
 };
 
 

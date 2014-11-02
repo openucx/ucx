@@ -338,6 +338,15 @@ uint64_t ucs_string_to_id(const char* str)
     return id;
 }
 
+void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
+{
+    va_list ap;
+
+    memset(buf, 0, size);
+    va_start(ap, fmt);
+    vsnprintf(buf, size - 1, fmt, ap);
+    va_end(ap);
+}
 
 ssize_t ucs_read_file(char *buffer, size_t max, int silent,
                       const char *filename_fmt, ...)

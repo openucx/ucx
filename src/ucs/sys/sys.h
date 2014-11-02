@@ -173,6 +173,18 @@ uint64_t ucs_string_to_id(const char *str);
 
 
 /**
+ * Format a string to a buffer of given size, and fill the rest of the buffer
+ * with '\0'. Also, guarantee that the last char in the buffer is '\0'.
+ *
+ * @param buf  Buffer to format the string to.
+ * @param size Buffer size.
+ * @param fmt  Format string.
+ */
+void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
+    UCS_F_PRINTF(3, 4);
+
+
+/**
  * Read file contents into a string. If the size of the data is smaller than the
  * supplied upper limit (max), a null terminator is appended to the data.
  *

@@ -54,26 +54,29 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
 
-.PHONY: test test gdb valgrind fix_rpath
+.PHONY: test test gdb valgrind fix_rpath uct
 
 all-local: gtest
 
-test: gtest
+uct:
+	$(MAKE) -C $(top_builddir)/src/uct
+
+test: uct gtest
 	@rm -f core.*
 	$(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 	
-test_gdb:
+test_gdb: uct gtest
 	echo 'r' > .gdbcommands
 	env UCS_HANDLE_ERRORS=none UCS_GDB_PATH="" gdb -x .gdbcommands --args $(GDB_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 
 list: gtest
 	$(abs_builddir)/gtest --gtest_list_tests --gtest_filter=$(GTEST_FILTER)
 
-test_valgrind: gtest
+test_valgrind: uct gtest
 	. /usr/share/Modules/init/sh && \
 	module load dev/mofed_valgrind && \
 	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 
-test_jenkins_valgrind: gtest
+test_jenkins_valgrind: uct gtest
 	valgrind $(VALGRIND_ARGS) $(VALGRIND_EXTRA_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 	
