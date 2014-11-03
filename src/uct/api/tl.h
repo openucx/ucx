@@ -59,8 +59,8 @@ typedef struct uct_iface_attr {
  * Communication resource.
  */
 typedef struct uct_resource_desc {
-    char                     tl_name[64];  /* Transport name */
-    char                     hw_name[64];  /* Hardware resource name */
+    char                     tl_name[UCT_MAX_NAME_LEN];  /* Transport name */
+    char                     hw_name[UCT_MAX_NAME_LEN];  /* Hardware resource name */
     uint64_t                 latency;      /* Latency, nanoseconds */
     size_t                   bandwidth;    /* Bandwidth, bytes/second */
     cpu_set_t                local_cpus;   /* Mask of CPUs near the resource */

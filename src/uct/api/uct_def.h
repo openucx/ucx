@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 
+#define UCT_MAX_NAME_LEN         64
 
 typedef struct uct_context       *uct_context_h;
 typedef struct uct_iface         *uct_iface_h;

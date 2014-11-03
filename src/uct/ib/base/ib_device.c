@@ -14,41 +14,41 @@
 #include <sched.h>
 
 
-static ucs_status_t
-uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
+static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
 {
     char *p, buf[CPU_SETSIZE];
     ssize_t nread;
     uint32_t word;
     int base, k;
 
-    nread = ucs_read_file(buf, sizeof(buf), 0,
+    CPU_ZERO(cpu_mask);
+    nread = ucs_read_file(buf, sizeof(buf), 1,
                           "/sys/class/infiniband/%s/device/local_cpus",
                           dev_name);
-    if (nread < 0) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    base = 0;
-    CPU_ZERO(cpu_mask);
-    do {
-        p = strrchr(buf, ',');
-        if (p == NULL) {
-            p = buf;
-        } else if (*p == ',') {
-            *(p++) = 0;
-        }
-
-        word = strtoul(p, 0, 16);
-        for (k = 0; word; ++k, word >>= 1) {
-            if (word & 1) {
-                CPU_SET(base + k, cpu_mask);
+    if (nread >= 0) {
+        base = 0;
+        do {
+            p = strrchr(buf, ',');
+            if (p == NULL) {
+                p = buf;
+            } else if (*p == ',') {
+                *(p++) = 0;
             }
-        }
-        base += 32;
-    } while ((base < CPU_SETSIZE) && (p != buf));
 
-    return UCS_OK;
+            word = strtoul(p, 0, 16);
+            for (k = 0; word; ++k, word >>= 1) {
+                if (word & 1) {
+                    CPU_SET(base + k, cpu_mask);
+                }
+            }
+            base += 32;
+        } while ((base < CPU_SETSIZE) && (p != buf));
+    } else {
+        /* If affinity file is not present, treat all CPUs as local */
+        for (k = 0; k < CPU_SETSIZE; ++k) {
+            CPU_SET(k, cpu_mask);
+        }
+    }
 }
 
 ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t **dev_p)
@@ -105,10 +105,7 @@ ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t
     dev->num_ports   = num_ports;
 
     /* Get device locality */
-    status = uct_ib_device_get_affinity(ibv_get_device_name(ibv_device), &dev->local_cpus);
-    if (status != UCS_OK) {
-        goto err_free_device;
-    }
+    uct_ib_device_get_affinity(ibv_get_device_name(ibv_device), &dev->local_cpus);
 
     /* Query all ports */
     for (i = 0; i < dev->num_ports; ++i) {

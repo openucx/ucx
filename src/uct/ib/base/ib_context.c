@@ -42,7 +42,8 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
     /* Allocate resources array */
     resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "resource desc");
     if (resources == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     /* Second pass: fill port information */
@@ -68,6 +69,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
 
 err_free:
     ucs_free(resources);
+err:
     return status;
 }
 
