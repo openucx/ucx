@@ -3,12 +3,18 @@
 * Style
  - 4 spaces, no tabs
  - up to 80 columns
- - names must begin with ucp/uct/ucs
  - single space around operators
  - indent function arguments on column
  - no spaces in the end-of-line
  
-* C++
+ * Naming convention:
+ - lower case, underscores
+ - names must begin with ucp/uct/ucs
+ - an output argument which is a pointer to a user variable has _p suffix
+ - value types (e.g struct types, integer types) have _t suffix
+ - pointer to structs, which are used as API handles, have _h suffix
+ 
+ * C++
  - used only for unit testing
  - lower-case class names (same as stl/boost)
  

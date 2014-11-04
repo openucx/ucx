@@ -70,6 +70,13 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
                             const char *hw_name, uct_iface_h *iface_p);
 
+
+/**
+ * @brief Close a communication interface.
+ *
+ * @param [in]  iface         Interface to close.
+ */
 void uct_iface_close(uct_iface_h iface);
+
 
 #endif
