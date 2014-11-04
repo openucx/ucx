@@ -8,7 +8,7 @@
 lib_LTLIBRARIES     = libuct.la
 
 libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src
-libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION) $(IBVERBS_LDFLAGS)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)
 
@@ -25,11 +25,24 @@ libuct_la_SOURCES = \
 	tl/context.c \
 	tl/tl.c
 
-
 if HAVE_IB
 noinst_HEADERS += \
-	ib/ib_context.h
+	ib/base/ib_context.h \
+	ib/base/ib_device.h \
+	ib/base/ib_iface.h
+	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \
-	ib/ib_context.c
+	ib/base/ib_context.c \
+	ib/base/ib_device.c \
+	ib/base/ib_iface.c
+endif
+
+if HAVE_TL_RC
+noinst_HEADERS += \
+	ib/rc/rc_iface.h
+
+libuct_la_SOURCES += \
+	ib/rc/rc_iface.c \
+	ib/rc/rc_tl.c
 endif

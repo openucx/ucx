@@ -10,13 +10,14 @@
 
 #include <stdint.h>
 
+#define UCT_MAX_NAME_LEN         64
 
 typedef struct uct_context       *uct_context_h;
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef struct uct_ep_addr       uct_ep_addr_t;
-typedef struct uct_ops           uct_ops_t;
+typedef struct uct_tl_ops        uct_tl_ops_t;
 typedef uint64_t                 uct_lkey_t;
 typedef uint64_t                 uct_rkey_t;
 typedef struct uct_req           *uct_req_h;
