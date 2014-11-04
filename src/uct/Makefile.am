@@ -22,8 +22,7 @@ noinst_HEADERS = \
 	tl/context.h
 
 libuct_la_SOURCES = \
-	tl/context.c \
-	tl/tl.c
+	tl/context.c
 
 if HAVE_IB
 noinst_HEADERS += \
@@ -36,13 +35,30 @@ libuct_la_SOURCES += \
 	ib/base/ib_context.c \
 	ib/base/ib_device.c \
 	ib/base/ib_iface.c
+
+if HAVE_MLX5_HW
+noinst_HEADERS += \
+	ib/mlx5/ib_mlx5.h
+
+libuct_la_SOURCES += \
+	ib/mlx5/ib_mlx5.c
+endif
+
 endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \
+	ib/rc/rc_ep.h \
 	ib/rc/rc_iface.h
 
 libuct_la_SOURCES += \
-	ib/rc/rc_iface.c \
-	ib/rc/rc_tl.c
+	ib/rc/rc_ep.c \
+	ib/rc/rc_iface.c
+
+if HAVE_MLX5_HW
+libuct_la_SOURCES += \
+	ib/rc/rc_mlx5.c \
+	ib/rc/rc_mlx5.h
+endif
+
 endif

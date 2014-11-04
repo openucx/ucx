@@ -178,6 +178,7 @@ AC_CONFIG_FILES([
                  src/uct/Makefile
                  src/uct/api/version.h
                  test/gtest/Makefile
+                 test/perf/Makefile
                  ])
 
 AC_OUTPUT

@@ -7,6 +7,7 @@
 
 #define _GNU_SOURCE /* for CPU_ZERO/CPU_SET in sched.h */
 #include "ib_device.h"
+#include "ib_context.h"
 
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
@@ -50,6 +51,71 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
         }
     }
 }
+
+static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
+{
+    pd_attr->rkey_packed_size  = sizeof(uint32_t);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void *address, size_t length,
+                                   uct_lkey_t *lkey_p)
+{
+    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
+    struct ibv_mr *mr;
+
+    mr = ibv_reg_mr(dev->pd, address, length,
+                    IBV_ACCESS_LOCAL_WRITE |
+                    IBV_ACCESS_REMOTE_WRITE |
+                    IBV_ACCESS_REMOTE_READ |
+                    IBV_ACCESS_REMOTE_ATOMIC);
+    if (mr == NULL) {
+        ucs_error("ibv_reg_mr() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *lkey_p = (uintptr_t)mr;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
+{
+    struct ibv_mr *mr = (void*)lkey;
+    int ret;
+
+    ret = ibv_dereg_mr(mr);
+    if (ret != 0) {
+        ucs_error("ibv_dereg_mr() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
+                                     void *rkey_buffer)
+{
+    struct ibv_mr *mr = (void*)lkey;
+
+    *(uint32_t*)rkey_buffer = htonl(mr->rkey); /* Use r-keys as big endian */
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+                                       uct_rkey_t *rkey_p)
+{
+    *rkey_p = *(uint32_t*)rkey_buffer;
+    return UCS_OK;
+}
+
+uct_pd_ops_t uct_ib_pd_ops = {
+    .query        = uct_ib_pd_query,
+    .mem_map      = uct_ib_mem_map,
+    .mem_unmap    = uct_ib_mem_unmap,
+    .rkey_pack    = uct_ib_rkey_pack,
+    .rkey_unpack  = uct_ib_rkey_unpack,
+    .rkey_release = (void*)ucs_empty_function
+};
 
 ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t **dev_p)
 {
@@ -99,6 +165,7 @@ ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t
     }
 
     /* Save device information */
+    dev->super.ops   = &uct_ib_pd_ops;
     dev->ibv_context = ibv_context;
     dev->dev_attr    = dev_attr;
     dev->first_port  = first_port;
@@ -119,6 +186,14 @@ ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t
         }
     }
 
+    /* Allocate protection domain */
+    dev->pd = ibv_alloc_pd(dev->ibv_context);
+    if (dev->pd == NULL) {
+        ucs_error("ibv_alloc_pd() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_device;
+    }
+
     ucs_debug("created device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
@@ -136,6 +211,7 @@ err:
 
 void uct_ib_device_destroy(uct_ib_device_t *dev)
 {
+    ibv_dealloc_pd(dev->pd);
     ibv_close_device(dev->ibv_context);
     ucs_free(dev);
 }
@@ -150,7 +226,22 @@ int uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned fl
         return 0;
     }
 
-    /* TODO check flags, e.g DC support */
+    if (flags & UCT_IB_RESOURCE_FLAG_DC) {
+        if (!IBV_DEVICE_HAS_DC(&dev->dev_attr)) {
+            return 0;
+        }
+    }
+
+    if (flags & UCT_IB_RESOURCE_FLAG_MLX4_PRM) {
+        return 0; /* Unsupported yet */
+    }
+
+    if (flags & UCT_IB_RESOURCE_FLAG_MLX5_PRM) {
+        /* TODO list all devices with their flags */
+        if (dev->dev_attr.vendor_id != 0x02c9 || dev->dev_attr.vendor_part_id != 4113) {
+            return 0;
+        }
+    }
 
     return 1;
 }

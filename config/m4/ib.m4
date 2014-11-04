@@ -76,13 +76,23 @@ AC_CHECK_HEADER([infiniband/verbs_exp.h],
 
 
 #
+# mlx5 PRM
+#
+with_mlx5_hw=no
+AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
+                 [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
+                  AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
+                  with_mlx5_hw=yes])
+
+
+#
 # For automake
 #
 AM_CONDITIONAL([HAVE_IB], [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC], [test "x$with_rc" != xno])
+AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 
 mlnx_valg_libdir=/usr/lib64/mlnx_ofed/valgrind
 AS_IF([test -d "$mlnx_valg_libdir"],
       [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
        valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
-

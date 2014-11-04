@@ -75,9 +75,11 @@ err:
 
 static void uct_ib_register_tls(uct_context_t *context)
 {
+#if HAVE_MLX5_HW
 #if HAVE_TL_RC
-    extern uct_tl_ops_t uct_rc_tl_ops;
-    uct_register_tl(context, "rc", &uct_rc_tl_ops);
+    extern uct_tl_ops_t uct_rc_mlx5_tl_ops;
+    uct_register_tl(context, "rc_mlx5", &uct_rc_mlx5_tl_ops);
+#endif
 #endif
 }
 
@@ -122,11 +124,8 @@ ucs_status_t uct_ib_init(uct_context_h context)
     if (ibctx->num_devices > 0) {
         ucs_debug("initialized IB component with %u devices", ibctx->num_devices);
         uct_ib_register_tls(context);
-        status = UCS_OK;
-    } else {
-        ucs_free(ibctx->devices);
-        status = UCS_ERR_NO_DEVICE;
     }
+    status = UCS_OK;
 
 out_free_device_list:
     ibv_free_device_list(device_list);

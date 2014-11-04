@@ -21,19 +21,25 @@
 
 
 /**
- * Communication interface context
+ * Communication resource.
  */
-typedef struct uct_iface {
-    uct_tl_ops_t             *ops;
-} uct_iface_t;
+typedef struct uct_resource_desc {
+    char                     tl_name[UCT_MAX_NAME_LEN];  /* Transport name */
+    char                     hw_name[UCT_MAX_NAME_LEN];  /* Hardware resource name */
+    uint64_t                 latency;      /* Latency, nanoseconds */
+    size_t                   bandwidth;    /* Bandwidth, bytes/second */
+    cpu_set_t                local_cpus;   /* Mask of CPUs near the resource */
+    socklen_t                addrlen;      /* Size of address */
+    struct sockaddr_storage  subnet_addr;  /* Subnet address. Devices which can
+                                              reach each other have same address */
+} uct_resource_desc_t;
 
 
-/**
- * Remote endpoint
- */
-typedef struct uct_ep {
-    uct_tl_ops_t             *ops;
-} uct_ep_t;
+struct uct_iface_addr {
+};
+
+struct uct_ep_addr {
+};
 
 
 /**
@@ -56,24 +62,17 @@ typedef struct uct_iface_attr {
 
 
 /**
- * Communication resource.
+ * Protection domain attributes
  */
-typedef struct uct_resource_desc {
-    char                     tl_name[UCT_MAX_NAME_LEN];  /* Transport name */
-    char                     hw_name[UCT_MAX_NAME_LEN];  /* Hardware resource name */
-    uint64_t                 latency;      /* Latency, nanoseconds */
-    size_t                   bandwidth;    /* Bandwidth, bytes/second */
-    cpu_set_t                local_cpus;   /* Mask of CPUs near the resource */
-    socklen_t                addrlen;      /* Size of address */
-    struct sockaddr_storage  subnet_addr;  /* Subnet address. Devices which can
-                                              reach each other have same address */
-} uct_resource_desc_t;
+typedef struct uct_pd_attr {
+    size_t                   rkey_packed_size; /* Size of buffer needed for packed rkey */
+} uct_pd_attr_t;
 
 
 /**
- * Transport operations.
+ * Transport "global" operations
  */
-struct uct_tl_ops {
+typedef struct uct_tl_ops {
 
     ucs_status_t (*query_resources)(uct_context_h context,
                                     uct_resource_desc_t **resources_p,
@@ -81,29 +80,83 @@ struct uct_tl_ops {
 
     ucs_status_t (*iface_open)(uct_context_h context, const char *hw_name,
                                uct_iface_h *iface_p);
-    void         (*iface_close)(uct_iface_h iface);
+} uct_tl_ops_t;
+
+
+/**
+ * Transport memory operations
+ */
+typedef struct uct_pd_ops {
+    ucs_status_t (*query)(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+
+    ucs_status_t (*mem_map)(uct_pd_h pd, void *address, size_t length,
+                            uct_lkey_t *lkey_p);
+
+    ucs_status_t (*mem_unmap)(uct_pd_h pd, uct_lkey_t lkey);
+
+    /* TODO support "mem attach", MPI-3 style */
+
+    ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer);
+
+    ucs_status_t (*rkey_unpack)(uct_pd_h pd, void *rkey_buffer, uct_rkey_t *rkey_p);
+
+    void         (*rkey_release)(uct_pd_h pd, uct_rkey_t rkey);
+} uct_pd_ops_t;
+
+
+/**
+ * Transport iface operations.
+ */
+typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_query)(uct_iface_h iface,
                                 uct_iface_attr_t *iface_attr);
     ucs_status_t (*iface_get_address)(uct_iface_h iface,
                                       uct_iface_addr_t *iface_addr);
 
-    ucs_status_t (*ep_create)(uct_ep_h *ep_p);
+    ucs_status_t (*iface_flush)(uct_iface_h iface, uct_req_h *req_p,
+                                uct_completion_cb_t cb);
+
+    void         (*iface_close)(uct_iface_h iface);
+
+    ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
     void         (*ep_destroy)(uct_ep_h ep);
 
-    ucs_status_t (*ep_get_address)(uct_ep_h *ep,
+    ucs_status_t (*ep_get_address)(uct_ep_h ep,
                                      uct_ep_addr_t *ep_addr);
-    ucs_status_t (*ep_connect_to_iface)(uct_iface_addr_t *iface_addr);
-    ucs_status_t (*ep_connect_to_ep)(uct_iface_addr_t *iface_addr,
-                                       uct_ep_addr_t *ep_addr);
+    ucs_status_t (*ep_connect_to_iface)(uct_ep_h ep, uct_iface_addr_t *iface_addr);
+    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, uct_iface_addr_t *iface_addr,
+                                     uct_ep_addr_t *ep_addr);
 
     ucs_status_t (*ep_put_short)(uct_ep_h ep, void *buffer, unsigned length,
-                                   uct_rkey_t rkey, uct_req_h *req_p,
-                                   uct_completion_cb_t cb);
+                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                 uct_req_h *req_p, uct_completion_cb_t cb);
+} uct_iface_ops_t;
 
-    ucs_status_t (*iface_flush)(uct_iface_h iface, uct_req_h *req_p,
-                                  uct_completion_cb_t cb);
-};
+
+/**
+ * Protection domain
+ */
+typedef struct uct_pd {
+    uct_pd_ops_t             *ops;
+} uct_pd_t;
+
+
+/**
+ * Communication interface context
+ */
+typedef struct uct_iface {
+    uct_iface_ops_t          ops;
+    uct_pd_h                 pd;
+} uct_iface_t;
+
+
+/**
+ * Remote endpoint
+ */
+typedef struct uct_ep {
+    uct_iface_h              iface;
+} uct_ep_t;
 
 
 #endif

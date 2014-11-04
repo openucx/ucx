@@ -16,6 +16,7 @@
 
 typedef struct uct_ib_device uct_ib_device_t;
 struct uct_ib_device {
+    uct_pd_t                    super;
     struct ibv_context          *ibv_context;    /* Verbs context */
     struct ibv_pd               *pd;             /* Protection domain */
     struct ibv_exp_device_attr  dev_attr;        /* Cached device attributes */

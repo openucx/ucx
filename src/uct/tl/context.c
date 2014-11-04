@@ -130,11 +130,7 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
         }
     }
 
-    /* Invalid transport name */
-    return UCS_ERR_INVALID_PARAM;
+    /* Non-existing transport */
+    return UCS_ERR_NO_ELEM;
 }
 
-void uct_iface_close(uct_iface_h iface)
-{
-    iface->ops->iface_close(iface);
-}

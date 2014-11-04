@@ -17,10 +17,10 @@ typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef struct uct_ep_addr       uct_ep_addr_t;
-typedef struct uct_tl_ops        uct_tl_ops_t;
-typedef uint64_t                 uct_lkey_t;
-typedef uint64_t                 uct_rkey_t;
+typedef uintptr_t                uct_lkey_t;
+typedef uintptr_t                uct_rkey_t;
 typedef struct uct_req           *uct_req_h;
-
+typedef struct uct_memory_region *uct_memory_region_h;
+typedef struct uct_pd            *uct_pd_h;
 
 #endif
