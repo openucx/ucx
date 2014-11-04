@@ -74,8 +74,7 @@ list: gtest
 
 test_valgrind: uct gtest
 	. /usr/share/Modules/init/sh && \
-	module load dev/mofed_valgrind && \
-	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
+	env LD_LIBRARY_PATH=/usr/lib64/mlnx_ofed/valgrind:${LD_LIBRARY_PATH} valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 
 test_jenkins_valgrind: uct gtest
 	valgrind $(VALGRIND_ARGS) $(VALGRIND_EXTRA_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
