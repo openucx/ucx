@@ -225,13 +225,14 @@ void *ucs_memtrack_mmap(void *addr, size_t length, int prot, int flags,
                         int fd, off_t offset UCS_MEMTRACK_ARG)
 {
     ucs_memtrack_buffer_t *res;
+
     if ((flags & MAP_FIXED) || !(prot & PROT_WRITE)) {
-        return NULL;
+        return MAP_FAILED;
     }
 
     res = mmap(addr, length + (ucs_memtrack_context.enabled ? sizeof(*res) : 0),
                prot, flags, fd, offset);
-    if ((res == NULL) || (!ucs_memtrack_context.enabled)) {
+    if ((res == MAP_FAILED) || (!ucs_memtrack_context.enabled)) {
         return res;
     }
 
