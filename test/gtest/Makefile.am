@@ -11,7 +11,6 @@ export UCS_HANDLE_ERRORS
 GTEST_FILTER ?= *
 export GTEST_FILTER
 
-#VALGRIND_EXTRA_ARGS = --xml=yes --xml-file=valgrind.xml
 VALGRIND_EXTRA_ARGS =
 
 VALGRIND_ARGS = \
