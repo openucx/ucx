@@ -29,7 +29,7 @@ if HAVE_IB
 noinst_HEADERS += \
 	ib/base/ib_context.h \
 	ib/base/ib_device.h \
-	ib/base/ib_iface.h
+	ib/base/ib_iface.h \
 	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \

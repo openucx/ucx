@@ -80,3 +80,9 @@ AC_CHECK_HEADER([infiniband/verbs_exp.h],
 #
 AM_CONDITIONAL([HAVE_IB], [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC], [test "x$with_rc" != xno])
+
+mlnx_valg_libdir=/usr/lib64/mlnx_ofed/valgrind
+AS_IF([test -d "$mlnx_valg_libdir"],
+      [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
+       valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
+

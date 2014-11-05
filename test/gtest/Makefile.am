@@ -11,7 +11,7 @@ export UCS_HANDLE_ERRORS
 GTEST_FILTER ?= *
 export GTEST_FILTER
 
-VALGRIND_EXTRA_ARGS = --xml=yes --xml-file=valgrind.xml
+VALGRIND_EXTRA_ARGS =
 
 VALGRIND_ARGS = \
 	--tool=memcheck \
@@ -73,10 +73,4 @@ list: gtest
 	$(abs_builddir)/gtest --gtest_list_tests --gtest_filter=$(GTEST_FILTER)
 
 test_valgrind: uct gtest
-	. /usr/share/Modules/init/sh && \
-	module load dev/mofed_valgrind && \
-	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
-
-test_jenkins_valgrind: uct gtest
-	valgrind $(VALGRIND_ARGS) $(VALGRIND_EXTRA_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
-	
+	env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" valgrind $(VALGRIND_ARGS) $(VALGRIND_EXTRA_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
