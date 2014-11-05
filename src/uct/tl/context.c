@@ -18,6 +18,10 @@ ucs_status_t uct_init(uct_context_h *context_p)
     uct_context_t *context;
 
     context = ucs_malloc(ucs_components_total_size(uct_context_t), "uct context");
+    if (context != UCS_OK) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     context->num_tls  = 0;
     context->tls      = NULL;
@@ -25,11 +29,16 @@ ucs_status_t uct_init(uct_context_h *context_p)
 
     status = ucs_components_init_all(uct_context_t, context);
     if (status != UCS_OK) {
-        return status;
+        goto err_free;
     }
 
     *context_p = context;
     return UCS_OK;
+
+err_free:
+    ucs_free(context);
+err:
+    return status;
 }
 
 void uct_cleanup(uct_context_h context)
