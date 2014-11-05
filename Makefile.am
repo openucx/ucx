@@ -23,4 +23,5 @@ EXTRA_DIST += config/m4/ib.m4
 EXTRA_DIST += config/m4/sysdep.m4
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
+EXTRA_DIST += contrib/configure-prof
 

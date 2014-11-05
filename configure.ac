@@ -19,6 +19,7 @@ define([libucx_so_version], 2:1:0)
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
 
 config_flags="$*"
+valgrind_libpath=""
 
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([1.10 foreign tar-ustar silent-rules subdir-objects])
@@ -155,6 +156,12 @@ AC_ARG_ENABLE([debug-data],
 	               [Enable collecting data to ease debugging, default: NO]),
 	[AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])],
 	[AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
+
+
+#
+# Path for valgrind-enabled libraries
+#
+AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
 
 
 #
