@@ -33,7 +33,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
         for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
                         ++port_num)
         {
-            if (uct_ib_device_port_check(dev, port_num, flags)) {
+            if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
                 ++num_resources;
             }
         }
@@ -53,7 +53,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
         for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
                         ++port_num)
         {
-            if (uct_ib_device_port_check(dev, port_num, flags)) {
+            if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
                 rsc = &resources[resource_index++];
                 status = uct_ib_device_port_get_resource(dev, port_num, rsc);
                 if (status != UCS_OK) {

@@ -216,34 +216,35 @@ void uct_ib_device_destroy(uct_ib_device_t *dev)
     ucs_free(dev);
 }
 
-int uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
+ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
+                                      unsigned flags)
 {
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
-        return 0;
+        return UCS_ERR_NO_DEVICE;
     }
 
     if (uct_ib_device_port_attr(dev, port_num)->state != IBV_PORT_ACTIVE) {
-        return 0;
+        return UCS_ERR_UNREACHABLE;
     }
 
     if (flags & UCT_IB_RESOURCE_FLAG_DC) {
         if (!IBV_DEVICE_HAS_DC(&dev->dev_attr)) {
-            return 0;
+            return UCS_ERR_UNSUPPORTED;
         }
     }
 
     if (flags & UCT_IB_RESOURCE_FLAG_MLX4_PRM) {
-        return 0; /* Unsupported yet */
+        return UCS_ERR_UNSUPPORTED; /* Unsupported yet */
     }
 
     if (flags & UCT_IB_RESOURCE_FLAG_MLX5_PRM) {
         /* TODO list all devices with their flags */
         if (dev->dev_attr.vendor_id != 0x02c9 || dev->dev_attr.vendor_part_id != 4113) {
-            return 0;
+            return UCS_ERR_UNSUPPORTED;
         }
     }
 
-    return 1;
+    return UCS_OK;
 }
 
 const char *uct_ib_device_name(uct_ib_device_t *dev)

@@ -31,7 +31,8 @@ ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t
 void uct_ib_device_destroy(uct_ib_device_t *dev);
 
 
-int uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags);
+ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
+                                      unsigned flags);
 
 ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
                                              uct_resource_desc_t *resource);
