@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -35,7 +35,7 @@ UCS_TEST_F(test_datatype, list_basic) {
     elem_t *iter, *tmp;
 
     ucs_list_head_init(&head);
-    ASSERT_EQ(0, ucs_list_length(&head));
+    ASSERT_EQ((unsigned long)0, ucs_list_length(&head));
     ucs_list_insert_after(&head, &elem0.list);
     ucs_list_insert_before(&head, &elem1.list);
 
@@ -46,13 +46,13 @@ UCS_TEST_F(test_datatype, list_basic) {
     ASSERT_EQ(2ul, vec.size());
     ASSERT_EQ(&elem0, vec[0]);
     ASSERT_EQ(&elem1, vec[1]);
-    ASSERT_EQ(2, ucs_list_length(&head));
+    ASSERT_EQ((unsigned long)2, ucs_list_length(&head));
 
     ucs_list_for_each_safe(iter, tmp, &head, list) {
         ucs_list_del(&iter->list);
     }
     ASSERT_TRUE(ucs_list_is_empty(&head));
-    ASSERT_EQ(0, ucs_list_length(&head));
+    ASSERT_EQ((unsigned long)0, ucs_list_length(&head));
 }
 
 UCS_TEST_F(test_datatype, list_splice) {
@@ -104,21 +104,21 @@ UCS_TEST_F(test_datatype, queue) {
     for (unsigned i = 0; i < 5; ++i) {
         ucs_queue_push(&head, &elem0.queue);
         EXPECT_FALSE(ucs_queue_is_empty(&head));
-        EXPECT_EQ(1, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
 
         ucs_queue_push(&head, &elem1.queue);
-        EXPECT_EQ(2, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)2, ucs_queue_length(&head));
 
         elem = ucs_queue_pull_elem_non_empty(&head, elem_t, queue);
         EXPECT_EQ(&elem0, elem);
-        EXPECT_EQ(1, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
 
         ucs_queue_push(&head, &elem2.queue);
-        EXPECT_EQ(2, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)2, ucs_queue_length(&head));
 
         elem = ucs_queue_pull_elem_non_empty(&head, elem_t, queue);
         EXPECT_EQ(&elem1, elem);
-        EXPECT_EQ(1, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
 
         elem = ucs_queue_pull_elem_non_empty(&head, elem_t, queue);
         EXPECT_EQ(&elem2, elem);
@@ -128,11 +128,11 @@ UCS_TEST_F(test_datatype, queue) {
         /* Push to head now */
 
         ucs_queue_push_head(&head, &elem2.queue);
-        EXPECT_EQ(1, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
 
         ucs_queue_push_head(&head, &elem1.queue);
         ucs_queue_push_head(&head, &elem0.queue);
-        EXPECT_EQ(3, ucs_queue_length(&head));
+        EXPECT_EQ((unsigned long)3, ucs_queue_length(&head));
 
         elem = ucs_queue_pull_elem_non_empty(&head, elem_t, queue);
         EXPECT_EQ(&elem0, elem);
@@ -197,7 +197,7 @@ UCS_TEST_F(test_datatype, queue_iter) {
                 free(elem);
             }
         }
-        ASSERT_EQ(2, ucs_queue_length(&head));
+        ASSERT_EQ((unsigned long)2, ucs_queue_length(&head));
 
         ucs_queue_for_each_safe(elem, iter, &head, queue) {
             vec.push_back(elem->i);
@@ -234,7 +234,7 @@ UCS_TEST_F(test_datatype, queue_perf) {
     UCS_TEST_MESSAGE << lat << " nsec per push+pull";
 
     EXPECT_LT(lat, 10.0 * ucs::test_time_multiplier());
-    EXPECT_EQ(1, ucs_queue_length(&head));
+    EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
 }
 
 UCS_TEST_F(test_datatype, queue_splice) {
@@ -254,13 +254,13 @@ UCS_TEST_F(test_datatype, queue_splice) {
     ucs_queue_head_t newq;
     ucs_queue_head_init(&newq);
 
-    EXPECT_EQ(3, ucs_queue_length(&head));
-    EXPECT_EQ(0, ucs_queue_length(&newq));
+    EXPECT_EQ((unsigned long)3, ucs_queue_length(&head));
+    EXPECT_EQ((unsigned long)0, ucs_queue_length(&newq));
 
     ucs_queue_splice(&newq, &head);
 
-    EXPECT_EQ(0, ucs_queue_length(&head));
-    EXPECT_EQ(3, ucs_queue_length(&newq));
+    EXPECT_EQ((unsigned long)0, ucs_queue_length(&head));
+    EXPECT_EQ((unsigned long)3, ucs_queue_length(&newq));
 
     elem = ucs_queue_pull_elem_non_empty(&newq, elem_t, queue);
     EXPECT_EQ(&elem0, elem);

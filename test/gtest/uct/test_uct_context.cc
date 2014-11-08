@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -33,8 +33,8 @@ UCS_TEST_F(test_uct, query_resources) {
         uct_resource_desc_t *res = &resources[i];
         EXPECT_TRUE(strcmp(res->tl_name, ""));
         EXPECT_TRUE(strcmp(res->hw_name, ""));
-        EXPECT_GT(res->latency, 0);
-        EXPECT_GT(res->bandwidth, 0);
+        EXPECT_GT(res->latency, (uint64_t)0);
+        EXPECT_GT(res->bandwidth, (size_t)0);
         UCS_TEST_MESSAGE << i << ": " << res->tl_name <<
                         " on " << res->hw_name <<
                         " at " << (res->bandwidth / 1024.0 / 1024.0) << " MB/sec";

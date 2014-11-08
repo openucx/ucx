@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
+# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -55,11 +55,11 @@ AS_IF([test "x$with_dc" != xno],
 #
 AS_IF([test "x$with_ib" != xno],
       [AC_CHECK_HEADER([infiniband/verbs.h], [],
-                       [AC_MSG_ERROR([ibverbs header files not found]);with_ib=no])
+                       [AC_MSG_WARN([ibverbs header files not found]);with_ib=no])
        save_LDFLAGS="$LDFLAGS"
        AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
                     [AC_SUBST(IBVERBS_LDFLAGS, [-libverbs])],
-                    [AC_MSG_ERROR([libibverbs not found]);with_ib=no])
+                    [AC_MSG_WARN([libibverbs not found]);with_ib=no])
        LDFLAGS="$save_LDFLAGS"
       ])
 AS_IF([test "x$with_ib" != xno],

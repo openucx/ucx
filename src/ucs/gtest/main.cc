@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -8,6 +8,9 @@
 #include <gtest/gtest.h>
 #include <boost/noncopyable.hpp>
 extern "C" {
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 #include <ucs/sys/sys.h>
 }
 

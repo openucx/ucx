@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -11,6 +11,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/stats/stats.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 
 enum {
