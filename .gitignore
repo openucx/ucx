@@ -37,4 +37,5 @@ depcomp
 *.o
 src/ucs/ucs_stats_parser
 test/gtest/gtest
+test/perf/ucx_perftest
 build-*

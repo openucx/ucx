@@ -50,7 +50,7 @@ static ucs_status_t uct_rc_mlx5_ep_create(uct_iface_h tl_iface, uct_ep_h *ep_p)
 
     status = uct_rc_ep_init(&ep->super);
     if (status != UCS_OK) {
-        goto err;
+        goto err_free;
     }
 
     status = uct_ib_mlx5_get_qp_info(ep->super.qp, &qp_info);
@@ -82,6 +82,8 @@ static ucs_status_t uct_rc_mlx5_ep_create(uct_iface_h tl_iface, uct_ep_h *ep_p)
 
 err_cleanup_rc_ep:
     uct_rc_ep_cleanup(&ep->super);
+err_free:
+    ucs_free(ep);
 err:
     return status;
 }

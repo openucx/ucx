@@ -37,6 +37,7 @@ int sock_init(int argc, char **argv, int *my_rank)
         optval = 1;
         ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
         if (ret < 0) {
+            close(sockfd);
             return ret;
         }
 
@@ -45,22 +46,27 @@ int sock_init(int argc, char **argv, int *my_rank)
         ret = bind(sockfd, (struct sockaddr*)&inaddr, sizeof(inaddr));
         if (ret < 0) {
             fprintf(stderr, "bind() failed: %m\n");
+            close(sockfd);
             return ret;
         }
 
         ret = listen(sockfd, 100);
         if (ret < 0) {
             fprintf(stderr, "listen() failed: %m\n");
+            close(sockfd);
             return ret;
         }
 
         *my_rank = 0;
         printf("Waiting for connection...\n");
-        return accept(sockfd, NULL, NULL);
+        ret = accept(sockfd, NULL, NULL);
+        close(sockfd);
+        return ret;
     } else {
          he = gethostbyname(argv[1]);
          if (he == NULL || he->h_addr_list == NULL) {
              fprintf(stderr, "host %s not found: %s\n", argv[1], hstrerror(h_errno));
+             close(sockfd);
              return -1;
          }
 
@@ -70,6 +76,7 @@ int sock_init(int argc, char **argv, int *my_rank)
          ret = connect(sockfd, (struct sockaddr*)&inaddr, sizeof(inaddr));
          if (ret < 0) {
              fprintf(stderr, "connect() failed: %m\n");
+             close(sockfd);
              return -1;
          }
 
