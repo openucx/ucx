@@ -14,6 +14,7 @@
 #include <ucs/sys/sys.h>
 #include <sched.h>
 
+#define UCT_IB_RKEY_MAGIC  0x69626962  /* ibib *(const uint32_t*)"ibib" */
 
 static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
 {
@@ -54,12 +55,12 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
 
 static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    pd_attr->rkey_packed_size  = sizeof(uint32_t);
+    pd_attr->rkey_packed_size  = sizeof(uint32_t) * 2;
     return UCS_OK;
 }
 
 static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void *address, size_t length,
-                                   uct_lkey_t *lkey_p)
+                                   unsigned flags, uct_lkey_t *lkey_p)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
     struct ibv_mr *mr;
@@ -96,15 +97,26 @@ static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
                                      void *rkey_buffer)
 {
     struct ibv_mr *mr = (void*)lkey;
+    uint32_t *ptr = rkey_buffer;
 
-    *(uint32_t*)rkey_buffer = htonl(mr->rkey); /* Use r-keys as big endian */
+    *(ptr++) = UCT_IB_RKEY_MAGIC;
+    *(ptr++) = htonl(mr->rkey); /* Use r-keys as big endian */
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
-                                       uct_rkey_t *rkey_p)
+ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
+                                uct_rkey_bundle_t *rkey_ob)
 {
-    *rkey_p = *(uint32_t*)rkey_buffer;
+    uint32_t *ptr = rkey_buffer;
+    uint32_t magic;
+
+    magic = *(ptr++);
+    if (magic != UCT_IB_RKEY_MAGIC) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    rkey_ob->rkey = *(ptr++);
+    rkey_ob->type = (void*)ucs_empty_function;
     return UCS_OK;
 }
 
@@ -113,8 +125,6 @@ uct_pd_ops_t uct_ib_pd_ops = {
     .mem_map      = uct_ib_mem_map,
     .mem_unmap    = uct_ib_mem_unmap,
     .rkey_pack    = uct_ib_rkey_pack,
-    .rkey_unpack  = uct_ib_rkey_unpack,
-    .rkey_release = (void*)ucs_empty_function
 };
 
 ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t **dev_p)

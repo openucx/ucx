@@ -118,12 +118,13 @@ public:
         free(iface_addr);
     }
 
-    void mem_map(void *address, size_t length, uct_lkey_t *lkey_p, uct_rkey_t *rkey_p) {
+    void mem_map(void *address, size_t length, uct_lkey_t *lkey_p,
+                 uct_rkey_bundle_t *rkey_p) {
         ucs_status_t status;
         void *rkey_buffer;
         uct_pd_attr_t pd_attr;
 
-        status = uct_pd_mem_map(m_iface->pd, address, length, lkey_p);
+        status = uct_mem_map(m_iface->pd, address, length, 0, lkey_p);
         ASSERT_UCS_OK(status);
 
         status = uct_pd_query(m_iface->pd, &pd_attr);
@@ -132,19 +133,19 @@ public:
         rkey_buffer = malloc(pd_attr.rkey_packed_size);
         ASSERT_TRUE(rkey_buffer != NULL);
 
-        status = uct_pd_rkey_pack(m_iface->pd, *lkey_p, rkey_buffer);
+        status = uct_rkey_pack(m_iface->pd, *lkey_p, rkey_buffer);
         ASSERT_UCS_OK(status);
 
-        status = uct_pd_rkey_unpack(m_iface->pd, rkey_buffer, rkey_p);
+        status = uct_rkey_unpack(m_ucth, rkey_buffer, rkey_p);
         ASSERT_UCS_OK(status);
 
         free(rkey_buffer);
     }
 
-    void mem_unmap(uct_lkey_t lkey, uct_lkey_t rkey) {
+    void mem_unmap(uct_lkey_t lkey, uct_rkey_bundle_t *rkey) {
         ucs_status_t status;
-        uct_pd_rkey_release(m_iface->pd, rkey);
-        status = uct_pd_mem_unmap(m_iface->pd, lkey);
+        uct_rkey_release(m_ucth, rkey);
+        status = uct_mem_unmap(m_iface->pd, lkey);
         ASSERT_UCS_OK(status);
     }
 
@@ -170,9 +171,9 @@ public:
 UCS_TEST_F(test_uct, connect_ep) {
 
     const uint64_t magic = 0xdeadbeed1ee7a880;
-    entity e1, e2;
+    uct_rkey_bundle_t rkey;
     uct_lkey_t lkey;
-    uct_rkey_t rkey;
+    entity e1, e2;
     uint64_t val8;
 
     e2.mem_map(&val8, sizeof(val8), &lkey, &rkey);
@@ -181,7 +182,7 @@ UCS_TEST_F(test_uct, connect_ep) {
     e2.connect(e1);
 
     val8 = 0;
-    e1.put8(magic, (uintptr_t)&val8, rkey);
+    e1.put8(magic, (uintptr_t)&val8, rkey.rkey);
 
     usleep(100000);
 
@@ -189,6 +190,6 @@ UCS_TEST_F(test_uct, connect_ep) {
 
     EXPECT_EQ(magic, val8);
 
-    e2.mem_unmap(lkey, rkey);
+    e2.mem_unmap(lkey, &rkey);
 
 }

@@ -72,35 +72,51 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
                             const char *hw_name, uct_iface_h *iface_p);
 
 
+/**
+ * @ingroup CONTEXT
+ *
+ * @brief Unpack a remote key.
+ *
+ * @param [in]  context      Handle to context.
+ * @param [in]  rkey_buffer  Packet remote key buffer.
+ * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
+                             uct_rkey_bundle_t *rkey_ob);
+
+
+/**
+ * @ingroup CONTEXT
+ *
+ * @brief Unpack a remote key.
+ *
+ * @param [in]  context      Handle to context.
+ * @param [in]  rkey_ob      Remote key to release.
+ */
+void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob);
+
+
 static inline ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
     return pd->ops->query(pd, pd_attr);
 }
 
-static inline ucs_status_t uct_pd_mem_map(uct_pd_h pd, void *address,
-                                          size_t length, uct_lkey_t *lkey_p)
+static inline ucs_status_t uct_mem_map(uct_pd_h pd, void *address, size_t length,
+                                       unsigned flags, uct_lkey_t *lkey_p)
 {
-    return pd->ops->mem_map(pd, address, length, lkey_p);
+    return pd->ops->mem_map(pd, address, length, flags, lkey_p);
 }
 
-static inline ucs_status_t uct_pd_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
+static inline ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 {
     return pd->ops->mem_unmap(pd, lkey);
 }
 
-static inline ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer)
+static inline ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer)
 {
     return pd->ops->rkey_pack(pd, lkey, rkey_buffer);
-}
-
-static inline ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, void *rkey_buffer, uct_rkey_t *rkey_p)
-{
-    return pd->ops->rkey_unpack(pd, rkey_buffer, rkey_p);
-}
-
-static inline void uct_pd_rkey_release(uct_pd_h pd, uct_rkey_t rkey)
-{
-    pd->ops->rkey_release(pd, rkey);
 }
 
 static inline ucs_status_t uct_iface_query(uct_iface_h iface,

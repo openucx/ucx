@@ -98,7 +98,7 @@ int main(int argc, char **argv)
     static const uint64_t count = 1000000ul;
     static volatile uint64_t shared_val8;
     unsigned long vaddr;
-    uct_rkey_t rkey;
+    uct_rkey_bundle_t rkey;
     void *rkey_buffer;
     uct_lkey_t lkey;
     uct_iface_addr_t *iface_addr;
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
     }
 
     shared_val8 = -1;
-    status = uct_pd_mem_map(iface->pd, (void*)&shared_val8, sizeof(shared_val8), &lkey);
+    status = uct_mem_map(iface->pd, (void*)&shared_val8, sizeof(shared_val8), 0, &lkey);
     if (status != UCS_OK) {
         fprintf(stderr, "Failed to register\n");
         return -1;
@@ -175,14 +175,14 @@ int main(int argc, char **argv)
     vaddr = (uintptr_t)&shared_val8;
 
     rkey_buffer = malloc(pd_attr.rkey_packed_size);
-    status = uct_pd_rkey_pack(iface->pd, lkey, rkey_buffer);
+    status = uct_rkey_pack(iface->pd, lkey, rkey_buffer);
     if (status != UCS_OK) {
         fprintf(stderr, "Failed to pack rkey\n");
         return -1;
     }
 
     xchg(sockfd, rkey_buffer, pd_attr.rkey_packed_size);
-    status = uct_pd_rkey_unpack(iface->pd, rkey_buffer, &rkey);
+    status = uct_rkey_unpack(context, rkey_buffer, &rkey);
     if (status != UCS_OK) {
         fprintf(stderr, "Failed to unpack rkey\n");
         return -1;
@@ -203,13 +203,13 @@ int main(int argc, char **argv)
 
     if (my_rank == 0) {
         for (value = 0; value < 100; ++value) {
-            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey, NULL, NULL);
+            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey.rkey, NULL, NULL);
             while (shared_val8 != value);
         }
     } else if (my_rank == 1) {
         for (value = 0; value < 100; ++value) {
             while (shared_val8 != value);
-            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey, NULL, NULL);
+            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey.rkey, NULL, NULL);
         }
     }
 
@@ -217,13 +217,13 @@ int main(int argc, char **argv)
 
     if (my_rank == 0) {
         for (value = 0; value < count; ++value) {
-            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey, NULL, NULL);
+            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey.rkey, NULL, NULL);
             while (shared_val8 != value);
         }
     } else if (my_rank == 1) {
         for (value = 0; value < count; ++value) {
             while (shared_val8 != value);
-            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey, NULL, NULL);
+            uct_ep_put_short(ep, &value, sizeof(value), vaddr, rkey.rkey, NULL, NULL);
         }
     }
 
@@ -233,8 +233,8 @@ int main(int argc, char **argv)
 
     printf("Test done latency=%.3f usec\n",  lat);
 
-    uct_pd_rkey_release(iface->pd, rkey);
-    uct_pd_mem_unmap(iface->pd, lkey);
+    uct_rkey_release(context, &rkey);
+    uct_mem_unmap(iface->pd, lkey);
     uct_ep_destroy(ep);
     uct_iface_close(iface);
     uct_cleanup(context);

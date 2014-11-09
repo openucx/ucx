@@ -22,5 +22,6 @@ typedef uintptr_t                uct_rkey_t;
 typedef struct uct_req           *uct_req_h;
 typedef struct uct_memory_region *uct_memory_region_h;
 typedef struct uct_pd            *uct_pd_h;
+typedef void                     *uct_rkey_ctx_h;
 
 #endif

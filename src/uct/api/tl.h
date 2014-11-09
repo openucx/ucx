@@ -49,6 +49,11 @@ typedef void (*uct_completion_cb_t)(uct_req_h req, ucs_status_t status);
 
 
 /**
+ * Remote key release function.
+ */
+typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
+
+/**
  * Interface attributes: capabilities and limitations.
  */
 typedef struct uct_iface_attr {
@@ -70,6 +75,15 @@ typedef struct uct_pd_attr {
 
 
 /**
+ * Remote key with its type
+ */
+typedef struct uct_rkey_bundle {
+    uct_rkey_t               rkey;   /**< Remote key descriptor, passed to RMA functions */
+    void                     *type;  /**< Remote key type */
+} uct_rkey_bundle_t;
+
+
+/**
  * Transport "global" operations
  */
 typedef struct uct_tl_ops {
@@ -80,6 +94,10 @@ typedef struct uct_tl_ops {
 
     ucs_status_t (*iface_open)(uct_context_h context, const char *hw_name,
                                uct_iface_h *iface_p);
+
+    ucs_status_t (*rkey_unpack)(uct_context_h context, void *rkey_buffer,
+                                uct_rkey_bundle_t *rkey_ob);
+
 } uct_tl_ops_t;
 
 
@@ -89,18 +107,17 @@ typedef struct uct_tl_ops {
 typedef struct uct_pd_ops {
     ucs_status_t (*query)(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
+    /* TODO
+     * - support "mem attach", MPI-3 style, e.g by passing rkey
+     * - support allocation, e.g by returning an address
+     */
     ucs_status_t (*mem_map)(uct_pd_h pd, void *address, size_t length,
-                            uct_lkey_t *lkey_p);
+                            unsigned flags, uct_lkey_t *lkey_p);
 
     ucs_status_t (*mem_unmap)(uct_pd_h pd, uct_lkey_t lkey);
 
-    /* TODO support "mem attach", MPI-3 style */
-
     ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer);
 
-    ucs_status_t (*rkey_unpack)(uct_pd_h pd, void *rkey_buffer, uct_rkey_t *rkey_p);
-
-    void         (*rkey_release)(uct_pd_h pd, uct_rkey_t rkey);
 } uct_pd_ops_t;
 
 

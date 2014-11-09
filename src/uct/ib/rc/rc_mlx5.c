@@ -183,5 +183,6 @@ static ucs_status_t uct_rc_mlx5_iface_open(uct_context_h context,
 uct_tl_ops_t uct_rc_mlx5_tl_ops = {
     .query_resources     = uct_rc_mlx5_query_resources,
     .iface_open          = uct_rc_mlx5_iface_open,
+    .rkey_unpack         = uct_ib_rkey_unpack,
 };
 
