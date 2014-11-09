@@ -33,5 +33,9 @@
  - the function which prints the log message is the first one which decides which
    error it is. If a functions returns an error because it's callee returned 
    erroneous ucs_status_t, it does not have to print a log message.
+ - destructors are not able to propagate error code to the caller because they
+   return void. also, users are not ready to handle errors during cleanup flow.
+   therefore a destructor should handle an error by printing a warning or an
+   error message.
 
 * Logging

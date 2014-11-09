@@ -130,11 +130,29 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
         }
     }
 
-    /* Invalid transport name */
+    /* Non-existing transport */
+    return UCS_ERR_NO_ELEM;
+}
+
+ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
+                             uct_rkey_bundle_t *rkey_ob)
+{
+    uct_context_tl_info_t *tl;
+    ucs_status_t status;
+
+    for (tl = context->tls; tl < context->tls + context->num_tls; ++tl) {
+        status = tl->ops->rkey_unpack(context, rkey_buffer, rkey_ob);
+        if (status != UCS_ERR_UNSUPPORTED) {
+            return status;
+        }
+    }
+
     return UCS_ERR_INVALID_PARAM;
 }
 
-void uct_iface_close(uct_iface_h iface)
+void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob)
 {
-    iface->ops->iface_close(iface);
+    uct_rkey_release_func_t release = rkey_ob->type;
+    release(context, rkey_ob->rkey);
 }
+
