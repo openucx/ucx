@@ -136,6 +136,9 @@ ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t
     uint8_t first_port, num_ports, i;
     int ret;
 
+    setenv("MLX5_TOTAL_UUARS",       "64", 1);
+    setenv("MLX5_NUM_LOW_LAT_UUARS", "60", 1);
+
     /* Open verbs context */
     ibv_context = ibv_open_device(ibv_device);
     if (ibv_context == NULL) {
