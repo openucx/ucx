@@ -84,4 +84,6 @@ typedef struct {
 extern ucs_global_opts_t ucs_global_opts;
 extern ucs_config_field_t ucs_global_opts_table[];
 
+void ucs_global_opts_init();
+
 #endif

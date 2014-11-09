@@ -61,6 +61,7 @@ libucs_la_SOURCES = \
 	debug/log.c \
 	debug/memtrack.c \
 	stats/stats.c \
+	sys/init.c \
 	sys/math.c \
 	sys/sys.c \
 	time/time.c \
