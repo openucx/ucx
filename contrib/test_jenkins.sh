@@ -6,10 +6,10 @@ if [ -z "$BUILD_NUMBER" ]; then
     echo Running interactive
     WORKSPACE=$PWD
     BUILD_NUMBER=1
-    JOB_URL=file://$WORKSPACE
+    WS_URL=file://$WORKSPACE
 else
     echo Running under jenkins
-    JOB_URL=$JOB_URL/ws
+    WS_URL=$JOB_URL/ws
 fi
 
 rpm_topdir=$WORKSPACE/rpm-dist
@@ -57,7 +57,7 @@ nerrors=$(cov-analyze --dir $cov_build |grep "Defect occurrences found" | awk '{
 cov-format-errors --dir $cov_build
 rc=$(($rc+$nerrors))
 
-cov_url="$JOB_URL/$cov_build_id/c/output/errors/index.html"
+cov_url="$WS_URL/$cov_build_id/c/output/errors/index.html"
 rm -f jenkins_sidelinks.txt
 echo 1..1 > coverity.tap
 if [ $nerrors -gt 0 ]; then
