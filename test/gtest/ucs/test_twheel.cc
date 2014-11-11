@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -146,7 +146,7 @@ UCS_TEST_F(twheel, precision_single) {
                 ucs_twheel_sweep(&m_wheel, now);
             } while (t.end_time == 0);
 
-            if (::abs(t.total_time - t.d) > 2 * m_wheel.res) {
+            if ((ucs_time_t)::abs(t.total_time - t.d) > 2 * m_wheel.res) {
                 ++fail_count;
             }
         }
@@ -180,7 +180,7 @@ UCS_TEST_F(twheel, precision_multi) {
      * correct delta
      */
     for (int i = 0; i < N_TIMERS; i++) {
-        EXPECT_NE(t[i].end_time, 0);
+        EXPECT_NE(t[i].end_time, (ucs_time_t)0);
         EXPECT_NEAR(t[i].total_time,  t[i].d, 2 * m_wheel.res + eps);
     }
 }
@@ -235,7 +235,7 @@ UCS_TEST_F(twheel, delayed_sweep) {
 
     /* all timers should have been triggered */
     for (int i = 0; i < N_TIMERS; i++) {
-        EXPECT_NE(t[i].end_time, 0);
+        EXPECT_NE(t[i].end_time, (ucs_time_t)0);
     }
 }
 

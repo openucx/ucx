@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
+# Copyright (C) 2014 Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -84,9 +84,17 @@ endif
 
 if HAVE_GTEST
 lib_LTLIBRARIES       += libucstest.la
-libucstest_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
+libucstest_la_LDFLAGS  = -ldl -version-info \
+			$(SOVERSION) \
+			$(GTEST_LDFLAGS)
+libucstest_la_CPPFLAGS = -I$(top_builddir) -I$(abs_top_srcdir)/src \
+			 $(GTEST_CPPFLAGS)
+libucstest_la_CXXFLAGS = $(GTEST_CXXFLAGS)
 libucstest_la_LIBADD   = libucs.la
+			$(GTEST_LIBS) \
+			$(BOOST_THREAD_LIB)
 libucstest_ladir       = $(includedir)
+
 libucstest_la_SOURCES  = \
 	gtest/main.cc \
 	gtest/test_helpers.cc \

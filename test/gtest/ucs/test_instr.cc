@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -75,7 +75,7 @@ UCS_TEST_F(instrument, record) {
         EXPECT_GE(record.timestamp, ucs_get_time() - ucs_time_from_sec(0.1));
     }
     EXPECT_EQ(UCS_TEST_INSTR_LPARAM, record.lparam);
-    EXPECT_EQ(UCS_TEST_INSTR_WPARAM, record.wparam);
+    EXPECT_EQ((uint32_t)UCS_TEST_INSTR_WPARAM, record.wparam);
     EXPECT_GE(record.location, static_cast<uint32_t>(address));
 
 #if HAVE_DETAILED_BACKTRACE

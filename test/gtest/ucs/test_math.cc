@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -53,17 +53,17 @@ UCS_TEST_F(test_math, circular_compare) {
 }
 
 UCS_TEST_F(test_math, bitops) {
-    EXPECT_EQ(0,  ucs_ffs64(0xfffff));
-    EXPECT_EQ(16, ucs_ffs64(0xf0000));
-    EXPECT_EQ(1,  ucs_ffs64(0x4002));
-    EXPECT_EQ(41, ucs_ffs64(1ull<<41));
+    EXPECT_EQ((unsigned)0,  ucs_ffs64(0xfffff));
+    EXPECT_EQ((unsigned)16, ucs_ffs64(0xf0000));
+    EXPECT_EQ((unsigned)1,  ucs_ffs64(0x4002));
+    EXPECT_EQ((unsigned)41, ucs_ffs64(1ull<<41));
 
-    EXPECT_EQ(0, ucs_ilog2(1));
-    EXPECT_EQ(2, ucs_ilog2(4));
-    EXPECT_EQ(2, ucs_ilog2(5));
-    EXPECT_EQ(2, ucs_ilog2(7));
-    EXPECT_EQ(14, ucs_ilog2(17000));
-    EXPECT_EQ(40, ucs_ilog2(1ull<<40));
+    EXPECT_EQ((unsigned)0, ucs_ilog2(1));
+    EXPECT_EQ((unsigned)2, ucs_ilog2(4));
+    EXPECT_EQ((unsigned)2, ucs_ilog2(5));
+    EXPECT_EQ((unsigned)2, ucs_ilog2(7));
+    EXPECT_EQ((unsigned)14, ucs_ilog2(17000));
+    EXPECT_EQ((unsigned)40, ucs_ilog2(1ull<<40));
 }
 
 #define TEST_ATOMIC_ADD(_bitsize) \

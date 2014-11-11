@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -55,14 +55,14 @@ UCS_TEST_F(test_memtrack, sanity) {
     ucs_free(b);
     ucs_memtrack_total(&entry);
     if (ucs_memtrack_is_enabled()) {
-        ASSERT_EQ(i + 1, entry.current_count);
+        ASSERT_EQ((size_t)(i + 1), entry.current_count);
     }
 
     b = ucs_malloc(4, test_str);
     ucs_free(b);
     ucs_memtrack_total( &entry);
     if (ucs_memtrack_is_enabled()) {
-        ASSERT_EQ(1, entry.current_count);
+        ASSERT_EQ((size_t)1, entry.current_count);
     }
     ucs_free(a);
 

@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -58,6 +58,9 @@
 #  define IBV_EXP_WR_ATOMIC_FETCH_AND_ADD  IBV_WR_ATOMIC_FETCH_AND_ADD
 #  define IBV_EXP_WR_ATOMIC_CMP_AND_SWP    IBV_WR_ATOMIC_CMP_AND_SWP
 #  define ibv_exp_qp_init_attr             ibv_qp_init_attr
+#  define ibv_exp_port_attr                ibv_port_attr
+#  define ibv_exp_query_port               ibv_query_port
+#  define exp_device_cap_flags             device_cap_flags
 #  define ibv_exp_create_qp                ibv_create_qp
 
 struct ibv_exp_reg_mr_in {
@@ -74,14 +77,14 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 }
 
 #  define IBV_IS_MPAGES_AVAIL(_attr)                ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_MR_ALLOCATE)
-#  define IBV_DEVICE_HAS_DC(_attr)                  ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)
+#  define IBV_DEVICE_HAS_DC(_attr)                  0
 #  define IBV_EXP_REG_MR_FLAGS(_f, _e)              ((_f) | (_e))
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->exp_access)
 #  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)
 #  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)
 #else
 #  define IBV_IS_MPAGES_AVAIL(_attr)                ((_attr)->device_cap_flags2 & IBV_EXP_DEVICE_MR_ALLOCATE)
-#  define IBV_DEVICE_HAS_DC(_attr)                  0
+#  define IBV_DEVICE_HAS_DC(_attr)                  ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)
 #  define IBV_EXP_REG_MR_FLAGS(_f, _e)              (_f) , (_e)
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->access)
 #  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  (_attr)->comp_mask = (IBV_EXP_DEVICE_ATTR_RESERVED - 1)

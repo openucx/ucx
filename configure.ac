@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
-#
+# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -22,7 +22,17 @@ config_flags="$*"
 valgrind_libpath=""
 
 AC_CONFIG_HEADERS([config.h])
-AM_INIT_AUTOMAKE([1.10 foreign tar-ustar silent-rules subdir-objects])
+
+AH_TOP([
+#ifndef UCX_CONFIG_H
+#define UCX_CONFIG_H
+])
+
+AH_BOTTOM([
+#endif /* UCX_CONFIG_H */
+])
+
+AM_INIT_AUTOMAKE([1.10 foreign tar-ustar subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([config/m4])

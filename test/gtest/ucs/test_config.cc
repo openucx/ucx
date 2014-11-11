@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -163,14 +163,14 @@ protected:
 UCS_TEST_F(test_config, parse_default) {
     car_opts opts("TEST");
 
-    EXPECT_EQ(999, opts->price);
+    EXPECT_EQ((unsigned)999, opts->price);
     EXPECT_EQ(std::string("Chevy"), opts->brand);
     EXPECT_EQ(std::string("Corvette"), opts->model);
-    EXPECT_EQ(COLOR_RED, opts->color);
-    EXPECT_EQ(6000, opts->engine.volume);
-    EXPECT_EQ(COLOR_RED, opts->coach.driver_seat.color);
-    EXPECT_EQ(COLOR_BLUE, opts->coach.passenger_seat.color);
-    EXPECT_EQ(COLOR_BLACK, opts->coach.rear_seat.color);
+    EXPECT_EQ((unsigned)COLOR_RED, opts->color);
+    EXPECT_EQ((unsigned)6000, opts->engine.volume);
+    EXPECT_EQ((unsigned)COLOR_RED, opts->coach.driver_seat.color);
+    EXPECT_EQ((unsigned)COLOR_BLUE, opts->coach.passenger_seat.color);
+    EXPECT_EQ((unsigned)COLOR_BLACK, opts->coach.rear_seat.color);
 
 }
 
@@ -181,10 +181,10 @@ UCS_TEST_F(test_config, parse_with_prefix) {
     ucs::scoped_setenv env4("UCS_TEST_REAR_COLOR", "white");
 
     car_opts dfl, test("TEST");
-    EXPECT_EQ(COLOR_WHITE, dfl->color);
-    EXPECT_EQ(COLOR_BLACK, test->color);
-    EXPECT_EQ(COLOR_YELLOW, test->coach.driver_seat.color);
-    EXPECT_EQ(COLOR_WHITE, test->coach.rear_seat.color);
+    EXPECT_EQ((unsigned)COLOR_WHITE, dfl->color);
+    EXPECT_EQ((unsigned)COLOR_BLACK, test->color);
+    EXPECT_EQ((unsigned)COLOR_YELLOW, test->coach.driver_seat.color);
+    EXPECT_EQ((unsigned)COLOR_WHITE, test->coach.rear_seat.color);
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -194,21 +194,21 @@ UCS_TEST_F(test_config, clone) {
     {
         ucs::scoped_setenv env1("UCS_TEST_COLOR", "white");
         car_opts opts("TEST");
-        EXPECT_EQ(COLOR_WHITE, opts->color);
+        EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
         ucs::scoped_setenv env2("UCS_TEST_COLOR", "black");
         opts_clone_ptr = boost::make_shared<car_opts>(opts);
     }
 
-    EXPECT_EQ(COLOR_WHITE, (*opts_clone_ptr)->color);
+    EXPECT_EQ((unsigned)COLOR_WHITE, (*opts_clone_ptr)->color);
 }
 
 UCS_TEST_F(test_config, set) {
     car_opts opts("TEST");
-    EXPECT_EQ(COLOR_RED, opts->color);
+    EXPECT_EQ((unsigned)COLOR_RED, opts->color);
 
     opts.set("COLOR", "white");
-    EXPECT_EQ(COLOR_WHITE, opts->color);
+    EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
 }
 

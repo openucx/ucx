@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -100,11 +100,11 @@ UCS_TEST_F(frag_list, in_order_rcv) {
         EXPECT_EQ(UCS_FRAG_LIST_INSERT_FAST, err);
     }
 #if ENABLE_STATS
-    EXPECT_EQ(1, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
-    EXPECT_EQ(9, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
-    EXPECT_EQ(0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
-    EXPECT_EQ(0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_LEN));
-    EXPECT_EQ(0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_OUT));
+    EXPECT_EQ((ucs_stats_counter_t)1, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
+    EXPECT_EQ((ucs_stats_counter_t)9, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
+    EXPECT_EQ((ucs_stats_counter_t)0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
+    EXPECT_EQ((ucs_stats_counter_t)0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_LEN));
+    EXPECT_EQ((ucs_stats_counter_t)0, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_OUT));
 #endif
 }
 
@@ -153,13 +153,13 @@ UCS_TEST_F(frag_list, one_hole) {
         EXPECT_EQ(out->sn, i+5);
         i++;
     }
-    EXPECT_EQ(5, i);
+    EXPECT_EQ((unsigned)5, i);
 #if ENABLE_STATS
-    EXPECT_EQ(2, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
-    EXPECT_EQ(10, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
-    EXPECT_EQ(1, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
-    EXPECT_EQ(5, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_LEN));
-    EXPECT_EQ(9, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_OUT));
+    EXPECT_EQ((ucs_stats_counter_t)2, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
+    EXPECT_EQ((ucs_stats_counter_t)10, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
+    EXPECT_EQ((ucs_stats_counter_t)1, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
+    EXPECT_EQ((ucs_stats_counter_t)5, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_LEN));
+    EXPECT_EQ((ucs_stats_counter_t)9, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_OUT));
 #endif
 }
 
@@ -204,7 +204,7 @@ UCS_TEST_F(frag_list, two_holes_basic) {
         EXPECT_EQ(out->sn, i);
         i++;
     }
-    EXPECT_EQ(i, 10);
+    EXPECT_EQ(i, (unsigned)10);
 
     for (i = 10; i < 15; i++) {
         err = ucs_frag_list_insert(&m_frags, &pkts[i].elem, i);
@@ -221,13 +221,13 @@ UCS_TEST_F(frag_list, two_holes_basic) {
         EXPECT_EQ(out->sn, i);
         i++;
     }
-    EXPECT_EQ(20, i);
+    EXPECT_EQ((unsigned)20, i);
 #if ENABLE_STATS
-    EXPECT_EQ(7, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
-    EXPECT_EQ(19, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
-    EXPECT_EQ(2, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
-    EXPECT_EQ(20, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_LEN));
-    EXPECT_EQ(28, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_OUT));
+    EXPECT_EQ((ucs_stats_counter_t)7, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURSTS));
+    EXPECT_EQ((ucs_stats_counter_t)19, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_BURST_LEN));
+    EXPECT_EQ((ucs_stats_counter_t)2, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAPS));
+    EXPECT_EQ((ucs_stats_counter_t)20, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_LEN));
+    EXPECT_EQ((ucs_stats_counter_t)28, UCS_STATS_GET_COUNTER(m_frags.stats, UCS_FRAG_LIST_STAT_GAP_OUT));
 #endif
 }
 
@@ -280,7 +280,7 @@ UCS_TEST_F(frag_list, two_holes_advanced) {
         EXPECT_EQ(out->sn, i);
         i++;
     }
-    EXPECT_EQ(20, i);
+    EXPECT_EQ((unsigned)20, i);
 }
 
 /** 
@@ -309,7 +309,7 @@ UCS_TEST_F(frag_list, random_arrival) {
         EXPECT_NE(err, UCS_FRAG_LIST_INSERT_DUP);
         if (err == UCS_FRAG_LIST_INSERT_FAST || err == UCS_FRAG_LIST_INSERT_FIRST) {
             fast_inserts++;
-            EXPECT_EQ(last_sn+1, idx[i]+1);
+            EXPECT_EQ(last_sn+1, (uint32_t)idx[i]+1);
             last_sn = idx[i]+1;
         }
         else {

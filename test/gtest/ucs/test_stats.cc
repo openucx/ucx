@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -87,7 +87,7 @@ public:
 
     void check_cat_node(ucs_stats_node_t *cat_node) {
         EXPECT_EQ(std::string("category"), std::string(cat_node->cls->name));
-        EXPECT_EQ(0, cat_node->cls->num_counters);
+        EXPECT_EQ((unsigned)0, cat_node->cls->num_counters);
 
         ucs_stats_node_t *data_node;
         ucs_list_for_each(data_node, &cat_node->children[UCS_STATS_ACTIVE_CHILDREN], list) {
@@ -95,10 +95,10 @@ public:
             EXPECT_EQ(unsigned(NUM_COUNTERS),  data_node->cls->num_counters);
             EXPECT_EQ(std::string("counter0"), std::string(data_node->cls->counter_names[0]));
 
-            EXPECT_EQ(10, data_node->counters[0]);
-            EXPECT_EQ(20, data_node->counters[1]);
-            EXPECT_EQ(30, data_node->counters[2]);
-            EXPECT_EQ(40, data_node->counters[3]);
+            EXPECT_EQ((unsigned)10, data_node->counters[0]);
+            EXPECT_EQ((unsigned)20, data_node->counters[1]);
+            EXPECT_EQ((unsigned)30, data_node->counters[2]);
+            EXPECT_EQ((unsigned)40, data_node->counters[3]);
         }
     }
 
