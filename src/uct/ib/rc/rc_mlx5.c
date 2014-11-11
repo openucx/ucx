@@ -55,6 +55,7 @@ static ucs_status_t uct_rc_mlx5_ep_create(uct_iface_h tl_iface, uct_ep_h *ep_p)
 
     status = uct_ib_mlx5_get_qp_info(ep->super.qp, &qp_info);
     if (status != UCS_OK) {
+        ucs_error("Failed to get mlx5 QP information");
         goto err_cleanup_rc_ep;
     }
 

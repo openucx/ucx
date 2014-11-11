@@ -131,7 +131,7 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
     }
 
     /* Non-existing transport */
-    return UCS_ERR_NO_ELEM;
+    return UCS_ERR_NO_DEVICE;
 }
 
 ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,

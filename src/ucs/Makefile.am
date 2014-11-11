@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 #
 # $COPYRIGHT$
 # $HEADER$
@@ -61,6 +61,7 @@ libucs_la_SOURCES = \
 	debug/log.c \
 	debug/memtrack.c \
 	stats/stats.c \
+	sys/init.c \
 	sys/math.c \
 	sys/sys.c \
 	time/time.c \

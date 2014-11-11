@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 #
 # $COPYRIGHT$
 # $HEADER$
@@ -23,16 +23,18 @@ noinst_PROGRAMS = gtest
 
 gtestdir  = $(includedir)
 gtest_LDADD = \
-	$(abs_top_builddir)/src/ucs/libucs.la \
-	$(abs_top_builddir)/src/uct/libuct.la \
-	$(abs_top_builddir)/src/ucs/libucstest.la \
+	$(top_builddir)/src/ucs/libucs.la \
+	$(top_builddir)/src/uct/libuct.la \
+	$(top_builddir)/src/ucs/libucstest.la \
+	$(top_builddir)/test/perf/libucxperf.la \
 	$(GTEST_LIBS) \
 	$(BOOST_THREAD_LIB)
 
 gtest_CPPFLAGS = \
-	-I$(abs_top_srcdir)/src \
-	-I$(abs_top_builddir)/src \
-	-I$(abs_top_srcdir)/test/gtest \
+	-I$(top_srcdir)/src \
+	-I$(top_srcdir)/test \
+	-I$(top_builddir)/src \
+	-I$(top_srcdir)/test/gtest \
 	$(GTEST_CPPFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
@@ -40,6 +42,7 @@ gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
 
 gtest_SOURCES = \
 	uct/test_uct_context.cc \
+	uct/test_uct_perf.cc \
 	ucs/test_component.cc \
 	ucs/test_config.cc \
 	ucs/test_datatype.cc \

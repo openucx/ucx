@@ -146,7 +146,7 @@ ucs_config_field_t ucs_global_opts_table[] = {
  {NULL}
 };
 
-void UCS_F_CTOR ucs_global_opts_init()
+void ucs_global_opts_init()
 {
     ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table, NULL);
 }
