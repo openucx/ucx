@@ -7,8 +7,8 @@
 
 lib_LTLIBRARIES     = libuct.la
 
-libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src
-libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION) $(IBVERBS_LDFLAGS)
+libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
+libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)
 
@@ -25,6 +25,8 @@ libuct_la_SOURCES = \
 	tl/context.c
 
 if HAVE_IB
+libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
+libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS)
 noinst_HEADERS += \
 	ib/base/ib_context.h \
 	ib/base/ib_device.h \
@@ -44,7 +46,6 @@ libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5.c
 endif
 
-endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \
@@ -61,4 +62,5 @@ libuct_la_SOURCES += \
 	ib/rc/rc_mlx5.h
 endif
 
+endif
 endif
