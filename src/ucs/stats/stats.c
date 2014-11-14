@@ -447,19 +447,19 @@ int ucs_stats_is_active()
 
 #else
 
-void mxm_stats_init()
+void ucs_stats_init()
 {
 }
 
-void mxm_stats_cleanup()
+void ucs_stats_cleanup()
 {
 }
 
-void mxm_stats_dump()
+void ucs_stats_dump()
 {
 }
 
-int mxm_stats_is_active()
+int ucs_stats_is_active()
 {
     return 0;
 }
