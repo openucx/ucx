@@ -54,4 +54,3 @@ libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5.c
 endif
 endif
-
