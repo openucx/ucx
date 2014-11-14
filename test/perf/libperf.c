@@ -302,7 +302,7 @@ static ucs_status_t ucx_perf_run_put_lat(uct_perf_context_t *perf)
 
 ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
 {
-    unsigned group_index, group_size, i;
+    unsigned group_size, i;
     uct_iface_addr_t *iface_addr;
     uct_ep_addr_t *ep_addr;
     uct_iface_attr_t iface_attr;
@@ -340,7 +340,6 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
 
     address = (uintptr_t)perf->super.recv_buffer;
 
-    group_index = rte_call(&perf->super, group_index);
     group_size  = rte_call(&perf->super, group_size);
 
     perf->peers = calloc(group_size, sizeof(*perf->peers));
