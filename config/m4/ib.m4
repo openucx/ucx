@@ -5,49 +5,10 @@
 # $HEADER$
 #
 
-
 #
 # Select IB transports
 #
 with_ib=no
-
-
-#
-# RC Support
-#
-AC_ARG_WITH([rc],
-            [AC_HELP_STRING([--with-rc], [Compile with IB Reliable Connection support])],
-            [],
-            [with_rc=yes])
-AS_IF([test "x$with_rc" != xno], 
-      [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
-       with_ib=yes
-       transports="${transports},rc"])
-
-
-AC_ARG_WITH([ud],
-            [AC_HELP_STRING([--with-ud], [Compile with IB Unreliable Datagram support])],
-            [],
-            [with_ud=yes;with_ib=yes])
-AS_IF([test "x$with_ud" != xno],
-      [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])
-       with_ib=yes
-       transports="${transports},ud"])
-
-
-AC_ARG_WITH([dc],
-            [AC_HELP_STRING([--with-dc], [Compile with IB Dynamic Connection support])],
-            [],
-            [with_dc=yes;with_ib=yes])
-AS_IF([test "x$with_dc" != xno],
-      [AC_CHECK_DECLS(IBV_EXP_QPT_DC_INI, [], [with_dc=no], [[#include <infiniband/verbs.h>]])
-       AC_CHECK_MEMBERS([struct ibv_exp_dct_init_attr.inline_size], [] , [with_dc=no], [[#include <infiniband/verbs.h>]])
-      ])
-AS_IF([test "x$with_dc" != xno],
-      [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
-       with_ib=yes
-       transports="${transports},dc"])
-
 
 #
 # Check basic IB support: User wanted at least one IB transport, and we found
@@ -64,6 +25,38 @@ AS_IF([test "x$with_ib" != xno],
       ])
 AS_IF([test "x$with_ib" != xno],
       [AC_DEFINE([HAVE_IB], 1, [IB support])])
+#
+# RC Support
+#
+AC_ARG_WITH([rc],
+            [AC_HELP_STRING([--with-rc], [Compile with IB Reliable Connection support])],
+            [],
+            [with_rc=yes])
+AS_IF([test "x$with_rc" != xno -a "x$with_ib" !=  xno], 
+      [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
+       transports="${transports},rc"])
+
+
+AC_ARG_WITH([ud],
+            [AC_HELP_STRING([--with-ud], [Compile with IB Unreliable Datagram support])],
+            [],
+            [with_ud=yes])
+AS_IF([test "x$with_ud" != xno -a "x$with_ib" !=  xno],
+      [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])
+       transports="${transports},ud"])
+
+
+AC_ARG_WITH([dc],
+            [AC_HELP_STRING([--with-dc], [Compile with IB Dynamic Connection support])],
+            [],
+            [with_dc=yes])
+AS_IF([test "x$with_dc" != xno -a "x$with_ib" !=  xno],
+      [AC_CHECK_DECLS(IBV_EXP_QPT_DC_INI, [], [with_dc=no], [[#include <infiniband/verbs.h>]])
+       AC_CHECK_MEMBERS([struct ibv_exp_dct_init_attr.inline_size], [] , [with_dc=no], [[#include <infiniband/verbs.h>]])
+      ])
+AS_IF([test "x$with_dc" != xno -a "x$with_ib" !=  xno],
+      [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
+       transports="${transports},dc"])
 
 
 #
