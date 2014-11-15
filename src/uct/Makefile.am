@@ -49,6 +49,7 @@ endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \
+	ib/rc/rc_def.h \
 	ib/rc/rc_ep.h \
 	ib/rc/rc_iface.h
 

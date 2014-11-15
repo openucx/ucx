@@ -57,23 +57,23 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
 
-.PHONY: test test gdb valgrind fix_rpath uct
+.PHONY: test test gdb valgrind fix_rpath ucx
 
 all-local: gtest
 
-uct:
-	$(MAKE) -C $(top_builddir)/src/uct
+ucx:
+	$(MAKE) -C $(top_builddir)
 
-test: uct gtest
+test: ucx gtest
 	@rm -f core.*
 	$(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 	
-test_gdb: uct gtest
+test_gdb: ucx gtest
 	echo 'r' > .gdbcommands
 	env UCS_HANDLE_ERRORS=none UCS_GDB_PATH="" gdb -x .gdbcommands --args $(GDB_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 
 list: gtest
 	$(abs_builddir)/gtest --gtest_list_tests --gtest_filter=$(GTEST_FILTER)
 
-test_valgrind: uct gtest
+test_valgrind: ucx gtest
 	env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" valgrind $(VALGRIND_ARGS) $(VALGRIND_EXTRA_ARGS) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)

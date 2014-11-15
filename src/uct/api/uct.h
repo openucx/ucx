@@ -34,6 +34,15 @@ void uct_cleanup(uct_context_h context);
 
 /**
  * @ingroup CONTEXT
+ * @brief Progress all communications of the context.
+ *
+ * @param [in] context   Handle to context.
+ */
+void uct_progress(uct_context_h context);
+
+
+/**
+ * @ingroup CONTEXT
  * @brief Query for transport resources.
  *
  * @param [in]  context         Handle to context.
@@ -63,13 +72,13 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
  *
  * @param [in]  context       Handle to context.
  * @param [in]  tl_name       Transport name.
- * @param [in]  hw_name       Hardware resource name,
+ * @param [in]  dev_name      Hardware device name,
  * @param [out] iface_p       Filled with a handle to opened communication interface.
  *
  * @return Error code.
  */
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *hw_name, uct_iface_h *iface_p);
+                            const char *dev_name, uct_iface_h *iface_p);
 
 
 /**
@@ -169,10 +178,9 @@ static inline ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *i
 }
 
 static inline ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned length,
-                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                            uct_req_h *req_p, uct_completion_cb_t cb)
+                                            uint64_t remote_addr, uct_rkey_t rkey)
 {
-    return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey, req_p, cb);
+    return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
 }
 
 #endif

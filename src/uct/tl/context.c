@@ -48,6 +48,11 @@ void uct_cleanup(uct_context_h context)
     ucs_free(context);
 }
 
+void uct_progress(uct_context_h context)
+{
+    ucs_notifier_chain_call(&context->progress_chain);
+}
+
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
                              uct_tl_ops_t *tl_ops)
 {
@@ -120,13 +125,13 @@ void uct_release_resource_list(uct_resource_desc_t *resources)
 }
 
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *hw_name, uct_iface_h *iface_p)
+                            const char *dev_name, uct_iface_h *iface_p)
 {
     uct_context_tl_info_t *tl;
 
     for (tl = context->tls; tl < context->tls + context->num_tls; ++tl) {
         if (!strcmp(tl_name, tl->name)) {
-            return tl->ops->iface_open(context, hw_name, iface_p);
+            return tl->ops->iface_open(context, dev_name, iface_p);
         }
     }
 

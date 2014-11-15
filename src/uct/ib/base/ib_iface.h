@@ -36,7 +36,7 @@ typedef struct uct_ib_iface {
 
 
 ucs_status_t ucs_ib_iface_init(uct_context_h context, uct_ib_iface_t *iface,
-                               const char *hw_name);
+                               const char *dev_name);
 void ucs_ib_iface_cleanup(uct_ib_iface_t *iface);
 
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)

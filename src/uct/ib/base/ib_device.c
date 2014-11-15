@@ -127,7 +127,9 @@ uct_pd_ops_t uct_ib_pd_ops = {
     .rkey_pack    = uct_ib_rkey_pack,
 };
 
-ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t **dev_p)
+ucs_status_t uct_ib_device_create(uct_context_h context,
+                                  struct ibv_device *ibv_device,
+                                  uct_ib_device_t **dev_p)
 {
     struct ibv_context *ibv_context;
     struct ibv_exp_device_attr dev_attr;
@@ -178,11 +180,12 @@ ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t
     }
 
     /* Save device information */
-    dev->super.ops   = &uct_ib_pd_ops;
-    dev->ibv_context = ibv_context;
-    dev->dev_attr    = dev_attr;
-    dev->first_port  = first_port;
-    dev->num_ports   = num_ports;
+    dev->super.ops     = &uct_ib_pd_ops;
+    dev->super.context = context;
+    dev->ibv_context   = ibv_context;
+    dev->dev_attr      = dev_attr;
+    dev->first_port    = first_port;
+    dev->num_ports     = num_ports;
 
     /* Get device locality */
     uct_ib_device_get_affinity(ibv_get_device_name(ibv_device), &dev->local_cpus);
@@ -281,7 +284,7 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
     int ret;
 
     /* HCA:Port is the hardware resource name */
-    ucs_snprintf_zero(resource->hw_name, sizeof(resource->hw_name), "%s:%d",
+    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s:%d",
                       uct_ib_device_name(dev), port_num);
 
     /* Port network address */

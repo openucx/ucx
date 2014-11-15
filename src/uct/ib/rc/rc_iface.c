@@ -12,49 +12,6 @@
 #include <ucs/debug/log.h>
 
 
-ucs_status_t uct_rc_iface_open(uct_context_h context, const char *hw_name,
-                               uct_iface_h *iface_p)
-{
-    ucs_status_t status;
-    uct_rc_iface_t *iface;
-
-    iface = ucs_malloc(sizeof(*iface), "rc iface");
-    if (iface == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    iface->super.super.ops.iface_close         = uct_rc_iface_close;
-    iface->super.super.ops.iface_get_address   = uct_rc_iface_get_address;
-    iface->super.super.ops.iface_flush         = uct_rc_iface_flush;
-    iface->super.super.ops.ep_get_address      = uct_rc_ep_get_address;
-    iface->super.super.ops.ep_connect_to_iface = NULL;
-    iface->super.super.ops.ep_connect_to_ep    = uct_rc_ep_connect_to_ep;
-
-    status = ucs_ib_iface_init(context, &iface->super, hw_name);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
-
-    ucs_debug("opened RC dev %s port %d",
-              uct_ib_device_name(uct_ib_iface_device(&iface->super)),
-              iface->super.port_num);
-
-    *iface_p = &iface->super.super;
-    return UCS_OK;
-
-err_free:
-    ucs_free(iface);
-    return status;
-}
-
-void uct_rc_iface_close(uct_iface_h tl_iface)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-
-    ucs_ib_iface_cleanup(&iface->super);
-    ucs_free(iface);
-}
-
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     iface_attr->max_short      = 0;
@@ -73,8 +30,34 @@ ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *if
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
-                                uct_completion_cb_t cb)
+static inline int uct_rc_ep_compare(uct_rc_ep_t *ep1, uct_rc_ep_t *ep2)
 {
-    return UCS_OK;
+    return (int32_t)ep1->qp_num - (int32_t)ep2->qp_num;
+}
+
+static inline unsigned uct_rc_ep_hash(uct_rc_ep_t *ep)
+{
+    return ep->qp_num;
+}
+
+SGLIB_DEFINE_LIST_PROTOTYPES(uct_rc_ep_t, mxm_rc_ep_compare, next);
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, mxm_rc_ep_hash);
+SGLIB_DEFINE_LIST_FUNCTIONS(uct_rc_ep_t, uct_rc_ep_compare, next);
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, uct_rc_ep_hash);
+
+uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface, unsigned qp_num)
+{
+    uct_rc_ep_t tmp;
+    tmp.qp_num = qp_num;
+    return sglib_hashed_uct_rc_ep_t_find_member(iface->eps, &tmp);
+}
+
+void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+{
+    sglib_hashed_uct_rc_ep_t_add(iface->eps, ep);
+}
+
+void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+{
+    sglib_hashed_uct_rc_ep_t_delete(iface->eps, ep);
 }

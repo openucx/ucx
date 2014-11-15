@@ -14,6 +14,7 @@ extern "C" {
 #include <pthread.h>
 #include <boost/format.hpp>
 #include <string>
+#include <vector>
 
 
 class test_rte_comm {
@@ -53,6 +54,10 @@ public:
         m_index(index), m_send(send), m_recv(recv) {
     }
 
+    unsigned index() const {
+        return m_index;
+    }
+
     static unsigned group_size(void *rte_group)
     {
         return 2;
@@ -61,7 +66,7 @@ public:
     static unsigned group_index(void *rte_group)
     {
         test_rte *self = reinterpret_cast<test_rte*>(rte_group);
-        return self->m_index;
+        return self->index();
     }
 
     static void barrier(void *rte_group)
@@ -123,11 +128,14 @@ protected:
     struct test_spec {
         const char           *title;
         const char           *units;
+        double               min;
+        double               max;
         ucx_perf_cmd_t       command;
         ucx_perf_test_type_t test_type;
         size_t               msglen;
-        double               norm;
+        size_t               iters;
         size_t               field_offset;
+        double               norm;
     };
 
     test_uct_perf() {
@@ -136,30 +144,42 @@ protected:
 
     void init() {
         ucs::test::init();
-
         sched_getaffinity(getpid(), sizeof(m_orig_affinity), &m_orig_affinity);
+    }
 
-        const int max_cpus = sysconf(_SC_NPROCESSORS_CONF);
-        int num_cpus = 0, first_cpu = -1;
+    static void set_affinity(unsigned index) {
+        std::vector<unsigned> cpus;
+        cpu_set_t affinity;
+        unsigned my_cpu;
+        int ret, nr_cpus;
 
-        for (int cpu = 0; cpu < sysconf(_SC_NPROCESSORS_CONF); ++cpu) {
-            if (CPU_ISSET(cpu, &m_orig_affinity)) {
-                ++num_cpus;
-                first_cpu = cpu;
+        ret = sched_getaffinity(getpid(), sizeof(m_orig_affinity), &affinity);
+        if (ret != 0) {
+            ucs_error("Failed to get CPU affinity: %m");
+            throw ucs::test_abort_exception();
+        }
+
+        nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
+        if (nr_cpus < 0) {
+            ucs_error("Failed to get CPU count: %m");
+            throw ucs::test_abort_exception();
+        }
+
+        for (int cpu = 0; cpu < nr_cpus; ++cpu) {
+            if (CPU_ISSET(cpu, &affinity)) {
+                cpus.push_back(cpu);
             }
         }
 
-        ucs_assert_always(num_cpus > 0 && first_cpu != -1);
-
-        if (num_cpus < 2) {
-            unsigned next_cpu = (first_cpu + 1) % max_cpus;
-            UCS_TEST_MESSAGE << "Changing CPU affinity to " << first_cpu <<
-                            "," << next_cpu;
-
-            cpu_set_t affinity = m_orig_affinity;
-            CPU_SET(next_cpu , &affinity);
-            sched_setaffinity(getpid(), sizeof(affinity), &affinity);
+        if (index < cpus.size()) {
+            my_cpu = cpus[index];
+        } else {
+            my_cpu = cpus.back() + (index - cpus.size()) + 1;
         }
+
+        CPU_ZERO(&affinity);
+        CPU_SET(my_cpu , &affinity);
+        sched_setaffinity(ucs_get_tid(), sizeof(affinity), &affinity);
     }
 
     void cleanup() {
@@ -176,6 +196,7 @@ protected:
 
         status = uct_init(&ucth);
         ASSERT_UCS_OK(status);
+        set_affinity(reinterpret_cast<test_rte*>(params->rte_group)->index());
 
         result = new ucx_perf_result_t();
 
@@ -186,7 +207,7 @@ protected:
         return result;
     }
 
-    ucx_perf_result_t run_multi_threaded(const test_spec &test, const char *hw_name,
+    ucx_perf_result_t run_multi_threaded(const test_spec &test, const char *dev_name,
                                          const char *tl_name)
     {
         test_rte_comm c0to1, c1to0;
@@ -199,7 +220,7 @@ protected:
         params.flags           = UCX_PERF_TEST_FLAG_WARMUP;
         params.message_size    = test.msglen;
         params.alignment       = ucs_get_page_size();
-        params.max_iter        = 400000l;
+        params.max_iter        = test.iters;
         params.max_time        = 0.0;
         params.report_interval = 1.0;
         params.rte_group       = NULL;
@@ -245,8 +266,13 @@ protected:
 
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
-  { "put latency", "usec", UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
-    8, 1e6, ucs_offsetof(ucx_perf_result_t, latency.total_average) },
+  { "put latency", "usec", 0.0, 1.0,
+    UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+
+  { "put msgrate", "Mpps", 6.0, 20.0,
+    UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI, 8, 2000000l,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
   { NULL }
 };
@@ -256,16 +282,18 @@ UCS_TEST_F(test_uct_perf, envelope) {
         UCS_TEST_SKIP;
     }
 
-    const char *hw_name = "mlx5_0:1";
-    const char *tl_name = "rc_mlx5";
+    const char *dev_name = "mlx5_0:1";
+    const char *tl_name  = "rc_mlx5";
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
-        ucx_perf_result_t result = run_multi_threaded(*test, hw_name, tl_name);
-        double value = *(double*)( (char*)&result + test->field_offset);
+        ucx_perf_result_t result = run_multi_threaded(*test, dev_name, tl_name);
+        double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
         UCS_TEST_MESSAGE << boost::format("%s/%s %15s : %.3f %s")
                             % tl_name
-                            % hw_name
+                            % dev_name
                             % test->title
-                            % (value * test->norm)
+                            % value
                             % test->units;
+        EXPECT_GE(value, test->min);
+        EXPECT_LT(value, test->max);
     }
 }

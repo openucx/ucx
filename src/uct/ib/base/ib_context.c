@@ -109,7 +109,7 @@ ucs_status_t uct_ib_init(uct_context_h context)
     /* TODO apply a user-defined regex/wildcard filter */
     ibctx->num_devices = 0;
     for (i = 0; i < num_devices; ++i) {
-        status = uct_ib_device_create(device_list[i],
+        status = uct_ib_device_create(context, device_list[i],
                                       &ibctx->devices[ibctx->num_devices]);
         if (status != UCS_OK) {
             ucs_warn("Failed to initialize %s (%s), ignoring it",

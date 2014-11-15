@@ -63,4 +63,14 @@ void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci);
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
 
+static inline int uct_ib_mlx5_cqe_hw_owned(struct mlx5_cqe64 *cqe, unsigned index,
+                                           unsigned cq_length)
+{
+    uint8_t op_own = cqe->op_own;
+
+    return ((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq_length)        ||
+            (op_own & 0xF0)                == (MLX5_CQE_INVALID << 4));
+}
+
+
 #endif

@@ -10,13 +10,14 @@
 
 #include "rc_ep.h"
 
+
 typedef struct {
     uct_rc_ep_t      super;
     unsigned         qpn_ds;
 
     struct {
         unsigned       sw_pi;
-        unsigned       hw_ci;
+        unsigned       max_pi;
         void           *seg;
         void           *bf_reg;
         unsigned long  bf_size;
@@ -26,6 +27,16 @@ typedef struct {
     } tx;
 } uct_rc_mlx5_ep_t;
 
+
+typedef struct {
+    uct_rc_iface_t     super;
+    struct {
+        void           *cq_buf;
+        unsigned       cq_ci;
+        unsigned       cq_length;
+        unsigned       outstanding;
+    } tx;
+} uct_rc_mlx5_iface_t;
 
 
 #endif
