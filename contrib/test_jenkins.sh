@@ -20,24 +20,30 @@ echo Starting on host: $(hostname)
 
 echo "Autogen"
 ./autogen.sh
+make distclean||:
 
 echo "Making a directory for test build"
 mkdir -p build-test
 cd build-test
 
+echo "Build w/o IB"
+../contrib/configure-release --without-verbs && make $make_opt
+
 echo "Build release"
 ../contrib/configure-release && make $make_opt && make $make_opt distcheck
 
 echo "Build gtest "
-make clean && ../contrib/configure-devel && make $make_opt
+module load hpcx-gcc
+make clean && ../contrib/configure-devel --with-mpi && make $make_opt
+module unload hpcx-gcc
 
 echo "Starting gtest"
 
 make -C test/gtest test
 
-module load tools/valgrind-3.9.0
+module load tools/valgrind
 make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
-module unload tools/valgrind-3.9.0
+module unload tools/valgrind
 
 
 echo "Build with coverity"
