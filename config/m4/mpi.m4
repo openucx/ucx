@@ -12,7 +12,12 @@
 AC_ARG_WITH([mpi],
             [AS_HELP_STRING([--with-mpi@<:@=MPIHOME@:>@], [Compile MPI tests (default is NO).])],[:],[with_mpi=no])
 
-AS_IF([test "x$with_mpi" != xyes && test "x$with_mpi" != xno],mpi_path=$with_mpi;with_mpi=yes, mpi_path=$PATH)
+    AS_IF([test "x$with_mpi" != xyes && test "x$with_mpi" != xno],
+            [
+            AS_IF([test -d "$with_mpi/bin"],[with_mpi="$with_mpi/bin"],[:])
+            mpi_path=$with_mpi;with_mpi=yes
+            ], 
+            mpi_path=$PATH)
 
 #
 # Search for mpicc and mpirun in the given path.
@@ -23,7 +28,7 @@ AS_IF([test "x$with_mpi" == xyes],
         AC_PATH_PROGS(MPICC,mpicc mpiicc,"",$mpi_path)
         AC_ARG_VAR(MPIRUN,[MPI launch command])
         AC_PATH_PROGS(MPIRUN,mpirun mpiexec orterun,"",$mpi_path)
-        AS_IF([test -z "$MPIRUN"], AC_MSG_ERROR([--with-mpi was requested but MPI was not found in the PATH $with_mpi]),[:])
+        AS_IF([test -z "$MPIRUN"], AC_MSG_ERROR([--with-mpi was requested but MPI was not found in the PATH in $mpi_path]),[:])
         ],[:])
 
 AM_CONDITIONAL([HAVE_MPI],    [test -n "$MPIRUN"])
