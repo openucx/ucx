@@ -157,7 +157,10 @@ public:
 
     void flush() {
         ucs_status_t status;
-        status = uct_iface_flush(m_iface, NULL, NULL);
+        do {
+            uct_progress(m_ucth);
+            status = uct_iface_flush(m_iface, NULL, NULL);
+        } while (status == UCS_ERR_WOULD_BLOCK);
         ASSERT_UCS_OK(status);
     }
 
