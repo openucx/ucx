@@ -46,11 +46,14 @@ ucx_perftest$(EXEEXT): perftest.o $(ucx_perftest_LDADD)
 		perftest.o $(ucx_perftest_LDFLAGS) $(ucx_perftest_LDADD) -o $@
 
 if HAVE_MPIRUN
-.PHONY: test help
+.PHONY: ucx test help
 
-MPI_ARGS = -n 2 -map-by node
+MPI_ARGS = -n 2 -map-by node -mca pml ob1 -mca btl self,tcp,sm
 
-test: ucx_perftest
+ucx:
+	$(MAKE) -C $(top_builddir)
+
+test: ucx ucx_perftest
 	$(MPIRUN) $(MPI_ARGS) ucx_perftest$(EXEEXT) $(TEST_ARGS)
 
 help:

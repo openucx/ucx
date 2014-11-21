@@ -25,7 +25,7 @@ ucs_status_t uct_rc_ep_init(uct_rc_ep_t *ep)
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
     qp_init_attr.srq                 = NULL; /* TODO */
-    qp_init_attr.cap.max_send_wr     = 1024;
+    qp_init_attr.cap.max_send_wr     = UCT_RC_TX_QP_LEN;
     qp_init_attr.cap.max_recv_wr     = 1024;
     qp_init_attr.cap.max_send_sge    = 2;
     qp_init_attr.cap.max_recv_sge    = 1;
@@ -40,6 +40,8 @@ ucs_status_t uct_rc_ep_init(uct_rc_ep_t *ep)
         goto err;
     }
 
+    ep->qp_num = ep->qp->qp_num;
+    uct_rc_iface_add_ep(iface, ep);
     return UCS_OK;
 
 err:
@@ -48,7 +50,10 @@ err:
 
 void uct_rc_ep_cleanup(uct_rc_ep_t *ep)
 {
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
     int ret;
+
+    uct_rc_iface_remove_ep(iface, ep);
 
     ret = ibv_destroy_qp(ep->qp);
     if (ret != 0) {

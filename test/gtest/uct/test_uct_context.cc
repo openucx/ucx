@@ -32,11 +32,11 @@ UCS_TEST_F(test_uct, query_resources) {
     for (unsigned i = 0; i < num_resources; ++i) {
         uct_resource_desc_t *res = &resources[i];
         EXPECT_TRUE(strcmp(res->tl_name, ""));
-        EXPECT_TRUE(strcmp(res->hw_name, ""));
+        EXPECT_TRUE(strcmp(res->dev_name, ""));
         EXPECT_GT(res->latency, (uint64_t)0);
         EXPECT_GT(res->bandwidth, (size_t)0);
         UCS_TEST_MESSAGE << i << ": " << res->tl_name <<
-                        " on " << res->hw_name <<
+                        " on " << res->dev_name <<
                         " at " << (res->bandwidth / 1024.0 / 1024.0) << " MB/sec";
     }
 
@@ -61,7 +61,7 @@ UCS_TEST_F(test_uct, open_iface) {
 
     for (unsigned i = 0; i < num_resources; ++i) {
         uct_iface_h iface = NULL;
-        status = uct_iface_open(ucth, resources[i].tl_name, resources[i].hw_name,
+        status = uct_iface_open(ucth, resources[i].tl_name, resources[i].dev_name,
                                 &iface);
         ASSERT_TRUE(iface != NULL);
         ASSERT_UCS_OK(status);
@@ -151,14 +151,16 @@ public:
 
     void put8(uint64_t value, uint64_t address, uct_rkey_t rkey) {
         ucs_status_t status;
-        status = uct_ep_put_short(m_ep, &value, sizeof(value), address, rkey,
-                                  NULL, NULL);
+        status = uct_ep_put_short(m_ep, &value, sizeof(value), address, rkey);
         ASSERT_UCS_OK(status);
     }
 
     void flush() {
         ucs_status_t status;
-        status = uct_iface_flush(m_iface, NULL, NULL);
+        do {
+            uct_progress(m_ucth);
+            status = uct_iface_flush(m_iface, NULL, NULL);
+        } while (status == UCS_ERR_WOULD_BLOCK);
         ASSERT_UCS_OK(status);
     }
 

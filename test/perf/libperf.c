@@ -124,16 +124,20 @@ static ucs_time_t __find_median_quick_select(ucs_time_t arr[], int n)
 static ucs_status_t ucx_perf_test_init(ucx_perf_context_t *perf,
                                           ucx_perf_test_params_t *params)
 {
-    unsigned i;
-
-    perf->params = *params;
-
-    perf->send_buffer = memalign(perf->params.alignment, perf->params.message_size);
-    perf->recv_buffer = memalign(perf->params.alignment, perf->params.message_size);
+    perf->send_buffer = memalign(params->alignment, params->message_size);
+    perf->recv_buffer = memalign(params->alignment, params->message_size);
     if (perf->send_buffer == NULL || perf->recv_buffer == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
+    return UCS_OK;
+}
 
+static void ucx_perf_test_reset(ucx_perf_context_t *perf,
+                                ucx_perf_test_params_t *params)
+{
+    unsigned i;
+
+    perf->params            = *params;
     perf->start_time        = ucs_get_time();
     perf->prev_time         = perf->start_time;
     perf->end_time          = (perf->params.max_time == 0.0) ? UINT64_MAX :
@@ -153,8 +157,6 @@ static ucs_status_t ucx_perf_test_init(ucx_perf_context_t *perf,
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
     }
-
-    return UCS_OK;
 }
 
 void ucx_perf_test_cleanup(ucx_perf_context_t *perf)
@@ -253,7 +255,27 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf, ucx_perf_counter_t 
     }
 }
 
-static ucs_status_t ucx_perf_run_put_lat(uct_perf_context_t *perf)
+static inline void uct_perf_put_short_b(uct_ep_h ep, void *buffer, unsigned length,
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_perf_context_t *perf)
+{
+    ucs_status_t status;
+
+    status = uct_ep_put_short(ep, buffer, length, remote_addr, rkey);
+    while (status == UCS_ERR_WOULD_BLOCK) {
+        uct_progress(perf->context);
+        status = uct_ep_put_short(ep, buffer, length, remote_addr, rkey);
+    }
+}
+
+static void uct_perf_iface_flush_b(uct_perf_context_t *perf)
+{
+    while (uct_iface_flush(perf->iface, NULL, NULL) == UCS_ERR_WOULD_BLOCK) {
+        uct_progress(perf->context);
+    }
+}
+
+static ucs_status_t uct_perf_run_put_short_lat(uct_perf_context_t *perf)
 {
     volatile uint8_t *send_sn, *recv_sn;
     unsigned my_index;
@@ -263,6 +285,10 @@ static ucs_status_t ucx_perf_run_put_lat(uct_perf_context_t *perf)
     unsigned long remote_addr;
     uct_rkey_t rkey;
     uint8_t sn;
+
+    if (perf->super.params.message_size < 1) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     recv_sn = (uint8_t*)perf->super.recv_buffer + perf->super.params.message_size - 1;
     send_sn = (uint8_t*)perf->super.send_buffer + perf->super.params.message_size - 1;
@@ -275,14 +301,15 @@ static ucs_status_t ucx_perf_run_put_lat(uct_perf_context_t *perf)
     buffer = perf->super.send_buffer;
     length = perf->super.params.message_size;
 
-    sn = 0;
+    *send_sn = sn = 0;
     if (my_index == 0) {
         ep          = perf->peers[1].ep;
         remote_addr = perf->peers[1].remote_addr;
         rkey        = perf->peers[1].rkey.rkey;
         UCX_PERF_TEST_FOREACH(&perf->super) {
             while (*recv_sn != sn);
-            uct_ep_put_short(ep, buffer,length, remote_addr, rkey, NULL, NULL);
+            uct_perf_put_short_b(ep, buffer, length, remote_addr, rkey, perf);
+            uct_progress(perf->context);
             *send_sn = ++sn;
             ucx_perf_update(&perf->super, 1, length);
         }
@@ -291,11 +318,51 @@ static ucs_status_t ucx_perf_run_put_lat(uct_perf_context_t *perf)
         remote_addr = perf->peers[0].remote_addr;
         rkey        = perf->peers[0].rkey.rkey;
         UCX_PERF_TEST_FOREACH(&perf->super) {
-            uct_ep_put_short(ep, buffer,length, remote_addr, rkey, NULL, NULL);
+            uct_perf_put_short_b(ep, buffer,length, remote_addr, rkey, perf);
+            uct_progress(perf->context);
             while (*recv_sn != sn);
             *send_sn = ++sn;
             ucx_perf_update(&perf->super, 1, length);
         }
+    }
+    return UCS_OK;
+}
+
+static ucs_status_t uct_perf_run_put_short_bw(uct_perf_context_t *perf)
+{
+    unsigned long remote_addr;
+    uct_rkey_t rkey;
+    void *buffer;
+    volatile uint8_t *ptr;
+    unsigned length;
+    uct_ep_h ep;
+
+    if (perf->super.params.message_size < 1) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *(uint8_t*)perf->super.recv_buffer = 0;
+
+    rte_call(&perf->super, barrier);
+
+    if (rte_call(&perf->super, group_index) == 0) {
+        ep          = perf->peers[1].ep;
+        buffer      = perf->super.send_buffer;
+        length      = perf->super.params.message_size;
+        remote_addr = perf->peers[1].remote_addr;
+        rkey        = perf->peers[1].rkey.rkey;
+        *(uint8_t*)buffer = 1;
+
+        UCX_PERF_TEST_FOREACH(&perf->super) {
+            uct_perf_put_short_b(ep, buffer, length, remote_addr, rkey, perf);
+            ucx_perf_update(&perf->super, 1, length);
+        }
+
+        *(uint8_t*)buffer = 2;
+        uct_perf_put_short_b(ep, buffer, length, remote_addr, rkey, perf);
+    } else {
+        ptr = (uint8_t*)perf->super.recv_buffer;
+        while (*ptr != 2);
     }
     return UCS_OK;
 }
@@ -422,21 +489,46 @@ void uct_perf_test_cleanup_endpoints(uct_perf_context_t *perf)
     free(perf->peers);
 }
 
+static ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf)
+{
+    ucs_status_t status;
+
+    if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT_SHORT &&
+        perf->super.params.test_type == UCX_PERF_TEST_TYPE_PINGPONG &&
+        perf->super.params.data_layout == UCX_PERF_DATA_LAYOUT_BUFFER)
+    {
+        status = uct_perf_run_put_short_lat(perf);
+    } else if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT_SHORT &&
+               perf->super.params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI &&
+               perf->super.params.data_layout == UCX_PERF_DATA_LAYOUT_BUFFER)
+    {
+        status = uct_perf_run_put_short_bw(perf);
+    } else {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    uct_perf_iface_flush_b(perf);
+    rte_call(&perf->super, barrier);
+    return status;
+}
+
 ucs_status_t uct_perf_test_run(uct_context_h context,
-                               ucx_perf_test_params_t *params, const char *hw_name,
+                               ucx_perf_test_params_t *params, const char *dev_name,
                                const char *tl_name, ucx_perf_result_t *result)
 {
     uct_perf_context_t perf;
     ucs_status_t status;
+
+    perf.context = context;
 
     status = ucx_perf_test_init(&perf.super, params);
     if (status != UCS_OK) {
         goto out;
     }
 
-    perf.context = context;
+    ucx_perf_test_reset(&perf.super, params);
 
-    status = uct_iface_open(perf.context, tl_name, hw_name, &perf.iface);
+    status = uct_iface_open(perf.context, tl_name, dev_name, &perf.iface);
     if (status != UCS_OK) {
         goto out_test_cleanup;
     }
@@ -452,16 +544,15 @@ ucs_status_t uct_perf_test_run(uct_context_h context,
         goto out_mem_unmap;
     }
 
-    /* Run test */
-    if (perf.super.params.command == UCX_PERF_TEST_CMD_PUT_SHORT &&
-        perf.super.params.test_type == UCX_PERF_TEST_TYPE_PINGPONG &&
-        perf.super.params.data_layout == UCX_PERF_DATA_LAYOUT_BUFFER)
-    {
-        status = ucx_perf_run_put_lat(&perf);
-    } else {
-        status = UCS_ERR_INVALID_PARAM;
+    if (perf.super.params.flags & UCX_PERF_TEST_FLAG_WARMUP) {
+        perf.super.params.max_iter        = 1000;
+        perf.super.params.report_interval = 1e10;
+        uct_perf_test_dispatch(&perf);
+        ucx_perf_test_reset(&perf.super, params);
     }
 
+    /* Run test */
+    status = uct_perf_test_dispatch(&perf);
     if (status == UCS_OK) {
         ucx_perf_calc_result(&perf.super, result);
     }

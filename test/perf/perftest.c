@@ -49,7 +49,7 @@ typedef struct sock_rte_group {
 struct perftest_context {
     ucx_perf_test_params_t       params;
 
-    char                         hw_name[UCT_MAX_NAME_LEN];
+    char                         dev_name[UCT_MAX_NAME_LEN];
     char                         tl_name[UCT_MAX_NAME_LEN];
 
     uct_context_h                ucth;
@@ -179,6 +179,7 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -x <tl>      Transport to use for testing.\n");
     printf("     -t <test>    Test to run:\n");
     printf("                     put_lat  : put latency.\n");
+    printf("                     put_bw   : put bandwidth / message rate.\n");
     printf("     -n <iters>   Number of iterations to run. (%ld)\n", ctx->params.max_iter);
     printf("     -s <size>    Message size. (%Zu)\n", ctx->params.message_size);
     printf("     -N           Use numeric formatting - thousands separator.\n");
@@ -212,7 +213,7 @@ void print_transports(struct perftest_context *ctx)
 
     for (res = resources; res < resources + num_resources; ++res) {
        printf("| %-9s | %-11s | %10.2f MB/s | %7.3f usec |\n",
-               res->hw_name, res->tl_name,
+               res->dev_name, res->tl_name,
                res->bandwidth / (1024.0 * 1024.0),
                res->latency / 1000.0);
     }
@@ -235,7 +236,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->params.max_iter        = 1000000l;
     ctx->params.max_time        = 0.0;
     ctx->params.report_interval = 1.0;
-    strcpy(ctx->hw_name, "");
+    strcpy(ctx->dev_name, "");
     strcpy(ctx->tl_name, "");
     ctx->server_addr            = NULL;
     ctx->port                   = 13337;
@@ -247,7 +248,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             ctx->port = atoi(optarg);
             break;
         case 'd':
-            ucs_snprintf_zero(ctx->hw_name, sizeof(ctx->hw_name), "%s", optarg);
+            ucs_snprintf_zero(ctx->dev_name, sizeof(ctx->dev_name), "%s", optarg);
             break;
         case 'x':
             ucs_snprintf_zero(ctx->tl_name, sizeof(ctx->tl_name), "%s", optarg);
@@ -256,6 +257,9 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             if (0 == strcmp(optarg, "put_lat")) {
                 ctx->params.command   = UCX_PERF_TEST_CMD_PUT_SHORT;
                 ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
+            } else if (0 == strcmp(optarg, "put_bw")) {
+                ctx->params.command   = UCX_PERF_TEST_CMD_PUT_SHORT;
+                ctx->params.test_type = UCX_PERF_TEST_TYPE_STREAM_UNI;
             } else {
                 ucs_error("Invalid option argument for -t");
                 return -1;
@@ -300,7 +304,7 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (!strlen(ctx->hw_name)) {
+    if (!strlen(ctx->dev_name)) {
         ucs_error("Must specify device name");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -445,7 +449,7 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
         close(sockfd);
         safe_recv(connfd, &ctx->params, sizeof(ctx->params));
-        safe_recv(connfd, &ctx->hw_name, sizeof(ctx->hw_name));
+        safe_recv(connfd, &ctx->dev_name, sizeof(ctx->dev_name));
         safe_recv(connfd, &ctx->tl_name, sizeof(ctx->tl_name));
 
         ctx->sock_rte_group.connfd    = connfd;
@@ -479,7 +483,7 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         }
 
         safe_send(sockfd, &ctx->params, sizeof(ctx->params));
-        safe_send(sockfd, &ctx->hw_name, sizeof(ctx->hw_name));
+        safe_send(sockfd, &ctx->dev_name, sizeof(ctx->dev_name));
         safe_send(sockfd, &ctx->tl_name, sizeof(ctx->tl_name));
 
         ctx->sock_rte_group.connfd    = sockfd;
@@ -641,7 +645,7 @@ static ucs_status_t run_test(struct perftest_context *ctx)
     setlocale(LC_ALL, "en_US");
 
     print_header(ctx);
-    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->hw_name, ctx->tl_name,
+    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->dev_name, ctx->tl_name,
                                &result);
     if (status != UCS_OK) {
         ucs_error("Failed to run test: %s", ucs_status_string(status));

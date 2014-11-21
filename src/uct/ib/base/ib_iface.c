@@ -16,25 +16,27 @@
 
 static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
                                            uct_ib_iface_t *iface,
-                                           const char *hw_name)
+                                           const char *dev_name)
 {
     uct_ib_device_t *dev;
-    const char *dev_name;
+    const char *ibdev_name;
     unsigned port_num;
     unsigned dev_index;
     size_t devname_len;
     char *p;
 
-    p = strrchr(hw_name, ':');
+    p = strrchr(dev_name, ':');
     if (p == NULL) {
-        return UCS_ERR_INVALID_PARAM; /* Wrong hw_name format */
+        return UCS_ERR_INVALID_PARAM; /* Wrong dev_name format */
     }
-    devname_len = p - hw_name;
+    devname_len = p - dev_name;
 
     for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
         dev = ibctx->devices[dev_index];
-        dev_name = uct_ib_device_name(dev);
-        if ((strlen(dev_name) == devname_len) && !strncmp(dev_name, hw_name, devname_len)) {
+        ibdev_name = uct_ib_device_name(dev);
+        if ((strlen(ibdev_name) == devname_len) &&
+            !strncmp(ibdev_name, dev_name, devname_len))
+        {
             port_num = strtod(p + 1, &p);
             if (*p != '\0') {
                 return UCS_ERR_INVALID_PARAM; /* Failed to parse port number */
@@ -54,14 +56,14 @@ static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
 }
 
 ucs_status_t ucs_ib_iface_init(uct_context_h context, uct_ib_iface_t *iface,
-                               const char *hw_name)
+                               const char *dev_name)
 {
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     struct ibv_exp_port_attr *port_attr;
     uct_ib_device_t *dev;
     ucs_status_t status;
 
-    status = uct_ib_iface_find_port(ibctx, iface, hw_name);
+    status = uct_ib_iface_find_port(ibctx, iface, dev_name);
     if (status != UCS_OK) {
         goto err;
     }

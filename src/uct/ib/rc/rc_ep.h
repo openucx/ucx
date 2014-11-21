@@ -8,21 +8,23 @@
 #ifndef UCT_RC_EP_H
 #define UCT_RC_EP_H
 
-#include "rc_iface.h"
+#include "rc_def.h"
 
 #include <uct/api/uct.h>
 
 
-typedef struct uct_rc_ep_addr {
+struct uct_rc_ep_addr {
     uct_ep_addr_t     super;
     uint32_t          qp_num;
-} uct_rc_ep_addr_t;
+};
 
 
-typedef struct uct_rc_ep {
+struct uct_rc_ep {
     uct_ep_t          super;
     struct ibv_qp     *qp;
-} uct_rc_ep_t;
+    unsigned          qp_num;
+    uct_rc_ep_t       *next;
+};
 
 
 ucs_status_t uct_rc_ep_init(uct_rc_ep_t *ep);

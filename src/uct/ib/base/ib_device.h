@@ -23,11 +23,15 @@ struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
+    pthread_t                   async_thread;    /* Async event thread */
+    int                         stop_thread;
     struct ibv_exp_port_attr    port_attr[0];    /* Cached port attributes */
 };
 
 
-ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device, uct_ib_device_t **dev_p);
+ucs_status_t uct_ib_device_create(uct_context_h context,
+                                  struct ibv_device *ibv_device,
+                                  uct_ib_device_t **dev_p);
 void uct_ib_device_destroy(uct_ib_device_t *dev);
 
 

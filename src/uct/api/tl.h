@@ -24,8 +24,8 @@
  * Communication resource.
  */
 typedef struct uct_resource_desc {
-    char                     tl_name[UCT_MAX_NAME_LEN];  /* Transport name */
-    char                     hw_name[UCT_MAX_NAME_LEN];  /* Hardware resource name */
+    char                     tl_name[UCT_MAX_NAME_LEN];   /* Transport name */
+    char                     dev_name[UCT_MAX_NAME_LEN];  /* Hardware device name */
     uint64_t                 latency;      /* Latency, nanoseconds */
     size_t                   bandwidth;    /* Bandwidth, bytes/second */
     cpu_set_t                local_cpus;   /* Mask of CPUs near the resource */
@@ -46,6 +46,12 @@ struct uct_ep_addr {
  * Send completion callback.
  */
 typedef void (*uct_completion_cb_t)(uct_req_h req, ucs_status_t status);
+
+
+typedef struct uct_callback uct_callback_t;
+struct uct_callback {
+    void (*cb)(uct_callback_t *self, ucs_status_t status);
+};
 
 
 /**
@@ -92,7 +98,7 @@ typedef struct uct_tl_ops {
                                     uct_resource_desc_t **resources_p,
                                     unsigned *num_resources_p);
 
-    ucs_status_t (*iface_open)(uct_context_h context, const char *hw_name,
+    ucs_status_t (*iface_open)(uct_context_h context, const char *dev_name,
                                uct_iface_h *iface_p);
 
     ucs_status_t (*rkey_unpack)(uct_context_h context, void *rkey_buffer,
@@ -146,8 +152,8 @@ typedef struct uct_iface_ops {
                                      uct_ep_addr_t *ep_addr);
 
     ucs_status_t (*ep_put_short)(uct_ep_h ep, void *buffer, unsigned length,
-                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                 uct_req_h *req_p, uct_completion_cb_t cb);
+                                 uint64_t remote_addr, uct_rkey_t rkey);
+
 } uct_iface_ops_t;
 
 
@@ -156,6 +162,7 @@ typedef struct uct_iface_ops {
  */
 typedef struct uct_pd {
     uct_pd_ops_t             *ops;
+    uct_context_h            context;
 } uct_pd_t;
 
 
