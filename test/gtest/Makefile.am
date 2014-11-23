@@ -43,6 +43,7 @@ gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
 gtest_SOURCES = \
 	uct/test_uct_context.cc \
 	uct/test_uct_perf.cc \
+	ucs/test_class.cc \
 	ucs/test_component.cc \
 	ucs/test_config.cc \
 	ucs/test_datatype.cc \
