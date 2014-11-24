@@ -10,6 +10,10 @@
 
 #include <ucs/sys/compiler.h>
 
+
+/* Convert token to string */
+#define UCS_PP_QUOTE(x)                 # x
+
 /* Paste two expanded tokens */
 #define __UCS_TOKENPASTE_HELPER(x, y)   x ## y
 #define UCS_PP_TOKENPASTE(x, y)         __UCS_TOKENPASTE_HELPER(x, y)
@@ -43,11 +47,14 @@
  * e.g
  * UCS_PP_FOREACH(macro, arg, a, b, c) will expand to: macro(arg, a) macro(arg, b) macro(arg, c)
  * UCS_PP_FOREACH_SEP(macro, arg, a, b, c) will expand to: macro(arg, a), macro(arg, b), macro(arg, c)
+ * UCS_PP_ZIP((a, b, c), (1, 2, 3)) will expand to: (a, 1), (b, 2), (c, 3)
  */
 #define UCS_PP_FOREACH(_macro, _arg, ...) \
     UCS_PP_TOKENPASTE(_UCS_PP_FOREACH_, UCS_PP_NUM_ARGS(__VA_ARGS__))(_macro, _arg, __VA_ARGS__)
 #define UCS_PP_FOREACH_SEP(_macro, _arg, ...) \
     UCS_PP_TOKENPASTE(_UCS_PP_FOREACH_SEP_, UCS_PP_NUM_ARGS(__VA_ARGS__))(_macro, _arg, __VA_ARGS__)
+#define UCS_PP_ZIP(_l1, _l2) \
+    UCS_PP_TOKENPASTE(_UCS_PP_ZIP_, UCS_PP_NUM_ARGS _l1)(_l1, _l2)
 
 #define _UCS_PP_FOREACH_0(_macro , _arg, ...)
 #define _UCS_PP_FOREACH_1(_macro , _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_0 (_macro, _arg, __VA_ARGS__)
@@ -71,6 +78,7 @@
 #define _UCS_PP_FOREACH_19(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_18(_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_20(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1) _UCS_PP_FOREACH_19(_macro, _arg, __VA_ARGS__)
 
+#define _UCS_PP_FOREACH_SEP_0(_macro , _arg, _arg1, ...)
 #define _UCS_PP_FOREACH_SEP_1(_macro , _arg, _arg1, ...)  _macro(_arg, _arg1)
 #define _UCS_PP_FOREACH_SEP_2(_macro , _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_1 (_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_SEP_3(_macro , _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_2 (_macro, _arg, __VA_ARGS__)
@@ -92,15 +100,32 @@
 #define _UCS_PP_FOREACH_SEP_19(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_18(_macro, _arg, __VA_ARGS__)
 #define _UCS_PP_FOREACH_SEP_20(_macro, _arg, _arg1, ...)  _macro(_arg, _arg1), _UCS_PP_FOREACH_SEP_19(_macro, _arg, __VA_ARGS__)
 
+#define _UCS_PP_ZIP_0(_l1, _l2)
+#define _UCS_PP_ZIP_1(_l1, _l2)       _UCS_PP_ZIP_0(_l1, _l2)  (UCS_PP_TUPLE_0 _l1, UCS_PP_TUPLE_0 _l2)
+#define _UCS_PP_ZIP_2(_l1, _l2)       _UCS_PP_ZIP_1(_l1, _l2), (UCS_PP_TUPLE_1 _l1, UCS_PP_TUPLE_1 _l2)
+#define _UCS_PP_ZIP_3(_l1, _l2)       _UCS_PP_ZIP_2(_l1, _l2), (UCS_PP_TUPLE_2 _l1, UCS_PP_TUPLE_2 _l2)
+#define _UCS_PP_ZIP_4(_l1, _l2)       _UCS_PP_ZIP_3(_l1, _l2), (UCS_PP_TUPLE_3 _l1, UCS_PP_TUPLE_3 _l2)
+#define _UCS_PP_ZIP_5(_l1, _l2)       _UCS_PP_ZIP_4(_l1, _l2), (UCS_PP_TUPLE_4 _l1, UCS_PP_TUPLE_4 _l2)
+#define _UCS_PP_ZIP_6(_l1, _l2)       _UCS_PP_ZIP_5(_l1, _l2), (UCS_PP_TUPLE_5 _l1, UCS_PP_TUPLE_5 _l2)
+#define _UCS_PP_ZIP_7(_l1, _l2)       _UCS_PP_ZIP_6(_l1, _l2), (UCS_PP_TUPLE_6 _l1, UCS_PP_TUPLE_6 _l2)
+#define _UCS_PP_ZIP_8(_l1, _l2)       _UCS_PP_ZIP_7(_l1, _l2), (UCS_PP_TUPLE_7 _l1, UCS_PP_TUPLE_7 _l2)
+#define _UCS_PP_ZIP_9(_l1, _l2)       _UCS_PP_ZIP_8(_l1, _l2), (UCS_PP_TUPLE_8 _l1, UCS_PP_TUPLE_8 _l2)
+#define _UCS_PP_ZIP_10(_l1, _l2)      _UCS_PP_ZIP_9(_l1, _l2), (UCS_PP_TUPLE_9 _l1, UCS_PP_TUPLE_9 _l2)
+
 
 /* Extract elements from tuples
  */
-#define UCS_PP_TUPLE_0(_0, ...)                      _0
-#define UCS_PP_TUPLE_1(_0, _1, ...)                  _1
-#define UCS_PP_TUPLE_2(_0, _1, _2, ...)              _2
-#define UCS_PP_TUPLE_3(_0, _1, _2, _3, ...)          _3
-#define UCS_PP_TUPLE_4(_0, _1, _2, _3, _4, ...)      _4
-#define UCS_PP_TUPLE_5(_0, _1, _2, _3, _4, _5, ...)  _5
+#define UCS_PP_TUPLE_0(_0, ...)                                            _0
+#define UCS_PP_TUPLE_1(_0, _1, ...)                                        _1
+#define UCS_PP_TUPLE_2(_0, _1, _2, ...)                                    _2
+#define UCS_PP_TUPLE_3(_0, _1, _2, _3, ...)                                _3
+#define UCS_PP_TUPLE_4(_0, _1, _2, _3, _4, ...)                            _4
+#define UCS_PP_TUPLE_5(_0, _1, _2, _3, _4, _5, ...)                        _5
+#define UCS_PP_TUPLE_6(_0, _1, _2, _3, _4, _5, _6, ...)                    _6
+#define UCS_PP_TUPLE_7(_0, _1, _2, _3, _4, _5, _6, _7, ...)                _7
+#define UCS_PP_TUPLE_8(_0, _1, _2, _3, _4, _5, _6, _7, _8, ...)            _8
+#define UCS_PP_TUPLE_9(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ...)        _9
+#define UCS_PP_TUPLE_10(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, ...)  _10
 
 
 /* Sequence of numbers

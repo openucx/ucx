@@ -27,10 +27,6 @@ struct uct_rc_ep {
 };
 
 
-ucs_status_t uct_rc_ep_init(uct_rc_ep_t *ep);
-
-void uct_rc_ep_cleanup(uct_rc_ep_t *ep);
-
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
 
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_addr,

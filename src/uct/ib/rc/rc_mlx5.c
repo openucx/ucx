@@ -15,6 +15,7 @@
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/type/class.h>
 #include <string.h>
 #include <arpa/inet.h> /* For htonl */
 
@@ -35,68 +36,48 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_context_h context,
                                   resources_p, num_resources_p);
 }
 
-static ucs_status_t uct_rc_mlx5_ep_create(uct_iface_h tl_iface, uct_ep_h *ep_p)
+static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 {
     uct_ib_mlx5_qp_info_t qp_info;
-    uct_rc_mlx5_ep_t *ep;
     ucs_status_t status;
 
-    ep = ucs_malloc(sizeof(*ep), "rc mlx5 ep");
-    if (ep == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
+    UCS_CLASS_CALL_SUPER_INIT(tl_iface);
 
-    ep->super.super.iface = tl_iface;
-
-    status = uct_rc_ep_init(&ep->super);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
-
-    status = uct_ib_mlx5_get_qp_info(ep->super.qp, &qp_info);
+    status = uct_ib_mlx5_get_qp_info(self->super.qp, &qp_info);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");
-        goto err_cleanup_rc_ep;
+        return status;
     }
 
     if ((qp_info.bf.size == 0) || !ucs_is_pow2(qp_info.bf.size) ||
         (qp_info.sq.stride != MLX5_SEND_WQE_BB) || !ucs_is_pow2(qp_info.sq.wqe_cnt))
     {
         ucs_error("mlx5 device parameters not suitable for transport");
-        goto err_cleanup_rc_ep;
+        return status;
     }
 
-    ep->qpn_ds     = htonl(ep->super.qp->qp_num << 8);
-    ep->tx.qstart  = qp_info.sq.buf;
-    ep->tx.qend    = qp_info.sq.buf + (MLX5_SEND_WQE_BB *  qp_info.sq.wqe_cnt);
-    ep->tx.seg     = ep->tx.qstart;
-    ep->tx.sw_pi   = 0;
-    ep->tx.max_pi  = UCT_RC_TX_QP_LEN;
-    ep->tx.bf_reg  = qp_info.bf.reg;
-    ep->tx.bf_size = qp_info.bf.size;
-    ep->tx.dbrec   = &qp_info.dbrec[MLX5_SND_DBR];
+    self->qpn_ds     = htonl(self->super.qp->qp_num << 8);
+    self->tx.qstart  = qp_info.sq.buf;
+    self->tx.qend    = qp_info.sq.buf + (MLX5_SEND_WQE_BB *  qp_info.sq.wqe_cnt);
+    self->tx.seg     = self->tx.qstart;
+    self->tx.sw_pi   = 0;
+    self->tx.max_pi  = UCT_RC_TX_QP_LEN;
+    self->tx.bf_reg  = qp_info.bf.reg;
+    self->tx.bf_size = qp_info.bf.size;
+    self->tx.dbrec   = &qp_info.dbrec[MLX5_SND_DBR];
 
-    memset(ep->tx.qstart, 0, ep->tx.qend - ep->tx.qstart);
-
-    *ep_p = &ep->super.super;
+    memset(self->tx.qstart, 0, self->tx.qend - self->tx.qstart);
     return UCS_OK;
-
-err_cleanup_rc_ep:
-    uct_rc_ep_cleanup(&ep->super);
-err_free:
-    ucs_free(ep);
-err:
-    return status;
 }
 
-static void uct_rc_mlx5_ep_destroy(uct_ep_h tl_ep)
+static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
-    uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
-
-    uct_rc_ep_cleanup(&ep->super);
-    ucs_free(ep);
 }
+
+UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
+
 
 static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
                                              unsigned length,
@@ -210,79 +191,65 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_iface_close(uct_iface_h tl_iface)
-{
-    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_t);
-    uct_context_h context = iface->super.super.super.pd->context;
+static void uct_rc_mlx5_iface_t_delete(uct_iface_t*);
 
-    ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, iface);
-    ucs_ib_iface_cleanup(&iface->super.super);
-    ucs_free(iface);
-}
+uct_iface_ops_t uct_rc_mlx5_iface_ops = {
+    .iface_close         = uct_rc_mlx5_iface_t_delete,
+    .iface_get_address   = uct_rc_iface_get_address,
+    .iface_flush         = uct_rc_mlx5_iface_flush,
+    .ep_get_address      = uct_rc_ep_get_address,
+    .ep_connect_to_iface = NULL,
+    .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
+    .iface_query         = uct_rc_mlx5_iface_query,
+    .ep_put_short        = uct_rc_mlx5_ep_put_short,
+    .ep_create           = uct_rc_mlx5_ep_t_new,
+    .ep_destroy          = uct_rc_mlx5_ep_t_delete,
+};
 
-static ucs_status_t uct_rc_mlx5_iface_open(uct_context_h context,
-                                           const char *dev_name,
-                                           uct_iface_h *iface_p)
+static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context, const char *dev_name)
 {
     uct_ib_mlx5_cq_info_t cq_info;
-    uct_rc_mlx5_iface_t *iface;
     ucs_status_t status;
     int ret;
 
-    iface = ucs_malloc(sizeof(*iface), "rc mlx5 iface");
-    if (iface == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
+    UCS_CLASS_CALL_SUPER_INIT(&uct_rc_mlx5_iface_ops, context, dev_name);
 
-    iface->super.super.super.ops.iface_close         = uct_rc_mlx5_iface_close;
-    iface->super.super.super.ops.iface_get_address   = uct_rc_iface_get_address;
-    iface->super.super.super.ops.iface_flush         = uct_rc_mlx5_iface_flush;
-    iface->super.super.super.ops.ep_get_address      = uct_rc_ep_get_address;
-    iface->super.super.super.ops.ep_connect_to_iface = NULL;
-    iface->super.super.super.ops.ep_connect_to_ep    = uct_rc_ep_connect_to_ep;
-    iface->super.super.super.ops.iface_query         = uct_rc_mlx5_iface_query;
-    iface->super.super.super.ops.ep_put_short        = uct_rc_mlx5_ep_put_short;
-    iface->super.super.super.ops.ep_create           = uct_rc_mlx5_ep_create;
-    iface->super.super.super.ops.ep_destroy          = uct_rc_mlx5_ep_destroy;
-
-    status = ucs_ib_iface_init(context, &iface->super.super, dev_name);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
-
-    ret = ibv_exp_cq_ignore_overrun(iface->super.super.send_cq);
+    ret = ibv_exp_cq_ignore_overrun(self->super.super.send_cq);
     if (ret != 0) {
         ucs_error("Failed to modify send CQ to ignore overrun: %s", strerror(ret));
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_cleanup_ib_ep;
+        return UCS_ERR_UNSUPPORTED;
     }
 
-    status = uct_ib_mlx5_get_cq_info(iface->super.super.send_cq, &cq_info);
+    status = uct_ib_mlx5_get_cq_info(self->super.super.send_cq, &cq_info);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 CQ information");
-        goto err_cleanup_ib_ep;
+        return status;
     }
 
-    iface->tx.cq_buf      = cq_info.buf;
-    iface->tx.cq_ci       = 0;
-    iface->tx.cq_length   = cq_info.cqe_cnt;
-    iface->tx.outstanding = 0;
+    self->tx.cq_buf      = cq_info.buf;
+    self->tx.cq_ci       = 0;
+    self->tx.cq_length   = cq_info.cqe_cnt;
+    self->tx.outstanding = 0;
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_mlx5_iface_progress,
-                           iface);
-
-    *iface_p = &iface->super.super.super;
+                           self);
     return UCS_OK;
-    err_cleanup_ib_ep:
-
-err_free:
-    ucs_free(iface);
-    return status;
 }
+
+static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
+{
+    uct_context_h context = self->super.super.super.pd->context;
+    ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, self);
+}
+
+UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_ib_iface_t);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h, const char*);
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
+
 
 uct_tl_ops_t uct_rc_mlx5_tl_ops = {
     .query_resources     = uct_rc_mlx5_query_resources,
-    .iface_open          = uct_rc_mlx5_iface_open,
+    .iface_open          = uct_rc_mlx5_iface_t_new,
     .rkey_unpack         = uct_ib_rkey_unpack,
 };
 

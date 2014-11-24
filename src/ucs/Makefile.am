@@ -45,10 +45,11 @@ noinst_HEADERS = \
 	time/time.h \
 	time/timer_wheel.h \
 	time/timerq.h \
-	type/status.h \
 	type/callback.h \
+	type/class.h \
 	type/component.h \
-	type/spinlock.h
+	type/spinlock.h \
+	type/status.h 
 	
 libucs_la_SOURCES = \
 	config/global_opts.c \
@@ -68,6 +69,7 @@ libucs_la_SOURCES = \
 	time/timer_wheel.c \
 	time/timerq.c \
 	type/callback.c \
+	type/class.c \
 	type/component.c \
 	type/status.c
 	

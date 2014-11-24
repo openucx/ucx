@@ -11,14 +11,17 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/type/class.h>
 
 
-ucs_status_t uct_rc_ep_init(uct_rc_ep_t *ep)
+static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     struct ibv_qp_init_attr qp_init_attr;
     ucs_status_t status;
+
+    UCS_CLASS_CALL_SUPER_INIT(tl_iface)
 
     /* Create QP */
     qp_init_attr.qp_context          = NULL;
@@ -33,33 +36,35 @@ ucs_status_t uct_rc_ep_init(uct_rc_ep_t *ep)
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.sq_sig_all          = 0;
     qp_init_attr.xrc_domain          = NULL;
-    ep->qp = ibv_create_qp(dev->pd, &qp_init_attr);
-    if (ep->qp == NULL) {
+    self->qp = ibv_create_qp(dev->pd, &qp_init_attr);
+    if (self->qp == NULL) {
         ucs_error("failed to create qp: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
 
-    ep->qp_num = ep->qp->qp_num;
-    uct_rc_iface_add_ep(iface, ep);
+    self->qp_num = self->qp->qp_num; /* For hash */
+    uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
 
 err:
     return status;
 }
 
-void uct_rc_ep_cleanup(uct_rc_ep_t *ep)
+static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(self->super.iface, uct_rc_iface_t);
     int ret;
 
-    uct_rc_iface_remove_ep(iface, ep);
+    uct_rc_iface_remove_ep(iface, self);
 
-    ret = ibv_destroy_qp(ep->qp);
+    ret = ibv_destroy_qp(self->qp);
     if (ret != 0) {
         ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
     }
 }
+
+UCS_CLASS_DEFINE(uct_rc_ep_t, uct_ep_t)
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 {
