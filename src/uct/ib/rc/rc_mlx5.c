@@ -75,8 +75,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
-UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 
 
 static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
@@ -146,9 +146,6 @@ static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
     return UCS_OK;
 }
 
-UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h, const char*);
-UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
-
 static void uct_rc_mlx5_iface_progress(void *arg)
 {
     uct_rc_mlx5_iface_t *iface = arg;
@@ -193,6 +190,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->max_short = MLX5_SEND_WQE_BB - sizeof(uct_ib_mlx5_wqe_rc_rdma_inl_seg_t);  /* TODO */
     return UCS_OK;
 }
+
+static void uct_rc_mlx5_iface_t_delete(uct_iface_t*);
 
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_close         = uct_rc_mlx5_iface_t_delete,
@@ -244,6 +243,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_ib_iface_t);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h, const char*);
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
+
 
 uct_tl_ops_t uct_rc_mlx5_tl_ops = {
     .query_resources     = uct_rc_mlx5_query_resources,

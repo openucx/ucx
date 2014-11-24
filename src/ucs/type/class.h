@@ -92,7 +92,7 @@ struct ucs_class {
         int init_count = 0; \
         ucs_status_t status; \
         \
-        status = cls->init((_obj), ## __VA_ARGS__, cls, &init_count); \
+        status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), ## __VA_ARGS__, cls, &init_count); \
         if (status != UCS_OK) { \
             _ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
                                           (_obj), init_count); \
