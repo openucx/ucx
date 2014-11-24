@@ -22,7 +22,8 @@ noinst_HEADERS = \
 	tl/context.h
 
 libuct_la_SOURCES = \
-	tl/context.c
+	tl/context.c \
+	tl/tl.c
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)

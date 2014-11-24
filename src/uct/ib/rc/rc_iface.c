@@ -10,6 +10,7 @@
 
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/type/class.h>
 
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
@@ -61,3 +62,16 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
     sglib_hashed_uct_rc_ep_t_delete(iface->eps, ep);
 }
+
+
+static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_context_h context, const char *dev_name)
+{
+    UCS_CLASS_CALL_SUPER_INIT(context, dev_name);
+    return UCS_OK;
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
+{
+}
+
+UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
