@@ -17,6 +17,7 @@
 #include <infiniband/verbs_exp.h>
 #endif
 
+#include <errno.h>
 
 #ifndef HAVE_VERBS_EXP_H
 #  define IBV_EXP_SEND_INLINE              IBV_SEND_INLINE
