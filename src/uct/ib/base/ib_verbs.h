@@ -8,8 +8,6 @@
 #ifndef UCT_IB_VERBS_H
 #define UCT_IB_VERBS_H
 
-#include <errno.h>
-
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -19,6 +17,7 @@
 #include <infiniband/verbs_exp.h>
 #endif
 
+#include <errno.h>
 
 #ifndef HAVE_VERBS_EXP_H
 #  define IBV_EXP_SEND_INLINE              IBV_SEND_INLINE
