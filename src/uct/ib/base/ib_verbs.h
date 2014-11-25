@@ -8,6 +8,8 @@
 #ifndef UCT_IB_VERBS_H
 #define UCT_IB_VERBS_H
 
+#include <errno.h>
+
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
