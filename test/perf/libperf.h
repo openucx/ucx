@@ -124,8 +124,8 @@ typedef struct ucx_perf_test_params {
  * Run a performance test.
  */
 ucs_status_t uct_perf_test_run(uct_context_h context,
-                               ucx_perf_test_params_t *params, const char *dev_name,
-                               const char *tl_name, ucx_perf_result_t *result);
+                               ucx_perf_test_params_t *params, const char *tl_name,
+                               const char *dev_name, ucx_perf_result_t *result);
 
 
 END_C_DECLS

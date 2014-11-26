@@ -513,8 +513,8 @@ static ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf)
 }
 
 ucs_status_t uct_perf_test_run(uct_context_h context,
-                               ucx_perf_test_params_t *params, const char *dev_name,
-                               const char *tl_name, ucx_perf_result_t *result)
+                               ucx_perf_test_params_t *params, const char *tl_name,
+                               const char *dev_name, ucx_perf_result_t *result)
 {
     uct_perf_context_t perf;
     ucs_status_t status;

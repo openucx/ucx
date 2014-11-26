@@ -645,7 +645,7 @@ static ucs_status_t run_test(struct perftest_context *ctx)
     setlocale(LC_ALL, "en_US");
 
     print_header(ctx);
-    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->dev_name, ctx->tl_name,
+    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->tl_name, ctx->dev_name,
                                &result);
     if (status != UCS_OK) {
         ucs_error("Failed to run test: %s", ucs_status_string(status));
