@@ -9,6 +9,9 @@
 #define UCS_CONFIG_TYPES_H
 
 
+#include <ucs/sys/math.h>
+
+
 /**
  * Logging levels.
  */
@@ -61,6 +64,15 @@ typedef enum {
     UCS_HANDLE_ERROR_LAST
 } ucs_handle_error_t;
 
+
+/**
+ * Configuration printing flags
+ */
+typedef enum {
+    UCS_CONFIG_PRINT_HEADER        = UCS_BIT(0),
+    UCS_CONFIG_PRINT_DOC           = UCS_BIT(1),
+    UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(2),
+} ucs_config_print_flags_t;
 
 
 #endif /* TYPES_H_ */

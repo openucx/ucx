@@ -10,7 +10,19 @@
 #include <uct/api/uct.h>
 #include <ucs/debug/memtrack.h>
 
+#define UCT_CONFIG_ENV_PREFIX "UCT_"
+
 UCS_COMPONENT_LIST_DEFINE(uct_context_t);
+
+/**
+ * Keeps information about allocated configuration structure, to be used when
+ * releasing the options.
+ */
+typedef struct uct_config_bundle {
+    ucs_config_field_t *table;
+    char               data[];
+} uct_config_bundle_t;
+
 
 ucs_status_t uct_init(uct_context_h *context_p)
 {
@@ -54,6 +66,7 @@ void uct_progress(uct_context_h context)
 }
 
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
+                             ucs_config_field_t *config_table, size_t config_size,
                              uct_tl_ops_t *tl_ops)
 {
     uct_context_tl_info_t *tls;
@@ -64,8 +77,10 @@ ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
     }
 
     context->tls = tls;
-    context->tls[context->num_tls].name = tl_name;
-    context->tls[context->num_tls].ops  = tl_ops;
+    context->tls[context->num_tls].ops                = tl_ops;
+    context->tls[context->num_tls].name               = tl_name;
+    context->tls[context->num_tls].iface_config_table = config_table;
+    context->tls[context->num_tls].iface_config_size  = config_size;
     ++context->num_tls;
     return UCS_OK;
 }
@@ -124,19 +139,92 @@ void uct_release_resource_list(uct_resource_desc_t *resources)
     ucs_free(resources);
 }
 
-ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *dev_name, uct_iface_h *iface_p)
+static uct_context_tl_info_t *uct_find_tl(uct_context_h context, const char *tl_name)
 {
     uct_context_tl_info_t *tl;
 
     for (tl = context->tls; tl < context->tls + context->num_tls; ++tl) {
         if (!strcmp(tl_name, tl->name)) {
-            return tl->ops->iface_open(context, dev_name, iface_p);
+            return tl;
         }
     }
+    return NULL;
+}
 
-    /* Non-existing transport */
-    return UCS_ERR_NO_DEVICE;
+ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
+                                   const char *env_prefix, const char *filename,
+                                   uct_iface_config_t **config_p)
+{
+    uct_config_bundle_t *bundle;
+    uct_context_tl_info_t *tl;
+    ucs_status_t status;
+
+    tl = uct_find_tl(context, tl_name);
+    if (tl == NULL) {
+        status = UCS_ERR_NO_ELEM; /* Non-existing transport */
+        goto err;
+    }
+
+    bundle = ucs_calloc(1, sizeof(*bundle) + tl->iface_config_size, "uct_iface_config");
+    if (bundle == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* TODO use env_prefix */
+    status = ucs_config_parser_fill_opts(bundle->data, tl->iface_config_table,
+                                         UCT_CONFIG_ENV_PREFIX);
+
+    if (status != UCS_OK) {
+        goto err_free_opts;
+    }
+
+    bundle->table = tl->iface_config_table;
+    *config_p = (uct_iface_config_t*)bundle->data;
+    return UCS_OK;
+
+err_free_opts:
+    ucs_free(bundle);
+err:
+    return status;
+
+}
+
+void uct_iface_config_release(uct_iface_config_t *config)
+{
+    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
+
+    ucs_config_parser_release_opts(config, bundle->table);
+    ucs_free(bundle);
+}
+
+void uct_iface_config_print(uct_iface_config_t *config, FILE *stream,
+                            const char *title, ucs_config_print_flags_t print_flags)
+{
+    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
+    ucs_config_parser_print_opts(stream, title, bundle->data, bundle->table,
+                                 UCT_CONFIG_ENV_PREFIX, print_flags);
+}
+
+ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
+                                     const char *name, const char *value)
+{
+    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
+    return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
+}
+
+ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
+                            const char *dev_name, uct_iface_config_t *config,
+                            uct_iface_h *iface_p)
+{
+    uct_context_tl_info_t *tl = uct_find_tl(context, tl_name);
+
+    if (tl == NULL) {
+        /* Non-existing transport */
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return tl->ops->iface_open(context, dev_name, config, iface_p);
 }
 
 ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,

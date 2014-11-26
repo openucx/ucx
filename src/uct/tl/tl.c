@@ -5,6 +5,8 @@
 * $HEADER$
 */
 
+#include "context.h"
+
 #include <uct/api/uct.h>
 #include <ucs/type/class.h>
 
@@ -33,3 +35,18 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ep_t, void);
+
+
+ucs_config_field_t uct_iface_config_table[] = {
+  {"MAX_SHORT", "128",
+   "Maximal size of short sends. The transport is allowed to support any size up\n"
+   "to this limit, the actual size can be lower due to transport constraints.",
+   ucs_offsetof(uct_iface_config_t, max_short), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"MAX_BCOPY", "8192",
+   "Maximal size of copy-out sends. The transport is allowed to support any size\n"
+   "up to this limit, the actual size can be lower due to transport constraints.",
+   ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {NULL}
+};

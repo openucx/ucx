@@ -75,3 +75,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
+
+ucs_config_field_t uct_rc_iface_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+
+  {NULL}
+};

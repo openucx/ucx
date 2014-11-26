@@ -38,5 +38,8 @@ typedef struct {
     } tx;
 } uct_rc_mlx5_iface_t;
 
+typedef struct uct_rc_mlx5_iface_config {
+    uct_rc_iface_config_t  super;
+} uct_rc_mlx5_iface_config_t;
 
 #endif

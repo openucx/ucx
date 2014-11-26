@@ -206,7 +206,8 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
 };
 
-static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context, const char *dev_name)
+static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
+                           const char *dev_name, uct_iface_config_t *tl_config)
 {
     uct_ib_mlx5_cq_info_t cq_info;
     ucs_status_t status;
@@ -243,13 +244,28 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_ib_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h, const char*);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h,
+                                 const char*, uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 
-uct_tl_ops_t uct_rc_mlx5_tl_ops = {
+static uct_tl_ops_t uct_rc_mlx5_tl_ops = {
     .query_resources     = uct_rc_mlx5_query_resources,
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_iface_t),
     .rkey_unpack         = uct_ib_rkey_unpack,
 };
 
+ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+
+  {NULL}
+};
+
+static void uct_rc_mlx5_register(uct_context_t *context)
+{
+    uct_register_tl(context, "rc_mlx5", uct_rc_mlx5_iface_config_table,
+                    sizeof(uct_rc_mlx5_iface_config_t), &uct_rc_mlx5_tl_ops);
+}
+
+UCS_COMPONENT_DEFINE(uct_context_t, rc_mlx5, uct_rc_mlx5_register, ucs_empty_function, 0)

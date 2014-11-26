@@ -512,9 +512,10 @@ static ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf)
     return status;
 }
 
-ucs_status_t uct_perf_test_run(uct_context_h context,
-                               ucx_perf_test_params_t *params, const char *tl_name,
-                               const char *dev_name, ucx_perf_result_t *result)
+ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *params,
+                               const char *tl_name, const char *dev_name,
+                               uct_iface_config_t *iface_config,
+                               ucx_perf_result_t *result)
 {
     uct_perf_context_t perf;
     ucs_status_t status;
@@ -528,7 +529,7 @@ ucs_status_t uct_perf_test_run(uct_context_h context,
 
     ucx_perf_test_reset(&perf.super, params);
 
-    status = uct_iface_open(perf.context, tl_name, dev_name, &perf.iface);
+    status = uct_iface_open(perf.context, tl_name, dev_name, iface_config, &perf.iface);
     if (status != UCS_OK) {
         goto out_test_cleanup;
     }

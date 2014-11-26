@@ -60,13 +60,18 @@ UCS_TEST_F(test_uct, open_iface) {
     ASSERT_UCS_OK(status);
 
     for (unsigned i = 0; i < num_resources; ++i) {
+        uct_iface_config_t *iface_config;
+        status = uct_iface_config_read(ucth, resources[i].tl_name, NULL, NULL, &iface_config);
+        ASSERT_UCS_OK(status);
+
         uct_iface_h iface = NULL;
         status = uct_iface_open(ucth, resources[i].tl_name, resources[i].dev_name,
-                                &iface);
+                                iface_config, &iface);
         ASSERT_TRUE(iface != NULL);
         ASSERT_UCS_OK(status);
 
         uct_iface_close(iface);
+        uct_iface_config_release(iface_config);
     }
 
     uct_release_resource_list(resources);
@@ -76,17 +81,23 @@ UCS_TEST_F(test_uct, open_iface) {
 
 class entity {
 public:
-    entity() {
+    entity(const char *tl_name, const char *dev_name) {
         ucs_status_t status;
 
         status = uct_init(&m_ucth);
         ASSERT_UCS_OK(status);
 
-        status = uct_iface_open(m_ucth, "rc_mlx5", "mlx5_0:1", &m_iface);
+        uct_iface_config_t *iface_config;
+        status = uct_iface_config_read(m_ucth, tl_name, NULL, NULL, &iface_config);
+        ASSERT_UCS_OK(status);
+
+        status = uct_iface_open(m_ucth, tl_name, dev_name, iface_config, &m_iface);
         ASSERT_UCS_OK(status);
 
         status = uct_ep_create(m_iface, &m_ep);
         ASSERT_UCS_OK(status);
+
+        uct_iface_config_release(iface_config);
     }
 
     ~entity() {
@@ -175,7 +186,8 @@ UCS_TEST_F(test_uct, connect_ep) {
     const uint64_t magic = 0xdeadbeed1ee7a880;
     uct_rkey_bundle_t rkey;
     uct_lkey_t lkey;
-    entity e1, e2;
+    entity e1("rc_mlx5", "mlx5_0:1");
+    entity e2("rc_mlx5", "mlx5_0:1");
     uint64_t val8;
 
     e2.mem_map(&val8, sizeof(val8), &lkey, &rkey);

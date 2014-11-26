@@ -99,7 +99,7 @@ typedef struct uct_tl_ops {
                                     unsigned *num_resources_p);
 
     ucs_status_t (*iface_open)(uct_context_h context, const char *dev_name,
-                               uct_iface_h *iface_p);
+                               uct_iface_config_t *config, uct_iface_h *iface_p);
 
     ucs_status_t (*rkey_unpack)(uct_context_h context, void *rkey_buffer,
                                 uct_rkey_bundle_t *rkey_ob);

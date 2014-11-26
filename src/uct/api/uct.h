@@ -8,8 +8,10 @@
 #ifndef UCT_H_
 #define UCT_H_
 
-
-#include "tl.h"
+#include <uct/api/tl.h>
+#include <uct/api/version.h>
+#include <ucs/config/types.h>
+#include <stdio.h>
 
 
 /**
@@ -68,17 +70,77 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
 
 /**
  * @ingroup CONTEXT
+ * @brief Read transport-specific interface configuration.
+ *
+ * @param [in]  context       Handle to context.
+ * @param [in]  tl_name       Transport name.
+ * @param [in]  env_prefix    If non-NULL, search for environment variables
+ *                            starting with this UCT_<prefix>_. Otherwise, search
+ *                            for environment variables starting with just UCT_.
+ * @param [in]  filename      If non-NULL, read configuration from this file. If
+ *                            the file does not exist, it will be ignored.
+ * @param [out] config_p      Filled with a pointer to configuration.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
+                                   const char *env_prefix, const char *filename,
+                                   uct_iface_config_t **config_p);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Release configuration memory returned from uct_iface_read_config().
+ *
+ * @param [in]  config        Configuration to release.
+ */
+void uct_iface_config_release(uct_iface_config_t *config);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Print interface configuration to a stream.
+ *
+ * @param [in]  config        Configuration to print.
+ * @param [in]  stream        Output stream to print to.
+ * @param [in]  title         Title to the output.
+ * @param [in]  print_flags   Controls how the configuration is printed.
+ */
+void uct_iface_config_print(uct_iface_config_t *config, FILE *stream,
+                            const char *title, ucs_config_print_flags_t print_flags);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Print interface configuration to a stream.
+ *
+ * @param [in]  config        Configuration to release.
+ * @param [in]  name          Configuration variable name.
+ * @param [in]  value         Value to set.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
+                                     const char *name, const char *value);
+
+
+/**
+ * @ingroup CONTEXT
  * @brief Open a communication interface.
  *
  * @param [in]  context       Handle to context.
  * @param [in]  tl_name       Transport name.
  * @param [in]  dev_name      Hardware device name,
+ * @param [in]  config        Interface configuration options. Should be obtained
+ *                            from uct_iface_read_config() function, or point to
+ *                            transport-specific structure which extends uct_iface_config_t.
  * @param [out] iface_p       Filled with a handle to opened communication interface.
  *
  * @return Error code.
  */
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *dev_name, uct_iface_h *iface_p);
+                            const char *dev_name, uct_iface_config_t *config,
+                            uct_iface_h *iface_p);
 
 
 /**

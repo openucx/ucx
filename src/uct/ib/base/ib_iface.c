@@ -8,6 +8,7 @@
 #include "ib_iface.h"
 #include "ib_context.h"
 
+#include <uct/tl/context.h>
 #include <ucs/type/component.h>
 #include <ucs/type/class.h>
 #include <ucs/debug/log.h>
@@ -125,3 +126,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_ib_iface_t, uct_iface_t);
+
+ucs_config_field_t uct_ib_iface_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+  {NULL}
+};

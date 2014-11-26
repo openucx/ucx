@@ -190,12 +190,16 @@ protected:
         ASSERT_UCS_OK(status);
         set_affinity(a->cpu);
 
-        result = new ucx_perf_result_t();
-
-        status = uct_perf_test_run(ucth, &a->params, a->tl_name.c_str(),
-                                   a->dev_name.c_str(), result);
+        uct_iface_config_t *iface_config;
+        status = uct_iface_config_read(ucth, "rc_mlx5", NULL, NULL, &iface_config);
         ASSERT_UCS_OK(status);
 
+        result = new ucx_perf_result_t();
+        status = uct_perf_test_run(ucth, &a->params, a->tl_name.c_str(),
+                                   a->dev_name.c_str(), iface_config, result);
+        ASSERT_UCS_OK(status);
+
+        uct_iface_config_release(iface_config);
         uct_cleanup(ucth);
         return result;
     }
