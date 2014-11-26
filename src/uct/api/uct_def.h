@@ -15,6 +15,7 @@
 typedef struct uct_context       *uct_context_h;
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_addr    uct_iface_addr_t;
+typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef struct uct_ep_addr       uct_ep_addr_t;
 typedef uintptr_t                uct_lkey_t;

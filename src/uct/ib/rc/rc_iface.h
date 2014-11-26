@@ -15,10 +15,16 @@
 
 
 struct uct_rc_iface {
-    uct_ib_iface_t      super;
-    uct_rc_ep_t         *eps[UCT_RC_QP_HASH_SIZE];
+    uct_ib_iface_t           super;
+    uct_rc_ep_t              *eps[UCT_RC_QP_HASH_SIZE];
 };
 
+typedef struct uct_rc_iface_config {
+    uct_ib_iface_config_t    super;
+} uct_rc_iface_config_t;
+
+
+extern ucs_config_field_t uct_rc_iface_config_table[];
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
 

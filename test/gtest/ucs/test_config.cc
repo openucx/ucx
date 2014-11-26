@@ -116,47 +116,44 @@ protected:
      */
     class car_opts {
     public:
-        car_opts(const char *user_prefix = NULL) : m_opts(parse(user_prefix)) {
+        car_opts(const char *env_prefix) : m_opts(parse(env_prefix)) {
         }
 
-        car_opts(const car_opts& orig) :
-            m_opts((car_opts_t*)ucs_malloc(sizeof *m_opts, "opts"))
+        car_opts(const car_opts& orig)
         {
-            ucs_status_t status = ucs_config_parser_clone_opts(orig.m_opts,
-                                                               m_opts,
+            ucs_status_t status = ucs_config_parser_clone_opts(const_cast<car_opts_t*>(&orig.m_opts),
+                                                               &m_opts,
                                                                car_opts_table);
             ASSERT_UCS_OK(status);
         }
 
         ~car_opts() {
-            ucs_config_parser_release_opts(m_opts, car_opts_table);
-            ucs_free(m_opts);
+            ucs_config_parser_release_opts(&m_opts, car_opts_table);
         }
 
         void set(const char *name, const char *value) {
-            ucs_config_parser_set_value(m_opts, car_opts_table, name, value);
+            ucs_config_parser_set_value(&m_opts, car_opts_table, name, value);
         }
 
-        car_opts_t* operator->() const {
-            return m_opts;
+        car_opts_t* operator->() {
+            return &m_opts;
         }
 
-        car_opts_t* operator*() const {
-            return m_opts;
+        car_opts_t* operator*() {
+            return &m_opts;
         }
     private:
 
-        static car_opts_t *parse(const char *user_prefix) {
-            car_opts_t *tmp;
-            ucs_status_t status = ucs_config_parser_read_opts(car_opts_table,
-                                                              user_prefix,
-                                                              sizeof(*tmp),
-                                                              (void**)&tmp);
+        static car_opts_t parse(const char *env_prefix) {
+            car_opts_t tmp;
+            ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
+                                                              car_opts_table,
+                                                              env_prefix);
             ASSERT_UCS_OK(status);
             return tmp;
         }
 
-        car_opts_t * const m_opts;
+        car_opts_t m_opts;
     };
 };
 
@@ -174,29 +171,16 @@ UCS_TEST_F(test_config, parse_default) {
 
 }
 
-UCS_TEST_F(test_config, parse_with_prefix) {
-    ucs::scoped_setenv env1("UCS_COLOR", "white");
-    ucs::scoped_setenv env2("UCS_TEST_COLOR", "black");
-    ucs::scoped_setenv env3("UCS_DRIVER_COLOR", "yellow");
-    ucs::scoped_setenv env4("UCS_TEST_REAR_COLOR", "white");
-
-    car_opts dfl, test("TEST");
-    EXPECT_EQ((unsigned)COLOR_WHITE, dfl->color);
-    EXPECT_EQ((unsigned)COLOR_BLACK, test->color);
-    EXPECT_EQ((unsigned)COLOR_YELLOW, test->coach.driver_seat.color);
-    EXPECT_EQ((unsigned)COLOR_WHITE, test->coach.rear_seat.color);
-}
-
 UCS_TEST_F(test_config, clone) {
 
     boost::shared_ptr<car_opts> opts_clone_ptr;
 
     {
-        ucs::scoped_setenv env1("UCS_TEST_COLOR", "white");
-        car_opts opts("TEST");
+        ucs::scoped_setenv env1("UCSTEST_COLOR", "white");
+        car_opts opts("UCSTEST_");
         EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
-        ucs::scoped_setenv env2("UCS_TEST_COLOR", "black");
+        ucs::scoped_setenv env2("UCSTEST_COLOR", "black");
         opts_clone_ptr = boost::make_shared<car_opts>(opts);
     }
 
@@ -204,7 +188,7 @@ UCS_TEST_F(test_config, clone) {
 }
 
 UCS_TEST_F(test_config, set) {
-    car_opts opts("TEST");
+    car_opts opts("UCSTEST_");
     EXPECT_EQ((unsigned)COLOR_RED, opts->color);
 
     opts.set("COLOR", "white");
@@ -224,7 +208,7 @@ UCS_TEST_F(test_config, performance) {
 
     /* Now test the time */
     UCS_TEST_TIME_LIMIT(0.005) {
-        car_opts opts("TEST");
+        car_opts opts("UCSTEST_");
     }
 }
 
@@ -233,13 +217,13 @@ UCS_TEST_F(test_config, dump) {
     size_t dump_size;
     char line_buf[1024];
 
-    car_opts opts("TEST");
+    car_opts opts("UCSTEST_");
 
     /* Dump configuration to a memory buffer */
     dump_data = NULL;
     FILE *file = open_memstream(&dump_data, &dump_size);
-    ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
-                                 0);
+    ucs_config_parser_print_opts(file, "", *opts, car_opts_table, "UCS_",
+                                 (ucs_config_print_flags_t)0);
 
     /* Sanity check - all lines begin with UCS_ */
     unsigned num_lines = 0;

@@ -639,21 +639,31 @@ static ucs_status_t check_system(struct perftest_context *ctx)
 
 static ucs_status_t run_test(struct perftest_context *ctx)
 {
+    uct_iface_config_t *iface_config;
     ucx_perf_result_t result;
     ucs_status_t status;
 
     setlocale(LC_ALL, "en_US");
 
+    status = uct_iface_config_read(ctx->ucth, ctx->tl_name, NULL, NULL, &iface_config);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     print_header(ctx);
-    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->dev_name, ctx->tl_name,
-                               &result);
+    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->tl_name, ctx->dev_name,
+                               iface_config, &result);
     if (status != UCS_OK) {
         ucs_error("Failed to run test: %s", ucs_status_string(status));
-        return status;
+        goto out_release_cfg;
     }
 
     print_footer(ctx, &result);
-    return UCS_OK;
+
+out_release_cfg:
+    uct_iface_config_release(iface_config);
+out:
+    return status;
 }
 
 int main(int argc, char **argv)

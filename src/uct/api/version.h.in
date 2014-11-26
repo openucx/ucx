@@ -13,7 +13,7 @@
 #define UCT_VERNO_MINOR            @MINOR_VERSION@
 #define UCT_VERNO_REV              "@MICRO_VERSION@"
 #define UCT_VERNO_MICRO            @REV_COUNT@
-#define UCT_VERNO_STRIN             "@MAJOR_VERSION@.@MINOR_VERSION@.@REV_COUNT@"
+#define UCT_VERNO_STRING           "@MAJOR_VERSION@.@MINOR_VERSION@.@REV_COUNT@"
                                    
 #define UCT_MINOR_BIT              (16UL)
 #define UCT_MAJOR_BIT              (24UL)

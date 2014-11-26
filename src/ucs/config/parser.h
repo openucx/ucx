@@ -18,10 +18,9 @@
 /*
  * Configuration varaibles syntax:
  *
- * name: <ucs_prefix><user_prefix><table_prefix><field_name>
+ * name: <env_prefix><table_prefix><field_name>
  *
- * - ucs_prefix:     UCS_
- * - user_prefix:    supplied by user to ucs_config_read_XXX() API
+ * - env_prefix:     supplied by user to ucs_config_read_XXX() API
  * - table_prefix:   defined in sub-tables. e.g IB_, UD_, ...
  * - field_name:     field_name as defined in the table. e.g ZCOPY_THRESH
  *
@@ -30,37 +29,11 @@
  *   - UCS_IB_TX_MODERATION
  */
 
-#define UCS_CONFIG_VAR_PREFIX  "UCS_"
-
 /* Special values for IB port parser */
 #define UCS_IB_CFG_DEVICE_NAME_ANY  ((char *)0xfe)
 #define UCS_IB_CFG_DEVICE_NAME_ALL  ((char *)0xff)
 #define UCS_IB_CFG_PORT_NUM_ANY     0xfffe
 #define UCS_IB_CFG_PORT_NUM_ALL     0xffff
-
-
-/**
- * Configuration printing flags
- */
-enum {
-    UCS_CONFIG_PRINT_HEADER        = UCS_BIT(0),
-    UCS_CONFIG_PRINT_VERSION       = UCS_BIT(1),
-    UCS_CONFIG_PRINT_DOC           = UCS_BIT(2),
-    UCS_CONFIG_PRINT_GLOBAL_OPTS   = UCS_BIT(3),
-    UCS_CONFIG_PRINT_CONTEXT_OPTS  = UCS_BIT(4),
-    UCS_CONFIG_PRINT_ENDPOINT_OPTS = UCS_BIT(5),
-    UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(6),
-    UCS_CONFIG_PRINT_BUILD_CONFIG  = UCS_BIT(7),
-
-    UCS_CONFIG_PRINT_FULL = UCS_CONFIG_PRINT_HEADER |
-                            UCS_CONFIG_PRINT_VERSION |
-                            UCS_CONFIG_PRINT_DOC |
-                            UCS_CONFIG_PRINT_GLOBAL_OPTS |
-                            UCS_CONFIG_PRINT_CONTEXT_OPTS |
-                            UCS_CONFIG_PRINT_ENDPOINT_OPTS |
-                            UCS_CONFIG_PRINT_HIDDEN |
-                            UCS_CONFIG_PRINT_BUILD_CONFIG
-};
 
 
 typedef struct ucs_config_parser {
@@ -234,13 +207,6 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 
 /**
- * Allocate and fill opts structure.
- */
-ucs_status_t ucs_config_parser_read_opts(ucs_config_field_t *table,
-                                         const char *user_prefix,
-                                         size_t size, void **optsp);
-
-/**
  * Fill existing opts structure.
  */
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
@@ -262,7 +228,8 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * Print the options.
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
-                                  ucs_config_field_t *fields, unsigned flags);
+                                  ucs_config_field_t *fields, const char *env_prefix,
+                                  ucs_config_print_flags_t flags);
 
 /**
  * Read existing opts structure.

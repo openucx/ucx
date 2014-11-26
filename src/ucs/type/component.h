@@ -33,7 +33,7 @@ typedef struct ucs_component {
  * Helper macros
  */
 #define _UCS_COMPONENT_LIST_NAME(_base_type) \
-    ucs ## _base_type ## _component_list
+    ucs_ ## _base_type ## _component_list
 #define _UCS_COMPONENT_LIST_EXTERN(_base_type) \
     extern ucs_list_link_t _UCS_COMPONENT_LIST_NAME(_base_type)
 
@@ -54,9 +54,9 @@ typedef struct ucs_component {
  * @param _name        Component name.
  * @param _init        Initialization function.
  * @param _cleanup     Cleanup function.
- * @param _type        Component context type to add to base type.
+ * @param _size        How much room to reserve after the base type.
  */
-#define UCS_COMPONENT_DEFINE(_base_type, _name, _init, _cleanup, _type) \
+#define UCS_COMPONENT_DEFINE(_base_type, _name, _init, _cleanup, _size) \
     \
     size_t ucs_##_name##_component_offset; \
     \
@@ -65,7 +65,7 @@ typedef struct ucs_component {
             #_name, \
             (ucs_component_init_cb_t)_init, \
             (ucs_component_cleanup_cb_t)_cleanup, \
-            sizeof(_type)}; \
+            _size}; \
         \
         _UCS_COMPONENT_LIST_EXTERN(_base_type); \
         __ucs_component_add(&_UCS_COMPONENT_LIST_NAME(_base_type), \

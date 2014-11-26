@@ -42,7 +42,7 @@ void test_comp1_cleanup(test_base_t *test_base)
 }
 
 UCS_COMPONENT_DEFINE(test_base_t, test1, test_comp1_init, test_comp1_cleanup,
-                     test_comp1_ctx_t)
+                     sizeof(test_comp1_ctx_t))
 
 
 /******* Second component *********/
@@ -64,7 +64,7 @@ void test_comp2_cleanup(test_base_t *test_base)
 }
 
 UCS_COMPONENT_DEFINE(test_base_t, test2, test_comp2_init, test_comp2_cleanup,
-                     test_comp2_ctx_t)
+                     sizeof(test_comp2_ctx_t))
 
 
 /******* TEST *********/

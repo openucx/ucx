@@ -138,22 +138,19 @@ protected:
         double               norm;
     };
 
-    test_uct_perf() {
-        memset(&m_orig_affinity, 0, sizeof(m_orig_affinity));
-    }
+    struct thread_arg {
+        ucx_perf_test_params_t   params;
+        std::string              tl_name;
+        std::string              dev_name;
+        int                      cpu;
+    };
 
-    void init() {
-        ucs::test::init();
-        sched_getaffinity(getpid(), sizeof(m_orig_affinity), &m_orig_affinity);
-    }
-
-    static void set_affinity(unsigned index) {
-        std::vector<unsigned> cpus;
+    static std::vector<int> get_affinity() {
+        std::vector<int> cpus;
         cpu_set_t affinity;
-        unsigned my_cpu;
         int ret, nr_cpus;
 
-        ret = sched_getaffinity(getpid(), sizeof(m_orig_affinity), &affinity);
+        ret = sched_getaffinity(getpid(), sizeof(affinity), &affinity);
         if (ret != 0) {
             ucs_error("Failed to get CPU affinity: %m");
             throw ucs::test_abort_exception();
@@ -171,44 +168,46 @@ protected:
             }
         }
 
-        if (index < cpus.size()) {
-            my_cpu = cpus[index];
-        } else {
-            my_cpu = cpus.back() + (index - cpus.size()) + 1;
-        }
-
-        CPU_ZERO(&affinity);
-        CPU_SET(my_cpu , &affinity);
-        sched_setaffinity(ucs_get_tid(), sizeof(affinity), &affinity);
+        return cpus;
     }
 
-    void cleanup() {
-        sched_setaffinity(getpid(), sizeof(m_orig_affinity), &m_orig_affinity);
-        ucs::test::cleanup();
+    static void set_affinity(int cpu)
+    {
+        cpu_set_t affinity;
+        CPU_ZERO(&affinity);
+        CPU_SET(cpu , &affinity);
+        sched_setaffinity(ucs_get_tid(), sizeof(affinity), &affinity);
     }
 
     static void* thread_func(void *arg)
     {
-        ucx_perf_test_params_t *params = (ucx_perf_test_params_t*)arg;
+        thread_arg *a = (thread_arg*)arg;
         ucx_perf_result_t *result;
         ucs_status_t status;
         uct_context_h ucth;
 
         status = uct_init(&ucth);
         ASSERT_UCS_OK(status);
-        set_affinity(reinterpret_cast<test_rte*>(params->rte_group)->index());
+        set_affinity(a->cpu);
 
-        result = new ucx_perf_result_t();
-
-        status = uct_perf_test_run(ucth, params, "mlx5_0:1", "rc_mlx5", result);
+        uct_iface_config_t *iface_config;
+        status = uct_iface_config_read(ucth, "rc_mlx5", NULL, NULL, &iface_config);
         ASSERT_UCS_OK(status);
 
+        result = new ucx_perf_result_t();
+        status = uct_perf_test_run(ucth, &a->params, a->tl_name.c_str(),
+                                   a->dev_name.c_str(), iface_config, result);
+        ASSERT_UCS_OK(status);
+
+        uct_iface_config_release(iface_config);
         uct_cleanup(ucth);
         return result;
     }
 
-    ucx_perf_result_t run_multi_threaded(const test_spec &test, const char *dev_name,
-                                         const char *tl_name)
+    ucx_perf_result_t run_multi_threaded(const test_spec &test,
+                                         const std::string &tl_name,
+                                         const std::string &dev_name,
+                                         const std::vector<int> &cpus)
     {
         test_rte_comm c0to1, c1to0;
 
@@ -226,22 +225,32 @@ protected:
         params.rte_group       = NULL;
         params.rte             = &test_rte::rte;
 
-        ucx_perf_test_params_t params0 = params;
+        thread_arg arg0;
+        arg0.params   = params;
+        arg0.tl_name  = tl_name;
+        arg0.dev_name = dev_name;
+        arg0.cpu      = cpus[0];
+
         test_rte rte0(0, c0to1, c1to0);
-        params0.rte_group = &rte0;
+        arg0.params.rte_group = &rte0;
 
         pthread_t thread0, thread1;
-        int ret = pthread_create(&thread0, NULL, thread_func, &params0);
+        int ret = pthread_create(&thread0, NULL, thread_func, &arg0);
         if (ret) {
             UCS_TEST_MESSAGE << strerror(errno);
             throw ucs::test_abort_exception();
         }
 
-        ucx_perf_test_params_t params1 = params;
-        test_rte rte1(1, c1to0, c0to1);
-        params1.rte_group = &rte1;
+        thread_arg arg1;
+        arg1.params   = params;
+        arg1.tl_name  = tl_name;
+        arg1.dev_name = dev_name;
+        arg1.cpu      = cpus[1];
 
-        ret = pthread_create(&thread1, NULL, thread_func, &params1);
+        test_rte rte1(1, c1to0, c0to1);
+        arg1.params.rte_group = &rte1;
+
+        ret = pthread_create(&thread1, NULL, thread_func, &arg1);
         if (ret) {
             UCS_TEST_MESSAGE << strerror(errno);
             throw ucs::test_abort_exception();
@@ -258,9 +267,6 @@ protected:
     }
 
     static test_spec tests[];
-
-    cpu_set_t m_orig_affinity;
-
 };
 
 
@@ -278,22 +284,75 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
 };
 
 UCS_TEST_F(test_uct_perf, envelope) {
+    ucs_status_t status;
+    uct_context_h ucth;
+    uct_resource_desc_t *resources, resource;
+    unsigned i, num_resources;
+    bool check_perf;
+
     if (ucs::test_time_multiplier() > 1) {
         UCS_TEST_SKIP;
     }
 
-    const char *dev_name = "mlx5_0:1";
-    const char *tl_name  = "rc_mlx5";
+    std::vector<int> cpus = get_affinity();
+    if (cpus.size() < 2) {
+        UCS_TEST_MESSAGE << "Need at least 2 CPUs (got: " << cpus.size() << " )";
+        throw ucs::test_abort_exception();
+    }
+    cpus.resize(2);
+
+    status = uct_init(&ucth);
+    ASSERT_UCS_OK(status);
+
+    status = uct_query_resources(ucth, &resources, &num_resources);
+    ASSERT_UCS_OK(status);
+
+    bool found = false;
+    for (i = 0; i < num_resources; ++i) {
+        if (!strcmp(resources[i].tl_name, "rc_mlx5") && !strcmp(resources[i].dev_name, "mlx5_0:1")) {
+            /* TODO take resource dev/tl name from test env */
+            resource = resources[i];
+            found = true;
+            break;
+        }
+    }
+
+    uct_release_resource_list(resources);
+    uct_cleanup(ucth);
+
+    if (!found) {
+        UCS_TEST_SKIP;
+    }
+
+    /* For SandyBridge CPUs, don't check performance of far-socket devices */
+    check_perf = true;
+    if (ucs_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
+        BOOST_FOREACH(int cpu, cpus) {
+            if (!CPU_ISSET(cpu, &resources[i].local_cpus)) {
+                UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
+                check_perf = false;
+                break;
+            }
+        }
+    }
+
+    /* Run all tests */
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
-        ucx_perf_result_t result = run_multi_threaded(*test, dev_name, tl_name);
+        ucx_perf_result_t result = run_multi_threaded(*test,
+                                                      resource.tl_name,
+                                                      resource.dev_name,
+                                                      cpus);
         double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
         UCS_TEST_MESSAGE << boost::format("%s/%s %15s : %.3f %s")
-                            % tl_name
-                            % dev_name
+                            % resource.tl_name
+                            % resource.dev_name
                             % test->title
                             % value
                             % test->units;
-        EXPECT_GE(value, test->min);
-        EXPECT_LT(value, test->max);
+        if (check_perf) {
+            EXPECT_GE(value, test->min);
+            EXPECT_LT(value, test->max);
+        }
     }
+
 }

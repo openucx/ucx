@@ -41,10 +41,14 @@ echo "Build without IB verbs"
 echo "Build release"
 ../contrib/configure-release && make $make_opt && make $make_opt distcheck
 
-echo "Build gtest "
+echo "Build gtest"
 module load hpcx-gcc
 make clean && ../contrib/configure-devel --with-mpi && make $make_opt
 module unload hpcx-gcc
+
+echo "Running ucx_info"
+./src/tools/info/ucx_info -v -f
+./src/tools/info/ucx_info -c
 
 echo "Running unit tests"
 $AFFINITY make -C test/gtest test

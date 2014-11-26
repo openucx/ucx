@@ -11,7 +11,9 @@
 #include "ib_device.h"
 
 #include <uct/api/uct.h>
+#include <uct/tl/context.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/config/parser.h>
 
 
 typedef struct uct_ib_iface_addr {
@@ -34,6 +36,12 @@ typedef struct uct_ib_iface {
     struct ibv_cq           *recv_cq;
 } uct_ib_iface_t;
 
+typedef struct uct_ib_iface_config {
+    uct_iface_config_t      super;
+} uct_ib_iface_config_t;
+
+
+extern ucs_config_field_t uct_ib_iface_config_table[];
 
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {
