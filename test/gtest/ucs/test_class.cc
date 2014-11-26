@@ -104,7 +104,7 @@ UCS_TEST_F(test_class, create_destroy) {
     ASSERT_EQ(0, base_init_count);
     ASSERT_EQ(0, derived_init_count);
 
-    status = derived_t_new(1, 2, &derived);
+    status = UCS_CLASS_NEW_FUNC_NAME(derived_t)(1, 2, &derived);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(2, derived->field2);
@@ -113,7 +113,7 @@ UCS_TEST_F(test_class, create_destroy) {
     EXPECT_EQ(1, base_init_count);
     EXPECT_EQ(1, derived_init_count);
 
-    derived_t_delete(derived);
+    UCS_CLASS_DELETE_FUNC_NAME(derived_t)(derived);
 
     EXPECT_EQ(0, base_init_count);
     EXPECT_EQ(0, derived_init_count);

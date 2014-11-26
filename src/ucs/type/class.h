@@ -195,7 +195,7 @@ struct ucs_class {
  * }
  */
 #define UCS_CLASS_DEFINE_NEW_FUNC(_type, _argtype, ...) \
-    ucs_status_t UCS_PP_TOKENPASTE(_type, _new)( \
+    ucs_status_t UCS_CLASS_NEW_FUNC_NAME(_type)( \
                     UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_DEFINE, _, \
                                    UCS_PP_ZIP((UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__))), (__VA_ARGS__))) \
                                    _argtype **obj_p) \
@@ -204,6 +204,7 @@ struct ucs_class {
                              UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_PASS, _, \
                                             UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__)))); \
     }
+
 #define _UCS_CLASS_INIT_ARG_DEFINE(_, _bundle) \
     __UCS_CLASS_INIT_ARG_DEFINE(_, UCS_PP_TUPLE_0 _bundle, UCS_PP_TUPLE_1 _bundle)
 #define __UCS_CLASS_INIT_ARG_DEFINE(_, _index, _type) \
@@ -212,6 +213,13 @@ struct ucs_class {
     , _UCS_CLASS_INIT_ARG_NAME(_, _index)
 #define _UCS_CLASS_INIT_ARG_NAME(_, _index) \
     UCS_PP_TOKENPASTE(arg, _index)
+
+
+/**
+ * Name of the function created by UCS_CLASS_DEFINE_NEW_FUNC.
+ */
+#define UCS_CLASS_NEW_FUNC_NAME(_type) \
+    UCS_PP_TOKENPASTE(_type, _new)
 
 
 /**
@@ -226,10 +234,17 @@ struct ucs_class {
  *      _type##_delete(obj);
  */
 #define UCS_CLASS_DEFINE_DELETE_FUNC(_type, _argtype) \
-    void UCS_PP_TOKENPASTE(_type, _delete)(_argtype *self) \
+    void UCS_CLASS_DELETE_FUNC_NAME(_type)(_argtype *self) \
     { \
         UCS_CLASS_DELETE(_type, self); \
     }
+
+
+/**
+ * Name of the function created by UCS_CLASS_DEFINE_DELETE_FUNC.
+ */
+#define UCS_CLASS_DELETE_FUNC_NAME(_type) \
+    UCS_PP_TOKENPASTE(_type, _delete)
 
 
 /**

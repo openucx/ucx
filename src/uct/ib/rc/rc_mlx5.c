@@ -191,10 +191,10 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_iface_t_delete(uct_iface_t*);
+static void UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t)(uct_iface_t*);
 
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
-    .iface_close         = uct_rc_mlx5_iface_t_delete,
+    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_get_address   = uct_rc_iface_get_address,
     .iface_flush         = uct_rc_mlx5_iface_flush,
     .ep_get_address      = uct_rc_ep_get_address,
@@ -202,8 +202,8 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
     .iface_query         = uct_rc_mlx5_iface_query,
     .ep_put_short        = uct_rc_mlx5_ep_put_short,
-    .ep_create           = uct_rc_mlx5_ep_t_new,
-    .ep_destroy          = uct_rc_mlx5_ep_t_delete,
+    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
 };
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context, const char *dev_name)
@@ -249,7 +249,7 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 uct_tl_ops_t uct_rc_mlx5_tl_ops = {
     .query_resources     = uct_rc_mlx5_query_resources,
-    .iface_open          = uct_rc_mlx5_iface_t_new,
+    .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_iface_t),
     .rkey_unpack         = uct_ib_rkey_unpack,
 };
 
