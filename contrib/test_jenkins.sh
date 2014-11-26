@@ -12,6 +12,15 @@ else
     WS_URL=$JOB_URL/ws
 fi
 
+# Set CPU affinity to 2 cores, for performance tests
+if [ -n "$EXECUTOR_NUMBER" ]
+then
+    AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
+else
+    AFFINITY=""
+fi
+
+
 rpm_topdir=$WORKSPACE/rpm-dist
 
 make_opt="-j$(($(nproc) - 1))"
@@ -26,7 +35,7 @@ echo "Making a directory for test build"
 mkdir -p build-test
 cd build-test
 
-echo "Build w/o IB"
+echo "Build without IB verbs"
 ../contrib/configure-release --without-verbs && make $make_opt
 
 echo "Build release"
@@ -37,14 +46,13 @@ module load hpcx-gcc
 make clean && ../contrib/configure-devel --with-mpi && make $make_opt
 module unload hpcx-gcc
 
-echo "Starting gtest"
+echo "Running unit tests"
+$AFFINITY make -C test/gtest test
 
-make -C test/gtest test
-
+echo "Running valgrind tests"
 module load tools/valgrind
-make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
+$AFFINITY make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
 module unload tools/valgrind
-
 
 echo "Build with coverity"
 module load tools/cov
