@@ -42,6 +42,9 @@ libuct_la_SOURCES += \
 if HAVE_MLX5_HW
 libuct_la_SOURCES += \
 	ib/mlx5/ib_mlx5.c
+	
+noinst_HEADERS += \
+	ib/mlx5/ib_mlx5.h
 endif
 
 
@@ -58,8 +61,7 @@ libuct_la_SOURCES += \
 
 if HAVE_MLX5_HW
 libuct_la_SOURCES += \
-	ib/rc/rc_mlx5.c \
-	ib/rc/rc_mlx5.h
+	ib/rc/rc_mlx5.c
 endif
 
 endif
