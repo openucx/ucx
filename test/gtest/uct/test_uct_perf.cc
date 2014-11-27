@@ -5,11 +5,9 @@
 * $HEADER$
 */
 
-#include <ucs/gtest/test.h>
+#include "uct_test.h"
+
 #include <perf/libperf.h>
-extern "C" {
-#include <uct/api/uct.h>
-}
 #include <linux/sched.h>
 #include <pthread.h>
 #include <boost/format.hpp>
@@ -123,7 +121,7 @@ ucx_perf_test_rte_t test_rte::rte = {
 };
 
 
-class test_uct_perf : public ucs::test {
+class test_uct_perf : public uct_test {
 protected:
     struct test_spec {
         const char           *title;
@@ -191,7 +189,8 @@ protected:
         set_affinity(a->cpu);
 
         uct_iface_config_t *iface_config;
-        status = uct_iface_config_read(ucth, "rc_mlx5", NULL, NULL, &iface_config);
+        status = uct_iface_config_read(ucth, a->tl_name.c_str(), NULL, NULL,
+                                       &iface_config);
         ASSERT_UCS_OK(status);
 
         result = new ucx_perf_result_t();
@@ -276,18 +275,15 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "put msgrate", "Mpps", 6.0, 20.0,
+  { "put msgrate", "Mpps", 5.0, 20.0,
     UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI, 8, 2000000l,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
   { NULL }
 };
 
-UCS_TEST_F(test_uct_perf, envelope) {
-    ucs_status_t status;
-    uct_context_h ucth;
-    uct_resource_desc_t *resources, resource;
-    unsigned i, num_resources;
+UCS_TEST_P(test_uct_perf, envelope) {
+    uct_resource_desc_t resource = GetParam();
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {
@@ -301,34 +297,11 @@ UCS_TEST_F(test_uct_perf, envelope) {
     }
     cpus.resize(2);
 
-    status = uct_init(&ucth);
-    ASSERT_UCS_OK(status);
-
-    status = uct_query_resources(ucth, &resources, &num_resources);
-    ASSERT_UCS_OK(status);
-
-    bool found = false;
-    for (i = 0; i < num_resources; ++i) {
-        if (!strcmp(resources[i].tl_name, "rc_mlx5") && !strcmp(resources[i].dev_name, "mlx5_0:1")) {
-            /* TODO take resource dev/tl name from test env */
-            resource = resources[i];
-            found = true;
-            break;
-        }
-    }
-
-    uct_release_resource_list(resources);
-    uct_cleanup(ucth);
-
-    if (!found) {
-        UCS_TEST_SKIP;
-    }
-
     /* For SandyBridge CPUs, don't check performance of far-socket devices */
     check_perf = true;
     if (ucs_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
         BOOST_FOREACH(int cpu, cpus) {
-            if (!CPU_ISSET(cpu, &resources[i].local_cpus)) {
+            if (!CPU_ISSET(cpu, &resource.local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
                 check_perf = false;
                 break;
@@ -350,9 +323,11 @@ UCS_TEST_F(test_uct_perf, envelope) {
                             % value
                             % test->units;
         if (check_perf) {
+            /* TODO take expected values from resource advertised capabilities */
             EXPECT_GE(value, test->min);
             EXPECT_LT(value, test->max);
         }
     }
-
 }
+
+UCT_INSTANTIATE_TEST_CASE(test_uct_perf);

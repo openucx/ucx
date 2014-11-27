@@ -41,8 +41,11 @@ gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
 
 gtest_SOURCES = \
+	uct/test_p2p_rma.cc \
 	uct/test_uct_context.cc \
 	uct/test_uct_perf.cc \
+	uct/uct_p2p_test.cc \
+	uct/uct_test.cc \
 	ucs/test_class.cc \
 	ucs/test_component.cc \
 	ucs/test_config.cc \
@@ -57,6 +60,10 @@ gtest_SOURCES = \
 	ucs/test_timer.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
+
+noinst_HEADERS = \
+	uct/uct_p2p_test.h \
+	uct/uct_test.h
 
 .PHONY: test test gdb valgrind fix_rpath ucx
 
