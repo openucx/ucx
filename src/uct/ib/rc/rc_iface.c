@@ -63,10 +63,23 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
     sglib_hashed_uct_rc_ep_t_delete(iface->eps, ep);
 }
 
-
-static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_context_h context, const char *dev_name)
+ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
+                                uct_completion_cb_t cb)
 {
-    UCS_CLASS_CALL_SUPER_INIT(context, dev_name);
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+
+    if (iface->tx.outstanding > 0) {
+        return UCS_ERR_WOULD_BLOCK;
+    }
+
+    return UCS_OK;
+}
+
+static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
+                           uct_context_h context, const char *dev_name)
+{
+    UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name);
+    self->tx.outstanding = 0;
     return UCS_OK;
 }
 

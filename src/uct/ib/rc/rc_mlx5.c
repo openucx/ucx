@@ -6,7 +6,6 @@
 */
 
 #include "rc_iface.h"
-#include "rc_mlx5.h"
 
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_context.h>
@@ -19,6 +18,35 @@
 #include <string.h>
 #include <arpa/inet.h> /* For htonl */
 
+
+typedef struct {
+    uct_rc_ep_t      super;
+    unsigned         qpn_ds;
+
+    struct {
+        unsigned       sw_pi;
+        unsigned       max_pi;
+        void           *seg;
+        void           *bf_reg;
+        unsigned long  bf_size;
+        uint32_t       *dbrec;
+        void           *qstart;
+        void           *qend;
+    } tx;
+} uct_rc_mlx5_ep_t;
+
+typedef struct {
+    uct_rc_iface_t     super;
+    struct {
+        void           *cq_buf;
+        unsigned       cq_ci;
+        unsigned       cq_length;
+    } tx;
+} uct_rc_mlx5_iface_t;
+
+typedef struct uct_rc_mlx5_iface_config {
+    uct_rc_iface_config_t  super;
+} uct_rc_mlx5_iface_config_t;
 
 typedef struct {
     struct mlx5_wqe_ctrl_seg     ctrl;
@@ -88,7 +116,7 @@ static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
     uct_ib_mlx5_wqe_rc_rdma_inl_seg_t *seg = ep->tx.seg;
     unsigned wqe_size;
     uint32_t sw_pi_16_n;
-    uint64_t *src, *dst, *end;
+    uint64_t *src, *dst;
     unsigned sw_pi, i;
 
     sw_pi = ep->tx.sw_pi;
@@ -110,10 +138,10 @@ static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
     /* Data */
     UCS_STATIC_ASSERT(seg + 1 == ((void*)seg + 32 + 4));
     seg->inl.byte_count          = htonl(length | MLX5_INLINE_SEG);
-    memcpy(seg + 1, buffer, length);
+    __builtin_memcpy(seg + 1, buffer, length);
 
     /* Write doorbell record */
-    ucs_compiler_fence();
+    ucs_compiler_fence(); /* Put memory store fence here too, to prevent WC being flushed after DBrec */
     *ep->tx.dbrec = sw_pi_16_n;
 
     /* Make sure that doorbell record is written before ringing the doorbell */
@@ -122,26 +150,26 @@ static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
     /* Set up copy pointers */
     dst = ep->tx.bf_reg;
     src = (void*)seg;
-    end = (void*)seg + sizeof(*seg) + length;
 
     /* BF copy */
-    do {
-        for (i = 0; i < MLX5_SEND_WQE_BB / sizeof(*dst); ++i) {
-            *dst++ = *src++;
-        }
-    } while (src < end);
+    for (i = 0; i < MLX5_SEND_WQE_BB / sizeof(*dst); ++i) {
+        *dst++ = *src++;
+    }
+
+    /* We don't want the compiler to reorder instructions and hurt our latency */
+    ucs_compiler_fence();
 
     /* Flip BF register */
     ep->tx.bf_reg = (void*) ((uintptr_t) ep->tx.bf_reg ^ ep->tx.bf_size);
-
-    /* Completion counters */
-    ++ep->tx.sw_pi;
-    ++ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t)->tx.outstanding;
 
     /* Advance queue pointer */
     if (ucs_unlikely((ep->tx.seg += MLX5_SEND_WQE_BB) >= ep->tx.qend)) {
         ep->tx.seg = ep->tx.qstart;
     }
+
+    /* Completion counters */
+    ++ep->tx.sw_pi;
+    ++ucs_derived_of(ep->super.super.iface, uct_rc_iface_t)->tx.outstanding;
 
     return UCS_OK;
 }
@@ -158,8 +186,9 @@ static void uct_rc_mlx5_iface_progress(void *arg)
     if (uct_ib_mlx5_cqe_hw_owned(cqe, index, iface->tx.cq_length)) {
         return; /* CQ is empty */
     }
+
     iface->tx.cq_ci = index + 1;
-    --iface->tx.outstanding;
+    --iface->super.tx.outstanding;
 
     ucs_memory_cpu_load_fence();
 
@@ -168,18 +197,6 @@ static void uct_rc_mlx5_iface_progress(void *arg)
     ucs_assert(ep != NULL);
 
     ++ep->tx.max_pi;
-}
-
-static ucs_status_t uct_rc_mlx5_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
-                                            uct_completion_cb_t cb)
-{
-    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_t);
-
-    if (iface->tx.outstanding > 0) {
-        return UCS_ERR_WOULD_BLOCK;
-    }
-
-    return UCS_OK;
 }
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -196,7 +213,7 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t)(uct_iface_t*);
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_get_address   = uct_rc_iface_get_address,
-    .iface_flush         = uct_rc_mlx5_iface_flush,
+    .iface_flush         = uct_rc_iface_flush,
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_iface = NULL,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
@@ -230,7 +247,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
     self->tx.cq_buf      = cq_info.buf;
     self->tx.cq_ci       = 0;
     self->tx.cq_length   = cq_info.cqe_cnt;
-    self->tx.outstanding = 0;
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_mlx5_iface_progress,
                            self);
@@ -243,7 +259,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, self);
 }
 
-UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_ib_iface_t);
+UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_rc_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h,
                                  const char*, uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
