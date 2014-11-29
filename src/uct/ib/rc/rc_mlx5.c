@@ -138,7 +138,7 @@ static ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer,
     /* Data */
     UCS_STATIC_ASSERT(seg + 1 == ((void*)seg + 32 + 4));
     seg->inl.byte_count          = htonl(length | MLX5_INLINE_SEG);
-    __builtin_memcpy(seg + 1, buffer, length);
+    memcpy(seg + 1, buffer, length);
 
     /* Write doorbell record */
     ucs_compiler_fence(); /* Put memory store fence here too, to prevent WC being flushed after DBrec */
