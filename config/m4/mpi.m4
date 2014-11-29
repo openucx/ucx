@@ -31,6 +31,7 @@ AS_IF([test "x$with_mpi" == xyes],
         AS_IF([test -z "$MPIRUN"], AC_MSG_ERROR([--with-mpi was requested but MPI was not found in the PATH in $mpi_path]),[:])
         ],[:])
 
+AS_IF([test -n "$MPIRUN"], AC_DEFINE([HAVE_MPI], [1], [MPI support]))
 AM_CONDITIONAL([HAVE_MPI],    [test -n "$MPIRUN"])
 AM_CONDITIONAL([HAVE_MPICC],  [test -n "$MPICC"])
 AM_CONDITIONAL([HAVE_MPIRUN], [test -n "$MPIRUN"])

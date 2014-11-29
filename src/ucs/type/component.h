@@ -20,7 +20,6 @@
 typedef ucs_status_t (*ucs_component_init_cb_t)(void *base_ptr);
 typedef void (*ucs_component_cleanup_cb_t)(void *base_ptr);
 typedef struct ucs_component {
-    const char                  *name;
     ucs_component_init_cb_t     init;
     ucs_component_cleanup_cb_t  cleanup;
     size_t                      size;
@@ -60,9 +59,8 @@ typedef struct ucs_component {
     \
     size_t ucs_##_name##_component_offset; \
     \
-    void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_component_##_name##_register)() { \
+    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_component_##_name##_register)() { \
         static ucs_component_t comp = { \
-            #_name, \
             (ucs_component_init_cb_t)_init, \
             (ucs_component_cleanup_cb_t)_cleanup, \
             _size}; \
