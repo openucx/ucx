@@ -161,7 +161,7 @@ ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
 /**
  * @ingroup CONTEXT
  *
- * @brief Unpack a remote key.
+ * @brief Release a remote key.
  *
  * @param [in]  context      Handle to context.
  * @param [in]  rkey_ob      Remote key to release.
