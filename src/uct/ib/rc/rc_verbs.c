@@ -10,7 +10,6 @@
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_context.h>
 #include <uct/ib/base/ib_iface.h>
-#include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
