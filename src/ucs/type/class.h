@@ -53,8 +53,8 @@ struct ucs_class {
  * Class initialization/cleanup function prototypes.
  */
 #define UCS_CLASS_INIT_FUNC(_type, ...) \
-    ucs_status_t _UCS_CLASS_INIT_NAME(_type)(_type *self, ## __VA_ARGS__, \
-                                      ucs_class_t *_myclass, int *_init_count)
+    ucs_status_t _UCS_CLASS_INIT_NAME(_type)(_type *self, ucs_class_t *_myclass, \
+                                             int *_init_count, ## __VA_ARGS__)
 #define UCS_CLASS_CLEANUP_FUNC(_type) \
     void _UCS_CLASS_CLEANUP_NAME(_type)(_type *self)
 
@@ -89,10 +89,11 @@ struct ucs_class {
     ({ \
         UCS_CLASS_DECLARE(_type) \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
-        int init_count = 0; \
+        int init_count = 1; \
         ucs_status_t status; \
         \
-        status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), ## __VA_ARGS__, cls, &init_count); \
+        status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
+                                             ## __VA_ARGS__); \
         if (status != UCS_OK) { \
             _ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
                                           (_obj), init_count); \
@@ -171,12 +172,14 @@ struct ucs_class {
 #define UCS_CLASS_CALL_SUPER_INIT(...) \
     { \
         ucs_status_t status = \
-            _myclass->superclass->init(self, ## __VA_ARGS__, \
-                                       _myclass->superclass, _init_count); \
+            _myclass->superclass->init(self, _myclass->superclass, _init_count, \
+                                       ## __VA_ARGS__); \
         if (status != UCS_OK) { \
             return status; \
         } \
-        ++(*_init_count); \
+        if (_myclass->superclass != &_UCS_CLASS_DECL_NAME(void)) { \
+            ++(*_init_count); \
+        } \
     }
 
 
@@ -256,5 +259,10 @@ struct ucs_class {
  */
 void _ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit);
 
+
+/**
+ * The empty class.
+ */
+UCS_CLASS_DECLARE(void);
 
 #endif
