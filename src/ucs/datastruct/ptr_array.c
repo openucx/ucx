@@ -122,7 +122,7 @@ static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array UCS_MEMTRACK_ARG)
     }
 
     /* Allocate new array */
-    new_array = ucs_malloc_fwd(new_size * sizeof(ucs_ptr_array_elem_t) UCS_MEMTRACK_VAL);
+    new_array = ucs_malloc(new_size * sizeof(ucs_ptr_array_elem_t) UCS_MEMTRACK_VAL);
     ucs_assert_always(new_array != NULL);
     memcpy(new_array, ptr_array->start, curr_size * sizeof(ucs_ptr_array_elem_t));
 
