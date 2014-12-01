@@ -280,19 +280,19 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
 
     ucs_ptr_array_init(&pa, 3);
 
-    index = ucs_ptr_array_insert(&pa, &a, &value UCS_MEMTRACK_NAME("ptr_array test"));
+    index = ucs_ptr_array_insert(&pa, &a, &value, "ptr_array test");
     EXPECT_EQ(0u, index);
     EXPECT_EQ(3u, value);
 
-    index = ucs_ptr_array_insert(&pa, &b, &value UCS_MEMTRACK_NAME("ptr_array test"));
+    index = ucs_ptr_array_insert(&pa, &b, &value, "ptr_array test");
     EXPECT_EQ(1u, index);
     EXPECT_EQ(3u, value);
 
-    index = ucs_ptr_array_insert(&pa, &c, &value UCS_MEMTRACK_NAME("ptr_array test"));
+    index = ucs_ptr_array_insert(&pa, &c, &value, "ptr_array test");
     EXPECT_EQ(2u, index);
     EXPECT_EQ(3u, value);
 
-    index = ucs_ptr_array_insert(&pa, &d, &value UCS_MEMTRACK_NAME("ptr_array test"));
+    index = ucs_ptr_array_insert(&pa, &d, &value, "ptr_array test");
     EXPECT_EQ(3u, index);
     EXPECT_EQ(3u, value);
 
@@ -324,7 +324,7 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
     /* Insert phase */
     for (unsigned i = 0; i < count; ++i) {
         void *ptr = malloc(0);
-        unsigned index = ucs_ptr_array_insert(&pa, ptr, &value UCS_MEMTRACK_NAME("ptr_array test"));
+        unsigned index = ucs_ptr_array_insert(&pa, ptr, &value, "ptr_array test");
 
         EXPECT_TRUE(map.end() == map.find(index));
         EXPECT_EQ(5u, value);
@@ -353,8 +353,7 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
         int insert_count = rand() % 10;
         for (int j = 0; j < insert_count; ++j) {
             void *ptr = malloc(0);
-            unsigned index = ucs_ptr_array_insert(&pa, ptr, &value
-                                                  UCS_MEMTRACK_NAME("ptr_array test"));
+            unsigned index = ucs_ptr_array_insert(&pa, ptr, &value, "ptr_array test");
 
             EXPECT_TRUE(map.end() == map.find(index));
             EXPECT_TRUE(index * index == value || 5u == value);
@@ -382,15 +381,13 @@ UCS_TEST_F(test_datatype, ptr_array_placeholder) {
 
     ucs_ptr_array_init(&pa, 3);
 
-    index = ucs_ptr_array_insert(&pa, &a, &value
-                                 UCS_MEMTRACK_NAME("ptr_array test"));
+    index = ucs_ptr_array_insert(&pa, &a, &value, "ptr_array test");
     EXPECT_EQ(0u, index);
     EXPECT_EQ(3u, value);
 
     ucs_ptr_array_remove(&pa, index, 4);
 
-    index = ucs_ptr_array_insert(&pa, &a, &value
-                                 UCS_MEMTRACK_NAME("ptr_array test"));
+    index = ucs_ptr_array_insert(&pa, &a, &value, "ptr_array test");
     EXPECT_EQ(0u, index);
     EXPECT_EQ(4u, value);
 
@@ -411,8 +408,7 @@ UCS_TEST_F(test_datatype, ptr_array_perf) {
     ucs_time_t insert_start_time = ucs_get_time();
     ucs_ptr_array_init(&pa, 0);
     for (unsigned i = 0; i < count; ++i) {
-        EXPECT_EQ(i, ucs_ptr_array_insert(&pa, NULL, &value
-                                          UCS_MEMTRACK_NAME("ptr_array test")));
+        EXPECT_EQ(i, ucs_ptr_array_insert(&pa, NULL, &value, "ptr_array test"));
     }
 
     ucs_time_t lookup_start_time = ucs_get_time();

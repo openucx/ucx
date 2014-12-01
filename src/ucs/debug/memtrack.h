@@ -20,106 +20,34 @@ enum {
     UCS_MEMTRACK_STAT_LAST
 };
 
+#define UCS_MEMTRACK_NAME_MAX 16
 
-typedef struct ucs_memtrack_entry
-{
-    char* alloc_name;
-    unsigned origin;
+/**
+ * Allocation site entry.
+ */
+typedef struct ucs_memtrack_entry ucs_memtrack_entry_t;
+struct ucs_memtrack_entry {
+    char                  name[UCS_MEMTRACK_NAME_MAX];
+    size_t                size;
+    size_t                peak_size;
+    size_t                count;
+    size_t                peak_count;
+    ucs_memtrack_entry_t  *next;
+};
 
-    size_t current_size;
-    size_t peak_size;
 
-    size_t current_count;
-    size_t peak_count;
-
-    struct ucs_memtrack_entry* next;
-} ucs_memtrack_entry_t;
-
-
-typedef struct ucs_memtrack_buffer
-{
-    size_t magic;  /* Make sure this buffer is "memtracked" */
-    size_t length; /* length of user-requested buffer */
-    size_t offset; /* Offset between result of memory allocation and the
-                      location of this buffer struct (mainly for ucs_memalign) */
-
-    ucs_memtrack_entry_t *entry;
-} ucs_memtrack_buffer_t;
+/**
+ * Initialize the total allocations structure.
+ */
+void ucs_memtrack_total_reset(ucs_memtrack_entry_t* total);
 
 
 #if ENABLE_MEMTRACK
 
-#define UCS_MEMTRACK_NAME(name) , name , __LINE__
-#define UCS_MEMTRACK_ARG        , const char* alloc_name, unsigned origin
-#define UCS_MEMTRACK_VAL        , alloc_name, origin
+#define UCS_MEMTRACK_ARG        , const char* alloc_name
+#define UCS_MEMTRACK_VAL        , alloc_name
+#define UCS_MEMTRACK_NAME(_n)   , _n
 
-#define UCS_MEMTRACK_ADJUST_SIZE_BEFORE(ptr) {\
-    if (ucs_memtrack_is_enabled()) *ptr += sizeof(ucs_memtrack_buffer_t);\
-    }
-#define UCS_MEMTRACK_ADJUST_SIZE_AFTER(ptr)  {\
-    if (ucs_memtrack_is_enabled()) *ptr -= sizeof(ucs_memtrack_buffer_t);\
-    }
-
-#define ucs_calloc(nmemb, size, name) \
-    ucs_memtrack_calloc(nmemb, size UCS_MEMTRACK_NAME(name))
-#define ucs_calloc_fwd ucs_memtrack_calloc
-#define ucs_malloc(size, name) \
-    ucs_memtrack_malloc(size UCS_MEMTRACK_NAME(name))
-#define ucs_malloc_cachealigned(size, name) \
-    ucs_memtrack_memalign(UCS_SYS_CACHE_LINE_SIZE, size UCS_MEMTRACK_NAME(name))
-#define ucs_malloc_fwd ucs_memtrack_malloc
-#define ucs_free(ptr) \
-    ucs_memtrack_free(ptr)
-#define ucs_realloc(ptr, size) \
-    ucs_memtrack_realloc(ptr, size)
-#define ucs_memalign(boundary, size, name) \
-    ucs_memtrack_memalign(boundary, size UCS_MEMTRACK_NAME(name))
-#define ucs_memalign_fwd ucs_memtrack_memalign
-
-#define ucs_mmap(addr, length, prot, flags, fd, offset, name) \
-    ucs_memtrack_mmap(addr, length, prot, flags, fd, offset UCS_MEMTRACK_NAME(name))
-#define ucs_mmap_fwd ucs_memtrack_mmap
-#define ucs_mmap64(addr, length, prot, flags, fd, offset, name) \
-    ucs_memtrack_mmap(addr, length, prot, flags, fd, offset UCS_MEMTRACK_NAME(name))
-#define ucs_munmap(addr, length) \
-    ucs_memtrack_munmap(addr, length)
-
-#else
-
-#define UCS_MEMTRACK_NAME(name)
-#define UCS_MEMTRACK_ARG
-#define UCS_MEMTRACK_VAL
-#define UCS_MEMTRACK_ADJUST_SIZE_BEFORE(ptr)
-#define UCS_MEMTRACK_ADJUST_SIZE_AFTER(ptr)
-
-#define ucs_calloc(nmemb, size, name) \
-    calloc(nmemb, size)
-#define ucs_calloc_fwd calloc
-#define ucs_malloc(size, name) \
-    malloc(size)
-#define ucs_malloc_cachealigned(size, name) \
-    memalign(UCS_SYS_CACHE_LINE_SIZE, size)
-#define ucs_malloc_fwd malloc
-#define ucs_free(ptr) \
-    free(ptr)
-#define ucs_realloc(ptr, size) \
-    realloc(ptr, size)
-#define ucs_memalign(boundary, size, name) \
-    memalign(boundary, size)
-#define ucs_memalign_fwd memalign
-
-#define ucs_mmap(addr, length, prot, flags, fd, offset, name) \
-    mmap(addr, length, prot, flags, fd, offset UCS_MEMTRACK_NAME(name))
-#define ucs_mmap_fwd mmap
-#define ucs_mmap64(addr, length, prot, flags, fd, offset, name) \
-    mmap(addr, length, prot, flags, fd, offset UCS_MEMTRACK_NAME(name))
-#define ucs_munmap(addr, length) \
-    munmap(addr, length)
-
-#endif /* ENABLE_MEMTRACK */
-
-#define UCS_MEMTRACK_ADJUST_PTR_BEFORE(ptr) UCS_MEMTRACK_ADJUST_SIZE_AFTER(ptr)
-#define UCS_MEMTRACK_ADJUST_PTR_AFTER(ptr) UCS_MEMTRACK_ADJUST_SIZE_BEFORE(ptr)
 
 /**
  * Start trakcing memory (or increment reference count).
@@ -132,7 +60,7 @@ void ucs_memtrack_init();
 void ucs_memtrack_cleanup();
 
 /*
- * Check if memtrack is enbled at the moment.
+ * Check if memtrack is enabled at the moment.
  */
 int ucs_memtrack_is_enabled();
 
@@ -151,105 +79,68 @@ void ucs_memtrack_dump(FILE* output);
 void ucs_memtrack_total(ucs_memtrack_entry_t* total);
 
 /**
- * Memory allocation registration for tracking.
- *
- * @param ptr            Pointer to note as allocated.
- * @param size           Size of the requested allocation.
- * @param alloc_name    Name for this allocation command.
- *
+ * Adjust size before doing custom allocation. Need to be called in order to
+ * obtain the size of a custom allocation to have room for memtrack descriptor.
  */
-void ucs_memtrack_record_alloc(ucs_memtrack_buffer_t* buffer, size_t size
-                                 UCS_MEMTRACK_ARG);
+size_t ucs_memtrack_adjust_alloc_size(size_t size);
 
 /**
- * Memory deallocation registration for tracking.
- *
- * @param ptr            Pointer to note as deallocated.
+ * Track custom allocation. Need to be called after custom allocation returns,
+ * it will adjust the pointer and size to user buffer instead of the memtrack
+ * descriptor.
  */
-ucs_memtrack_entry_t* ucs_memtrack_record_dealloc(ucs_memtrack_buffer_t* buffer);
+void ucs_memtrack_allocated(void **ptr_p, size_t *size_p, const char *name);
 
 /**
- * Clear memory allocation request.
- *
- * @param nmemb          Amount of allocated slots requested.
- * @param size           Size of allocation slots requested.
- * @param alloc_name    Name for this allocation command.
- * @param origin         Origin of the allocation command (used for id).
+ * Track release of custom allocation. Need to be called before actually
+ * releasing the memory.
  */
-void *ucs_memtrack_calloc(size_t nmemb, size_t size UCS_MEMTRACK_ARG);
+void ucs_memtrack_releasing(void **ptr_p);
 
-/**
- * Memory allocation request.
- *
- * @param size           Size of allocation requested.
- * @param alloc_name    Name for this allocation command.
- * @param origin         Origin of the allocation command (used for id).
- */
-void *ucs_memtrack_malloc(size_t size UCS_MEMTRACK_ARG);
 
-/**
- * Memory deallocation request.
- *
- * @param ptr            Pointer for note as allocated.
+/*
+ * Memory allocation replacements. Their interface is the same as the originals,
+ * except the additional parameter which specifies the allocation name.
  */
-void ucs_memtrack_free(void *ptr);
-
-/**
- * Memory reallocation request.
- *
- * @param ptr            Pointer to reallocate.
- * @param size           Size of the requested allocation.
- */
-void *ucs_memtrack_realloc(void *ptr, size_t size);
-
-/**
- * Memory alignment request.
- *
- * @param boundary       Size to align memory to.
- * @param size           Size of the requested allocation.
- * @param alloc_name    Name for this allocation command.
- * @param origin         Origin of the allocation command (used for id).
- */
-void *ucs_memtrack_memalign(size_t boundary, size_t size UCS_MEMTRACK_ARG);
-
-/**
- * Memory mapping request.
- *
- * @param addr           Address hint for mapping.
- * @param length         Size of the requested allocation.
- * @param prot           Memory protection mask.
- * @param flags          Other flags.
- * @param fd             File to map.
- * @param offset         Offset within the file.
- * @param alloc_name    Name for this allocation command.
- * @param origin         Origin of the allocation command (used for id).
- */
-void *ucs_memtrack_mmap(void *addr, size_t length, int prot, int flags,
-                        int fd, off_t offset UCS_MEMTRACK_ARG);
-
-/**
- * Memory mapping request (for 64 bit).
- *
- * @param addr           Address hint for mapping.
- * @param length         Size of the requested allocation.
- * @param prot           Memory protection mask.
- * @param flags          Other flags.
- * @param fd             File to map.
- * @param offset         Offset within the file.
- * @param alloc_name    Name for this allocation command.
- * @param origin         Origin of the allocation command (used for id).
- */
+void *ucs_malloc(size_t size, const char *name);
+void *ucs_calloc(size_t nmemb, size_t size, const char *name);
+void *ucs_realloc(void *ptr, size_t size);
+void *ucs_memalign(size_t boundary, size_t size, const char *name);
+void ucs_free(void *ptr);
+void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
+               off_t offset, const char *name);
 #ifdef __USE_LARGEFILE64
-void *ucs_memtrack_mmap64(void *addr, size_t length, int prot, int flags,
-                          int fd, uint64_t offset UCS_MEMTRACK_ARG);
+void *ucs_mmap64(void *addr, size_t length, int prot, int flags, int fd,
+                 off64_t offset, const char *name);
 #endif
+int ucs_munmap(void *addr, size_t length);
 
-/**
- * Memory unmaping request.
- *
- * @param addr           Address to unmap.
- * @param length         Size of the requested allocation.
- */
-int ucs_memtrack_munmap(void *addr, size_t length);
+#else
+
+#define UCS_MEMTRACK_ARG
+#define UCS_MEMTRACK_VAL
+#define UCS_MEMTRACK_NAME(_n)
+
+#define ucs_memtrack_init()                        UCS_EMPTY_STATEMENT
+#define ucs_memtrack_cleanup()                     UCS_EMPTY_STATEMENT
+#define ucs_memtrack_is_enabled()                  0
+#define ucs_memtrack_dump(_output)                 UCS_EMPTY_STATEMENT
+#define ucs_memtrack_total(_total)                 ucs_memtrack_total_init(_total)
+
+#define ucs_memtrack_adjust_alloc_size(_size)      (_size)
+#define ucs_memtrack_allocated(_ptr_p, _sz_p, ...) UCS_EMPTY_STATEMENT
+#define ucs_memtrack_releasing(_ptr)               UCS_EMPTY_STATEMENT
+
+#define ucs_malloc(_s, ...)                        malloc(_s)
+#define ucs_calloc(_n, _s, ...)                    calloc(_n, _s)
+#define ucs_realloc(_p, _s)                        realloc(_p, _s)
+#define ucs_memalign(_b, _s, ...)                  memalign(_b, _s)
+#define ucs_free(_p)                               free(_p)
+#define ucs_mmap(_a, _l, _p, _fl, _fd, _o, ...)    mmap(_a, _l, _p, _fl, _fd, _o)
+#define ucs_mmap64(_a, _l, _p, _fl, _fd, _o, ...)  mmap64(_a, _l, _p, _fl, _fd, _o)
+#define ucs_munmap(_a, _l)                         munmap(_a, _l)
+
+#endif /* ENABLE_MEMTRACK */
+
 
 #endif
