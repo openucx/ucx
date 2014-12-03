@@ -119,6 +119,9 @@ static void print_header(struct perftest_context *ctx)
     const char *test_type_str;
 
     switch (ctx->params.command) {
+    case UCX_PERF_TEST_CMD_AM_SHORT:
+        test_cmd_str = "uct_am_short()";
+        break;
     case UCX_PERF_TEST_CMD_PUT_SHORT:
         test_cmd_str = "uct_put_short()";
         break;
@@ -180,8 +183,10 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -t <test>    Test to run:\n");
     printf("                     put_lat  : put latency.\n");
     printf("                     put_bw   : put bandwidth / message rate.\n");
+    printf("                     am_lat   : active message latency.\n");
     printf("     -n <iters>   Number of iterations to run. (%ld)\n", ctx->params.max_iter);
     printf("     -s <size>    Message size. (%Zu)\n", ctx->params.message_size);
+    printf("     -w <iters>   Number of warm-up iterations. (%Zu)\n", ctx->params.warmup_iter);
     printf("     -N           Use numeric formatting - thousands separator.\n");
     printf("\n");
     printf("  Server options:\n");
@@ -230,7 +235,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->params.test_type       = UCX_PERF_TEST_TYPE_LAST;
     ctx->params.data_layout     = UCX_PERF_DATA_LAYOUT_BUFFER;
     ctx->params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    ctx->params.flags           = UCX_PERF_TEST_FLAG_WARMUP;
+    ctx->params.warmup_iter     = 10000;
     ctx->params.message_size    = 8;
     ctx->params.alignment       = ucs_get_page_size();
     ctx->params.max_iter        = 1000000l;
@@ -242,7 +247,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->port                   = 13337;
     ctx->flags                  = 0;
 
-    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:Nl")) != -1) {
+    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:Nlw:")) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -254,7 +259,10 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             ucs_snprintf_zero(ctx->tl_name, sizeof(ctx->tl_name), "%s", optarg);
             break;
         case 't':
-            if (0 == strcmp(optarg, "put_lat")) {
+            if (0 == strcmp(optarg, "am_lat")) {
+                ctx->params.command   = UCX_PERF_TEST_CMD_AM_SHORT;
+                ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
+            } else if (0 == strcmp(optarg, "put_lat")) {
                 ctx->params.command   = UCX_PERF_TEST_CMD_PUT_SHORT;
                 ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
             } else if (0 == strcmp(optarg, "put_bw")) {
@@ -277,6 +285,9 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
         case 'c':
             ctx->flags |= TEST_FLAG_SET_AFFINITY;
             ctx->cpu = atoi(optarg);
+            break;
+        case 'w':
+            ctx->params.warmup_iter = atol(optarg);
             break;
         case 'l':
             print_transports(ctx);
