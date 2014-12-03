@@ -12,8 +12,8 @@
 #include <malloc.h>
 #include <unistd.h>
 
-#define TIMING_QUEUE_SIZE   2048
-
+#define TIMING_QUEUE_SIZE    2048
+#define UCT_PERF_TEST_AM_ID  5
 
 typedef struct ucx_perf_context {
     ucx_perf_test_params_t       params;
@@ -130,6 +130,13 @@ static ucs_status_t ucx_perf_test_init(ucx_perf_context_t *perf,
         return UCS_ERR_NO_MEMORY;
     }
     return UCS_OK;
+}
+
+static void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
+{
+    perf->start_time        = ucs_get_time();
+    perf->prev_time         = perf->start_time;
+    perf->prev.time         = perf->start_time;
 }
 
 static void ucx_perf_test_reset(ucx_perf_context_t *perf,
@@ -268,6 +275,19 @@ static inline void uct_perf_put_short_b(uct_ep_h ep, void *buffer, unsigned leng
     }
 }
 
+static inline void uct_perf_am_short_b(uct_ep_h ep, uint8_t id, uint64_t hdr,
+                                       void *buffer, unsigned length,
+                                       uct_perf_context_t *perf)
+{
+    ucs_status_t status;
+
+    status = uct_ep_am_short(ep, id, hdr, buffer, length);
+    while (status == UCS_ERR_WOULD_BLOCK) {
+        uct_progress(perf->context);
+        status = uct_ep_am_short(ep, id, hdr, buffer, length);
+    }
+}
+
 static void uct_perf_iface_flush_b(uct_perf_context_t *perf)
 {
     while (uct_iface_flush(perf->iface, NULL, NULL) == UCS_ERR_WOULD_BLOCK) {
@@ -301,6 +321,8 @@ static ucs_status_t uct_perf_run_put_short_lat(uct_perf_context_t *perf)
     buffer = perf->super.send_buffer;
     length = perf->super.params.message_size;
 
+    ucx_perf_test_start_clock(&perf->super);
+
     *send_sn = sn = 0;
     if (my_index == 0) {
         ep          = perf->peers[1].ep;
@@ -328,6 +350,61 @@ static ucs_status_t uct_perf_run_put_short_lat(uct_perf_context_t *perf)
     return UCS_OK;
 }
 
+static ucs_status_t uct_perf_am_hander(void *data, unsigned length, void *arg)
+{
+    uint64_t hdr = *(uint64_t*)data;
+    *(uint64_t*)arg = hdr;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_perf_run_am_short_lat(uct_perf_context_t *perf)
+{
+    uint64_t sn, *am_sn;
+    unsigned my_index;
+    uct_ep_h ep;
+    void *buffer;
+    size_t length;
+
+    if (perf->super.params.message_size < 8) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    am_sn = perf->super.recv_buffer;
+    *am_sn = 0;
+    rte_call(&perf->super, barrier);
+
+    my_index = rte_call(&perf->super, group_index);
+    buffer   = perf->super.send_buffer;
+    length   = perf->super.params.message_size - 8;
+
+    ucx_perf_test_start_clock(&perf->super);
+
+    sn = 0;
+    if (my_index == 0) {
+        ep = perf->peers[1].ep;
+        UCX_PERF_TEST_FOREACH(&perf->super) {
+            uct_perf_am_short_b(ep, UCT_PERF_TEST_AM_ID, sn + 1, buffer, length, perf);
+            while (*am_sn == sn) {
+                uct_progress(perf->context);
+            }
+            sn = *am_sn;
+            ucx_perf_update(&perf->super, 1, length);
+        }
+    } else if (my_index == 1) {
+        ep = perf->peers[0].ep;
+        UCX_PERF_TEST_FOREACH(&perf->super) {
+            while (*am_sn == sn) {
+                uct_progress(perf->context);
+            }
+            sn = *am_sn;
+            uct_perf_am_short_b(ep, UCT_PERF_TEST_AM_ID, sn + 1, buffer, length, perf);
+            ucx_perf_update(&perf->super, 1, length);
+        }
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t uct_perf_run_put_short_bw(uct_perf_context_t *perf)
 {
     unsigned long remote_addr;
@@ -344,6 +421,8 @@ static ucs_status_t uct_perf_run_put_short_bw(uct_perf_context_t *perf)
     *(uint8_t*)perf->super.recv_buffer = 0;
 
     rte_call(&perf->super, barrier);
+
+    ucx_perf_test_start_clock(&perf->super);
 
     if (rte_call(&perf->super, group_index) == 0) {
         ep          = perf->peers[1].ep;
@@ -453,6 +532,13 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
     free(ep_addr);
     free(rkey_buffer);
 
+
+    status = uct_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID,
+                                uct_perf_am_hander, perf->super.recv_buffer);
+    if (status != UCS_OK) {
+        goto err_destroy_eps;
+    }
+
     rte_call(&perf->super, barrier);
 
     return UCS_OK;
@@ -481,6 +567,8 @@ void uct_perf_test_cleanup_endpoints(uct_perf_context_t *perf)
 
     rte_call(&perf->super, barrier);
 
+    uct_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
+
     group_size = rte_call(&perf->super, group_size);
     for (i = 0; i < group_size; ++i) {
         uct_rkey_release(perf->context, &perf->peers[i].rkey);
@@ -493,9 +581,14 @@ static ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf)
 {
     ucs_status_t status;
 
-    if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT_SHORT &&
+    if (perf->super.params.command == UCX_PERF_TEST_CMD_AM_SHORT &&
         perf->super.params.test_type == UCX_PERF_TEST_TYPE_PINGPONG &&
         perf->super.params.data_layout == UCX_PERF_DATA_LAYOUT_BUFFER)
+    {
+        status = uct_perf_run_am_short_lat(perf);
+    } else if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT_SHORT &&
+               perf->super.params.test_type == UCX_PERF_TEST_TYPE_PINGPONG &&
+               perf->super.params.data_layout == UCX_PERF_DATA_LAYOUT_BUFFER)
     {
         status = uct_perf_run_put_short_lat(perf);
     } else if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT_SHORT &&
@@ -529,7 +622,8 @@ ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *par
 
     ucx_perf_test_reset(&perf.super, params);
 
-    status = uct_iface_open(perf.context, tl_name, dev_name, 0, iface_config, &perf.iface);
+    status = uct_iface_open(perf.context, tl_name, dev_name, 0, iface_config,
+                            &perf.iface);
     if (status != UCS_OK) {
         goto out_test_cleanup;
     }
@@ -545,8 +639,8 @@ ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *par
         goto out_mem_unmap;
     }
 
-    if (perf.super.params.flags & UCX_PERF_TEST_FLAG_WARMUP) {
-        perf.super.params.max_iter        = 1000;
+    if (params->warmup_iter > 0) {
+        perf.super.params.max_iter        = params->warmup_iter;
         perf.super.params.report_interval = 1e10;
         uct_perf_test_dispatch(&perf);
         ucx_perf_test_reset(&perf.super, params);
