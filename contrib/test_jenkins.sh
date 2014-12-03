@@ -7,21 +7,11 @@ if [ -z "$BUILD_NUMBER" ]; then
     WORKSPACE=$PWD
     BUILD_NUMBER=1
     WS_URL=file://$WORKSPACE
+    JENKINS_RUN_TESTS=yes
 else
     echo Running under jenkins
     WS_URL=$JOB_URL/ws
 fi
-
-# Set CPU affinity to 2 cores, for performance tests
-if [ -n "$EXECUTOR_NUMBER" ]
-then
-    AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-else
-    AFFINITY=""
-fi
-
-
-rpm_topdir=$WORKSPACE/rpm-dist
 
 make_opt="-j$(($(nproc) - 1))"
 
@@ -32,55 +22,64 @@ echo "Autogen"
 make distclean||:
 
 echo "Making a directory for test build"
-mkdir -p build-test
-cd build-test
-
-echo "Build without IB verbs"
-../contrib/configure-release --without-verbs && make $make_opt
+rm -rf build-test && mkdir -p build-test && cd build-test
 
 echo "Build release"
 ../contrib/configure-release && make $make_opt && make $make_opt distcheck
-
-echo "Build gtest"
-module load hpcx-gcc
-make clean && ../contrib/configure-devel --with-mpi && make $make_opt
-module unload hpcx-gcc
 
 echo "Running ucx_info"
 ./src/tools/info/ucx_info -v -f
 ./src/tools/info/ucx_info -c
 
-echo "Running unit tests"
-$AFFINITY make -C test/gtest test
+echo "Build without IB verbs"
+../contrib/configure-release --without-verbs && make $make_opt
 
-echo "Running valgrind tests"
-module load tools/valgrind
-$AFFINITY make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
-module unload tools/valgrind
+if [ -n "$JENKINS_RUN_TESTS" ]; then
+    # Set CPU affinity to 2 cores, for performance tests
+    if [ -n "$EXECUTOR_NUMBER" ]; then
+        AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
+    else
+        AFFINITY=""
+    fi
 
-echo "Build with coverity"
-module load tools/cov
-cov_build_id="cov_build_${BUILD_NUMBER}"
-cov_build="$WORKSPACE/$cov_build_id"
-rm -rf $cov_build
-make clean
-cov-build --dir $cov_build make $make_opt all
-nerrors=$(cov-analyze --dir $cov_build |grep "Defect occurrences found" | awk '{print $5}')
-cov-format-errors --dir $cov_build
-rc=$(($rc+$nerrors))
+    echo "Build gtest"
+    module load hpcx-gcc
+    make clean && ../contrib/configure-devel --with-mpi && make $make_opt
+    module unload hpcx-gcc
 
-cov_url="$WS_URL/$cov_build_id/c/output/errors/index.html"
-rm -f jenkins_sidelinks.txt
-echo 1..1 > coverity.tap
-if [ $nerrors -gt 0 ]; then
-    echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
-else
-    echo ok 1 Coverity found no issues >> coverity.tap
+    echo "Running unit tests"
+    $AFFINITY make -C test/gtest test
+
+    echo "Running valgrind tests"
+    module load tools/valgrind
+    $AFFINITY make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
+    module unload tools/valgrind
+
+    echo "Build with coverity"
+    module load tools/cov
+    cov_build_id="cov_build_${BUILD_NUMBER}"
+    cov_build="$WORKSPACE/$cov_build_id"
+    rm -rf $cov_build
+    make clean
+    cov-build --dir $cov_build make $make_opt all
+    nerrors=$(cov-analyze --dir $cov_build |grep "Defect occurrences found" | awk '{print $5}')
+    cov-format-errors --dir $cov_build
+    rc=$(($rc+$nerrors))
+
+    cov_url="$WS_URL/$cov_build_id/c/output/errors/index.html"
+    rm -f jenkins_sidelinks.txt
+    echo 1..1 > coverity.tap
+    if [ $nerrors -gt 0 ]; then
+        echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
+    else
+        echo ok 1 Coverity found no issues >> coverity.tap
+    fi
+    echo Coverity report: $cov_url
+    printf "%s\t%s\n" Coverity $cov_url >> jenkins_sidelinks.txt
+    module unload tools/cov
 fi
-echo Coverity report: $cov_url
-printf "%s\t%s\n" Coverity $cov_url >> jenkins_sidelinks.txt
-module unload tools/cov
 
+#rpm_topdir=$WORKSPACE/rpm-dist
 #(make distcheck && rm -rf $rpm_topdir && mkdir -p $rpm_topdir && cd $rpm_topdir && mkdir -p BUILD RPMS SOURCES SPECS SRPMS)
 #
 #if [ -x /usr/bin/dpkg-buildpackage ]; then
