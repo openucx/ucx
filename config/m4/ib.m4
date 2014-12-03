@@ -113,6 +113,6 @@ AS_IF([test "x$with_ib" == xyes],
 AM_CONDITIONAL([HAVE_IB], [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC], [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC], [test "x$with_dc" != xno])
-AM_CONDITIONAL([HAVE_TL_UC], [test "x$with_uc" != xno])
+AM_CONDITIONAL([HAVE_TL_UD], [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 
