@@ -41,6 +41,7 @@ gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
 
 gtest_SOURCES = \
+	uct/test_p2p_am.cc \
 	uct/test_p2p_rma.cc \
 	uct/test_uct_context.cc \
 	uct/test_uct_perf.cc \

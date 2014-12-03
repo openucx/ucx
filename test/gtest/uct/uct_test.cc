@@ -45,7 +45,7 @@ uct_test::entity::entity(const uct_resource_desc_t& resource) {
                                    &iface_config);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name,
+    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name, 0,
                             iface_config, &m_iface);
     ASSERT_UCS_OK(status);
 
@@ -113,6 +113,14 @@ void uct_test::entity::mem_unmap(uct_lkey_t lkey, const uct_rkey_bundle_t& rkey)
     uct_rkey_release(m_ucth, const_cast<uct_rkey_bundle_t*>(&rkey));
     status = uct_mem_unmap(m_iface->pd, lkey);
     ASSERT_UCS_OK(status);
+}
+
+void uct_test::entity::progress() const {
+    uct_progress(m_ucth);
+}
+
+uct_iface_h uct_test::entity::iface() const {
+    return m_iface;
 }
 
 uct_ep_h uct_test::entity::ep() const {

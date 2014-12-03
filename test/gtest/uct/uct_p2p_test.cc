@@ -6,7 +6,10 @@
 */
 
 #include "uct_p2p_test.h"
-
+extern "C" {
+#include <ucs/time/time.h>
+}
+#include <boost/foreach.hpp>
 
 void uct_p2p_test::init() {
     for (unsigned i =0; i < 2; ++i) {
@@ -19,6 +22,15 @@ void uct_p2p_test::init() {
 
 void uct_p2p_test::cleanup() {
     m_entities.clear();
+}
+
+void uct_p2p_test::short_progress_loop() {
+    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0);
+    while (ucs_get_time() < end_time) {
+        BOOST_FOREACH(const entity& e, m_entities) {
+            e.progress();
+        }
+    }
 }
 
 const uct_test::entity& uct_p2p_test::get_entity(unsigned index) const {

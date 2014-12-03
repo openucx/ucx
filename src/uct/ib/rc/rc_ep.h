@@ -26,6 +26,12 @@ struct uct_rc_ep {
     uct_rc_ep_t       *next;
 };
 
+/**
+ * RC network header.
+ */
+typedef struct uct_rc_hdr {
+    uint8_t           am_id;  /* Active message ID */
+} uct_rc_hdr_t;
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
 

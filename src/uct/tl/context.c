@@ -6,6 +6,7 @@
 */
 
 #include "context.h"
+#include "tl_base.h"
 
 #include <uct/api/uct.h>
 #include <ucs/debug/memtrack.h>
@@ -214,8 +215,8 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
 }
 
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *dev_name, uct_iface_config_t *config,
-                            uct_iface_h *iface_p)
+                            const char *dev_name, size_t rx_headroom,
+                            uct_iface_config_t *config, uct_iface_h *iface_p)
 {
     uct_context_tl_info_t *tl = uct_find_tl(context, tl_name);
 
@@ -224,7 +225,12 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
         return UCS_ERR_NO_DEVICE;
     }
 
-    return tl->ops->iface_open(context, dev_name, config, iface_p);
+    return tl->ops->iface_open(context, dev_name, rx_headroom, config, iface_p);
+}
+
+ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer)
+{
+    return pd->ops->rkey_pack(pd, lkey, rkey_buffer);
 }
 
 ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
@@ -249,3 +255,25 @@ void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob)
     release(context, rkey_ob->rkey);
 }
 
+ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
+{
+    return pd->ops->query(pd, pd_attr);
+}
+
+ucs_status_t uct_mem_map(uct_pd_h pd, void *address, size_t length,
+                                       unsigned flags, uct_lkey_t *lkey_p)
+{
+    return pd->ops->mem_map(pd, address, length, flags, lkey_p);
+}
+
+ucs_status_t uct_mem_alloc(uct_pd_h pd, size_t *length_p, unsigned flags,
+                           void **address_p, uct_lkey_t *lkey_p)
+{
+    return pd->ops->mem_alloc(pd, length_p, flags, address_p, lkey_p
+                              UCS_MEMTRACK_NAME("user"));
+}
+
+ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
+{
+    return pd->ops->mem_unmap(pd, lkey);
+}

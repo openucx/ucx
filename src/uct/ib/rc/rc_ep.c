@@ -27,12 +27,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
     qp_init_attr.qp_context          = NULL;
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
-    qp_init_attr.srq                 = NULL; /* TODO */
-    qp_init_attr.cap.max_send_wr     = UCT_RC_TX_QP_LEN;
-    qp_init_attr.cap.max_recv_wr     = 1024;
-    qp_init_attr.cap.max_send_sge    = 2;
+    qp_init_attr.srq                 = iface->rx.srq;
+    qp_init_attr.cap.max_send_wr     = iface->config.tx_qp_len;
+    qp_init_attr.cap.max_recv_wr     = 0;
+    qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
     qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = 0;
+    qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.sq_sig_all          = 0;
     qp_init_attr.xrc_domain          = NULL;
@@ -105,7 +105,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
 
     qp_attr.qp_state              = IBV_QPS_RTR;
     qp_attr.ah_attr.dlid          = iface_addr->lid; /* TODO LMC */
-    qp_attr.ah_attr.sl            = 9; /* TODO SL */
+    qp_attr.ah_attr.sl            = iface->super.sl;
     qp_attr.ah_attr.src_path_bits = 0; /* TODO LMC */
     qp_attr.ah_attr.static_rate   = 0;
     qp_attr.ah_attr.is_global     = 0; /* TODO RoCE */
