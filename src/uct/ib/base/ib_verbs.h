@@ -119,4 +119,6 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 }
 #endif /* HAVE_IBV_EXP_CQ_IGNORE_OVERRUN */
 
+#define UCT_IB_MAX_WC 32
+
 #endif /* UCT_IB_VERBS_H */
