@@ -42,8 +42,8 @@ UCS_TEST_F(test_uct, open_iface) {
         ASSERT_UCS_OK(status);
 
         uct_iface_h iface = NULL;
-        status = uct_iface_open(ucth, res->tl_name, res->dev_name, iface_config,
-                                &iface);
+        status = uct_iface_open(ucth, res->tl_name, res->dev_name, 0,
+                                iface_config, &iface);
         ASSERT_TRUE(iface != NULL);
         ASSERT_UCS_OK(status);
 

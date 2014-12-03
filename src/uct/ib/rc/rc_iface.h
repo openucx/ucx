@@ -10,6 +10,7 @@
 
 #include "rc_ep.h"
 
+#include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/sglib_wrapper.h>
 
@@ -21,8 +22,20 @@ struct uct_rc_iface {
         unsigned             outstanding;
     } tx;
 
-    uct_rc_ep_t              *eps[UCT_RC_QP_HASH_SIZE];
+    struct {
+        ucs_mpool_h          mp;
+        struct ibv_srq       *srq;
+    } rx;
 
+    struct {
+        unsigned             tx_qp_len;
+        unsigned             tx_min_sge;
+        unsigned             tx_min_inline;
+        unsigned             tx_moderation;
+        unsigned             rx_max_batch;
+    } config;
+
+    uct_rc_ep_t              *eps[UCT_RC_QP_HASH_SIZE];
 };
 
 typedef struct uct_rc_iface_config {

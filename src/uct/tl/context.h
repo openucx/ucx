@@ -14,6 +14,27 @@
 #include <ucs/config/parser.h>
 
 
+/**
+ * Transport memory operations
+ */
+struct uct_pd_ops {
+    ucs_status_t (*query)(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+
+    /* TODO
+     * - support "mem attach", MPI-3 style, e.g by passing rkey
+     */
+    ucs_status_t (*mem_map)(uct_pd_h pd, void *address, size_t length,
+                            unsigned flags, uct_lkey_t *lkey_p);
+
+    ucs_status_t (*mem_alloc)(uct_pd_h pd, size_t *length_p, unsigned flags,
+                              void **address_p, uct_lkey_t *lkey_p UCS_MEMTRACK_ARG);
+
+    ucs_status_t (*mem_unmap)(uct_pd_h pd, uct_lkey_t lkey);
+
+    ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer);
+};
+
+
 typedef struct uct_context_tl_info {
     uct_tl_ops_t           *ops;
     const char             *name;
@@ -28,15 +49,6 @@ struct uct_context {
     unsigned               num_tls;
     uct_context_tl_info_t  *tls;
     UCS_STATS_NODE_DECLARE(stats);
-};
-
-/**
- * "Base" structure which defines interface configuration options.
- * Specific transport extend this structure.
- */
-struct uct_iface_config {
-    size_t                   max_short;
-    size_t                   max_bcopy;
 };
 
 
