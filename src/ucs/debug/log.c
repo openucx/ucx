@@ -100,6 +100,7 @@ void ucs_log_init()
                                 &ucs_log_file_close, &next_token);
     }
 
+    get_thread_num();
     ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
               ucs_debug_get_lib_base_addr());
 }
