@@ -103,31 +103,31 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
     /* Fetch information from Cray's PMI */
     rc = PMI_Init(&spawned);
     if (PMI_SUCCESS != rc) {
-        ucs_debug("PMI_Init failed, Error status: %d\n", rc);
+        ucs_error("PMI_Init failed, Error status: %d\n", rc);
         return UCS_ERR_IO_ERROR;
     }
 
     rc = PMI_Get_size(&ugni_ctx->pmi_num_of_ranks);
     if (PMI_SUCCESS != rc) {
-        ucs_debug("PMI_Get_size failed, Error status: %d\n", rc);
+        ucs_error("PMI_Get_size failed, Error status: %d\n", rc);
         return UCS_ERR_IO_ERROR;
     }
 
     rc = PMI_Get_rank(&ugni_ctx->pmi_rank_id);
     if (PMI_SUCCESS != rc) {
-        ucs_debug("PMI_Get_rank failed, Error status: %d\n", rc);
+        ucs_error("PMI_Get_rank failed, Error status: %d\n", rc);
         return UCS_ERR_IO_ERROR;
     }
 
     rc = get_ptag(&ugni_ctx->ptag);
     if (UCS_OK != rc) {
-        ucs_debug("get_ptag failed, Error status: %d\n", rc);
+        ucs_error("get_ptag failed, Error status: %d\n", rc);
         return rc;
     }
 
     rc = get_cookie(&ugni_ctx->cookie);
     if (UCS_OK != rc) {
-        ucs_debug("get_cookie failed, Error status: %d\n", rc);
+        ucs_error("get_cookie failed, Error status: %d\n", rc);
         return rc;
     }
 
@@ -138,7 +138,7 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
             ugni_ctx->cookie, modes,
             &ugni_ctx->cdm_handle);
     if (ugni_rc != GNI_RC_SUCCESS) {
-        ucs_debug("GNI_CdmCreate failed, Error status: %s %d\n",
+        ucs_error("GNI_CdmCreate failed, Error status: %s %d\n",
                 gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
@@ -251,7 +251,7 @@ void uct_ugni_cleanup(uct_context_t *context)
     if (ugni_ctx->activated) {
         ugni_rc = GNI_CdmDestroy(ugni_ctx->cdm_handle);
         if (GNI_RC_SUCCESS != ugni_rc) {
-            ucs_debug("GNI_CdmDestroy error status: %s (%d)\n",
+            ucs_warn("GNI_CdmDestroy error status: %s (%d)\n",
                     gni_err_str[ugni_rc], ugni_rc);
         }
     }
