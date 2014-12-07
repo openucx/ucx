@@ -37,7 +37,7 @@ static ucs_status_t get_cookie(uint32_t *cookie)
 
     cookie_token = strtok(cookie_str, ":");
     if (NULL == cookie_token) {
-        ucs_debug("Failed to read PMI_GNI_COOKIE tocken");
+        ucs_debug("Failed to read PMI_GNI_COOKIE token");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -58,7 +58,7 @@ static ucs_status_t get_ptag(uint8_t *ptag)
 
     ptag_token = strtok(ptag_str, ":");
     if (NULL == ptag_token) {
-        ucs_debug("Failed to read PMI_GNI_PTAG tocken");
+        ucs_debug("Failed to read PMI_GNI_PTAG token");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -103,31 +103,31 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
     /* Fetch information from Cray's PMI */
     rc = PMI_Init(&spawned);
     if (PMI_SUCCESS != rc) {
-        ucs_error("PMI_Init failed, Error status: %d\n", rc);
+        ucs_error("PMI_Init failed, Error status: %d", rc);
         return UCS_ERR_IO_ERROR;
     }
 
     rc = PMI_Get_size(&ugni_ctx->pmi_num_of_ranks);
     if (PMI_SUCCESS != rc) {
-        ucs_error("PMI_Get_size failed, Error status: %d\n", rc);
+        ucs_error("PMI_Get_size failed, Error status: %d", rc);
         return UCS_ERR_IO_ERROR;
     }
 
     rc = PMI_Get_rank(&ugni_ctx->pmi_rank_id);
     if (PMI_SUCCESS != rc) {
-        ucs_error("PMI_Get_rank failed, Error status: %d\n", rc);
+        ucs_error("PMI_Get_rank failed, Error status: %d", rc);
         return UCS_ERR_IO_ERROR;
     }
 
     rc = get_ptag(&ugni_ctx->ptag);
     if (UCS_OK != rc) {
-        ucs_error("get_ptag failed, Error status: %d\n", rc);
+        ucs_error("get_ptag failed, Error status: %d", rc);
         return rc;
     }
 
     rc = get_cookie(&ugni_ctx->cookie);
     if (UCS_OK != rc) {
-        ucs_error("get_cookie failed, Error status: %d\n", rc);
+        ucs_error("get_cookie failed, Error status: %d", rc);
         return rc;
     }
 
@@ -137,8 +137,8 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
     ugni_rc = GNI_CdmCreate(ugni_ctx->id, ugni_ctx->ptag,
             ugni_ctx->cookie, modes,
             &ugni_ctx->cdm_handle);
-    if (ugni_rc != GNI_RC_SUCCESS) {
-        ucs_error("GNI_CdmCreate failed, Error status: %s %d\n",
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_error("GNI_CdmCreate failed, Error status: %s %d",
                 gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
@@ -251,7 +251,7 @@ void uct_ugni_cleanup(uct_context_t *context)
     if (ugni_ctx->activated) {
         ugni_rc = GNI_CdmDestroy(ugni_ctx->cdm_handle);
         if (GNI_RC_SUCCESS != ugni_rc) {
-            ucs_warn("GNI_CdmDestroy error status: %s (%d)\n",
+            ucs_warn("GNI_CdmDestroy error status: %s (%d)",
                     gni_err_str[ugni_rc], ugni_rc);
         }
     }
@@ -264,7 +264,8 @@ uct_ugni_device_t * uct_ugni_device_by_name(uct_ugni_context_t *ugni_ctx,
     uct_ugni_device_t *dev;
     unsigned dev_index;
 
-    if (dev_name == NULL || ugni_ctx == NULL) {
+    if (NULL == dev_name || NULL == ugni_ctx) {
+        ucs_error("Bad parameter. Device name and/or context are set to NULL");
         return NULL;
     }
     for (dev_index = 0; dev_index < ugni_ctx->num_devices; ++dev_index) {
