@@ -1,13 +1,13 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * $COPYRIGHT$
+ * $HEADER$
+ */
 
 #ifndef UCT_UGNI_IFACE_H
 #define UCT_UGNI_IFACE_H
 
-#include <uct/ugni/ugni_device.h>
+#include "ugni_device.h"
 
 typedef struct uct_ugni_iface_addr {
     uct_iface_addr_t    super;

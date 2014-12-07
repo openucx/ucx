@@ -1,11 +1,11 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * $COPYRIGHT$
+ * $HEADER$
+ */
 
-#include <uct/tl/context.h>
-#include <ucs/type/class.h>
+#include "uct/tl/context.h"
+#include "ucs/type/class.h"
 
 #include "ugni_iface.h"
 #include "ugni_context.h"
@@ -27,7 +27,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
 
     dev = uct_ugni_device_by_name(ugni_ctx, dev_name);
     if (NULL == dev) {
-        ucs_warn("No device was found: %s", dev_name);
+        ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 

@@ -1,27 +1,27 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * $COPYRIGHT$
+ * $HEADER$
+ */
 
 #include <pmi.h>
 
-#include <ucs/debug/memtrack.h>
-#include <ucs/type/class.h>
+#include "ucs/debug/memtrack.h"
+#include "ucs/type/class.h"
 
-#include <uct/tl/context.h>
-#include <uct/ugni/ugni_iface.h>
-#include <uct/ugni/ugni_context.h>
+#include "uct/tl/context.h"
+#include "ugni_iface.h"
+#include "ugni_context.h"
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
         uct_resource_desc_t **resources_p,
         unsigned *num_resources_p);
 
 ucs_config_field_t uct_ugni_iface_config_table[] = {
-  {"", "", NULL,
-   ucs_offsetof(uct_ugni_iface_config_t, super),
-   UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-  {NULL}
+    {"", "", NULL,
+    ucs_offsetof(uct_ugni_iface_config_t, super),
+    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+    {NULL}
 };
 
 static ucs_status_t get_cookie(uint32_t *cookie)
@@ -31,13 +31,13 @@ static ucs_status_t get_cookie(uint32_t *cookie)
 
     cookie_str = getenv("PMI_GNI_COOKIE");
     if (NULL == cookie_str) {
-        ucs_debug("getenv PMI_GNI_COOKIE failed");
+        ucs_error("getenv PMI_GNI_COOKIE failed");
         return UCS_ERR_IO_ERROR;
     }
 
     cookie_token = strtok(cookie_str, ":");
     if (NULL == cookie_token) {
-        ucs_debug("Failed to read PMI_GNI_COOKIE token");
+        ucs_error("Failed to read PMI_GNI_COOKIE token");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -52,13 +52,13 @@ static ucs_status_t get_ptag(uint8_t *ptag)
 
     ptag_str = getenv("PMI_GNI_PTAG");
     if (NULL == ptag_str) {
-        ucs_debug("getenv PMI_GNI_PTAG failed");
+        ucs_error("getenv PMI_GNI_PTAG failed");
         return UCS_ERR_IO_ERROR;
     }
 
     ptag_token = strtok(ptag_str, ":");
     if (NULL == ptag_token) {
-        ucs_debug("Failed to read PMI_GNI_PTAG token");
+        ucs_error("Failed to read PMI_GNI_PTAG token");
         return UCS_ERR_IO_ERROR;
     }
 
@@ -67,8 +67,8 @@ static ucs_status_t get_ptag(uint8_t *ptag)
 }
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-                                    uct_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p)
+        uct_resource_desc_t **resources_p,
+        unsigned *num_resources_p)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
     uct_resource_desc_t *resources;
@@ -77,7 +77,7 @@ ucs_status_t uct_ugni_query_resources(uct_context_h context,
     /* Allocate resources array */
     resources = ucs_calloc(ugni_ctx->num_devices, sizeof(uct_resource_desc_t), "resource desc");
     if (NULL == resources) {
-        ucs_debug("Failed to allocate memory");
+        ucs_error("Failed to allocate memory");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -133,7 +133,7 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
 
     ugni_ctx->id = getpid(); /* TBD */
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
-                    GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
+        GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
     ugni_rc = GNI_CdmCreate(ugni_ctx->id, ugni_ctx->ptag,
             ugni_ctx->cookie, modes,
             &ugni_ctx->cdm_handle);
@@ -160,14 +160,14 @@ ucs_status_t uct_ugni_init(uct_context_h context)
      * more than single device */
     ugni_rc = GNI_GetNumLocalDevices(&ugni_ctx->num_devices);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_debug("GNI_GetNumLocalDevices failed, Error status: %s %d",
+        ucs_error("GNI_GetNumLocalDevices failed, Error status: %s %d",
                 gni_err_str[ugni_rc], ugni_rc);
         status = UCS_ERR_NO_DEVICE;
         goto err_zero;
     }
 
     if (0 == ugni_ctx->num_devices){
-        ucs_debug("UGNI No device found");
+        ucs_warn("UGNI No device found");
         status = UCS_ERR_NO_DEVICE;
         goto err_zero;
     }
@@ -176,7 +176,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     ugni_ctx->devices = ucs_calloc(ugni_ctx->num_devices,
             sizeof(uct_ugni_device_t), "ugni device");
     if (NULL == ugni_ctx->devices) {
-        ucs_debug("Failed to allocate memory");
+        ucs_error("Failed to allocate memory");
         status = UCS_ERR_NO_MEMORY;
         goto err_zero;
     }
@@ -184,7 +184,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     dev_ids = ucs_calloc(ugni_ctx->num_devices,
             sizeof(int ), "ugni device ids");
     if (NULL == dev_ids) {
-        ucs_debug("Failed to allocate memory");
+        ucs_error("Failed to allocate memory");
         status = UCS_ERR_NO_MEMORY;
         goto err_ids;
     }
@@ -192,7 +192,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     ugni_rc = GNI_GetLocalDeviceIds(ugni_ctx->num_devices,
             dev_ids);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_debug("GNI_GetLocalDeviceIds failed, Error status: %s %d",
+        ucs_error("GNI_GetLocalDeviceIds failed, Error status: %s %d",
                 gni_err_str[ugni_rc], ugni_rc);
         status = UCS_ERR_NO_DEVICE;
         goto err_dev;
@@ -219,8 +219,8 @@ ucs_status_t uct_ugni_init(uct_context_h context)
 
     status = uct_register_tl(context, "ugni", uct_ugni_iface_config_table,
             sizeof(uct_ugni_iface_config_t), &uct_ugni_tl_ops);
-    if (status != UCS_OK) {
-        ucs_warn("Failed to register context (%s), ignoring it",
+    if (UCS_OK != status) {
+        ucs_error("Failed to register context (%s), ignoring it",
                 ucs_status_string(status));
         goto err_dev;
     }
@@ -278,6 +278,6 @@ uct_ugni_device_t * uct_ugni_device_by_name(uct_ugni_context_t *ugni_ctx,
     }
 
     /* Device not found */
-    ucs_warn("Cannot find: %s", dev_name);
+    ucs_error("Cannot find: %s", dev_name);
     return NULL;
 }

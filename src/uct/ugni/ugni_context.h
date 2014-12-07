@@ -1,8 +1,8 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * $COPYRIGHT$
+ * $HEADER$
+ */
 
 #ifndef UCT_UGNI_CONTEXT_H
 #define UCT_UGNI_CONTEXT_H
@@ -25,8 +25,8 @@ typedef struct uct_ugni_context {
  * Helper function to list UGNI resources
  */
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-                                    uct_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
+        uct_resource_desc_t **resources_p,
+        unsigned *num_resources_p);
 
 uct_ugni_device_t * uct_ugni_device_by_name(uct_ugni_context_t * ugni_ctx,
         const char *dev_name);
