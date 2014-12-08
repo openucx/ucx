@@ -219,8 +219,8 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
 }
 
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *dev_name, uct_iface_config_t *config,
-                            uct_iface_h *iface_p)
+                            const char *dev_name, size_t rx_headroom,
+                            uct_iface_config_t *config, uct_iface_h *iface_p)
 {
     uct_context_tl_info_t *tl = uct_find_tl(context, tl_name);
 
@@ -229,7 +229,7 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
         return UCS_ERR_NO_DEVICE;
     }
 
-    return tl->ops->iface_open(context, dev_name, config, iface_p);
+    return tl->ops->iface_open(context, dev_name, rx_headroom, config, iface_p);
 }
 
 ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer)

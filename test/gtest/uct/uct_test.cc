@@ -45,7 +45,7 @@ uct_test::entity::entity(const uct_resource_desc_t& resource) {
                                    &iface_config);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name,
+    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name, 0,
                             iface_config, &m_iface);
     ASSERT_UCS_OK(status);
 

@@ -131,6 +131,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @param [in]  context       Handle to context.
  * @param [in]  tl_name       Transport name.
  * @param [in]  dev_name      Hardware device name,
+ * @param [in]  rx_headroom   How much bytes to reserve before the receive segment.
  * @param [in]  config        Interface configuration options. Should be obtained
  *                            from uct_iface_read_config() function, or point to
  *                            transport-specific structure which extends uct_iface_config_t.
@@ -139,8 +140,8 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @return Error code.
  */
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *dev_name, uct_iface_config_t *config,
-                            uct_iface_h *iface_p);
+                            const char *dev_name, size_t rx_headroom,
+                            uct_iface_config_t *config, uct_iface_h *iface_p);
 
 
 /**

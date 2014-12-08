@@ -531,7 +531,7 @@ ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *par
 
     ucx_perf_test_reset(&perf.super, params);
 
-    status = uct_iface_open(perf.context, tl_name, dev_name, iface_config, &perf.iface);
+    status = uct_iface_open(perf.context, tl_name, dev_name, 0, iface_config, &perf.iface);
     if (status != UCS_OK) {
         goto out_test_cleanup;
     }

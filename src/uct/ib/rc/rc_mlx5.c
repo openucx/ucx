@@ -225,7 +225,8 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
 };
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
-                           const char *dev_name, uct_iface_config_t *tl_config)
+                           const char *dev_name, size_t rx_headroom,
+                           uct_iface_config_t *tl_config)
 {
     uct_ib_mlx5_cq_info_t cq_info;
     ucs_status_t status;
@@ -262,7 +263,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_rc_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h,
-                                 const char*, uct_iface_config_t*);
+                                 const char*, size_t, uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 
