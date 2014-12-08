@@ -218,7 +218,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     ucs_debug("Initialized UGNI component with %d devices", ugni_ctx->num_devices);
 
     status = uct_register_tl(context, "ugni", uct_ugni_iface_config_table,
-            sizeof(uct_ugni_iface_config_t), &uct_ugni_tl_ops);
+            sizeof(uct_ugni_iface_config_t), "UGNI_", &uct_ugni_tl_ops);
     if (UCS_OK != status) {
         ucs_error("Failed to register context (%s), ignoring it",
                 ucs_status_string(status));

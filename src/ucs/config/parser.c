@@ -865,7 +865,8 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
 }
 
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
-                                         const char *env_prefix)
+                                         const char *env_prefix,
+                                         const char *table_prefix)
 {
     ucs_status_t status;
 
@@ -875,7 +876,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
     }
 
     /* Use default UCS_ prefix */
-    status = ucs_config_apply_env_vars(opts, table, env_prefix, NULL, 1);
+    status = ucs_config_apply_env_vars(opts, table, env_prefix, table_prefix, 1);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -1075,7 +1076,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, void *opts,
 
 void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
                                   ucs_config_field_t *fields, const char *env_prefix,
-                                  ucs_config_print_flags_t flags)
+                                  const char *table_prefix, ucs_config_print_flags_t flags)
 {
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");
@@ -1085,7 +1086,8 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
         fprintf(stream, "\n");
     }
 
-    ucs_config_parser_print_opts_recurs(stream, opts, fields, flags, env_prefix, NULL);
+    ucs_config_parser_print_opts_recurs(stream, opts, fields, flags, env_prefix,
+                                        table_prefix);
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");

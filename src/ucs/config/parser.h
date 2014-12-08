@@ -210,7 +210,8 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
  * Fill existing opts structure.
  */
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
-                                        const char *user_prefix);
+                                         const char *user_prefix,
+                                         const char *table_prefix);
 
 /**
  * Perform deep copy of the options structure.
@@ -229,7 +230,7 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
                                   ucs_config_field_t *fields, const char *env_prefix,
-                                  ucs_config_print_flags_t flags);
+                                  const char *table_prefix, ucs_config_print_flags_t flags);
 
 /**
  * Read existing opts structure.

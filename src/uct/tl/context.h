@@ -19,6 +19,7 @@ typedef struct uct_context_tl_info {
     const char             *name;
     ucs_config_field_t     *iface_config_table;
     size_t                 iface_config_size;
+    const char             *config_prefix;
 } uct_context_tl_info_t;
 
 
@@ -58,7 +59,7 @@ extern ucs_config_field_t uct_iface_config_table[];
  */
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
                              ucs_config_field_t *config_table, size_t config_size,
-                             uct_tl_ops_t *tl_ops);
+                             const char *config_prefix, uct_tl_ops_t *tl_ops);
 
 
 
