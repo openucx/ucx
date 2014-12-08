@@ -281,7 +281,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 static void uct_rc_mlx5_register(uct_context_t *context)
 {
     uct_register_tl(context, "rc_mlx5", uct_rc_mlx5_iface_config_table,
-                    sizeof(uct_rc_mlx5_iface_config_t), &uct_rc_mlx5_tl_ops);
+                    sizeof(uct_rc_mlx5_iface_config_t), "RC_MLX5_", &uct_rc_mlx5_tl_ops);
 }
 
 UCS_COMPONENT_DEFINE(uct_context_t, rc_mlx5, uct_rc_mlx5_register, ucs_empty_function, 0)
