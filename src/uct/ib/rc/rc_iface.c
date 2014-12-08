@@ -13,6 +13,13 @@
 #include <ucs/type/class.h>
 
 
+ucs_config_field_t uct_rc_iface_config_table[] = {
+  {"IB_", "RX_INLINE=64", NULL,
+   ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+
+  {NULL}
+};
+
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     iface_attr->max_short      = 0;
@@ -67,31 +74,85 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
                                 uct_completion_cb_t cb)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    struct sglib_hashed_uct_rc_ep_t_iterator iter;
+    uct_rc_ep_t *ep;
 
-    if (iface->tx.outstanding > 0) {
-        return UCS_ERR_WOULD_BLOCK;
+    if (iface->tx.outstanding == 0) {
+        return UCS_OK;
+    }
+
+    if (iface->tx.sig_outstanding == 0) {
+        /* TODO hash iteration is slow with sglib */
+        /* TODO go over only relevant QPs */
+        for (ep = sglib_hashed_uct_rc_ep_t_it_init(&iter, iface->eps);
+             ep != NULL;
+             ep = sglib_hashed_uct_rc_ep_t_it_next(&iter))
+        {
+            uct_ep_flush(&ep->super);
+        }
+    }
+
+    return UCS_ERR_WOULD_BLOCK;
+}
+
+static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
+                           uct_context_h context, const char *dev_name,
+                           size_t rx_headroom, size_t rx_priv_len,
+                           uct_rc_iface_config_t *config)
+{
+    struct ibv_srq_init_attr srq_init_attr;
+    ucs_status_t status;
+
+    UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, rx_priv_len,
+                              sizeof(uct_rc_hdr_t), config);
+
+    self->tx.outstanding         = 0;
+    self->tx.sig_outstanding     = 0;
+    self->rx.available           = config->super.rx.queue_len;
+    self->config.tx_qp_len       = config->super.tx.queue_len;
+    self->config.tx_min_sge      = config->super.tx.min_sge;
+    self->config.tx_min_inline   = config->super.tx.min_inline;
+    self->config.tx_moderation   = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
+                                           ucs_roundup_pow2(config->super.tx.queue_len / 4));
+    self->config.rx_max_batch    = ucs_min(config->super.rx.max_batch, config->super.tx.queue_len / 4);
+    self->config.rx_inline       = config->super.rx.inl;
+
+    memset(self->eps, 0, sizeof(self->eps));
+
+    /* Create RX buffers mempool */
+    status = uct_ib_iface_recv_mpool_create(&self->super, &config->super,
+                                            "rc_recv_skb", &self->rx.mp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Create SRQ */
+    srq_init_attr.attr.max_sge   = 1;
+    srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
+    srq_init_attr.attr.srq_limit = 0;
+    srq_init_attr.srq_context    = self;
+    self->rx.srq = ibv_create_srq(uct_ib_iface_device(&self->super)->pd,
+                                  &srq_init_attr);
+    if (self->rx.srq == NULL) {
+        ucs_error("failed to create SRQ: %m");
+        ucs_mpool_destroy_unchecked(self->rx.mp);
+        return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
-                           uct_context_h context, const char *dev_name)
-{
-    UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name);
-    self->tx.outstanding = 0;
-    return UCS_OK;
-}
-
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 {
+    int ret;
+
+    /* TODO flush RX buffers */
+    ret = ibv_destroy_srq(self->rx.srq);
+    if (ret) {
+        ucs_warn("failed to destroy SRQ: %m");
+    }
+
+    ucs_mpool_destroy_unchecked(self->rx.mp); /* Cannot flush SRQ */
 }
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
-
-ucs_config_field_t uct_rc_iface_config_table[] = {
-  {"", "", NULL,
-   ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
-
-  {NULL}
-};

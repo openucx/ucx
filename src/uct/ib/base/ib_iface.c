@@ -16,6 +16,66 @@
 #include <stdlib.h>
 
 
+ucs_config_field_t uct_ib_iface_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+  {"TX_QUEUE_LEN", "256",
+   "Length of send queue in the QP.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.queue_len), UCS_CONFIG_TYPE_UINT},
+
+  {"TX_MAX_BATCH", "16",
+   "Number of send WQEs to batch in one post-send list. Larger values reduce\n"
+   "the CPU usage, but increase the latency and pipelining between sender and\n"
+   "receiver.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.max_batch), UCS_CONFIG_TYPE_UINT},
+
+  {"TX_MIN_INLINE", "64",
+   "Bytes to reserve in send WQE for inline data. Messages which are small\n"
+   "enough will be sent inline.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.min_inline), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TX_MIN_SGE", "3",
+   "Number of SG entries to reserve in the send WQE.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
+
+  {"TX_CQ_MODERATION", "64",
+   "Number of send WQEs for which completion is requested.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
+
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, "send",
+                                ucs_offsetof(uct_ib_iface_config_t, tx.mp),
+      "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
+      "in RC/DC and could cause deadlock or performance degradation."),
+
+  {"RX_QUEUE_LEN", "4096",
+   "Length of receive queue in the QPs.",
+   ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
+
+  {"RX_MAX_BATCH", "64",
+   "How many post-receives to perform in one batch.",
+   ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
+
+  {"RX_INLINE", "0",
+   "Number of bytes to request for inline receive. If the maximal supported size\n"
+   "is smaller, it will be used instead. If it is possible to support a larger\n"
+   "size than requested with the same hardware resources, it will be used instead.",
+   ucs_offsetof(uct_ib_iface_config_t, rx.inl), UCS_CONFIG_TYPE_MEMUNITS},
+
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, "receive",
+                                ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
+
+  {"GID_INDEX", "0",
+   "Port GID index to use for RoCE.",
+   ucs_offsetof(uct_ib_iface_config_t, gid_index), UCS_CONFIG_TYPE_UINT},
+
+  {"SL", "0",
+   "While IB service level to use.\n",
+   ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
+
+  {NULL}
+};
+
 static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
                                            uct_ib_iface_t *iface,
                                            const char *dev_name)
@@ -57,8 +117,46 @@ static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
     return UCS_ERR_NO_DEVICE;
 }
 
+static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
+{
+    uct_ib_iface_recv_desc_t *desc = obj;
+    desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
+}
+
+ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
+                                            uct_ib_iface_config_t *config,
+                                            const char *name, ucs_mpool_h *mp_p)
+{
+    unsigned grow;
+
+    if (config->rx.queue_len < 1024) {
+        grow = 1024;
+    } else {
+        /* We want to have some free (+10%) elements to avoid mem pool expansion */
+        grow = ucs_min( (int)(1.1 * config->rx.queue_len + 0.5),
+                        config->rx.mp.max_bufs);
+    }
+
+    return uct_iface_mpool_create(&iface->super.super,
+                                  iface->config.rx_payload_offset + iface->config.rx_data_size,
+                                  iface->config.rx_hdr_offset,
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->rx.mp,
+                                  grow,
+                                  uct_ib_iface_recv_desc_init,
+                                  name,
+                                  mp_p);
+}
+
+/**
+ * @param rx_headroom   Headroom requested by the user.
+ * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
+ * @param rx_hdr_len    Length of transport network header.
+ */
 static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
-                           uct_context_h context, const char *dev_name)
+                           uct_context_h context, const char *dev_name,
+                           unsigned rx_headroom, unsigned rx_priv_len,
+                           unsigned rx_hdr_len, uct_ib_iface_config_t *config)
 {
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
@@ -72,17 +170,37 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     }
 
     dev = uct_ib_iface_device(self);
+    self->gid_index                = config->gid_index;
+    self->sl                       = config->sl;
+    self->config.rx_headroom       = rx_headroom;
+    self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
+                                     ucs_max(rx_headroom, rx_priv_len + rx_hdr_len);
+    self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
+    self->config.rx_data_size      = config->super.max_bcopy;
+
+    ucs_debug("rx_headroom=%d payload_ofs=%d hdr_ofs=%d data_sz=%d",
+              self->config.rx_headroom, self->config.rx_payload_offset,
+              self->config.rx_hdr_offset, self->config.rx_data_size);
 
     /* TODO comp_channel */
-    /* TODO cqe */
-    self->send_cq = ibv_create_cq(dev->ibv_context, 1024, NULL, NULL, 0);
+    /* TODO inline scatter for SQ */
+    self->send_cq = ibv_create_cq(dev->ibv_context, config->tx.queue_len,
+                                  NULL, NULL, 0);
     if (self->send_cq == NULL) {
         ucs_error("Failed to create send cq: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
 
-    self->recv_cq = ibv_create_cq(dev->ibv_context, 1024, NULL, NULL, 0);
+    /* TODO need exp API to set this value */
+    if (config->rx.inl > 32 /*UCT_IB_MLX5_CQE64_MAX_INL*/) {
+        ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "128", 1);
+    }
+
+    self->recv_cq = ibv_create_cq(dev->ibv_context, config->rx.queue_len,
+                                  NULL, NULL, 0);
+    ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "64", 1);
+
     if (self->recv_cq == NULL) {
         ucs_error("Failed to create recv cq: %m");
         goto err_destroy_send_cq;
@@ -122,9 +240,3 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 
 UCS_CLASS_DEFINE(uct_ib_iface_t, uct_base_iface_t);
 
-ucs_config_field_t uct_ib_iface_config_table[] = {
-  {"", "", NULL,
-   ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-
-  {NULL}
-};

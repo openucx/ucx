@@ -36,6 +36,10 @@ protected:
 
         void mem_unmap(uct_lkey_t lkey, const uct_rkey_bundle_t& rkey) const;
 
+        void progress() const;
+
+        uct_iface_h iface() const;
+
         uct_ep_h ep() const;
 
         void flush() const;
