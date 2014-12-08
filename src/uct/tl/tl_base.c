@@ -5,6 +5,7 @@
 * $HEADER$
 */
 
+#include "tl_base.h"
 #include "context.h"
 
 #include <uct/api/uct.h>

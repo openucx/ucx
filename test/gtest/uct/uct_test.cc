@@ -90,7 +90,7 @@ uct_rkey_bundle_t uct_test::entity::mem_map(void *address, size_t length, uct_lk
     uct_pd_attr_t pd_attr;
     uct_rkey_bundle_t rkey;
 
-    status = uct_mem_map(m_iface->pd, address, length, 0, lkey_p);
+    status = uct_mem_map(m_iface->pd, &address, &length, 0, lkey_p);
     ASSERT_UCS_OK(status);
 
     status = uct_pd_query(m_iface->pd, &pd_attr);

@@ -11,6 +11,7 @@
 #include <uct/ib/base/ib_context.h>
 #include <uct/ib/base/ib_iface.h>
 #include <uct/tl/context.h>
+#include <uct/tl/tl_base.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>

@@ -12,6 +12,7 @@
 #include <uct/ib/base/ib_iface.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/tl/context.h>
+#include <uct/tl/tl_base.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
