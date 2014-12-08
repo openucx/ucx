@@ -15,7 +15,7 @@ typedef struct uct_ugni_iface_addr {
 } uct_ugni_iface_addr_t;
 
 typedef struct uct_ugni_iface {
-    uct_iface_t             super;
+    uct_base_iface_t        super;
     uct_ugni_device_t       *dev;
     uct_ugni_iface_addr_t   addr;
     /* TBD */

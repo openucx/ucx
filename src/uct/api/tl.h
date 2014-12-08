@@ -198,7 +198,6 @@ typedef struct uct_am_handler {
 typedef struct uct_iface {
     uct_iface_ops_t          ops;
     uct_pd_h                 pd;
-    uct_am_handler_t         am[UCT_AM_ID_MAX];
 } uct_iface_t;
 
 

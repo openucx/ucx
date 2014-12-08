@@ -23,7 +23,7 @@ typedef struct uct_ib_iface_addr {
 
 
 typedef struct uct_ib_iface {
-    uct_iface_t             super;
+    uct_base_iface_t        super;
     uint8_t                 port_num;
     /* TODO
      * lmc
@@ -45,7 +45,7 @@ extern ucs_config_field_t uct_ib_iface_config_table[];
 
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {
-    return ucs_derived_of(iface->super.pd, uct_ib_device_t);
+    return ucs_derived_of(iface->super.super.pd, uct_ib_device_t);
 }
 
 #endif
