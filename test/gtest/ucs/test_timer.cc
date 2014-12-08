@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -60,7 +60,7 @@ UCS_TEST_F(test_timer, get_time) {
     ASSERT_NEAR(1.0, time(NULL) - system_start_time, 0.000001);
 
     double nsec = (ucs_time_to_nsec(current_time - start_time)) / count;
-    EXPECT_LT(nsec, 20.0) << "ucs_get_time() performance is too bad";
+    EXPECT_LT(nsec, 30.0) << "ucs_get_time() performance is too bad";
 }
 
 UCS_TEST_F(test_timer, time_shift) {

@@ -1,12 +1,14 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
+# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
 
 lib_LTLIBRARIES     = libuct.la
 
+libuct_la_CFLAGS   =
+libuct_la_LIBS     =
 libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
@@ -65,4 +67,20 @@ libuct_la_SOURCES += \
 endif
 
 endif
+endif
+
+if HAVE_CRAY_UGNI 
+libuct_la_CFLAGS   += $(CRAY_UGNI_CFLAGS)
+libuct_la_LDFLAGS  += $(CRAY_UGNI_LIBS)
+libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
+
+noinst_HEADERS += \
+    ugni/ugni_context.h \
+    ugni/ugni_device.h \
+    ugni/ugni_iface.h
+
+libuct_la_SOURCES += \
+    ugni/ugni_context.c \
+    ugni/ugni_device.c \
+    ugni/ugni_iface.c
 endif
