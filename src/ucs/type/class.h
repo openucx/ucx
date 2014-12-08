@@ -171,6 +171,7 @@ struct ucs_class {
  */
 #define UCS_CLASS_CALL_SUPER_INIT(...) \
     { \
+        ucs_assert(*_init_count >= 1); \
         ucs_status_t status = \
             _myclass->superclass->init(self, _myclass->superclass, _init_count, \
                                        ## __VA_ARGS__); \

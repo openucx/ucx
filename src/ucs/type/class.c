@@ -32,6 +32,8 @@ void _ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit)
     ucs_class_t *c;
     int depth, skip;
 
+    ucs_assert((limit == -1) || (limit >= 1));
+
     /* Count how many classes are there */
     for (depth = 0, c = cls; c != NULL; ++depth, c = c->superclass);
 
