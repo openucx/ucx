@@ -59,6 +59,22 @@ struct uct_callback {
  */
 typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
 
+
+/**
+ * Active message handler
+ *
+ * @param [in]  data     Points to the received data.
+ * @param [in]  length   Length of data.
+ * @param [in]  arg      User-defined argument.
+ *
+ * @note The reserved headroom is placed right before the data.
+ *
+ * @return UCS_OK - descriptor is used and should be release
+ *         UCS_INPROGRESS - descriptor is owned by the user, and would be released later.
+ */
+typedef ucs_status_t (*uct_am_callback_t)(void *data, unsigned length, void *arg);
+
+
 /**
  * Interface attributes: capabilities and limitations.
  */
@@ -153,6 +169,11 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_put_short)(uct_ep_h ep, void *buffer, unsigned length,
                                  uint64_t remote_addr, uct_rkey_t rkey);
+
+    ucs_status_t (*ep_am_short)(uct_ep_h ep, uint8_t id, uint64_t header,
+                                void *payload, unsigned length);
+
+    ucs_status_t (*ep_flush)(uct_ep_h ep);
 
 } uct_iface_ops_t;
 

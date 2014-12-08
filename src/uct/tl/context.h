@@ -31,6 +31,26 @@ struct uct_context {
     UCS_STATS_NODE_DECLARE(stats);
 };
 
+
+/**
+ * Active message handle table entry
+ */
+typedef struct uct_am_handler {
+    uct_am_callback_t        cb;
+    void                     *arg;
+} uct_am_handler_t;
+
+
+/**
+ * Base structure of all interfaces.
+ * Includes the AM table which we don't want to expose.
+ */
+typedef struct uct_base_iface {
+    uct_iface_t       super;
+    uct_am_handler_t  am[UCT_AM_ID_MAX];
+} uct_base_iface_t;
+
+
 /**
  * "Base" structure which defines interface configuration options.
  * Specific transport extend this structure.

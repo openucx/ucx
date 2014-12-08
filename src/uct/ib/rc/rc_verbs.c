@@ -160,7 +160,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    uct_context_h context = self->super.super.super.pd->context;
+    uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_verbs_iface_progress, self);
 }
 
