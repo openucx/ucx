@@ -8,9 +8,12 @@
 #ifndef UCT_DEF_H_
 #define UCT_DEF_H_
 
+#include <ucs/sys/math.h>
 #include <stdint.h>
 
 #define UCT_MAX_NAME_LEN         64
+#define UCT_AM_ID_BITS           5
+#define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 
 typedef struct uct_context       *uct_context_h;
 typedef struct uct_iface         *uct_iface_h;

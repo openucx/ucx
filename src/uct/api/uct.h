@@ -145,6 +145,19 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
 
 /**
  * @ingroup CONTEXT
+ * @brief Set active message handler for the interface.
+ *
+ * @param [in]  iface    Interface to set the active message handler for.
+ * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
+ * @param [in]  cb       Active message callback. NULL to clear.
+ * @param [in]  arg      Active message argument.
+ */
+ucs_status_t uct_set_am_handler(uct_iface_h iface, uint8_t id,
+                                uct_am_callback_t cb, void *arg);
+
+
+/**
+ * @ingroup CONTEXT
  *
  * @brief Unpack a remote key.
  *
@@ -243,6 +256,17 @@ static inline ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned 
                                             uint64_t remote_addr, uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
+}
+
+static inline ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
+                                           void *payload, unsigned length)
+{
+    return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
+}
+
+static inline ucs_status_t uct_ep_flush(uct_ep_h ep)
+{
+    return ep->iface->ops.ep_flush(ep);
 }
 
 #endif
