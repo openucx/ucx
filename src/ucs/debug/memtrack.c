@@ -19,6 +19,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 
+
 #if ENABLE_MEMTRACK
 
 #define UCS_MEMTRACK_MAGIC            0x1ee7beefa880feedULL
@@ -362,7 +363,7 @@ static void ucs_memtrack_dump_internal(FILE* output_stream)
 {
     struct sglib_hashed_ucs_memtrack_entry_t_iterator entry_it;
     ucs_memtrack_entry_t *entry, *all_entries;
-    ucs_memtrack_entry_t total;
+    ucs_memtrack_entry_t total = {"", 0};
     unsigned num_entries, i;
 
     if (!ucs_memtrack_is_enabled()) {
