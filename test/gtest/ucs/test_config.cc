@@ -116,7 +116,8 @@ protected:
      */
     class car_opts {
     public:
-        car_opts(const char *env_prefix) : m_opts(parse(env_prefix)) {
+        car_opts(const char *env_prefix, const char *table_prefix = NULL) :
+            m_opts(parse(env_prefix, table_prefix)) {
         }
 
         car_opts(const car_opts& orig)
@@ -144,12 +145,12 @@ protected:
         }
     private:
 
-        static car_opts_t parse(const char *env_prefix) {
+        static car_opts_t parse(const char *env_prefix, const char *table_prefix) {
             car_opts_t tmp;
             ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
                                                               car_opts_table,
                                                               env_prefix,
-                                                              NULL);
+                                                              table_prefix);
             ASSERT_UCS_OK(status);
             return tmp;
         }
@@ -169,7 +170,6 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ((unsigned)COLOR_RED, opts->coach.driver_seat.color);
     EXPECT_EQ((unsigned)COLOR_BLUE, opts->coach.passenger_seat.color);
     EXPECT_EQ((unsigned)COLOR_BLACK, opts->coach.rear_seat.color);
-
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -194,7 +194,14 @@ UCS_TEST_F(test_config, set) {
 
     opts.set("COLOR", "white");
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+}
 
+UCS_TEST_F(test_config, set_with_prefix) {
+    ucs::scoped_setenv env1("UCSTEST_COLOR", "black");
+    ucs::scoped_setenv env2("UCSTEST_CARS_COLOR", "white");
+
+    car_opts opts("UCSTEST_", "CARS_");
+    EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 }
 
 UCS_TEST_F(test_config, performance) {

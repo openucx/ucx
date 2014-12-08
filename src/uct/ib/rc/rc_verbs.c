@@ -178,7 +178,7 @@ static uct_tl_ops_t uct_rc_verbs_tl_ops = {
 static void uct_rc_verbs_register(uct_context_t *context)
 {
     uct_register_tl(context, "rc_verbs", uct_rc_iface_config_table,
-                    sizeof(uct_rc_iface_config_t), "RC_V_", &uct_rc_verbs_tl_ops);
+                    sizeof(uct_rc_iface_config_t), "RC_VERBS_", &uct_rc_verbs_tl_ops);
 }
 
 UCS_COMPONENT_DEFINE(uct_context_t, rc_verbs, uct_rc_verbs_register, ucs_empty_function, 0)
