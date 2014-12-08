@@ -33,6 +33,15 @@ struct uct_context {
 
 
 /**
+ * Active message handle table entry
+ */
+typedef struct uct_am_handler {
+    uct_am_callback_t        cb;
+    void                     *arg;
+} uct_am_handler_t;
+
+
+/**
  * Base structure of all interfaces.
  * Includes the AM table which we don't want to expose.
  */

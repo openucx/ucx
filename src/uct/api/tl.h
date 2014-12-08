@@ -187,11 +187,6 @@ typedef struct uct_pd {
 } uct_pd_t;
 
 
-typedef struct uct_am_handler {
-    uct_am_callback_t        cb;
-    void                     *arg;
-} uct_am_handler_t;
-
 /**
  * Communication interface context
  */
