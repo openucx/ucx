@@ -4,18 +4,32 @@
  * $HEADER$
  */
 
-#include "uct/tl/context.h"
 #include "ucs/type/class.h"
+#include "uct/tl/context.h"
 
 #include "ugni_iface.h"
 #include "ugni_context.h"
-
-uct_iface_ops_t uct_ugni_iface_ops;
 
 static void uct_ugni_progress(void *arg)
 {
     /* TBD */
 }
+
+/* Forward declaration for the delete function */
+static void UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t)(uct_iface_t*);
+
+uct_iface_ops_t uct_ugni_iface_ops = {
+    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t),
+    .iface_get_address   = NULL,//uct_ugni_iface_get_address,
+    .iface_flush         = NULL,//uct_ugni_iface_flush,
+    .ep_get_address      = NULL,//uct_ugni_ep_get_address,
+    .ep_connect_to_iface = NULL,//NULL,
+    .ep_connect_to_ep    = NULL,//uct_ugni_ep_connect_to_ep,
+    .iface_query         = NULL,//uct_ugni_iface_query,
+    .ep_put_short        = NULL,//uct_ugni_ep_put_short,
+    .ep_create           = NULL,//UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
+    .ep_destroy          = NULL,//UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
+};
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
         const char *dev_name, uct_iface_config_t *config)
@@ -23,7 +37,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
     uct_ugni_device_t *dev;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_ops);
+    UCS_CLASS_CALL_SUPER_INIT(&uct_ugni_iface_ops);
 
     dev = uct_ugni_device_by_name(ugni_ctx, dev_name);
     if (NULL == dev) {
@@ -46,25 +60,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
     ucs_notifier_chain_remove(&context->progress_chain, uct_ugni_progress, self);
 }
 
+UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_context_h, const char*, uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
-UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_iface_t);
 
 uct_tl_ops_t uct_ugni_tl_ops = {
     .query_resources     = uct_ugni_query_resources,
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_iface_t),
     .rkey_unpack         = uct_ugni_rkey_unpack,
-};
-
-uct_iface_ops_t uct_ugni_iface_ops = {
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t),
-    .iface_get_address   = NULL,//uct_ugni_iface_get_address,
-    .iface_flush         = NULL,//uct_ugni_iface_flush,
-    .ep_get_address      = NULL,//uct_ugni_ep_get_address,
-    .ep_connect_to_iface = NULL,//NULL,
-    .ep_connect_to_ep    = NULL,//uct_ugni_ep_connect_to_ep,
-    .iface_query         = NULL,//uct_ugni_iface_query,
-    .ep_put_short        = NULL,//uct_ugni_ep_put_short,
-    .ep_create           = NULL,//UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
-    .ep_destroy          = NULL,//UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
 };

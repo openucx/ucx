@@ -108,7 +108,7 @@ uct_pd_ops_t uct_ugni_pd_ops = {
     .rkey_pack    = uct_ugni_rkey_pack,
 };
 
-ucs_status_t uct_ugni_device_create(int dev_id, uct_ugni_device_t *dev_p)
+ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, uct_ugni_device_t *dev_p)
 {
     gni_return_t ugni_rc;
 
@@ -148,6 +148,7 @@ ucs_status_t uct_ugni_device_create(int dev_id, uct_ugni_device_t *dev_p)
             sizeof(dev_p->fname), "%s:%u", dev_p->type_name, dev_p->address);
 
     dev_p->super.ops = &uct_ugni_pd_ops;
+    dev_p->super.context = context;
     dev_p->attached = false;
     return UCS_OK;
 }
