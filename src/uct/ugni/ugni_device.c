@@ -1,15 +1,18 @@
 /**
  * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ *
  * $COPYRIGHT$
  * $HEADER$
  */
 
 #define _GNU_SOURCE /* for CPU_ZERO/CPU_SET in sched.h */
-
-#include "ucs/debug/memtrack.h"
-#include "ucs/debug/log.h"
-
 #include "ugni_device.h"
+
+#include <uct/tl/context.h>
+#include <ucs/debug/memtrack.h>
+#include <ucs/debug/log.h>
+
 
 #define UCT_UGNI_RKEY_MAGIC  0x77777777ul
 
@@ -19,8 +22,8 @@ static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_mem_map(uct_pd_h pd, void *address, size_t length,
-        unsigned flags, uct_lkey_t *lkey_p)
+static ucs_status_t uct_ugni_mem_map(uct_pd_h pd, void **address_p, size_t *length_p,
+                                     unsigned flags, uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
 {
 #if 0
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
@@ -91,14 +94,13 @@ ucs_status_t uct_ugni_rkey_unpack(uct_context_h context, void *rkey_buffer,
 void uct_device_get_resource(uct_ugni_device_t *dev,
         uct_resource_desc_t *resource)
 {
-    ucs_snprintf_zero(resource->tl_name,
-            sizeof(resource->tl_name), "%s", TL_NAME);
+    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
     resource->addrlen    = sizeof(unsigned int);
     resource->local_cpus = dev->cpu_mask;
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));
-    memset((void *)&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
+    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 }
 
 uct_pd_ops_t uct_ugni_pd_ops = {
@@ -115,10 +117,10 @@ ucs_status_t uct_ugni_device_create(int dev_id, uct_ugni_device_t *dev_p)
     dev_p->device_id = (uint32_t)dev_id;
 
     ugni_rc = GNI_CdmGetNicAddress(dev_p->device_id, &dev_p->address,
-            &dev_p->cpu_id);
+                                   &dev_p->cpu_id);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmGetNicAddress failed, device %d, Error status: %s %d",
-                dev_id, gni_err_str[ugni_rc], ugni_rc);
+                  dev_id, gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
     CPU_SET(dev_p->cpu_id, &(dev_p->cpu_mask));
@@ -126,26 +128,26 @@ ucs_status_t uct_ugni_device_create(int dev_id, uct_ugni_device_t *dev_p)
     ugni_rc = GNI_GetDeviceType(&dev_p->type);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_GetDeviceType failed, device %d, Error status: %s %d",
-                dev_id, gni_err_str[ugni_rc], ugni_rc);
+                  dev_id, gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
 
     switch (dev_p->type) {
     case GNI_DEVICE_GEMINI:
         ucs_snprintf_zero(dev_p->type_name, sizeof(dev_p->type_name), "%s",
-                "GEMINI");
+                          "GEMINI");
         break;
     case GNI_DEVICE_ARIES:
         ucs_snprintf_zero(dev_p->type_name, sizeof(dev_p->type_name), "%s",
-                "ARIES");
+                          "ARIES");
         break;
     default:
         ucs_snprintf_zero(dev_p->type_name, sizeof(dev_p->type_name), "%s",
-                "UNKNOWN");
+                          "UNKNOWN");
     }
 
-    ucs_snprintf_zero(dev_p->fname,
-            sizeof(dev_p->fname), "%s:%u", dev_p->type_name, dev_p->address);
+    ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->fname), "%s:%u",
+                      dev_p->type_name, dev_p->address);
 
     dev_p->super.ops = &uct_ugni_pd_ops;
     dev_p->attached = false;
@@ -155,5 +157,4 @@ ucs_status_t uct_ugni_device_create(int dev_id, uct_ugni_device_t *dev_p)
 void uct_ugni_device_destroy(uct_ugni_device_t *dev)
 {
     /* Nop */
-    return;
 }
