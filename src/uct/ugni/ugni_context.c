@@ -1,7 +1,6 @@
 /**
  * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
- *
  * $COPYRIGHT$
  * $HEADER$
  */
@@ -16,8 +15,8 @@
 #include "ugni_context.h"
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-        uct_resource_desc_t **resources_p,
-        unsigned *num_resources_p);
+                                      uct_resource_desc_t **resources_p,
+                                      unsigned *num_resources_p);
 
 ucs_config_field_t uct_ugni_iface_config_table[] = {
     {"", "", NULL,
@@ -69,8 +68,8 @@ static ucs_status_t get_ptag(uint8_t *ptag)
 }
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-        uct_resource_desc_t **resources_p,
-        unsigned *num_resources_p)
+                                      uct_resource_desc_t **resources_p,
+                                      unsigned *num_resources_p)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
     uct_resource_desc_t *resources;
@@ -169,9 +168,10 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     }
 
     if (0 == ugni_ctx->num_devices) {
-        ucs_warn("UGNI No device found");
-        status = UCS_ERR_NO_DEVICE;
-        goto err_zero;
+        ucs_debug("UGNI No device found");
+        ugni_ctx->devices = NULL;
+        ugni_ctx->activated = 0;
+        return UCS_OK;
     }
 
     /* Allocate array for devices */
