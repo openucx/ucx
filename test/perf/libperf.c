@@ -527,6 +527,7 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
             goto err_destroy_eps;
         }
     }
+    uct_perf_iface_flush_b(perf);
 
     free(iface_addr);
     free(ep_addr);
