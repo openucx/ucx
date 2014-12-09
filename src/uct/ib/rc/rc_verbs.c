@@ -160,7 +160,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    uct_context_h context = self->super.super.super.pd->context;
+    uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_verbs_iface_progress, self);
 }
 
@@ -178,7 +178,7 @@ static uct_tl_ops_t uct_rc_verbs_tl_ops = {
 static void uct_rc_verbs_register(uct_context_t *context)
 {
     uct_register_tl(context, "rc_verbs", uct_rc_iface_config_table,
-                    sizeof(uct_rc_iface_config_t), &uct_rc_verbs_tl_ops);
+                    sizeof(uct_rc_iface_config_t), "RC_VERBS_", &uct_rc_verbs_tl_ops);
 }
 
 UCS_COMPONENT_DEFINE(uct_context_t, rc_verbs, uct_rc_verbs_register, ucs_empty_function, 0)

@@ -47,8 +47,8 @@ static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
                 return UCS_ERR_NO_DEVICE; /* Port number out of range */
             }
 
-            iface->super.pd = &dev->super;
-            iface->port_num = port_num;
+            iface->super.super.pd = &dev->super;
+            iface->port_num       = port_num;
             return UCS_OK;
         }
     }
@@ -125,7 +125,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
     }
 }
 
-UCS_CLASS_DEFINE(uct_ib_iface_t, uct_iface_t);
+UCS_CLASS_DEFINE(uct_ib_iface_t, uct_base_iface_t);
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "", NULL,

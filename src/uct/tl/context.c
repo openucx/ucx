@@ -20,6 +20,7 @@ UCS_COMPONENT_LIST_DEFINE(uct_context_t);
  */
 typedef struct uct_config_bundle {
     ucs_config_field_t *table;
+    const char         *table_prefix;
     char               data[];
 } uct_config_bundle_t;
 
@@ -67,7 +68,7 @@ void uct_progress(uct_context_h context)
 
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
                              ucs_config_field_t *config_table, size_t config_size,
-                             uct_tl_ops_t *tl_ops)
+                             const char *config_prefix, uct_tl_ops_t *tl_ops)
 {
     uct_context_tl_info_t *tls;
 
@@ -81,6 +82,7 @@ ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
     context->tls[context->num_tls].name               = tl_name;
     context->tls[context->num_tls].iface_config_table = config_table;
     context->tls[context->num_tls].iface_config_size  = config_size;
+    context->tls[context->num_tls].config_prefix      = config_prefix;
     ++context->num_tls;
     return UCS_OK;
 }
@@ -173,13 +175,14 @@ ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
 
     /* TODO use env_prefix */
     status = ucs_config_parser_fill_opts(bundle->data, tl->iface_config_table,
-                                         UCT_CONFIG_ENV_PREFIX);
+                                         UCT_CONFIG_ENV_PREFIX, tl->config_prefix);
 
     if (status != UCS_OK) {
         goto err_free_opts;
     }
 
-    bundle->table = tl->iface_config_table;
+    bundle->table        = tl->iface_config_table;
+    bundle->table_prefix = tl->config_prefix;
     *config_p = (uct_iface_config_t*)bundle->data;
     return UCS_OK;
 
@@ -203,7 +206,8 @@ void uct_iface_config_print(uct_iface_config_t *config, FILE *stream,
 {
     uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
     ucs_config_parser_print_opts(stream, title, bundle->data, bundle->table,
-                                 UCT_CONFIG_ENV_PREFIX, print_flags);
+                                 UCT_CONFIG_ENV_PREFIX, bundle->table_prefix,
+                                 print_flags);
 }
 
 ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,

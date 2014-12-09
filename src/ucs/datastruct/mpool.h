@@ -17,34 +17,41 @@
 
 
 /**
- * @param context    Mempool context as passed to ucs_mpool_create().
+ * @param mp_context Mempool context as passed to ucs_mpool_create().
  */
-typedef void  (*ucs_mpool_non_empty_cb_t)(void *context);
+typedef void  (*ucs_mpool_non_empty_cb_t)(void *mp_context);
 
 /**
- * @param size       Minimal size to allocate. The function may modify it to
- *                   the actual allocated size.
- * @param mp_context User-defined argument.
- * @return           Pointer to the allocated chunk.
+ * @param size         Minimal size to allocate. The function may modify it to
+ *                     the actual allocated size.
+ * @param chunk_p      Filled with a pointer to the allocated chunk.
+ * @param mp_context   Mempool context as passed to ucs_mpool_create().
+ *
+ * @return             Error status.
  */
-typedef void* (*ucs_mpool_alloc_chunk_cb)(size_t *size, void *mp_context UCS_MEMTRACK_ARG);
+typedef ucs_status_t (*ucs_mpool_chunk_alloc_cb_t)(void *mp_context, size_t *size,
+                                                   void **chunk_p UCS_MEMTRACK_ARG);
+
 
 /**
+ * @param mp_context Mempool context as passed to ucs_mpool_create().
  * @param chunk      Pointer to the chunk to free.
- * @param mp_context User-defined argument.
  */
-typedef void  (*ucs_mpool_free_chunk_cb)(void *chunk, void *mp_context);
+typedef void  (*ucs_mpool_chunk_free_cb_t)(void *mp_context, void *chunk);
+
 
 /**
- * @param obj        Object to initialize.
- * @param chunk      Chunk this object belongs to.
- * @param mp_context User-defined argument.
- * @param mp_arf     User-defined argument.
+ * @param mp_context  Mempool context as passed to ucs_mpool_create().
+ * @param
+ * @param obj         Object to initialize.
+ * @param arg         User-defined argument to init function.
  */
-typedef void  (*ucs_mpool_init_obj_cb)(void *obj, void *chunk, void *mp_context, void *arg);
+typedef void  (*ucs_mpool_init_obj_cb_t)(void *mp_context, void *obj, void *chunk,
+                                         void *arg);
 
 
 typedef struct ucs_mpool *ucs_mpool_h;
+
 
 /**
  * Create a memory pool, which returns elements consisting of header and data.
@@ -68,9 +75,9 @@ ucs_status_t
 ucs_mpool_create(const char *name, size_t elem_size, size_t align_offset,
                  size_t alignment, unsigned elems_per_chunk, unsigned max_elems,
                  void *mp_context,
-                 ucs_mpool_alloc_chunk_cb alloc_chunk_cb,
-                 ucs_mpool_free_chunk_cb free_chunk_cb,
-                 ucs_mpool_init_obj_cb init_obj_cb, void *init_obj_arg,
+                 ucs_mpool_chunk_alloc_cb_t alloc_chunk_cb,
+                 ucs_mpool_chunk_free_cb_t free_chunk_cb,
+                 ucs_mpool_init_obj_cb_t init_obj_cb, void *init_obj_arg,
                  ucs_mpool_h *mpp);
 
 void ucs_mpool_destroy(ucs_mpool_h mp);
@@ -90,21 +97,24 @@ void ucs_mpool_put(void *obj);
 /**
  * Simple chunk allocator (default).
  */
-void *ucs_mpool_chunk_malloc(size_t *size, void *mp_context UCS_MEMTRACK_ARG);
-void ucs_mpool_chunk_free(void *chunk, void *mp_context);
+ucs_status_t ucs_mpool_chunk_malloc(void *mp_context, size_t *size, void **chunk_p
+                                    UCS_MEMTRACK_ARG);
+void ucs_mpool_chunk_free(void *mp_context, void *chunk);
 
 
 /*
  * mmap chunk allocator.
  */
-void *ucs_mpool_chunk_mmap(size_t *size, void *mp_context UCS_MEMTRACK_ARG);
-void ucs_mpool_chunk_munmap(void *chunk, void *mp_context);
+ucs_status_t ucs_mpool_chunk_mmap(void *mp_context, size_t *size, void **chunk_p
+                                  UCS_MEMTRACK_ARG);
+void ucs_mpool_chunk_munmap(void *mp_context, void *chunk);
 
 /**
  * Hugetlb chunk allocator.
  */
-void* ucs_mpool_hugetlb_malloc(size_t *size, void *mp_context UCS_MEMTRACK_ARG);
-void ucs_mpool_hugetlb_free(void *ptr, void *mp_context);
+ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chunk_p
+                                      UCS_MEMTRACK_ARG);
+void ucs_mpool_hugetlb_free(void *mp_context, void *chunk);
 
 
 #endif /* MPOOL_H_ */

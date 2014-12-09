@@ -19,6 +19,7 @@ typedef struct uct_context_tl_info {
     const char             *name;
     ucs_config_field_t     *iface_config_table;
     size_t                 iface_config_size;
+    const char             *config_prefix;
 } uct_context_tl_info_t;
 
 
@@ -29,6 +30,26 @@ struct uct_context {
     uct_context_tl_info_t  *tls;
     UCS_STATS_NODE_DECLARE(stats);
 };
+
+
+/**
+ * Active message handle table entry
+ */
+typedef struct uct_am_handler {
+    uct_am_callback_t        cb;
+    void                     *arg;
+} uct_am_handler_t;
+
+
+/**
+ * Base structure of all interfaces.
+ * Includes the AM table which we don't want to expose.
+ */
+typedef struct uct_base_iface {
+    uct_iface_t       super;
+    uct_am_handler_t  am[UCT_AM_ID_MAX];
+} uct_base_iface_t;
+
 
 /**
  * "Base" structure which defines interface configuration options.
@@ -58,7 +79,7 @@ extern ucs_config_field_t uct_iface_config_table[];
  */
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
                              ucs_config_field_t *config_table, size_t config_size,
-                             uct_tl_ops_t *tl_ops);
+                             const char *config_prefix, uct_tl_ops_t *tl_ops);
 
 
 

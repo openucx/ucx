@@ -15,13 +15,16 @@ extern "C" {
 
 class test_mpool : public ucs::test {
 protected:
-    static void *test_alloc(size_t *size, void *context UCS_MEMTRACK_ARG) {
-        return (*(void**)context = malloc(*size));
+    static ucs_status_t test_alloc(void *mp_context, size_t *size, void **chunk_p
+                                   UCS_MEMTRACK_ARG) {
+        *chunk_p = malloc(*size);
+        *(void**)mp_context = *chunk_p;
+        return (*chunk_p == NULL) ? UCS_ERR_NO_MEMORY : UCS_OK;
     }
 
-    static void test_free(void *ptr, void *context) {
-        free(ptr);
-        *(void**)context = NULL;
+    static void test_free(void *mp_context, void *chunk) {
+        free(chunk);
+        *(void**)mp_context = NULL;
     }
 
     static const size_t header_size = 30;

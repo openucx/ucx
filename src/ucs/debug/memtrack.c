@@ -5,6 +5,8 @@
 * $HEADER$
 */
 
+#include "memtrack.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
@@ -17,43 +19,36 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
 
+
 #if ENABLE_MEMTRACK
 
-#define MEMTRACK_BUFFER_MAGIC        0x1ee7beefa880feed
-#define MEMTRACK_DUMP_FORMAT_STRING  ("%22s: size: %9lu / %9lu\tcount: %9lu / %9lu\n")
-#define UCS_MEMTRACK_ENTRY_HASH_SIZE 127
+#define UCS_MEMTRACK_MAGIC            0x1ee7beefa880feedULL
+#define UCS_MEMTRACK_FORMAT_STRING    ("%22s: size: %9lu / %9lu\tcount: %9lu / %9lu\n")
+#define UCS_MEMTRACK_ENTRY_HASH_SIZE  127
+
+
+typedef struct ucs_memtrack_buffer {
+    uint64_t              magic;  /* Make sure this buffer is "memtracked" */
+    size_t                size; /* length of user-requested buffer */
+    off_t                 offset; /* Offset between result of memory allocation and the
+                                     location of this buffer struct (mainly for ucs_memalign) */
+    ucs_memtrack_entry_t  *entry; /* Entry which tracks this allocation */
+} ucs_memtrack_buffer_t;
 
 
 typedef struct ucs_memtrack_context {
-    int                  enabled;
-    pthread_mutex_t      lock;
-    ucs_memtrack_entry_t *entries[UCS_MEMTRACK_ENTRY_HASH_SIZE];
+    int                     enabled;
+    pthread_mutex_t         lock;
+    ucs_memtrack_entry_t    *entries[UCS_MEMTRACK_ENTRY_HASH_SIZE];
     UCS_STATS_NODE_DECLARE(stats);
 } ucs_memtrack_context_t;
 
 
-/* Global context for tracking all the memory */
+/* Global context for tracking allocated memory */
 static ucs_memtrack_context_t ucs_memtrack_context = {
     .enabled = 0,
     .lock    = PTHREAD_MUTEX_INITIALIZER
 };
-
-
-static inline unsigned ucs_memtrack_entry_hash(ucs_memtrack_entry_t *entry)
-{
-    return entry->origin % UCS_MEMTRACK_ENTRY_HASH_SIZE;
-}
-
-static inline int ucs_memtrack_entry_compare(ucs_memtrack_entry_t *entry1,
-                                             ucs_memtrack_entry_t *entry2)
-{
-    if (entry1->origin != entry2->origin) {
-        return (int)entry1->origin - (int)entry2->origin;
-    } else {
-        return strcmp(entry1->alloc_name, entry2->alloc_name);
-    }
-}
-
 
 SGLIB_DEFINE_LIST_PROTOTYPES(ucs_memtrack_entry_t, ucs_memtrack_entry_compare, next)
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucs_memtrack_entry_t,
@@ -71,239 +66,255 @@ static ucs_stats_class_t ucs_memtrack_stats_class = {
 };
 #endif
 
-static inline ucs_memtrack_entry_t* ucs_memtrack_create_entry(const char* alloc_name,
-                                                              unsigned origin)
+
+static inline ucs_memtrack_entry_t* ucs_memtrack_entry_new(const char* name)
 {
-    ucs_memtrack_entry_t *new_entry = malloc(sizeof(*new_entry));
-    if (new_entry == NULL) {
+    ucs_memtrack_entry_t *entry;
+
+    entry = malloc(sizeof(*entry));
+    if (entry == NULL) {
         return NULL;
     }
 
-    new_entry->current_size = 0;
-    new_entry->peak_size = 0;
-    new_entry->current_count = 0;
-    new_entry->peak_count = 0;
-
-    new_entry->origin = origin;
-    new_entry->alloc_name = alloc_name ? strdup(alloc_name) : NULL;
-    sglib_hashed_ucs_memtrack_entry_t_add(ucs_memtrack_context.entries, new_entry);
-    return new_entry;
+    entry->size       = 0;
+    entry->peak_size  = 0;
+    entry->count      = 0;
+    entry->peak_count = 0;
+    ucs_snprintf_zero(entry->name, UCS_MEMTRACK_NAME_MAX, "%s", name);
+    sglib_hashed_ucs_memtrack_entry_t_add(ucs_memtrack_context.entries, entry);
+    return entry;
 }
 
-void ucs_memtrack_record_alloc(ucs_memtrack_buffer_t* buffer, size_t size
-                               UCS_MEMTRACK_ARG)
+static void ucs_memtrack_record_alloc(ucs_memtrack_buffer_t* buffer, size_t size,
+                                      off_t offset, const char *name)
 {
-    ucs_memtrack_entry_t *new_entry, search = {0};
+    ucs_memtrack_entry_t *entry, search;
 
-    if (!ucs_memtrack_context.enabled) {
-        return;
+    if (!ucs_memtrack_is_enabled()) {
+        goto out;
     }
 
     ucs_assert(buffer != NULL);
-    ucs_assert(alloc_name != NULL);
     ucs_assert(ucs_memtrack_context.entries != NULL); // context initialized
     pthread_mutex_lock(&ucs_memtrack_context.lock);
 
-    search.origin = origin;
-    search.alloc_name = (char*)((void*)alloc_name);
-    new_entry = sglib_hashed_ucs_memtrack_entry_t_find_member(ucs_memtrack_context.entries,
-                                                              &search);
-    if (new_entry == NULL) {
-        new_entry = ucs_memtrack_create_entry(alloc_name, origin);
-        if (new_entry == NULL) {
+    ucs_snprintf_zero(search.name, UCS_MEMTRACK_NAME_MAX, "%s", name);
+    entry = sglib_hashed_ucs_memtrack_entry_t_find_member(ucs_memtrack_context.entries,
+                                                          &search);
+    if (entry == NULL) {
+        entry = ucs_memtrack_entry_new(name);
+        if (entry == NULL) {
             goto out_unlock;
         }
     }
 
-    ucs_assert(0 == strcmp(alloc_name, new_entry->alloc_name));
-    buffer->magic = MEMTRACK_BUFFER_MAGIC;
-    buffer->length = size;
-    buffer->offset = 0;
-    buffer->entry = new_entry;
+    ucs_assert(!strcmp(name, entry->name));
+    buffer->magic   = UCS_MEMTRACK_MAGIC;
+    buffer->size    = size;
+    buffer->offset  = offset;
+    buffer->entry   = entry;
+    VALGRIND_MAKE_MEM_NOACCESS(buffer, sizeof(*buffer));
 
-    new_entry->current_size += size;
-    UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_SIZE, size);
-    new_entry->peak_size = ucs_max(new_entry->peak_size, new_entry->current_size);
-
-    new_entry->current_count++;
+    /* Update total count */
+    entry->count++;
     UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_COUNT, 1);
-    new_entry->peak_count = ucs_max(new_entry->peak_count, new_entry->current_count);
+    entry->peak_count = ucs_max(entry->peak_count, entry->count);
+
+    /* Update total size */
+    entry->size += size;
+    UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_SIZE, size);
+    entry->peak_size = ucs_max(entry->peak_size, entry->size);
 
 out_unlock:
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
+out:
+    UCS_EMPTY_STATEMENT;
 }
 
-ucs_memtrack_entry_t* ucs_memtrack_record_dealloc(ucs_memtrack_buffer_t *buffer)
+static ucs_memtrack_entry_t*
+ucs_memtrack_record_release(ucs_memtrack_buffer_t *buffer, size_t size)
 {
-    ucs_memtrack_entry_t *res;
-    if (!ucs_memtrack_context.enabled) {
+    ucs_memtrack_entry_t *entry;
+
+    if (!ucs_memtrack_is_enabled()) {
         return NULL;
     }
 
     pthread_mutex_lock(&ucs_memtrack_context.lock);
-    ucs_assert(buffer->magic == MEMTRACK_BUFFER_MAGIC);
-#if ENABLE_ASSERT
-    buffer->magic = MEMTRACK_BUFFER_MAGIC + 1; /* protect from double free */
-#endif
+    VALGRIND_MAKE_MEM_DEFINED(buffer, sizeof(*buffer));
 
-    res = buffer->entry;
-    ucs_assert(res->current_size >= buffer->length);
-    res->current_size -= buffer->length;
-    ucs_assert(res->current_count >= 1);
-    res->current_count--;
+    ucs_assert_always(buffer->magic == UCS_MEMTRACK_MAGIC);
+    buffer->magic = UCS_MEMTRACK_MAGIC + 1; /* protect from double free */
+    if (size != 0) {
+        ucs_assert(buffer->size == size);
+    }
+
+    entry = buffer->entry;
+
+    /* Update total count */
+    ucs_assert(entry->count >= 1);
+    --entry->count;
+
+    /* Update total size */
+    ucs_assert(entry->size >= buffer->size);
+    entry->size -= buffer->size;
 
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
-    return res;
+    return entry;
 }
 
-void *ucs_memtrack_calloc(size_t nmemb, size_t size UCS_MEMTRACK_ARG)
+void *ucs_malloc(size_t size, const char *name)
 {
-    ucs_memtrack_buffer_t *res;
-    res = calloc(1, nmemb * size + (ucs_memtrack_context.enabled ? sizeof(*res) : 0));
-    if ((res == NULL) || (!ucs_memtrack_context.enabled)) {
-        return res;
+    ucs_memtrack_buffer_t *buffer;
+
+    buffer = malloc(size + (ucs_memtrack_is_enabled() ? sizeof(*buffer) : 0));
+    if ((buffer == NULL) || (!ucs_memtrack_is_enabled())) {
+        return buffer;
     }
 
-    ucs_memtrack_record_alloc(res, nmemb * size, alloc_name, origin);
-    return res + 1;
+    ucs_memtrack_record_alloc(buffer, size, 0, name);
+    return buffer + 1;
 }
 
-void *ucs_memtrack_malloc(size_t size UCS_MEMTRACK_ARG)
+void *ucs_calloc(size_t nmemb, size_t size, const char *name)
 {
-    ucs_memtrack_buffer_t *res;
-    res = malloc(size + (ucs_memtrack_context.enabled ? sizeof(*res) : 0));
-    if ((res == NULL) || (!ucs_memtrack_context.enabled)) {
-        return res;
+    ucs_memtrack_buffer_t *buffer;
+
+    buffer = calloc(1, nmemb * size + (ucs_memtrack_is_enabled() ? sizeof(*buffer) : 0));
+    if ((buffer == NULL) || (!ucs_memtrack_is_enabled())) {
+        return buffer;
     }
 
-    ucs_memtrack_record_alloc(res, size, alloc_name, origin);
-    return res + 1;
+    ucs_memtrack_record_alloc(buffer, nmemb * size, 0, name);
+    return buffer + 1;
 }
 
-void *ucs_memtrack_memalign(size_t boundary, size_t size UCS_MEMTRACK_ARG)
+void *ucs_realloc(void *ptr, size_t size)
 {
-    size_t offset = 0;
-    ucs_memtrack_buffer_t *res;
-    if (!ucs_memtrack_context.enabled) {
+    ucs_memtrack_buffer_t *buffer = (ucs_memtrack_buffer_t*)ptr - 1;
+    ucs_memtrack_entry_t *entry;
+
+    if (!ucs_memtrack_is_enabled()) {
+        return realloc(ptr, size);
+    }
+
+    entry = ucs_memtrack_record_release(buffer, 0);
+    buffer = realloc((void*)buffer - buffer->offset, size + sizeof(*buffer));
+    if (buffer == NULL) {
+        return NULL;
+    }
+    if (!ucs_memtrack_is_enabled()) {
+        return buffer;
+    }
+    if (entry != NULL) {
+        ucs_memtrack_record_alloc(buffer, size, 0, entry->name);
+    }
+    return buffer + 1;
+}
+
+void *ucs_memalign(size_t boundary, size_t size, const char *name)
+{
+    ucs_memtrack_buffer_t *buffer;
+    off_t offset;
+
+    if (!ucs_memtrack_is_enabled()) {
         return memalign(boundary, size);
     }
 
-    if (boundary > sizeof(*res)) {
-        res = memalign(boundary, size + boundary);
-        offset = boundary - sizeof(*res);
+    if (boundary > sizeof(*buffer)) {
+        buffer = memalign(boundary, size + boundary);
+        offset = boundary - sizeof(*buffer);
     } else {
-        if (sizeof(*res) % boundary != 0) {
-            offset = boundary - (sizeof(*res) % boundary);
+        if (sizeof(*buffer) % boundary != 0) {
+            offset = boundary - (sizeof(*buffer) % boundary);
+        } else {
+            offset = 0;
         }
-        res = memalign(boundary, size + sizeof(*res) + offset);
+        buffer = memalign(boundary, size + sizeof(*buffer) + offset);
     }
-    if ((res == NULL) || (!ucs_memtrack_context.enabled)) {
-        return res;
+    if ((buffer == NULL) || (!ucs_memtrack_is_enabled())) {
+        return buffer;
     }
 
-    res = (void*)res + offset;
-    ucs_memtrack_record_alloc(res, size, alloc_name, origin);
-    res->offset = offset;
-    return res + 1;
+    buffer = (void*)buffer + offset;
+    ucs_memtrack_record_alloc(buffer, size, offset, name);
+    return buffer + 1;
 }
 
-void ucs_memtrack_free(void *ptr)
+void ucs_free(void *ptr)
 {
-    ucs_memtrack_buffer_t *buffer = (ucs_memtrack_buffer_t*)ptr - 1;
-    if (!ucs_memtrack_context.enabled) {
+    ucs_memtrack_buffer_t *buffer;
+
+    if ((ptr == NULL) || !ucs_memtrack_is_enabled()) {
         free(ptr);
-    } else {
-        if (ptr == NULL) {
-            return;
-        }
-        ucs_memtrack_record_dealloc(buffer);
-        free((void*)buffer - buffer->offset);
+        return;
     }
+
+    buffer = (ucs_memtrack_buffer_t*)ptr - 1;
+    ucs_memtrack_record_release(buffer, 0);
+    free((void*)buffer - buffer->offset);
 }
 
-void *ucs_memtrack_mmap(void *addr, size_t length, int prot, int flags,
-                        int fd, off_t offset UCS_MEMTRACK_ARG)
+void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
+               off_t offset, const char *name)
 {
-    ucs_memtrack_buffer_t *res;
+    ucs_memtrack_buffer_t *buffer;
 
     if ((flags & MAP_FIXED) || !(prot & PROT_WRITE)) {
         return MAP_FAILED;
     }
 
-    res = mmap(addr, length + (ucs_memtrack_context.enabled ? sizeof(*res) : 0),
+    buffer = mmap(addr, length + (ucs_memtrack_is_enabled() ? sizeof(*buffer) : 0),
                prot, flags, fd, offset);
-    if ((res == MAP_FAILED) || (!ucs_memtrack_context.enabled)) {
-        return res;
+    if ((buffer == MAP_FAILED) || (!ucs_memtrack_is_enabled())) {
+        return buffer;
     }
 
     if (fd > 0) {
-        memmove(res + 1, res, length);
+        memmove(buffer + 1, buffer, length);
     }
 
-    ucs_memtrack_record_alloc(res, length UCS_MEMTRACK_VAL);
-    return res + 1;
+    ucs_memtrack_record_alloc(buffer, length, 0, name);
+    return buffer + 1;
 }
 
 #ifdef __USE_LARGEFILE64
-void *ucs_memtrack_mmap64(void *addr, size_t length, int prot, int flags,
-                          int fd, uint64_t offset UCS_MEMTRACK_ARG)
+void *ucs_mmap64(void *addr, size_t size, int prot, int flags, int fd,
+                 uint64_t offset, const char *name)
 {
-    ucs_memtrack_buffer_t *res;
+    ucs_memtrack_buffer_t *buffer;
+
     if ((flags & MAP_FIXED) || !(prot & PROT_WRITE)) {
         return NULL;
     }
 
-    res = mmap64(addr, length + (ucs_memtrack_context.enabled ? sizeof(*res) : 0),
+    res = mmap64(addr, size + (ucs_memtrack_is_enabled() ? sizeof(*buffer) : 0),
                  prot, flags, fd, offset);
-    if ((res == NULL) || (!ucs_memtrack_context.enabled)) {
-        return res;
-    }
-
-    if (fd > 0) {
-        memmove(res + 1, res, length);
-    }
-
-    ucs_memtrack_record_alloc(res, length UCS_MEMTRACK_VAL);
-    return res + 1;
-}
-#endif
-
-int ucs_memtrack_munmap(void *addr, size_t length)
-{
-    ucs_memtrack_buffer_t *buffer = (ucs_memtrack_buffer_t*)addr - 1;
-    if (!ucs_memtrack_context.enabled) {
-        return munmap(addr, length);
-    }
-
-    ucs_assert(buffer->length == length); // Otherwise it's part of the buffer!
-    ucs_memtrack_record_dealloc(buffer);
-    return munmap((void*)buffer - buffer->offset,
-                  length + sizeof(*buffer) + buffer->offset);
-}
-
-void *ucs_memtrack_realloc(void *ptr, size_t size)
-{
-    ucs_memtrack_buffer_t *buffer = (ucs_memtrack_buffer_t*)ptr - 1;
-    ucs_memtrack_entry_t *entry;
-
-    if (!ucs_memtrack_context.enabled) {
-        return realloc(ptr, size);
-    }
-
-    entry = ucs_memtrack_record_dealloc(buffer);
-    buffer = realloc((void*)buffer - buffer->offset, size + sizeof(*buffer));
-    if (buffer == NULL) {
-        return NULL;
-    }
-    if (!ucs_memtrack_context.enabled) {
+    if ((buffer == NULL) || (!ucs_memtrack_is_enabled())) {
         return buffer;
     }
 
-    if (entry != NULL) {
-        ucs_memtrack_record_alloc(buffer, size, entry->alloc_name,
-                                    entry->origin);
+    if (fd > 0) {
+        memmove(buffer + 1, buffer, size);
     }
+
+    ucs_memtrack_record_alloc(buffer, size, 0, name);
     return buffer + 1;
+}
+#endif
+
+int ucs_munmap(void *addr, size_t length)
+{
+    ucs_memtrack_buffer_t *buffer;
+
+    if (!ucs_memtrack_is_enabled()) {
+        return munmap(addr, length);
+    }
+
+    buffer = (ucs_memtrack_buffer_t*)addr - 1;
+    ucs_memtrack_record_release(buffer, length);
+    return munmap((void*)buffer - buffer->offset,
+                  length + sizeof(*buffer) + buffer->offset);
 }
 
 static unsigned ucs_memtrack_total_internal(ucs_memtrack_entry_t* total)
@@ -312,33 +323,29 @@ static unsigned ucs_memtrack_total_internal(ucs_memtrack_entry_t* total)
     ucs_memtrack_entry_t *entry;
     unsigned num_entries;
 
-    if (!ucs_memtrack_context.enabled) {
-        return 0;
-    }
+    ucs_memtrack_total_reset(total);
 
     num_entries          = 0;
-    total->current_size  = 0;
-    total->peak_size     = 0;
-    total->current_count = 0;
-    total->peak_count    = 0;
-
     for (entry = sglib_hashed_ucs_memtrack_entry_t_it_init(&entry_it,
                                                            ucs_memtrack_context.entries);
          entry != NULL;
          entry = sglib_hashed_ucs_memtrack_entry_t_it_next(&entry_it))
     {
-        total->current_size  += entry->current_size;
+        total->size          += entry->size;
         total->peak_size     += entry->peak_size;
-        total->current_count += entry->current_count;
+        total->count         += entry->count;
         total->peak_count    += entry->peak_count;
         ++num_entries;
     }
-
     return num_entries;
 }
 
 void ucs_memtrack_total(ucs_memtrack_entry_t* total)
 {
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
     pthread_mutex_lock(&ucs_memtrack_context.lock);
     ucs_memtrack_total_internal(total);
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
@@ -355,20 +362,20 @@ static int ucs_memtrack_cmp_entries(const void *ptr1, const void *ptr2)
 static void ucs_memtrack_dump_internal(FILE* output_stream)
 {
     struct sglib_hashed_ucs_memtrack_entry_t_iterator entry_it;
-    ucs_memtrack_entry_t total = {0};
     ucs_memtrack_entry_t *entry, *all_entries;
+    ucs_memtrack_entry_t total = {"", 0};
     unsigned num_entries, i;
 
-    if (!ucs_memtrack_context.enabled) {
+    if (!ucs_memtrack_is_enabled()) {
         return;
     }
 
     num_entries = ucs_memtrack_total_internal(&total);
 
     fprintf(output_stream, "%31s current / peak  %16s current / peak\n", "", "");
-    fprintf(output_stream, MEMTRACK_DUMP_FORMAT_STRING, "TOTAL",
-            total.current_size, total.peak_size,
-            total.current_count, total.peak_count);
+    fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, "TOTAL",
+            total.size, total.peak_size,
+            total.count, total.peak_count);
 
     all_entries = malloc(sizeof(ucs_memtrack_entry_t) * num_entries);
 
@@ -387,9 +394,8 @@ static void ucs_memtrack_dump_internal(FILE* output_stream)
     qsort(all_entries, num_entries, sizeof(ucs_memtrack_entry_t), ucs_memtrack_cmp_entries);
     for (i = 0; i < num_entries; ++i) {
         entry = &all_entries[i];
-        fprintf(output_stream, MEMTRACK_DUMP_FORMAT_STRING, entry->alloc_name,
-                entry->current_size, entry->peak_size,
-                entry->current_count, entry->peak_count);
+        fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, entry->name,
+                entry->size, entry->peak_size, entry->count, entry->peak_count);
     }
 
     free(all_entries);
@@ -465,7 +471,6 @@ void ucs_memtrack_cleanup()
          entry = sglib_hashed_ucs_memtrack_entry_t_it_next(&entry_it))
     {
         sglib_hashed_ucs_memtrack_entry_t_delete(ucs_memtrack_context.entries, entry);
-        free(entry->alloc_name);
         free(entry);
     }
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
@@ -476,19 +481,61 @@ int ucs_memtrack_is_enabled()
     return ucs_memtrack_context.enabled;
 }
 
+size_t ucs_memtrack_adjust_alloc_size(size_t size)
+{
+    return size + sizeof(ucs_memtrack_buffer_t);
+}
+
+void ucs_memtrack_allocated(void **ptr_p, size_t *size_p, const char *name)
+{
+    ucs_memtrack_buffer_t *buffer;
+
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
+    buffer   = *ptr_p;
+    *ptr_p   = buffer + 1;
+    *size_p -= sizeof(*buffer);
+    ucs_memtrack_record_alloc(buffer, *size_p, 0, name);
+}
+
+void ucs_memtrack_releasing(void **ptr_p)
+{
+    ucs_memtrack_buffer_t *buffer;
+
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
+    buffer = *ptr_p -= sizeof(*buffer);
+    ucs_memtrack_record_release(buffer, 0);
+}
+
+static uint64_t ucs_memtrack_entry_hash(ucs_memtrack_entry_t *entry)
+{
+    return ucs_string_to_id(entry->name);
+}
+
+static int ucs_memtrack_entry_compare(ucs_memtrack_entry_t *entry1,
+                                      ucs_memtrack_entry_t *entry2)
+{
+    return strcmp(entry1->name, entry2->name);
+}
+
 SGLIB_DEFINE_LIST_FUNCTIONS(ucs_memtrack_entry_t, ucs_memtrack_entry_compare, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucs_memtrack_entry_t,
                                         UCS_MEMTRACK_ENTRY_HASH_SIZE,
                                         ucs_memtrack_entry_hash)
 
-#else
-
-void ucs_memtrack_init()
-{
-}
-
-void ucs_memtrack_cleanup()
-{
-}
-
 #endif
+
+
+void ucs_memtrack_total_reset(ucs_memtrack_entry_t* total)
+{
+    ucs_snprintf_zero(total->name, UCS_MEMTRACK_NAME_MAX, "total");
+    total->size          = 0;
+    total->peak_size     = 0;
+    total->count         = 0;
+    total->peak_count    = 0;
+}
