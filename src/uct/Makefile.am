@@ -21,11 +21,12 @@ nobase_dist_libuct_la_HEADERS = \
 	api/version.h
 
 noinst_HEADERS = \
-	tl/context.h
+	tl/context.h \
+	tl/tl_base.h
 
 libuct_la_SOURCES = \
 	tl/context.c \
-	tl/tl.c
+	tl/tl_base.c
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)

@@ -1,5 +1,6 @@
 /**
  * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
  */
@@ -14,8 +15,8 @@
 #include "ugni_context.h"
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-        uct_resource_desc_t **resources_p,
-        unsigned *num_resources_p);
+                                      uct_resource_desc_t **resources_p,
+                                      unsigned *num_resources_p);
 
 ucs_config_field_t uct_ugni_iface_config_table[] = {
     {"", "", NULL,
@@ -67,15 +68,16 @@ static ucs_status_t get_ptag(uint8_t *ptag)
 }
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-        uct_resource_desc_t **resources_p,
-        unsigned *num_resources_p)
+                                      uct_resource_desc_t **resources_p,
+                                      unsigned *num_resources_p)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
     uct_resource_desc_t *resources;
     unsigned dev_index;
 
     /* Allocate resources array */
-    resources = ucs_calloc(ugni_ctx->num_devices, sizeof(uct_resource_desc_t), "resource desc");
+    resources = ucs_calloc(ugni_ctx->num_devices, sizeof(uct_resource_desc_t),
+                           "resource desc");
     if (NULL == resources) {
         ucs_error("Failed to allocate memory");
         return UCS_ERR_NO_MEMORY;
@@ -83,7 +85,7 @@ ucs_status_t uct_ugni_query_resources(uct_context_h context,
 
     for (dev_index = 0; dev_index < ugni_ctx->num_devices; ++dev_index) {
         uct_device_get_resource(&ugni_ctx->devices[dev_index],
-                &resources[dev_index]);
+                                &resources[dev_index]);
     }
 
     *num_resources_p = ugni_ctx->num_devices;
@@ -133,13 +135,12 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
 
     ugni_ctx->id = getpid(); /* TBD */
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
-        GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
-    ugni_rc = GNI_CdmCreate(ugni_ctx->id, ugni_ctx->ptag,
-            ugni_ctx->cookie, modes,
-            &ugni_ctx->cdm_handle);
+            GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
+    ugni_rc = GNI_CdmCreate(ugni_ctx->id, ugni_ctx->ptag, ugni_ctx->cookie,
+                            modes, &ugni_ctx->cdm_handle);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmCreate failed, Error status: %s %d",
-                gni_err_str[ugni_rc], ugni_rc);
+                  gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -166,34 +167,33 @@ ucs_status_t uct_ugni_init(uct_context_h context)
         goto err_zero;
     }
 
-    if (0 == ugni_ctx->num_devices){
-        ucs_warn("UGNI No device found");
-        status = UCS_ERR_NO_DEVICE;
-        goto err_zero;
+    if (0 == ugni_ctx->num_devices) {
+        ucs_debug("UGNI No device found");
+        ugni_ctx->devices = NULL;
+        ugni_ctx->activated = 0;
+        return UCS_OK;
     }
 
     /* Allocate array for devices */
     ugni_ctx->devices = ucs_calloc(ugni_ctx->num_devices,
-            sizeof(uct_ugni_device_t), "ugni device");
+                                   sizeof(uct_ugni_device_t), "ugni device");
     if (NULL == ugni_ctx->devices) {
         ucs_error("Failed to allocate memory");
         status = UCS_ERR_NO_MEMORY;
         goto err_zero;
     }
 
-    dev_ids = ucs_calloc(ugni_ctx->num_devices,
-            sizeof(int ), "ugni device ids");
+    dev_ids = ucs_calloc(ugni_ctx->num_devices, sizeof(int), "ugni device ids");
     if (NULL == dev_ids) {
         ucs_error("Failed to allocate memory");
         status = UCS_ERR_NO_MEMORY;
         goto err_ids;
     }
 
-    ugni_rc = GNI_GetLocalDeviceIds(ugni_ctx->num_devices,
-            dev_ids);
+    ugni_rc = GNI_GetLocalDeviceIds(ugni_ctx->num_devices, dev_ids);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_GetLocalDeviceIds failed, Error status: %s %d",
-                gni_err_str[ugni_rc], ugni_rc);
+                  gni_err_str[ugni_rc], ugni_rc);
         status = UCS_ERR_NO_DEVICE;
         goto err_dev;
     }
@@ -203,7 +203,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
         status = uct_ugni_device_create(dev_ids[i], &ugni_ctx->devices[i]);
         if (status != UCS_OK) {
             ucs_warn("Failed to initialize ugni device %d (%s), ignoring it",
-                    i, ucs_status_string(status));
+                     i, ucs_status_string(status));
         } else {
             ++num_devices;
         }
@@ -218,10 +218,11 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     ucs_debug("Initialized UGNI component with %d devices", ugni_ctx->num_devices);
 
     status = uct_register_tl(context, "ugni", uct_ugni_iface_config_table,
-            sizeof(uct_ugni_iface_config_t), "UGNI_", &uct_ugni_tl_ops);
+                             sizeof(uct_ugni_iface_config_t), "UGNI_",
+                             &uct_ugni_tl_ops);
     if (UCS_OK != status) {
         ucs_error("Failed to register context (%s), ignoring it",
-                ucs_status_string(status));
+                  ucs_status_string(status));
         goto err_dev;
     }
 
@@ -240,7 +241,7 @@ err_zero:
 void uct_ugni_cleanup(uct_context_t *context)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
-    gni_return_t ugni_rc = GNI_RC_SUCCESS;
+    gni_return_t ugni_rc;
     int i;
 
     for (i = 0; i < ugni_ctx->num_devices; ++i) {
@@ -252,22 +253,23 @@ void uct_ugni_cleanup(uct_context_t *context)
         ugni_rc = GNI_CdmDestroy(ugni_ctx->cdm_handle);
         if (GNI_RC_SUCCESS != ugni_rc) {
             ucs_warn("GNI_CdmDestroy error status: %s (%d)",
-                    gni_err_str[ugni_rc], ugni_rc);
+                     gni_err_str[ugni_rc], ugni_rc);
         }
     }
 }
 UCS_COMPONENT_DEFINE(uct_context_t, ugni, uct_ugni_init, uct_ugni_cleanup, sizeof(uct_ugni_context_t))
 
 uct_ugni_device_t * uct_ugni_device_by_name(uct_ugni_context_t *ugni_ctx,
-        const char *dev_name)
+                                            const char *dev_name)
 {
     uct_ugni_device_t *dev;
     unsigned dev_index;
 
-    if (NULL == dev_name || NULL == ugni_ctx) {
+    if ((NULL == dev_name) || (NULL == ugni_ctx)) {
         ucs_error("Bad parameter. Device name and/or context are set to NULL");
         return NULL;
     }
+
     for (dev_index = 0; dev_index < ugni_ctx->num_devices; ++dev_index) {
         dev = &ugni_ctx->devices[dev_index];
         if (strlen(dev_name) == strlen(dev->fname) &&

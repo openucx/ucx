@@ -9,12 +9,20 @@
 #include "ib_device.h"
 #include "ib_context.h"
 
+#include <uct/tl/context.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 #include <sched.h>
 
-#define UCT_IB_RKEY_MAGIC  0x69626962  /* ibib *(const uint32_t*)"ibib" */
+
+#define UCT_IB_RKEY_MAGIC        0x69626962  /* ibib *(const uint32_t*)"ibib" */
+#define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
+                                  IBV_ACCESS_REMOTE_WRITE | \
+                                  IBV_ACCESS_REMOTE_READ | \
+                                  IBV_ACCESS_REMOTE_ATOMIC)
+
 
 static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
 {
@@ -59,20 +67,40 @@ static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void *address, size_t length,
-                                   unsigned flags, uct_lkey_t *lkey_p)
+static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
+                                   size_t *length_p, unsigned flags,
+                                   uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
     struct ibv_mr *mr;
 
-    mr = ibv_reg_mr(dev->pd, address, length,
-                    IBV_ACCESS_LOCAL_WRITE |
-                    IBV_ACCESS_REMOTE_WRITE |
-                    IBV_ACCESS_REMOTE_READ |
-                    IBV_ACCESS_REMOTE_ATOMIC);
-    if (mr == NULL) {
-        ucs_error("ibv_reg_mr() failed: %m");
-        return UCS_ERR_IO_ERROR;
+    if (*address_p == NULL) {
+        struct ibv_exp_reg_mr_in in = {
+            dev->pd,
+            NULL,
+            ucs_memtrack_adjust_alloc_size(*length_p),
+            UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
+            0,
+            0
+        };
+
+        /* TODO check backward compatibility of this */
+        mr = ibv_exp_reg_mr(&in);
+        if (mr == NULL) {
+            ucs_error("ibv_exp_reg_mr(NULL, length=%Zu) failed: %m", *length_p);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        *address_p = mr->addr;
+        *length_p  = mr->length;
+        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
+    } else {
+        mr = ibv_reg_mr(dev->pd, *address_p, *length_p, UCT_IB_MEM_ACCESS_FLAGS);
+        if (mr == NULL) {
+            ucs_error("ibv_reg_mr(address=%p, length=%Zu) failed: %m", *address_p,
+                      *length_p);
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     *lkey_p = (uintptr_t)mr;
@@ -81,9 +109,11 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void *address, size_t length,
 
 static ucs_status_t uct_ib_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 {
-    struct ibv_mr *mr = (void*)lkey;
+    struct ibv_mr *mr = uct_ib_lkey_mr(lkey);
+    void UCS_V_UNUSED *address = mr->addr;
     int ret;
 
+    ucs_memtrack_releasing(&address);
     ret = ibv_dereg_mr(mr);
     if (ret != 0) {
         ucs_error("ibv_dereg_mr() failed: %m");
@@ -96,7 +126,7 @@ static ucs_status_t uct_ib_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
                                      void *rkey_buffer)
 {
-    struct ibv_mr *mr = (void*)lkey;
+    struct ibv_mr *mr = uct_ib_lkey_mr(lkey);
     uint32_t *ptr = rkey_buffer;
 
     *(ptr++) = UCT_IB_RKEY_MAGIC;
