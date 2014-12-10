@@ -64,13 +64,7 @@ AC_PROG_LIBTOOL
 AC_HEADER_STDC
 LT_LIB_M
 
-
 PKG_PROG_PKG_CONFIG
-PKG_CONFIG="pkg-config"
-if test -n "${host}" ; then
-   PKG_CONFIG=${host}-${PKG_CONFIG}
-fi
-
 
 #
 # Save config flags for version dump tool
