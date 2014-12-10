@@ -45,7 +45,7 @@ uct_test::entity::entity(const uct_resource_desc_t& resource) {
                                    &iface_config);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name,
+    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name, 0,
                             iface_config, &m_iface);
     ASSERT_UCS_OK(status);
 
@@ -90,7 +90,7 @@ uct_rkey_bundle_t uct_test::entity::mem_map(void *address, size_t length, uct_lk
     uct_pd_attr_t pd_attr;
     uct_rkey_bundle_t rkey;
 
-    status = uct_mem_map(m_iface->pd, address, length, 0, lkey_p);
+    status = uct_mem_map(m_iface->pd, &address, &length, 0, lkey_p);
     ASSERT_UCS_OK(status);
 
     status = uct_pd_query(m_iface->pd, &pd_attr);

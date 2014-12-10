@@ -11,7 +11,7 @@
 #include "ib_device.h"
 
 #include <uct/api/uct.h>
-#include <uct/tl/context.h>
+#include <uct/tl/tl_base.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 

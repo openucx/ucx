@@ -51,5 +51,9 @@ static inline struct ibv_exp_port_attr* uct_ib_device_port_attr(uct_ib_device_t 
     return &dev->port_attr[port_num - dev->first_port];
 }
 
+static inline struct ibv_mr* uct_ib_lkey_mr(uct_lkey_t lkey)
+{
+    return (struct ibv_mr *)(void*)lkey;
+}
 
 #endif
