@@ -157,6 +157,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     int *dev_ids = NULL;
     gni_return_t ugni_rc = GNI_RC_SUCCESS;
 
+    ugni_ctx->activated = false;
     /* The code is designed to support
      * more than single device */
     ugni_rc = GNI_GetNumLocalDevices(&ugni_ctx->num_devices);
@@ -200,7 +201,7 @@ ucs_status_t uct_ugni_init(uct_context_h context)
 
     num_devices = 0;
     for (i = 0; i < ugni_ctx->num_devices; i++) {
-        status = uct_ugni_device_create(dev_ids[i], &ugni_ctx->devices[i]);
+        status = uct_ugni_device_create(context, dev_ids[i], &ugni_ctx->devices[i]);
         if (status != UCS_OK) {
             ucs_warn("Failed to initialize ugni device %d (%s), ignoring it",
                      i, ucs_status_string(status));

@@ -31,7 +31,7 @@ typedef struct uct_ugni_device {
     /* TBD - reference counter */
 } uct_ugni_device_t;
 
-ucs_status_t uct_ugni_device_create(int dev_id, uct_ugni_device_t *dev_p);
+ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, uct_ugni_device_t *dev_p);
 
 void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 
