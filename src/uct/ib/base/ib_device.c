@@ -75,6 +75,7 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
     struct ibv_mr *mr;
 
     if (*address_p == NULL) {
+#if HAVE_VERBS_EXP_H
         struct ibv_exp_reg_mr_in in = {
             dev->pd,
             NULL,
@@ -94,6 +95,10 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
         *address_p = mr->addr;
         *length_p  = mr->length;
         ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
+#else
+        ucs_error("Contig pages allocator not supported");
+        return UCS_ERR_UNSUPPORTED;
+#endif
     } else {
         mr = ibv_reg_mr(dev->pd, *address_p, *length_p, UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {

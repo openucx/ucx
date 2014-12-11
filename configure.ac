@@ -4,6 +4,7 @@
 # $COPYRIGHT$
 # $HEADER$
 #
+AC_PREREQ([2.63])
 
 define([scm_r], esyscmd([sh -c "git rev-parse --short=7 HEAD"]))
 define([ucx_ver_major], 0)

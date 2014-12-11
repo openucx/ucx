@@ -37,7 +37,7 @@
 #  define IBV_EXP_ACCESS_REMOTE_READ       IBV_ACCESS_REMOTE_READ
 #  define IBV_EXP_ACCESS_REMOTE_ATOMIC     IBV_ACCESS_REMOTE_ATOMIC
 #  define exp_send_flags                   send_flags
-#  define IBV_EXP_ACCESS_ALLOCATE_MR       IBV_ACCESS_ALLOCATE_MR
+#  define IBV_EXP_ACCESS_ALLOCATE_MR       0
 #  define IBV_EXP_ATOMIC_HCA               IBV_ATOMIC_HCA
 #  define ibv_exp_reg_shared_mr            ibv_reg_shared_mr_ex
 #  define ibv_exp_reg_shared_mr_in         ibv_reg_shared_mr_in
@@ -63,6 +63,7 @@
 #  define ibv_exp_query_port               ibv_query_port
 #  define exp_device_cap_flags             device_cap_flags
 #  define ibv_exp_create_qp                ibv_create_qp
+#  define ibv_exp_setenv(_c, _n, _v, _o)   ({setenv(_n, _v, _o); 0;})
 
 struct ibv_exp_reg_mr_in {
     struct ibv_pd *pd;
