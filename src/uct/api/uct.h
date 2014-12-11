@@ -131,6 +131,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @param [in]  context       Handle to context.
  * @param [in]  tl_name       Transport name.
  * @param [in]  dev_name      Hardware device name,
+ * @param [in]  rx_headroom   How much bytes to reserve before the receive segment.
  * @param [in]  config        Interface configuration options. Should be obtained
  *                            from uct_iface_read_config() function, or point to
  *                            transport-specific structure which extends uct_iface_config_t.
@@ -139,8 +140,8 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @return Error code.
  */
 ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
-                            const char *dev_name, uct_iface_config_t *config,
-                            uct_iface_h *iface_p);
+                            const char *dev_name, size_t rx_headroom,
+                            uct_iface_config_t *config, uct_iface_h *iface_p);
 
 
 /**
@@ -158,11 +159,62 @@ ucs_status_t uct_set_am_handler(uct_iface_h iface, uint8_t id,
 
 /**
  * @ingroup CONTEXT
+ * @brief Query for protection domain attributes..
+ *
+ * @param [in]  pd       Protection domain to query.
+ * @param [out] pd_attr  Filled with protection domain attributes.
+ */
+ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Map or allocate memory for zero-copy sends and remote access.
+ *
+ * @param [in]     pd         Protection domain to map memory on.
+ * @param [out]    address_p  If != NULL, memory region to map.
+ *                            If == NULL, filled with a pointer to allocated region.
+ * @param [inout]  length_p   How many bytes to allocate. Filled with the actual
+ *                           allocated size, which is larger than or equal to the
+ *                           requested size.
+ * @param [in]     flags      Allocation flags (currently reserved - set to 0).
+ * @param [out]    lkey_p     Filled with local access key for allocated region.
+ */
+ucs_status_t uct_mem_map(uct_pd_h pd, void **address_p, size_t *length_p,
+                         unsigned flags, uct_lkey_t *lkey_p);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Undo the operation of uct_mem_map().
+ *
+ * @param [in]  pd          Protection domain which was used to allocate/map the memory.
+ * @paran [in]  lkey        Local access key to memory region.
+ */
+ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey);
+
+
+/**
+ * @ingroup CONTEXT
+ *
+ * @brief Pack a remote key.
+ *
+ * @param [in]  pd           Handle to protection domain.
+ * @param [in]  lkey         Local key, whose remote key should be packed.
+ * @param [out] rkey_buffer  Filled with packed remote key.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer);
+
+
+/**
+ * @ingroup CONTEXT
  *
  * @brief Unpack a remote key.
  *
  * @param [in]  context      Handle to context.
- * @param [in]  rkey_buffer  Packet remote key buffer.
+ * @param [in]  rkey_buffer  Packed remote key buffer.
  * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
  *
  * @return Error code.
@@ -181,27 +233,6 @@ ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
  */
 void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob);
 
-
-static inline ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
-{
-    return pd->ops->query(pd, pd_attr);
-}
-
-static inline ucs_status_t uct_mem_map(uct_pd_h pd, void *address, size_t length,
-                                       unsigned flags, uct_lkey_t *lkey_p)
-{
-    return pd->ops->mem_map(pd, address, length, flags, lkey_p);
-}
-
-static inline ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
-{
-    return pd->ops->mem_unmap(pd, lkey);
-}
-
-static inline ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer)
-{
-    return pd->ops->rkey_pack(pd, lkey, rkey_buffer);
-}
 
 static inline ucs_status_t uct_iface_query(uct_iface_h iface,
                                            uct_iface_attr_t *iface_attr)

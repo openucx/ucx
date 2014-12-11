@@ -1,5 +1,6 @@
 /**
  * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
  */
@@ -32,7 +33,8 @@ uct_iface_ops_t uct_ugni_iface_ops = {
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
-                           const char *dev_name, uct_iface_config_t *config)
+                           const char *dev_name, size_t rx_headroom,
+                           uct_iface_config_t *config)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
     uct_ugni_device_t *dev;
@@ -48,8 +50,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
     self->super.super.pd = &dev->super;
     self->dev            = dev;
 
-    ucs_notifier_chain_add(&context->progress_chain, uct_ugni_progress,
-            self);
+    ucs_notifier_chain_add(&context->progress_chain, uct_ugni_progress, self);
     /* TBD: Resources are allocted later on */
     return UCS_OK;
 }
@@ -61,7 +62,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_context_h, const char*, uct_iface_config_t*);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_context_h,
+                                 const char*, size_t, uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
 
 uct_tl_ops_t uct_ugni_tl_ops = {
