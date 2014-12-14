@@ -24,6 +24,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
     UCS_CLASS_CALL_SUPER_INIT(tl_iface)
 
     /* Create QP */
+    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
@@ -35,7 +36,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
     qp_init_attr.cap.max_inline_data = 0;
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.sq_sig_all          = 0;
-    qp_init_attr.xrc_domain          = NULL;
     self->qp = ibv_create_qp(dev->pd, &qp_init_attr);
     if (self->qp == NULL) {
         ucs_error("failed to create qp: %m");

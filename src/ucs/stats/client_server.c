@@ -5,6 +5,8 @@
 * $HEADER$
 */
 
+#define _GNU_SOURCE /* For fmemopen */
+
 #include "libstats.h"
 
 #include <arpa/inet.h>
