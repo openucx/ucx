@@ -255,11 +255,13 @@ protected:
             throw ucs::test_abort_exception();
         }
 
-        ucx_perf_result_t *result0, *result1, result;
-        pthread_join(thread0, (void**)&result0);
-        pthread_join(thread1, (void**)&result1);
+        void *ptr0, *ptr1;
+        pthread_join(thread0, &ptr0);
+        pthread_join(thread1, &ptr1);
 
-        result = *result0;
+        ucx_perf_result_t *result0 = reinterpret_cast<ucx_perf_result*>(ptr0),
+                          *result1 = reinterpret_cast<ucx_perf_result*>(ptr1);
+        ucx_perf_result_t result = *result0;
         delete result0;
         delete result1;
         return result;
