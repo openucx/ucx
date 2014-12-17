@@ -23,7 +23,7 @@ ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
-static UCS_F_NOINLINE void
+static UCS_F_NOINLINE unsigned
 uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 {
     struct ibv_recv_wr *wrs, *bad_wr;
@@ -62,17 +62,19 @@ uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 
         iface->super.rx.available -= count;
     }
+
+    return count;
 }
 
-static inline void uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
-                                                int fill)
+static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
+                                                    int fill)
 {
     unsigned batch = iface->super.config.rx_max_batch;
     unsigned count;
 
     if (iface->super.rx.available < batch) {
         if (!fill) {
-            return;
+            return 0;
         } else {
             count = iface->super.rx.available;
         }
@@ -80,7 +82,7 @@ static inline void uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
         count = batch;
     }
 
-    uct_rc_verbs_iface_post_recv_always(iface, count);
+    return uct_rc_verbs_iface_post_recv_always(iface, count);
 }
 
 static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
@@ -201,7 +203,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
     self->inl_sge[1].lkey                   = 0;
 
     while (self->super.rx.available > 0) {
-        uct_rc_verbs_iface_post_recv(self, 1);
+        if (uct_rc_verbs_iface_post_recv(self, 1) == 0) {
+            ucs_error("Failed to post receives");
+            return UCS_ERR_NO_MEMORY;
+        }
     }
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_verbs_iface_progress,

@@ -35,7 +35,7 @@ static inline unsigned uct_rc_mlx5_srq_next_wqe_ind(struct mlx5_wqe_srq_next_seg
     return ntohs(seg->next_wqe_index);
 }
 
-static void uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned max)
+static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned max)
 {
     struct mlx5_wqe_srq_next_seg *seg;
     uct_rc_mlx5_recv_desc_t *desc;
@@ -74,6 +74,8 @@ static void uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned max
         ucs_memory_cpu_store_fence();
         *iface->rx.db = htonl(iface->rx.sw_pi);
     }
+
+    return count;
 }
 
 static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
@@ -221,7 +223,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
     self->rx.sw_pi = 0;
     ucs_queue_head_init(&self->rx.desc_q);
 
-    uct_rc_mlx5_iface_post_recv(self, self->super.rx.available);
+    if (uct_rc_mlx5_iface_post_recv(self, self->super.rx.available) == 0) {
+        ucs_error("Failed to post receives");
+        return UCS_ERR_NO_MEMORY;
+    }
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_mlx5_iface_progress,
                            self);
