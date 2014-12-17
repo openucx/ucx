@@ -24,40 +24,44 @@ ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 };
 
 static UCS_F_NOINLINE void
-uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned count)
+uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 {
     struct ibv_recv_wr *wrs, *bad_wr;
     struct ibv_sge *sges;
     uct_ib_iface_recv_desc_t *desc;
-    unsigned i;
+    unsigned count;
     int ret;
 
-    wrs  = alloca(sizeof *wrs  * count);
-    sges = alloca(sizeof *sges * count);
+    wrs  = alloca(sizeof *wrs  * max);
+    sges = alloca(sizeof *sges * max);
 
-    for (i = 0; i < count; ++i) {
+    count = 0;
+    while (count < max) {
         desc = ucs_mpool_get(iface->super.rx.mp);
         if (desc == NULL) {
             break;
         }
 
-        sges[i].addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-        sges[i].length = iface->super.super.config.rx_data_size;
-        sges[i].lkey   = desc->lkey;
-        wrs[i].num_sge = 1;
-        wrs[i].wr_id   = (uintptr_t)desc;
-        wrs[i].sg_list = &sges[i];
-        wrs[i].next    = &wrs[i + 1];
+        sges[count].addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+        sges[count].length = iface->super.super.config.rx_data_size;
+        sges[count].lkey   = desc->lkey;
+        wrs[count].num_sge = 1;
+        wrs[count].wr_id   = (uintptr_t)desc;
+        wrs[count].sg_list = &sges[count];
+        wrs[count].next    = &wrs[count + 1];
+        ++count;
     }
 
-    wrs[i - 1].next = NULL;
+    if (count > 0) {
+        wrs[count - 1].next = NULL;
 
-    ret = ibv_post_srq_recv(iface->super.rx.srq, wrs, &bad_wr);
-    if (ret != 0) {
-        ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
+        ret = ibv_post_srq_recv(iface->super.rx.srq, wrs, &bad_wr);
+        if (ret != 0) {
+            ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
+        }
+
+        iface->super.rx.available -= count;
     }
-
-    iface->super.rx.available -= count;
 }
 
 static inline void uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
