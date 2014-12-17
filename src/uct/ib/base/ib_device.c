@@ -81,7 +81,6 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
             NULL,
             ucs_memtrack_adjust_alloc_size(*length_p),
             UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
-            0,
             0
         };
 
