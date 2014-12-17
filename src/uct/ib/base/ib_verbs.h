@@ -63,7 +63,6 @@
 #  define ibv_exp_query_port               ibv_query_port
 #  define exp_device_cap_flags             device_cap_flags
 #  define ibv_exp_create_qp                ibv_create_qp
-#  define ibv_exp_setenv(_c, _n, _v, _o)   ({setenv(_n, _v, _o); 0;})
 
 struct ibv_exp_reg_mr_in {
     struct ibv_pd *pd;
@@ -99,6 +98,10 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 #else
 #  define IBV_DEVICE_HAS_DC(_attr)                  0
 #endif /* HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT */
+
+#if !HAVE_DECL_IBV_EXP_SETENV
+#  define ibv_exp_setenv(_c, _n, _v, _o)            setenv(_n, _v, _o)
+#endif
 
 #if HAVE_DECL_IBV_EXP_CQ_IGNORE_OVERRUN
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)

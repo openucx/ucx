@@ -55,16 +55,22 @@ if HAVE_TL_RC
 noinst_HEADERS += \
 	ib/rc/rc_def.h \
 	ib/rc/rc_ep.h \
-	ib/rc/rc_iface.h
+	ib/rc/rc_iface.h \
+	ib/rc/rc_verbs.h
 
 libuct_la_SOURCES += \
 	ib/rc/rc_ep.c \
 	ib/rc/rc_iface.c \
-	ib/rc/rc_verbs.c
+	ib/rc/rc_verbs_ep.c \
+	ib/rc/rc_verbs_iface.c
 
 if HAVE_MLX5_HW
+noinst_HEADERS += \
+	ib/rc/rc_mlx5.h
+
 libuct_la_SOURCES += \
-	ib/rc/rc_mlx5.c
+	ib/rc/rc_mlx5_ep.c \
+	ib/rc/rc_mlx5_iface.c
 endif
 
 endif

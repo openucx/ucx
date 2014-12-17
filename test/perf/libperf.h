@@ -18,6 +18,7 @@ BEGIN_C_DECLS
 
 
 typedef enum {
+    UCX_PERF_TEST_CMD_AM_SHORT,
     UCX_PERF_TEST_CMD_PUT_SHORT,
     UCX_PERF_TEST_CMD_LAST
 } ucx_perf_cmd_t;
@@ -46,8 +47,7 @@ typedef enum {
 
 
 enum {
-    UCX_PERF_TEST_FLAG_WARMUP     = UCS_BIT(1), /* Run some warm-up iterations */
-    UCX_PERF_TEST_FLAG_VALIDATE   = UCS_BIT(2)  /* Validate data. Affects performance. */
+    UCX_PERF_TEST_FLAG_VALIDATE   = UCS_BIT(1)  /* Validate data. Affects performance. */
 };
 
 
@@ -111,6 +111,7 @@ typedef struct ucx_perf_test_params {
 
     size_t                 message_size;    /* Test message size */
     size_t                 alignment;       /* Message buffer alignment */
+    ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
     double                 max_time;        /* Time limit (seconds), 0 - unlimited */
     double                 report_interval; /* Interval at which to call the report callback */

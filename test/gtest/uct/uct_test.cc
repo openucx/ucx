@@ -115,6 +115,14 @@ void uct_test::entity::mem_unmap(uct_lkey_t lkey, const uct_rkey_bundle_t& rkey)
     ASSERT_UCS_OK(status);
 }
 
+void uct_test::entity::progress() const {
+    uct_progress(m_ucth);
+}
+
+uct_iface_h uct_test::entity::iface() const {
+    return m_iface;
+}
+
 uct_ep_h uct_test::entity::ep() const {
     return m_ep;
 }

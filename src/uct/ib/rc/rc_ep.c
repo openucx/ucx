@@ -18,7 +18,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
-    struct ibv_qp_init_attr qp_init_attr;
+    struct ibv_exp_qp_init_attr qp_init_attr;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(tl_iface)
@@ -28,20 +28,36 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
     qp_init_attr.qp_context          = NULL;
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
-    qp_init_attr.srq                 = NULL; /* TODO */
-    qp_init_attr.cap.max_send_wr     = UCT_RC_TX_QP_LEN;
-    qp_init_attr.cap.max_recv_wr     = 1024;
-    qp_init_attr.cap.max_send_sge    = 2;
+    qp_init_attr.srq                 = iface->rx.srq;
+    qp_init_attr.cap.max_send_wr     = iface->config.tx_qp_len;
+    qp_init_attr.cap.max_recv_wr     = 0;
+    qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
     qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = 0;
+    qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.sq_sig_all          = 0;
+#if HAVE_DECL_IBV_EXP_CREATE_QP
+    qp_init_attr.pd                  = dev->pd;
+#  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
+    qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_INL_RECV;
+    qp_init_attr.max_inl_recv        = iface->config.rx_inline;
+#  endif
+    /* TODO max atomic */
+    self->qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
+#else
     self->qp = ibv_create_qp(dev->pd, &qp_init_attr);
+#endif
     if (self->qp == NULL) {
         ucs_error("failed to create qp: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
+
+#if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
+    qp_init_attr.max_inl_recv = qp_init_attr.max_inl_recv / 2; /* Driver bug W/A */
+#endif
+
+    self->tx.unsignaled = 0;
 
     self->qp_num = self->qp->qp_num; /* For hash */
     uct_rc_iface_add_ep(iface, self);
@@ -105,7 +121,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
 
     qp_attr.qp_state              = IBV_QPS_RTR;
     qp_attr.ah_attr.dlid          = iface_addr->lid; /* TODO LMC */
-    qp_attr.ah_attr.sl            = 9; /* TODO SL */
+    qp_attr.ah_attr.sl            = iface->super.sl;
     qp_attr.ah_attr.src_path_bits = 0; /* TODO LMC */
     qp_attr.ah_attr.static_rate   = 0;
     qp_attr.ah_attr.is_global     = 0; /* TODO RoCE */

@@ -10,8 +10,10 @@
 
 #include "rc_ep.h"
 
+#include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/sglib_wrapper.h>
+#include <ucs/debug/log.h>
 
 
 struct uct_rc_iface {
@@ -19,10 +21,25 @@ struct uct_rc_iface {
 
     struct {
         unsigned             outstanding;
+        unsigned             sig_outstanding;
     } tx;
 
-    uct_rc_ep_t              *eps[UCT_RC_QP_HASH_SIZE];
+    struct {
+        ucs_mpool_h          mp;
+        struct ibv_srq       *srq;
+        unsigned             available;
+    } rx;
 
+    struct {
+        unsigned             tx_qp_len;
+        unsigned             tx_min_sge;
+        unsigned             tx_min_inline;
+        unsigned             tx_moderation;
+        unsigned             rx_max_batch;
+        unsigned             rx_inline;
+    } config;
+
+    uct_rc_ep_t              *eps[UCT_RC_QP_HASH_SIZE];
 };
 
 typedef struct uct_rc_iface_config {
@@ -43,5 +60,13 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
                                 uct_completion_cb_t cb);
+
+static inline ucs_status_t
+uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned byte_len)
+{
+    ucs_trace_data("RX: AM [%d]", hdr->am_id);
+    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                               byte_len - sizeof(*hdr));
+}
 
 #endif

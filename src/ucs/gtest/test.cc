@@ -96,6 +96,8 @@ void test_base::TestBodyProxy() {
         } catch (test_skip_exception&) {
             detail::message_stream("SKIP");
             m_state = SKIPPED;
+        } catch (test_abort_exception&) {
+            m_state = ABORTED;
         }
     } else if (m_state == SKIPPED) {
     } else if (m_state == ABORTED) {

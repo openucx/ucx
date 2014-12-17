@@ -215,9 +215,10 @@ protected:
         params.test_type       = test.test_type;
         params.data_layout     = UCX_PERF_DATA_LAYOUT_BUFFER;
         params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-        params.flags           = UCX_PERF_TEST_FLAG_WARMUP;
+        params.flags           = 0;
         params.message_size    = test.msglen;
         params.alignment       = ucs_get_page_size();
+        params.warmup_iter     = test.iters / 10;
         params.max_iter        = test.iters;
         params.max_time        = 0.0;
         params.report_interval = 1.0;
@@ -273,6 +274,10 @@ protected:
 
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
+  { "active message latency", "usec", 0.1, 1.3,
+    UCX_PERF_TEST_CMD_AM_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+
   { "put latency", "usec", 0.01, 1.5,
     UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
@@ -318,7 +323,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
                                                       resource.dev_name,
                                                       cpus);
         double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
-        UCS_TEST_MESSAGE << boost::format("%s/%s %15s : %.3f %s")
+        UCS_TEST_MESSAGE << boost::format("%s/%s %25s : %.3f %s")
                             % resource.tl_name
                             % resource.dev_name
                             % test->title

@@ -21,6 +21,8 @@ public:
     virtual void init();
     virtual void cleanup();
 
+    void short_progress_loop();
+
     UCS_TEST_BASE_IMPL;
 protected:
     const entity &get_entity(unsigned index) const;
