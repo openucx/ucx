@@ -75,7 +75,7 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
     struct ibv_mr *mr;
 
     if (*address_p == NULL) {
-#if HAVE_VERBS_EXP_H
+#if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
         struct ibv_exp_reg_mr_in in = {
             dev->pd,
             NULL,

@@ -79,26 +79,28 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 }
 
 #  define IBV_IS_MPAGES_AVAIL(_attr)                ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_MR_ALLOCATE)
-#  define IBV_DEVICE_HAS_DC(_attr)                  0
 #  define IBV_EXP_REG_MR_FLAGS(_f, _e)              ((_f) | (_e))
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->exp_access)
 #  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)
 #  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)
 
-static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
-{
-    errno = ENOSYS;
-    return -1;
-}
-
 #else
 #  define IBV_IS_MPAGES_AVAIL(_attr)                ((_attr)->device_cap_flags2 & IBV_EXP_DEVICE_MR_ALLOCATE)
-#  define IBV_DEVICE_HAS_DC(_attr)                  ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)
 #  define IBV_EXP_REG_MR_FLAGS(_f, _e)              (_f) , (_e)
 #  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->access)
 #  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  (_attr)->comp_mask = (IBV_EXP_DEVICE_ATTR_RESERVED - 1)
 #  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)    (_attr)->comp_mask = 0
 
+#endif /* HAVE_VERBS_EXP_H */
+
+
+#if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
+#  define IBV_DEVICE_HAS_DC(_attr)                  ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)
+#else
+#  define IBV_DEVICE_HAS_DC(_attr)                  0
+#endif /* HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT */
+
+#if HAVE_DECL_IBV_EXP_CQ_IGNORE_OVERRUN
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 {
     struct ibv_exp_cq_attr cq_attr = {0};
@@ -106,7 +108,12 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
     cq_attr.cq_cap_flags = IBV_EXP_CQ_IGNORE_OVERRUN;
     return ibv_exp_modify_cq(cq, &cq_attr, IBV_EXP_CQ_CAP_FLAGS);
 }
+#else
+static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
+{
+    errno = ENOSYS;
+    return -1;
+}
+#endif /* HAVE_IBV_EXP_CQ_IGNORE_OVERRUN */
 
-#endif
-
-#endif
+#endif /* UCT_IB_VERBS_H */
