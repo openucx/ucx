@@ -273,7 +273,7 @@ protected:
 
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
-  { "put latency", "usec", 0.0, 1.0,
+  { "put latency", "usec", 0.01, 1.5,
     UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
