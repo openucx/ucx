@@ -76,6 +76,8 @@ AS_IF([test "x$with_ib" == xyes],
            AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
            with_mlx5_hw=yes])
 
+       AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND], [], [], [[#include <infiniband/verbs.h>]])
+
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
        AS_IF([test "x$with_dc" != xno],
