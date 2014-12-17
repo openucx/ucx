@@ -104,7 +104,7 @@ ucs_status_t uct_query_resources(uct_context_h context,
         /* Get TL resources */
         status = tl->ops->query_resources(context,&tl_resources,
                                           &num_tl_resources);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) || (num_tl_resources == 0)) {
             continue; /* Skip transport */
         }
 

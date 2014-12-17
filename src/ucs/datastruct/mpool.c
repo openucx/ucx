@@ -222,6 +222,7 @@ static UCS_F_NOINLINE ucs_status_t ucs_mpool_allocate_chunk(ucs_mpool_h mp)
     ucs_status_t status;
     int elems_in_chunk;
     unsigned i;
+    void *ptr;
 
     if (mp->num_elems >= mp->max_elems) {
         return UCS_ERR_NO_MEMORY;
@@ -229,17 +230,15 @@ static UCS_F_NOINLINE ucs_status_t ucs_mpool_allocate_chunk(ucs_mpool_h mp)
 
     chunk_size = sizeof(ucs_mpool_chunk_t) + mp->alignment +
                  mp->elems_per_chunk * (mp->elem_size + mp->elem_padding);
-    status = mp->chunk_alloc_cb(mp->mp_context, &chunk_size, (void**)&chunk
-#if ENABLE_MEMTRACK
-                               , mp->name
-#endif
-                               );
+    status = mp->chunk_alloc_cb(mp->mp_context, &chunk_size, &ptr
+                                UCS_MEMTRACK_NAME(mp->name));
     if (status != UCS_OK) {
         ucs_error("Failed to allocate memory pool chunk");
         return status;
     }
 
     /* Calculate padding, and update element count according to allocated size */
+    chunk = ptr;
     chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + mp->align_offset, mp->alignment);
     elems_in_chunk = (chunk_size - chunk_padding) /
                     (mp->elem_size + mp->elem_padding);

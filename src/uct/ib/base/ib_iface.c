@@ -61,7 +61,6 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
                            uct_context_h context, const char *dev_name)
 {
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
-    struct ibv_exp_port_attr *port_attr;
     uct_ib_device_t *dev;
     ucs_status_t status;
 
@@ -89,13 +88,9 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
         goto err_destroy_send_cq;
     }
 
-    port_attr = uct_ib_device_port_attr(dev, self->port_num);
-    switch (port_attr->link_layer) {
-    case IBV_LINK_LAYER_UNSPECIFIED:
-    case IBV_LINK_LAYER_INFINIBAND:
-        self->addr.lid = port_attr->lid;
-        break;
-    default:
+    if (uct_ib_device_is_port_ib(dev, self->port_num)) {
+        self->addr.lid = uct_ib_device_port_attr(dev, self->port_num)->lid;
+    } else {
         ucs_error("Unsupported link layer");
         goto err_destroy_recv_cq;
     }

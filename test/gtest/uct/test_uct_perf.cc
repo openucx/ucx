@@ -255,11 +255,13 @@ protected:
             throw ucs::test_abort_exception();
         }
 
-        ucx_perf_result_t *result0, *result1, result;
-        pthread_join(thread0, (void**)&result0);
-        pthread_join(thread1, (void**)&result1);
+        void *ptr0, *ptr1;
+        pthread_join(thread0, &ptr0);
+        pthread_join(thread1, &ptr1);
 
-        result = *result0;
+        ucx_perf_result_t *result0 = reinterpret_cast<ucx_perf_result*>(ptr0),
+                          *result1 = reinterpret_cast<ucx_perf_result*>(ptr1);
+        ucx_perf_result_t result = *result0;
         delete result0;
         delete result1;
         return result;
@@ -271,7 +273,7 @@ protected:
 
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
-  { "put latency", "usec", 0.0, 1.0,
+  { "put latency", "usec", 0.01, 1.5,
     UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 

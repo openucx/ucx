@@ -64,7 +64,7 @@ static inline double ucs_time_sec_value()
  */
 static inline ucs_time_t ucs_time_from_sec(double sec)
 {
-    return sec * ucs_time_sec_value();
+    return (ucs_time_t)(sec * ucs_time_sec_value() + 0.5);
 }
 
 /**

@@ -15,7 +15,7 @@ AC_CHECK_LIB([rt], [shm_open], [], AC_MSG_ERROR([librt not found]))
 #
 # Extended string functions
 #
-AC_CHECK_DECLS([asprintf, strdupa, basename], [],
+AC_CHECK_DECLS([asprintf, strdupa, basename, fmemopen], [],
 				AC_MSG_ERROR([GNU string extensions not found]), 
 				[#define _GNU_SOURCE 1
 				 #include <string.h>

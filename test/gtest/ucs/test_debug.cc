@@ -95,7 +95,7 @@ UCS_TEST_F(test_debug, lookup_address) {
     EXPECT_EQ(lineno, info.line_number);
     EXPECT_EQ(__basename(__FILE__), __basename(info.source_file));
 #else
-    EXPECT_EQ(0, info.line_number);
+    EXPECT_EQ(0u, info.line_number);
     EXPECT_EQ("", std::string(info.source_file));
 #endif
 }

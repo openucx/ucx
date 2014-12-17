@@ -46,6 +46,11 @@ const char *uct_ib_device_name(uct_ib_device_t *dev);
 ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                 uct_rkey_bundle_t *rkey_ob);
 
+/**
+ * @return 1 if the port is InfiniBand, 0 if the port is Ethernet.
+ */
+int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
+
 static inline struct ibv_exp_port_attr* uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {
     return &dev->port_attr[port_num - dev->first_port];

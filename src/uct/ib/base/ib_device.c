@@ -75,12 +75,12 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
     struct ibv_mr *mr;
 
     if (*address_p == NULL) {
+#if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
         struct ibv_exp_reg_mr_in in = {
             dev->pd,
             NULL,
             ucs_memtrack_adjust_alloc_size(*length_p),
             UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
-            0,
             0
         };
 
@@ -94,6 +94,10 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
         *address_p = mr->addr;
         *length_p  = mr->length;
         ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
+#else
+        ucs_error("Contig pages allocator not supported");
+        return UCS_ERR_UNSUPPORTED;
+#endif
     } else {
         mr = ibv_reg_mr(dev->pd, *address_p, *length_p, UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
@@ -298,6 +302,23 @@ const char *uct_ib_device_name(uct_ib_device_t *dev)
     return ibv_get_device_name(dev->ibv_context->device);
 }
 
+int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
+{
+#if HAVE_DECL_IBV_LINK_LAYER_INFINIBAND
+    switch (uct_ib_device_port_attr(dev, port_num)->link_layer) {
+    case IBV_LINK_LAYER_UNSPECIFIED:
+    case IBV_LINK_LAYER_INFINIBAND:
+        return 1;
+    case IBV_LINK_LAYER_ETHERNET:
+        return 0;
+    default:
+        ucs_fatal("Invalid link layer on %s:%d", uct_ib_device_name(dev), port_num);
+    }
+#else
+    return 1;
+#endif
+}
+
 ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
                                              uct_resource_desc_t *resource)
 {
@@ -318,9 +339,7 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
                       uct_ib_device_name(dev), port_num);
 
     /* Port network address */
-    switch (uct_ib_device_port_attr(dev, port_num)->link_layer) {
-    case IBV_LINK_LAYER_UNSPECIFIED:
-    case IBV_LINK_LAYER_INFINIBAND:
+    if (uct_ib_device_is_port_ib(dev, port_num)) {
         /*
          * For Infiniband, take the subnet prefix.
          */
@@ -338,12 +357,8 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
         gid.global.interface_id = 0; /* Zero-out GUID, keep only subnet prefix */
         UCS_STATIC_ASSERT(sizeof(in6_addr->sin6_addr) == sizeof(gid.raw));
         memcpy(&in6_addr->sin6_addr, &gid.raw, sizeof(gid.raw));
-        break;
-    case IBV_LINK_LAYER_ETHERNET:
+    } else {
         return UCS_ERR_UNSUPPORTED;
-    default:
-        ucs_error("Invalid link layer on %s:%d", uct_ib_device_name(dev), port_num);
-        return UCS_ERR_IO_ERROR;
     }
 
     /* Copy local CPUs mask */
