@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
-# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+# Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -109,6 +109,7 @@ m4_include([config/m4/ucs.m4])
 m4_include([config/m4/ib.m4])
 m4_include([config/m4/cray_ugni.m4])
 m4_include([config/m4/mpi.m4])
+m4_include([config/m4/rte.m4])
 
 
 #

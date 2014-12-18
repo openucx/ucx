@@ -1,5 +1,5 @@
 /**
- * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
@@ -37,7 +37,4 @@ void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 
 void uct_device_get_resource(uct_ugni_device_t *dev,
                              uct_resource_desc_t *resource);
-
-ucs_status_t uct_ugni_rkey_unpack(uct_context_h context, void *rkey_buffer,
-                                  uct_rkey_bundle_t *rkey_ob);
 #endif

@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+# Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -84,10 +84,12 @@ libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
 noinst_HEADERS += \
     ugni/ugni_context.h \
     ugni/ugni_device.h \
-    ugni/ugni_iface.h
+    ugni/ugni_iface.h \
+    ugni/ugni_ep.h
 
 libuct_la_SOURCES += \
     ugni/ugni_context.c \
     ugni/ugni_device.c \
-    ugni/ugni_iface.c
+    ugni/ugni_iface.c \
+    ugni/ugni_ep.c
 endif

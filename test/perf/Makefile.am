@@ -1,6 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 #
+# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -15,15 +16,20 @@ bin_PROGRAMS          = ucx_perftest
 noinst_LTLIBRARIES    = libucxperf.la
 AM_CPPFLAGS           = \
     -I$(abs_top_srcdir)/src \
-    -I$(abs_top_builddir)/src
+    -I$(abs_top_builddir)/src \
+    $(RTE_CPPFLAGS)
 
 noinst_HEADERS        = libperf.h
 libucxperf_la_SOURCES = libperf.c
+libucxperf_la_LDFLAGS   = \
+     $(RTE_LDFLAGS)
 libucxperf_la_LIBADD   = \
      $(abs_top_builddir)/src/uct/libuct.la \
      $(abs_top_builddir)/src/ucs/libucs.la
 
 ucx_perftest_SOURCES  = perftest.c
+ucx_perftest_LDFLAGS    = \
+     $(RTE_LDFLAGS)
 ucx_perftest_LDADD    = \
      $(abs_top_builddir)/src/uct/libuct.la \
      $(abs_top_builddir)/src/ucs/libucs.la \

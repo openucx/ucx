@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -28,6 +29,8 @@
 #include <locale.h>
 #if HAVE_MPI
 #  include <mpi.h>
+#elif HAVE_RTE
+#   include<rte.h>
 #endif
 
 enum {
@@ -53,6 +56,7 @@ struct perftest_context {
     char                         tl_name[UCT_MAX_NAME_LEN];
 
     uct_context_h                ucth;
+
     const char                   *server_addr;
     int                          port;
     unsigned                     cpu;
@@ -171,6 +175,8 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("\n");
 #if HAVE_MPI
     printf("This test can be also launched as an MPI application\n");
+#elif HAVE_RTE
+    printf("This test can be also launched as an libRTE application\n");
 #endif
     printf("  Common options:\n");
     printf("     -h           Show this help message.\n");
@@ -202,9 +208,10 @@ const char *__basename(const char *path)
 
 void print_transports(struct perftest_context *ctx)
 {
-    uct_resource_desc_t *resources, *res;
-    unsigned num_resources;
+    uct_resource_desc_t *res, *resources;
     ucs_status_t status;
+    unsigned num_resources;
+
 
     status = uct_query_resources(ctx->ucth, &resources, &num_resources);
     if (status != UCS_OK) {
@@ -308,6 +315,11 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
 
 static ucs_status_t validate_params(struct perftest_context *ctx)
 {
+    ucs_status_t status;
+    uct_resource_desc_t *resources;
+    unsigned num_resources;
+
+
     if ((ctx->params.command == UCX_PERF_TEST_CMD_LAST) ||
         (ctx->params.test_type == UCX_PERF_TEST_TYPE_LAST))
     {
@@ -315,17 +327,46 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (!strlen(ctx->dev_name)) {
-        ucs_error("Must specify device name");
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_query_resources(ctx->ucth, &resources, &num_resources);
+    if (status != UCS_OK) {
+        ucs_error("Failed to query resources");
+        return status;
     }
 
     if (!strlen(ctx->tl_name)) {
-        ucs_error("Must specify transport");
-        return UCS_ERR_INVALID_PARAM;
+        if (num_resources <= 0) {
+            ucs_error("Must specify transport");
+            status = UCS_ERR_INVALID_PARAM;
+            goto error;
+        }
+        strncpy(ctx->tl_name, resources[0].tl_name, UCT_MAX_NAME_LEN);
+        printf("No transport was specified, selecting %s\n", ctx->tl_name); 
+
     }
 
-    return UCS_OK;
+    if (!strlen(ctx->dev_name)) {
+        int i;
+        if (num_resources <= 0) {
+            ucs_error("No specify device name");
+            status = UCS_ERR_INVALID_PARAM;
+            goto error;
+        }
+        for (i = 0; i < num_resources; i++) {
+            if(!strcmp(ctx->tl_name, resources[i].tl_name)) {
+                strncpy(ctx->dev_name, resources[i].dev_name, UCT_MAX_NAME_LEN);
+                printf("No device was specified, selecting %s\n", ctx->dev_name); 
+            }
+        }
+        if (!strlen(ctx->dev_name)) {
+            ucs_error("Device for trasport %s was not found", ctx->tl_name);
+            status = UCS_ERR_INVALID_PARAM;
+            goto error;
+        }
+    }
+
+error:
+    uct_release_resource_list(resources);
+    return status;
 }
 
 unsigned sock_rte_group_size(void *rte_group)
@@ -387,6 +428,41 @@ void sock_rte_recv(void *rte_group, unsigned src, void *value, size_t size)
     }
 }
 
+void sock_rte_post_vec(void *rte_group, struct iovec * iovec, size_t num, void **req)
+{
+    int i, j;
+    int group_size;
+    int group_index;
+
+    group_size = sock_rte_group_size(rte_group);
+    group_index = sock_rte_group_index(rte_group);
+
+    for (i = 0; i < group_size; ++i) {
+        if (i != group_index) {
+            for (j = 0; j < num; ++j) {
+                sock_rte_send(rte_group, i, iovec[j].iov_base, iovec[j].iov_len);
+            }
+        }
+    }
+}
+
+void sock_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
+{
+    int i, group_index;
+
+    group_index = sock_rte_group_index(rte_group);
+    if (dest != group_index) {
+        for (i = 0; i < num; ++i) {
+            sock_rte_recv(rte_group, dest, iovec[i].iov_base, iovec[i].iov_len);
+        }
+    }
+}
+
+void sock_rte_exchange_vec(void *rte_group, void * req)
+{
+    sock_rte_barrier(rte_group);
+}
+
 static void sock_rte_report(void *rte_group, ucx_perf_result_t *result)
 {
     sock_rte_group_t *group = rte_group;
@@ -400,8 +476,9 @@ ucx_perf_test_rte_t sock_rte = {
     .group_size    = sock_rte_group_size,
     .group_index   = sock_rte_group_index,
     .barrier       = sock_rte_barrier,
-    .send          = sock_rte_send,
-    .recv          = sock_rte_recv,
+    .post_vec      = sock_rte_post_vec,
+    .recv_vec      = sock_rte_recv_vec,
+    .exchange_vec  = sock_rte_exchange_vec,
     .report        = sock_rte_report,
 };
 
@@ -545,14 +622,41 @@ void mpi_rte_barrier(void *rte_group)
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-void mpi_rte_send(void *rte_group, unsigned dest, void *value, size_t size)
+void mpi_rte_post_vec(void *rte_group, struct iovec * iovec, size_t num, void **req)
 {
-    MPI_Send(value, size, MPI_CHAR, dest, 1, MPI_COMM_WORLD);
+    int i, j;
+    int group_size;
+    int group_index;
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &group_index);
+    MPI_Comm_size(MPI_COMM_WORLD, &group_size);
+
+    for (i = 0; i < group_size; ++i) {
+        if (i != group_index) {
+            for (j = 0; j < num; ++j) {
+                MPI_Send(iovec[j].iov_base, iovec[j].iov_len, MPI_CHAR, i,
+                         1, MPI_COMM_WORLD);
+            }
+        }
+    }
 }
 
-void mpi_rte_recv(void *rte_group, unsigned src, void *value, size_t size)
+void mpi_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
 {
-    MPI_Recv(value, size, MPI_CHAR, src, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    int i, group_index;
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &group_index);
+    if (dest != group_index) {
+        for (i = 0; i < num; ++i) {
+            MPI_Recv(iovec[i].iov_base, iovec[i].iov_len, MPI_CHAR, dest, 1,
+                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
+    }
+}
+
+void mpi_rte_exchange_vec(void *rte_group, void * req)
+{
+    MPI_Barrier(MPI_COMM_WORLD);
 }
 
 static void mpi_rte_report(void *rte_group, ucx_perf_result_t *result)
@@ -565,9 +669,118 @@ ucx_perf_test_rte_t mpi_rte = {
     .group_size    = mpi_rte_group_size,
     .group_index   = mpi_rte_group_index,
     .barrier       = mpi_rte_barrier,
-    .send          = mpi_rte_send,
-    .recv          = mpi_rte_recv,
+    .post_vec      = mpi_rte_post_vec,
+    .recv_vec      = mpi_rte_recv_vec,
+    .exchange_vec  = mpi_rte_exchange_vec,
     .report        = mpi_rte_report,
+};
+#elif HAVE_RTE
+unsigned ext_rte_group_size(void *rte_group)
+{
+    return rte_group_size((rte_group_t)rte_group);
+}
+
+unsigned ext_rte_group_index(void *rte_group)
+{
+    return rte_group_rank((rte_group_t)rte_group);
+}
+
+void ext_rte_barrier(void *rte_group)
+{
+    int rc;
+    rc = rte_barrier((rte_group_t)rte_group);
+    if (RTE_SUCCESS != rc) {
+        ucs_error("Failed to rte_barrier");
+    }
+}
+
+void ext_rte_post_vec(void *rte_group, struct iovec* iovec, size_t num, void **req)
+{
+    int i, rc;
+    rte_group_t group = (rte_group_t)rte_group;
+    rte_srs_session_t session;
+    rte_iovec_t *r_vec;
+
+    rc = rte_srs_session_create(group, 0, &session);
+    if (RTE_SUCCESS != rc) {
+        ucs_error("Failed to rte_srs_session_create");
+    }
+
+    r_vec = calloc(num, sizeof(rte_iovec_t));
+    if (r_vec == NULL) {
+        return;
+    }
+    for (i = 0; i < num; ++i) {
+        r_vec[i].iov_base = iovec[i].iov_base;
+        r_vec[i].type = rte_datatype_uint8_t;
+        r_vec[i].count = iovec[i].iov_len;
+    }
+    rc = rte_srs_set_data(session, "KEY_PERF", r_vec, num);
+    if (RTE_SUCCESS != rc) {
+        ucs_error("Failed to rte_srs_set_data");
+    }
+    *req = session;
+    free(r_vec);
+}
+
+void ext_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
+{
+    rte_srs_session_t session = (rte_srs_session_t)req;
+    rte_group_t group = (rte_group_t)rte_group;
+    void *buffer = NULL;
+    int size;
+    uint32_t offset = 0;
+    rte_iovec_t *r_vec;
+    int i, rc;
+
+    rc = rte_srs_get_data(session, rte_group_index_to_ec(group, dest),
+                     "KEY_PERF", &buffer, &size);
+    if (RTE_SUCCESS != rc) {
+        ucs_error("Failed to rte_srs_get_data");
+    }
+    r_vec = calloc(num, sizeof(rte_iovec_t));
+    if (r_vec == NULL) {
+        ucs_error("Failed to allocate memory");
+        return;
+    }
+    for (i = 0; i < num; ++i) {
+        r_vec[i].iov_base = iovec[i].iov_base;
+        r_vec[i].type = rte_datatype_uint8_t;
+        r_vec[i].count = iovec[i].iov_len;
+        rte_unpack(&r_vec[i], buffer, &offset);
+    }
+    rc = rte_srs_session_destroy(session);
+    if (RTE_SUCCESS != rc) {
+        ucs_error("Failed to rte_srs_session_destroy");
+    }
+    free(buffer);
+    free(r_vec);
+}
+
+void ext_rte_exchange_vec(void *rte_group, void * req)
+{
+    rte_srs_session_t session = (rte_srs_session_t)req;
+    int rc;
+    rc = rte_srs_exchange_data(session);
+    if (RTE_SUCCESS != rc) {
+        ucs_error("Failed to rte_srs_exchange_data");
+    }
+}
+
+static void ext_rte_report(void *rte_group, ucx_perf_result_t *result)
+{
+    struct perftest_context *ctx = rte_group;
+    print_progress(result, ctx->flags);
+}
+
+ucx_perf_test_rte_t ext_rte = {
+    .group_size    = ext_rte_group_size,
+    .group_index   = ext_rte_group_index,
+    .barrier       = ext_rte_barrier,
+    .report        = ext_rte_report,
+    .post_vec      = ext_rte_post_vec,
+    .recv_vec      = ext_rte_recv_vec,
+    .exchange_vec  = ext_rte_exchange_vec,
 };
 #endif
 
@@ -591,6 +804,24 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->sock_rte_group.self_size = 0;
     ctx->params.rte_group         = ctx;
     ctx->params.rte               = &mpi_rte;
+#elif HAVE_RTE
+    ucs_status_t status;
+    rte_group_t group;
+
+    status = validate_params(ctx);
+    if (status != UCS_OK) {
+        return status;;
+    }
+
+    rte_init(NULL, NULL, &group);
+    if (0 == rte_group_rank(group)) {
+        ctx->flags |= TEST_FLAG_PRINT_RESULTS;
+    }
+
+    ctx->sock_rte_group.self      = NULL;
+    ctx->sock_rte_group.self_size = 0;
+    ctx->params.rte_group         = (void *)group;
+    ctx->params.rte               = &ext_rte;
 #endif
     return UCS_OK;
 }
@@ -681,17 +912,21 @@ int main(int argc, char **argv)
 {
     struct perftest_context ctx;
     ucs_status_t status;
-    int mpi = 0;
+    int rte = 0;
     int ret;
 
 #ifdef __COVERITY__
-    mpi = rand(); /* Shut up deadcode error */
+    rte = rand(); /* Shut up deadcode error */
 #endif
 
 #if HAVE_MPI
     /* Don't try MPI when running interactively */
     if (!isatty(0) && (MPI_Init(&argc, &argv) == 0)) {
-        mpi = 1;
+        rte = 1;
+    }
+#elif HAVE_RTE
+    if (!isatty(0)) {
+        rte = 1;
     }
 #endif
 
@@ -716,7 +951,7 @@ int main(int argc, char **argv)
     }
 
     /* Create RTE */
-    status = (mpi) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
+    status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
     if (status != UCS_OK) {
         ret = -1;
         goto out_cleanup;
@@ -733,14 +968,16 @@ int main(int argc, char **argv)
     ret = 0;
 
 out_cleanup_rte:
-    (mpi) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
+    (rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
 out_cleanup:
     uct_cleanup(ctx.ucth);
 out:
+    if (rte) {
 #if HAVE_MPI
-    if (mpi) {
         MPI_Finalize();
-    }
+#elif HAVE_RTE
+        rte_finalize();
 #endif
+    }
     return ret;
 }
