@@ -5,7 +5,7 @@
 * $HEADER$
 */
 
-#include <src/ucp/api/ucp.h>
+#include <ucp/api/ucp.h>
 #include <ucs/type/component.h>
 
 UCS_COMPONENT_LIST_DEFINE(ucp_context_t);
@@ -66,13 +66,17 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_
     ucs_status_t status;
 
     ucp_iface = ucs_malloc(ucs_components_total_size(ucp_iface_t), "ucp iface");
+    if (ucp_iface == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     status = uct_iface_config_read(ucp_context->uct_context,
                                    ucp_context->resources->tl_name, NULL, NULL,
                                    &iface_config);
     if (status != UCS_OK) {
         ucs_error("Failed to read UCT config: %s", ucs_status_string(status));
-        goto err;
+        goto err_free_iface;
     }
 
     // need to open all the resources, one iface per resource?
@@ -94,6 +98,8 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_
 
 err_release_cfg:
     uct_iface_config_release(iface_config);
+err_free_iface:
+    ucs_free(ucp_iface);
 err:
     return status;
 
