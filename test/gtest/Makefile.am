@@ -25,6 +25,7 @@ gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
 	$(top_builddir)/src/uct/libuct.la \
+	$(top_builddir)/src/ucp/libucp.la \
 	$(top_builddir)/src/ucs/libucstest.la \
 	$(top_builddir)/test/perf/libucxperf.la \
 	$(GTEST_LIBS) \
@@ -47,6 +48,8 @@ gtest_SOURCES = \
 	uct/test_uct_perf.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
+	ucp/ucp_test.cc \
+	ucp/test_ucp_ep.cc \
 	ucs/test_class.cc \
 	ucs/test_component.cc \
 	ucs/test_config.cc \
@@ -64,7 +67,8 @@ gtest_SOURCES = \
 
 noinst_HEADERS = \
 	uct/uct_p2p_test.h \
-	uct/uct_test.h
+	uct/uct_test.h \
+	ucp/ucp_test.h
 
 .PHONY: test test gdb valgrind fix_rpath ucx
 

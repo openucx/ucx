@@ -184,6 +184,7 @@ AC_CONFIG_FILES([
                  src/ucs/Makefile
                  src/uct/Makefile
                  src/uct/api/version.h
+                 src/ucp/Makefile
                  src/tools/info/Makefile
                  test/gtest/Makefile
                  test/perf/Makefile
