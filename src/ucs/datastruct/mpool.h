@@ -62,6 +62,7 @@ typedef struct ucs_mpool *ucs_mpool_h;
  * @param alignment        Boundary to which align the given offset within the element.
  * @param elems_per_chunk  Number of elements in a single chunk.
  * @param max_elems        Maximal number of elements which can be allocated by the pool.
+ *                         -1 or UINT_MAX means no limit.
  * @param mp_context       Mempool context, passed to all callbacks
  * @param alloc_chunk_cb   Called to allocate a chunk of objects.
  * @param free_chunk_cb    Called to free a previously allocated chunk of objects.
