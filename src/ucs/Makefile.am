@@ -20,6 +20,7 @@ noinst_HEADERS = \
 	config/types.h \
 	datastruct/frag_list.h \
 	datastruct/list.h \
+	datastruct/mpmc.h \
 	datastruct/mpool.h \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
@@ -55,6 +56,7 @@ libucs_la_SOURCES = \
 	config/global_opts.c \
 	config/parser.c \
 	datastruct/frag_list.c \
+	datastruct/mpmc.c \
 	datastruct/mpool.c \
 	datastruct/ptr_array.c \
 	debug/debug.c \
