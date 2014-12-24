@@ -48,8 +48,8 @@ static inline unsigned uct_rc_ep_hash(uct_rc_ep_t *ep)
     return ep->qp_num;
 }
 
-SGLIB_DEFINE_LIST_PROTOTYPES(uct_rc_ep_t, mxm_rc_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, mxm_rc_ep_hash);
+SGLIB_DEFINE_LIST_PROTOTYPES(uct_rc_ep_t, uct_rc_ep_compare, next);
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, uct_rc_ep_t);
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_rc_ep_t, uct_rc_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, uct_rc_ep_hash);
 
