@@ -17,9 +17,7 @@ extern "C" {
 /**
  * UCP test
  */
-class ucp_test : public ucs::test_base {
-public:
-    UCS_TEST_BASE_IMPL;
+class ucp_test : public ucs::test {
 
 protected:
     class entity {

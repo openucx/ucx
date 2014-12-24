@@ -9,7 +9,6 @@
 
 #include <ucs/gtest/test_helpers.h>
 
-
 ucp_test::entity::entity() {
     ucs_status_t status;
 
@@ -21,7 +20,6 @@ ucp_test::entity::entity() {
 
     status = ucp_ep_create(m_iface, &m_ep);
     ASSERT_UCS_OK(status);
-
 }
 
 ucp_test::entity::~entity() {

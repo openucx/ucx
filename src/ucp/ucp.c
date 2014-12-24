@@ -1,16 +1,11 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
 
 #include <ucp/api/ucp.h>
 #include <ucs/type/component.h>
-
-UCS_COMPONENT_LIST_DEFINE(ucp_context_t);
-UCS_COMPONENT_LIST_DEFINE(ucp_iface_t);
-UCS_COMPONENT_LIST_DEFINE(ucp_ep_t);
 
 ucs_status_t ucp_init(ucp_context_h *context_p)
 {
@@ -20,7 +15,7 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
     unsigned num_resources;
 
     /* allocate a ucp context */
-    context = ucs_malloc(ucs_components_total_size(ucp_context_t),"ucp context");
+    context = ucs_malloc(sizeof(*context),"ucp context");
     if (context == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -52,11 +47,11 @@ err:
     return status;
 }
 
-void ucp_cleanup(ucp_context_h context_p)
+void ucp_cleanup(ucp_context_h context)
 {
-    uct_release_resource_list(context_p->resources);
-    uct_cleanup(context_p->uct_context);
-    ucs_free(context_p);
+    uct_release_resource_list(context->resources);
+    uct_cleanup(context->uct_context);
+    ucs_free(context);
 }
 
 ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_p)
@@ -65,7 +60,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_
     uct_iface_config_t *iface_config;
     ucs_status_t status;
 
-    ucp_iface = ucs_malloc(ucs_components_total_size(ucp_iface_t), "ucp iface");
+    ucp_iface = ucs_malloc(sizeof(*ucp_iface), "ucp iface");
     if (ucp_iface == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -79,7 +74,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_
         goto err_free_iface;
     }
 
-    // need to open all the resources, one iface per resource?
+    /* TODO open all resources. for now we open just the 1st */
     status = uct_iface_open(ucp_context->uct_context,
                             ucp_context->resources->tl_name,
                             ucp_context->resources->dev_name, 0, iface_config,
@@ -93,7 +88,6 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_
     ucp_iface->context = ucp_context;
     *ucp_iface_p = ucp_iface;
 
-
     return UCS_OK;
 
 err_release_cfg:
@@ -102,7 +96,6 @@ err_free_iface:
     ucs_free(ucp_iface);
 err:
     return status;
-
 }
 
 void ucp_iface_close(ucp_iface_h ucp_iface)
@@ -116,7 +109,7 @@ ucs_status_t ucp_ep_create(ucp_iface_h ucp_iface, ucp_ep_h *ucp_ep_p)
     ucp_ep_t *ucp_ep;
     ucs_status_t status;
 
-    ucp_ep = ucs_malloc(ucs_components_total_size(ucp_ep_t), "ucp ep");
+    ucp_ep = ucs_malloc(sizeof(*ucp_ep), "ucp ep");
     if (ucp_ep == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;

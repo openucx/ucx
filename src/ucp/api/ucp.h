@@ -17,15 +17,15 @@
 
 typedef struct ucp_context {
     uct_context_h       uct_context;
-    uct_resource_desc_t *resources;    //should be list/array of resources?
+    uct_resource_desc_t *resources;    /* TODO should be list/array of resources? */
 } ucp_context_t;
 
 /**
  * Remote protocol layer endpoint
  */
 typedef struct ucp_ep {
-    ucp_iface_h       ucp_iface;    // local interface?
-    uct_ep_h          uct_ep;  // remote eps - one per transport
+    ucp_iface_h       ucp_iface;
+    uct_ep_h          uct_ep;       /* TODO remote eps - one per transport */
 } ucp_ep_t;
 
 /**
@@ -36,17 +36,60 @@ typedef struct ucp_iface {
     uct_iface_h       uct_iface;
 } ucp_iface_t;
 
-
+/**
+ * @ingroup CONTEXT
+ * @brief Initialize global ucp context.
+ *
+ * @param [out] context_p   Filled with a ucp context handle.
+ *
+ * @return Error code.
+ */
 ucs_status_t ucp_init(ucp_context_h *context_p);
 
+/**
+ * @ingroup CONTEXT
+ * @brief Destroy global ucp context.
+ *
+ * @param [in] context_p   Handle to the ucp context.
+ */
 void ucp_cleanup(ucp_context_h context_p);
 
+/**
+ * @ingroup CONTEXT
+ * @brief Create and open a communication interface.
+ *
+ * @param [in]  ucp_context   Handle to the ucp context.
+ * @param [out] ucp_iface     Filled with a handle to the opened communication interface.
+ *
+ * @return Error code.
+ */
 ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface);
 
+/**
+ * @ingroup CONTEXT
+ * @brief Close the communication interface.
+ *
+ * @param [in]  ucp_iface   Handle to the communication interface.
+ */
 void ucp_iface_close(ucp_iface_h ucp_iface);
 
+/**
+ * @ingroup CONTEXT
+ * @brief Create and open a remote endpoint.
+ *
+ * @param [in]  ucp_iface   Handle to the communication interface.
+ * @param [out] ucp_ep      Filled with a handle to the opened remote endpoint.
+ *
+ * @return Error code.
+ */
 ucs_status_t ucp_ep_create(ucp_iface_h ucp_iface, ucp_ep_h *ucp_ep);
 
+/**
+ * @ingroup CONTEXT
+ * @brief Close the remote endpoint.
+ *
+ * @param [in]  ucp_ep   Handle to the remote endpoint.
+ */
 void ucp_ep_destroy(ucp_ep_h ucp_ep);
 
 
