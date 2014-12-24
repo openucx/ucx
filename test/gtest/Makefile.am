@@ -58,6 +58,7 @@ gtest_SOURCES = \
 	ucs/test_memtrack.cc \
 	ucs/test_instr.cc \
 	ucs/test_math.cc \
+	ucs/test_mpmc.cc \
 	ucs/test_mpool.cc \
 	ucs/test_stats.cc \
 	ucs/test_sys.cc \
