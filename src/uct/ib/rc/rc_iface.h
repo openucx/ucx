@@ -58,8 +58,7 @@ uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface, unsigned qp_num);
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
-ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
-                                uct_completion_cb_t cb);
+ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface);
 
 static inline ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned byte_len)
