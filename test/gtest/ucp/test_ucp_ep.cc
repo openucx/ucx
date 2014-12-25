@@ -1,6 +1,5 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -28,7 +27,7 @@ UCS_TEST_F(test_ucp, open_ep) {
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(ucph != NULL);
 
-    status = ucp_iface_create(ucph, &iface);
+    status = ucp_iface_create(ucph, NULL, &iface);
     ASSERT_UCS_OK(status);
 
     status = ucp_ep_create(iface, &ep);

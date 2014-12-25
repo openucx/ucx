@@ -1,6 +1,5 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -15,7 +14,7 @@ ucp_test::entity::entity() {
     status = ucp_init(&m_ucph);
     ASSERT_UCS_OK(status);
 
-    status = ucp_iface_create(m_ucph, &m_iface);
+    status = ucp_iface_create(m_ucph, NULL, &m_iface);
     ASSERT_UCS_OK(status);
 
     status = ucp_ep_create(m_iface, &m_ep);

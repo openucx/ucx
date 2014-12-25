@@ -1,6 +1,5 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -59,11 +58,14 @@ void ucp_cleanup(ucp_context_h context_p);
  * @brief Create and open a communication interface.
  *
  * @param [in]  ucp_context   Handle to the ucp context.
+ * @param [in]  env_prefix    If non-NULL, search for environment variables
+ *                            starting with this UCP_<prefix>_. Otherwise, search
+ *                            for environment variables starting with just UCP_.
  * @param [out] ucp_iface     Filled with a handle to the opened communication interface.
  *
  * @return Error code.
  */
-ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface);
+ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix, ucp_iface_h *ucp_iface);
 
 /**
  * @ingroup CONTEXT

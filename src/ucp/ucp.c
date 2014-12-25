@@ -30,7 +30,7 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
 
     status = uct_query_resources(context->uct_context, &resources, &num_resources);
     if (status != UCS_OK) {
-        ucs_error("Failed to query resources: %s\n",ucs_status_string(status));
+        ucs_error("Failed to query resources: %s",ucs_status_string(status));
         goto err_free_uct;
     }
 
@@ -54,7 +54,8 @@ void ucp_cleanup(ucp_context_h context)
     ucs_free(context);
 }
 
-ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_p)
+ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
+                              ucp_iface_h *ucp_iface_p)
 {
     ucp_iface_t *ucp_iface;
     uct_iface_config_t *iface_config;
@@ -67,7 +68,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, ucp_iface_h *ucp_iface_
     }
 
     status = uct_iface_config_read(ucp_context->uct_context,
-                                   ucp_context->resources->tl_name, NULL, NULL,
+                                   ucp_context->resources->tl_name, env_prefix, NULL,
                                    &iface_config);
     if (status != UCS_OK) {
         ucs_error("Failed to read UCT config: %s", ucs_status_string(status));
