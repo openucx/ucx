@@ -19,6 +19,7 @@ typedef struct ucp_context {
     uct_resource_desc_t *resources;    /* TODO should be list/array of resources? */
 } ucp_context_t;
 
+
 /**
  * Remote protocol layer endpoint
  */
@@ -27,6 +28,7 @@ typedef struct ucp_ep {
     uct_ep_h          uct_ep;       /* TODO remote eps - one per transport */
 } ucp_ep_t;
 
+
 /**
  * Local protocol layer interface
  */
@@ -34,6 +36,7 @@ typedef struct ucp_iface {
     ucp_context_h     context;
     uct_iface_h       uct_iface;
 } ucp_iface_t;
+
 
 /**
  * @ingroup CONTEXT
@@ -44,6 +47,7 @@ typedef struct ucp_iface {
  * @return Error code.
  */
 ucs_status_t ucp_init(ucp_context_h *context_p);
+
 
 /**
  * @ingroup CONTEXT
@@ -67,6 +71,7 @@ void ucp_cleanup(ucp_context_h context_p);
  */
 ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix, ucp_iface_h *ucp_iface);
 
+
 /**
  * @ingroup CONTEXT
  * @brief Close the communication interface.
@@ -74,6 +79,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
  * @param [in]  ucp_iface   Handle to the communication interface.
  */
 void ucp_iface_close(ucp_iface_h ucp_iface);
+
 
 /**
  * @ingroup CONTEXT
@@ -86,6 +92,7 @@ void ucp_iface_close(ucp_iface_h ucp_iface);
  */
 ucs_status_t ucp_ep_create(ucp_iface_h ucp_iface, ucp_ep_h *ucp_ep);
 
+
 /**
  * @ingroup CONTEXT
  * @brief Close the remote endpoint.
@@ -95,4 +102,4 @@ ucs_status_t ucp_ep_create(ucp_iface_h ucp_iface, ucp_ep_h *ucp_ep);
 void ucp_ep_destroy(ucp_ep_h ucp_ep);
 
 
-#endif /* UCP_H_ */
+#endif
