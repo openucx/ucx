@@ -744,3 +744,8 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
 void ucs_empty_function()
 {
 }
+
+ucs_status_t ucs_empty_function_return_success()
+{
+    return UCS_OK;
+}

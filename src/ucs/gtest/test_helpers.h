@@ -32,6 +32,13 @@ class test_skip_exception : public std::exception {
  */
 int test_time_multiplier();
 
+
+/**
+ * Signal-safe sleep.
+ */
+void safe_usleep(double usec);
+
+
 /*
  * For gtest's EXPECT_EQ
  */

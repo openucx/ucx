@@ -86,6 +86,9 @@
 /* Unused variable */
 #define UCS_V_UNUSED __attribute__((unused))
 
+/* Aligned variable */
+#define UCS_V_ALIGNED(_align) __attribute__((aligned(_align)))
+
 /* Used for labels */
 #define UCS_EMPTY_STATEMENT {}
 

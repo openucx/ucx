@@ -15,11 +15,18 @@ libucs_la_LIBADD   = $(LIBM)
 libucs_ladir       = $(includedir)
 
 noinst_HEADERS = \
+	async/async_int.h \
+	async/async.h \
+	async/pipe.h \
+	async/signal.h \
+	async/thread.h \
 	config/global_opts.h \
 	config/parser.h \
 	config/types.h \
 	datastruct/frag_list.h \
+	datastruct/hash.h \
 	datastruct/list.h \
+	datastruct/mpmc.h \
 	datastruct/mpool.h \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
@@ -52,9 +59,14 @@ noinst_HEADERS = \
 	type/status.h 
 	
 libucs_la_SOURCES = \
+	async/async.c \
+	async/signal.c \
+	async/pipe.c \
+	async/thread.c \
 	config/global_opts.c \
 	config/parser.c \
 	datastruct/frag_list.c \
+	datastruct/mpmc.c \
 	datastruct/mpool.c \
 	datastruct/ptr_array.c \
 	debug/debug.c \
