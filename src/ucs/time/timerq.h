@@ -8,25 +8,25 @@
 #ifndef UCS_TIMERQ_H
 #define UCS_TIMERQ_H
 
-#include <ucs/datastruct/list.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/type/callback.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/preprocessor.h>
+#include <pthread.h>
 
 
-/**
- * UCS timer.
- */
 typedef struct ucs_timer {
-    ucs_callback_t *cb;              /* User callback */
-    ucs_time_t     interval;         /* Re-scheduling interval */
-    ucs_time_t     expiration;       /* Absolute timer expiration time */
-    ucs_list_link_t    list;             /* Link in the list of timers */
+    ucs_time_t                 expiration;/* Absolute timer expiration time */
+    ucs_time_t                 interval;  /* Re-scheduling interval */
+    int                        id;
 } ucs_timer_t;
 
 
 typedef struct ucs_timer_queue {
-    ucs_time_t     expiration;       /* Expiration of next timer */
-    ucs_list_link_t    timers;           /* List of timers */
+    pthread_spinlock_t         lock;
+    ucs_time_t                 min_interval; /* Expiration of next timer */
+    ucs_timer_t                *timers;      /* Array of timers */
+    unsigned                   num_timers;   /* Number of timers */
 } ucs_timer_queue_t;
 
 
@@ -37,6 +37,7 @@ typedef struct ucs_timer_queue {
  */
 ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq);
 
+
 /**
  * Cleanup the timer queue.
  *
@@ -44,44 +45,68 @@ ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq);
  */
 void ucs_timerq_cleanup(ucs_timer_queue_t *timerq);
 
-void ucs_timerq_sweep_internal(ucs_timer_queue_t *timerq, ucs_time_t current_time);
-
-/**
- * Go through the timers in the timer queue, dispatch expired timers, and reschedule
- * periodic timers.
- *
- * @param timerq        Timer queue to dispatch timers on.
- * @param current_time  Current time to dispatch the timers for.
- *
- * @note Timers which expired between calls to this function will also be dispatched.
- * @note There is no guarantee on the order of dispatching.
- */
-static inline void ucs_timerq_sweep(ucs_timer_queue_t *timerq, ucs_time_t current_time)
-{
-    if (current_time >= timerq->expiration) {
-        ucs_timerq_sweep_internal(timerq, current_time);
-    }
-}
 
 /**
  * Add a periodic timer.
  *
  * @param timerq     Timer queue to schedule on.
- * @param callback   Callback to invoke every time.
+ * @param timer_id   Timer ID to add.
  * @param interval   Timer interval.
- *
- * NOTE: The timer callback is allowed to remove itself from the queue by
- * calling ucs_timer_remove().
  */
-ucs_status_t ucs_timer_add(ucs_timer_queue_t *timerq, ucs_callback_t *callback,
-                          ucs_time_t interval);
+ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
+                            ucs_time_t interval);
+
 
 /**
  * Remove a timer.
  *
  * @param timerq     Time queue this timer was scheduled on.
- * @param callback   Callback to remove.
+ * @param timer_id   Timer ID to remove.
  */
-void ucs_timer_remove(ucs_timer_queue_t *timerq, ucs_callback_t *callback);
+ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id);
+
+
+/**
+ * @return Minimal timer interval.
+ */
+static inline ucs_time_t ucs_timerq_min_interval(ucs_timer_queue_t *timerq) {
+    return timerq->min_interval;
+}
+
+
+/**
+ * @return Whether there are no timers.
+ */
+static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
+    return timerq->num_timers == 0;
+}
+
+
+/**
+ * Go through the expired timers in the timer queue.
+ *
+ * @param _timer        Variable to be assigned with a pointer to the timer.
+ * @param _timerq       Timer queue to dispatch timers on.
+ * @param _current_time Current time to dispatch the timers for.
+ *
+ * @note Timers which expired between calls to this function will also be dispatched.
+ * @note There is no guarantee on the order of dispatching.
+ */
+#define ucs_timerq_for_each_expired(_timer, _timerq, _current_time) \
+    for ( \
+         /* Initialization */ \
+         pthread_spin_lock(&(_timerq)->lock), /* Grab lock */ \
+         _timer = (_timerq)->timers; /* Set iterator */ \
+         \
+         /* Condition */ \
+         (_timer != (_timerq)->timers + (_timerq)->num_timers) || /* Reached the end */ \
+         pthread_spin_unlock(&(_timerq)->lock); /* Release lock - should return 0 */ \
+         \
+         /* Step: advance iterator */ \
+         ++_timer) \
+        \
+        if ((_current_time >= (_timer)->expiration) /* Check if this timer has expirted */ && \
+            ((_timer)->expiration = _current_time + (_timer)->interval) /* Update expiration time */ \
+           )
 
 #endif
