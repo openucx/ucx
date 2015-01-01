@@ -50,6 +50,7 @@ gtest_SOURCES = \
 	uct/uct_test.cc \
 	ucp/ucp_test.cc \
 	ucp/test_ucp_ep.cc \
+	ucs/test_async.cc \
 	ucs/test_class.cc \
 	ucs/test_component.cc \
 	ucs/test_config.cc \
