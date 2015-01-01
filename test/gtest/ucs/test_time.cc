@@ -12,22 +12,10 @@ extern "C" {
 
 #include <time.h>
 
-class test_timer : public ucs::test {
-protected:
-    struct timer_with_counter {
-        ucs_callback_t cb;
-        unsigned       counter;
-    };
-
-    static void timer_func(ucs_callback_t *self)
-    {
-        struct timer_with_counter *ctx =
-                        ucs_container_of(self, struct timer_with_counter, cb);
-        ++ctx->counter;
-    }
+class test_time : public ucs::test {
 };
 
-UCS_TEST_F(test_timer, time_calc) {
+UCS_TEST_F(test_time, time_calc) {
     double value = rand() % UCS_USEC_PER_SEC;
 
     EXPECT_NEAR(value * 1000, ucs_time_to_msec(ucs_time_from_sec (value)), 0.000001);
@@ -35,7 +23,7 @@ UCS_TEST_F(test_timer, time_calc) {
     EXPECT_NEAR(value * 1000, ucs_time_to_nsec(ucs_time_from_usec(value)), 1.0);
 }
 
-UCS_TEST_F(test_timer, get_time) {
+UCS_TEST_F(test_time, get_time) {
     if (ucs::test_time_multiplier() > 1) {
         UCS_TEST_SKIP;
     }
@@ -63,7 +51,7 @@ UCS_TEST_F(test_timer, get_time) {
     EXPECT_LT(nsec, 30.0) << "ucs_get_time() performance is too bad";
 }
 
-UCS_TEST_F(test_timer, time_shift) {
+UCS_TEST_F(test_time, time_shift) {
 
     double accuracy_usec = ucs_time_to_usec(1ull << ucs_get_short_time_shift());
 
@@ -72,7 +60,10 @@ UCS_TEST_F(test_timer, time_shift) {
     EXPECT_LT(accuracy_usec, 1000.0);
 }
 
-UCS_TEST_F(test_timer, timerq_basic) {
+UCS_TEST_F(test_time, timerq) {
+    static const int TIMER_ID_1  = 100;
+    static const int TIMER_ID_2  = 200;
+
     ucs_timer_queue_t timerq;
     ucs_status_t status;
 
@@ -83,62 +74,76 @@ UCS_TEST_F(test_timer, timerq_basic) {
         const ucs_time_t interval2 = (::rand() % 20) + 1;
         const ucs_time_t test_time = ::rand() % 10000;
         const ucs_time_t time_base = ::rand();
-
-        struct timer_with_counter timerctx1;
-        struct timer_with_counter timerctx2;
+        ucs_timer_t *timer;
+        unsigned counter1, counter2;
 
         status = ucs_timerq_init(&timerq);
         ASSERT_UCS_OK(status);
 
-        timerctx1.cb.func = timer_func;
-        timerctx2.cb.func = timer_func;
+        EXPECT_TRUE(ucs_timerq_is_empty(&timerq));
+        EXPECT_EQ(UCS_TIME_INFINITY, ucs_timerq_min_interval(&timerq));
 
         ucs_time_t current_time = time_base;
 
-        ucs_timer_add(&timerq, &timerctx1.cb, interval1);
-        ucs_timer_add(&timerq, &timerctx2.cb, interval2);
+        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
+        ucs_timerq_add(&timerq, TIMER_ID_2, interval2);
+
+        EXPECT_FALSE(ucs_timerq_is_empty(&timerq));
+        EXPECT_EQ(std::min(interval1, interval2), ucs_timerq_min_interval(&timerq));
 
         /*
          * Check that both timers are invoked
          */
-        timerctx1.counter = 0;
-        timerctx2.counter = 0;
+        counter1 = 0;
+        counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_sweep(&timerq, current_time);
+            ucs_timerq_for_each_expired(timer, &timerq, current_time) {
+                if (timer->id == TIMER_ID_1) ++counter1;
+                if (timer->id == TIMER_ID_2) ++counter2;
+            }
         }
-        EXPECT_NEAR(test_time / interval1, timerctx1.counter, 1);
-        EXPECT_NEAR(test_time / interval2, timerctx2.counter, 1);
+        EXPECT_NEAR(test_time / interval1, counter1, 1);
+        EXPECT_NEAR(test_time / interval2, counter2, 1);
 
         /*
          * Check that after canceling, only one timer is invoked
          */
-        timerctx1.counter = 0;
-        timerctx2.counter = 0;
-        ucs_timer_remove(&timerq, &timerctx1.cb);
+        counter1 = 0;
+        counter2 = 0;
+        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        ASSERT_UCS_OK(status);
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_sweep(&timerq, current_time);
+            ucs_timerq_for_each_expired(timer, &timerq, current_time) {
+                if (timer->id == TIMER_ID_1) ++counter1;
+                if (timer->id == TIMER_ID_2) ++counter2;
+            }
         }
-        EXPECT_EQ(0u, timerctx1.counter);
-        EXPECT_NEAR(test_time / interval2, timerctx2.counter, 1);
+        EXPECT_EQ(0u, counter1);
+        EXPECT_NEAR(test_time / interval2, counter2, 1);
 
         /*
          * Check that after rescheduling, both timers are invoked again
          */
-        ucs_timer_add(&timerq, &timerctx1.cb, interval1);
+        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
 
-        timerctx1.counter = 0;
-        timerctx2.counter = 0;
+        counter1 = 0;
+        counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_sweep(&timerq, current_time);
+            ucs_timerq_for_each_expired(timer, &timerq, current_time) {
+                if (timer->id == TIMER_ID_1) ++counter1;
+                if (timer->id == TIMER_ID_2) ++counter2;
+            }
         }
-        EXPECT_NEAR(test_time / interval1, timerctx1.counter, 1);
-        EXPECT_NEAR(test_time / interval2, timerctx2.counter, 1);
+        EXPECT_NEAR(test_time / interval1, counter1, 1);
+        EXPECT_NEAR(test_time / interval2, counter2, 1);
 
-        ucs_timer_remove(&timerq, &timerctx1.cb);
-        ucs_timer_remove(&timerq, &timerctx2.cb);
+        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        ASSERT_UCS_OK(status);
+        status = ucs_timerq_remove(&timerq, TIMER_ID_2);
+        ASSERT_UCS_OK(status);
 
         ucs_timerq_cleanup(&timerq);
     }

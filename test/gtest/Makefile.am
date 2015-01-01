@@ -62,7 +62,7 @@ gtest_SOURCES = \
 	ucs/test_mpool.cc \
 	ucs/test_stats.cc \
 	ucs/test_sys.cc \
-	ucs/test_timer.cc \
+	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
 
