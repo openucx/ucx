@@ -19,6 +19,7 @@ noinst_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/frag_list.h \
+	datastruct/hash.h \
 	datastruct/list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.h \
