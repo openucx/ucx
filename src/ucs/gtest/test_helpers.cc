@@ -10,6 +10,7 @@
 extern "C" {
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
+#include <ucs/time/time.h>
 }
 
 namespace ucs {
@@ -55,6 +56,17 @@ scoped_setenv::~scoped_setenv() {
         unsetenv(m_name.c_str());
     }
 }
+
+void safe_usleep(double usec) {
+    ucs_time_t current_time = ucs_get_time();
+    ucs_time_t end_time = current_time + ucs_time_from_usec(usec);
+
+    while (current_time < end_time) {
+        usleep((long)ucs_time_to_usec(end_time - current_time));
+        current_time = ucs_get_time();
+    }
+}
+
 
 namespace detail {
 

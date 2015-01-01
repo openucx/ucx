@@ -287,6 +287,6 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
  * Empty function which can be casted to a no-operation callback in various situations.
  */
 void ucs_empty_function();
-
+ucs_status_t ucs_empty_function_return_success();
 
 #endif

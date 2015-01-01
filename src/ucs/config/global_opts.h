@@ -52,10 +52,8 @@ typedef struct {
     /* Limit for instrumentation data size */
     size_t                   instrument_max_size;
 
-    /* Asynchronous progress interval. Lower values may cause poor performance,
-     * but better responsiveness.
-     */
-    double                   async_interval;
+    /* Max. events per context, will be removed in the future */
+    unsigned                 async_max_events;
 
     /* Destination for statistics: udp:host:port / file:path / stdout
      */
