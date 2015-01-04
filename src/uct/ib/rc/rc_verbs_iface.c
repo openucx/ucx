@@ -26,42 +26,24 @@ ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 static UCS_F_NOINLINE unsigned
 uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 {
-    struct ibv_recv_wr *wrs, *bad_wr;
-    struct ibv_sge *sges;
-    uct_ib_iface_recv_desc_t *desc;
+    struct ibv_recv_wr *bad_wr;
+    uct_ib_recv_wr_t *wrs;
     unsigned count;
     int ret;
 
     wrs  = alloca(sizeof *wrs  * max);
-    sges = alloca(sizeof *sges * max);
 
-    count = 0;
-    while (count < max) {
-        desc = ucs_mpool_get(iface->super.rx.mp);
-        if (desc == NULL) {
-            break;
-        }
-
-        sges[count].addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-        sges[count].length = iface->super.super.config.rx_data_size;
-        sges[count].lkey   = desc->lkey;
-        wrs[count].num_sge = 1;
-        wrs[count].wr_id   = (uintptr_t)desc;
-        wrs[count].sg_list = &sges[count];
-        wrs[count].next    = &wrs[count + 1];
-        ++count;
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super,
+                                        iface->super.rx.mp, wrs, max);
+    if (count == 0) {
+        return 0;
     }
 
-    if (count > 0) {
-        wrs[count - 1].next = NULL;
-
-        ret = ibv_post_srq_recv(iface->super.rx.srq, wrs, &bad_wr);
-        if (ret != 0) {
-            ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
-        }
-
-        iface->super.rx.available -= count;
+    ret = ibv_post_srq_recv(iface->super.rx.srq, &wrs[0].ibwr, &bad_wr);
+    if (ret != 0) {
+        ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
     }
+    iface->super.rx.available -= count;
 
     return count;
 }

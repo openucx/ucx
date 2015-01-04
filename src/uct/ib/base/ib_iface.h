@@ -133,4 +133,19 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
     return (void*)desc + iface->config.rx_hdr_offset;
 }
 
+typedef struct uct_ib_recv_wr {
+    struct ibv_recv_wr ibwr;
+    struct ibv_sge     sg;
+} uct_ib_recv_wr_t; 
+
+/**
+ * prepare a list of n work requests that can be passed to
+ * ibv_post_recv()
+ *
+ * @return number of prepared wrs
+ */
+int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
+                                ucs_mpool_h rx_mp, uct_ib_recv_wr_t *wrs, unsigned n);
+
+
 #endif
