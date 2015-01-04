@@ -248,8 +248,10 @@
      */ \
     int ucs_hashed_##_type##_is_empty(ucs_hashed_##_type *table) \
     { \
+        pthread_rwlock_rdlock(&table->lock); \
         struct sglib_hashed_##_type##_iterator it; \
         return sglib_hashed_##_type##_it_init(&it, table->hash) == NULL; \
+        pthread_rwlock_unlock(&table->lock); \
     } \
     \
     \

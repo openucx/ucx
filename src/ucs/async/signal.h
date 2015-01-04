@@ -25,7 +25,7 @@ typedef struct ucs_async_signal_context {
     { \
         ucs_assert((_async)->signal.tid == ucs_get_tid()); \
         ++(_async)->signal.block_count; \
-        ucs_compiler_fence(); \
+        ucs_memory_cpu_fence(); \
     }
 
 #define UCS_ASYNC_SIGNAL_UNBLOCK(_async) \
