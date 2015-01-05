@@ -47,6 +47,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
     }
 
     /* Second pass: fill port information */
+    num_resources  = 0;
     resource_index = 0;
     for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
         dev = ibctx->devices[dev_index];
@@ -56,11 +57,17 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
             if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
                 rsc = &resources[resource_index++];
                 status = uct_ib_device_port_get_resource(dev, port_num, rsc);
-                if (status != UCS_OK) {
-                    goto err_free;
+                if (status == UCS_OK) {
+                    num_resources++;
                 }
             }
         }
+    }
+
+    if (num_resources == 0) {
+        ucs_debug("There are no compatible ports for this transport.");
+        status = UCS_ERR_NO_DEVICE;
+        goto err_free;
     }
 
     *num_resources_p = num_resources;
