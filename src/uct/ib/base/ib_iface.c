@@ -166,6 +166,7 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
 
     status = uct_ib_iface_find_port(ibctx, self, dev_name);
     if (status != UCS_OK) {
+        ucs_error("Failed to find port %s: %s", dev_name, ucs_status_string(status));
         goto err;
     }
 
@@ -239,4 +240,35 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_ib_iface_t, uct_base_iface_t);
+
+int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
+                                ucs_mpool_h rx_mp, 
+                                uct_ib_recv_wr_t *wrs, unsigned n)
+{
+    uct_ib_iface_recv_desc_t *desc;
+    unsigned count;
+
+    count = 0;
+    while (count < n) {
+        desc = ucs_mpool_get(rx_mp);
+        if (desc == NULL) {
+            break;
+        }
+
+        wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
+        wrs[count].sg.length = iface->config.rx_data_size;
+        wrs[count].sg.lkey   = desc->lkey;
+        wrs[count].ibwr.num_sge = 1;
+        wrs[count].ibwr.wr_id   = (uintptr_t)desc;
+        wrs[count].ibwr.sg_list = &wrs[count].sg;  
+        wrs[count].ibwr.next    = &wrs[count + 1].ibwr;
+        ++count;
+    }
+
+    if (count > 0) {
+        wrs[count - 1].ibwr.next = NULL;
+    }
+
+    return count;
+}
 
