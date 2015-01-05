@@ -20,13 +20,33 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     uct_resource_desc_t *resources, *rsc;
     ucs_status_t status;
+    unsigned max_resources;
     unsigned num_resources;
-    unsigned resource_index;
     uct_ib_device_t *dev;
     unsigned dev_index;
     uint8_t port_num;
 
-    /* First pass: count ports */
+    /* First pass: count the upper limit of ports to be used */
+    max_resources = 0;
+    for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
+        dev = ibctx->devices[dev_index];
+        for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
+                        ++port_num)
+        {
+            if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
+                ++max_resources;
+            }
+        }
+    }
+
+    /* Allocate resources array */
+    resources = ucs_calloc(max_resources, sizeof(uct_resource_desc_t), "resource desc");
+    if (resources == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* Second pass: fill port information */
     num_resources = 0;
     for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
         dev = ibctx->devices[dev_index];
@@ -34,28 +54,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
                         ++port_num)
         {
             if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
-                ++num_resources;
-            }
-        }
-    }
-
-    /* Allocate resources array */
-    resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "resource desc");
-    if (resources == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    /* Second pass: fill port information */
-    num_resources  = 0;
-    resource_index = 0;
-    for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
-        dev = ibctx->devices[dev_index];
-        for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
-                        ++port_num)
-        {
-            if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
-                rsc = &resources[resource_index++];
+                rsc = &resources[num_resources];
                 status = uct_ib_device_port_get_resource(dev, port_num, rsc);
                 if (status == UCS_OK) {
                     num_resources++;
