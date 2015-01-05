@@ -129,15 +129,22 @@ public:
     } while(0)
 
 
+/* Abort test */
+#define UCS_TEST_ABORT(_message) \
+    do { \
+        std::stringstream ss; \
+        ss << _message; \
+        GTEST_MESSAGE_(ss.str().c_str(), ::testing::TestPartResult::kFatalFailure); \
+        throw ucs::test_abort_exception(); \
+    } while(0)
+
+
 /* UCS error check */
 #define EXPECT_UCS_OK(_error)  EXPECT_EQ(UCS_OK, _error) << "Error: " << ucs_error_string(_error)
 #define ASSERT_UCS_OK(_error) \
     do { \
         if ((_error) != UCS_OK) { \
-            std::stringstream ss; \
-            ss << "Error: " << ucs_status_string(_error); \
-            GTEST_MESSAGE_(ss.str().c_str(), ::testing::TestPartResult::kFatalFailure); \
-            throw ucs::test_abort_exception(); \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_error)); \
         } \
     } while (0)
 
