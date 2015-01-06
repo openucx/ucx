@@ -35,7 +35,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
 
     /* Allocate resources array */
     resources = ucs_calloc(max_resources, sizeof(uct_resource_desc_t),
-                           "ib resource desc");
+                           "ib resource");
     if (resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;

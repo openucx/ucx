@@ -105,11 +105,21 @@ UCS_TEST_F(test_memtrack, malloc_realloc) {
     ptr = ucs_malloc(ALLOC_SIZE, ALLOC_NAME);
     ASSERT_NE((void *)NULL, ptr);
 
-    ptr = ucs_realloc(ptr, 2 * ALLOC_SIZE);
+    ptr = ucs_realloc(ptr, 2 * ALLOC_SIZE, ALLOC_NAME);
     ASSERT_NE((void *)NULL, ptr);
     ucs_free(ptr);
 
     test_total(1, 2 * ALLOC_SIZE);
+}
+
+UCS_TEST_F(test_memtrack, realloc_null) {
+    void* ptr;
+
+    ptr = ucs_realloc(NULL, ALLOC_SIZE, ALLOC_NAME);
+    ASSERT_NE((void *)NULL, ptr);
+    ucs_free(ptr);
+
+    test_total(1, ALLOC_SIZE);
 }
 
 UCS_TEST_F(test_memtrack, calloc) {
@@ -137,7 +147,7 @@ UCS_TEST_F(test_memtrack, memalign_realloc) {
     ptr = ucs_memalign(1000, ALLOC_SIZE, ALLOC_NAME);
     ASSERT_NE((void *)NULL, ptr);
 
-    ptr = ucs_realloc(ptr, 2*ALLOC_SIZE);
+    ptr = ucs_realloc(ptr, 2*ALLOC_SIZE, ALLOC_NAME);
     ASSERT_NE((void *)NULL, ptr);
 
     ucs_free(ptr);

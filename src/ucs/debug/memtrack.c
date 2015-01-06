@@ -89,9 +89,13 @@ static void ucs_memtrack_record_alloc(ucs_memtrack_buffer_t* buffer, size_t size
                                       off_t offset, const char *name)
 {
     ucs_memtrack_entry_t *entry, search;
-
     if (!ucs_memtrack_is_enabled()) {
         goto out;
+    }
+
+    if (strlen(name) >= UCS_MEMTRACK_NAME_MAX - 1) {
+        ucs_fatal("memory allocation name too long: '%s' (len: %ld, max: %d)",
+                  name, strlen(name), UCS_MEMTRACK_NAME_MAX - 1);
     }
 
     ucs_assert(buffer != NULL);
@@ -189,7 +193,7 @@ void *ucs_calloc(size_t nmemb, size_t size, const char *name)
     return buffer + 1;
 }
 
-void *ucs_realloc(void *ptr, size_t size)
+void *ucs_realloc(void *ptr, size_t size, const char *name)
 {
     ucs_memtrack_buffer_t *buffer = (ucs_memtrack_buffer_t*)ptr - 1;
     ucs_memtrack_entry_t *entry;
@@ -198,17 +202,18 @@ void *ucs_realloc(void *ptr, size_t size)
         return realloc(ptr, size);
     }
 
+    if (ptr == NULL) {
+        return ucs_malloc(size, name);
+    }
+
     entry = ucs_memtrack_record_release(buffer, 0);
+
     buffer = realloc((void*)buffer - buffer->offset, size + sizeof(*buffer));
     if (buffer == NULL) {
         return NULL;
     }
-    if (!ucs_memtrack_is_enabled()) {
-        return buffer;
-    }
-    if (entry != NULL) {
-        ucs_memtrack_record_alloc(buffer, size, 0, entry->name);
-    }
+
+    ucs_memtrack_record_alloc(buffer, size, 0, entry->name);
     return buffer + 1;
 }
 

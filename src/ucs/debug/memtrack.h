@@ -20,7 +20,7 @@ enum {
     UCS_MEMTRACK_STAT_LAST
 };
 
-#define UCS_MEMTRACK_NAME_MAX 16
+#define UCS_MEMTRACK_NAME_MAX  20
 
 /**
  * Allocation site entry.
@@ -104,7 +104,7 @@ void ucs_memtrack_releasing(void **ptr_p);
  */
 void *ucs_malloc(size_t size, const char *name);
 void *ucs_calloc(size_t nmemb, size_t size, const char *name);
-void *ucs_realloc(void *ptr, size_t size);
+void *ucs_realloc(void *ptr, size_t size, const char *name);
 void *ucs_memalign(size_t boundary, size_t size, const char *name);
 void ucs_free(void *ptr);
 void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
@@ -133,7 +133,7 @@ int ucs_munmap(void *addr, size_t length);
 
 #define ucs_malloc(_s, ...)                        malloc(_s)
 #define ucs_calloc(_n, _s, ...)                    calloc(_n, _s)
-#define ucs_realloc(_p, _s)                        realloc(_p, _s)
+#define ucs_realloc(_p, _s, ...)                   realloc(_p, _s)
 #define ucs_memalign(_b, _s, ...)                  memalign(_b, _s)
 #define ucs_free(_p)                               free(_p)
 #define ucs_mmap(_a, _l, _p, _fl, _fd, _o, ...)    mmap(_a, _l, _p, _fl, _fd, _o)

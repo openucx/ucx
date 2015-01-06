@@ -73,7 +73,7 @@ ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
 {
     uct_context_tl_info_t *tls;
 
-    tls = ucs_realloc(context->tls, (context->num_tls + 1) * sizeof(*tls));
+    tls = ucs_realloc(context->tls, (context->num_tls + 1) * sizeof(*tls), "tls");
     if (tls == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -112,7 +112,8 @@ ucs_status_t uct_query_resources(uct_context_h context,
         ucs_assert(num_tl_resources > 0);
 
         /* Enlarge the array */
-        p = ucs_realloc(resources, (num_resources + num_tl_resources) * sizeof(*resources));
+        p = ucs_realloc(resources, (num_resources + num_tl_resources) * sizeof(*resources),
+                        "resources");
         if (p == NULL) {
             goto err_free;
         }
