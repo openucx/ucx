@@ -7,6 +7,7 @@
 #include <ucp/api/ucp.h>
 #include <ucs/type/component.h>
 
+
 ucs_status_t ucp_init(ucp_context_h *context_p)
 {
     ucs_status_t status;
@@ -15,7 +16,7 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
     unsigned num_resources;
 
     /* allocate a ucp context */
-    context = ucs_malloc(sizeof(*context),"ucp context");
+    context = ucs_malloc(sizeof(*context), "ucp context");
     if (context == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -36,7 +37,6 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
 
     context->resources = resources;
     *context_p = context;
-
     return UCS_OK;
 
 err_free_uct:
@@ -88,7 +88,6 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
 
     ucp_iface->context = ucp_context;
     *ucp_iface_p = ucp_iface;
-
     return UCS_OK;
 
 err_release_cfg:
