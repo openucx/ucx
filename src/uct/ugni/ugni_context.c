@@ -75,6 +75,10 @@ ucs_status_t uct_ugni_query_resources(uct_context_h context,
     uct_resource_desc_t *resources;
     unsigned dev_index;
 
+    if (ugni_ctx->num_devices == 0) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     /* Allocate resources array */
     resources = ucs_calloc(ugni_ctx->num_devices, sizeof(uct_resource_desc_t),
                            "resource desc");
