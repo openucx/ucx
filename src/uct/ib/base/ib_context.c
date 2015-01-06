@@ -64,7 +64,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
     }
 
     if (num_resources == 0) {
-        ucs_debug("There are no compatible ports for this transport.");
+        ucs_debug("No compatible IB ports found (flags=%x)", flags);
         status = UCS_ERR_NO_DEVICE;
         goto err_free;
     }
