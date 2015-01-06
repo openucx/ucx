@@ -108,6 +108,8 @@ ucs_status_t uct_query_resources(uct_context_h context,
             continue; /* Skip transport */
         }
 
+        ucs_assert(num_tl_resources != 0);
+
         /* Enlarge the array */
         p = ucs_realloc(resources, (num_resources + num_tl_resources) * sizeof(*resources));
         if (p == NULL) {
