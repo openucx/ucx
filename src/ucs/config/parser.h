@@ -207,14 +207,36 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 
 /**
- * Fill existing opts structure.
+ * Set default values for options.
+ *
+ * @param opts   User-defined options structure to fill.
+ * @param fields Array of fields which define how to parse.
  */
-ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
-                                         const char *user_prefix,
-                                         const char *table_prefix);
+ucs_status_t
+ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
+
+
+/**
+ * Fill existing opts structure.
+ *
+ * @param opts           User-defined options structure to fill.
+ * @param fields         Array of fields which define how to parse.
+ * @param env_prefix     Prefix to add to all environment variables.
+ * @param table_prefix   Optional prefix to add to the variables of top-level table.
+ * @param ignore_errors  Whether to ignore parsing errors and continue parsing
+ *                       other fields.
+ */
+ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
+                                         const char *env_prefix,
+                                         const char *table_prefix,
+                                         int ignore_errors);
 
 /**
  * Perform deep copy of the options structure.
+ *
+ * @param src    User-defined options structure to copy from.
+ * @param dst    User-defined options structure to copy to.
+ * @param table  Array of fields which define the structure of the options.
  */
 ucs_status_t ucs_config_parser_clone_opts(void *src, void *dst,
                                          ucs_config_field_t *fields);
@@ -222,24 +244,45 @@ ucs_status_t ucs_config_parser_clone_opts(void *src, void *dst,
 /**
  * Release the options fields.
  * NOTE: Does not release the structure itself.
+ *
+ * @param opts   User-defined options structure.
+ * @param table  Array of fields which define the options.
  */
 void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
 
 /**
- * Print the options.
+ * Print the options - names, values, documentation.
+ *
+ * @param stream         Output stream to print to.
+ * @param opts           User-defined options structure.
+ * @param fields         Array of fields which define the options.
+ * @param env_prefix     Prefix to add to all environment variables.
+ * @param table_prefix   Optional prefix to add to the variables of top-level table.
+ * @param flags          Flags which control the output.
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
                                   ucs_config_field_t *fields, const char *env_prefix,
                                   const char *table_prefix, ucs_config_print_flags_t flags);
 
 /**
- * Read existing opts structure.
+ * Read a value from options structure.
+ *
+ * @param opts       User-defined options structure.
+ * @param fields     Array of fields which define how to parse.
+ * @param name       Option name.
+ * @param value      Filled with option value (as a string).
+ * @param max        Number of bytes reserved in 'value'.
  */
 ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
                                         const char *name, char *value, size_t max);
 
 /**
  * Modify existing opts structure with new setting.
+ *
+ * @param opts       User-defined options structure.
+ * @param fields     Array of fields which define how to parse.
+ * @param name       Option name to modify.
+ * @param value      Value to assign.
  */
 ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                         const char *name, const char *value);

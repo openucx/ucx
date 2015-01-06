@@ -179,7 +179,8 @@ ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
 
     /* TODO use env_prefix */
     status = ucs_config_parser_fill_opts(bundle->data, tl->iface_config_table,
-                                         UCT_CONFIG_ENV_PREFIX, tl->config_prefix);
+                                         UCT_CONFIG_ENV_PREFIX, tl->config_prefix,
+                                         0);
 
     if (status != UCS_OK) {
         goto err_free_opts;

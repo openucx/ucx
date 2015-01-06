@@ -714,7 +714,7 @@ static void ucs_config_parser_release_field(ucs_config_field_t *field, void *var
     field->parser.release(var, field->parser.arg);
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields)
 {
     ucs_config_field_t *field, *sub_fields;
@@ -811,7 +811,7 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
 
 static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
                                              const char *prefix, const char *table_prefix,
-                                             int recurse)
+                                             int recurse, int ignore_errors)
 {
     ucs_config_field_t *field, *sub_fields;
     ucs_status_t status;
@@ -834,7 +834,8 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
 
             /* Parse with sub-table prefix */
             if (recurse) {
-                status = ucs_config_apply_env_vars(var, sub_fields, prefix, field->name, 1);
+                status = ucs_config_apply_env_vars(var, sub_fields, prefix,
+                                                   field->name, 1, ignore_errors);
                 if (status != UCS_OK) {
                     return status;
                 }
@@ -842,7 +843,8 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
 
             /* Possible override with my prefix */
             if (table_prefix) {
-                status = ucs_config_apply_env_vars(var, sub_fields, prefix, table_prefix, 0);
+                status = ucs_config_apply_env_vars(var, sub_fields, prefix,
+                                                   table_prefix, 0, ignore_errors);
                 if (status != UCS_OK) {
                     return status;
                 }
@@ -854,6 +856,10 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             if (env_value != NULL) {
                 ucs_config_parser_release_field(field, var);
                 status = ucs_config_parser_parse_field(field, env_value, var);
+                if (status != UCS_OK && ignore_errors) {
+                    /* If set to ignore errors, restore the default value */
+                    status = ucs_config_parser_parse_field(field, field->dfl_value, var);
+                }
                 if (status != UCS_OK) {
                     return status;
                 }
@@ -864,19 +870,21 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
     return UCS_OK;
 }
 
-ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
+ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          const char *env_prefix,
-                                         const char *table_prefix)
+                                         const char *table_prefix,
+                                         int ignore_errors)
 {
     ucs_status_t status;
 
-    status = ucs_config_parser_set_default_values(opts, table);
+    status = ucs_config_parser_set_default_values(opts, fields);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* Use default UCS_ prefix */
-    status = ucs_config_apply_env_vars(opts, table, env_prefix, table_prefix, 1);
+    status = ucs_config_apply_env_vars(opts, fields, env_prefix, table_prefix,
+                                       1, ignore_errors);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -884,7 +892,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *table,
     return UCS_OK;
 
 err_free:
-    ucs_config_parser_release_opts(opts, table); /* Release default values */
+    ucs_config_parser_release_opts(opts, fields); /* Release default values */
 err:
     return status;
 }
