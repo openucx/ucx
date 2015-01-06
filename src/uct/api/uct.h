@@ -39,14 +39,14 @@ typedef ucs_status_t (*uct_am_callback_t)(void *data, unsigned length, void *arg
  * Communication resource.
  */
 typedef struct uct_resource_desc {
-    char                     tl_name[UCT_MAX_NAME_LEN];   /* Transport name */
-    char                     dev_name[UCT_MAX_NAME_LEN];  /* Hardware device name */
-    uint64_t                 latency;      /* Latency, nanoseconds */
-    size_t                   bandwidth;    /* Bandwidth, bytes/second */
-    cpu_set_t                local_cpus;   /* Mask of CPUs near the resource */
-    socklen_t                addrlen;      /* Size of address */
-    struct sockaddr_storage  subnet_addr;  /* Subnet address. Devices which can
-                                              reach each other have same address */
+    char                     tl_name[UCT_MAX_NAME_LEN];   /**< Transport name */
+    char                     dev_name[UCT_MAX_NAME_LEN];  /**< Hardware device name */
+    uint64_t                 latency;      /**< Latency, nanoseconds */
+    size_t                   bandwidth;    /**< Bandwidth, bytes/second */
+    cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
+    socklen_t                addrlen;      /**< Size of address */
+    struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
+                                                reach each other have same address */
 } uct_resource_desc_t;
 
 
