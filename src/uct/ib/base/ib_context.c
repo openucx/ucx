@@ -26,21 +26,16 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
     unsigned dev_index;
     uint8_t port_num;
 
-    /* First pass: count the upper limit of ports to be used */
+    /* First pass: count total number of ports on all devices.
+     * We may allocate more memory than really required, but it's not so bad. */
     max_resources = 0;
     for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
-        dev = ibctx->devices[dev_index];
-        for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
-                        ++port_num)
-        {
-            if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
-                ++max_resources;
-            }
-        }
+        max_resources += ibctx->devices[dev_index]->num_ports;
     }
 
     /* Allocate resources array */
-    resources = ucs_calloc(max_resources, sizeof(uct_resource_desc_t), "resource desc");
+    resources = ucs_calloc(max_resources, sizeof(uct_resource_desc_t),
+                           "ib resource desc");
     if (resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -50,21 +45,36 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
     num_resources = 0;
     for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
         dev = ibctx->devices[dev_index];
-        for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
-                        ++port_num)
+        for (port_num = dev->first_port;
+             port_num < dev->first_port + dev->num_ports;
+             ++port_num)
         {
-            if (uct_ib_device_port_check(dev, port_num, flags) == UCS_OK) {
-                rsc = &resources[num_resources];
-                status = uct_ib_device_port_get_resource(dev, port_num, rsc);
-                if (status == UCS_OK) {
-                    num_resources++;
-                }
+            /* Check port capabilities */
+            status = uct_ib_device_port_check(dev, port_num, flags);
+            if (status != UCS_OK) {
+               ucs_trace("%s:%d does not support flags 0x%x: %s",
+                         uct_ib_device_name(dev), port_num, flags,
+                         ucs_status_string(status));
+               continue;
             }
+
+            /* Get port information */
+            rsc = &resources[num_resources];
+            status = uct_ib_device_port_get_resource(dev, port_num, rsc);
+            if (status != UCS_OK) {
+                ucs_debug("failed to get port info for %s:%d: %s",
+                          uct_ib_device_name(dev), port_num,
+                          ucs_status_string(status));
+                continue;
+            }
+
+            ucs_debug("using port %s:%d", uct_ib_device_name(dev), port_num);
+            num_resources++;
         }
     }
 
     if (num_resources == 0) {
-        ucs_debug("No compatible IB ports found (flags=%x)", flags);
+        ucs_debug("no compatible IB ports found for flags 0x%x", flags);
         status = UCS_ERR_NO_DEVICE;
         goto err_free;
     }

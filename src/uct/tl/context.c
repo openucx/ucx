@@ -104,11 +104,12 @@ ucs_status_t uct_query_resources(uct_context_h context,
         /* Get TL resources */
         status = tl->ops->query_resources(context,&tl_resources,
                                           &num_tl_resources);
-        if ((status != UCS_OK) || (num_tl_resources == 0)) {
+        if (status != UCS_OK) {
             continue; /* Skip transport */
         }
 
-        ucs_assert(num_tl_resources != 0);
+        /* tl's query_resources should return error if there are no resources */
+        ucs_assert(num_tl_resources > 0);
 
         /* Enlarge the array */
         p = ucs_realloc(resources, (num_resources + num_tl_resources) * sizeof(*resources));
