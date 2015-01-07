@@ -131,7 +131,7 @@ void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
         uct_progress(m_ucth);
-        status = uct_iface_flush(m_iface, NULL, NULL);
+        status = uct_iface_flush(m_iface);
     } while (status == UCS_ERR_WOULD_BLOCK);
     ASSERT_UCS_OK(status);
 }

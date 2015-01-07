@@ -15,6 +15,86 @@
 
 
 /**
+ * Remote key release function.
+ */
+typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
+
+
+/**
+ * Active message handler
+ *
+ * @param [in]  data     Points to the received data.
+ * @param [in]  length   Length of data.
+ * @param [in]  arg      User-defined argument.
+ *
+ * @note The reserved headroom is placed right before the data.
+ *
+ * @return UCS_OK - descriptor is used and should be release
+ *         UCS_INPROGRESS - descriptor is owned by the user, and would be released later.
+ */
+typedef ucs_status_t (*uct_am_callback_t)(void *data, unsigned length, void *arg);
+
+
+/**
+ * Communication resource.
+ */
+typedef struct uct_resource_desc {
+    char                     tl_name[UCT_MAX_NAME_LEN];   /**< Transport name */
+    char                     dev_name[UCT_MAX_NAME_LEN];  /**< Hardware device name */
+    uint64_t                 latency;      /**< Latency, nanoseconds */
+    size_t                   bandwidth;    /**< Bandwidth, bytes/second */
+    cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
+    socklen_t                addrlen;      /**< Size of address */
+    struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
+                                                reach each other have same address */
+} uct_resource_desc_t;
+
+
+/**
+ * Opaque type for interface address.
+ */
+struct uct_iface_addr {
+};
+
+
+/**
+ * Opaque type for endpoint address.
+ */
+struct uct_ep_addr {
+};
+
+
+/**
+ * Interface attributes: capabilities and limitations.
+ */
+struct uct_iface_attr {
+    size_t                   max_short;
+    size_t                   max_bcopy;
+    size_t                   max_zcopy;
+    size_t                   iface_addr_len;
+    size_t                   ep_addr_len;
+    unsigned                 flags;
+};
+
+
+/**
+ * Protection domain attributes
+ */
+struct uct_pd_attr {
+    size_t                   rkey_packed_size; /* Size of buffer needed for packed rkey */
+};
+
+
+/**
+ * Remote key with its type
+ */
+typedef struct uct_rkey_bundle {
+    uct_rkey_t               rkey;   /**< Remote key descriptor, passed to RMA functions */
+    void                     *type;  /**< Remote key type */
+} uct_rkey_bundle_t;
+
+
+/**
  * @ingroup CONTEXT
  * @brief Initialize global context.
  *
@@ -246,10 +326,9 @@ static inline ucs_status_t uct_iface_get_address(uct_iface_h iface,
     return iface->ops.iface_get_address(iface, iface_addr);
 }
 
-static inline ucs_status_t uct_iface_flush(uct_iface_h iface, uct_req_h *req_p,
-                                           uct_completion_cb_t cb)
+static inline ucs_status_t uct_iface_flush(uct_iface_h iface)
 {
-    return iface->ops.iface_flush(iface, req_p, cb);
+    return iface->ops.iface_flush(iface);
 }
 
 static inline void uct_iface_close(uct_iface_h iface)

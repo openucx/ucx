@@ -290,7 +290,7 @@ static inline void uct_perf_am_short_b(uct_ep_h ep, uint8_t id, uint64_t hdr,
 
 static void uct_perf_iface_flush_b(uct_perf_context_t *perf)
 {
-    while (uct_iface_flush(perf->iface, NULL, NULL) == UCS_ERR_WOULD_BLOCK) {
+    while (uct_iface_flush(perf->iface) == UCS_ERR_WOULD_BLOCK) {
         uct_progress(perf->context);
     }
 }

@@ -70,8 +70,7 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
     sglib_hashed_uct_rc_ep_t_delete(iface->eps, ep);
 }
 
-ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, uct_req_h *req_p,
-                                uct_completion_cb_t cb)
+ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     struct sglib_hashed_uct_rc_ep_t_iterator iter;
