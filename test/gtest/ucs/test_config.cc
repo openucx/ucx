@@ -150,7 +150,8 @@ protected:
             ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
                                                               car_opts_table,
                                                               env_prefix,
-                                                              table_prefix);
+                                                              table_prefix,
+                                                              0);
             ASSERT_UCS_OK(status);
             return tmp;
         }

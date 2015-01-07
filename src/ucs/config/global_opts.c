@@ -148,5 +148,11 @@ ucs_config_field_t ucs_global_opts_table[] = {
 
 void ucs_global_opts_init()
 {
-    ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table, "UCS_", NULL);
+    ucs_status_t status;
+
+    status = ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table,
+                                         "UCS_", NULL, 1);
+    if (status != UCS_OK) {
+        ucs_fatal("failed to parse global configuration - aborting");
+    }
 }
