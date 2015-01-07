@@ -10,7 +10,8 @@
 # SystemV shared memory
 #
 #IPC_INFO
-AC_CHECK_LIB([rt], [shm_open], [], AC_MSG_ERROR([librt not found]))
+AC_CHECK_LIB([rt], [shm_open],     [], AC_MSG_ERROR([librt not found]))
+AC_CHECK_LIB([rt], [timer_create], [], AC_MSG_ERROR([librt not found]))
 
 #
 # Extended string functions

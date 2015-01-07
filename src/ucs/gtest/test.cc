@@ -27,6 +27,16 @@ test_base::~test_base() {
                        "state=%d", m_state);
 }
 
+void test_base::set_config(const std::string& config_str)
+{
+    std::string::size_type pos = config_str.find("=");
+    if (pos == std::string::npos) {
+        set_config(config_str, "");
+    } else {
+        set_config(config_str.substr(0, pos), config_str.substr(pos + 1));
+    }
+}
+
 void test_base::set_config(void *opts, ucs_config_field_t *fields,
                            const std::string& name, const std::string& value)
 {

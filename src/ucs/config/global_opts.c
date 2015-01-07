@@ -20,7 +20,7 @@ ucs_global_opts_t ucs_global_opts = {
     .error_signals         = { NULL, 0 },
     .gdb_command           = "gdb",
     .debug_signo           = SIGHUP,
-    .async_interval        = 0.05,
+    .async_max_events      = 64,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
     .tuning_path           = "",
@@ -92,10 +92,9 @@ ucs_config_field_t ucs_global_opts_table[] = {
   "Signal number which causes UCS to enter debug mode. Set to 0 to disable.",
   ucs_offsetof(ucs_global_opts_t, debug_signo), UCS_CONFIG_TYPE_SIGNO},
 
- {"ASYNC_INTERVAL", "50ms",
-  "Interval of asynchronous progress. Lower values may make the network\n"
-  "more responsive, in the cost of higher CPU load.",
-  ucs_offsetof(ucs_global_opts_t, async_interval), UCS_CONFIG_TYPE_TIME},
+ {"ASYNC_MAX_EVENTS", "64", /* TODO remove this; resize mpmc */
+  "Maximal number of events which can be handled from one context",
+  ucs_offsetof(ucs_global_opts_t, async_max_events), UCS_CONFIG_TYPE_UINT},
 
  {"ASYNC_SIGNO", "SIGALRM",
   "Signal number used for async signaling.",

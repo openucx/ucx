@@ -31,6 +31,7 @@ protected:
     test_base();
     virtual ~test_base();
 
+    virtual void set_config(const std::string& config_str);
     virtual void set_config(const std::string& name, const std::string& value);
     virtual void push_config();
     virtual void pop_config();
@@ -132,7 +133,7 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
       : public test_case_name { \
    public: \
     GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {\
-       UCS_PP_FOREACH(UCS_API_TEST_SET_CONFIG, _, __VA_ARGS__) \
+       UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__); \
     } \
     virtual void test_body(); \
    private: \
