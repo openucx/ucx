@@ -109,6 +109,8 @@ UCS_TEST_F(test_datatype, queue) {
         ucs_queue_push(&head, &elem1.queue);
         EXPECT_EQ((unsigned long)2, ucs_queue_length(&head));
 
+        EXPECT_EQ(&elem1, ucs_queue_tail_elem_non_empty(&head, elem_t, queue));
+
         elem = ucs_queue_pull_elem_non_empty(&head, elem_t, queue);
         EXPECT_EQ(&elem0, elem);
         EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
