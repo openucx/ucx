@@ -16,7 +16,7 @@
 
 typedef struct ucp_context {
     uct_context_h       uct_context;
-    uct_resource_desc_t *resources;    /* TODO should be list/array of resources? */
+    uct_resource_desc_t *resources;    /* array of resources */
 } ucp_context_t;
 
 
@@ -37,6 +37,24 @@ typedef struct ucp_iface {
     uct_iface_h       uct_iface;
 } ucp_iface_t;
 
+
+typedef struct ucp_ib_port_spec {
+    char              *device_name_port_num;
+} ucp_ib_port_spec_t;
+
+/**
+ * IB single port specification
+ */
+typedef struct ucp_ib_ports_config {
+    ucp_ib_port_spec_t        *spec;
+    unsigned                  count;    /* number of devices */
+} ucp_ib_ports_config_t;
+
+
+struct ucp_iface_config {
+    ucp_ib_ports_config_t     ports;
+    ucp_device_policy_t       device_policy;
+};
 
 /**
  * @ingroup CONTEXT
