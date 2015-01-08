@@ -23,6 +23,7 @@ noinst_HEADERS = \
 	config/global_opts.h \
 	config/parser.h \
 	config/types.h \
+	datastruct/callbackq.h \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
 	datastruct/list.h \
