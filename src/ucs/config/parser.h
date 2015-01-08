@@ -29,13 +29,6 @@
  *   - UCS_IB_TX_MODERATION
  */
 
-/* Special values for IB port parser */
-#define UCS_IB_CFG_DEVICE_NAME_ANY  ((char *)0xfe)
-#define UCS_IB_CFG_DEVICE_NAME_ALL  ((char *)0xff)
-#define UCS_IB_CFG_PORT_NUM_ANY     0xfffe
-#define UCS_IB_CFG_PORT_NUM_ALL     0xffff
-
-
 typedef struct ucs_config_parser {
     int              (*read) (const char *buf, void *dest, const void *arg);
     int              (*write)(char *buf, size_t max, void *src, const void *arg);
@@ -109,11 +102,6 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg);
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bitmask(char *buf, size_t max, void *src, const void *arg);
 
-int ucs_config_sscanf_port_spec(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_port_spec(char *buf, size_t max, void *src, const void *arg);
-ucs_status_t ucs_config_clone_port_spec(void *src, void *dest, const void *arg);
-void ucs_config_release_port_spec(void *ptr, const void *arg);
-
 int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_time(char *buf, size_t max, void *src, const void *arg);
 
@@ -180,10 +168,6 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_BITMASK    {ucs_config_sscanf_bitmask,   ucs_config_sprintf_bitmask, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
                                     ucs_config_help_generic,     "bit count"}
-
-#define UCS_CONFIG_TYPE_PORT_SPEC  {ucs_config_sscanf_port_spec, ucs_config_sprintf_port_spec, \
-                                    ucs_config_clone_port_spec,  ucs_config_release_port_spec, \
-                                    ucs_config_help_generic,     "IB port: <device>:<port_num>"}
 
 #define UCS_CONFIG_TYPE_TIME       {ucs_config_sscanf_time,      ucs_config_sprintf_time, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
