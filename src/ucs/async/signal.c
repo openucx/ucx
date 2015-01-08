@@ -47,20 +47,6 @@ typedef struct ucs_async_signal_timer_info {
 } ucs_async_signal_timer_info_t;
 
 
-/*
- * Use a single pointer value to pass either an (aligned) pointer or a file
- * descriptor. This way we our parameter to the signal handler function.
- */
-#define UCS_ASYNC_SIGNAL_PARAM_IS_FD(param)  ((uintptr_t)(param) & 0x1)
-#define UCS_ASYNC_SIGNAL_PARAM_PTR(param)    (param)
-#define UCS_ASYNC_SIGNAL_PARAM_FD(param)     ((int)((uintptr_t)(param) >> 3))
-#define UCS_ASYNC_SIGNAL_FD_PARAM(fd)        ((void*)((((uintptr_t)(fd)) << 3) | 0x1))
-#define UCS_ASYNC_SIGNAL_PTR_PARAM(ptr)      ({ \
-                ucs_assert_always(!(UCS_ASYNC_SIGNAL_PARAM_IS_FD(ptr))); \
-                (void*)(ptr); \
-    })
-
-
 static struct {
     struct sigaction                     prev_sighandler; /* Previous signal handler */
     volatile uint32_t                    event_count;     /* Number of events in use */
@@ -68,6 +54,17 @@ static struct {
 } ucs_async_signal_global_context = {
     .event_count = 0,
 };
+
+
+/**
+ * In signal mode, we allow user to manipulate events only from the same thread.
+ * Otherwise, we'd get into big synchronization issues.
+ */
+#define UCS_ASYNC_SIGNAL_CHECK_THREAD(_async) \
+    if (ucs_get_tid() != __ucs_async_signal_context_tid(_async)) { \
+        ucs_error("cannot manipulate signal async from different thread"); \
+        return UCS_ERR_UNREACHABLE; \
+    }
 
 
 /**
@@ -163,14 +160,18 @@ static void ucs_async_signal_sys_timer_delete(timer_t sys_timer_id)
     }
 }
 
-static int ucs_async_signal_queue(pid_t tid, void *param)
+static int ucs_async_signal_queue(ucs_async_context_t *async, int param)
 {
     union sigval sv;
 
-    ucs_trace_func("tid=%d, param=%p", tid, param);
+    ucs_trace_func("tid=%d, param=%d", __ucs_async_signal_context_tid(async), param);
 
-    sv.sival_ptr = param;
-    return sigqueue(tid, ucs_global_opts.async_signo, sv);
+    sv.sival_int = param;
+    if (async == NULL) {
+        return sigqueue(getpid(), ucs_global_opts.async_signo, sv);
+    } else {
+        return pthread_sigqueue(async->signal.pthread, ucs_global_opts.async_signo, sv);
+    }
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
@@ -181,8 +182,7 @@ ucs_async_signal_check_handler_cb(int event_fd, ucs_async_context_t *async)
      * support sending IO signals to specific thread.
      */
     if ((async == NULL) || (async->signal.tid != ucs_get_tid())) {
-        ucs_async_signal_queue(__ucs_async_signal_context_tid(async),
-                               UCS_ASYNC_SIGNAL_FD_PARAM(event_fd));
+        ucs_async_signal_queue(async, event_fd);
         return UCS_ERR_CANCELED;
     }
 
@@ -218,7 +218,6 @@ ucs_async_signal_dispatch_timerq(ucs_async_signal_timerq_t *timerq, void *arg)
 static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
 {
     ucs_async_signal_timerq_t search;
-    unsigned *ptr;
     int fd;
 
     ucs_assert(signo == ucs_global_opts.async_signo);
@@ -245,48 +244,16 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
         ucs_async_signal_handle_fd(fd);
         return;
     case SI_QUEUE:
-        if (UCS_ASYNC_SIGNAL_PARAM_IS_FD(siginfo->si_ptr)) {
-            /* Redirected file descriptor event */
-            fd = UCS_ASYNC_SIGNAL_PARAM_FD(siginfo->si_ptr);
-            ucs_trace_async("queued signal called for fd %d", fd);
-            ucs_async_signal_handle_fd(fd);
-        } else {
-            /* Request to increment a counter */
-            ptr = UCS_ASYNC_SIGNAL_PARAM_PTR(siginfo->si_ptr);
-            ucs_trace_async("queued signal called for ptr %p", ptr);
-            ++(*ptr);
-        }
+        /* Redirected file descriptor event */
+        fd = siginfo->si_int;
+        ucs_trace_async("queued signal called for fd %d", fd);
+        ucs_async_signal_handle_fd(fd);
         return;
     default:
         ucs_warn("signal handler called with unexpected event code %d, ignoring",
                  siginfo->si_code);
         return;
     }
-}
-
-static void ucs_async_signal_flush(pid_t tid)
-{
-    volatile unsigned UCS_V_ALIGNED(8) count;
-    int ret;
-
-    ucs_trace_func("tid=%d", tid);
-
-    /* Queue a signal to the given thread to increment our pointer */
-    count = 0;
-    do {
-        ret = ucs_async_signal_queue(tid, UCS_ASYNC_SIGNAL_PTR_PARAM(&count));
-    } while (ret != 0 && errno == EAGAIN);
-    if (ret != 0) {
-        ucs_trace_async("sigqueue(%d) failed: %m", tid);
-        return;
-    }
-
-    /* Make sure signal handler completed. This would also mean all previous
-     * events have been handled.
-     */
-    while (count == 0) {
-        sched_yield();
-     }
 }
 
 static void ucs_async_signal_allow(int allow)
@@ -351,6 +318,7 @@ static ucs_status_t ucs_async_signal_init(ucs_async_context_t *async)
 {
     async->signal.block_count = 0;
     async->signal.tid         = ucs_get_tid();
+    async->signal.pthread     = pthread_self();
     async->signal.timer       = NULL;
     return UCS_OK;
 }
@@ -360,6 +328,8 @@ static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
 {
     ucs_status_t status;
     pid_t tid;
+
+    UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
 
     status = ucs_async_signal_install_handler();
     if (status != UCS_OK) {
@@ -402,10 +372,11 @@ static ucs_status_t ucs_async_signal_remove_event_fd(ucs_async_context_t *async,
 
     ucs_trace_func("event_fd=%d", event_fd);
 
+    UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
+
     ucs_async_signal_allow(0);
     status = ucs_sys_fcntl_modfl(event_fd, 0, O_ASYNC);
     ucs_async_signal_allow(1);
-    ucs_async_signal_flush(__ucs_async_signal_context_tid(async));
 
     ucs_async_signal_uninstall_handler();
     return status;
@@ -519,6 +490,8 @@ static ucs_status_t ucs_async_signal_add_timer(ucs_async_context_t *async,
     ucs_trace_func("async=%p interval=%.2fus timer_id=%d",
                    async, ucs_time_to_usec(interval), timer_id);
 
+    UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
+
     /* Must install signal handler before arming the timer */
     status = ucs_async_signal_install_handler();
     if (status != UCS_OK) {
@@ -557,6 +530,8 @@ static ucs_status_t ucs_async_signal_remove_timer(ucs_async_context_t *async,
 
     ucs_trace_func("async=%p timer_id=%d", async, timer_id);
 
+    UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
+
     search.tid          = __ucs_async_signal_context_tid(async);
     timer_info.timer_id = timer_id;
     ucs_async_signal_allow(0);
@@ -568,7 +543,6 @@ static ucs_status_t ucs_async_signal_remove_timer(ucs_async_context_t *async,
     ucs_async_signal_allow(1);
 
     if (status == UCS_OK) {
-        ucs_async_signal_flush(timerq->tid);
         free(timerq);
     } else if (status != UCS_ERR_NO_PROGRESS) {
         return status; /* Timer not found */

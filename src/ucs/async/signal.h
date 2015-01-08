@@ -17,6 +17,7 @@
 typedef struct ucs_async_signal_context {
     pid_t               tid;         /* Thread ID to receive the signal */
     int                 block_count; /* How many times this context is blocked */
+    pthread_t           pthread;     /* Thread ID for pthreads */
     timer_t             timer;
 } ucs_async_signal_context_t;
 
