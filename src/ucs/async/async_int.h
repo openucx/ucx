@@ -23,13 +23,6 @@ ucs_status_t ucs_async_dispatch_handler(int id, int from_async);
 
 
 /**
- * Run a callback on the async context of an event handler.
- */
-typedef ucs_status_t (*ucs_async_check_handler_cb_t)(int id, ucs_async_context_t *async);
-ucs_status_t ucs_async_check_handler(int id, ucs_async_check_handler_cb_t cb);
-
-
-/**
  * Operation for specific async event delivery method.
  */
 typedef struct ucs_async_ops {

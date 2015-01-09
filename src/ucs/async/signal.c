@@ -93,13 +93,21 @@ ucs_async_signal_set_fd_owner(pid_t dest_tid, int fd)
         ucs_error("fcntl F_SETOWN_EX failed: %m");
         return UCS_ERR_IO_ERROR;
     }
+
+    return UCS_OK;
 #else
+    if (dest_tid != getpid()) {
+        ucs_error("Cannot use signaled events to threads without F_SETOWN_EX support");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (0 > fcntl(fd, F_SETOWN, dest_tid)) {
         ucs_error("fcntl F_SETOWN failed: %m");
         return UCS_ERR_IO_ERROR;
     }
-#endif
+
     return UCS_OK;
+#endif
 }
 
 static ucs_status_t
@@ -160,47 +168,6 @@ static void ucs_async_signal_sys_timer_delete(timer_t sys_timer_id)
     }
 }
 
-static int ucs_async_signal_queue(ucs_async_context_t *async, int param)
-{
-    union sigval sv;
-
-    ucs_trace_func("tid=%d, param=%d", __ucs_async_signal_context_tid(async), param);
-
-    sv.sival_int = param;
-    if (async == NULL) {
-        return sigqueue(getpid(), ucs_global_opts.async_signo, sv);
-    } else {
-        return pthread_sigqueue(async->signal.pthread, ucs_global_opts.async_signo, sv);
-    }
-}
-
-static ucs_status_t UCS_F_MAYBE_UNUSED
-ucs_async_signal_check_handler_cb(int event_fd, ucs_async_context_t *async)
-{
-    /*
-     * Redirect signal to destination thread, if we have a glibc which does not
-     * support sending IO signals to specific thread.
-     */
-    if ((async == NULL) || (async->signal.tid != ucs_get_tid())) {
-        ucs_async_signal_queue(async, event_fd);
-        return UCS_ERR_CANCELED;
-    }
-
-    return UCS_OK;
-}
-
-static void ucs_async_signal_handle_fd(int event_fd)
-{
-    ucs_trace_func("fd=%d", event_fd);
-
-#if !(HAVE_DECL_F_SETOWN_EX)
-    if (ucs_async_check_handler(event_fd, ucs_async_signal_check_handler_cb) != UCS_OK) {
-        return;
-    }
-#endif
-    ucs_async_dispatch_handler(event_fd, 1);
-}
-
 static ucs_status_t
 ucs_async_signal_dispatch_timerq(ucs_async_signal_timerq_t *timerq, void *arg)
 {
@@ -218,7 +185,6 @@ ucs_async_signal_dispatch_timerq(ucs_async_signal_timerq_t *timerq, void *arg)
 static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
 {
     ucs_async_signal_timerq_t search;
-    int fd;
 
     ucs_assert(signo == ucs_global_opts.async_signo);
 
@@ -239,15 +205,8 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
     case POLL_ERR:
     case POLL_MSG:
     case POLL_PRI:
-        fd = siginfo->si_fd;
-        ucs_trace_async("async signal handler called for fd %d", fd);
-        ucs_async_signal_handle_fd(fd);
-        return;
-    case SI_QUEUE:
-        /* Redirected file descriptor event */
-        fd = siginfo->si_int;
-        ucs_trace_async("queued signal called for fd %d", fd);
-        ucs_async_signal_handle_fd(fd);
+        ucs_trace_async("async signal handler called for fd %d", siginfo->si_fd);
+        ucs_async_dispatch_handler(siginfo->si_fd, 1);
         return;
     default:
         ucs_warn("signal handler called with unexpected event code %d, ignoring",

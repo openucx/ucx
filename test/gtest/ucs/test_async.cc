@@ -442,6 +442,10 @@ typedef test_async_mt<local_timer> test_async_timer_mt;
  * Run multiple threads which all process events independently.
  */
 UCS_TEST_P(test_async_event_mt, multithread) {
+    if (!(HAVE_DECL_F_SETOWN_EX)) {
+        UCS_TEST_SKIP;
+    }
+
     spawn();
 
     for (unsigned j = 0; j < COUNT; ++j) {

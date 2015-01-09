@@ -70,23 +70,6 @@ static ucs_async_ops_t ucs_async_poll_ops = {
     .remove_timer       = ucs_empty_function_return_success,
 };
 
-static ucs_status_t ucs_async_check_handler_proxy_cb(ucs_async_handler_t *handler,
-                                                     void *arg)
-{
-    ucs_async_check_handler_cb_t cb = arg;
-    return cb(handler->id, handler->async);
-}
-
-ucs_status_t ucs_async_check_handler(int id, ucs_async_check_handler_cb_t cb)
-{
-    ucs_async_handler_t search;
-    search.id = id;
-    return ucs_hashed_ucs_async_handler_t_find(&ucs_async_global_context.handlers,
-                                               &search,
-                                               ucs_async_check_handler_proxy_cb,
-                                               cb);
-}
-
 static ucs_status_t ucs_async_dispatch_handler_cb(ucs_async_handler_t *handler,
                                                   void *arg)
 {
