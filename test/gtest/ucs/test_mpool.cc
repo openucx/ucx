@@ -93,7 +93,7 @@ UCS_TEST_F(test_mpool, custom_alloc) {
     ucs_mpool_put(obj);
 
     ucs_mpool_destroy(mp);
-    EXPECT_EQ(NULL, ptr);
+    EXPECT_TRUE(NULL == ptr);
 }
 
 UCS_TEST_F(test_mpool, infinite) {

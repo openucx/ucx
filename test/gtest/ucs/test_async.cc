@@ -127,12 +127,17 @@ private:
 class async_poll {
 public:
     virtual void poll() = 0;
+    virtual ~async_poll() {
+    }
 };
 
 class global : public async_poll {
 public:
     virtual void poll() {
         ucs_async_poll(NULL);
+    }
+
+    virtual ~global() {
     }
 };
 
@@ -165,7 +170,7 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    ~local() {
+    virtual ~local() {
         ucs_async_context_cleanup(&m_async);
     }
 
@@ -221,7 +226,7 @@ public:
     UCS_TEST_BASE_IMPL;
 
 protected:
-    static const unsigned COUNT       = 40;
+    static const int      COUNT       = 40;
     static const unsigned SLEEP_USEC  = 1000;
 
     void suspend(double scale = 1.0) {
@@ -448,7 +453,7 @@ UCS_TEST_P(test_async_event_mt, multithread) {
 
     spawn();
 
-    for (unsigned j = 0; j < COUNT; ++j) {
+    for (int j = 0; j < COUNT; ++j) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
             event(i)->push_event();
             suspend();
@@ -461,7 +466,7 @@ UCS_TEST_P(test_async_event_mt, multithread) {
 
     for (unsigned i = 0; i < NUM_THREADS; ++i) {
         int count = thread_count(i);
-        EXPECT_GE(count, (unsigned)(COUNT * 0.75));
+        EXPECT_GE(count, (int)(COUNT * 0.75));
     }
 }
 UCS_TEST_P(test_async_timer_mt, multithread) {
@@ -473,7 +478,7 @@ UCS_TEST_P(test_async_timer_mt, multithread) {
 
     for (unsigned i = 0; i < NUM_THREADS; ++i) {
         int count = thread_count(i);
-        EXPECT_GE(count, (unsigned)(COUNT * 0.5));
+        EXPECT_GE(count, (int)(COUNT * 0.5));
     }
 }
 
