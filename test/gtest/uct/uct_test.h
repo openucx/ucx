@@ -30,7 +30,7 @@ protected:
         entity(const uct_resource_desc_t& resource);
         ~entity();
 
-        void connect(const entity& other);
+        void connect(const entity& other) const;
 
         uct_rkey_bundle_t mem_map(void *address, size_t length, uct_lkey_t *lkey_p) const;
 
@@ -44,7 +44,9 @@ protected:
 
         void flush() const;
 
-    protected:
+    private:
+        entity(const entity&);
+
         uct_context_h m_ucth;
         uct_iface_h   m_iface;
         uct_ep_h      m_ep;

@@ -10,7 +10,6 @@
 #include <perf/libperf.h>
 #include <linux/sched.h>
 #include <pthread.h>
-#include <boost/format.hpp>
 #include <string>
 #include <vector>
 
@@ -307,8 +306,8 @@ UCS_TEST_P(test_uct_perf, envelope) {
     /* For SandyBridge CPUs, don't check performance of far-socket devices */
     check_perf = true;
     if (ucs_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
-        BOOST_FOREACH(int cpu, cpus) {
-            if (!CPU_ISSET(cpu, &resource.local_cpus)) {
+        for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
+            if (!CPU_ISSET(*iter, &resource.local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
                 check_perf = false;
                 break;
@@ -323,12 +322,10 @@ UCS_TEST_P(test_uct_perf, envelope) {
                                                       resource.dev_name,
                                                       cpus);
         double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
-        UCS_TEST_MESSAGE << boost::format("%s/%s %25s : %.3f %s")
-                            % resource.tl_name
-                            % resource.dev_name
-                            % test->title
-                            % value
-                            % test->units;
+        char result_str[200] = {0};
+        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %25s : %.3f %s",
+                 resource.tl_name, resource.dev_name, test->title, value, test->units);
+        UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
             /* TODO take expected values from resource advertised capabilities */
             EXPECT_GE(value, test->min);

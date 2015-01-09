@@ -16,8 +16,6 @@ extern "C" {
 
 #include <vector>
 #include <map>
-#include <boost/next_prior.hpp>
-#include <boost/foreach.hpp>
 
 class test_datatype : public ucs::test {
 };
@@ -337,7 +335,9 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
         int remove_count = rand() % 10;
         for (int j = 0; j < remove_count; ++j) {
             unsigned to_remove = rand() % map.size();
-            unsigned index = boost::next(map.begin(), to_remove)->first;
+            std::map<int, void*>::iterator iter = map.begin();
+            std::advance(iter, to_remove);
+            unsigned index = iter->first;
 
             void *ptr;
             EXPECT_TRUE(ucs_ptr_array_lookup(&pa, index, ptr));
@@ -463,7 +463,9 @@ UCS_TEST_F(test_datatype, notifier_chain) {
     ucs_notifier_chain_init(&chain);
 
     int i = 0;
-    BOOST_FOREACH(notifier_test_cb_t& cb, elems) {
+    for (std::vector<notifier_test_cb_t>::iterator iter = elems.begin();
+                    iter != elems.end(); ++iter) {
+        notifier_test_cb_t& cb = *iter;
         cb.me         = i++;
         cb.ncalls     = 0;
         cb.remove     = 0;

@@ -30,12 +30,12 @@ int test_time_multiplier()
 std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec) {
     static const size_t LIMIT = 100;
     size_t i = 0;
-    BOOST_FOREACH(const char&value, vec) {
+    for (std::vector<char>::const_iterator iter = vec.begin(); iter != vec.end(); ++iter) {
         if (i >= LIMIT) {
             os << "...";
             break;
         }
-        int n = static_cast<unsigned char>(value);
+        int n = static_cast<unsigned char>(*iter);
         os << "[" << i << "]=" << n << " ";
         ++i;
     }
@@ -44,14 +44,14 @@ std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec) {
 
 scoped_setenv::scoped_setenv(const char *name, const char *value) : m_name(name) {
     if (getenv(name)) {
-        m_old_value.reset(getenv(m_name.c_str()));
+        m_old_value = getenv(m_name.c_str());
     }
     setenv(m_name.c_str(), value, 1);
 }
 
 scoped_setenv::~scoped_setenv() {
-    if (m_old_value) {
-        setenv(m_name.c_str(), m_old_value->c_str(), 1);
+    if (!m_old_value.empty()) {
+        setenv(m_name.c_str(), m_old_value.c_str(), 1);
     } else {
         unsetenv(m_name.c_str());
     }

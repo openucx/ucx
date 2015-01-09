@@ -18,7 +18,7 @@ extern "C" {
 #include <sys/poll.h>
 
 
-class base : public boost::noncopyable {
+class base {
 public:
     base(ucs_async_mode_t mode) : m_mode(mode), m_count(0) {
     }
@@ -29,6 +29,8 @@ public:
     int count() const {
         return m_count;
     }
+private:
+    base(const base& other);
 
 protected:
     virtual void ack_event() = 0;
@@ -394,8 +396,8 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     }
 
     /* Release timers */
-    BOOST_FOREACH(int timer_id, timers) {
-        status = ucs_async_remove_timer(timer_id);
+    for (std::vector<int>::iterator iter = timers.begin(); iter != timers.end(); ++iter) {
+        status = ucs_async_remove_timer(*iter);
         ASSERT_UCS_OK(status);
     }
 

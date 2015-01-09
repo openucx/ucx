@@ -6,7 +6,6 @@
 */
 
 #include <gtest/gtest.h>
-#include <boost/noncopyable.hpp>
 extern "C" {
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -14,7 +13,7 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 
-class valgrind_errors_Test : public ::testing::Test, boost::noncopyable {
+class valgrind_errors_Test : public ::testing::Test {
 private:
     virtual void TestBody() {
         long leaked, dubious, reachable, suppressed, errors;

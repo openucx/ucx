@@ -9,7 +9,6 @@
 extern "C" {
 #include <ucs/time/time.h>
 }
-#include <boost/foreach.hpp>
 
 void uct_p2p_test::init() {
     for (unsigned i =0; i < 2; ++i) {
@@ -27,8 +26,11 @@ void uct_p2p_test::cleanup() {
 void uct_p2p_test::short_progress_loop() {
     ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0);
     while (ucs_get_time() < end_time) {
-        BOOST_FOREACH(const entity& e, m_entities) {
-            e.progress();
+        for (ucs::ptr_vector<entity>::const_iterator iter = m_entities.begin();
+             iter != m_entities.end();
+             ++iter)
+        {
+            (*iter)->progress();
         }
     }
 }

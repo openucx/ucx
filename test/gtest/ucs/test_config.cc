@@ -11,11 +11,6 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
-#include <boost/lexical_cast.hpp>
-#include <boost/ptr_container/ptr_vector.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/make_shared.hpp>
-
 
 typedef enum {
     COLOR_RED,
@@ -175,7 +170,7 @@ UCS_TEST_F(test_config, parse_default) {
 
 UCS_TEST_F(test_config, clone) {
 
-    boost::shared_ptr<car_opts> opts_clone_ptr;
+    car_opts *opts_clone_ptr;
 
     {
         ucs::scoped_setenv env1("UCSTEST_COLOR", "white");
@@ -183,10 +178,11 @@ UCS_TEST_F(test_config, clone) {
         EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
         ucs::scoped_setenv env2("UCSTEST_COLOR", "black");
-        opts_clone_ptr = boost::make_shared<car_opts>(opts);
+        opts_clone_ptr = new car_opts(opts);
     }
 
     EXPECT_EQ((unsigned)COLOR_WHITE, (*opts_clone_ptr)->color);
+    delete opts_clone_ptr;
 }
 
 UCS_TEST_F(test_config, set) {
@@ -208,10 +204,10 @@ UCS_TEST_F(test_config, set_with_prefix) {
 UCS_TEST_F(test_config, performance) {
 
     /* Add stuff to env to presumably make getenv() slower */
-    boost::ptr_vector<ucs::scoped_setenv> env;
+    ucs::ptr_vector<ucs::scoped_setenv> env;
     for (unsigned i = 0; i < 300; ++i) {
         env.push_back(new ucs::scoped_setenv(
-                        (std::string("MTEST") + boost::lexical_cast<std::string>(i)).c_str(),
+                        (std::string("MTEST") + ucs::to_string(i)).c_str(),
                         ""));
     }
 

@@ -65,45 +65,6 @@ GTEST_LIB_CHECK([1.5.0], [true], [true])
 
 
 #
-# Boost C++ library (if we're using gtest)
-#
-AC_ARG_WITH([boost],
-    AC_HELP_STRING([--with-boost],
-                   [Enable Boost C++ library (required by gtest)]),
-    [],
-    [with_boost=no])
-
-if test "x$HAVE_GTEST" = "xyes"; then
-
-    AC_LANG_PUSH([C++])
-    AC_MSG_CHECKING([for boost])
-
-    AS_IF([test "x$with_boost" != xno],
-      [GTEST_CPPFLAGS="$GTEST_CPPFLAGS -I$with_boost"
-       GTEST_LDFLAGS="$GTEST_LDFLAGS -L$with_boost/stage/lib"],[])
-      
-    ORIG_CXXFLAGS=$CXXFLAGS
-    CXXFLAGS="$GTEST_CPPFLAGS $CXXFLAGS"
-
-	AC_COMPILE_IFELSE(
-		[AC_LANG_PROGRAM([[#include <boost/version.hpp>]]
-					 [[
-					 #if (BOOST_VERSION < 103800)
-					 #  error Failed
-					 #endif
-					 ]])],
-					AC_MSG_RESULT([yes]),
-					AC_MSG_ERROR([Please install boost development libraries version 1.38 of above]))
-
-	AC_CHECK_DECLS([BOOST_FOREACH], [], AC_MSG_ERROR([BOOST_FOREACH not supported]),
-	               [#include <boost/foreach.hpp>])
-
-    CXXFLAGS=$ORIG_CXXFLAGS
-	AC_LANG_POP
-fi
-
-
-#
 # Zlib
 #
 AC_ARG_WITH([zlib],

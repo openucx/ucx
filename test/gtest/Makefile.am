@@ -28,8 +28,7 @@ gtest_LDADD = \
 	$(top_builddir)/src/ucp/libucp.la \
 	$(top_builddir)/src/ucs/libucstest.la \
 	$(top_builddir)/test/perf/libucxperf.la \
-	$(GTEST_LIBS) \
-	$(BOOST_THREAD_LIB)
+	$(GTEST_LIBS)
 
 gtest_CPPFLAGS = \
 	-I$(top_srcdir)/src \

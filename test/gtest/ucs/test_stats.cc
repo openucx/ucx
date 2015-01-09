@@ -10,7 +10,6 @@ extern "C" {
 #include <ucs/stats/stats.h>
 }
 
-#include <boost/lexical_cast.hpp>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -126,7 +125,7 @@ public:
     virtual std::string stats_dest_config() {
         int port = ucs_stats_server_get_port(m_server);
         EXPECT_GT(port, 0);
-        return "udp:localhost:" + boost::lexical_cast<std::string>(port);
+        return "udp:localhost:" + ucs::to_string(port);
     }
 
     virtual std::string stats_trigger_config() {
@@ -172,7 +171,7 @@ public:
     }
 
     virtual std::string stats_dest_config() {
-        return "file:/dev/fd/" + boost::lexical_cast<std::string>(m_pipefds[1]) + ":bin";
+        return "file:/dev/fd/" + ucs::to_string(m_pipefds[1]) + ":bin";
     }
 
     std::string get_data() {
@@ -208,7 +207,7 @@ public:
 class stats_on_exit_test : public stats_file_test {
 public:
     virtual std::string stats_dest_config() {
-        return "file:/dev/fd/" + boost::lexical_cast<std::string>(m_pipefds[1]);
+        return "file:/dev/fd/" + ucs::to_string(m_pipefds[1]);
     }
 
     /*
@@ -219,14 +218,14 @@ public:
         std::string data = get_data();
         size_t pos = 0;
         for (unsigned i = 0; i < NUM_DATA_NODES; ++i) {
-            std::string node_name = " data-" + boost::lexical_cast<std::string>(i) + ":";
+            std::string node_name = " data-" + ucs::to_string(i) + ":";
             pos = data.find(node_name, pos);
             EXPECT_NE(pos, std::string::npos) << node_name << " not found";
             for (unsigned j = 0; j < NUM_COUNTERS; ++j) {
                 std::string value = "counter" +
-                                boost::lexical_cast<std::string>(j) +
+                                ucs::to_string(j) +
                                 ": " +
-                                boost::lexical_cast<std::string>((j + 1) * 10);
+                                ucs::to_string((j + 1) * 10);
                 pos = data.find(value, pos);
                 EXPECT_NE(pos, std::string::npos) << value << " not found";
             }
