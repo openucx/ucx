@@ -11,6 +11,7 @@ extern "C" {
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/time/time.h>
 }
 
@@ -108,6 +109,8 @@ UCS_TEST_F(test_datatype, queue) {
 
         ucs_queue_push(&head, &elem1.queue);
         EXPECT_EQ((unsigned long)2, ucs_queue_length(&head));
+
+        EXPECT_EQ(&elem1, ucs_queue_tail_elem_non_empty(&head, elem_t, queue));
 
         elem = ucs_queue_pull_elem_non_empty(&head, elem_t, queue);
         EXPECT_EQ(&elem0, elem);
@@ -512,6 +515,45 @@ UCS_TEST_F(test_datatype, notifier_chain) {
         EXPECT_NEAR(N_CALLS  , elems[1].ncalls, N_CALLS/100);
         EXPECT_NEAR(N_CALLS*3, elems[2].ncalls, N_CALLS/100);
     }
+}
 
+void test_callbackq_cb(ucs_callbackq_elem_t *self)
+{
+    self->sn = 0;
+}
 
+UCS_TEST_F(test_datatype, callbackq) {
+    ucs_callbackq_t cbq;
+    ucs_callbackq_elem_t elem1, elem2, elem3;
+    unsigned count;
+
+    ucs_callbackq_init(&cbq);
+
+    elem1.sn = 1;
+    elem1.cb = test_callbackq_cb;
+    elem2.sn = 2;
+    elem2.cb = test_callbackq_cb;
+    elem3.sn = 3;
+    elem3.cb = test_callbackq_cb;
+
+    ucs_callbackq_push(&cbq, &elem1);
+    ucs_callbackq_push(&cbq, &elem2);
+    ucs_callbackq_push(&cbq, &elem3);
+
+    count = ucs_callbackq_pull(&cbq, 0);
+    EXPECT_EQ(0u, count);
+
+    count = ucs_callbackq_pull(&cbq, 1);
+    EXPECT_EQ(0u, count);
+
+    count = ucs_callbackq_pull(&cbq, 3);
+    EXPECT_EQ(2u, count);
+    EXPECT_EQ(0u, elem1.sn); /* should be removed */
+    EXPECT_EQ(0u, elem2.sn); /* should be removed */
+
+    count = ucs_callbackq_pull(&cbq, 10);
+    EXPECT_EQ(1u, count);
+    EXPECT_EQ(0u, elem3.sn); /* should be removed */
+
+    ucs_callbackq_cleanup(&cbq);
 }
