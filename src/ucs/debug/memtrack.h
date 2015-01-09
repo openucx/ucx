@@ -110,7 +110,7 @@ void ucs_free(void *ptr);
 void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
                off_t offset, const char *name);
 #ifdef __USE_LARGEFILE64
-void *ucs_mmap64(void *addr, size_t length, int prot, int flags, int fd,
+void *ucs_mmap64(void *addr, size_t size, int prot, int flags, int fd,
                  off64_t offset, const char *name);
 #endif
 int ucs_munmap(void *addr, size_t length);
