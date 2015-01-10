@@ -83,10 +83,14 @@ static void ucs_ptr_array_clear(ucs_ptr_array_t *ptr_array)
     ptr_array->freelist         = UCS_PTR_ARRAY_SENTINEL;
 }
 
-void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, uint32_t init_placeholder)
+void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, uint32_t init_placeholder,
+                        const char *name)
 {
     ptr_array->init_placeholder = init_placeholder;
     ucs_ptr_array_clear(ptr_array);
+#if ENABLE_MEMTRACK
+    ucs_snprintf_zero(ptr_array->name, sizeof(ptr_array->name), "%s", name);
+#endif
 }
 
 void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
@@ -153,7 +157,7 @@ static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array UCS_MEMTRACK_ARG)
 }
 
 unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
-                              uint32_t *placeholder_p UCS_MEMTRACK_ARG)
+                              uint32_t *placeholder_p)
 {
     ucs_ptr_array_elem_t *elem;
     unsigned index;
@@ -161,7 +165,7 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
     ucs_assert_always(((uintptr_t)value & UCS_PTR_ARRAY_FLAG_FREE) == 0);
 
     if (ptr_array->freelist == UCS_PTR_ARRAY_SENTINEL) {
-        ucs_ptr_array_grow(ptr_array UCS_MEMTRACK_VAL);
+        ucs_ptr_array_grow(ptr_array UCS_MEMTRACK_NAME(ptr_array->name));
     }
 
     /* Get the first item on the free list */

@@ -285,7 +285,7 @@ void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
 
 #ifdef __USE_LARGEFILE64
 void *ucs_mmap64(void *addr, size_t size, int prot, int flags, int fd,
-                 uint64_t offset, const char *name)
+                 off64_t offset, const char *name)
 {
     ucs_memtrack_buffer_t *buffer;
 
@@ -293,9 +293,9 @@ void *ucs_mmap64(void *addr, size_t size, int prot, int flags, int fd,
         return NULL;
     }
 
-    res = mmap64(addr, size + (ucs_memtrack_is_enabled() ? sizeof(*buffer) : 0),
-                 prot, flags, fd, offset);
-    if ((buffer == NULL) || (!ucs_memtrack_is_enabled())) {
+    buffer = mmap64(addr, size + (ucs_memtrack_is_enabled() ? sizeof(*buffer) : 0),
+                    prot, flags, fd, offset);
+    if ((buffer == MAP_FAILED) || (!ucs_memtrack_is_enabled())) {
         return buffer;
     }
 
