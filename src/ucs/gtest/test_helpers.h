@@ -9,8 +9,6 @@
 #define UCS_TEST_HELPERS_H
 
 #include <gtest/gtest.h>
-#include <boost/foreach.hpp>
-#include <boost/optional.hpp>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
@@ -46,12 +44,12 @@ template <typename T>
 static std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
     static const size_t LIMIT = 2000;
     size_t i = 0;
-    BOOST_FOREACH(const T&value, vec) {
+    for (std::vector<char>::const_iterator iter = vec.begin(); iter != vec.end(); ++iter) {
         if (i >= LIMIT) {
             os << "...";
             break;
         }
-        os << "[" << i << "]=" << value << " ";
+        os << "[" << i << "]=" << *iter << " ";
         ++i;
     }
     return os << std::endl;
@@ -101,10 +99,59 @@ public:
     scoped_setenv(const char *name, const char *value);
     ~scoped_setenv();
 private:
-    const std::string            m_name;
-    boost::optional<std::string> m_old_value;
+    scoped_setenv(const scoped_setenv&);
+    const std::string m_name;
+    std::string       m_old_value;
 };
 
+template <typename T>
+std::string to_string(const T& value) {
+    std::stringstream ss;
+    ss << value;
+    return ss.str();
+}
+
+template <typename T>
+class ptr_vector {
+public:
+    typedef std::vector<T*> vec_type;
+    typedef typename vec_type::const_iterator const_iterator;
+
+    ptr_vector() {
+    }
+
+    ~ptr_vector() {
+        clear();
+    }
+
+    /** Add and take ownership */
+    void push_back(T* ptr) {
+        m_vec.push_back(ptr);
+    }
+
+    const T& operator[](size_t index) const {
+        return *m_vec[index];
+    }
+
+    void clear() {
+        while (!m_vec.empty()) {
+            T* ptr = m_vec.back();
+            m_vec.pop_back();
+            delete ptr;
+        }
+    }
+
+    const_iterator begin() const {
+        return m_vec.begin();
+    }
+
+    const_iterator end() const {
+        return m_vec.end();
+    }
+private:
+    ptr_vector(const ptr_vector&);
+    vec_type m_vec;
+};
 
 namespace detail {
 

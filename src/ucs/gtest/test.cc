@@ -12,9 +12,6 @@ extern "C" {
 #include <ucs/config/global_opts.h>
 }
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
-
 namespace ucs {
 
 test_base::test_base() : m_state(NEW) {
@@ -63,12 +60,6 @@ void test_base::pop_config()
 {
     ucs_config_parser_release_opts(&ucs_global_opts, ucs_global_opts_table);
     ucs_global_opts = m_config_stack.back();
-}
-
-void test_base::set_multi_config(const std::string& multi_config) {
-    std::vector<std::string> tokens;
-    boost::split(tokens, multi_config, boost::is_any_of("="));
-    set_config(tokens[0], tokens[1]);
 }
 
 void test_base::SetUpProxy() {

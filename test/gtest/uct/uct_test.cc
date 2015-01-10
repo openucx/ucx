@@ -61,7 +61,7 @@ uct_test::entity::~entity() {
     uct_cleanup(m_ucth);
 }
 
-void uct_test::entity::connect(const uct_test::entity& other) {
+void uct_test::entity::connect(const uct_test::entity& other) const {
     ucs_status_t status;
 
     uct_iface_attr_t iface_attr;

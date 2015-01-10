@@ -37,7 +37,6 @@ protected:
     virtual void pop_config();
 
     /* Helpers */
-    void set_multi_config(const std::string& multi_config);
     void set_config(void *opts, ucs_config_field_t *fields,
                     const std::string& name, const std::string& value);
 

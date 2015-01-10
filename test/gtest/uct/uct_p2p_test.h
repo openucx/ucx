@@ -10,9 +10,6 @@
 
 #include "uct_test.h"
 
-#include <boost/ptr_container/ptr_vector.hpp>
-
-
 /**
  * Point-to-point UCT test.
  */
@@ -27,7 +24,8 @@ public:
 protected:
     const entity &get_entity(unsigned index) const;
 
-    boost::ptr_vector<entity> m_entities;
+private:
+    ucs::ptr_vector<entity> m_entities;
 };
 
 
