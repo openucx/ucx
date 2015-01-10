@@ -36,6 +36,9 @@ typedef struct ucs_ptr_array {
     ucs_ptr_array_elem_t     *start;
     unsigned                 freelist;
     unsigned                 size;
+#if ENABLE_MEMTRACK
+    char                     name[64];
+#endif
 } ucs_ptr_array_t;
 
 
@@ -57,7 +60,8 @@ typedef struct ucs_ptr_array {
  *
  * @param init_placeholder   Default placeholder value.
  */
-void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, uint32_t init_placeholder);
+void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, uint32_t init_placeholder,
+                        const char *name);
 
 
 /**
@@ -79,7 +83,7 @@ void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array);
  * Note: The array will grow if needed.
  */
 unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
-                              uint32_t *placeholder_p UCS_MEMTRACK_ARG);
+                              uint32_t *placeholder_p);
 
 
 /**
