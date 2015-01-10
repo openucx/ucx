@@ -126,7 +126,7 @@ UCS_TEST_F(test_mpmc, multi_threaded) {
         total += (uintptr_t)retval;
     }
 
-    EXPECT_EQ(NUM_THREADS * elem_count(), total);
+    EXPECT_EQ(NUM_THREADS * elem_count(), (long)total);
     EXPECT_TRUE(ucs_mpmc_queue_is_empty(&mpmc));
     ucs_mpmc_queue_cleanup(&mpmc);
 }

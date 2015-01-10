@@ -13,8 +13,6 @@ extern "C" {
 #include <ucs/async/pipe.h>
 }
 
-#include <boost/make_shared.hpp>
-#include <boost/shared_ptr.hpp>
 #include <sys/poll.h>
 
 
@@ -112,11 +110,9 @@ public:
     }
 
     void unset_timer() {
-        if (m_timer_id != -1) {
-            ucs_status_t status = ucs_async_remove_timer(m_timer_id);
-            ASSERT_UCS_OK(status);
-            m_timer_id = -1;
-        }
+        ucs_assert(m_timer_id != -1);
+        ucs_status_t status = ucs_async_remove_timer(m_timer_id);
+        ASSERT_UCS_OK(status);
     }
 
 protected:
@@ -131,12 +127,17 @@ private:
 class async_poll {
 public:
     virtual void poll() = 0;
+    virtual ~async_poll() {
+    }
 };
 
 class global : public async_poll {
 public:
     virtual void poll() {
         ucs_async_poll(NULL);
+    }
+
+    virtual ~global() {
     }
 };
 
@@ -154,14 +155,11 @@ public:
 class global_timer : public global,  public base_timer {
 public:
     global_timer(ucs_async_mode_t mode) : base_timer(mode) {
+        set_timer(NULL, ucs_time_from_usec(1000));
     }
 
     ~global_timer() {
         unset_timer();
-    }
-
-    void start_timer(ucs_time_t interval) {
-        set_timer(NULL, interval);
     }
 };
 
@@ -172,7 +170,7 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    ~local() {
+    virtual ~local() {
         ucs_async_context_cleanup(&m_async);
     }
 
@@ -214,17 +212,10 @@ class local_timer : public local,
 {
 public:
     local_timer(ucs_async_mode_t mode) : local(mode), base_timer(mode) {
+        set_timer(&m_async, ucs_time_from_usec(1000));
     }
 
     ~local_timer() {
-        unset_timer();
-    }
-
-    void start_timer(ucs_time_t interval) {
-        set_timer(&m_async, interval);
-    }
-
-    void stop_timer() {
         unset_timer();
     }
 };
@@ -235,7 +226,7 @@ public:
     UCS_TEST_BASE_IMPL;
 
 protected:
-    static const unsigned COUNT       = 40;
+    static const int      COUNT       = 40;
     static const unsigned SLEEP_USEC  = 1000;
 
     void suspend(double scale = 1.0) {
@@ -276,24 +267,27 @@ protected:
     }
 
     int thread_run(unsigned index) {
-        boost::shared_ptr<LOCAL> le;
-        m_ev[index] = le = boost::make_shared<LOCAL>(GetParam());
+        LOCAL* le;
+        m_ev[index] = le = new LOCAL(GetParam());
 
         barrier();
 
         while (!m_stop[index]) {
             le->block();
             unsigned before = le->count();
-            suspend_and_poll(le.get(), 0.5);
+            suspend_and_poll(le, 0.5);
             unsigned after  = le->count();
             le->unblock();
 
             EXPECT_EQ(before, after); /* Should not handle while blocked */
             le->check_miss();
-            suspend_and_poll(le.get(), 0.5);
+            suspend_and_poll(le, 0.5);
         }
 
-        return le->count();
+        int result = le->count();
+        delete le;
+        m_ev[index] = NULL;
+        return result;
     }
 
     void spawn() {
@@ -314,11 +308,7 @@ protected:
     }
 
     LOCAL* event(unsigned thread) {
-        return m_ev[thread].get();
-    }
-
-    int ctx_count(unsigned thread) {
-        return m_ev[thread]->count();
+        return m_ev[thread];
     }
 
     int thread_count(unsigned thread) {
@@ -348,7 +338,7 @@ private:
     pthread_barrier_t              m_barrier;
     int                            m_thread_counts[NUM_THREADS];
     bool                           m_stop[NUM_THREADS];
-    boost::shared_ptr<LOCAL>       m_ev[NUM_THREADS];
+    LOCAL*                         m_ev[NUM_THREADS];
 };
 
 
@@ -361,7 +351,6 @@ UCS_TEST_P(test_async, global_event) {
 
 UCS_TEST_P(test_async, global_timer) {
     global_timer gt(GetParam());
-    gt.start_timer(ucs_time_from_usec(SLEEP_USEC));
     suspend_and_poll(&gt, COUNT);
     EXPECT_GE(gt.count(), COUNT / 2);
 }
@@ -413,7 +402,6 @@ UCS_TEST_P(test_async, ctx_event) {
 
 UCS_TEST_P(test_async, ctx_timer) {
     local_timer lt(GetParam());
-    lt.start_timer(ucs_time_from_usec(SLEEP_USEC));
     suspend_and_poll(&lt, COUNT);
     EXPECT_GE(lt.count(), COUNT / 2);
 }
@@ -421,8 +409,6 @@ UCS_TEST_P(test_async, ctx_timer) {
 UCS_TEST_P(test_async, two_timers) {
     local_timer lt1(GetParam());
     local_timer lt2(GetParam());
-    lt1.start_timer(ucs_time_from_usec(SLEEP_USEC));
-    lt2.start_timer(ucs_time_from_usec(SLEEP_USEC));
     suspend_and_poll2(&lt1, &lt2, COUNT);
     EXPECT_GE(lt1.count(), COUNT / 2);
     EXPECT_GE(lt2.count(), COUNT / 2);
@@ -445,14 +431,13 @@ UCS_TEST_P(test_async, ctx_timer_block) {
     local_timer lt(GetParam());
 
     lt.block();
-    lt.start_timer(ucs_time_from_usec(SLEEP_USEC));
+    int count = lt.count();
     suspend_and_poll(&lt, COUNT);
-    EXPECT_EQ(0, lt.count());
+    EXPECT_EQ(count, lt.count());
     lt.unblock();
 
     lt.check_miss();
     EXPECT_GE(lt.count(), 1); /* Timer could expire again after unblock */
-    lt.stop_timer();
 }
 
 typedef test_async_mt<local_event> test_async_event_mt;
@@ -462,9 +447,13 @@ typedef test_async_mt<local_timer> test_async_timer_mt;
  * Run multiple threads which all process events independently.
  */
 UCS_TEST_P(test_async_event_mt, multithread) {
+    if (!(HAVE_DECL_F_SETOWN_EX)) {
+        UCS_TEST_SKIP;
+    }
+
     spawn();
 
-    for (unsigned j = 0; j < COUNT; ++j) {
+    for (int j = 0; j < COUNT; ++j) {
         for (unsigned i = 0; i < NUM_THREADS; ++i) {
             event(i)->push_event();
             suspend();
@@ -477,30 +466,19 @@ UCS_TEST_P(test_async_event_mt, multithread) {
 
     for (unsigned i = 0; i < NUM_THREADS; ++i) {
         int count = thread_count(i);
-        ASSERT_EQ(ctx_count(i), count);
-        EXPECT_GE(count, (unsigned)(COUNT * 0.75));
+        EXPECT_GE(count, (int)(COUNT * 0.75));
     }
 }
 UCS_TEST_P(test_async_timer_mt, multithread) {
     spawn();
 
-    for (unsigned i = 0; i < NUM_THREADS; ++i) {
-        event(i)->start_timer(ucs_time_from_usec(SLEEP_USEC));
-    }
-
     suspend(2 * COUNT);
-
-    /* First stop the timers, to get exact counts */
-    for (unsigned i = 0; i < NUM_THREADS; ++i) {
-        event(i)->stop_timer();
-    }
 
     stop();
 
     for (unsigned i = 0; i < NUM_THREADS; ++i) {
         int count = thread_count(i);
-        ASSERT_EQ(ctx_count(i), count);
-        EXPECT_GE(count, (unsigned)(COUNT * 0.5));
+        EXPECT_GE(count, (int)(COUNT * 0.5));
     }
 }
 
