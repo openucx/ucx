@@ -1,5 +1,5 @@
 /**
- * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
@@ -22,6 +22,11 @@ ucs_config_field_t uct_ugni_iface_config_table[] = {
     {"", "", NULL,
     ucs_offsetof(uct_ugni_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, "fma",
+                                  ucs_offsetof(uct_ugni_iface_config_t, mpool),
+                                  "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
+                                  "and could cause deadlock or performance degradation."),
+
     {NULL}
 };
 
@@ -98,13 +103,14 @@ ucs_status_t uct_ugni_query_resources(uct_context_h context,
     return UCS_OK;
 }
 
-ucs_status_t ugni_activate_domain(uct_context_h context)
+ucs_status_t ugni_activate_domain(uct_ugni_context_t *ugni_ctx)
 {
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
-    int modes,
-        spawned,
+    int spawned = 0,
         rc;
-    gni_return_t ugni_rc = GNI_RC_SUCCESS;
+
+    if(ugni_ctx->activated) {
+        return UCS_OK;
+    }
 
     /* Fetch information from Cray's PMI */
     rc = PMI_Init(&spawned);
@@ -112,44 +118,39 @@ ucs_status_t ugni_activate_domain(uct_context_h context)
         ucs_error("PMI_Init failed, Error status: %d", rc);
         return UCS_ERR_IO_ERROR;
     }
+    ucs_debug("PMI spawned %d", spawned);
 
     rc = PMI_Get_size(&ugni_ctx->pmi_num_of_ranks);
     if (PMI_SUCCESS != rc) {
         ucs_error("PMI_Get_size failed, Error status: %d", rc);
         return UCS_ERR_IO_ERROR;
     }
+    ucs_debug("PMI size %d", ugni_ctx->pmi_num_of_ranks);
 
     rc = PMI_Get_rank(&ugni_ctx->pmi_rank_id);
     if (PMI_SUCCESS != rc) {
         ucs_error("PMI_Get_rank failed, Error status: %d", rc);
         return UCS_ERR_IO_ERROR;
     }
+    ucs_debug("PMI rank %d", ugni_ctx->pmi_rank_id);
 
     rc = get_ptag(&ugni_ctx->ptag);
     if (UCS_OK != rc) {
         ucs_error("get_ptag failed, Error status: %d", rc);
         return rc;
     }
+    ucs_debug("PMI ptag %d", ugni_ctx->ptag);
 
     rc = get_cookie(&ugni_ctx->cookie);
     if (UCS_OK != rc) {
         ucs_error("get_cookie failed, Error status: %d", rc);
         return rc;
     }
-
-    ugni_ctx->id = getpid(); /* TBD */
-    modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
-            GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
-    ugni_rc = GNI_CdmCreate(ugni_ctx->id, ugni_ctx->ptag, ugni_ctx->cookie,
-                            modes, &ugni_ctx->cdm_handle);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CdmCreate failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_NO_DEVICE;
-    }
+    ucs_debug("PMI cookie %d", ugni_ctx->cookie);
 
     /* Context and domain is activated */
     ugni_ctx->activated = true;
+    ucs_debug("UGNI context %p was activated", ugni_ctx);
     return UCS_OK;
 }
 
@@ -162,6 +163,8 @@ ucs_status_t uct_ugni_init(uct_context_h context)
     gni_return_t ugni_rc = GNI_RC_SUCCESS;
 
     ugni_ctx->activated = false;
+    ugni_ctx->num_ifaces = 0;
+
     /* The code is designed to support
      * more than single device */
     ugni_rc = GNI_GetNumLocalDevices(&ugni_ctx->num_devices);
@@ -246,21 +249,12 @@ err_zero:
 void uct_ugni_cleanup(uct_context_t *context)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
-    gni_return_t ugni_rc;
     int i;
 
     for (i = 0; i < ugni_ctx->num_devices; ++i) {
         uct_ugni_device_destroy(&ugni_ctx->devices[i]);
     }
     ucs_free(ugni_ctx->devices);
-
-    if (ugni_ctx->activated) {
-        ugni_rc = GNI_CdmDestroy(ugni_ctx->cdm_handle);
-        if (GNI_RC_SUCCESS != ugni_rc) {
-            ucs_warn("GNI_CdmDestroy error status: %s (%d)",
-                     gni_err_str[ugni_rc], ugni_rc);
-        }
-    }
 }
 UCS_COMPONENT_DEFINE(uct_context_t, ugni, uct_ugni_init, uct_ugni_cleanup, sizeof(uct_ugni_context_t))
 

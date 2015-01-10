@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -12,6 +13,7 @@
 
 BEGIN_C_DECLS
 
+#include <sys/uio.h>
 #include <uct/api/uct.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
@@ -90,8 +92,9 @@ typedef struct ucx_perf_test_rte {
     void        (*barrier)(void *rte_group);
 
     /* Direct modex */
-    void        (*send)(void *rte_group, unsigned dest, void *value, size_t size);
-    void        (*recv)(void *rte_group, unsigned src,  void *value, size_t size);
+    void        (*post_vec)(void *rte_group, struct iovec *iovec, size_t num, void **req);
+    void        (*recv_vec)(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req);
+    void        (*exchange_vec)(void *rte_group, void * req);
 
     /* Handle results */
     void        (*report)(void *rte_group, ucx_perf_result_t *result);

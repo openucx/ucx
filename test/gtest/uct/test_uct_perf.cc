@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -97,6 +98,44 @@ public:
         }
     }
 
+    static void post_vec(void *rte_group, struct iovec *iovec, size_t num, void **req)
+    {
+        int i;
+        size_t j;
+        int group_size;
+        int group_index;
+        test_rte *self = reinterpret_cast<test_rte*>(rte_group);
+
+        group_size = self->group_size(rte_group);
+        group_index = self->group_index(rte_group);
+
+        for (i = 0; i < group_size; ++i) {
+            if (i != group_index) {
+                for (j = 0; j < num; ++j) {
+                    self->send(rte_group, i, iovec[j].iov_base, iovec[j].iov_len);
+                }
+            }
+        }
+    }
+
+    static void recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
+    {
+        int group_index;
+        size_t i;
+        test_rte *self = reinterpret_cast<test_rte*>(rte_group);
+
+        group_index = self->group_index(rte_group);
+        if (dest != (unsigned)group_index) {
+            for (i = 0; i < num; ++i) {
+                self->recv(rte_group, dest, iovec[i].iov_base, iovec[i].iov_len);
+            }
+        }
+    }
+
+    static void exchange_vec(void *rte_group, void * req)
+    {
+    }
+
     static void report(void *rte_group, ucx_perf_result_t *result)
     {
     }
@@ -114,8 +153,9 @@ ucx_perf_test_rte_t test_rte::rte = {
     test_rte::group_size,
     test_rte::group_index,
     test_rte::barrier,
-    test_rte::send,
-    test_rte::recv,
+    test_rte::post_vec,
+    test_rte::recv_vec,
+    test_rte::exchange_vec,
     test_rte::report,
 };
 

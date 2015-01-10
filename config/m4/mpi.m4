@@ -1,6 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 #
+# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -27,7 +28,7 @@ AS_IF([test "x$with_mpi" == xyes],
         AC_ARG_VAR(MPICC,[MPI C compiler command])
         AC_PATH_PROGS(MPICC,mpicc mpiicc,"",$mpi_path)
         AC_ARG_VAR(MPIRUN,[MPI launch command])
-        AC_PATH_PROGS(MPIRUN,mpirun mpiexec orterun,"",$mpi_path)
+        AC_PATH_PROGS(MPIRUN,mpirun mpiexec aprun orterun,"",$mpi_path)
         AS_IF([test -z "$MPIRUN"], AC_MSG_ERROR([--with-mpi was requested but MPI was not found in the PATH in $mpi_path]),[:])
         ],[:])
 

@@ -1,6 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 #
+# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -12,6 +13,8 @@ GTEST_FILTER ?= *
 export GTEST_FILTER
 
 VALGRIND_EXTRA_ARGS =
+
+LAUNCHER =
 
 VALGRIND_ARGS = \
 	--tool=memcheck \
@@ -80,7 +83,7 @@ ucx:
 
 test: ucx gtest
 	@rm -f core.*
-	$(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
+	$(LAUNCHER) $(abs_builddir)/gtest --gtest_filter=$(GTEST_FILTER)
 	
 test_gdb: ucx gtest
 	echo 'r' > .gdbcommands

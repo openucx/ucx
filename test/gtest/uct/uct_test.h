@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -56,7 +57,8 @@ protected:
 
 #define UCT_TEST_TLS \
     rc_mlx5, \
-    rc_verbs
+    rc_verbs, \
+    ugni
 
 /**
  * Instantiate the parameterized test case for all transports.

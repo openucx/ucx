@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -261,7 +262,9 @@ ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
 void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob)
 {
     uct_rkey_release_func_t release = rkey_ob->type;
-    release(context, rkey_ob->rkey);
+    if (release) {
+        release(context, rkey_ob->rkey);
+    }
 }
 
 ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)

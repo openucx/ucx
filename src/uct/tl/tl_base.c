@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 *
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -59,7 +60,9 @@ void uct_iface_mp_init_obj(void *mp_context, void *obj, void *chunk, void *arg)
     uct_iface_mp_chunk_hdr_t *hdr;
 
     hdr = chunk - sizeof(*hdr);
-    cb(iface, obj, hdr->lkey);
+    if (cb) {
+        cb(iface, obj, hdr->lkey);
+    }
 }
 
 ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
