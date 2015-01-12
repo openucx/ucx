@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
+# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -132,4 +132,24 @@ AC_ARG_ENABLE([assertions],
 	[],
 	[AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])])
 
+# CHECK_CROSS_COMP (program, true-action, false-action)
+#
+# The macro checks if it can run the program; it executes
+# true action if the program can be executed, otherwise 
+# false action is executed.
+# For cross-platform compilation we only check
+# if we can compile and link the program.
+AC_DEFUN([CHECK_CROSS_COMP], [
+         AC_RUN_IFELSE([$1], [$2], [$3],
+                       [AC_LINK_IFELSE([$1], [$2], [$3])])
+])
 
+AC_MSG_CHECKING([__attribute__((constructor))])
+CHECK_CROSS_COMP([[static int rc = 1;
+                  static void constructor_test() __attribute__((constructor));
+                  static void constructor_test() { rc = 0; }
+                  int main() { return rc; }]],
+                [AC_MSG_RESULT([yes])],
+                [AC_MSG_ERROR([Cannot continue. Please use compiler that
+                             supports __attribute__((constructor))])]
+                )
