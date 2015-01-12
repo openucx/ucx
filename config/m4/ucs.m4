@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
+# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -132,4 +132,13 @@ AC_ARG_ENABLE([assertions],
 	[],
 	[AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])])
 
-
+AC_MSG_CHECKING([__attribute__((constructor))])
+AC_RUN_IFELSE([[
+              static int rc = 1;
+              static void constructor_test() __attribute__((constructor));
+              static void constructor_test() { rc = 0; }
+              int main() { return rc; }
+              ]],
+              [ AC_MSG_RESULT([yes]) ],
+              [ AC_MSG_ERROR([Cannot continue. Please use compiler that
+                             supports __attribute__((constructor))])])
