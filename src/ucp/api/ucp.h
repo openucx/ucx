@@ -17,6 +17,7 @@
 typedef struct ucp_context {
     uct_context_h       uct_context;
     uct_resource_desc_t *resources;    /* array of resources */
+    unsigned            num_resources; /* number of the final resources for the ucp layer to use */
 } ucp_context_t;
 
 
@@ -38,22 +39,18 @@ typedef struct ucp_iface {
 } ucp_iface_t;
 
 
-typedef struct ucp_ib_port_spec {
-    char              *device_name_port_num;
-} ucp_ib_port_spec_t;
-
 /**
- * IB single port specification
+ * Device specification
  */
-typedef struct ucp_ib_ports_config {
-    ucp_ib_port_spec_t        *spec;
-    unsigned                  count;    /* number of devices */
-} ucp_ib_ports_config_t;
+typedef struct ucp_device_config {
+    char              **device_name_port_num;
+    unsigned          count;    /* number of devices */
+} ucp_device_config_t;
 
 
 struct ucp_iface_config {
-    ucp_ib_ports_config_t     ports;
-    ucp_device_policy_t       device_policy;
+    ucp_device_config_t   devices;
+    ucs_ternary_value_t   device_policy_force;
 };
 
 /**

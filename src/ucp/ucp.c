@@ -7,94 +7,106 @@
 #include <ucp/api/ucp.h>
 #include <ucs/type/component.h>
 
-#define UCP_CONFIG_ENV_PREFIX "UCP_"
+#define UCP_CONFIG_ENV_PREFIX "UCX_"
 
-static UCS_CONFIG_DEFINE_ARRAY(port_spec,
-                               sizeof(ucp_ib_port_spec_t),
+static UCS_CONFIG_DEFINE_ARRAY(device_spec,
+                               sizeof(char*),
                                UCS_CONFIG_TYPE_STRING);
-
-static const char *device_policy_names[] = {
-    [UCP_DEVICE_POLICY_TRY]   = "try",
-    [UCP_DEVICE_POLICY_FORCE] = "force",
-    [UCP_DEVICE_POLICY_LAST]   = NULL
-};
 
 ucs_config_field_t ucp_iface_config_table[] = {
   {"DEVICES", "*",
-   "Specifies which Infiniband ports to use.",
-   ucs_offsetof(ucp_iface_config_t, ports), UCS_CONFIG_TYPE_ARRAY(port_spec)},
+   "Specifies which device to use.",
+   ucs_offsetof(ucp_iface_config_t, devices), UCS_CONFIG_TYPE_ARRAY(device_spec)},
 
-  {"DEVICE_POLICY", "try",
+  {"DEVICE_POLICY_FORCE", "no",
    "The ports selection policy."
-   "try     - try to using the available devices from the devices list.\n"
-   "force   - force the usage of all the devices from the devices list.\n",
-   ucs_offsetof(ucp_iface_config_t, device_policy), UCS_CONFIG_TYPE_ENUM(device_policy_names)},
+   "yes     - force the usage of all the devices from the devices list.\n"
+   "no/try  - try using the available devices from the devices list.\n",
+   ucs_offsetof(ucp_iface_config_t, device_policy_force), UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
 
-static int ucp_device_match(uct_resource_desc_t *resources,
+/**
+ * @ingroup CONTEXT
+ * @brief create the final list of resources to use. (compare the user's list against the available resources)
+ *
+ * @param [in]  resources            Available resources on the host. (filled by the uct layer)
+ * @param [in]  ucp_config           User's ucp configuration parameters.
+ * @param [in]  num_resources        Number of available resources on the host.
+ * @param [out] final_resources      Filled with the final list of resources to use.
+ * @param [out] final_num_resources  Filled with the number of resources to use.
+ *
+ * @return Error code.
+ */
+static ucs_status_t ucp_device_match(uct_resource_desc_t *resources,
                             ucp_iface_config_t *ucp_config,
                             uct_resource_desc_t *final_resources,
-                            unsigned num_resources) {
+                            unsigned num_resources, unsigned *final_num_resources) {
 
     int config_idx, resource_idx, final_idx, is_force, found_match = 0;
     uct_resource_desc_t *resource_device = NULL;
 
     /* if we got here then num_resources > 0.
-     * if the user's list is *, use all the available resources */
-    if (0 == ucp_config->ports.count
-        || !strcmp(ucp_config->ports.spec[0].device_name_port_num, "*")) {
-        for (resource_idx = 0; resource_idx < num_resources; resource_idx++) {
-            final_resources[resource_idx] = resources[resource_idx];
-        }
-        return 1;
+     * if the user's list is empty, there is no match */
+    if (0 == ucp_config->devices.count) {
+        ucs_error("The device list is empty. Please specify the devices you would like to use "
+                        "or use the default setting");
+        return UCS_ERR_NO_ELEM;
     }
 
-    is_force = (ucp_config->device_policy == UCP_DEVICE_POLICY_FORCE);
+    /* if the user's list is *, use all the available resources */
+    if (!strcmp(ucp_config->devices.device_name_port_num[0], "*")) {
+        memcpy(final_resources, resources, num_resources*sizeof(uct_resource_desc_t));
+        *final_num_resources = num_resources;
+        return UCS_OK;
+    }
+
+    is_force = (ucp_config->device_policy_force == UCS_YES);
 
     /* go over the device list from the user and check (against the available resources)
      * which can be satisfied */
     final_idx = 0;
-    for (config_idx = 0; config_idx < ucp_config->ports.count; config_idx++) {
+    for (config_idx = 0; config_idx < ucp_config->devices.count; config_idx++) {
         if (is_force) {
             found_match = 0;
         }
         for (resource_idx = 0; resource_idx < num_resources; resource_idx++) {
 
             resource_device = &resources[resource_idx];
-            if (!strcmp(ucp_config->ports.spec[config_idx].device_name_port_num, resource_device->dev_name)) {
+            if (!strcmp(ucp_config->devices.device_name_port_num[config_idx], resource_device->dev_name)) {
                 /* there is a match */
                 final_resources[final_idx] = *resource_device;
                 final_idx++;
                 found_match = 1;
-                ucs_debug("port %s can be used",resource_device->dev_name);
+                ucs_debug("port %s can be used. tl name: %s",resource_device->dev_name, resource_device->tl_name);
                 break;
             }
         }
         if ((!found_match) && (is_force)) {
             ucs_error("Device '%s' is not available",
-                      ucp_config->ports.spec[config_idx].device_name_port_num);
+                      ucp_config->devices.device_name_port_num[config_idx]);
             break;
         }
     }
 
+    *final_num_resources = final_idx;
+
     if (!found_match) {
-        ucs_error("One or more of the ports from the UCP_DEVICES list, is not available");
+        ucs_error("One or more of the ports from the UCX_DEVICES list, is not available");
+        return UCS_ERR_NO_ELEM;
     }
 
-    return found_match;
-
+    return UCS_OK;
 }
 
 ucs_status_t ucp_init(ucp_context_h *context_p)
 {
     ucs_status_t status;
     ucp_context_t *context;
-    uct_resource_desc_t *resources, *final_resources;
-    unsigned num_resources;
+    uct_resource_desc_t *resources;
+    unsigned num_resources, final_num_resources;
     ucp_iface_config_t ucp_config;
-    int match;
 
     /* allocate a ucp context */
     context = ucs_malloc(sizeof(*context), "ucp context");
@@ -128,29 +140,28 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
         goto err_free_resources;
     }
 
-    final_resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "final resources list");
-    if (final_resources == NULL) {
+    context->resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "final resources list");
+    if (context->resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_resources;
     }
 
     /* test the user's ucp_configuration against the uct resource */
-    match = ucp_device_match(resources, &ucp_config, final_resources, num_resources);
-    if (0 == match) {
+    status = ucp_device_match(resources, &ucp_config, context->resources, num_resources, &final_num_resources);
+    if (UCS_OK != status) {
         /* the requested device list cannot be satisfied */
-        status = UCS_ERR_NO_ELEM;
         goto err_free_final_resources;
     }
 
     /* release the original list of resources */
     uct_release_resource_list(resources);
 
-    context->resources = final_resources;
+    context->num_resources = final_num_resources;
     *context_p = context;
     return UCS_OK;
 
 err_free_final_resources:
-    ucs_free(final_resources);
+    ucs_free(context->resources);
 err_free_resources:
     uct_release_resource_list(resources);
 err_free_uct:
