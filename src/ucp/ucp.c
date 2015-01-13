@@ -14,15 +14,17 @@ static UCS_CONFIG_DEFINE_ARRAY(device_spec,
                                UCS_CONFIG_TYPE_STRING);
 
 ucs_config_field_t ucp_iface_config_table[] = {
-  {"DEVICES", "*",
-   "Specifies which device to use.",
+  {"DEVICES", "all",
+   "Specifies which device to use.\n"
+   "all - use all the available devices\n"
+   "or a comma separated list of devices\n",
    ucs_offsetof(ucp_iface_config_t, devices), UCS_CONFIG_TYPE_ARRAY(device_spec)},
 
-  {"DEVICE_POLICY_FORCE", "no",
-   "The ports selection policy."
-   "yes     - force the usage of all the devices from the devices list.\n"
-   "no/try  - try using the available devices from the devices list.\n",
-   ucs_offsetof(ucp_iface_config_t, device_policy_force), UCS_CONFIG_TYPE_TERNARY},
+  {"FORCE_ALL_DEVICES", "no",
+   "The devices selection policy."
+   "yes - force the usage of all the devices from the devices list.\n"
+   "no  - try using the available devices from the devices list.\n",
+   ucs_offsetof(ucp_iface_config_t, device_policy_force), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -40,9 +42,11 @@ ucs_config_field_t ucp_iface_config_table[] = {
  * @return Error code.
  */
 static ucs_status_t ucp_device_match(uct_resource_desc_t *resources,
-                            ucp_iface_config_t *ucp_config,
-                            uct_resource_desc_t *final_resources,
-                            unsigned num_resources, unsigned *final_num_resources) {
+                                     ucp_iface_config_t *ucp_config,
+                                     uct_resource_desc_t *final_resources,
+                                     unsigned num_resources,
+                                     unsigned *final_num_resources)
+{
 
     int config_idx, resource_idx, final_idx, is_force, found_match = 0;
     uct_resource_desc_t *resource_device = NULL;
@@ -56,13 +60,13 @@ static ucs_status_t ucp_device_match(uct_resource_desc_t *resources,
     }
 
     /* if the user's list is *, use all the available resources */
-    if (!strcmp(ucp_config->devices.device_name_port_num[0], "*")) {
+    if (!strcmp(ucp_config->devices.device_name[0], "all")) {
         memcpy(final_resources, resources, num_resources*sizeof(uct_resource_desc_t));
         *final_num_resources = num_resources;
         return UCS_OK;
     }
 
-    is_force = (ucp_config->device_policy_force == UCS_YES);
+    is_force = ucp_config->device_policy_force;
 
     /* go over the device list from the user and check (against the available resources)
      * which can be satisfied */
@@ -74,18 +78,18 @@ static ucs_status_t ucp_device_match(uct_resource_desc_t *resources,
         for (resource_idx = 0; resource_idx < num_resources; resource_idx++) {
 
             resource_device = &resources[resource_idx];
-            if (!strcmp(ucp_config->devices.device_name_port_num[config_idx], resource_device->dev_name)) {
+            if (!strcmp(ucp_config->devices.device_name[config_idx], resource_device->dev_name)) {
                 /* there is a match */
                 final_resources[final_idx] = *resource_device;
                 final_idx++;
                 found_match = 1;
-                ucs_debug("port %s can be used. tl name: %s",resource_device->dev_name, resource_device->tl_name);
+                ucs_debug("device %s can be used. tl name: %s",resource_device->dev_name, resource_device->tl_name);
                 break;
             }
         }
         if ((!found_match) && (is_force)) {
             ucs_error("Device '%s' is not available",
-                      ucp_config->devices.device_name_port_num[config_idx]);
+                      ucp_config->devices.device_name[config_idx]);
             break;
         }
     }
@@ -93,7 +97,7 @@ static ucs_status_t ucp_device_match(uct_resource_desc_t *resources,
     *final_num_resources = final_idx;
 
     if (!found_match) {
-        ucs_error("One or more of the ports from the UCX_DEVICES list, is not available");
+        ucs_error("One or more of the devices from the UCX_DEVICES list, is not available");
         return UCS_ERR_NO_ELEM;
     }
 

@@ -13,14 +13,4 @@ typedef struct ucp_ep            *ucp_ep_h;
 typedef struct ucp_iface         *ucp_iface_h;
 typedef struct ucp_iface_config  ucp_iface_config_t;
 
-
-/**
- * Device choosing mode
- */
-typedef enum {
-    UCP_DEVICE_POLICY_TRY,
-    UCP_DEVICE_POLICY_FORCE,
-    UCP_DEVICE_POLICY_LAST
-} ucp_device_policy_t;
-
 #endif

@@ -43,14 +43,14 @@ typedef struct ucp_iface {
  * Device specification
  */
 typedef struct ucp_device_config {
-    char              **device_name_port_num;
+    char              **device_name;
     unsigned          count;    /* number of devices */
 } ucp_device_config_t;
 
 
 struct ucp_iface_config {
     ucp_device_config_t   devices;
-    ucs_ternary_value_t   device_policy_force;
+    int                   device_policy_force;
 };
 
 /**
