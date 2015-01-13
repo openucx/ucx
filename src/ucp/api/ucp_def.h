@@ -11,6 +11,6 @@
 typedef struct ucp_context       *ucp_context_h;
 typedef struct ucp_ep            *ucp_ep_h;
 typedef struct ucp_iface         *ucp_iface_h;
-
+typedef struct ucp_iface_config  ucp_iface_config_t;
 
 #endif

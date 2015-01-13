@@ -16,7 +16,8 @@
 
 typedef struct ucp_context {
     uct_context_h       uct_context;
-    uct_resource_desc_t *resources;    /* TODO should be list/array of resources? */
+    uct_resource_desc_t *resources;    /* array of resources */
+    unsigned            num_resources; /* number of the final resources for the ucp layer to use */
 } ucp_context_t;
 
 
@@ -37,6 +38,20 @@ typedef struct ucp_iface {
     uct_iface_h       uct_iface;
 } ucp_iface_t;
 
+
+/**
+ * Device specification
+ */
+typedef struct ucp_device_config {
+    char              **device_name;
+    unsigned          count;    /* number of devices */
+} ucp_device_config_t;
+
+
+struct ucp_iface_config {
+    ucp_device_config_t   devices;
+    int                   device_policy_force;
+};
 
 /**
  * @ingroup CONTEXT
