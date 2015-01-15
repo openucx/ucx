@@ -385,7 +385,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     if (sz == ULONG_MAX) {
         snprintf(buf, max, "inf");
     } else {
-        snprintf(buf, max, "%Zu", sz);
+        snprintf(buf, max, "%zu", sz);
     }
     return 1;
 }
