@@ -228,7 +228,7 @@ ucs_frag_list_insert_head(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
      /* check that we are not hitting element on the first frag list */
      if (!ucs_queue_is_empty(&head->list)) {
          h = ucs_queue_head_elem_non_empty(&head->list, ucs_frag_list_elem_t, list);
-         if (UCS_CIRCULAR_COMPARE32(sn, >=, h->head.first_sn)) {
+         if (UCS_FRAG_LIST_SN_CMP(sn, >=, h->head.first_sn)) {
              return UCS_FRAG_LIST_INSERT_DUP;
          }
      }
@@ -242,7 +242,7 @@ ucs_frag_list_insert_head(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
          return UCS_FRAG_LIST_INSERT_READY;
      }
 
-     if (h != NULL && h->head.first_sn == sn + 1) {
+     if (h != NULL && UCS_FRAG_LIST_SN_CMP(h->head.first_sn, ==, sn + 1)) {
          /* do not enqueue. let know that more elems may
           * be pulled from the list.
           * Ex of arrivals: 2 3 1
@@ -259,11 +259,11 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 {
     ucs_frag_list_elem_t *h, *prevh, *nexth;
 
-    if (sn == head->head_sn + 1) {
+    if (UCS_FRAG_LIST_SN_CMP(sn, ==, head->head_sn + 1)) {
         return ucs_frag_list_insert_head(head, elem, sn);
     }
 
-    if (UCS_CIRCULAR_COMPARE32(sn, <=, head->head_sn)) {
+    if (UCS_FRAG_LIST_SN_CMP(sn, <=, head->head_sn)) {
         return UCS_FRAG_LIST_INSERT_DUP;
     }
 
@@ -275,12 +275,12 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
     /* find right list to insert */
     ucs_queue_for_each(h, &head->list, list) {
         /* trying to insert duplicate. retransmission or packet duplication */
-        if (UCS_CIRCULAR_COMPARE32(sn, >=, h->head.first_sn) &&
-            UCS_CIRCULAR_COMPARE32(sn, <=,  h->head.last_sn)) {
+        if (UCS_FRAG_LIST_SN_CMP(sn, >=, h->head.first_sn) &&
+            UCS_FRAG_LIST_SN_CMP(sn, <=,  h->head.last_sn)) {
             return UCS_FRAG_LIST_INSERT_DUP;
         }
 
-        if (sn+1 == h->head.first_sn) {
+        if (UCS_FRAG_LIST_SN_CMP(sn+1, ==, h->head.first_sn)) {
             frag_list_replace_head(head, prevh, h, elem);
             /* no need to check merge here. merge iff prev->last_sn+1==sn & sn+1 == h->first_sn 
              * the condition is handled in next if */
@@ -289,7 +289,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
         }
 
         /* todo: mark as likely */
-        if (h->head.last_sn+1 == sn) {
+        if (UCS_FRAG_LIST_SN_CMP(h->head.last_sn+1, ==, sn)) {
             /* add tail, check merge with next list */
             frag_list_add_tail(h, elem);
             nexth = ucs_container_of(h->list.next, ucs_frag_list_elem_t, list);
@@ -302,10 +302,10 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
             return UCS_FRAG_LIST_INSERT_SLOW;
         }
 
-        if (UCS_CIRCULAR_COMPARE32(sn, <, h->head.first_sn)) {
+        if (UCS_FRAG_LIST_SN_CMP(sn, <, h->head.first_sn)) {
             /* new hole, see above comment on merge */
             if (prevh) {
-                ucs_assert(UCS_CIRCULAR_COMPARE32(prevh->head.last_sn+1, <, sn));
+                ucs_assert(UCS_FRAG_LIST_SN_CMP(prevh->head.last_sn+1, <, sn));
             }
             UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_LEN, 
                                      prevh ? sn-prevh->head.last_sn : sn-head->head_sn);
@@ -317,7 +317,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
         }
 
         /* if we got here following must hold */
-        ucs_assert(UCS_CIRCULAR_COMPARE32(h->head.last_sn+1, <, sn));
+        ucs_assert(UCS_FRAG_LIST_SN_CMP(h->head.last_sn+1, <, sn));
         prevh = h;
     }
 
@@ -347,7 +347,7 @@ ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head)
     ucs_frag_list_elem_t *h;
 
     h = ucs_queue_head_elem_non_empty(&head->list, ucs_frag_list_elem_t, list);
-    if (h->head.first_sn != head->head_sn+1) {
+    if (UCS_FRAG_LIST_SN_CMP(h->head.first_sn, !=, head->head_sn+1)) {
         ucs_trace_data("first_sn(%u) != head_sn(%u) + 1", (unsigned)h->head.first_sn,
                        (unsigned)head->head_sn);
         return NULL;

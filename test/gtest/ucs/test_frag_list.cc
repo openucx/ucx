@@ -92,7 +92,7 @@ UCS_TEST_F(frag_list, in_order_rcv) {
 
     err = ucs_frag_list_insert(&m_frags, &pkt, 0);
     EXPECT_EQ(UCS_FRAG_LIST_INSERT_DUP, err);
-    err = ucs_frag_list_insert(&m_frags, &pkt, (unsigned)(-1));
+    err = ucs_frag_list_insert(&m_frags, &pkt, (ucs_frag_list_sn_t)(-1));
     EXPECT_EQ(UCS_FRAG_LIST_INSERT_DUP, err);
 
     for (i = 1; i < 10; i++) {
