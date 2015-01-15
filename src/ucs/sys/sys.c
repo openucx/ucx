@@ -419,10 +419,10 @@ size_t ucs_get_huge_page_size()
 
         if (huge_page_size == 0) {
             huge_page_size = UCS_DEFAULT_HUGEPAGE_SIZE;
-            ucs_warn("cannot determine huge page size, using default: %Zu",
+            ucs_warn("cannot determine huge page size, using default: %zu",
                       huge_page_size);
         } else {
-            ucs_trace("detected huge page size: %Zu", huge_page_size);
+            ucs_trace("detected huge page size: %zu", huge_page_size);
         }
     }
 
@@ -456,7 +456,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
             if (!(flags & SHM_HUGETLB)) {
                 shminfo_ptr = &shminfo;
                 if ((shmctl(0, IPC_INFO, (struct shmid_ds *) shminfo_ptr)) > -1) {
-                    ucs_error("shmget failed (size=%Zu): The max number of shared memory segments in the system is = %ld. "
+                    ucs_error("shmget failed (size=%zu): The max number of shared memory segments in the system is = %ld. "
                     "Please try to increase this value through /proc/sys/kernel/shmmni",
                     *size, shminfo.shmmni);
                 }
@@ -472,7 +472,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
             return UCS_ERR_NO_MEMORY;
             break;
         default:
-            ucs_error("shmget(size=%Zu, flags=0x%x) returned unexpected error: %m. "
+            ucs_error("shmget(size=%zu, flags=0x%x) returned unexpected error: %m. "
             "Please check shared memory limits by 'ipcs -l'.",
                       *size, flags);
             return UCS_ERR_SHMEM_SEGMENT;

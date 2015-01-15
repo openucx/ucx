@@ -147,7 +147,7 @@ static void print_header(struct perftest_context *ctx)
         printf("+------------------------------------------------------------------------------------------+\n");
         printf("| API:          %-60s               |\n", test_cmd_str);
         printf("| Test type:    %-60s               |\n", test_type_str);
-        printf("| Message size: %-60Zu               |\n", ctx->params.message_size);
+        printf("| Message size: %-60zu               |\n", ctx->params.message_size);
     }
 
     if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
@@ -191,8 +191,8 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                     put_bw   : put bandwidth / message rate.\n");
     printf("                     am_lat   : active message latency.\n");
     printf("     -n <iters>   Number of iterations to run. (%ld)\n", ctx->params.max_iter);
-    printf("     -s <size>    Message size. (%Zu)\n", ctx->params.message_size);
-    printf("     -w <iters>   Number of warm-up iterations. (%Zu)\n", ctx->params.warmup_iter);
+    printf("     -s <size>    Message size. (%zu)\n", ctx->params.message_size);
+    printf("     -w <iters>   Number of warm-up iterations. (%zu)\n", ctx->params.warmup_iter);
     printf("     -N           Use numeric formatting - thousands separator.\n");
     printf("\n");
     printf("  Server options:\n");
