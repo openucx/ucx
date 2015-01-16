@@ -16,7 +16,13 @@ extern "C" {
 /**
  * UCP test
  */
-class ucp_test : public ucs::test {
+class ucp_test : public testing::TestWithParam<uct_resource_desc_t>,
+                 public ucs::test_base {
+
+public:
+    UCS_TEST_BASE_IMPL;
+
+    static std::vector<uct_resource_desc_t> enum_resources();
 
 protected:
     class entity {
@@ -36,5 +42,15 @@ protected:
         ucp_ep_h      m_ep;
     };
 };
+
+
+/**
+ * Instantiate the parameterized test case..
+ *
+ * @param _test_case  Test case class, derived form ucp_test.
+ */
+#define UCP_INSTANTIATE_TEST_CASE(_test_case) \
+    INSTANTIATE_TEST_CASE_P(ucp, _test_case, \
+                            testing::ValuesIn(ucp_test::enum_resources()));
 
 #endif /* UCP_TEST_H_ */

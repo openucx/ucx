@@ -5,14 +5,16 @@
 */
 
 #include <ucs/gtest/test.h>
+#include "ucp_test.h"
 extern "C" {
 #include <ucp/api/ucp.h>
 }
 
-class test_ucp : public ucs::test {
+class test_ucp : public ucp_test {
+
 };
 
-UCS_TEST_F(test_ucp, open_ep) {
+UCS_TEST_P(test_ucp, open_ep) {
     ucs_status_t status;
     ucp_context_h ucph;
     ucp_iface_h iface;
@@ -38,3 +40,5 @@ UCS_TEST_F(test_ucp, open_ep) {
     ucp_iface_close(iface);
     ucp_cleanup (ucph);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp)

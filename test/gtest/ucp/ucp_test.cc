@@ -8,6 +8,28 @@
 
 #include <ucs/gtest/test_helpers.h>
 
+std::vector<uct_resource_desc_t> ucp_test::enum_resources() {
+    std::vector<uct_resource_desc_t> result;
+    uct_resource_desc_t *resources;
+    unsigned num_resources;
+    ucs_status_t status;
+    uct_context_h ucth;
+
+    status = uct_init(&ucth);
+    ASSERT_UCS_OK(status);
+
+    status = uct_query_resources(ucth, &resources, &num_resources);
+    ASSERT_UCS_OK(status);
+
+    if (num_resources > 0) {
+        result.push_back(resources[0]);
+    }
+
+    uct_release_resource_list(resources);
+    uct_cleanup(ucth);
+    return result;
+}
+
 ucp_test::entity::entity() {
     ucs_status_t status;
 
