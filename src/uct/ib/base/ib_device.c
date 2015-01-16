@@ -101,7 +101,7 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
     } else {
         mr = ibv_reg_mr(dev->pd, *address_p, *length_p, UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
-            ucs_error("ibv_reg_mr(address=%p, length=%Zu) failed: %m", *address_p,
+            ucs_error("ibv_reg_mr(address=%p, length=%zu) failed: %m", *address_p,
                       *length_p);
             return UCS_ERR_IO_ERROR;
         }
