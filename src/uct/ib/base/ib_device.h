@@ -13,6 +13,8 @@
 #include <uct/api/uct.h>
 #include <ucs/type/status.h>
 
+#define UCT_IB_QPN_ORDER   24  /* How many bits can be an IB QP number */
+
 
 typedef struct uct_ib_device uct_ib_device_t;
 struct uct_ib_device {

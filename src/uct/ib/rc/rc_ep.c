@@ -59,7 +59,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
 
     self->tx.unsignaled = 0;
 
-    self->qp_num = self->qp->qp_num; /* For hash */
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
 

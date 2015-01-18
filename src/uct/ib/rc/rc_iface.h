@@ -12,16 +12,18 @@
 
 #include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
-#include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/debug/log.h>
 
+
+#define UCT_RC_QP_TABLE_ORDER       12
+#define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
+#define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 
 struct uct_rc_iface {
     uct_ib_iface_t           super;
 
     struct {
         unsigned             outstanding;
-        unsigned             sig_outstanding;
     } tx;
 
     struct {
@@ -39,8 +41,9 @@ struct uct_rc_iface {
         unsigned             rx_inline;
     } config;
 
-    uct_rc_ep_t              *eps[UCT_RC_QP_HASH_SIZE];
+    uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
 };
+
 
 typedef struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
@@ -53,12 +56,20 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
-uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface, unsigned qp_num);
-
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface);
+
+
+static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
+                                                  unsigned qp_num)
+{
+    ucs_assert(qp_num < UCS_BIT(UCT_IB_QPN_ORDER));
+    return iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
+                     [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+}
+
 
 static inline ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned byte_len)

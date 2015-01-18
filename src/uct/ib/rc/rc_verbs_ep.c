@@ -33,7 +33,6 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, void *buffer,
     ep->super.tx.unsignaled = 0;
     --ep->tx.available;
     ++iface->super.tx.outstanding;
-    ++iface->super.tx.sig_outstanding;
     return UCS_OK;
 }
 
@@ -57,7 +56,6 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     iface->inl_am_wr.wr_id    = ep->super.tx.unsignaled;
     if (ep->super.tx.unsignaled >= iface->super.config.tx_moderation) {
         iface->inl_am_wr.send_flags = IBV_SEND_INLINE|IBV_SEND_SIGNALED;
-        ++iface->super.tx.sig_outstanding;
         ep->super.tx.unsignaled = 0;
     } else {
         iface->inl_am_wr.send_flags = IBV_SEND_INLINE;
@@ -80,6 +78,12 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
 {
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    if (ep->super.tx.unsignaled == 0) {
+        return UCS_OK;
+    }
+
     /* TODO use NOP */
     return uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
 }

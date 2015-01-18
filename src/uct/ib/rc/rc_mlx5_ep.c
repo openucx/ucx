@@ -135,7 +135,6 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
     ++iface->super.tx.outstanding;
     if (force_sig || (ctrl->fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE)) {
         ep->super.tx.unsignaled = 0;
-        ++iface->super.tx.sig_outstanding;
     } else {
         ++ep->super.tx.unsignaled;
     }
@@ -158,6 +157,12 @@ ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
 {
+    uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+
+    if (ep->super.tx.unsignaled == 0) {
+        return UCS_OK;
+    }
+
     return uct_rc_mlx5_ep_inline_post(tl_ep, MLX5_OPCODE_NOP, NULL, 0, 0, 0, 0, 0);
 }
 

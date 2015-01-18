@@ -87,7 +87,6 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             count = wc[i].wr_id + 1;
             ep->tx.available            += count;
             iface->super.tx.outstanding -= count;
-            --iface->super.tx.sig_outstanding;
         }
     } else if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll send CQ");

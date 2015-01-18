@@ -101,7 +101,6 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
      */
     prev_pi  = ep->tx.max_pi;
     new_pi   = ntohs(cqe->wqe_counter) + ep->tx.wqe_cnt + 1;
-    --iface->super.tx.sig_outstanding;
     iface->super.tx.outstanding -= (uint16_t)(new_pi - prev_pi);
     ep->tx.max_pi = new_pi;
 }

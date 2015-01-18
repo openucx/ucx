@@ -38,59 +38,59 @@ ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *if
     return UCS_OK;
 }
 
-static inline int uct_rc_ep_compare(uct_rc_ep_t *ep1, uct_rc_ep_t *ep2)
-{
-    return (int32_t)ep1->qp_num - (int32_t)ep2->qp_num;
-}
-
-static inline unsigned uct_rc_ep_hash(uct_rc_ep_t *ep)
-{
-    return ep->qp_num;
-}
-
-SGLIB_DEFINE_LIST_PROTOTYPES(uct_rc_ep_t, uct_rc_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, uct_rc_ep_t);
-SGLIB_DEFINE_LIST_FUNCTIONS(uct_rc_ep_t, uct_rc_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_rc_ep_t, UCT_RC_QP_HASH_SIZE, uct_rc_ep_hash);
-
-uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface, unsigned qp_num)
-{
-    uct_rc_ep_t tmp;
-    tmp.qp_num = qp_num;
-    return sglib_hashed_uct_rc_ep_t_find_member(iface->eps, &tmp);
-}
-
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
-    sglib_hashed_uct_rc_ep_t_add(iface->eps, ep);
+    unsigned qp_num = ep->qp->qp_num;
+    uct_rc_ep_t ***ptr, **memb;
+
+    ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
+    if (*ptr == NULL) {
+        *ptr = ucs_calloc(UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER), sizeof(**ptr),
+                           "rc qp table");
+    }
+
+    memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    ucs_assert(*memb == NULL);
+    *memb = ep;
 }
 
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
-    sglib_hashed_uct_rc_ep_t_delete(iface->eps, ep);
+    unsigned qp_num = ep->qp->qp_num;
+    uct_rc_ep_t **memb;
+
+    memb = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
+                      [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    ucs_assert(*memb != NULL);
+    *memb = NULL;
 }
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    struct sglib_hashed_uct_rc_ep_t_iterator iter;
-    uct_rc_ep_t *ep;
+    uct_rc_ep_t **memb, *ep;
+    unsigned i, j;
 
     if (iface->tx.outstanding == 0) {
         return UCS_OK;
     }
 
-    if (iface->tx.sig_outstanding == 0) {
-        /* TODO hash iteration is slow with sglib */
-        /* TODO go over only relevant QPs */
-        for (ep = sglib_hashed_uct_rc_ep_t_it_init(&iter, iface->eps);
-             ep != NULL;
-             ep = sglib_hashed_uct_rc_ep_t_it_next(&iter))
-        {
+    /* TODO this iteration is too much.. */
+    for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
+        memb = iface->eps[i];
+        if (memb == NULL) {
+            continue;
+        }
+
+        for (j = 0; j < UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER); ++j) {
+            ep = memb[j];
+            if (ep == NULL) {
+                continue;
+            }
+
             uct_ep_flush(&ep->super);
         }
     }
-
     return UCS_ERR_WOULD_BLOCK;
 }
 
@@ -106,7 +106,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
                               sizeof(uct_rc_hdr_t), config);
 
     self->tx.outstanding         = 0;
-    self->tx.sig_outstanding     = 0;
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.tx_min_sge      = config->super.tx.min_sge;

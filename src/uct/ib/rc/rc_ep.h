@@ -25,8 +25,6 @@ struct uct_rc_ep {
     struct {
         unsigned      unsignaled;
     } tx;
-    unsigned          qp_num;
-    uct_rc_ep_t       *next;
 };
 
 /**
