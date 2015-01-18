@@ -15,9 +15,7 @@
 #include "uct_def.h"
 
 #include <ucs/type/status.h>
-#include <sys/socket.h>
 #include <stddef.h>
-#include <sched.h>
 
 
 /**
@@ -37,16 +35,41 @@ typedef struct uct_iface_ops {
     ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
     void         (*ep_destroy)(uct_ep_h ep);
 
+    /* Connection management */
+
     ucs_status_t (*ep_get_address)(uct_ep_h ep, uct_ep_addr_t *ep_addr);
     ucs_status_t (*ep_connect_to_iface)(uct_ep_h ep, uct_iface_addr_t *iface_addr);
     ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, uct_iface_addr_t *iface_addr,
                                      uct_ep_addr_t *ep_addr);
 
+    /* Put */
+
     ucs_status_t (*ep_put_short)(uct_ep_h ep, void *buffer, unsigned length,
                                  uint64_t remote_addr, uct_rkey_t rkey);
 
+    ucs_status_t (*ep_put_bcopy)(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                 void *arg, size_t length, uint64_t remote_addr,
+                                 uct_rkey_t rkey);
+
+    ucs_status_t (*ep_put_zcopy)(uct_ep_h ep, void *buffer, size_t length,
+                                 uct_lkey_t lkey, uint64_t remote_addr,
+                                 uct_rkey_t rkey, uct_completion_t *comp);
+
+    /* Active message */
+
     ucs_status_t (*ep_am_short)(uct_ep_h ep, uint8_t id, uint64_t header,
                                 void *payload, unsigned length);
+
+    ucs_status_t (*ep_am_bcopy)(uct_ep_h ep, uint8_t id,
+                                uct_pack_callback_t pack_cb, void *arg,
+                                size_t length);
+
+    ucs_status_t (*ep_am_zcopy)(uct_ep_h ep, uint8_t id, void *header,
+                                unsigned header_length, void *payload,
+                                size_t length, uct_lkey_t lkey,
+                                uct_completion_t *comp);
+
+    /* Synchronization */
 
     ucs_status_t (*ep_flush)(uct_ep_h ep);
 
