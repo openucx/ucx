@@ -168,6 +168,7 @@ protected:
         double               min;
         double               max;
         ucx_perf_cmd_t       command;
+        ucx_perf_data_layout_t data_layout;
         ucx_perf_test_type_t test_type;
         size_t               msglen;
         size_t               iters;
@@ -252,7 +253,7 @@ protected:
         ucx_perf_test_params_t params;
         params.command         = test.command;
         params.test_type       = test.test_type;
-        params.data_layout     = UCX_PERF_DATA_LAYOUT_BUFFER;
+        params.data_layout     = test.data_layout;
         params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
         params.flags           = 0;
         params.message_size    = test.msglen;
@@ -314,16 +315,24 @@ protected:
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
   { "active message latency", "usec", 0.1, 1.3,
-    UCX_PERF_TEST_CMD_AM_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+    UCX_PERF_TEST_CMD_AM,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
+    8, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
   { "put latency", "usec", 0.01, 1.5,
-    UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
+    8, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
   { "put msgrate", "Mpps", 5.0, 20.0,
-    UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI, 8, 2000000l,
-    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    8, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
+
+  { "put bcopy bandwidth", "MB/sec", 700.0, 10000.0,
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    2048, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
+
+  { "put zero-copy bandwidth", "MB/sec", 700.0, 10000.0,
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    2048, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
   { NULL }
 };
@@ -363,7 +372,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
                                                       cpus);
         double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
         char result_str[200] = {0};
-        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %25s : %.3f %s",
+        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : %.3f %s",
                  resource.tl_name, resource.dev_name, test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
