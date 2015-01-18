@@ -185,6 +185,18 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
     ucs_container_of((queue)->head, type, member)
 
 /**
+ * Convenience macro to get the head element of a non-empty queue.
+ *
+ * @param queue   Non-empty queue whose head element to get.
+ * @param type    Container element type.
+ * @param member  Queue element member inside the container.
+ *
+ * @return Head element.
+ */
+#define ucs_queue_tail_elem_non_empty(queue, type, member) \
+    ucs_container_of((queue)->ptail, type, member)
+
+/**
  * Iterate over queue elements. The queue must not be modified during the iteration.
  *
  * @param elem    Variable which will hold point to the element in the queue.
