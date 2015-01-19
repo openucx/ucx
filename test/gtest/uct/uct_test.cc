@@ -192,11 +192,14 @@ void uct_test::buffer::pattern_check(void *buffer, size_t length, uint64_t seed)
     size_t remainder = (end - (char*)ptr);
     if (remainder > 0) {
         ucs_assert(remainder < sizeof(*ptr));
-        uint64_t mask = UCS_MASK_SAFE(remainder * sizeof(char));
-        if ((*ptr & mask) != (seed & mask)) {
-             UCS_TEST_ABORT("At offset " << ((char*)ptr - (char*)buffer) << ": " <<
+        uint64_t mask = UCS_MASK_SAFE(remainder * 8 * sizeof(char));
+        uint64_t value = 0;
+        memcpy(&value, ptr, remainder);
+        if (value != (seed & mask)) {
+             UCS_TEST_ABORT("At offset " << ((char*)ptr - (char*)buffer) <<
+                            " (remainder " << remainder << ") : " <<
                             "Expected: 0x" << std::hex << (seed & mask) << " " <<
-                            "Got: 0x" << std::hex << (*ptr & mask) << std::dec);
+                            "Got: 0x" << std::hex << value << std::dec);
          }
 
     }
