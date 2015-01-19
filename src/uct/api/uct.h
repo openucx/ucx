@@ -50,15 +50,63 @@ struct uct_ep_addr {
 
 
 /**
+ * Operation support flags.
+ */
+enum {
+    UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0),
+    UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1),
+    UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2),
+
+    UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4),
+    UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5),
+    UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6),
+
+    UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8),
+    UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9),
+    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10),
+
+    UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16),
+    UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17),
+
+    UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18),
+    UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19),
+
+    UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20),
+    UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21),
+
+    UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22),
+    UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23),
+};
+
+
+/**
  * Interface attributes: capabilities and limitations.
  */
 struct uct_iface_attr {
-    size_t                   max_short;
-    size_t                   max_bcopy;
-    size_t                   max_zcopy;
+    struct {
+        struct {
+            size_t           max_short;
+            size_t           max_bcopy;
+            size_t           max_zcopy;
+        } put;
+
+        struct {
+            size_t           max_bcopy;
+            size_t           max_zcopy;
+        } get;
+
+        struct {
+            size_t           max_short;  /* Total max. size (incl. the header) */
+            size_t           max_bcopy;  /* Total max. size (incl. the header) */
+            size_t           max_zcopy;  /* Total max. size (incl. the header) */
+            size_t           max_hdr;    /* Max. header size for bcopy/zcopy */
+        } am;
+
+        uint32_t             flags;
+    } cap;
+
     size_t                   iface_addr_len;
     size_t                   ep_addr_len;
-    unsigned                 flags;
     size_t                   completion_priv_len;
 };
 
