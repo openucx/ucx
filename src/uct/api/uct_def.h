@@ -15,6 +15,7 @@
 #define UCT_MAX_NAME_LEN         64
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
+#define UCT_INVALID_MEM_KEY      ((uintptr_t)0)
 
 
 typedef struct uct_context       *uct_context_h;
