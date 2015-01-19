@@ -8,31 +8,16 @@
 #ifndef UCT_H_
 #define UCT_H_
 
+#include <uct/api/uct_def.h>
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/config/types.h>
+#include <ucs/datastruct/queue.h>
+#include <ucs/type/callback.h>
+
+#include <sys/socket.h>
 #include <stdio.h>
-
-
-/**
- * Remote key release function.
- */
-typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
-
-
-/**
- * Active message handler
- *
- * @param [in]  data     Points to the received data.
- * @param [in]  length   Length of data.
- * @param [in]  arg      User-defined argument.
- *
- * @note The reserved headroom is placed right before the data.
- *
- * @return UCS_OK - descriptor is used and should be release
- *         UCS_INPROGRESS - descriptor is owned by the user, and would be released later.
- */
-typedef ucs_status_t (*uct_am_callback_t)(void *data, unsigned length, void *arg);
+#include <sched.h>
 
 
 /**
@@ -65,15 +50,64 @@ struct uct_ep_addr {
 
 
 /**
+ * Operation support flags.
+ */
+enum {
+    UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0),
+    UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1),
+    UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2),
+
+    UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4),
+    UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5),
+    UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6),
+
+    UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8),
+    UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9),
+    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10),
+
+    UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16),
+    UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17),
+
+    UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18),
+    UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19),
+
+    UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20),
+    UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21),
+
+    UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22),
+    UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23),
+};
+
+
+/**
  * Interface attributes: capabilities and limitations.
  */
 struct uct_iface_attr {
-    size_t                   max_short;
-    size_t                   max_bcopy;
-    size_t                   max_zcopy;
+    struct {
+        struct {
+            size_t           max_short;
+            size_t           max_bcopy;
+            size_t           max_zcopy;
+        } put;
+
+        struct {
+            size_t           max_bcopy;
+            size_t           max_zcopy;
+        } get;
+
+        struct {
+            size_t           max_short;  /* Total max. size (incl. the header) */
+            size_t           max_bcopy;  /* Total max. size (incl. the header) */
+            size_t           max_zcopy;  /* Total max. size (incl. the header) */
+            size_t           max_hdr;    /* Max. header size for bcopy/zcopy */
+        } am;
+
+        uint32_t             flags;
+    } cap;
+
     size_t                   iface_addr_len;
     size_t                   ep_addr_len;
-    unsigned                 flags;
+    size_t                   completion_priv_len;
 };
 
 
@@ -92,6 +126,16 @@ typedef struct uct_rkey_bundle {
     uct_rkey_t               rkey;   /**< Remote key descriptor, passed to RMA functions */
     void                     *type;  /**< Remote key type */
 } uct_rkey_bundle_t;
+
+
+/**
+ * Completion handle.
+ */
+struct uct_completion {
+    ucs_callback_t            super;
+    char                      priv[0]; /**< Actual size of this field is returned
+                                            in completion_priv_len by uct_iface_query() */
+};
 
 
 /**
@@ -368,10 +412,41 @@ static inline ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned 
     return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
 }
 
+static inline ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                            void *arg, size_t length, uint64_t remote_addr,
+                                            uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, length, remote_addr, rkey);
+}
+
+static inline ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
+                                            uct_lkey_t lkey, uint64_t remote_addr,
+                                            uct_rkey_t rkey, uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_put_zcopy(ep, buffer, length, lkey, remote_addr,
+                                       rkey, comp);
+}
+
 static inline ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                            void *payload, unsigned length)
 {
     return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
+}
+
+static inline ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
+                                           uct_pack_callback_t pack_cb,
+                                           void *arg, size_t length)
+{
+    return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg, length);
+}
+
+static inline ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
+                                           unsigned header_length, void *payload,
+                                           size_t length, uct_lkey_t lkey,
+                                           uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, payload,
+                                      length, lkey, comp);
 }
 
 static inline ucs_status_t uct_ep_flush(uct_ep_h ep)

@@ -178,7 +178,8 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
 
     uct_rc_iface_query(iface, iface_attr);
-    iface_attr->max_short = MLX5_SEND_WQE_BB - sizeof(uct_rc_mlx5_wqe_rdma_inl_seg_t);  /* TODO */
+    iface_attr->cap.put.max_short = MLX5_SEND_WQE_BB - sizeof(uct_rc_mlx5_wqe_rdma_inl_seg_t);  /* TODO */
+    iface_attr->cap.am.max_short = MLX5_SEND_WQE_BB - sizeof(uct_rc_mlx5_wqe_rdma_inl_seg_t);  /* TODO */
     return UCS_OK;
 }
 

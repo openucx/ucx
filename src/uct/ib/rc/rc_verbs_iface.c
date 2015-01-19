@@ -145,7 +145,8 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
 
     uct_rc_iface_query(iface, iface_attr);
-    iface_attr->max_short = 50;  /* TODO max_inline */
+    iface_attr->cap.put.max_short = 50;  /* TODO max_inline */
+    iface_attr->cap.am.max_short = 50;  /* TODO max_inline */
     return UCS_OK;
 }
 

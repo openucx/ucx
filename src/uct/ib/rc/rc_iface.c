@@ -22,12 +22,12 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    iface_attr->max_short      = 0;
-    iface_attr->max_bcopy      = 0;
-    iface_attr->max_zcopy      = 0;
-    iface_attr->iface_addr_len = sizeof(uct_ib_iface_addr_t);
-    iface_attr->ep_addr_len    = sizeof(uct_rc_ep_addr_t);
-    iface_attr->flags          = 0;
+    memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
+    iface_attr->iface_addr_len      = sizeof(uct_ib_iface_addr_t);
+    iface_attr->ep_addr_len         = sizeof(uct_rc_ep_addr_t);
+    iface_attr->completion_priv_len = 0;
+    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
+                                      UCT_IFACE_FLAG_PUT_SHORT;
 }
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
