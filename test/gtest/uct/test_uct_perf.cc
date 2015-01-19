@@ -379,12 +379,19 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     /* Run all tests */
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
+        char result_str[200] = {0};
+        if (strcmp(resource.tl_name, "ud_verbs") == 0 &&
+            test->command != UCX_PERF_TEST_CMD_AM_SHORT) {
+            snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : SKIPPED",
+                    resource.tl_name, resource.dev_name, test->title);
+            UCS_TEST_MESSAGE << result_str;
+            break;
+        }
         ucx_perf_result_t result = run_multi_threaded(*test,
                                                       resource.tl_name,
                                                       resource.dev_name,
                                                       cpus);
         double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
-        char result_str[200] = {0};
         snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : %.3f %s",
                  resource.tl_name, resource.dev_name, test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
