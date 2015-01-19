@@ -25,9 +25,13 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
     memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
     iface_attr->iface_addr_len      = sizeof(uct_ib_iface_addr_t);
     iface_attr->ep_addr_len         = sizeof(uct_rc_ep_addr_t);
-    iface_attr->completion_priv_len = 0;
+    iface_attr->completion_priv_len = sizeof(ucs_callbackq_elem_t) - sizeof(uct_completion_t);
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
-                                      UCT_IFACE_FLAG_PUT_SHORT;
+                                      UCT_IFACE_FLAG_AM_BCOPY |
+                                      UCT_IFACE_FLAG_AM_ZCOPY |
+                                      UCT_IFACE_FLAG_PUT_SHORT |
+                                      UCT_IFACE_FLAG_PUT_BCOPY |
+                                      UCT_IFACE_FLAG_PUT_ZCOPY;
 }
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
@@ -94,6 +98,13 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
     return UCS_ERR_WOULD_BLOCK;
 }
 
+static void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj,
+                                        uct_lkey_t lkey)
+{
+    uct_rc_iface_send_desc_t *desc = obj;
+    desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
                            uct_context_h context, const char *dev_name,
                            size_t rx_headroom, size_t rx_priv_len,
@@ -119,9 +130,22 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
 
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_create(&self->super, &config->super,
-                                            "rc_recv_skb", &self->rx.mp);
+                                            "rc_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
-        return status;
+        goto err;
+    }
+
+    /* Create TX buffers mempool */
+    status = uct_iface_mpool_create(&self->super.super.super,
+                                    sizeof(uct_rc_iface_send_desc_t) + self->super.config.seg_size,
+                                    sizeof(uct_rc_iface_send_desc_t),
+                                    UCS_SYS_CACHE_LINE_SIZE,
+                                    &config->super.tx.mp,
+                                    self->config.tx_qp_len,
+                                    uct_rc_iface_send_desc_init,
+                                    "rc_send_desc", &self->tx.mp);
+    if (status != UCS_OK) {
+        goto err_destroy_rx_mp;
     }
 
     /* Create SRQ */
@@ -133,11 +157,18 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
                                   &srq_init_attr);
     if (self->rx.srq == NULL) {
         ucs_error("failed to create SRQ: %m");
-        ucs_mpool_destroy_unchecked(self->rx.mp);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto err_destory_tx_mp;
     }
 
     return UCS_OK;
+
+err_destory_tx_mp:
+    ucs_mpool_destroy(self->tx.mp);
+err_destroy_rx_mp:
+    ucs_mpool_destroy(self->rx.mp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
@@ -150,7 +181,53 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
         ucs_warn("failed to destroy SRQ: %m");
     }
 
+    ucs_mpool_destroy(self->tx.mp);
     ucs_mpool_destroy_unchecked(self->rx.mp); /* Cannot flush SRQ */
 }
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
+
+
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
+                                    struct ibv_qp_cap *cap)
+{
+    struct ibv_exp_qp_init_attr qp_init_attr;
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    struct ibv_qp *qp;
+
+    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
+    qp_init_attr.qp_context          = NULL;
+    qp_init_attr.send_cq             = iface->super.send_cq;
+    qp_init_attr.recv_cq             = iface->super.recv_cq;
+    qp_init_attr.srq                 = iface->rx.srq;
+    qp_init_attr.cap.max_send_wr     = iface->config.tx_qp_len;
+    qp_init_attr.cap.max_recv_wr     = 0;
+    qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
+    qp_init_attr.cap.max_recv_sge    = 1;
+    qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
+    qp_init_attr.qp_type             = IBV_QPT_RC;
+    qp_init_attr.sq_sig_all          = 0;
+#if HAVE_DECL_IBV_EXP_CREATE_QP
+    qp_init_attr.pd                  = dev->pd;
+#  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
+    qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_INL_RECV;
+    qp_init_attr.max_inl_recv        = iface->config.rx_inline;
+#  endif
+    /* TODO max atomic */
+    qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
+#else
+    qp = ibv_create_qp(dev->pd, &qp_init_attr);
+#endif
+    if (qp == NULL) {
+        ucs_error("failed to create qp: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+#if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
+    qp_init_attr.max_inl_recv = qp_init_attr.max_inl_recv / 2; /* Driver bug W/A */
+#endif
+
+    *qp_p = qp;
+    *cap  = qp_init_attr.cap;
+    return UCS_OK;
+}
