@@ -173,7 +173,13 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 {
+    unsigned i;
     int ret;
+
+    /* Release table. TODO release on-demand when removing ep. */
+    for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
+        ucs_free(self->eps[i]);
+    }
 
     /* TODO flush RX buffers */
     ret = ibv_destroy_srq(self->rx.srq);

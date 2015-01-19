@@ -72,6 +72,10 @@ void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length)
 
 void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t max_length) {
 
+    if (max_length > 1 * 1024 * 1024) {
+        max_length /= ucs::test_time_multiplier();
+    }
+
     if (!(max_length > min_length)) {
         UCS_TEST_SKIP;
     }

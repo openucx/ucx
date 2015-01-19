@@ -305,6 +305,7 @@ ucs_status_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_c
     if (desc == NULL) {
         return UCS_ERR_WOULD_BLOCK;
     }
+    VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
     desc->queue.super.func = (void*)ucs_mpool_put;
     desc->queue.sn = ep->tx.sw_pi;
@@ -364,6 +365,7 @@ ucs_status_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     if (desc == NULL) {
         return UCS_ERR_WOULD_BLOCK;
     }
+    VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
     desc->queue.super.func = (void*)ucs_mpool_put;
     desc->queue.sn = ep->tx.sw_pi;

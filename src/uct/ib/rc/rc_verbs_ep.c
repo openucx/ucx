@@ -92,6 +92,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
     if (desc == NULL) {
         return UCS_ERR_WOULD_BLOCK;
     }
+    VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
     desc->queue.super.func = (void*)ucs_mpool_put;
 
@@ -177,6 +178,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     if (desc == NULL) {
         return UCS_ERR_WOULD_BLOCK;
     }
+    VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
     desc->queue.super.func = (void*)ucs_mpool_put;
 
@@ -212,6 +214,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
     if (desc == NULL) {
         return UCS_ERR_WOULD_BLOCK;
     }
+    VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
     send_flags = (comp == NULL) ?
                  uct_rc_iface_tx_moderation(&iface->super, &ep->super,IBV_SEND_SIGNALED) :
