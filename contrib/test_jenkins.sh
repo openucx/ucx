@@ -51,9 +51,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     $AFFINITY make -C test/gtest test
 
     echo "Running valgrind tests"
-    module load tools/valgrind
+    module load tools/valgrind-latest
     $AFFINITY make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
-    module unload tools/valgrind
+    module unload tools/valgrind-latest
 
     echo "Build with coverity"
     module load tools/cov
