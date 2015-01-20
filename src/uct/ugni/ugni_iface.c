@@ -59,7 +59,8 @@ static ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t)(uct_iface_t*);
 
-ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
+ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, 
+                                        uct_iface_addr_t *iface_addr)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
 
@@ -86,8 +87,9 @@ static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_mem_map(uct_pd_h pd, void **address_p, size_t *length_p,
-                                     unsigned flags, uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
+static ucs_status_t uct_ugni_mem_map(uct_pd_h pd, void **address_p, 
+                                     size_t *length_p, unsigned flags, 
+                                     uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t rc;
     gni_return_t ugni_rc;
@@ -122,9 +124,9 @@ static ucs_status_t uct_ugni_mem_map(uct_pd_h pd, void **address_p, size_t *leng
                               GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
                               -1, mem_hndl);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_MemRegister failed (addr %p, size %zu), Error status: %s %d",
-                 *address_p, *length_p,
-                 gni_err_str[ugni_rc], ugni_rc);
+        ucs_error("GNI_MemRegister failed (addr %p, size %zu), 
+                  Error status: %s %d", *address_p, *length_p, 
+                  gni_err_str[ugni_rc], ugni_rc);
         rc = UCS_ERR_IO_ERROR;
         goto mem_err;
     }
@@ -183,7 +185,8 @@ ucs_status_t uct_ugni_rkey_unpack(uct_context_h context, void *rkey_buffer,
     gni_mem_handle_t *mem_hndl = NULL;
     uint64_t magic = 0;
 
-    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64"]", ptr[0], ptr[1], ptr[2]);
+    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64"]", 
+               ptr[0], ptr[1], ptr[2]);
     magic = ptr[0];
     if (magic != UCT_UGNI_RKEY_MAGIC) {
         ucs_error("Failed to identify key. Expected %llx but received %"PRIx64"",
@@ -227,7 +230,8 @@ uct_pd_ops_t uct_ugni_pd_ops = {
     .rkey_pack    = uct_ugni_rkey_pack,
 };
 
-static void uct_ugni_free_fma_out_init(void *mp_context, void *obj, void *chunk, void *arg)
+static void uct_ugni_free_fma_out_init(void *mp_context, void *obj, 
+                                       void *chunk, void *arg)
 {
     uct_ugni_fma_desc_t *fma = (uct_ugni_fma_desc_t *) obj;
     memset(&fma->desc, 0 , sizeof(fma->desc));
@@ -237,8 +241,10 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
-    uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
+    uct_ugni_iface_config_t *config = 
+        ucs_derived_of(tl_config, uct_ugni_iface_config_t);
+    uct_ugni_context_t *ugni_ctx = 
+        ucs_component_get(context, ugni, uct_ugni_context_t);
     uct_ugni_device_t *dev;
     ucs_status_t rc;
 
@@ -320,8 +326,8 @@ uct_tl_ops_t uct_ugni_tl_ops = {
 };
 
 #define UCT_UGNI_LOCAL_CQ (8192)
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface, uct_ugni_context_t
-                                 *ugni_ctx)
+ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface, 
+                                 uct_ugni_context_t *ugni_ctx)
 {
     int modes,
         rc,
