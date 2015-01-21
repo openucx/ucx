@@ -7,7 +7,7 @@
 
 #include <ucs/gtest/test.h>
 extern "C" {
-#include <ucs/type/callback.h>
+#include <ucs/datastruct/notifier.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/queue.h>

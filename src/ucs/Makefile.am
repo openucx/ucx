@@ -29,6 +29,7 @@ noinst_HEADERS = \
 	datastruct/list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.h \
+	datastruct/notifier.h \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
 	datastruct/sglib.h \
@@ -67,6 +68,7 @@ libucs_la_SOURCES = \
 	config/global_opts.c \
 	config/parser.c \
 	datastruct/frag_list.c \
+	datastruct/notifier.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
 	datastruct/ptr_array.c \
@@ -81,7 +83,6 @@ libucs_la_SOURCES = \
 	time/time.c \
 	time/timer_wheel.c \
 	time/timerq.c \
-	type/callback.c \
 	type/class.c \
 	type/component.c \
 	type/status.c
