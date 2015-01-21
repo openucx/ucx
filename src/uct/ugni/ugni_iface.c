@@ -69,12 +69,12 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *
 
 ucs_status_t uct_ugni_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
-    iface_attr->max_short      = 2048;
-    iface_attr->max_bcopy      = 2048;
-    iface_attr->max_zcopy      = 0;
+    iface_attr->cap.put.max_short      = 2048;
+    iface_attr->cap.put.max_bcopy      = 2048;
+    iface_attr->cap.put.max_zcopy      = 0;
     iface_attr->iface_addr_len = sizeof(uct_ugni_iface_addr_t);
     iface_attr->ep_addr_len    = sizeof(uct_ugni_ep_addr_t);
-    iface_attr->flags          = 0;
+    iface_attr->cap.flags          = 0;
     return UCS_OK;
 }
 
