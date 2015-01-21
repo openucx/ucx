@@ -203,6 +203,7 @@ AC_CONFIG_FILES([
                  src/uct/api/version.h
                  src/ucp/Makefile
                  src/tools/info/Makefile
+                 src/tools/hook/Makefile
                  test/gtest/Makefile
                  test/perf/Makefile
                  ])

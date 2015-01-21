@@ -10,7 +10,13 @@
 
 ACLOCAL_AMFLAGS = -I config/m4
 
-SUBDIRS = src/ucs src/uct src/ucp src/tools/info test/perf
+SUBDIRS = \
+	src/ucs \
+	src/uct \
+	src/ucp \
+	src/tools/info \
+	src/tools/hook \
+	test/perf
 
 if HAVE_GTEST
 SUBDIRS += test/gtest
