@@ -958,9 +958,7 @@ int main(int argc, char **argv)
         rte = 1;
     }
 #elif HAVE_RTE
-    if (!isatty(0)) {
-        rte = 1;
-    }
+    rte = 1;
 #endif
 
     /* Create application context */
