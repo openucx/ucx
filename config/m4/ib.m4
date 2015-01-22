@@ -76,6 +76,12 @@ AS_IF([test "x$with_ib" == xyes],
            AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
            with_mlx5_hw=yes])
 
+       AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
+                       ibv_mlx5_exp_get_cq_info,
+                       ibv_mlx5_exp_get_srq_info,
+                       ibv_mlx5_exp_update_cq_ci],
+                      [], [], [[#include <infiniband/mlx5_hw.h>]])
+
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_EXP_CQ_IGNORE_OVERRUN,
                        IBV_EXP_ACCESS_ALLOCATE_MR,
