@@ -10,11 +10,32 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/sys.h>
 #include <string.h>
 
 
 ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *qp_info)
 {
+#if HAVE_DECL_IBV_MLX5_EXP_GET_QP_INFO
+    struct ibv_mlx5_qp_info ibv_qp_info;
+    int ret;
+
+    ret = ibv_mlx5_exp_get_qp_info(qp, &ibv_qp_info);
+    if (ret != 0) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    qp_info->qpn        = ibv_qp_info.qpn;
+    qp_info->dbrec      = ibv_qp_info.dbrec;
+    qp_info->sq.buf     = ibv_qp_info.sq.buf;
+    qp_info->sq.wqe_cnt = ibv_qp_info.sq.wqe_cnt;
+    qp_info->sq.stride  = ibv_qp_info.sq.stride;
+    qp_info->rq.buf     = ibv_qp_info.rq.buf;
+    qp_info->rq.wqe_cnt = ibv_qp_info.rq.wqe_cnt;
+    qp_info->rq.stride  = ibv_qp_info.rq.stride;
+    qp_info->bf.reg     = ibv_qp_info.bf.reg;
+    qp_info->bf.size    = ibv_qp_info.bf.size;
+#else
     struct mlx5_qp *mqp = ucs_container_of(qp, struct mlx5_qp, verbs_qp.qp);
 
     if ((mqp->sq.cur_post != 0) || (mqp->rq.head != 0) || mqp->bf->need_lock) {
@@ -38,12 +59,27 @@ ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *q
     } else {
         qp_info->bf.size = 0; /* No BF */
     }
-
+#endif
     return UCS_OK;
 }
 
 ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq, uct_ib_mlx5_srq_info_t *srq_info)
 {
+#if HAVE_DECL_IBV_MLX5_EXP_GET_SRQ_INFO
+    struct ibv_mlx5_srq_info ibv_srq_info;
+    int ret;
+
+    ret = ibv_mlx5_exp_get_srq_info(srq, &ibv_srq_info);
+    if (ret != 0) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    srq_info->buf    = ibv_srq_info.buf;
+    srq_info->dbrec  = ibv_srq_info.dbrec;
+    srq_info->stride = ibv_srq_info.stride;
+    srq_info->head   = ibv_srq_info.head;
+    srq_info->tail   = ibv_srq_info.tail;
+#else
     struct mlx5_srq *msrq;
 
     if (srq->handle == LEGACY_XRC_SRQ_HANDLE) {
@@ -62,11 +98,26 @@ ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq, uct_ib_mlx5_srq_info_
     srq_info->stride = 1 << msrq->wqe_shift;
     srq_info->head   = msrq->head;
     srq_info->tail   = msrq->tail;
+#endif
     return UCS_OK;
 }
 
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
+#if HAVE_DECL_IBV_MLX5_EXP_GET_CQ_INFO
+    struct ibv_mlx5_cq_info ibv_cq_info;
+    int ret;
+
+    ret = ibv_mlx5_exp_get_cq_info(cq, &ibv_cq_info);
+    if (ret != 0) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    mlx5_cq->cq_buf    = ibv_cq_info.buf;
+    mlx5_cq->cq_ci     = 0;
+    mlx5_cq->cq_length = ibv_cq_info.cqe_cnt;
+    mlx5_cq->cqe_size  = ibv_cq_info.cqe_size;
+#else
     struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
     int ret;
 
@@ -75,24 +126,29 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
         return UCS_ERR_NO_DEVICE;
     }
 
+    mlx5_cq->cq_buf      = mcq->active_buf->buf;
+    mlx5_cq->cq_ci       = 0;
+    mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
+    mlx5_cq->cqe_size    = mcq->cqe_sz;
+#endif
+
     ret = ibv_exp_cq_ignore_overrun(cq);
     if (ret != 0) {
         ucs_error("Failed to modify send CQ to ignore overrun: %s", strerror(ret));
         return UCS_ERR_UNSUPPORTED;
     }
 
-    mlx5_cq->cq_buf      = mcq->active_buf->buf;
-    mlx5_cq->cq_ci       = 0;
-    mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
-    mlx5_cq->cqe_size    = mcq->cqe_sz;
     return UCS_OK;
 }
 
 void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci)
 {
+#if HAVE_DECL_IBV_MLX5_EXP_UPDATE_CQ_CI
+    ibv_mlx5_exp_update_cq_ci(cq, cq_ci);
+#else
     struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
-
     mcq->cons_index = cq_ci;
+#endif
 }
 
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
