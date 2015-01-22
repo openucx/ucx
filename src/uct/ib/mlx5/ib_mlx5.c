@@ -126,17 +126,18 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
         return UCS_ERR_NO_DEVICE;
     }
 
+    mlx5_cq->cq_buf      = mcq->active_buf->buf;
+    mlx5_cq->cq_ci       = 0;
+    mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
+    mlx5_cq->cqe_size    = mcq->cqe_sz;
+#endif
+
     ret = ibv_exp_cq_ignore_overrun(cq);
     if (ret != 0) {
         ucs_error("Failed to modify send CQ to ignore overrun: %s", strerror(ret));
         return UCS_ERR_UNSUPPORTED;
     }
 
-    mlx5_cq->cq_buf      = mcq->active_buf->buf;
-    mlx5_cq->cq_ci       = 0;
-    mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
-    mlx5_cq->cqe_size    = mcq->cqe_sz;
-#endif
     return UCS_OK;
 }
 
