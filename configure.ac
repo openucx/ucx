@@ -92,6 +92,20 @@ CXXFLAGS="$CFLAGS"
 
 
 #
+# CHECK_CROSS_COMP (program, true-action, false-action)
+#
+# The macro checks if it can run the program; it executes
+# true action if the program can be executed, otherwise
+# false action is executed.
+# For cross-platform compilation we only check
+# if we can compile and link the program.
+AC_DEFUN([CHECK_CROSS_COMP], [
+         AC_RUN_IFELSE([$1], [$2], [$3],
+                       [AC_LINK_IFELSE([$1], [$2], [$3])])
+])
+
+
+#
 # Debug mode
 #
 AC_ARG_ENABLE(debug,
@@ -189,6 +203,7 @@ AC_CONFIG_FILES([
                  src/uct/api/version.h
                  src/ucp/Makefile
                  src/tools/info/Makefile
+                 src/tools/hook/Makefile
                  test/gtest/Makefile
                  test/perf/Makefile
                  ])
