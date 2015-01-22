@@ -41,6 +41,8 @@ protected:
 
         uct_iface_h iface() const;
 
+        const uct_iface_attr& iface_attr() const;
+
         uct_ep_h ep() const;
 
         void flush() const;
@@ -48,9 +50,41 @@ protected:
     private:
         entity(const entity&);
 
-        uct_context_h m_ucth;
-        uct_iface_h   m_iface;
-        uct_ep_h      m_ep;
+        uct_context_h    m_ucth;
+        uct_iface_h      m_iface;
+        uct_ep_h         m_ep;
+        uct_iface_attr_t m_iface_attr;
+    };
+
+    class buffer {
+    public:
+        buffer(size_t size, size_t alignment, uint64_t seed);
+        virtual ~buffer();
+
+        static void pattern_check(void *buffer, size_t length, uint64_t seed);
+        void pattern_fill(uint64_t seed);
+        void pattern_check(uint64_t seed);
+        void *ptr() const;
+        uintptr_t addr() const;
+        size_t length() const;
+    private:
+        static uint64_t pat(uint64_t prev);
+
+        void             *m_buf;
+        void             *m_end;
+    };
+
+    class mapped_buffer : public buffer {
+    public:
+        mapped_buffer(size_t size, size_t alignment, uint64_t seed, const entity& entity);
+        ~mapped_buffer();
+
+        uct_lkey_t lkey() const;
+        uct_rkey_t rkey() const;
+    private:
+        const uct_test::entity& m_entity;
+        uct_lkey_t              m_lkey;
+        uct_rkey_bundle_t       m_rkey;
     };
 };
 

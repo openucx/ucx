@@ -76,24 +76,32 @@ typedef struct {
 } uct_rc_mlx5_iface_t;
 
 
-/**
- * RC/RDMA Inline WQE segment
- */
-typedef struct {
-    struct mlx5_wqe_ctrl_seg     ctrl;
-    struct mlx5_wqe_raddr_seg    raddr;
-    struct mlx5_wqe_inl_data_seg inl;
-} UCS_S_PACKED uct_rc_mlx5_wqe_rdma_inl_seg_t;
-
-
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 
 ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, void *buffer, unsigned length,
                                       uint64_t remote_addr, uct_rkey_t rkey);
 
-ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
-                                     void *buffer, unsigned length);
+ucs_status_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                      void *arg, size_t length, uint64_t remote_addr,
+                                      uct_rkey_t rkey);
+
+ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+                                      uct_lkey_t lkey, uint64_t remote_addr,
+                                      uct_rkey_t rkey, uct_completion_t *comp);
+
+ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                     void *payload, unsigned length);
+
+ucs_status_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                     uct_pack_callback_t pack_cb, void *arg,
+                                     size_t length);
+
+ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
+                                     unsigned header_length, void *payload,
+                                     size_t length, uct_lkey_t lkey,
+                                     uct_completion_t *comp);
+
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep);
 

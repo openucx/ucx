@@ -19,6 +19,7 @@
  */
 typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t  super;
+    size_t                 max_am_hdr;
     /* TODO flags for exp APIs */
 } uct_rc_verbs_iface_config_t;
 
@@ -26,10 +27,12 @@ typedef struct uct_rc_verbs_iface_config {
 /**
  * RC verbs communication context.
  */
-typedef struct uct_rc_verbs_iface {
+typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t        super;
 
     struct {
+        uint16_t       pi;
+        uint16_t       ci;
         unsigned       available;
     } tx;
 } uct_rc_verbs_ep_t;
@@ -38,12 +41,20 @@ typedef struct uct_rc_verbs_iface {
 /**
  * RC verbs remote endpoint.
  */
-typedef struct uct_rc_verbs_ep {
+typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t     super;
 
+    struct {
+    } tx;
+
+    ucs_mpool_h        am_hdr_mp;
     struct ibv_send_wr inl_am_wr;
     struct ibv_send_wr inl_rwrite_wr;
     struct ibv_sge     inl_sge[2];
+
+    struct {
+        size_t         max_am_hdr;
+    } config;
 } uct_rc_verbs_iface_t;
 
 
@@ -54,8 +65,25 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, void *buffer,
                                        unsigned length, uint64_t remote_addr,
                                        uct_rkey_t rkey);
 
+ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                       void *arg, size_t length, uint64_t remote_addr,
+                                       uct_rkey_t rkey);
+
+ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+                                       uct_lkey_t lkey, uint64_t remote_addr,
+                                       uct_rkey_t rkey, uct_completion_t *comp);
+
 ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                       void *buffer, unsigned length);
+
+ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                      uct_pack_callback_t pack_cb, void *arg,
+                                      size_t length);
+
+ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
+                                      unsigned header_length, void *payload,
+                                      size_t length, uct_lkey_t lkey,
+                                      uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep);
 

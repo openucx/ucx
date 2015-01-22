@@ -19,13 +19,20 @@ AM_CPPFLAGS           = \
     -I$(abs_top_builddir)/src \
     $(RTE_CPPFLAGS)
 
-noinst_HEADERS        = libperf.h
-libucxperf_la_SOURCES = libperf.c
-libucxperf_la_LDFLAGS   = \
-     $(RTE_LDFLAGS)
-libucxperf_la_LIBADD   = \
-     $(abs_top_builddir)/src/uct/libuct.la \
-     $(abs_top_builddir)/src/ucs/libucs.la
+noinst_HEADERS = \
+	libperf.h \
+	libperf_int.h
+libucxperf_la_SOURCES = \
+	libperf.c \
+	tests.cc
+libucxperf_la_LDFLAGS = \
+	$(RTE_LDFLAGS)
+libucxperf_la_CXXFLAGS = \
+	-nostdlib -fno-exceptions -fno-rtti
+libucxperf_la_LIBADD = \
+	$(abs_top_builddir)/src/uct/libuct.la \
+	$(abs_top_builddir)/src/ucs/libucs.la
+#libucxperf_la_LINK = $(CXX)
 
 ucx_perftest_SOURCES  = perftest.c
 ucx_perftest_LDFLAGS    = \

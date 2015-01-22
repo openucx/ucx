@@ -20,8 +20,8 @@ BEGIN_C_DECLS
 
 
 typedef enum {
-    UCX_PERF_TEST_CMD_AM_SHORT,
-    UCX_PERF_TEST_CMD_PUT_SHORT,
+    UCX_PERF_TEST_CMD_AM,
+    UCX_PERF_TEST_CMD_PUT,
     UCX_PERF_TEST_CMD_LAST
 } ucx_perf_cmd_t;
 
@@ -35,7 +35,9 @@ typedef enum {
 
 
 typedef enum {
-    UCX_PERF_DATA_LAYOUT_BUFFER,
+    UCX_PERF_DATA_LAYOUT_SHORT,
+    UCX_PERF_DATA_LAYOUT_BCOPY,
+    UCX_PERF_DATA_LAYOUT_ZCOPY,
     UCX_PERF_DATA_LAYOUT_LAST
 } ucx_perf_data_layout_t;
 

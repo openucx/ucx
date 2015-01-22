@@ -39,7 +39,7 @@ typedef struct uct_ib_iface {
         unsigned            rx_headroom;         /* user-requested headroom */
         unsigned            rx_payload_offset;   /* offset from desc to payload */
         unsigned            rx_hdr_offset;       /* offset from desc to network header */
-        unsigned            rx_data_size;
+        unsigned            seg_size;
     } config;
 
 } uct_ib_iface_t;
@@ -125,6 +125,11 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {
     return ucs_derived_of(iface->super.super.pd, uct_ib_device_t);
+}
+
+static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)
+{
+    return uct_ib_device_port_attr(uct_ib_iface_device(iface), iface->port_num);
 }
 
 static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
