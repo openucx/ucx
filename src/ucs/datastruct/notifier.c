@@ -5,10 +5,11 @@
 * $HEADER$
 */
 
-#include "callback.h"
-
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
+#include <ucs/sys/sys.h>
+
+#include "notifier.h"
 
 
 void ucs_notifier_chain_init(ucs_notifier_chain_t *chain)
