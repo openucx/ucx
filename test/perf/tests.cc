@@ -18,9 +18,9 @@ static void uct_test_am_pack_cb(void *dest, void *arg, size_t length)
 }
 
 template <ucx_perf_data_layout_t D>
-static inline void uct_perf_am_short_b(uct_ep_h ep, uint64_t hdr,
-                                       void *buffer, unsigned length,
-                                       uct_perf_context_t *perf)
+static UCS_F_ALWAYS_INLINE
+void uct_perf_am_short_b(uct_ep_h ep, uint64_t hdr, void *buffer, unsigned length,
+                         uct_perf_context_t *perf)
 {
     ucs_status_t status;
 
@@ -47,9 +47,9 @@ static inline void uct_perf_am_short_b(uct_ep_h ep, uint64_t hdr,
 }
 
 template <ucx_perf_data_layout_t D>
-static inline void uct_perf_put_short_b(uct_ep_h ep, void *buffer, unsigned length,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uct_perf_context_t *perf)
+static UCS_F_ALWAYS_INLINE void
+uct_perf_put_short_b(uct_ep_h ep, void *buffer, unsigned length,
+                     uint64_t remote_addr, uct_rkey_t rkey, uct_perf_context_t *perf)
 {
     ucs_status_t status;
 
@@ -75,7 +75,7 @@ static inline void uct_perf_put_short_b(uct_ep_h ep, void *buffer, unsigned leng
 }
 
 template <ucx_perf_data_layout_t D>
-static ucs_status_t uct_perf_run_put_short_lat(uct_perf_context_t *perf)
+static ucs_status_t uct_perf_run_put_lat(uct_perf_context_t *perf)
 {
     volatile uint8_t *send_sn, *recv_sn;
     unsigned my_index;
@@ -131,7 +131,7 @@ static ucs_status_t uct_perf_run_put_short_lat(uct_perf_context_t *perf)
 }
 
 template <ucx_perf_data_layout_t D>
-static ucs_status_t uct_perf_run_am_short_lat(uct_perf_context_t *perf)
+static ucs_status_t uct_perf_run_am_lat(uct_perf_context_t *perf)
 {
     uint64_t sn, *am_sn;
     unsigned my_index;
@@ -180,7 +180,7 @@ static ucs_status_t uct_perf_run_am_short_lat(uct_perf_context_t *perf)
 }
 
 template <ucx_perf_data_layout_t D>
-static ucs_status_t uct_perf_run_put_short_bw(uct_perf_context_t *perf)
+static ucs_status_t uct_perf_run_put_bw(uct_perf_context_t *perf)
 {
     unsigned long remote_addr;
     uct_rkey_t rkey;
@@ -221,6 +221,55 @@ static ucs_status_t uct_perf_run_put_short_bw(uct_perf_context_t *perf)
     return UCS_OK;
 }
 
+template <ucx_perf_data_layout_t D>
+static ucs_status_t uct_perf_run_am_bw(uct_perf_context_t *perf)
+{
+    void *buffer;
+    unsigned length;
+    uct_ep_h ep;
+    uint64_t send_sn, *recv_sn;
+    uint64_t window;
+
+    if (perf->super.params.message_size < 8) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    send_sn  = 0;
+    recv_sn  = (uint64_t*)perf->super.recv_buffer;
+    *recv_sn = 0;
+
+    rte_call(&perf->super, barrier);
+
+    ucx_perf_test_start_clock(&perf->super);
+
+    buffer = perf->super.send_buffer;
+    length = perf->super.params.message_size;
+    window = perf->super.params.am_window;
+
+    if (rte_call(&perf->super, group_index) == 0) {
+        ep = perf->peers[1].ep;
+        UCX_PERF_TEST_FOREACH(&perf->super) {
+            ++send_sn;
+            while (send_sn > (*recv_sn) + window) {
+                uct_progress(perf->context);
+            }
+            uct_perf_am_short_b<D>(ep, send_sn, buffer, length, perf);
+            ucx_perf_update(&perf->super, 1, length);
+        }
+        uct_perf_am_short_b<D>(ep, (uint64_t)-1, buffer, length, perf);
+    } else {
+        ep = perf->peers[0].ep;
+        while (*recv_sn != (uint64_t)-1) {
+            uct_progress(perf->context);
+            if (*recv_sn > send_sn + (window / 2)) {
+                send_sn = *recv_sn;
+                uct_perf_am_short_b<D>(ep, send_sn, buffer, length, perf);
+            }
+        }
+    }
+    return UCS_OK;
+}
+
 #define uct_perf_test_dispatch_data(perf, func) \
     ({ \
         ucs_status_t status; \
@@ -248,15 +297,19 @@ ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf)
     if (perf->super.params.command == UCX_PERF_TEST_CMD_AM &&
         perf->super.params.test_type == UCX_PERF_TEST_TYPE_PINGPONG)
     {
-        status = uct_perf_test_dispatch_data(perf, uct_perf_run_am_short_lat);
+        status = uct_perf_test_dispatch_data(perf, uct_perf_run_am_lat);
     } else if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT &&
                perf->super.params.test_type == UCX_PERF_TEST_TYPE_PINGPONG)
     {
-        status = uct_perf_test_dispatch_data(perf, uct_perf_run_put_short_lat);
+        status = uct_perf_test_dispatch_data(perf, uct_perf_run_put_lat);
+    } else if (perf->super.params.command == UCX_PERF_TEST_CMD_AM &&
+               perf->super.params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI)
+    {
+        status = uct_perf_test_dispatch_data(perf, uct_perf_run_am_bw);
     } else if (perf->super.params.command == UCX_PERF_TEST_CMD_PUT &&
                perf->super.params.test_type == UCX_PERF_TEST_TYPE_STREAM_UNI)
     {
-        status = uct_perf_test_dispatch_data(perf, uct_perf_run_put_short_bw);
+        status = uct_perf_test_dispatch_data(perf, uct_perf_run_put_bw);
     } else {
         return UCS_ERR_INVALID_PARAM;
     }
