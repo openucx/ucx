@@ -381,7 +381,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
         char result_str[200] = {0};
         if (strcmp(resource.tl_name, "ud_verbs") == 0 &&
-            test->command != UCX_PERF_TEST_CMD_AM_SHORT) {
+            test->command != UCX_PERF_TEST_CMD_AM) {
             snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : SKIPPED",
                     resource.tl_name, resource.dev_name, test->title);
             UCS_TEST_MESSAGE << result_str;

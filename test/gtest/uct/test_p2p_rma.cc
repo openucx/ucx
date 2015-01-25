@@ -56,16 +56,25 @@ public:
 };
 
 UCS_TEST_P(uct_p2p_rma_test, put_short) {
+    if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_SHORT)) { 
+        UCS_TEST_SKIP;
+    }
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_short),
                     0ul, get_entity(0).iface_attr().cap.put.max_short);
 }
 
 UCS_TEST_P(uct_p2p_rma_test, put_bcopy) {
+    if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_BCOPY)) { 
+        UCS_TEST_SKIP;
+    }
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy),
                     0ul, get_entity(0).iface_attr().cap.put.max_bcopy);
 }
 
 UCS_TEST_P(uct_p2p_rma_test, put_zcopy) {
+    if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY)) { 
+        UCS_TEST_SKIP;
+    }
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy),
                     0ul, get_entity(0).iface_attr().cap.put.max_zcopy);
 }
