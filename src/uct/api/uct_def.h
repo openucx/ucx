@@ -44,18 +44,29 @@ typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
 
 
 /**
- * Active message handler.
+ * Callback to process incoming data buffer.
+ * Used for atomics, get bcopy.
  *
+ * @param [in]  desc     Points to the received descriptor, just after rx_headroom.
  * @param [in]  data     Points to the received data.
  * @param [in]  length   Length of data.
  * @param [in]  arg      User-defined argument.
  *
- * @note The reserved headroom is placed right before the data.
- *
- * @return UCS_OK - descriptor is used and should be release
- *         UCS_INPROGRESS - descriptor is owned by the user, and would be released later.
+ * @return UCS_OK - descriptor was consumed, and can be released by the caller.
+ *         UCS_INPROGRESS - descriptor is owned by the callee, and would be released later.
  */
-typedef ucs_status_t (*uct_am_callback_t)(void *data, unsigned length, void *arg);
+typedef ucs_status_t (*uct_bcopy_recv_callback_t)(void *desc, void *data,
+                                                  size_t length, void *arg);
+
+
+/**
+ * Callback to process incoming immediate data.
+ * Used for atomics.
+ *
+ * @param [in]  arg      User-defined argument.
+ * @param [in]  data     Data received from remote.
+ */
+typedef void (*uct_imm_recv_callback_t)(void *arg, uint64_t data);
 
 
 /**

@@ -194,7 +194,7 @@ static void uct_perf_iface_flush_b(uct_perf_context_t *perf)
     }
 }
 
-ucs_status_t ucx_perf_am_hander(void *data, unsigned length, void *arg)
+ucs_status_t ucx_perf_am_hander(void *desc, void *data, size_t length, void *arg)
 {
     *(uint64_t*)arg = *(uint64_t*)data; /* Only copy out the header */
     return UCS_OK;

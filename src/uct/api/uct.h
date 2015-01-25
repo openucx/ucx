@@ -278,7 +278,7 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
  * @param [in]  arg      Active message argument.
  */
 ucs_status_t uct_set_am_handler(uct_iface_h iface, uint8_t id,
-                                uct_am_callback_t cb, void *arg);
+                                uct_bcopy_recv_callback_t cb, void *arg);
 
 
 /**
@@ -424,6 +424,21 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t l
                                             uct_rkey_t rkey, uct_completion_t *comp)
 {
     return ep->iface->ops.ep_put_zcopy(ep, buffer, length, lkey, remote_addr,
+                                       rkey, comp);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, size_t length,
+                                            uint64_t remote_addr, uct_rkey_t rkey,
+                                            uct_bcopy_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_get_bcopy(ep, length, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
+                                            uct_lkey_t lkey, uint64_t remote_addr,
+                                            uct_rkey_t rkey, uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_get_zcopy(ep, buffer, length, lkey, remote_addr,
                                        rkey, comp);
 }
 
