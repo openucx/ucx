@@ -12,10 +12,12 @@
 #include <ucs/type/status.h>
 #include <stdint.h>
 
+
 #define UCT_MAX_NAME_LEN         64
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_INVALID_MEM_KEY      ((uintptr_t)0)
+#define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
 typedef struct uct_context       *uct_context_h;
@@ -33,6 +35,7 @@ typedef void                     *uct_rkey_ctx_h;
 typedef struct uct_iface_attr    uct_iface_attr_t;
 typedef struct uct_pd_attr       uct_pd_attr_t;
 typedef struct uct_completion    uct_completion_t;
+
 
 /**
  * Remote key release function.
