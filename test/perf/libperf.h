@@ -116,6 +116,7 @@ typedef struct ucx_perf_test_params {
 
     size_t                 message_size;    /* Test message size */
     size_t                 alignment;       /* Message buffer alignment */
+    unsigned               am_window;       /* Window size for AM bandwidth */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
     double                 max_time;        /* Time limit (seconds), 0 - unlimited */

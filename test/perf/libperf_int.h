@@ -83,7 +83,8 @@ ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf);
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result);
 
 
-static inline int ucx_perf_context_done(ucx_perf_context_t *perf) {
+static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
+{
     return ucs_unlikely((perf->current.iters > perf->max_iter) ||
                         (perf->current.time  > perf->end_time));
 }
