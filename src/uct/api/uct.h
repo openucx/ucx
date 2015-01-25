@@ -358,68 +358,68 @@ ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
 void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob);
 
 
-static inline ucs_status_t uct_iface_query(uct_iface_h iface,
+UCT_INLINE_API ucs_status_t uct_iface_query(uct_iface_h iface,
                                            uct_iface_attr_t *iface_attr)
 {
     return iface->ops.iface_query(iface, iface_attr);
 }
 
-static inline ucs_status_t uct_iface_get_address(uct_iface_h iface,
+UCT_INLINE_API ucs_status_t uct_iface_get_address(uct_iface_h iface,
                                                  uct_iface_addr_t *iface_addr)
 {
     return iface->ops.iface_get_address(iface, iface_addr);
 }
 
-static inline ucs_status_t uct_iface_flush(uct_iface_h iface)
+UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface)
 {
     return iface->ops.iface_flush(iface);
 }
 
-static inline void uct_iface_close(uct_iface_h iface)
+UCT_INLINE_API void uct_iface_close(uct_iface_h iface)
 {
     iface->ops.iface_close(iface);
 }
 
-static inline ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
+UCT_INLINE_API ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
 {
     return iface->ops.ep_create(iface, ep_p);
 }
 
-static inline void uct_ep_destroy(uct_ep_h ep)
+UCT_INLINE_API void uct_ep_destroy(uct_ep_h ep)
 {
     ep->iface->ops.ep_destroy(ep);
 }
 
-static inline ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
+UCT_INLINE_API ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_get_address(ep, ep_addr);
 }
 
-static inline ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr)
+UCT_INLINE_API ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr)
 {
     return ep->iface->ops.ep_connect_to_iface(ep, iface_addr);
 }
 
-static inline ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
+UCT_INLINE_API ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
                                                 uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, iface_addr, ep_addr);
 }
 
-static inline ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned length,
+UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned length,
                                             uint64_t remote_addr, uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
 }
 
-static inline ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+UCT_INLINE_API ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
                                             void *arg, size_t length, uint64_t remote_addr,
                                             uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, length, remote_addr, rkey);
 }
 
-static inline ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
+UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
                                             uct_lkey_t lkey, uint64_t remote_addr,
                                             uct_rkey_t rkey, uct_completion_t *comp)
 {
@@ -427,20 +427,20 @@ static inline ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t le
                                        rkey, comp);
 }
 
-static inline ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
+UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                            void *payload, unsigned length)
 {
     return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
 }
 
-static inline ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
+UCT_INLINE_API ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
                                            uct_pack_callback_t pack_cb,
                                            void *arg, size_t length)
 {
     return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg, length);
 }
 
-static inline ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
+UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
                                            unsigned header_length, void *payload,
                                            size_t length, uct_lkey_t lkey,
                                            uct_completion_t *comp)
@@ -449,7 +449,7 @@ static inline ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header
                                       length, lkey, comp);
 }
 
-static inline ucs_status_t uct_ep_flush(uct_ep_h ep)
+UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep)
 {
     return ep->iface->ops.ep_flush(ep);
 }
