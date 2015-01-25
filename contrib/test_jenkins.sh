@@ -38,8 +38,10 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # Set CPU affinity to 2 cores, for performance tests
     if [ -n "$EXECUTOR_NUMBER" ]; then
         AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
+        TIMEOUT="timeout 10m"
     else
         AFFINITY=""
+        TIMEOUT=""
     fi
 
     echo "Build gtest"
@@ -47,12 +49,15 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     make clean && ../contrib/configure-devel --with-mpi && make $make_opt
     module unload hpcx-gcc
 
-    echo "Running unit tests"
-    $AFFINITY make -C test/gtest test
+    echo "Running ucx_info"
+    $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y
+
+        echo "Running unit tests"
+    $AFFINITY $TIMEOUT make -C test/gtest test
 
     echo "Running valgrind tests"
     module load tools/valgrind-latest
-    $AFFINITY make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
+    $AFFINITY $TIMEOUT make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
     module unload tools/valgrind-latest
 
     echo "Build with coverity"
