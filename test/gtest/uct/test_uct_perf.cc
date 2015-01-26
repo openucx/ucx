@@ -310,6 +310,7 @@ protected:
     }
 
     static test_spec tests[];
+    static int can_run_test(const test_spec &test, uint32_t cap_flags);
 };
 
 
@@ -350,8 +351,41 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
   { NULL }
 };
 
+int test_uct_perf::can_run_test(const test_spec &test, uint32_t cap_flags)
+{
+    switch (test.command) {
+        case UCX_PERF_TEST_CMD_AM:
+            switch (test.data_layout) {
+                case UCX_PERF_DATA_LAYOUT_SHORT:
+                    return cap_flags & UCT_IFACE_FLAG_AM_SHORT;
+                case UCX_PERF_DATA_LAYOUT_BCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_AM_BCOPY;
+                case UCX_PERF_DATA_LAYOUT_ZCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_AM_ZCOPY;
+                case UCX_PERF_DATA_LAYOUT_LAST:
+                    return 0;
+            }
+            return 0;
+        case UCX_PERF_TEST_CMD_PUT:
+            switch (test.data_layout) {
+                case UCX_PERF_DATA_LAYOUT_SHORT:
+                    return cap_flags & UCT_IFACE_FLAG_PUT_SHORT;
+                case UCX_PERF_DATA_LAYOUT_BCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_PUT_BCOPY;
+                case UCX_PERF_DATA_LAYOUT_ZCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_PUT_ZCOPY;
+                case UCX_PERF_DATA_LAYOUT_LAST:
+                    return 0;
+            }
+        case UCX_PERF_TEST_CMD_LAST:
+            return 0;
+    }
+    return 0;
+}
+
 UCS_TEST_P(test_uct_perf, envelope) {
     uct_resource_desc_t resource = GetParam();
+    entity tl(resource);
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {
@@ -380,12 +414,11 @@ UCS_TEST_P(test_uct_perf, envelope) {
     /* Run all tests */
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
         char result_str[200] = {0};
-        if (strcmp(resource.tl_name, "ud_verbs") == 0 &&
-            test->command != UCX_PERF_TEST_CMD_AM) {
+        if (!can_run_test(*test, tl.iface_attr().cap.flags)) {
             snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : SKIPPED",
                     resource.tl_name, resource.dev_name, test->title);
             UCS_TEST_MESSAGE << result_str;
-            break;
+            continue;
         }
         ucx_perf_result_t result = run_multi_threaded(*test,
                                                       resource.tl_name,
