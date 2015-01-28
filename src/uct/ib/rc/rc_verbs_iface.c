@@ -327,7 +327,7 @@ static uct_tl_ops_t uct_rc_verbs_tl_ops = {
 
 static void uct_rc_verbs_register(uct_context_t *context)
 {
-    uct_register_tl(context, "rc_verbs", uct_rc_verbs_iface_config_table,
+    uct_register_tl(context, "rc", uct_rc_verbs_iface_config_table,
                     sizeof(uct_rc_verbs_iface_config_t), "RC_VERBS_", &uct_rc_verbs_tl_ops);
 }
 
