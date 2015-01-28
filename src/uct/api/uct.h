@@ -455,6 +455,60 @@ UCT_INLINE_API ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
     return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg, length);
 }
 
+UCT_INLINE_API ucs_status_t uct_ep_atomic_add64(uct_ep_h ep, uint64_t add,
+                                                uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_atomic_add64(ep, add, remote_addr, rkey);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd64(uct_ep_h ep, uint64_t add,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_swap64(uct_ep_h ep, uint64_t swap,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap64(uct_ep_h ep, uint64_t compare, uint64_t swap,
+                                                  uint64_t remote_addr, uct_rkey_t rkey,
+                                                  uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_add32(uct_ep_h ep, uint32_t add,
+                                                uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_atomic_add32(ep, add, remote_addr, rkey);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd32(uct_ep_h ep, uint32_t add,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_swap32(uct_ep_h ep, uint32_t swap,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare, uint32_t swap,
+                                                  uint64_t remote_addr, uct_rkey_t rkey,
+                                                  uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, cb, arg);
+}
+
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
                                            unsigned header_length, void *payload,
                                            size_t length, uct_lkey_t lkey,
