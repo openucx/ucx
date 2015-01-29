@@ -45,7 +45,7 @@ typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
 
 /**
  * Callback to process incoming data buffer.
- * Used for atomics, get bcopy.
+ * Used for active messages, get bcopy.
  *
  * @param [in]  desc     Points to the received descriptor, just after rx_headroom.
  * @param [in]  data     Points to the received data.
@@ -61,7 +61,7 @@ typedef ucs_status_t (*uct_bcopy_recv_callback_t)(void *desc, void *data,
 
 /**
  * Callback to process incoming immediate data.
- * Used for atomics.
+ * Used for fetching results of atomic operations.
  *
  * @param [in]  arg      User-defined argument.
  * @param [in]  data     Data received from remote.
