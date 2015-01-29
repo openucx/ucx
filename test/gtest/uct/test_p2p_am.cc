@@ -21,13 +21,13 @@ public:
         m_am_count = 0;
     }
 
-    static ucs_status_t am_handler(void *data, unsigned length, void *arg) {
+    static ucs_status_t am_handler(void *desc, void *data, size_t length, void *arg) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
         self->am_handler(data, length);
         return UCS_OK; /* TODO test keeping data */
     }
 
-    void am_handler(void *data, unsigned length) {
+    void am_handler(void *data, size_t length) {
         uint64_t *hdr = (uint64_t*)data;
         if (*hdr != HDR) {
             UCS_TEST_ABORT("Invalid AM header received");

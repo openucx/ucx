@@ -36,8 +36,8 @@ struct uct_tl_ops {
  * Active message handle table entry
  */
 typedef struct uct_am_handler {
-    uct_am_callback_t        cb;
-    void                     *arg;
+    uct_bcopy_recv_callback_t cb;
+    void                      *arg;
 } uct_am_handler_t;
 
 
@@ -108,10 +108,10 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
 
 
 static inline ucs_status_t uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id,
-                                               void *data, unsigned length)
+                                               void *desc, void *data, unsigned length)
 {
     uct_am_handler_t *handler = &iface->am[id];
-    return handler->cb(data, length, handler->arg);
+    return handler->cb(desc, data, length, handler->arg);
 }
 
 #endif

@@ -120,7 +120,7 @@ static inline ucs_status_t uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *ifac
             hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
             VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
 
-            status = uct_rc_iface_invoke_am(&iface->super, hdr, wc[i].byte_len);
+            status = uct_rc_iface_invoke_am(&iface->super, desc, hdr, wc[i].byte_len);
             if (status == UCS_OK) {
                 ucs_mpool_put(desc);
             }

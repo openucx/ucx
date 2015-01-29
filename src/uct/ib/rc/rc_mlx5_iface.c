@@ -138,21 +138,23 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     ucs_memory_cpu_load_fence();
 
     desc     = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q, uct_rc_mlx5_recv_desc_t, queue);
-    hdr      = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
     byte_len = ntohl(cqe->byte_cnt);
-    VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
 
+    /* Get a pointer to AM header (after which comes the payload)
+     * Support cases of inline scatter by pointing directly to CQE.
+     */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-        /* TODO avoid memcpy, pass CQE data to callback.
-         * Need API change for this...
-         */
-        memcpy(hdr, cqe, byte_len);
+        status = uct_rc_iface_invoke_am(&iface->super, &desc->super,
+                                        (uct_rc_hdr_t*)cqe, byte_len);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         /* TODO support inline scatter of 64b */
         ucs_fatal("inl data @ %p", cqe - 1);
+    } else {
+        hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
+        VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
+        status = uct_rc_iface_invoke_am(&iface->super, &desc->super, hdr,
+                                        byte_len);
     }
-
-    status = uct_rc_iface_invoke_am(&iface->super, hdr, byte_len);
     if (status == UCS_OK) {
         ucs_mpool_put(desc);
     }

@@ -80,7 +80,8 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
                             uct_iface_mp_init_obj, init_obj_cb, mp_p);
 }
 
-static ucs_status_t uct_iface_stub_am_handler(void *desc, unsigned length, void *arg)
+static ucs_status_t uct_iface_stub_am_handler(void *desc, void *data,
+                                              size_t length, void *arg)
 {
     uint8_t id = (uintptr_t)arg;
     ucs_warn("got active message id %d, but no handler installed", id);
@@ -88,7 +89,7 @@ static ucs_status_t uct_iface_stub_am_handler(void *desc, unsigned length, void 
 }
 
 ucs_status_t uct_set_am_handler(uct_iface_h tl_iface, uint8_t id,
-                                uct_am_callback_t cb, void *arg)
+                                uct_bcopy_recv_callback_t cb, void *arg)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 

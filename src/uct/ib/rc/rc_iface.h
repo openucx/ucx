@@ -92,10 +92,11 @@ uct_rc_iface_tx_moderation(uct_rc_iface_t* iface, uct_rc_ep_t* ep, uint8_t flag)
 
 
 static inline ucs_status_t
-uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned byte_len)
+uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
+                       uct_rc_hdr_t *hdr, unsigned byte_len)
 {
     ucs_trace_data("RX: AM [%d]", hdr->am_id);
-    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, desc, hdr + 1,
                                byte_len - sizeof(*hdr));
 }
 
