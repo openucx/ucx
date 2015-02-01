@@ -94,18 +94,27 @@ private:
 };
 
 UCS_TEST_P(uct_p2p_am_test, am_short) {
-    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
-                    0ul,
-                    get_entity(0).iface_attr().cap.am.max_short - sizeof(uint64_t));
+  if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT)) {
+            UCS_TEST_SKIP;
+  }
+  test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                  0ul,
+                  get_entity(0).iface_attr().cap.am.max_short - sizeof(uint64_t));
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
-    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
-                    0ul,
-                    get_entity(0).iface_attr().cap.am.max_bcopy - sizeof(HDR));
+   if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY)) {
+            UCS_TEST_SKIP;
+   }
+   test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
+                   0ul,
+                   get_entity(0).iface_attr().cap.am.max_bcopy - sizeof(HDR));
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
+   if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY)) {
+            UCS_TEST_SKIP;
+   }
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
                     0ul,
                     get_entity(0).iface_attr().cap.am.max_zcopy - sizeof(HDR));

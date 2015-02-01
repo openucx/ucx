@@ -13,8 +13,6 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
-#define UCT_IB_MAX_WC 32
-
 
 ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"RC_", "", NULL,

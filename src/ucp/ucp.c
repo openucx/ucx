@@ -215,7 +215,7 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
     tmp_resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "temporary resources list");
     if (tmp_resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_resources;
+        goto err_free_ucp_config;
     }
 
     /* test the user's ucp_configuration (devices list) against the uct resources */
@@ -242,6 +242,8 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
     uct_release_resource_list(tmp_resources);
     uct_release_resource_list(resources);
 
+    ucs_config_parser_release_opts(&ucp_config, ucp_iface_config_table);
+
     context->num_resources = final_num_resources;
     *context_p = context;
     return UCS_OK;
@@ -250,6 +252,8 @@ err_free_final_resources:
     ucs_free(context->resources);
 err_free_tmp_resources:
     ucs_free(tmp_resources);
+err_free_ucp_config:
+    ucs_config_parser_release_opts(&ucp_config, ucp_iface_config_table);
 err_free_resources:
     uct_release_resource_list(resources);
 err_free_uct:

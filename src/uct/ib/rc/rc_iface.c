@@ -123,7 +123,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
     self->config.tx_min_inline   = config->super.tx.min_inline;
     self->config.tx_moderation   = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
                                            ucs_roundup_pow2(config->super.tx.queue_len / 4));
-    self->config.rx_max_batch    = ucs_min(config->super.rx.max_batch, config->super.tx.queue_len / 4);
+    self->config.rx_max_batch    = ucs_min(config->super.rx.max_batch, config->super.rx.queue_len / 4);
     self->config.rx_inline       = config->super.rx.inl;
 
     memset(self->eps, 0, sizeof(self->eps));

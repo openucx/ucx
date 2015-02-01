@@ -254,6 +254,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
         if (desc == NULL) {
             break;
         }
+        VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
         wrs[count].sg.length = iface->config.seg_size;
