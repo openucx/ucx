@@ -85,6 +85,26 @@ typedef struct uct_iface_mpool_config {
      (_offset) + ucs_offsetof(uct_iface_mpool_config_t, bufs_grow), UCS_CONFIG_TYPE_UINT}
 
 
+/**
+ * Get a descriptor from memory pool, tell valgrind it's already defined, return
+ * error if the memory pool is empty.
+ *
+ * @param _mp     Memory pool to get descriptor from.
+ * @param _desc   Variable to assign descriptor to.
+ * @param _error  Error value to return if memory poll is empty.
+ *
+ * @return TX descriptor fetched from memory pool.
+ */
+#define UCT_TL_IFACE_GET_TX_DESC(_mp, _desc, _error) \
+    { \
+        _desc = ucs_mpool_get(_mp); \
+        if (_desc == NULL) { \
+            return _error; \
+        } \
+        \
+        VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
+    }
+
 
 typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj, uct_lkey_t lkey);
 

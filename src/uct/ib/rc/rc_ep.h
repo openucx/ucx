@@ -13,6 +13,12 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/callbackq.h>
 
+/*
+ * Macro to generate functions for AMO completions.
+ */
+#define UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be) \
+    uct_rc_ep_atomic_completion_##_num_bits##_be##_is_be
+
 
 struct uct_rc_ep_addr {
     uct_ep_addr_t     super;
@@ -52,7 +58,14 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_addr,
                                      uct_ep_addr_t *tl_ep_addr);
 
-static inline void
+void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self);
+
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 0)(ucs_callback_t *self);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 1)(ucs_callback_t *self);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(64, 0)(ucs_callback_t *self);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(64, 1)(ucs_callback_t *self);
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_ep_add_user_completion(uct_rc_ep_t* ep, uct_completion_t* comp, uint16_t sn)
 {
     ucs_callbackq_elem_t* cbq;
@@ -65,6 +78,5 @@ uct_rc_ep_add_user_completion(uct_rc_ep_t* ep, uct_completion_t* comp, uint16_t 
     cbq->sn = sn;
     ucs_callbackq_push(&ep->tx.comp, cbq);
 }
-
 
 #endif

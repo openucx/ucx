@@ -54,6 +54,27 @@ typedef struct uct_ib_mlx5_cq {
 } uct_ib_mlx5_cq_t;
 
 
+struct uct_ib_mlx5_atomic_masked_cswap32_seg {
+    uint32_t           swap;
+    uint32_t           compare;
+    uint32_t           swap_mask;
+    uint32_t           compare_mask;
+} UCS_S_PACKED;
+
+
+struct uct_ib_mlx5_atomic_masked_fadd32_seg {
+    uint32_t           add;
+    uint32_t           filed_boundary;
+    uint32_t           reserved[2];
+} UCS_S_PACKED;
+
+
+struct uct_ib_mlx5_atomic_masked_cswap64_seg {
+    uint64_t           swap;
+    uint64_t           compare;
+    uint64_t           swap_mask;
+    uint64_t           compare_mask;
+} UCS_S_PACKED;
 
 /**
  * Get internal QP information.

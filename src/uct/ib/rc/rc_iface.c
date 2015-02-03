@@ -31,7 +31,9 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                                       UCT_IFACE_FLAG_AM_ZCOPY |
                                       UCT_IFACE_FLAG_PUT_SHORT |
                                       UCT_IFACE_FLAG_PUT_BCOPY |
-                                      UCT_IFACE_FLAG_PUT_ZCOPY;
+                                      UCT_IFACE_FLAG_PUT_ZCOPY |
+                                      UCT_IFACE_FLAG_GET_BCOPY |
+                                      UCT_IFACE_FLAG_GET_ZCOPY;
 }
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
@@ -98,8 +100,7 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
     return UCS_ERR_WOULD_BLOCK;
 }
 
-static void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj,
-                                        uct_lkey_t lkey)
+void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
 {
     uct_rc_iface_send_desc_t *desc = obj;
     desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
@@ -197,8 +198,8 @@ UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap)
 {
-    struct ibv_exp_qp_init_attr qp_init_attr;
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    struct ibv_exp_qp_init_attr qp_init_attr;
     struct ibv_qp *qp;
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
@@ -214,12 +215,26 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     qp_init_attr.qp_type             = IBV_QPT_RC;
     qp_init_attr.sq_sig_all          = 0;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
+    qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
     qp_init_attr.pd                  = dev->pd;
-#  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    qp_init_attr.max_inl_recv        = iface->config.rx_inline;
+
+#  if HAVE_IB_EXT_ATOMICS
+    qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
+    qp_init_attr.max_atomic_arg      = UCT_RC_MAX_ATOMIC_SIZE;
 #  endif
-    /* TODO max atomic */
+
+#  if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
+    if (dev->dev_attr.exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE) {
+        qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
+        qp_init_attr.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
+    }
+#  endif
+
+#  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
+    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
+    qp_init_attr.max_inl_recv       = iface->config.rx_inline;
+#  endif
+
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
     qp = ibv_create_qp(dev->pd, &qp_init_attr);
