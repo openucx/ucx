@@ -23,6 +23,18 @@ class test_abort_exception : public std::exception {
 
 
 class test_skip_exception : public std::exception {
+public:
+    test_skip_exception(const std::string& reason = "") : m_reason(reason) {
+    }
+    virtual ~test_skip_exception() throw() {
+    }
+
+    virtual const char* what() const throw() {
+        return m_reason.c_str();
+    }
+
+private:
+    const std::string m_reason;
 };
 
 /**
@@ -129,8 +141,8 @@ public:
         m_vec.push_back(ptr);
     }
 
-    const T& operator[](size_t index) const {
-        return *m_vec[index];
+    T& at(size_t index) const {
+        return *m_vec.at(index);
     }
 
     void clear() {
@@ -180,6 +192,10 @@ public:
 #define UCS_TEST_SKIP \
     do { \
         throw ucs::test_skip_exception(); \
+    } while(0)
+#define UCS_TEST_SKIP_R(_reason) \
+    do { \
+        throw ucs::test_skip_exception(_reason); \
     } while(0)
 
 

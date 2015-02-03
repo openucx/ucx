@@ -12,6 +12,9 @@ extern "C" {
 #endif
 #include <ucs/sys/sys.h>
 }
+#include "test_helpers.h"
+
+static int ucs_gtest_random_seed = -1;
 
 class valgrind_errors_Test : public ::testing::Test {
 private:
@@ -32,7 +35,7 @@ void parse_test_opts(int argc, char **argv) {
     while ((c = getopt(argc, argv, "s:")) != -1) {
         switch (c) {
         case 's':
-            srand(atoi(optarg));
+            ucs_gtest_random_seed = atoi(optarg);
             break;
         default:
             fprintf(stderr, "Usage: gtest [ -s rand-seed ]\n");
@@ -53,5 +56,10 @@ int main(int argc, char **argv) {
                         new ::testing::internal::TestFactoryImpl<valgrind_errors_Test>);
     }
     parse_test_opts(argc, argv);
+    if (ucs_gtest_random_seed == -1) {
+        ucs_gtest_random_seed = time(NULL) % 32768;
+    }
+    UCS_TEST_MESSAGE << "Using random seed of " << ucs_gtest_random_seed;
+    srand(ucs_gtest_random_seed);
     return RUN_ALL_TESTS();
 }
