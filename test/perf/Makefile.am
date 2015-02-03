@@ -75,7 +75,7 @@ help:
 	@echo "Targets:"
 	@echo "  test       : Run performance test."
 	@echo
-	@echo "Evnironment variables:"
+	@echo "Environment variables:"
 	@echo "  MPI_ARGS   : Arguments for mpirun (\"$(MPI_ARGS)\")"
 	@echo "  TEST_ARGS  : Arguments for performance test (\"$(TEST_ARGS)\")"
 	@echo

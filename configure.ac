@@ -18,12 +18,11 @@ define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs
 define([libucx_so_version], 2:1:0)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
-AC_USE_SYSTEM_EXTENSIONS
-
 
 config_flags="$*"
 valgrind_libpath=""
 
+AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADERS([config.h])
 
 AH_TOP([

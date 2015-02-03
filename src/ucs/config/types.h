@@ -69,9 +69,10 @@ typedef enum {
  * Configuration printing flags
  */
 typedef enum {
-    UCS_CONFIG_PRINT_HEADER        = UCS_BIT(0),
-    UCS_CONFIG_PRINT_DOC           = UCS_BIT(1),
-    UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(2),
+    UCS_CONFIG_PRINT_CONFIG        = UCS_BIT(0),
+    UCS_CONFIG_PRINT_HEADER        = UCS_BIT(1),
+    UCS_CONFIG_PRINT_DOC           = UCS_BIT(2),
+    UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(3),
 } ucs_config_print_flags_t;
 
 

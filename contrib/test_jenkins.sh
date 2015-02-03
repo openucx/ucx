@@ -50,7 +50,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     module unload hpcx-gcc
 
     echo "Running ucx_info"
-    $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y
+    $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
 
         echo "Running unit tests"
     $AFFINITY $TIMEOUT make -C test/gtest test
