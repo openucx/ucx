@@ -83,8 +83,15 @@ AS_IF([test "x$with_ib" == xyes],
                       [], [], [[#include <infiniband/mlx5_hw.h>]])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
+                       IBV_DEVICE_MR_ALLOCATE,
+                       IBV_ACCESS_ALLOCATE_MR],
+                      [], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
+                       IBV_ACCESS_ALLOCATE_MR,
                        IBV_EXP_CQ_IGNORE_OVERRUN,
                        IBV_EXP_ACCESS_ALLOCATE_MR,
+                       IBV_EXP_DEVICE_MR_ALLOCATE,
                        IBV_EXP_DEVICE_DC_TRANSPORT,
                        IBV_EXP_ATOMIC_HCA_REPLY_BE,
                        ibv_exp_create_qp,
