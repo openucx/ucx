@@ -42,39 +42,39 @@ public:
         memcpy(hdr + 1, arg, length - sizeof(*hdr));
     }
 
-    ucs_status_t am_short(const entity&e, const mapped_buffer& sendbuf,
+    ucs_status_t am_short(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
-        return uct_ep_am_short(e.ep(), AM_ID, HDR, sendbuf.ptr(), sendbuf.length());
+        return uct_ep_am_short(ep, AM_ID, HDR, sendbuf.ptr(), sendbuf.length());
     }
 
-    ucs_status_t am_bcopy(const entity&e, const mapped_buffer& sendbuf,
+    ucs_status_t am_bcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
-        return uct_ep_am_bcopy(e.ep(), AM_ID, am_pack,
+        return uct_ep_am_bcopy(ep, AM_ID, am_pack,
                                sendbuf.ptr(), sendbuf.length() + sizeof(HDR));
     }
 
-    ucs_status_t am_zcopy(const entity&e, const mapped_buffer& sendbuf,
+    ucs_status_t am_zcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
          uint64_t hdr = HDR;
-         return uct_ep_am_zcopy(e.ep(), AM_ID, &hdr, sizeof(hdr),
+         return uct_ep_am_zcopy(ep, AM_ID, &hdr, sizeof(hdr),
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
                                 &m_completion->uct);
     }
 
-    virtual void test_xfer(send_func_t send, size_t length) {
+    virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
         ucs_status_t status;
 
-        status = uct_set_am_handler(get_entity(1).iface(), AM_ID, am_handler, (void*)this);
+        status = uct_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
         ASSERT_UCS_OK(status);
 
-        mapped_buffer sendbuf(length, 1, SEED1, get_entity(0));
-        mapped_buffer recvbuf(0, 0, 0, get_entity(0)); /* dummy */
+        mapped_buffer sendbuf(length, 1, SEED1, sender());
+        mapped_buffer recvbuf(0, 0, 0, sender()); /* dummy */
 
         unsigned count = m_completion_count;
-        status = (this->*send)(get_entity(0), sendbuf, recvbuf);
+        status = (this->*send)(sender_ep(), sendbuf, recvbuf);
 
         wait_for_local(status, count);
         sendbuf.pattern_fill(SEED2);
@@ -84,7 +84,7 @@ public:
             short_progress_loop();
         }
 
-        status = uct_set_am_handler(get_entity(1).iface(), AM_ID, NULL, NULL);
+        status = uct_set_am_handler(receiver().iface(), AM_ID, NULL, NULL);
         ASSERT_UCS_OK(status);
     }
 
@@ -94,30 +94,27 @@ private:
 };
 
 UCS_TEST_P(uct_p2p_am_test, am_short) {
-  if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT)) {
-            UCS_TEST_SKIP;
-  }
-  test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
-                  0ul,
-                  get_entity(0).iface_attr().cap.am.max_short - sizeof(uint64_t));
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                    0ul,
+                    sender().iface_attr().cap.am.max_short - sizeof(uint64_t),
+                    DIRECTION_SEND_TO_RECV);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
-   if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY)) {
-            UCS_TEST_SKIP;
-   }
-   test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
-                   0ul,
-                   get_entity(0).iface_attr().cap.am.max_bcopy - sizeof(HDR));
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
+                    0ul,
+                    sender().iface_attr().cap.am.max_bcopy - sizeof(HDR),
+                    DIRECTION_SEND_TO_RECV);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
-   if (!(get_entity(0).iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY)) {
-            UCS_TEST_SKIP;
-   }
+    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
                     0ul,
-                    get_entity(0).iface_attr().cap.am.max_zcopy - sizeof(HDR));
+                    sender().iface_attr().cap.am.max_zcopy - sizeof(HDR),
+                    DIRECTION_SEND_TO_RECV);
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)

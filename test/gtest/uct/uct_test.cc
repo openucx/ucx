@@ -8,7 +8,13 @@
 #include "uct_test.h"
 
 #include <ucs/gtest/test_helpers.h>
+#include <algorithm>
 #include <malloc.h>
+
+
+#define FOR_EACH_ENTITY(_iter) \
+    for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
+         _iter != m_entities.end(); ++_iter) \
 
 
 std::vector<uct_resource_desc_t> uct_test::enum_resources(const std::string& tl_name) {
@@ -35,6 +41,31 @@ std::vector<uct_resource_desc_t> uct_test::enum_resources(const std::string& tl_
     return result;
 }
 
+void uct_test::init() {
+}
+
+void uct_test::cleanup() {
+    m_entities.clear();
+}
+
+void uct_test::check_caps(unsigned flags) {
+    FOR_EACH_ENTITY(iter) {
+        if (!ucs_test_all_flags((*iter)->iface_attr().cap.flags, flags)) {
+            UCS_TEST_SKIP_R("unsupported");
+        }
+    }
+}
+
+const uct_test::entity& uct_test::ent(unsigned index) const {
+    return m_entities.at(index);
+}
+
+void uct_test::progress() const {
+    FOR_EACH_ENTITY(iter) {
+        (*iter)->progress();
+    }
+}
+
 uct_test::entity::entity(const uct_resource_desc_t& resource) {
     ucs_status_t status;
 
@@ -53,39 +84,13 @@ uct_test::entity::entity(const uct_resource_desc_t& resource) {
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_create(m_iface, &m_ep);
-    ASSERT_UCS_OK(status);
-
     uct_iface_config_release(iface_config);
 }
 
 uct_test::entity::~entity() {
-    uct_ep_destroy(m_ep);
+    std::for_each(m_eps.begin(), m_eps.end(), uct_ep_destroy);
     uct_iface_close(m_iface);
     uct_cleanup(m_ucth);
-}
-
-void uct_test::entity::connect(const uct_test::entity& other) const {
-    ucs_status_t status;
-
-    uct_iface_attr_t iface_attr;
-    status = uct_iface_query(other.m_iface, &iface_attr);
-    ASSERT_UCS_OK(status);
-
-    uct_iface_addr_t *iface_addr = (uct_iface_addr_t*)malloc(iface_attr.iface_addr_len);
-    uct_ep_addr_t *ep_addr       = (uct_ep_addr_t*)malloc(iface_attr.ep_addr_len);
-
-    status = uct_iface_get_address(other.m_iface, iface_addr);
-    ASSERT_UCS_OK(status);
-
-    status = uct_ep_get_address(other.m_ep, ep_addr);
-    ASSERT_UCS_OK(status);
-
-    status = uct_ep_connect_to_ep(m_ep, iface_addr, ep_addr);
-    ASSERT_UCS_OK(status);
-
-    free(ep_addr);
-    free(iface_addr);
 }
 
 uct_rkey_bundle_t uct_test::entity::mem_map(void *address, size_t length, uct_lkey_t *lkey_p) const {
@@ -131,8 +136,38 @@ const uct_iface_attr& uct_test::entity::iface_attr() const {
     return m_iface_attr;
 }
 
-uct_ep_h uct_test::entity::ep() const {
-    return m_ep;
+void uct_test::entity::add_ep() {
+    uct_ep_h ep;
+    ucs_status_t status = uct_ep_create(m_iface, &ep);
+    ASSERT_UCS_OK(status);
+    m_eps.push_back(ep);
+}
+
+uct_ep_h uct_test::entity::ep(unsigned index) const {
+    return m_eps[index];
+}
+
+void uct_test::entity::connect(unsigned index, const entity& other, unsigned other_index) const {
+    ucs_status_t status;
+
+    uct_iface_attr_t iface_attr;
+    status = uct_iface_query(other.m_iface, &iface_attr);
+    ASSERT_UCS_OK(status);
+
+    uct_iface_addr_t *iface_addr = (uct_iface_addr_t*)malloc(iface_attr.iface_addr_len);
+    uct_ep_addr_t *ep_addr       = (uct_ep_addr_t*)malloc(iface_attr.ep_addr_len);
+
+    status = uct_iface_get_address(other.m_iface, iface_addr);
+    ASSERT_UCS_OK(status);
+
+    status = uct_ep_get_address(other.m_eps[other_index], ep_addr);
+    ASSERT_UCS_OK(status);
+
+    status = uct_ep_connect_to_ep(m_eps[index], iface_addr, ep_addr);
+    ASSERT_UCS_OK(status);
+
+    free(ep_addr);
+    free(iface_addr);
 }
 
 void uct_test::entity::flush() const {
