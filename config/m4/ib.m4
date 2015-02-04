@@ -86,9 +86,22 @@ AS_IF([test "x$with_ib" == xyes],
                        IBV_EXP_CQ_IGNORE_OVERRUN,
                        IBV_EXP_ACCESS_ALLOCATE_MR,
                        IBV_EXP_DEVICE_DC_TRANSPORT,
+                       IBV_EXP_ATOMIC_HCA_REPLY_BE,
                        ibv_exp_create_qp,
                        ibv_exp_setenv],
                       [], [], [[#include <infiniband/verbs_exp.h>]])
+
+       AC_CHECK_DECLS([ibv_exp_post_send,
+                       IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP,
+                       IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,
+                       IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG,
+                       IBV_EXP_SEND_EXT_ATOMIC_INLINE],
+                      [],
+                      [have_ext_atomics=no],
+                      [[#include <infiniband/verbs_exp.h>]])
+       AS_IF([test "x$have_ext_atomics" != xno],
+             [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],
+             [AC_MSG_WARN([Compiling without extended atomics support])])
 
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
                          struct ibv_exp_qp_init_attr.max_inl_recv],

@@ -87,12 +87,12 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num), uct_rc_verbs_ep_t);
             ucs_assert(ep != NULL);
 
-            count = wc[i].wr_id + 1;
+            count = wc[i].wr_id + 1; /* Number of sends with WC completes in batch */
             ep->tx.available            += count;
-            ep->tx.ci                   += count;
+            ep->tx.completion_count     += count;
             iface->super.tx.outstanding -= count;
 
-            ucs_callbackq_pull(&ep->super.tx.comp, ep->tx.ci);
+            ucs_callbackq_pull(&ep->super.tx.comp, ep->tx.completion_count);
         }
     } else if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll send CQ");
@@ -145,9 +145,25 @@ static void uct_rc_verbs_iface_progress(void *arg)
     }
 }
 
+static inline int
+uct_rc_verbs_is_ext_atomic_supported(struct ibv_exp_device_attr *dev_attr,
+                                           size_t atomic_size)
+{
+#ifdef HAVE_IB_EXT_ATOMICS
+    struct ibv_exp_ext_atomics_params ext_atom = dev_attr->ext_atom;
+    return (ext_atom.log_max_atomic_inline >= ucs_ilog2(atomic_size)) &&
+           (ext_atom.log_atomic_arg_sizes & atomic_size);
+#else
+      return 0;
+#endif
+}
+
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    struct ibv_exp_device_attr *dev_attr =
+                    &uct_ib_iface_device(&iface->super.super)->dev_attr;
+
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
     ucs_status_t status;
@@ -167,33 +183,46 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->cap.put.max_zcopy =
                         uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
 
+    /* GET */
+    iface_attr->cap.get.max_bcopy = iface->super.super.config.seg_size;
+    iface_attr->cap.get.max_zcopy =
+                    uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
+
     /* AM */
     iface_attr->cap.am.max_short  = cap.max_inline_data
                                         - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_bcopy  = iface->super.super.config.seg_size
                                         - sizeof(uct_rc_hdr_t);
 
-    if (iface->am_hdr_mp != NULL) {
-        iface_attr->cap.am.max_zcopy  = iface->super.super.config.seg_size
+    iface_attr->cap.am.max_zcopy  = iface->super.super.config.seg_size
                                             - sizeof(uct_rc_hdr_t);
-        iface_attr->cap.am.max_hdr    = iface->config.max_am_hdr
+    iface_attr->cap.am.max_hdr    = iface->config.short_desc_size
                                             - sizeof(uct_rc_hdr_t);
-    } else {
-        iface_attr->cap.am.max_zcopy  = 0;
-        iface_attr->cap.am.max_hdr    = 0;
+
+    /*
+     * Atomics.
+     * Need to make sure device support at least one kind of atomics.
+     */
+    if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) ||
+        IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr) ||
+        IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr))
+    {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                                 UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                                 UCT_IFACE_FLAG_ATOMIC_CSWAP64;
+
+        if (uct_rc_verbs_is_ext_atomic_supported(dev_attr, sizeof(uint32_t))) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                                     UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                                     UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                                     UCT_IFACE_FLAG_ATOMIC_CSWAP32;
+        }
+
+        if (uct_rc_verbs_is_ext_atomic_supported(dev_attr, sizeof(uint64_t))) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64;
+        }
     }
-
-    /* TODO add get and atomics */
     return UCS_OK;
-}
-
-static void uct_rc_verbs_iface_amh_desc_init(uct_iface_h tl_iface, void *obj,
-                                             uct_lkey_t lkey)
-{
-    uct_rc_iface_send_desc_t *desc = obj;
-
-    desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
-    desc->queue.super.func = (void*)ucs_mpool_put;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
@@ -202,6 +231,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
 {
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
+    struct ibv_exp_device_attr *dev_attr;
+    size_t am_hdr_size;
     ucs_status_t status;
 
     extern uct_iface_ops_t uct_rc_verbs_iface_ops;
@@ -209,55 +240,51 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
                               rx_headroom, 0, &config->super);
 
     /* Initialize inline work request */
-    self->inl_am_wr.wr_id                   = 0;
-    self->inl_am_wr.next                    = NULL;
+    memset(&self->inl_am_wr, 0, sizeof(self->inl_am_wr));
     self->inl_am_wr.sg_list                 = self->inl_sge;
     self->inl_am_wr.num_sge                 = 2;
     self->inl_am_wr.opcode                  = IBV_WR_SEND;
     self->inl_am_wr.send_flags              = IBV_SEND_INLINE;
-    self->inl_am_wr.imm_data                = 0;
-    self->inl_rwrite_wr.wr_id               = 0;
-    self->inl_rwrite_wr.next                = NULL;
+
+    memset(&self->inl_rwrite_wr, 0, sizeof(self->inl_rwrite_wr));
     self->inl_rwrite_wr.sg_list             = self->inl_sge;
     self->inl_rwrite_wr.num_sge             = 1;
     self->inl_rwrite_wr.opcode              = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.send_flags          = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
-    self->inl_rwrite_wr.imm_data            = 0;
-    self->inl_rwrite_wr.wr.rdma.remote_addr = 0;
-    self->inl_rwrite_wr.wr.rdma.rkey        = 0;
-    self->inl_sge[0].addr                   = 0;
-    self->inl_sge[0].length                 = 0;
-    self->inl_sge[0].lkey                   = 0;
-    self->inl_sge[1].addr                   = 0;
-    self->inl_sge[1].length                 = 0;
-    self->inl_sge[1].lkey                   = 0;
+
+    memset(self->inl_sge, 0, sizeof(self->inl_sge));
 
     /* Configuration */
-    self->config.max_am_hdr                 = config->max_am_hdr;
+    am_hdr_size = ucs_max(config->max_am_hdr, sizeof(uct_rc_hdr_t));
+    self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
+    dev_attr = &uct_ib_iface_device(&self->super.super)->dev_attr;
+    if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) || IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr)) {
+        self->config.atomic32_completoin = uct_rc_ep_atomic_completion_32_be0;
+        self->config.atomic64_completoin = uct_rc_ep_atomic_completion_64_be0;
+    } else if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr)) {
+        self->config.atomic32_completoin = uct_rc_ep_atomic_completion_32_be1;
+        self->config.atomic64_completoin = uct_rc_ep_atomic_completion_64_be1;
+    }
 
-    /* Create AH headers mempool */
-    if (self->config.max_am_hdr >= sizeof(uct_rc_hdr_t)) {
-        status = uct_iface_mpool_create(&self->super.super.super.super,
-                                        sizeof(uct_rc_iface_send_desc_t) + self->config.max_am_hdr,
-                                        sizeof(uct_rc_iface_send_desc_t),
-                                        UCS_SYS_CACHE_LINE_SIZE,
-                                        &config->super.super.tx.mp,
-                                        self->super.config.tx_qp_len,
-                                        uct_rc_verbs_iface_amh_desc_init,
-                                        "rc_verbs_am_hdr_desc", &self->am_hdr_mp);
-        if (status != UCS_OK) {
-            goto err;
-        }
-    } else {
-        ucs_debug("header buffer is too small - disabling zero-copy active messages");
-        self->am_hdr_mp = NULL;
+    /* Create AH headers and Atomic mempool */
+    status = uct_iface_mpool_create(&self->super.super.super.super,
+                                    sizeof(uct_rc_iface_send_desc_t) +
+                                        self->config.short_desc_size,
+                                    sizeof(uct_rc_iface_send_desc_t),
+                                    UCS_SYS_CACHE_LINE_SIZE,
+                                    &config->super.super.tx.mp,
+                                    self->super.config.tx_qp_len,
+                                    uct_rc_iface_send_desc_init,
+                                    "rc_verbs_short_desc", &self->short_desc_mp);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     while (self->super.rx.available > 0) {
         if (uct_rc_verbs_iface_post_recv(self, 1) == 0) {
             ucs_error("failed to post receives");
             status = UCS_ERR_NO_MEMORY;
-            goto err_destroy_amh_mp;
+            goto err_destroy_short_desc_mp;
         }
     }
 
@@ -265,10 +292,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
                            self);
     return UCS_OK;
 
-err_destroy_amh_mp:
-    if (self->am_hdr_mp != NULL) {
-        ucs_mpool_destroy(self->am_hdr_mp);
-    }
+err_destroy_short_desc_mp:
+    ucs_mpool_destroy(self->short_desc_mp);
 err:
     return status;
 }
@@ -277,9 +302,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
 
-    if (self->am_hdr_mp != NULL) {
-        ucs_mpool_destroy(self->am_hdr_mp);
-    }
+    ucs_mpool_destroy(self->short_desc_mp);
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_verbs_iface_progress, self);
 }
 
@@ -303,6 +326,16 @@ uct_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_put_short        = uct_rc_verbs_ep_put_short,
     .ep_put_bcopy        = uct_rc_verbs_ep_put_bcopy,
     .ep_put_zcopy        = uct_rc_verbs_ep_put_zcopy,
+    .ep_get_bcopy        = uct_rc_verbs_ep_get_bcopy,
+    .ep_get_zcopy        = uct_rc_verbs_ep_get_zcopy,
+    .ep_atomic_add64     = uct_rc_verbs_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_rc_verbs_ep_atomic_fadd64,
+    .ep_atomic_swap64    = uct_rc_verbs_ep_atomic_swap64,
+    .ep_atomic_cswap64   = uct_rc_verbs_ep_atomic_cswap64,
+    .ep_atomic_add32     = uct_rc_verbs_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_rc_verbs_ep_atomic_fadd32,
+    .ep_atomic_swap32    = uct_rc_verbs_ep_atomic_swap32,
+    .ep_atomic_cswap32   = uct_rc_verbs_ep_atomic_cswap32,
     .ep_flush            = uct_rc_verbs_ep_flush,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),

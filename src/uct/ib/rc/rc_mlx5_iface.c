@@ -193,6 +193,10 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
 
+    /* GET */
+    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+
     /* AM */
     iface_attr->cap.am.max_short  = max_bb
                                         - sizeof(struct mlx5_wqe_ctrl_seg)
@@ -208,7 +212,15 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                         - sizeof(uct_rc_hdr_t)
                                         - sizeof(struct mlx5_wqe_data_seg);
 
-    /* TODO add get and atomics */
+    /* Atomics */
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                             UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                             UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                             UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
+                             UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                             UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                             /* TODO UCT_IFACE_FLAG_ATOMIC_CSWAP64 | */
+                             UCT_IFACE_FLAG_ATOMIC_CSWAP64;
     return UCS_OK;
 }
 
@@ -228,22 +240,35 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
 
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = uct_ib_mlx5_get_srq_info(self->super.rx.srq, &srq_info);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     if (srq_info.stride != UCT_RC_MLX5_SRQ_STRIDE) {
         ucs_error("SRQ stride is not %lu (%d)", UCT_RC_MLX5_SRQ_STRIDE, srq_info.stride);
-        return UCS_ERR_NO_DEVICE;
+        status = UCS_ERR_NO_DEVICE;
+        goto err;
+    }
+
+    status = uct_iface_mpool_create(&self->super.super.super.super,
+                                    sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
+                                    sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
+                                    UCS_SYS_CACHE_LINE_SIZE,
+                                    &config->super.super.tx.mp,
+                                    self->super.config.tx_qp_len,
+                                    uct_rc_iface_send_desc_init,
+                                    "rc_mlx5_atomic_desc", &self->tx.atomic_desc_mp);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     self->rx.buf   = srq_info.buf;
@@ -255,18 +280,25 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
 
     if (uct_rc_mlx5_iface_post_recv(self, self->super.rx.available) == 0) {
         ucs_error("Failed to post receives");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err_destroy_atomic_mp;
     }
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_mlx5_iface_progress,
                            self);
     return UCS_OK;
+
+err_destroy_atomic_mp:
+    ucs_mpool_destroy(self->tx.atomic_desc_mp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 {
     uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, self);
+    ucs_mpool_destroy(self->tx.atomic_desc_mp);
 }
 
 
@@ -286,9 +318,19 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_put_short        = uct_rc_mlx5_ep_put_short,
     .ep_put_bcopy        = uct_rc_mlx5_ep_put_bcopy,
     .ep_put_zcopy        = uct_rc_mlx5_ep_put_zcopy,
+    .ep_get_bcopy        = uct_rc_mlx5_ep_get_bcopy,
+    .ep_get_zcopy        = uct_rc_mlx5_ep_get_zcopy,
     .ep_am_short         = uct_rc_mlx5_ep_am_short,
     .ep_am_bcopy         = uct_rc_mlx5_ep_am_bcopy,
     .ep_am_zcopy         = uct_rc_mlx5_ep_am_zcopy,
+    .ep_atomic_add64     = uct_rc_mlx5_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_rc_mlx5_ep_atomic_fadd64,
+    .ep_atomic_swap64    = uct_rc_mlx5_ep_atomic_swap64,
+    .ep_atomic_cswap64   = uct_rc_mlx5_ep_atomic_cswap64,
+    .ep_atomic_add32     = uct_rc_mlx5_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_rc_mlx5_ep_atomic_fadd32,
+    .ep_atomic_swap32    = uct_rc_mlx5_ep_atomic_swap32,
+    .ep_atomic_cswap32   = uct_rc_mlx5_ep_atomic_cswap32,
     .ep_flush            = uct_rc_mlx5_ep_flush,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),

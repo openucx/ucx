@@ -38,12 +38,10 @@
 #  define IBV_EXP_ACCESS_REMOTE_ATOMIC     IBV_ACCESS_REMOTE_ATOMIC
 #  define exp_send_flags                   send_flags
 #  define IBV_EXP_ACCESS_ALLOCATE_MR       0
-#  define IBV_EXP_ATOMIC_HCA               IBV_ATOMIC_HCA
 #  define ibv_exp_reg_shared_mr            ibv_reg_shared_mr_ex
 #  define ibv_exp_reg_shared_mr_in         ibv_reg_shared_mr_in
 #  define ibv_exp_query_device             ibv_query_device
 #  define ibv_exp_device_attr              ibv_device_attr
-#  define exp_atomic_cap                   atomic_cap
 #  define ibv_exp_modify_cq                ibv_modify_cq
 #  define ibv_exp_cq_attr                  ibv_cq_attr
 #  define IBV_EXP_CQ_ATTR_CQ_CAP_FLAGS     IBV_CQ_ATTR_CQ_CAP_FLAGS
@@ -118,6 +116,21 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
     return -1;
 }
 #endif /* HAVE_IBV_EXP_CQ_IGNORE_OVERRUN */
+
+
+/*
+ * Atomics support
+ */
+#if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
+#  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_HCA)
+#  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_GLOB)
+#  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   ((_attr)->exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE)
+#else
+#  define IBV_EXP_HAVE_ATOMIC_HCA(_attr)            ((_attr)->atomic_cap == IBV_ATOMIC_HCA)
+#  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->atomic_cap == IBV_ATOMIC_GLOB)
+#  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
+#endif /* HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE */
+
 
 #define UCT_IB_MAX_WC 32
 

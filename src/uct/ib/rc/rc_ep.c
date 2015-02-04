@@ -12,6 +12,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
+#include <infiniband/arch.h>
 
 
 static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
@@ -132,3 +133,40 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
     return UCS_OK;
 }
 
+void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_container_of(self, uct_rc_iface_send_desc_t,
+                                                      queue.super);
+    ucs_status_t status;
+
+    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->bcopy_recv.length);
+    status = desc->bcopy_recv.cb(desc, desc + 1, desc->bcopy_recv.length,
+                                 desc->bcopy_recv.arg);
+    if (status == UCS_OK) {
+        ucs_mpool_put(desc);
+    }
+}
+
+#define UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(_num_bits, _is_be) \
+    void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be)(ucs_callback_t *self) \
+    { \
+        uct_rc_iface_send_desc_t *desc = ucs_container_of(self, uct_rc_iface_send_desc_t, \
+                                                          queue.super); \
+        uint##_num_bits##_t value; \
+        \
+        VALGRIND_MAKE_MEM_DEFINED(desc + 1, sizeof(value)); \
+        value = *(uint##_num_bits##_t*)(desc + 1); \
+        if (_is_be && (_num_bits == 32)) { \
+            value = ntohl(value); \
+        } else if (_is_be && (_num_bits == 64)) { \
+            value = ntohll(value); \
+        } \
+        \
+        desc->imm_recv.cb(desc->imm_recv.arg, value); \
+        ucs_mpool_put(desc); \
+    }
+
+UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(32, 0);
+UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(32, 1);
+UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(64, 0);
+UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(64, 1);

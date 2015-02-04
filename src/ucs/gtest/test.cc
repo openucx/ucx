@@ -69,9 +69,8 @@ void test_base::SetUpProxy() {
     try {
         init();
         m_state = RUNNING;
-    } catch (test_skip_exception&) {
-        detail::message_stream("SKIP");
-        m_state = SKIPPED;
+    } catch (test_skip_exception& e) {
+        skipped(e);
     } catch (test_abort_exception&) {
         m_state = ABORTED;
     }
@@ -94,15 +93,24 @@ void test_base::TestBodyProxy() {
         try {
             test_body();
             m_state = FINISHED;
-        } catch (test_skip_exception&) {
-            detail::message_stream("SKIP");
-            m_state = SKIPPED;
+        } catch (test_skip_exception& e) {
+            skipped(e);
         } catch (test_abort_exception&) {
             m_state = ABORTED;
         }
     } else if (m_state == SKIPPED) {
     } else if (m_state == ABORTED) {
     }
+}
+
+void test_base::skipped(const test_skip_exception& e) {
+    std::string reason = e.what();
+    if (reason.empty()) {
+        detail::message_stream("SKIP");
+    } else {
+        detail::message_stream("SKIP") << "(" << reason << ")";
+    }
+    m_state = SKIPPED;
 }
 
 void test_base::init() {

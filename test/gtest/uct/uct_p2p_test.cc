@@ -11,16 +11,22 @@ extern "C" {
 }
 
 void uct_p2p_test::init() {
-    for (unsigned i =0; i < 2; ++i) {
-        m_entities.push_back(new entity(GetParam()));
-    }
+    uct_test::init();
 
-    m_entities[0].connect(m_entities[1]);
-    m_entities[1].connect(m_entities[0]);
+    /* Create 2 connected endpoints */
+    entity *e1 = new entity(GetParam());
+    entity *e2 = new entity(GetParam());
+    e1->add_ep();
+    e2->add_ep();
+    e1->connect(0, *e2, 0);
+    e2->connect(0, *e1, 0);
+
+    m_entities.push_back(e1);
+    m_entities.push_back(e2);
 
     /* Allocate completion handle and set the callback */
     m_completion = (completion*)malloc(sizeof(completion) +
-                          m_entities[1].iface_attr().completion_priv_len);
+                                       sender().iface_attr().completion_priv_len);
     m_completion->self           = this;
     m_completion->uct.super.func = completion_cb;
 
@@ -29,16 +35,7 @@ void uct_p2p_test::init() {
 
 void uct_p2p_test::cleanup() {
     free(m_completion);
-    m_entities.clear();
-}
-
-void uct_p2p_test::progress() {
-    for (ucs::ptr_vector<entity>::const_iterator iter = m_entities.begin();
-         iter != m_entities.end();
-         ++iter)
-    {
-        (*iter)->progress();
-    }
+    uct_test::cleanup();
 }
 
 void uct_p2p_test::short_progress_loop() {
@@ -48,12 +45,13 @@ void uct_p2p_test::short_progress_loop() {
     }
 }
 
-void uct_p2p_test::test_xfer(send_func_t send, size_t length) {
+void uct_p2p_test::test_xfer(send_func_t send, size_t length, direction_t direction) {
     UCS_TEST_SKIP;
 }
 
 template <typename O>
-void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length)
+void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length,
+                                   direction_t direction)
 {
     os << std::fixed << std::setprecision(1);
     if (length < 1024) {
@@ -67,10 +65,11 @@ void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length)
     }
 
     os << " " << std::flush;
-    test_xfer(send, length);
+    test_xfer(send, length, direction);
 }
 
-void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t max_length) {
+void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
+                                   ssize_t max_length, direction_t direction) {
 
     if (max_length > 1 * 1024 * 1024) {
         max_length /= ucs::test_time_multiplier();
@@ -83,8 +82,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t
     ucs::detail::message_stream ms("INFO");
 
     /* Run with min and max values */
-    test_xfer_print(ms, send, min_length);
-    test_xfer_print(ms, send, max_length);
+    test_xfer_print(ms, send, min_length, direction);
+    test_xfer_print(ms, send, max_length, direction);
 
     /*
      * Generate SQRT( log(max/min) ) random sizes
@@ -96,7 +95,7 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t
         double exp = (rand() * (log_max - log_min)) / RAND_MAX + log_min;
         ssize_t length = (ssize_t)pow(2.0, exp);
         ucs_assert(length > min_length && length < max_length);
-        test_xfer_print(ms, send, length);
+        test_xfer_print(ms, send, length, direction);
     }
 }
 
@@ -113,11 +112,19 @@ void uct_p2p_test::wait_for_local(ucs_status_t status, unsigned prev_comp_count)
 }
 
 void uct_p2p_test::wait_for_remote() {
-    get_entity(0).flush();
+    sender().flush();
 }
 
-const uct_test::entity& uct_p2p_test::get_entity(unsigned index) const {
-    return m_entities[index];
+const uct_test::entity& uct_p2p_test::sender() const {
+    return ent(0);
+}
+
+uct_ep_h uct_p2p_test::sender_ep() const {
+    return sender().ep(0);
+}
+
+const uct_test::entity& uct_p2p_test::receiver() const {
+    return ent(1);
 }
 
 void uct_p2p_test::completion_cb(ucs_callback_t *self) {

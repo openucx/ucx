@@ -13,6 +13,7 @@ extern "C" {
 #include <uct/api/uct.h>
 }
 #include <ucs/gtest/test.h>
+#include <vector>
 
 
 /**
@@ -26,12 +27,11 @@ public:
     static std::vector<uct_resource_desc_t> enum_resources(const std::string& tl_name);
 
 protected:
+
     class entity {
     public:
         entity(const uct_resource_desc_t& resource);
         ~entity();
-
-        void connect(const entity& other) const;
 
         uct_rkey_bundle_t mem_map(void *address, size_t length, uct_lkey_t *lkey_p) const;
 
@@ -43,17 +43,21 @@ protected:
 
         const uct_iface_attr& iface_attr() const;
 
-        uct_ep_h ep() const;
+        void add_ep();
+
+        uct_ep_h ep(unsigned index) const;
+
+        void connect(unsigned index, const entity& other, unsigned other_index) const;
 
         void flush() const;
 
     private:
         entity(const entity&);
 
-        uct_context_h    m_ucth;
-        uct_iface_h      m_iface;
-        uct_ep_h         m_ep;
-        uct_iface_attr_t m_iface_attr;
+        uct_context_h         m_ucth;
+        uct_iface_h           m_iface;
+        std::vector<uct_ep_h> m_eps;
+        uct_iface_attr_t      m_iface_attr;
     };
 
     class buffer {
@@ -86,6 +90,16 @@ protected:
         uct_lkey_t              m_lkey;
         uct_rkey_bundle_t       m_rkey;
     };
+
+
+    virtual void init();
+    virtual void cleanup();
+
+    void check_caps(unsigned flags);
+    const entity& ent(unsigned index) const;
+    void progress() const;
+
+    ucs::ptr_vector<entity> m_entities;
 };
 
 
