@@ -220,7 +220,9 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                              UCT_IFACE_FLAG_ATOMIC_ADD64 |
                              UCT_IFACE_FLAG_ATOMIC_FADD64 |
                              /* TODO UCT_IFACE_FLAG_ATOMIC_CSWAP64 | */
-                             UCT_IFACE_FLAG_ATOMIC_CSWAP64;
+                             UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
+                             UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
+                             UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
     return UCS_OK;
 }
 
