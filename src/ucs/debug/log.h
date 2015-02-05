@@ -73,6 +73,21 @@
 #define ucs_trace_poll(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, "%s("_message")", __FUNCTION__, ## __VA_ARGS__)
 
 
+/**
+ * Function for printing log messages.
+ *
+ * @param file     Source file name.
+ * @param line     Source line number.
+ * @param function Function name.
+ * @param prefix   Log message prefix.
+ * @param message  Log message - format string
+ * @param ap       Log message format parameters.
+ */
+typedef void (*ucs_log_func_t)(const char *file, unsigned line, const char *function,
+                               unsigned level, const char *prefix, const char *message,
+                               va_list ap);
+
+
 extern const char *ucs_log_level_names[];
 extern const char *ucs_log_category_names[];
 struct ibv_sge;
@@ -95,9 +110,9 @@ void __ucs_log(const char *file, unsigned line, const char *function,
                unsigned level, const char *message, ...)
     UCS_F_PRINTF(5, 6);
 
-void __ucs_vlog(const char *file, unsigned line, const char *function,
-                unsigned level, const char *prefix, const char *message,
-                va_list ap);
+void ucs_log_default_handler(const char *file, unsigned line, const char *function,
+                             unsigned level, const char *prefix, const char *message,
+                             va_list ap);
 
 void __ucs_abort(const char *file, unsigned line, const char *function,
                  const char *message, ...)
@@ -109,6 +124,7 @@ const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
 
 void ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max);
 
+void ucs_log_set_handler(ucs_log_func_t handler);
 
 #endif
 
