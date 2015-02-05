@@ -12,8 +12,10 @@
 #include <uct/tl/context.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
+#include <sys/poll.h>
 #include <sched.h>
 
 
@@ -160,6 +162,74 @@ uct_pd_ops_t uct_ib_pd_ops = {
     .rkey_pack    = uct_ib_rkey_pack,
 };
 
+static void uct_ib_async_event_handler(void *arg)
+{
+    uct_ib_device_t *dev = arg;
+    struct ibv_async_event event;
+    char event_info[200];
+    int ret;
+
+    ret = ibv_get_async_event(dev->ibv_context, &event);
+    if (ret != 0) {
+        ucs_warn("ibv_get_async_event() failed: %m");
+        return;
+    }
+
+    switch (event.event_type) {
+    case IBV_EVENT_CQ_ERR:
+        snprintf(event_info, sizeof(event_info), "%s on CQ %p",
+                 ibv_event_type_str(event.event_type), event.element.cq);
+        break;
+    case IBV_EVENT_QP_FATAL:
+    case IBV_EVENT_QP_REQ_ERR:
+    case IBV_EVENT_QP_ACCESS_ERR:
+    case IBV_EVENT_COMM_EST:
+    case IBV_EVENT_SQ_DRAINED:
+    case IBV_EVENT_PATH_MIG:
+    case IBV_EVENT_PATH_MIG_ERR:
+        snprintf(event_info, sizeof(event_info), "%s on QPN 0x%x",
+                 ibv_event_type_str(event.event_type), event.element.qp->qp_num);
+        break;
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        snprintf(event_info, sizeof(event_info), "SRQ-attached QP 0x%x was flushed",
+                 event.element.qp->qp_num);
+        break;
+    case IBV_EVENT_SRQ_ERR:
+    case IBV_EVENT_SRQ_LIMIT_REACHED:
+        snprintf(event_info, sizeof(event_info), "%s on SRQ %p",
+                 ibv_event_type_str(event.event_type), event.element.srq);
+        break;
+    case IBV_EVENT_DEVICE_FATAL:
+    case IBV_EVENT_PORT_ACTIVE:
+    case IBV_EVENT_PORT_ERR:
+#if HAVE_DECL_IBV_EVENT_GID_CHANGE
+    case IBV_EVENT_GID_CHANGE:
+#endif
+    case IBV_EVENT_LID_CHANGE:
+    case IBV_EVENT_PKEY_CHANGE:
+    case IBV_EVENT_SM_CHANGE:
+    case IBV_EVENT_CLIENT_REREGISTER:
+        snprintf(event_info, sizeof(event_info), "%s on port %d",
+                 ibv_event_type_str(event.event_type), event.element.port_num);
+        break;
+#if HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
+    case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
+    case IBV_EXP_EVENT_DCT_ACCESS_ERR:
+    case IBV_EXP_EVENT_DCT_REQ_ERR:
+        snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
+                 ibv_event_type_str(event.event_type), event.element.dct->dct_num);
+        break;
+#endif
+    default:
+        snprintf(event_info, sizeof(event_info), "%s",
+                 ibv_event_type_str(event.event_type));
+        break;
+    };
+
+    ucs_warn("IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
+    ibv_ack_async_event(&event);
+}
+
 ucs_status_t uct_ib_device_create(uct_context_h context,
                                   struct ibv_device *ibv_device,
                                   uct_ib_device_t **dev_p)
@@ -243,6 +313,21 @@ ucs_status_t uct_ib_device_create(uct_context_h context,
         goto err_free_device;
     }
 
+    status = ucs_sys_fcntl_modfl(dev->ibv_context->async_fd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        goto err_destroy_pd;
+    }
+
+    /* Register to IB async events
+     * TODO have option to set async mode as signal/thread.
+     */
+    status = ucs_async_set_event_handler(UCS_ASYNC_MODE_THREAD,
+                                         dev->ibv_context->async_fd,
+                                         POLLIN, uct_ib_async_event_handler, dev, NULL);
+    if (status != UCS_OK) {
+        goto err_destroy_pd;
+    }
+
     ucs_debug("created device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
@@ -250,6 +335,8 @@ ucs_status_t uct_ib_device_create(uct_context_h context,
     *dev_p = dev;
     return UCS_OK;
 
+err_destroy_pd:
+    ibv_dealloc_pd(dev->pd);
 err_free_device:
     ucs_free(dev);
 err_free_context:
@@ -260,6 +347,7 @@ err:
 
 void uct_ib_device_destroy(uct_ib_device_t *dev)
 {
+    ucs_async_unset_event_handler(dev->ibv_context->async_fd);
     ibv_dealloc_pd(dev->pd);
     ibv_close_device(dev->ibv_context);
     ucs_free(dev);

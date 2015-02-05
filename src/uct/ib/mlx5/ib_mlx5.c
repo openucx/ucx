@@ -8,6 +8,7 @@
 #include "ib_mlx5.h"
 
 #include <uct/ib/base/ib_verbs.h>
+#include <uct/ib/base/ib_device.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
@@ -156,20 +157,118 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));
 }
 
-void uct_ib_mlx5_check_completion(struct mlx5_cqe64 *cqe)
+static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
 {
-    struct mlx5_err_cqe *ecqe;
+    uint8_t wqe_err_opcode = ntohl(ecqe->s_wqe_opcode_qpn) >> 24;
 
-    switch (cqe->op_own >> 4) {
-    case MLX5_CQE_INVALID:
-        break;
+    switch (ecqe->op_own >> 4) {
     case MLX5_CQE_REQ_ERR:
+        switch (wqe_err_opcode) {
+        case MLX5_OPCODE_RDMA_WRITE_IMM:
+        case MLX5_OPCODE_RDMA_WRITE:
+            return "RDMA_WRITE";
+        case MLX5_OPCODE_SEND_IMM:
+        case MLX5_OPCODE_SEND:
+        case MLX5_OPCODE_SEND_INVAL:
+            return "SEND";
+        case MLX5_OPCODE_RDMA_READ:
+            return "RDMA_READ";
+        case MLX5_OPCODE_ATOMIC_CS:
+            return "COMPARE_SWAP";
+        case MLX5_OPCODE_ATOMIC_FA:
+            return "FETCH_ADD";
+        case MLX5_OPCODE_BIND_MW:
+            return "BIND_MW";
+        case MLX5_OPCODE_ATOMIC_MASKED_CS:
+            return "MASKED_COMPARE_SWAP";
+        case MLX5_OPCODE_ATOMIC_MASKED_FA:
+            return "MASKED_FETCH_ADD";
+        default:
+            return "";
+        }
     case MLX5_CQE_RESP_ERR:
-        ecqe = (void*)cqe;
-        ucs_fatal("completion with error synd %d vend %d wcnt %d",
-                  ecqe->syndrome, ecqe->vendor_err_synd, ntohs(ecqe->wqe_counter));
+        return "RECV";
+    default:
+        return "";
+    }
+}
+
+static void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe)
+{
+    uint16_t wqe_counter;
+    uint32_t qp_num;
+    char info[200] = {0};
+
+    wqe_counter = ntohs(ecqe->wqe_counter);
+    qp_num      = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+
+    switch (ecqe->syndrome) {
+    case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
+        snprintf(info, sizeof(info), "Local length");
+        break;
+    case MLX5_CQE_SYNDROME_LOCAL_QP_OP_ERR:
+        snprintf(info, sizeof(info), "Local QP operation");
+        break;
+    case MLX5_CQE_SYNDROME_LOCAL_PROT_ERR:
+        snprintf(info, sizeof(info), "Local protection");
+        break;
+    case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
+        snprintf(info, sizeof(info), "WR flushed because QP in error state");
+        break;
+    case MLX5_CQE_SYNDROME_MW_BIND_ERR:
+        snprintf(info, sizeof(info), "Memory window bind");
+        break;
+    case MLX5_CQE_SYNDROME_BAD_RESP_ERR:
+        snprintf(info, sizeof(info), "Bad response");
+        break;
+    case MLX5_CQE_SYNDROME_LOCAL_ACCESS_ERR:
+        snprintf(info, sizeof(info), "Local access");
+        break;
+    case MLX5_CQE_SYNDROME_REMOTE_INVAL_REQ_ERR:
+        snprintf(info, sizeof(info), "Invalid request");
+        break;
+    case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
+        snprintf(info, sizeof(info), "Remote access");
+        break;
+    case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
+        snprintf(info, sizeof(info), "Remote QP");
+        break;
+    case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
+        snprintf(info, sizeof(info), "Transport retry count exceeded");
+        break;
+    case MLX5_CQE_SYNDROME_RNR_RETRY_EXC_ERR:
+        snprintf(info, sizeof(info), "Receive-no-ready retry count exceeded");
+        break;
+    case MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR:
+        snprintf(info, sizeof(info), "Remote side aborted");
         break;
     default:
+        snprintf(info, sizeof(info), "Generic");
         break;
+    }
+
+    ucs_error("Error on QP 0x%x wqe[%d]: %s (synd 0x%x vend 0x%x) opcode %s",
+              qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
+              uct_ib_mlx5_cqe_err_opcode(ecqe));
+}
+
+struct mlx5_cqe64* uct_ib_mlx5_check_completion(struct mlx5_cqe64 *cqe)
+{
+    switch (cqe->op_own >> 4) {
+    case MLX5_CQE_INVALID:
+        return NULL; /* No CQE */
+    case MLX5_CQE_REQ_ERR:
+        uct_ib_mlx5_completion_with_err((void*)cqe);
+        /* For send completion, we don't care about the data, only releasing
+         * the descriptor and updating QP pi.
+         * TODO need to be changed if we have scatter-to-CQE on send. */
+        return cqe;
+    case MLX5_CQE_RESP_ERR:
+        uct_ib_mlx5_completion_with_err((void*)cqe);
+        return NULL;
+    default:
+        /* CQE might have been updated by HW. Skip it now, and it would be handled
+         * in next polling. */
+        return NULL;
     }
 }

@@ -83,13 +83,12 @@ AS_IF([test "x$with_ib" == xyes],
                       [], [], [[#include <infiniband/mlx5_hw.h>]])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
+                       IBV_EVENT_GID_CHANGE,
                        IBV_DEVICE_MR_ALLOCATE,
                        IBV_ACCESS_ALLOCATE_MR],
                       [], [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
-                       IBV_ACCESS_ALLOCATE_MR,
-                       IBV_EXP_CQ_IGNORE_OVERRUN,
+       AC_CHECK_DECLS([IBV_EXP_CQ_IGNORE_OVERRUN,
                        IBV_EXP_ACCESS_ALLOCATE_MR,
                        IBV_EXP_DEVICE_MR_ALLOCATE,
                        IBV_EXP_DEVICE_DC_TRANSPORT,
@@ -111,7 +110,8 @@ AS_IF([test "x$with_ib" == xyes],
              [AC_MSG_WARN([Compiling without extended atomics support])])
 
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
-                         struct ibv_exp_qp_init_attr.max_inl_recv],
+                         struct ibv_exp_qp_init_attr.max_inl_recv,
+                         struct ibv_async_event.element.dct],
                         [], [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_DEFINE([HAVE_IB], 1, [IB support])

@@ -90,12 +90,74 @@ public:
         }
     }
 
+    static void log_handler(const char *file, unsigned line, const char *function,
+                            unsigned level, const char *prefix, const char *message,
+                            va_list ap)
+    {
+        char buf[200] = {0};
+        if (level <= UCS_LOG_LEVEL_WARN) {
+            ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG, prefix, message, ap);
+            vsnprintf(buf, sizeof(buf), message, ap);
+            UCS_TEST_MESSAGE << "   < " << buf << " >";
+            ++error_count;
+        } else {
+            ucs_log_default_handler(file, line, function, level, prefix, message, ap);
+        }
+    }
+
+    void test_error_zcopy(void *buffer, size_t length, uct_lkey_t lkey,
+                          uint64_t remote_addr, uct_rkey_t rkey)
+    {
+        error_count = 0;
+
+        ucs_log_set_handler(log_handler);
+        ucs_status_t status;
+        do {
+            status = uct_ep_put_zcopy(sender_ep(), buffer, length, lkey,
+                                      remote_addr, rkey, NULL);
+        } while (status == UCS_ERR_WOULD_BLOCK);
+        wait_for_remote();
+
+        /* Flush async events */
+        ucs::safe_usleep(1e4);
+        ucs_log_set_handler(ucs_log_default_handler);
+
+        EXPECT_GT(error_count, 0u);
+    }
+
+    static unsigned error_count;
+
 private:
     struct bcopy_ctx {
         uct_p2p_rma_test     *self;
         const mapped_buffer  *buf;
     };
 };
+
+unsigned uct_p2p_rma_test::error_count = 0;
+
+
+UCS_TEST_P(uct_p2p_rma_test, local_access_error) {
+    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF);
+    mapped_buffer sendbuf(16, 1, SEED1, sender());
+    mapped_buffer recvbuf(16, 1, SEED2, receiver());
+
+    test_error_zcopy(sendbuf.ptr(), sendbuf.length() + 4, sendbuf.lkey(),
+                                  recvbuf.addr(), recvbuf.rkey());
+
+    recvbuf.pattern_check(SEED2);
+}
+
+UCS_TEST_P(uct_p2p_rma_test, remote_access_error) {
+    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF);
+    mapped_buffer sendbuf(16, 1, SEED1, sender());
+    mapped_buffer recvbuf(16, 1, SEED2, receiver());
+
+    test_error_zcopy(sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
+                                  recvbuf.addr() + 4, recvbuf.rkey());
+
+    recvbuf.pattern_check(SEED2);
+}
 
 UCS_TEST_P(uct_p2p_rma_test, put_short) {
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);

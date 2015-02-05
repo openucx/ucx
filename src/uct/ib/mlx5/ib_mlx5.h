@@ -101,7 +101,7 @@ void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci);
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
-void uct_ib_mlx5_check_completion(struct mlx5_cqe64 *cqe);
+struct mlx5_cqe64*  uct_ib_mlx5_check_completion(struct mlx5_cqe64 *cqe);
 
 
 static inline void uct_ib_mlx5_wqe_set_data_seg(struct mlx5_wqe_data_seg *seg,
@@ -126,8 +126,7 @@ static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq)
     if ((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length)) {
         return NULL;
     } else if (op_own & 0x80) {
-        uct_ib_mlx5_check_completion(cqe);
-        return NULL;
+        return uct_ib_mlx5_check_completion(cqe);
     }
 
     cq->cq_ci = index + 1;
