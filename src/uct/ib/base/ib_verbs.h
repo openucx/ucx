@@ -36,17 +36,10 @@
 #  define IBV_EXP_ACCESS_REMOTE_WRITE      IBV_ACCESS_REMOTE_WRITE
 #  define IBV_EXP_ACCESS_REMOTE_READ       IBV_ACCESS_REMOTE_READ
 #  define IBV_EXP_ACCESS_REMOTE_ATOMIC     IBV_ACCESS_REMOTE_ATOMIC
-#  define exp_send_flags                   send_flags
-#  define IBV_EXP_ACCESS_ALLOCATE_MR       0
 #  define ibv_exp_reg_shared_mr            ibv_reg_shared_mr_ex
 #  define ibv_exp_reg_shared_mr_in         ibv_reg_shared_mr_in
 #  define ibv_exp_query_device             ibv_query_device
 #  define ibv_exp_device_attr              ibv_device_attr
-#  define ibv_exp_modify_cq                ibv_modify_cq
-#  define ibv_exp_cq_attr                  ibv_cq_attr
-#  define IBV_EXP_CQ_ATTR_CQ_CAP_FLAGS     IBV_CQ_ATTR_CQ_CAP_FLAGS
-#  define IBV_EXP_CQ_IGNORE_OVERRUN        IBV_CQ_ATTR_CQ_CAP_FLAGS
-#  define IBV_EXP_CQ_CAP_FLAGS             IBV_CQ_CAP_FLAGS
 #  define ibv_exp_send_wr                  ibv_send_wr
 #  define exp_opcode                       opcode
 #  define ibv_exp_post_send                ibv_post_send
@@ -62,12 +55,36 @@
 #  define exp_device_cap_flags             device_cap_flags
 #  define ibv_exp_create_qp                ibv_create_qp
 
+#  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->exp_access)
+#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)
+#  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)
+
+#else
+#  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->access)
+#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  (_attr)->comp_mask = (IBV_EXP_DEVICE_ATTR_RESERVED - 1)
+#  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)    (_attr)->comp_mask = 0
+#endif /* HAVE_VERBS_EXP_H */
+
+
+/*
+ * Contiguous pages support
+ */
+#if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
+
+#  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_MR_ALLOCATE)
+
+#elif HAVE_DECL_IBV_ACCESS_ALLOCATE_MR
+
+#  define IBV_EXP_ACCESS_ALLOCATE_MR                IBV_ACCESS_ALLOCATE_MR
+#  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          ((_attr)->device_cap_flags & IBV_ACCESS_ALLOCATE_MR)
+
 struct ibv_exp_reg_mr_in {
     struct ibv_pd *pd;
     void *addr;
     size_t length;
-    int exp_access;
+    uint64_t exp_access;
     uint32_t comp_mask;
+    uint32_t create_flags;
 };
 
 static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
@@ -75,22 +92,28 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
     return ibv_reg_mr(in->pd, in->addr, in->length, in->exp_access);
 }
 
-#  define IBV_IS_MPAGES_AVAIL(_attr)                ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_MR_ALLOCATE)
-#  define IBV_EXP_REG_MR_FLAGS(_f, _e)              ((_f) | (_e))
-#  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->exp_access)
-#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)
-#  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)
-
 #else
-#  define IBV_IS_MPAGES_AVAIL(_attr)                ((_attr)->device_cap_flags2 & IBV_EXP_DEVICE_MR_ALLOCATE)
-#  define IBV_EXP_REG_MR_FLAGS(_f, _e)              (_f) , (_e)
-#  define IBV_SHARED_MR_ACCESS_FLAGS(_shared_mr)    ((_shared_mr)->access)
-#  define IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(_attr)  (_attr)->comp_mask = (IBV_EXP_DEVICE_ATTR_RESERVED - 1)
-#  define IBV_EXP_PORT_ATTR_SET_COMP_MASK(_attr)    (_attr)->comp_mask = 0
 
-#endif /* HAVE_VERBS_EXP_H */
+#  define IBV_EXP_ACCESS_ALLOCATE_MR                0
+#  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          0
+
+struct ibv_exp_reg_mr_in {
+    void    *dummy1, *dummy2;
+    size_t   dymmu3, dummy4;
+    uint32_t dummy5, dummy6;
+};
+
+static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
+{
+    return NULL;
+}
+
+#endif /* HAVE_DECL_IBV_ACCESS_ALLOCATE_MR */
 
 
+/*
+ * DC support
+ */
 #if HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT && HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_EXP_DEVICE_CAP_FLAGS
 #  define IBV_DEVICE_HAS_DC(_attr)                  ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_DC_TRANSPORT)
 #else
@@ -101,6 +124,10 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 #  define ibv_exp_setenv(_c, _n, _v, _o)            setenv(_n, _v, _o)
 #endif
 
+
+/*
+ * CQ overrun support
+ */
 #if HAVE_DECL_IBV_EXP_CQ_IGNORE_OVERRUN
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 {
