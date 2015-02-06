@@ -26,14 +26,15 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_LAST]         = NULL
 };
 
-static int ucs_log_initialized      = 0;
-static char ucs_log_hostname[256]   = {0};
-static int  ucs_log_pid             = 0;
-static FILE *ucs_log_file           = NULL;
-static int ucs_log_file_close       = 0;
-static unsigned threads_count       = 0;
+static ucs_log_func_t ucs_log_handler  = ucs_log_default_handler;
+static int ucs_log_initialized         = 0;
+static char ucs_log_hostname[256]      = {0};
+static int  ucs_log_pid                = 0;
+static FILE *ucs_log_file              = NULL;
+static int ucs_log_file_close          = 0;
+static unsigned threads_count          = 0;
 static pthread_spinlock_t threads_lock = 0;
-static pthread_t threads[128];
+static pthread_t threads[128]          = {0};
 
 
 int get_thread_num(void)
@@ -122,9 +123,9 @@ void ucs_log_flush()
     }
 }
 
-void __ucs_vlog(const char *file, unsigned line, const char *function,
-                unsigned level, const char *prefix, const char *message,
-                va_list ap)
+void ucs_log_default_handler(const char *file, unsigned line, const char *function,
+                             unsigned level, const char *prefix, const char *message,
+                             va_list ap)
 {
     size_t buffer_size = ucs_global_opts.log_buffer_size;
     const char *short_file;
@@ -174,13 +175,18 @@ void __ucs_vlog(const char *file, unsigned line, const char *function,
 
 }
 
+void ucs_log_set_handler(ucs_log_func_t handler)
+{
+    ucs_log_handler = handler;
+}
+
 void __ucs_log(const char *file, unsigned line, const char *function,
                unsigned level, const char *message, ...)
 {
     va_list ap;
 
     va_start(ap, message);
-    __ucs_vlog(file, line, function, level, "", message, ap);
+    ucs_log_handler(file, line, function, level, "", message, ap);
     va_end(ap);
 }
 
