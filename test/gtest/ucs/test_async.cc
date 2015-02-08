@@ -275,13 +275,13 @@ protected:
         while (!m_stop[index]) {
             le->block();
             unsigned before = le->count();
-            suspend_and_poll(le, 0.5);
+            suspend_and_poll(le, 1.0);
             unsigned after  = le->count();
             le->unblock();
 
             EXPECT_EQ(before, after); /* Should not handle while blocked */
             le->check_miss();
-            suspend_and_poll(le, 0.5);
+            suspend_and_poll(le, 1.0);
         }
 
         int result = le->count();
@@ -351,7 +351,7 @@ UCS_TEST_P(test_async, global_event) {
 
 UCS_TEST_P(test_async, global_timer) {
     global_timer gt(GetParam());
-    suspend_and_poll(&gt, COUNT);
+    suspend_and_poll(&gt, COUNT * 4);
     EXPECT_GE(gt.count(), COUNT / 2);
 }
 
@@ -402,14 +402,14 @@ UCS_TEST_P(test_async, ctx_event) {
 
 UCS_TEST_P(test_async, ctx_timer) {
     local_timer lt(GetParam());
-    suspend_and_poll(&lt, COUNT);
+    suspend_and_poll(&lt, COUNT * 4);
     EXPECT_GE(lt.count(), COUNT / 2);
 }
 
 UCS_TEST_P(test_async, two_timers) {
     local_timer lt1(GetParam());
     local_timer lt2(GetParam());
-    suspend_and_poll2(&lt1, &lt2, COUNT);
+    suspend_and_poll2(&lt1, &lt2, COUNT * 4);
     EXPECT_GE(lt1.count(), COUNT / 2);
     EXPECT_GE(lt2.count(), COUNT / 2);
 }
