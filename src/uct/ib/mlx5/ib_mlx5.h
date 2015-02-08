@@ -16,8 +16,12 @@
 #include <netinet/in.h>
 
 
+#define UCT_IB_MLX5_WQE_SEG_SIZE    16 /* Size of a segment in a WQE */
 #define UCT_IB_MLX5_CQE64_MAX_INL   32 /* Inline scatter size in 64-byte CQE */
 #define UCT_IB_MLX5_CQE128_MAX_INL  64 /* Inline scatter size in 128-byte CQE */
+
+#define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
+    ((8) | ((_log_arg_size) - 2))
 
 
 typedef struct uct_ib_mlx5_qp_info {

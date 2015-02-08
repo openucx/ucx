@@ -10,40 +10,38 @@
 #include <arpa/inet.h> /* For htonl */
 
 
-#define UCT_RC_MLX5_CHECK_SW_PI(_ep) \
-    if (UCS_CIRCULAR_COMPARE16((_ep)->tx.sw_pi, >=, (_ep)->tx.max_pi)) { \
-        return UCS_ERR_WOULD_BLOCK; \
-    }
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
-                      unsigned opcode, unsigned sig_flag, unsigned wqe_size)
+                      uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size)
 {
     uct_rc_mlx5_iface_t *iface =
                     ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
     uint64_t *src, *dst;
     uint16_t sw_pi;
-    unsigned i;
+    unsigned i, n, num_seg, num_bb;
 
     if (sig_flag && !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
         return UCS_ERR_WOULD_BLOCK;
     }
 
     /* TODO use SSE to build the WQE */
-    sw_pi                    = ep->tx.sw_pi;
-    ctrl->opmod_idx_opcode   = (htons(sw_pi) << 8) | (opcode << 24);
-    ctrl->qpn_ds             = htonl(wqe_size) | ep->qpn_ds;
-    ctrl->fm_ce_se           = sig_flag;
+    num_seg                = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
+    sw_pi                  = ep->tx.sw_pi;
+    ctrl->opmod_idx_opcode = (opcode << 24) | (htons(sw_pi) << 8) | opmod;
+    ctrl->qpn_ds           = htonl(num_seg) | ep->qpn_ds;
+    ctrl->fm_ce_se         = sig_flag;
 
     /* TODO Put memory store fence here too, to prevent WC being flushed after DBrec */
     ucs_memory_cpu_store_fence();
 
     /* Write doorbell record */
-    ++sw_pi;
-    *ep->tx.dbrec = htonl(sw_pi);  /* TODO multiple WQEBB */
+    num_bb = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+    ep->tx.prev_sw_pi = sw_pi;
+    *ep->tx.dbrec = htonl(sw_pi += num_bb);
 
     /* Make sure that doorbell record is written before ringing the doorbell */
     ucs_memory_bus_store_fence();
@@ -53,11 +51,17 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     src = (void*)ctrl;
 
     /* BF copy */
-    /* TODO support several WQEBBs */
     /* TODO support DB without BF */
-    ucs_assert(wqe_size*16 <= MLX5_SEND_WQE_BB);
-    for (i = 0; i < MLX5_SEND_WQE_BB / sizeof(*dst); ++i) {
-        *(dst++) = *(src++);
+    ucs_assert(wqe_size <= ep->tx.bf_size);
+    ucs_assert(num_bb <= UCT_RC_MLX5_MAX_BB);
+    for (n = 0; n < num_bb; ++n)
+    {
+        for (i = 0; i < MLX5_SEND_WQE_BB / sizeof(*dst); ++i) {
+            *(dst++) = *(src++);
+        }
+        if (ucs_unlikely(src == ep->tx.qend)) {
+            src = ep->tx.qstart;
+        }
     }
 
     /* We don't want the compiler to reorder instructions and hurt latency */
@@ -65,9 +69,7 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
 
     /* Advance queue pointer */
     ucs_assert(ctrl == ep->tx.seg);
-    if (ucs_unlikely((ep->tx.seg = src) >= ep->tx.qend)) {
-        ep->tx.seg = ep->tx.qstart;
-    }
+    ep->tx.seg   = src;
     ep->tx.sw_pi = sw_pi;
 
     /* Flip BF register */
@@ -82,11 +84,6 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     }
 
     return UCS_OK;
-}
-
-static UCS_F_ALWAYS_INLINE unsigned uct_rc_mlx5_ep_wqe_nsegs(unsigned seg_len)
-{
-    return (sizeof(struct mlx5_wqe_ctrl_seg) + seg_len + 15) / 16;
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
@@ -113,6 +110,32 @@ void uct_rc_mlx5_ep_set_dptr_seg(struct mlx5_wqe_data_seg *dptr, void *address,
     dptr->byte_count = htonl(length);
     dptr->lkey       = htonl(lkey);
     dptr->addr       = htonll((uintptr_t)address);
+}
+
+/**
+ * Copy data to inline segment, taking into account QP wrap-around.
+ *
+ * @param dest    Inline data in the WQE to copy to.
+ * @patam src     Data to copy.
+ * @param length  Data length.
+ *
+ * @return If there was a wrap-around, return -qp_size. Otherwise, return 0.
+ */
+static UCS_F_ALWAYS_INLINE ptrdiff_t
+uct_rc_mlx5_inline_copy(void *dest, void *src, unsigned length, uct_rc_mlx5_ep_t *ep)
+{
+    void *qend = ep->tx.qend;
+    ptrdiff_t n;
+
+    if (dest + length <= qend) {
+        memcpy(dest, src, length);
+        return 0;
+    } else {
+        n = qend - dest;
+        memcpy(dest, src, n);
+        memcpy(ep->tx.qstart, src + n, length - n);
+        return ep->tx.qstart - qend;
+    }
 }
 
 /*
@@ -148,14 +171,14 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
     switch (opcode) {
     case MLX5_OPCODE_SEND:
         /* Set inline segment which has AM id, AM header, and AM payload */
-        wqe_size         = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*inl) + sizeof(*am) + length);
+        wqe_size         = sizeof(*ctrl) + sizeof(*inl) + sizeof(*am) + length;
         iface            = ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
         inl              = (void*)(ctrl + 1);
         inl->byte_count  = htonl((length + sizeof(*am)) | MLX5_INLINE_SEG);
         am               = (void*)(inl + 1);
         am->rc_hdr.am_id = am_id;
         am->am_hdr       = am_hdr;
-        memcpy(am + 1, buffer, length);
+        uct_rc_mlx5_inline_copy(am + 1, buffer, length, ep);
         sig_flag         = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
                                                       MLX5_WQE_CTRL_CQ_UPDATE);
         break;
@@ -163,22 +186,21 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
         if (length == 0) {
-            wqe_size     = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr));
+            wqe_size     = sizeof(*ctrl) + sizeof(*raddr);
         } else {
-            wqe_size     = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr) + sizeof(*inl) + length);
+            wqe_size     = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*inl) + length;
         }
         raddr            = (void*)(ctrl + 1);
         uct_rc_mlx5_ep_set_rdma_seg(raddr, rdma_raddr, rdma_rkey);
         inl              = (void*)(raddr + 1);
         inl->byte_count  = htonl(length | MLX5_INLINE_SEG);
-        memcpy(inl + 1, buffer, length);
+        uct_rc_mlx5_inline_copy(inl + 1, buffer, length, ep);
         sig_flag         = MLX5_WQE_CTRL_CQ_UPDATE;
         break;
 
     case MLX5_OPCODE_NOP:
-        /* Empty inline segment
-         * TODO can there be no data segment at all? */
-        wqe_size         = uct_rc_mlx5_ep_wqe_nsegs(0);
+        /* Empty inline segment */
+        wqe_size         = sizeof(*ctrl);
         inl              = (void*)(ctrl + 1);
         inl->byte_count  = htonl(MLX5_INLINE_SEG);
         sig_flag         = MLX5_WQE_CTRL_CQ_UPDATE | MLX5_WQE_CTRL_FENCE;
@@ -188,7 +210,7 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    return uct_rc_mlx5_post_send(ep, ctrl, opcode, sig_flag, wqe_size);
+    return uct_rc_mlx5_post_send(ep, ctrl, opcode, 0, sig_flag, wqe_size);
 }
 
 /*
@@ -214,6 +236,7 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     struct mlx5_wqe_ctrl_seg                     *ctrl;
     struct mlx5_wqe_raddr_seg                    *raddr;
     struct mlx5_wqe_atomic_seg                   *atomic;
+    struct mlx5_wqe_data_seg                     *dptr;
     struct mlx5_wqe_inl_data_seg                 *inl;
     struct uct_ib_mlx5_atomic_masked_cswap32_seg *masked_cswap32;
     struct uct_ib_mlx5_atomic_masked_fadd32_seg  *masked_fadd32;
@@ -221,32 +244,36 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
 
     uct_rc_mlx5_iface_t *iface;
     uct_rc_hdr_t        *rch;
-    unsigned            wqe_size, inl_seg_size, atomic_seg_size;
+    unsigned            wqe_size, inl_seg_size;
+    ptrdiff_t           wraparound;
+    uint8_t             opmod;
 
     UCT_RC_MLX5_CHECK_SW_PI(ep);
 
     ucs_assert((signal == 0) || (signal == MLX5_WQE_CTRL_CQ_UPDATE));
 
+    opmod = 0;
     ctrl = ep->tx.seg;
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
-        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len, 16);
+        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len,
+                                             UCT_IB_MLX5_WQE_SEG_SIZE);
 
         /* Inline segment with AM ID and header */
         inl              = (void*)(ctrl + 1);
         inl->byte_count  = htonl((sizeof(*rch) + am_hdr_len) | MLX5_INLINE_SEG);
         rch              = (void*)(inl + 1);
         rch->am_id       = am_id;
-        memcpy(rch + 1, am_hdr, am_hdr_len);
+
+        wraparound = uct_rc_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, ep);
 
         /* Data segment with payload */
-        if (length != 0) {
-            uct_rc_mlx5_ep_set_dptr_seg((void*)(ctrl + 1) + inl_seg_size, buffer,
-                                        length, *lkey_p);
-            wqe_size     = uct_rc_mlx5_ep_wqe_nsegs(inl_seg_size +
-                                                    sizeof(struct mlx5_wqe_data_seg));
+        if (length == 0) {
+            wqe_size     = sizeof(*ctrl) + inl_seg_size;
         } else {
-            wqe_size     = uct_rc_mlx5_ep_wqe_nsegs(inl_seg_size);
+            wqe_size     = sizeof(*ctrl) + inl_seg_size + sizeof(*dptr);
+            uct_rc_mlx5_ep_set_dptr_seg((void*)(ctrl + 1) + inl_seg_size + wraparound,
+                                        buffer, length, *lkey_p);
         }
         break;
 
@@ -254,7 +281,7 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
         /* Data segment only */
         ucs_assert(length < (2ul << 30));
         ucs_assert(length > 0);
-        wqe_size         = uct_rc_mlx5_ep_wqe_nsegs(sizeof(struct mlx5_wqe_data_seg));
+        wqe_size         = sizeof(*ctrl) + sizeof(*dptr);
         uct_rc_mlx5_ep_set_dptr_seg((void*)(ctrl + 1), buffer, length, *lkey_p);
         break;
 
@@ -266,12 +293,11 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
         uct_rc_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
         /* Data segment */
-        if (length != 0) {
-            uct_rc_mlx5_ep_set_dptr_seg((void*)(raddr + 1), buffer, length, *lkey_p);
-            wqe_size     = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr) +
-                                                    sizeof(struct mlx5_wqe_data_seg));
+        if (length == 0) {
+            wqe_size     = sizeof(*ctrl) + sizeof(*raddr);
         } else {
-            wqe_size     = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr));
+            wqe_size     = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*dptr);
+            uct_rc_mlx5_ep_set_dptr_seg((void*)(raddr + 1), buffer, length, *lkey_p);
         }
         break;
 
@@ -283,13 +309,13 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
 
         atomic            = (void*)(raddr + 1);
         if (opcode_flags == MLX5_OPCODE_ATOMIC_CS) {
-            atomic->compare   = compare;
+            atomic->compare = compare;
         }
         atomic->swap_add  = swap_add;
 
         uct_rc_mlx5_ep_set_dptr_seg((void*)(atomic + 1), buffer, length, *lkey_p);
-        wqe_size = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr) + sizeof(*atomic) +
-                                            sizeof(struct mlx5_wqe_data_seg));
+        wqe_size          = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*atomic) +
+                            sizeof(*dptr);
         break;
 
     case MLX5_OPCODE_ATOMIC_MASKED_CS:
@@ -298,30 +324,42 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
 
         switch (length) {
         case sizeof(uint32_t):
+            opmod                        = UCT_IB_MLX5_OPMOD_EXT_ATOMIC(2);
             masked_cswap32 = (void*)(raddr + 1);
             masked_cswap32->swap         = swap_add;
             masked_cswap32->compare      = compare;
             masked_cswap32->swap_mask    = (uint32_t)-1;
             masked_cswap32->compare_mask = compare_mask;
-            atomic_seg_size              = sizeof(*masked_cswap32);
+            dptr                         = (void*)(masked_cswap32 + 1);
+            wqe_size                     = sizeof(*ctrl) + sizeof(*raddr) +
+                                           sizeof(*masked_cswap32) + sizeof(*dptr);
             break;
         case sizeof(uint64_t):
+            opmod                        = UCT_IB_MLX5_OPMOD_EXT_ATOMIC(3); /* Ext. atomic, size 2**3 */
             masked_cswap64 = (void*)(raddr + 1);
             masked_cswap64->swap         = swap_add;
             masked_cswap64->compare      = compare;
             masked_cswap64->swap_mask    = (uint64_t)-1;
             masked_cswap64->compare_mask = compare_mask;
-            atomic_seg_size              = sizeof(*masked_cswap64);
-            /* TODO this flow is disabled until we support multiple WQEBB */
+            dptr                         = (void*)(masked_cswap64 + 1);
+            wqe_size                     = sizeof(*ctrl) + sizeof(*raddr) +
+                                           sizeof(*masked_cswap64) + sizeof(*dptr);
+
+            /* Handle QP wrap-around. It cannot happen in the middle of
+             * masked-cswap segment, because it's still in the first BB.
+             */
+            ucs_assert((void*)dptr <= ep->tx.qend);
+            if (dptr == ep->tx.qend) {
+                dptr = ep->tx.qstart;
+            } else {
+                ucs_assert((void*)masked_cswap64 < ep->tx.qend);
+            }
             break;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
 
-        uct_rc_mlx5_ep_set_dptr_seg((void*)(raddr + 1) + atomic_seg_size,
-                                    buffer, length, *lkey_p);
-        wqe_size = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr) + atomic_seg_size +
-                                            sizeof(struct mlx5_wqe_data_seg));
+        uct_rc_mlx5_ep_set_dptr_seg(dptr, buffer, length, *lkey_p);
         break;
 
      case MLX5_OPCODE_ATOMIC_MASKED_FA:
@@ -329,14 +367,15 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
         raddr = (void*)(ctrl + 1);
         uct_rc_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
+        opmod                         = UCT_IB_MLX5_OPMOD_EXT_ATOMIC(2);
         masked_fadd32                 = (void*)(raddr + 1);
         masked_fadd32->add            = swap_add;
         masked_fadd32->filed_boundary = 0;
 
         uct_rc_mlx5_ep_set_dptr_seg((void*)(masked_fadd32 + 1), buffer, length,
                                     *lkey_p);
-        wqe_size = uct_rc_mlx5_ep_wqe_nsegs(sizeof(*raddr) + sizeof(*masked_fadd32) +
-                                            sizeof(struct mlx5_wqe_data_seg));
+        wqe_size                      = sizeof(*ctrl) + sizeof(*raddr) +
+                                        sizeof(*masked_fadd32) + sizeof(*dptr);
         break;
 
     default:
@@ -349,9 +388,8 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
                                             MLX5_WQE_CTRL_CQ_UPDATE);
     }
 
-    return uct_rc_mlx5_post_send(ep, ctrl,
-                                 (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 signal, wqe_size);
+    return uct_rc_mlx5_post_send(ep, ctrl, (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
+                                 opmod, signal, wqe_size);
 }
 
 /*
@@ -592,14 +630,10 @@ ucs_status_t uct_rc_mlx5_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
                                           uint64_t remote_addr, uct_rkey_t rkey,
                                           uct_imm_recv_callback_t cb, void *arg)
 {
-    /*
     return uct_rc_mlx5_ep_atomic(ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t),
                                  MLX5_OPCODE_ATOMIC_MASKED_CS, sizeof(uint64_t),
                                  uct_rc_ep_atomic_completion_64_be1, remote_addr,
                                  rkey, 0, 0, htonll(swap), cb, arg);
-     TODO support >1 WQEBB
-    */
-    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_rc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
@@ -655,9 +689,15 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
+    uint16_t exp_max_pi;
 
-    if (UCS_CIRCULAR_COMPARE16(ep->tx.sw_pi + iface->super.config.tx_qp_len,
-                               ==, ep->tx.max_pi)) {
+    /*
+     * If we got completion for the last posted WQE, max_pi would be advanced
+     * to the value calculated from prev_sw_pi - which is the index where the last
+     * posted WQE started. See also uct_rc_mlx5_iface_poll_tx().
+     */
+    exp_max_pi = uct_rc_mlx5_calc_max_pi(iface, ep->tx.prev_sw_pi);
+    if (ep->tx.max_pi == exp_max_pi) {
         return UCS_OK;
     }
 
@@ -694,15 +734,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
         return UCS_ERR_IO_ERROR;
     }
 
-    self->qpn_ds     = htonl(self->super.qp->qp_num << 8);
-    self->tx.qstart  = qp_info.sq.buf;
-    self->tx.qend    = qp_info.sq.buf + (MLX5_SEND_WQE_BB *  qp_info.sq.wqe_cnt);
-    self->tx.seg     = self->tx.qstart;
-    self->tx.sw_pi   = 0;
-    self->tx.max_pi  = iface->super.config.tx_qp_len;
-    self->tx.bf_reg  = qp_info.bf.reg;
-    self->tx.bf_size = qp_info.bf.size;
-    self->tx.dbrec   = &qp_info.dbrec[MLX5_SND_DBR];
+    self->qpn_ds        = htonl(self->super.qp->qp_num << 8);
+    self->tx.qstart     = qp_info.sq.buf;
+    self->tx.qend       = qp_info.sq.buf + (MLX5_SEND_WQE_BB *  qp_info.sq.wqe_cnt);
+    self->tx.seg        = self->tx.qstart;
+    self->tx.sw_pi      = 0;
+    self->tx.prev_sw_pi = -1;
+    self->tx.max_pi     = uct_rc_mlx5_calc_max_pi(iface, self->tx.prev_sw_pi);
+    self->tx.bf_reg     = qp_info.bf.reg;
+    self->tx.bf_size    = qp_info.bf.size;
+    self->tx.dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
 
     memset(self->tx.qstart, 0, self->tx.qend - self->tx.qstart);
     return UCS_OK;

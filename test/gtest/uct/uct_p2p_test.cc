@@ -90,8 +90,7 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
      */
     double log_min = log2(min_length + 1);
     double log_max = log2(max_length - 1);
-    int count = (int)sqrt(log_max - log_min);
-    for (int i = 0; i < count; ++i) {
+    for (int i = 0; i < 6; ++i) {
         double exp = (rand() * (log_max - log_min)) / RAND_MAX + log_min;
         ssize_t length = (ssize_t)pow(2.0, exp);
         ucs_assert(length > min_length && length < max_length);

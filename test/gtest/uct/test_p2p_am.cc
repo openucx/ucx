@@ -51,6 +51,7 @@ public:
     ucs_status_t am_bcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
+        /* TODO test with different header sizes */
         return uct_ep_am_bcopy(ep, AM_ID, am_pack,
                                sendbuf.ptr(), sendbuf.length() + sizeof(HDR));
     }
@@ -58,6 +59,7 @@ public:
     ucs_status_t am_zcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
+         /* TODO test with different header sizes */
          uint64_t hdr = HDR;
          return uct_ep_am_zcopy(ep, AM_ID, &hdr, sizeof(hdr),
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
