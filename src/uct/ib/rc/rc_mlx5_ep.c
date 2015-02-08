@@ -181,7 +181,7 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
         wqe_size         = uct_rc_mlx5_ep_wqe_nsegs(0);
         inl              = (void*)(ctrl + 1);
         inl->byte_count  = htonl(MLX5_INLINE_SEG);
-        sig_flag         = MLX5_WQE_CTRL_CQ_UPDATE;
+        sig_flag         = MLX5_WQE_CTRL_CQ_UPDATE | MLX5_WQE_CTRL_FENCE;
         break;
 
     default:

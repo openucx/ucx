@@ -39,7 +39,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                                                  IBV_SEND_SIGNALED);
     }
 
-    if (send_flags & IBV_SEND_SIGNALED && !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
+    if ((send_flags & IBV_SEND_SIGNALED) && !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
         return UCS_ERR_WOULD_BLOCK;
     }
 
@@ -55,6 +55,41 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     uct_rc_verbs_ep_posted(iface, ep, send_flags & IBV_SEND_SIGNALED);
     return UCS_OK;
 }
+
+#if HAVE_DECL_IBV_EXP_POST_SEND
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
+                           int signal)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    struct ibv_exp_send_wr *bad_wr;
+    int ret;
+
+    if (ep->tx.available == 0) {
+        return UCS_ERR_WOULD_BLOCK;
+    }
+
+    if (!signal) {
+        signal = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
+                                            IBV_EXP_SEND_SIGNALED);
+    }
+
+    if (signal && !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
+        return UCS_ERR_WOULD_BLOCK;
+    }
+
+    wr->exp_send_flags |= signal;
+    ret = ibv_exp_post_send(ep->super.qp, wr, &bad_wr);
+    if (ret != 0) {
+        ucs_error("ibv_exp_post_send() returned %d (%m)", ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    uct_rc_verbs_ep_posted(iface, ep, signal);
+    return UCS_OK;
+}
+#endif
 
 static UCS_F_ALWAYS_INLINE void uct_rc_verbs_ep_push_desc(uct_rc_verbs_ep_t* ep,
                                                           uct_rc_iface_send_desc_t *desc)
@@ -180,17 +215,9 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
                              uct_rc_iface_send_desc_t *desc, int force_sig,
                              ucs_status_t success)
 {
-    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                                 uct_rc_verbs_iface_t);
-    struct ibv_exp_send_wr wr, *bad_wr;
+    struct ibv_exp_send_wr wr;
     ucs_status_t status;
     struct ibv_sge sge;
-    int ret;
-
-    if ((ep->tx.available == 0) || !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
-        status = UCS_ERR_WOULD_BLOCK;
-        goto err;
-    }
 
     sge.addr          = (uintptr_t)(desc + 1);
     sge.lkey          = desc->lkey;
@@ -200,12 +227,8 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
     wr.sg_list        = &sge;
     wr.num_sge        = 1;
     wr.exp_opcode     = opcode;
-    wr.exp_send_flags = force_sig | IBV_EXP_SEND_EXT_ATOMIC_INLINE;
+    wr.exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
     wr.comp_mask      = 0;
-    if (!force_sig) {
-        wr.exp_send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super,
-                                                        IBV_EXP_SEND_SIGNALED);
-    }
 
     wr.ext_op.masked_atomics.log_arg_sz  = ucs_ilog2(length);
     wr.ext_op.masked_atomics.remote_addr = remote_addr;
@@ -224,20 +247,14 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
         break;
     }
 
-    ret = ibv_exp_post_send(ep->super.qp, &wr, &bad_wr);
-    if (ret != 0) {
-        ucs_error("ibv_exp_post_send() returned %d (%m)", ret);
-        status = UCS_ERR_IO_ERROR;
-        goto err;
+    status = uct_rc_verbs_exp_post_send(ep, &wr, force_sig);
+    if (status != UCS_OK) {
+        ucs_mpool_put(desc);
+        return status;
     }
 
-    uct_rc_verbs_ep_posted(iface, ep, wr.exp_send_flags & IBV_EXP_SEND_SIGNALED);
     uct_rc_verbs_ep_push_desc(ep, desc);
     return success;
-
-err:
-    ucs_mpool_put(desc);
-    return status;
 }
 
 static inline ucs_status_t
@@ -562,8 +579,24 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
     }
 
     if (ep->super.tx.unsignaled != 0) {
-        /* TODO use NOP */
-        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+#if HAVE_DECL_IBV_EXP_WR_NOP
+        if (uct_ib_iface_device(&iface->super.super)->dev_attr.exp_device_cap_flags
+                        & IBV_EXP_DEVICE_NOP)
+        {
+            struct ibv_exp_send_wr wr = {
+                .wr_id          = ep->super.tx.unsignaled,
+                .next           = NULL,
+                .num_sge        = 0,
+                .exp_opcode     = IBV_EXP_WR_NOP,
+                .exp_send_flags = IBV_EXP_SEND_FENCE,
+                .comp_mask      = 0
+            };
+            status = uct_rc_verbs_exp_post_send(ep, &wr, IBV_EXP_SEND_SIGNALED);
+        } else
+#endif
+        {
+            status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+        }
         if (status != UCS_OK) {
             return status;
         }
