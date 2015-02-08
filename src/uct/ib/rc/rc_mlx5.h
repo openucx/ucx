@@ -42,11 +42,10 @@ typedef struct uct_rc_mlx5_ep {
     struct {
         uint16_t       sw_pi;
         uint16_t       max_pi;
-        uint16_t       wqe_cnt;
-        void           *seg;
+        unsigned       bf_size;
         void           *bf_reg;
-        unsigned long  bf_size;
         uint32_t       *dbrec;
+        void           *seg;
         void           *qstart;
         void           *qend;
     } tx;

@@ -83,7 +83,7 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
-    uint16_t hw_ci, prev_pi, new_pi;
+    uint16_t hw_ci;
 
     cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq);
     if (cqe == NULL) {
@@ -99,11 +99,9 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     /* "cqe->wqe_counter" is the index of the completed wqe (modulo 2^16).
      * So we can post additional "wqe_cnt" WQEs, plus the one just completed.
      */
-    prev_pi  = ep->tx.max_pi;
-    hw_ci    = ntohs(cqe->wqe_counter);
-    new_pi   = hw_ci + ep->tx.wqe_cnt + 1;
-    iface->super.tx.outstanding -= (uint16_t)(new_pi - prev_pi);
-    ep->tx.max_pi = new_pi;
+    hw_ci         = ntohs(cqe->wqe_counter);
+    ep->tx.max_pi = hw_ci + iface->super.config.tx_qp_len + 1;
+    ++iface->super.tx.cq_available;
 
     /* Process completions */
     ucs_callbackq_pull(&ep->super.tx.comp, hw_ci);

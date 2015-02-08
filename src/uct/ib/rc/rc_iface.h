@@ -26,7 +26,7 @@ struct uct_rc_iface {
 
     struct {
         ucs_mpool_h          mp;
-        unsigned             outstanding;
+        unsigned             cq_available;
     } tx;
 
     struct {
@@ -113,6 +113,11 @@ uct_rc_iface_tx_moderation(uct_rc_iface_t* iface, uct_rc_ep_t* ep, uint8_t flag)
     return (ep->tx.unsignaled >= iface->config.tx_moderation) ? flag : 0;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
+{
+    return iface->tx.cq_available > 0;
+}
 
 static inline ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
