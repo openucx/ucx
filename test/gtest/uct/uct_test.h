@@ -95,7 +95,7 @@ protected:
     virtual void init();
     virtual void cleanup();
 
-    void check_caps(unsigned flags);
+    void check_caps(uint64_t flags);
     const entity& ent(unsigned index) const;
     void progress() const;
 
