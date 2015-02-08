@@ -17,6 +17,10 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
   {"IB_", "RX_INLINE=64", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
+  {"TX_CQ_LEN", "4096",
+   "Length of send completion queue. This limits the total number of outstanding signaled sends.",
+   ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
+
   {NULL}
 };
 
@@ -115,7 +119,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, rx_priv_len,
-                              sizeof(uct_rc_hdr_t), config);
+                              sizeof(uct_rc_hdr_t), config->tx.cq_len, config);
 
     self->tx.outstanding         = 0;
     self->rx.available           = config->super.rx.queue_len;

@@ -114,10 +114,13 @@ static UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops,
 {
     ucs_status_t status;
 
-    ucs_trace_func("%s: iface=%p ops=%p context=%p rx_headroom=%d rx_priv_len=%d", dev_name, self, ops, context, (int)rx_headroom, (int)rx_priv_len);
+    ucs_trace_func("%s: iface=%p ops=%p context=%p rx_headroom=%zu rx_priv_len=%zu",
+                   dev_name, self, ops, context, rx_headroom, rx_priv_len);
+
     UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, 
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
-                              UCT_UD_IB_GRH_LEN + sizeof(uct_ud_neth_t), config);
+                              UCT_UD_IB_GRH_LEN + sizeof(uct_ud_neth_t),
+                              config->super.tx.queue_len, config);
  
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;

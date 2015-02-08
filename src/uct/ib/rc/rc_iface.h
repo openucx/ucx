@@ -50,6 +50,10 @@ struct uct_rc_iface {
 
 struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
+
+    struct {
+        unsigned             cq_len;
+    } tx;
 };
 
 
