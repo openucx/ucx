@@ -444,7 +444,6 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
     /* Header buffer: active message ID + user header */
     rch = (void*)(desc + 1);
     rch->am_id = id;
-    ucs_assert(sizeof(*rch) + header_length <= iface->super.config.tx_min_inline);
     memcpy(rch + 1, header, header_length);
 
     wr.sg_list    = sge;
