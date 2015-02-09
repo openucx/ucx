@@ -10,13 +10,9 @@
 #include <arpa/inet.h> /* For htonl */
 
 
-#define UCT_RC_MLX5_GET_SW_PI(_ep, _sw_pi_n) \
-    { \
-        uint16_t sw_pi = (_ep)->tx.sw_pi; \
-        if (UCS_CIRCULAR_COMPARE16(sw_pi, >=, (_ep)->tx.max_pi)) { \
-            return UCS_ERR_WOULD_BLOCK; \
-        } \
-        _sw_pi_n = htons(sw_pi); \
+#define UCT_RC_MLX5_CHECK_SW_PI(_ep) \
+    if (UCS_CIRCULAR_COMPARE16((_ep)->tx.sw_pi, >=, (_ep)->tx.max_pi)) { \
+        return UCS_ERR_WOULD_BLOCK; \
     }
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
@@ -24,15 +20,16 @@
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
-                      uint16_t sw_pi_n, unsigned opcode, unsigned sig_flag,
-                      unsigned wqe_size)
+                      unsigned opcode, unsigned sig_flag, unsigned wqe_size)
 {
     uct_rc_mlx5_iface_t *iface;
     uint64_t *src, *dst;
+    uint16_t sw_pi;
     unsigned i;
 
     /* TODO use SSE to build the WQE */
-    ctrl->opmod_idx_opcode   = (sw_pi_n << 8) | (opcode << 24);
+    sw_pi                    = ep->tx.sw_pi;
+    ctrl->opmod_idx_opcode   = (htons(sw_pi) << 8) | (opcode << 24);
     ctrl->qpn_ds             = htonl(wqe_size) | ep->qpn_ds;
     ctrl->fm_ce_se           = sig_flag;
 
@@ -40,7 +37,8 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     ucs_memory_cpu_store_fence();
 
     /* Write doorbell record */
-    *ep->tx.dbrec = sw_pi_n << 16;
+    ++sw_pi;
+    *ep->tx.dbrec = htonl(sw_pi);  /* TODO multiple WQEBB */
 
     /* Make sure that doorbell record is written before ringing the doorbell */
     ucs_memory_bus_store_fence();
@@ -65,13 +63,13 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     if (ucs_unlikely((ep->tx.seg = src) >= ep->tx.qend)) {
         ep->tx.seg = ep->tx.qstart;
     }
+    ep->tx.sw_pi = sw_pi;
 
     /* Flip BF register */
     ep->tx.bf_reg = (void*) ((uintptr_t) ep->tx.bf_reg ^ ep->tx.bf_size);
 
     /* Count number of posts */
     iface = ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
-    ++ep->tx.sw_pi;
     ++iface->super.tx.outstanding;
     if (sig_flag) {
         ep->super.tx.unsignaled = 0;
@@ -135,11 +133,10 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
     struct mlx5_wqe_inl_data_seg *inl;
     uct_rc_am_short_hdr_t        *am;
     uct_rc_mlx5_iface_t *iface;
-    uint16_t sw_pi_n;
     unsigned wqe_size;
     unsigned sig_flag;
 
-    UCT_RC_MLX5_GET_SW_PI(ep, sw_pi_n);
+    UCT_RC_MLX5_CHECK_SW_PI(ep);
 
     ctrl = ep->tx.seg;
     switch (opcode) {
@@ -185,7 +182,7 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    uct_rc_mlx5_post_send(ep, ctrl, sw_pi_n, opcode, sig_flag, wqe_size);
+    uct_rc_mlx5_post_send(ep, ctrl, opcode, sig_flag, wqe_size);
     return UCS_OK;
 }
 
@@ -219,10 +216,9 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
 
     uct_rc_mlx5_iface_t *iface;
     uct_rc_hdr_t        *rch;
-    uint16_t            sw_pi_n;
     unsigned            wqe_size, inl_seg_size, atomic_seg_size;
 
-    UCT_RC_MLX5_GET_SW_PI(ep, sw_pi_n);
+    UCT_RC_MLX5_CHECK_SW_PI(ep);
 
     ucs_assert((signal == 0) || (signal == MLX5_WQE_CTRL_CQ_UPDATE));
 
@@ -348,8 +344,7 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
                                             MLX5_WQE_CTRL_CQ_UPDATE);
     }
 
-    uct_rc_mlx5_post_send(ep, ctrl, sw_pi_n,
-                          (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
+    uct_rc_mlx5_post_send(ep, ctrl, (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
                           signal, wqe_size);
     return UCS_OK;
 }
