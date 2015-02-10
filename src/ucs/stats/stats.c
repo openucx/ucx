@@ -13,8 +13,8 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/type/status.h>
 
-#include <linux/futex.h>
 #include <sys/ioctl.h>
+#include <linux/futex.h>
 
 
 #if ENABLE_STATS
