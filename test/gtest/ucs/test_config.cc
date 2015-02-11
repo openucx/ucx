@@ -228,7 +228,7 @@ UCS_TEST_F(test_config, dump) {
     dump_data = NULL;
     FILE *file = open_memstream(&dump_data, &dump_size);
     ucs_config_parser_print_opts(file, "", *opts, car_opts_table, "UCS_",
-                                 NULL, (ucs_config_print_flags_t)0);
+                                 NULL, UCS_CONFIG_PRINT_CONFIG);
 
     /* Sanity check - all lines begin with UCS_ */
     unsigned num_lines = 0;
