@@ -16,7 +16,6 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
-#include <linux/sched.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
