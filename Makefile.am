@@ -14,9 +14,9 @@ SUBDIRS = \
 	src/ucs \
 	src/uct \
 	src/ucp \
-	src/tools/info \
 	src/tools/hook \
-	test/perf
+	src/tools/info \
+	src/tools/perf
 
 if HAVE_GTEST
 SUBDIRS += test/gtest

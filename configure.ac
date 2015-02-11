@@ -201,10 +201,10 @@ AC_CONFIG_FILES([
                  src/uct/Makefile
                  src/uct/api/version.h
                  src/ucp/Makefile
-                 src/tools/info/Makefile
                  src/tools/hook/Makefile
+                 src/tools/info/Makefile
+                 src/tools/perf/Makefile
                  test/gtest/Makefile
-                 test/perf/Makefile
                  ])
 
 AC_OUTPUT
