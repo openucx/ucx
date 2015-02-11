@@ -17,6 +17,10 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
   {"IB_", "RX_INLINE=64", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
+  {"TX_CQ_LEN", "4096",
+   "Length of send completion queue. This limits the total number of outstanding signaled sends.",
+   ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
+
   {NULL}
 };
 
@@ -75,13 +79,12 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     uct_rc_ep_t **memb, *ep;
+    ucs_status_t status;
     unsigned i, j;
-
-    if (iface->tx.outstanding == 0) {
-        return UCS_OK;
-    }
+    unsigned count;
 
     /* TODO this iteration is too much.. */
+    count = 0;
     for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
         memb = iface->eps[i];
         if (memb == NULL) {
@@ -94,10 +97,16 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
                 continue;
             }
 
-            uct_ep_flush(&ep->super);
+            status = uct_ep_flush(&ep->super);
+            if ((status == UCS_ERR_WOULD_BLOCK) || (status == UCS_INPROGRESS)) {
+                ++count;
+            } else if (status != UCS_OK) {
+                return status;
+            }
         }
     }
-    return UCS_ERR_WOULD_BLOCK;
+
+    return (count == 0) ? UCS_OK : UCS_ERR_WOULD_BLOCK;
 }
 
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
@@ -115,9 +124,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, rx_priv_len,
-                              sizeof(uct_rc_hdr_t), config);
+                              sizeof(uct_rc_hdr_t), config->tx.cq_len, config);
 
-    self->tx.outstanding         = 0;
+    self->tx.cq_available        = config->tx.cq_len - 1; /* Reserve one for error */
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.tx_min_sge      = config->super.tx.min_sge;

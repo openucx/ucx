@@ -90,7 +90,7 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             count = wc[i].wr_id + 1; /* Number of sends with WC completes in batch */
             ep->tx.available            += count;
             ep->tx.completion_count     += count;
-            iface->super.tx.outstanding -= count;
+            ++iface->super.tx.cq_available;
 
             ucs_callbackq_pull(&ep->super.tx.comp, ep->tx.completion_count);
         }

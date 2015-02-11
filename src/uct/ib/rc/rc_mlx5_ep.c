@@ -18,14 +18,19 @@
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
 
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
                       unsigned opcode, unsigned sig_flag, unsigned wqe_size)
 {
-    uct_rc_mlx5_iface_t *iface;
+    uct_rc_mlx5_iface_t *iface =
+                    ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
     uint64_t *src, *dst;
     uint16_t sw_pi;
     unsigned i;
+
+    if (sig_flag && !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
+        return UCS_ERR_WOULD_BLOCK;
+    }
 
     /* TODO use SSE to build the WQE */
     sw_pi                    = ep->tx.sw_pi;
@@ -69,13 +74,14 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     ep->tx.bf_reg = (void*) ((uintptr_t) ep->tx.bf_reg ^ ep->tx.bf_size);
 
     /* Count number of posts */
-    iface = ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
-    ++iface->super.tx.outstanding;
     if (sig_flag) {
         ep->super.tx.unsignaled = 0;
+        --iface->super.tx.cq_available;
     } else {
         ++ep->super.tx.unsignaled;
     }
+
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned uct_rc_mlx5_ep_wqe_nsegs(unsigned seg_len)
@@ -182,8 +188,7 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    uct_rc_mlx5_post_send(ep, ctrl, opcode, sig_flag, wqe_size);
-    return UCS_OK;
+    return uct_rc_mlx5_post_send(ep, ctrl, opcode, sig_flag, wqe_size);
 }
 
 /*
@@ -344,9 +349,9 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
                                             MLX5_WQE_CTRL_CQ_UPDATE);
     }
 
-    uct_rc_mlx5_post_send(ep, ctrl, (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                          signal, wqe_size);
-    return UCS_OK;
+    return uct_rc_mlx5_post_send(ep, ctrl,
+                                 (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
+                                 signal, wqe_size);
 }
 
 /*
@@ -647,17 +652,29 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
 {
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    ucs_status_t status;
 
-    if (ep->super.tx.unsignaled == 0) {
+    if (UCS_CIRCULAR_COMPARE16(ep->tx.sw_pi + iface->super.config.tx_qp_len,
+                               ==, ep->tx.max_pi)) {
         return UCS_OK;
     }
 
-    return uct_rc_mlx5_ep_inline_post(tl_ep, MLX5_OPCODE_NOP, NULL, 0, 0, 0, 0, 0);
+    if (ep->super.tx.unsignaled != 0) {
+        status = uct_rc_mlx5_ep_inline_post(tl_ep, MLX5_OPCODE_NOP, NULL, 0, 0,
+                                            0, 0, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_INPROGRESS;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 {
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_t);
     uct_ib_mlx5_qp_info_t qp_info;
     ucs_status_t status;
 
@@ -682,8 +699,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
     self->tx.qend    = qp_info.sq.buf + (MLX5_SEND_WQE_BB *  qp_info.sq.wqe_cnt);
     self->tx.seg     = self->tx.qstart;
     self->tx.sw_pi   = 0;
-    self->tx.wqe_cnt = qp_info.sq.wqe_cnt;
-    self->tx.max_pi  = self->tx.wqe_cnt;
+    self->tx.max_pi  = iface->super.config.tx_qp_len;
     self->tx.bf_reg  = qp_info.bf.reg;
     self->tx.bf_size = qp_info.bf.size;
     self->tx.dbrec   = &qp_info.dbrec[MLX5_SND_DBR];

@@ -16,11 +16,11 @@ uct_rc_verbs_ep_posted(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
         ep->super.tx.unsignaled = 0;
     } else {
         ++ep->super.tx.unsignaled;
+        --iface->super.tx.cq_available;
     }
 
     --ep->tx.available;
     ++ep->tx.post_count;
-    ++iface->super.tx.outstanding;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -38,6 +38,11 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super,
                                                  IBV_SEND_SIGNALED);
     }
+
+    if (send_flags & IBV_SEND_SIGNALED && !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
+        return UCS_ERR_WOULD_BLOCK;
+    }
+
     wr->send_flags = send_flags;
     wr->wr_id      = ep->super.tx.unsignaled;
 
@@ -182,7 +187,7 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
     struct ibv_sge sge;
     int ret;
 
-    if (ep->tx.available == 0) {
+    if ((ep->tx.available == 0) || !uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
         status = UCS_ERR_WOULD_BLOCK;
         goto err;
     }
@@ -548,14 +553,23 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
 {
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    ucs_status_t status;
 
-    if (ep->super.tx.unsignaled == 0) {
+    if (ep->tx.available == iface->super.config.tx_qp_len) {
         return UCS_OK;
     }
 
-    /* TODO use NOP */
-    return uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+    if (ep->super.tx.unsignaled != 0) {
+        /* TODO use NOP */
+        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_INPROGRESS;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)

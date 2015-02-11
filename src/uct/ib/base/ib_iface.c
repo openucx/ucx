@@ -156,7 +156,8 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
 static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
                            uct_context_h context, const char *dev_name,
                            unsigned rx_headroom, unsigned rx_priv_len,
-                           unsigned rx_hdr_len, uct_ib_iface_config_t *config)
+                           unsigned rx_hdr_len, unsigned tx_cq_len,
+                           uct_ib_iface_config_t *config)
 {
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
@@ -184,9 +185,8 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
               self->config.rx_hdr_offset, self->config.seg_size);
 
     /* TODO comp_channel */
-    /* TODO inline scatter for SQ */
-    self->send_cq = ibv_create_cq(dev->ibv_context, config->tx.queue_len,
-                                  NULL, NULL, 0);
+    /* TODO inline scatter for send SQ */
+    self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len, NULL, NULL, 0);
     if (self->send_cq == NULL) {
         ucs_error("Failed to create send cq: %m");
         status = UCS_ERR_IO_ERROR;
