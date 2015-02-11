@@ -48,7 +48,16 @@ typedef struct sock_rte_group {
 } sock_rte_group_t;
 
 
+typedef struct test_type {
+    const char                   *name;
+    ucx_perf_cmd_t               command;
+    ucx_perf_test_type_t         test_type;
+    const char                   *desc;
+} test_type_t;
+
+
 struct perftest_context {
+    test_type_t                  *test;
     ucx_perf_test_params_t       params;
 
     char                         dev_name[UCT_MAX_NAME_LEN];
@@ -64,6 +73,40 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
+
+test_type_t tests[] = {
+    {"am_lat", UCX_PERF_TEST_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+     "active message latency"},
+
+    {"put_lat", UCX_PERF_TEST_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
+     "put latency"},
+
+    {"add_lat", UCX_PERF_TEST_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
+     "atomic add latency"},
+
+    {"get", UCX_PERF_TEST_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "get latency / bandwidth / message rate"},
+
+    {"fadd", UCX_PERF_TEST_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic fetch-and-add latency / message rate"},
+
+    {"swap", UCX_PERF_TEST_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic swap latency / message rate"},
+
+    {"cswap", UCX_PERF_TEST_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic compare-and-swap latency / message rate"},
+
+    {"am_bw", UCX_PERF_TEST_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "active message bandwidth / message rate"},
+
+    {"put_bw", UCX_PERF_TEST_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "put bandwidth / message rate"},
+
+    {"add_mr", UCX_PERF_TEST_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "atomic add message rate"},
+
+    {NULL}
+};
 
 static int safe_send(int sock, void *data, size_t size)
 {
@@ -118,21 +161,7 @@ static void print_progress(ucx_perf_result_t *result, unsigned flags)
 
 static void print_header(struct perftest_context *ctx)
 {
-    const char *test_cmd_str;
-    const char *test_type_str;
     const char *test_data_str;
-
-    switch (ctx->params.command) {
-    case UCX_PERF_TEST_CMD_AM:
-        test_cmd_str = "Active message";
-        break;
-    case UCX_PERF_TEST_CMD_PUT:
-        test_cmd_str = "Put";
-        break;
-    default:
-        test_cmd_str = "(undefined)";
-        break;
-    }
 
     switch (ctx->params.data_layout) {
     case UCX_PERF_DATA_LAYOUT_SHORT:
@@ -149,20 +178,10 @@ static void print_header(struct perftest_context *ctx)
         break;
     }
 
-    switch (ctx->params.test_type) {
-    case UCX_PERF_TEST_TYPE_PINGPONG:
-        test_type_str = "Ping-pong";
-        break;
-    default:
-        test_type_str = "(undefined)";
-        break;
-    }
-
     if (ctx->flags & TEST_FLAG_PRINT_TEST) {
         printf("+------------------------------------------------------------------------------------------+\n");
-        printf("| Operation:    %-60s               |\n", test_cmd_str);
+        printf("| Test:         %-60s               |\n", ctx->test->desc);
         printf("| Data layout:  %-60s               |\n", test_data_str);
-        printf("| Test type:    %-60s               |\n", test_type_str);
         printf("| Message size: %-60zu               |\n", ctx->params.message_size);
     }
 
@@ -187,6 +206,8 @@ static void print_footer(struct perftest_context *ctx, ucx_perf_result_t *result
 
 static void usage(struct perftest_context *ctx, const char *program)
 {
+    test_type_t *test;
+
     printf("Usage: %s [ server-hostname ] [ options ]\n", program);
     printf("\n");
 #if HAVE_MPI
@@ -195,30 +216,33 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("This test can be also launched as an libRTE application\n");
 #endif
     printf("  Common options:\n");
-    printf("     -h           Show this help message.\n");
-    printf("     -p <port>    TCP port to use for data exchange. (%d)\n", ctx->port);
-    printf("     -c <cpu>     Set affinity to this CPU. (off)\n");
     printf("\n");
     printf("  Test options:\n");
-    printf("     -d <device>  Device to use for testing.\n");
-    printf("     -x <tl>      Transport to use for testing.\n");
-    printf("     -t <test>    Test to run:\n");
-    printf("                     put_lat  : put latency.\n");
-    printf("                     put_bw   : put bandwidth / message rate.\n");
-    printf("                     am_lat   : active message latency.\n");
-    printf("                     am_bw   : active message bandwidth.\n");
-    printf("     -D <layout>  Data layout:\n");
-    printf("                     short    : Use short messages API.\n");
-    printf("                     bcopy    : Use copy-out API.\n");
-    printf("                     zcopy    : Use zero-copy API.\n");
-    printf("     -n <iters>   Number of iterations to run. (%ld)\n", ctx->params.max_iter);
-    printf("     -s <size>    Message size. (%zu)\n", ctx->params.message_size);
-    printf("     -w <iters>   Number of warm-up iterations. (%zu)\n", ctx->params.warmup_iter);
-    printf("     -W <count>   Window size for AM bandwidth. (%zu)\n", ctx->params.am_window);
-    printf("     -N           Use numeric formatting - thousands separator.\n");
+    printf("     -t <test>      Test to run.\n");
+    for (test = tests; test->name; ++test) {
+        printf("                   %10s : %s.\n", test->name, test->desc);
+    }
+    printf("\n");
+    printf("     -D <layout>    Data layout.\n");
+    printf("                        short : Use short messages API (cannot used for get).\n");
+    printf("                        bcopy : Use copy-out API (cannot used for atomics).\n");
+    printf("                        zcopy : Use zero-copy API (cannot used for atomics).\n");
+    printf("\n");
+    printf("     -d <device>    Device to use for testing.\n");
+    printf("     -x <tl>        Transport to use for testing.\n");
+    printf("     -c <cpu>       Set affinity to this CPU. (off)\n");
+    printf("     -n <iters>     Number of iterations to run. (%ld)\n", ctx->params.max_iter);
+    printf("     -s <size>      Message size. (%zu)\n", ctx->params.message_size);
+    printf("     -H <size>      AM Header size. (%zu)\n", ctx->params.hdr_size);
+    printf("     -w <iters>     Number of warm-up iterations. (%zu)\n", ctx->params.warmup_iter);
+    printf("     -W <count>     Flow control window size, for active messages. (%u)\n", ctx->params.fc_window);
+    printf("     -O <count>     Maximal number of uncompleted outstanding sends. (%u)\n", ctx->params.max_outstanding);
+    printf("     -N             Use numeric formatting - thousands separator.\n");
+    printf("     -p <port>      TCP port to use for data exchange. (%d)\n", ctx->port);
+    printf("     -h             Show this help message.\n");
     printf("\n");
     printf("  Server options:\n");
-    printf("     -l           Accept clients in an infinite loop\n");
+    printf("     -l             Accept clients in an infinite loop\n");
     printf("\n");
 }
 
@@ -258,15 +282,19 @@ void print_transports(struct perftest_context *ctx)
 
 static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
 {
+    test_type_t *test;
     char c;
 
+    ctx->test                   = NULL;
     ctx->params.command         = UCX_PERF_TEST_CMD_LAST;
     ctx->params.test_type       = UCX_PERF_TEST_TYPE_LAST;
     ctx->params.data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
     ctx->params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    ctx->params.am_window       = 128;
+    ctx->params.fc_window       = 128;
+    ctx->params.max_outstanding = 1;
     ctx->params.warmup_iter     = 10000;
     ctx->params.message_size    = 8;
+    ctx->params.hdr_size        = 8;
     ctx->params.alignment       = ucs_get_page_size();
     ctx->params.max_iter        = 1000000l;
     ctx->params.max_time        = 0.0;
@@ -277,7 +305,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->port                   = 13337;
     ctx->flags                  = 0;
 
-    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:NlW:w:D:")) != -1) {
+    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:NlW:O:w:D:H:o")) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -289,19 +317,15 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             ucs_snprintf_zero(ctx->tl_name, sizeof(ctx->tl_name), "%s", optarg);
             break;
         case 't':
-            if (0 == strcmp(optarg, "am_lat")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_AM;
-                ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
-            } else if (0 == strcmp(optarg, "put_lat")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_PUT;
-                ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
-            } else if (0 == strcmp(optarg, "am_bw")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_AM;
-                ctx->params.test_type = UCX_PERF_TEST_TYPE_STREAM_UNI;
-            } else if (0 == strcmp(optarg, "put_bw")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_PUT;
-                ctx->params.test_type = UCX_PERF_TEST_TYPE_STREAM_UNI;
-            } else {
+            for (test = tests; test->name; ++test) {
+                if (!strcmp(optarg, test->name)) {
+                    ctx->test             = test;
+                    ctx->params.command   = test->command;
+                    ctx->params.test_type = test->test_type;
+                    break;
+                }
+            }
+            if (ctx->test == NULL) {
                 ucs_error("Invalid option argument for -t");
                 return -1;
             }
@@ -324,6 +348,9 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
         case 's':
             ctx->params.message_size = atol(optarg);
             break;
+        case 'H':
+            ctx->params.hdr_size = atol(optarg);
+            break;
         case 'N':
             ctx->flags |= TEST_FLAG_NUMERIC_FMT;
             break;
@@ -332,10 +359,16 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             ctx->cpu = atoi(optarg);
             break;
         case 'W':
-            ctx->params.am_window = atoi(optarg);
+            ctx->params.fc_window = atoi(optarg);
+            break;
+        case 'O':
+            ctx->params.max_outstanding = atoi(optarg);
             break;
         case 'w':
             ctx->params.warmup_iter = atol(optarg);
+            break;
+        case 'o':
+            ctx->params.flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
             break;
         case 'l':
             print_transports(ctx);
@@ -360,10 +393,7 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
     uct_resource_desc_t *resources;
     unsigned num_resources;
 
-
-    if ((ctx->params.command == UCX_PERF_TEST_CMD_LAST) ||
-        (ctx->params.test_type == UCX_PERF_TEST_TYPE_LAST))
-    {
+    if (ctx->test == NULL) {
         ucs_error("Must specify test type");
         return UCS_ERR_INVALID_PARAM;
     }
