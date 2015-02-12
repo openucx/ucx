@@ -17,7 +17,7 @@ static void uct_ugni_progress(void *arg)
 {
     gni_cq_entry_t  event_data = 0;
     gni_post_descriptor_t *event_post_desc_ptr;
-    uct_ugni_fma_desc_t *fma;
+    uct_ugni_base_desc_t *desc;
     uct_ugni_iface_t * iface = (uct_ugni_iface_t *)arg;
     gni_return_t ugni_rc;
 
@@ -39,10 +39,17 @@ static void uct_ugni_progress(void *arg)
         return;
     }
 
-    fma = (uct_ugni_fma_desc_t *)event_post_desc_ptr;
+    desc = (uct_ugni_base_desc_t *)event_post_desc_ptr;
+    ucs_trace_async("Completion received on %p", desc);
+
+    if (NULL != desc->comp_cb) {
+        ucs_trace_async("Executing user defined callback %p",
+                        desc->comp_cb->super.func);
+        desc->comp_cb->super.func(&desc->comp_cb->super);
+    }
     --iface->outstanding;
-    --fma->ep->outstanding;
-    ucs_mpool_put(fma);
+    --desc->ep->outstanding;
+    ucs_mpool_put(desc);
     return;
 }
 
@@ -69,12 +76,17 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *
 
 ucs_status_t uct_ugni_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
+    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
     iface_attr->cap.put.max_short      = 2048;
     iface_attr->cap.put.max_bcopy      = 2048;
-    iface_attr->cap.put.max_zcopy      = 0;
+    iface_attr->cap.put.max_zcopy      = 512*1024*1024; /* TBD: veryfiy the limit */
     iface_attr->iface_addr_len         = sizeof(uct_ugni_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_ugni_ep_addr_t);
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT;
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT |
+                                         UCT_IFACE_FLAG_PUT_BCOPY |
+                                         UCT_IFACE_FLAG_PUT_ZCOPY;
+    iface_attr->completion_priv_len    = 0; /* TBD */
+
     return UCS_OK;
 }
 
@@ -96,6 +108,7 @@ static ucs_status_t uct_ugni_mem_map(uct_pd_h pd, void **address_p, size_t *leng
     bool inter_allocation = false;
 
     if (0 == *length_p) {
+        ucs_error("Unexpected length %zu", *length_p);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -215,6 +228,8 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_connect_to_ep    = uct_ugni_ep_connect_to_ep,
     .iface_query         = uct_ugni_iface_query,
     .ep_put_short        = uct_ugni_ep_put_short,
+    .ep_put_bcopy        = uct_ugni_ep_put_bcopy,
+    .ep_put_zcopy        = uct_ugni_ep_put_zcopy,
     .ep_am_short         = uct_ugni_ep_am_short,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
@@ -227,10 +242,10 @@ uct_pd_ops_t uct_ugni_pd_ops = {
     .rkey_pack    = uct_ugni_rkey_pack,
 };
 
-static void uct_ugni_free_fma_out_init(void *mp_context, void *obj, void *chunk, void *arg)
+static void uct_ugni_base_desc_init(void *mp_context, void *obj, void *chunk, void *arg)
 {
-    uct_ugni_fma_desc_t *fma = (uct_ugni_fma_desc_t *) obj;
-    memset(&fma->desc, 0 , sizeof(fma->desc));
+    uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
+    memset(&base->desc, 0 , sizeof(base->desc));
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
@@ -258,16 +273,36 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
     self->dev              = dev;
     self->address.nic_addr = dev->address;
 
-    rc = ucs_mpool_create("UGNI-FMA", sizeof(uct_ugni_fma_desc_t),
-                          0,                        /* alignment offset */
-                          UCS_SYS_CACHE_LINE_SIZE,  /* alignment */
-                          128 ,                     /* grow */
-                          config->mpool.max_bufs,   /* max buffers */
-                          &self->super.super,       /* iface */
-                          ucs_mpool_hugetlb_malloc, /* allocation hooks */
-                          ucs_mpool_hugetlb_free,   /* free hook */
-                          uct_ugni_free_fma_out_init,   /* init func */
-                          NULL , &self->free_fma_out);
+    /* Setting initial configuration */
+    self->config.fma_seg_size = UCT_UGNI_MAX_FMA;
+
+    rc = ucs_mpool_create("UGNI-DESC-ONLY", sizeof(uct_ugni_base_desc_t),
+                          0,                            /* alignment offset */
+                          UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                          128 ,                         /* grow */
+                          config->mpool.max_bufs,       /* max buffers */
+                          &self->super.super,           /* iface */
+                          ucs_mpool_hugetlb_malloc,     /* allocation hooks */
+                          ucs_mpool_hugetlb_free,       /* free hook */
+                          uct_ugni_base_desc_init,      /* init func */
+                          NULL , &self->free_desc);
+    if (UCS_OK != rc) {
+        ucs_error("Mpool creation failed");
+        return rc;
+    }
+
+    rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
+                          sizeof(uct_ugni_base_desc_t) +
+                          self->config.fma_seg_size,
+                          sizeof(uct_ugni_base_desc_t), /* alignment offset */
+                          UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                          128 ,                         /* grow */
+                          config->mpool.max_bufs,       /* max buffers */
+                          &self->super.super,           /* iface */
+                          ucs_mpool_hugetlb_malloc,     /* allocation hooks */
+                          ucs_mpool_hugetlb_free,       /* free hook */
+                          uct_ugni_base_desc_init,   /* init func */
+                          NULL , &self->free_desc_buffer);
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
         return rc;
