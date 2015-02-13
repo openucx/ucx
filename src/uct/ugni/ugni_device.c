@@ -18,7 +18,6 @@ void uct_device_get_resource(uct_ugni_device_t *dev,
 {
     ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
-    resource->addrlen    = sizeof(unsigned int);
     resource->local_cpus = dev->cpu_mask;
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));

@@ -431,7 +431,6 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
          * For Infiniband, take the subnet prefix.
          */
         in6_addr = (struct sockaddr_in6 *)&(resource->subnet_addr);
-        resource->addrlen      = sizeof(*in6_addr);
         in6_addr->sin6_family  = AF_INET6;
         ret = ibv_query_gid(dev->ibv_context, port_num, 0, &gid);
         if (ret != 0) {

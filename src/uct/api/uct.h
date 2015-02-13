@@ -29,7 +29,6 @@ typedef struct uct_resource_desc {
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
     cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
-    socklen_t                addrlen;      /**< Size of address */
     struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
                                                 reach each other have same address */
 } uct_resource_desc_t;
