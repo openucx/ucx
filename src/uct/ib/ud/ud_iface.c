@@ -40,7 +40,8 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
     qp_init_attr.cap.max_send_sge    = 2;
     qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = 0; /* TODO */
+    qp_init_attr.cap.max_inline_data = ucs_max(config->super.tx.min_inline,
+                                               UCT_UD_MIN_INLINE);
 
 #if HAVE_VERBS_EXP_H
     qp_init_attr.pd                  = dev->pd;
@@ -181,12 +182,23 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    /* TODO: mtu from port header */
-    int mtu = 4096;
+    struct ibv_qp_init_attr qp_init_attr;
+    struct ibv_qp_attr qp_attr;
+    int mtu = 4096; /* TODO: mtu from port header */
+    int ret;
+
+    /* Get QP properties */
+    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
+    memset(&qp_attr, 0, sizeof(qp_attr));
+    ret = ibv_query_qp(iface->qp, &qp_attr, IBV_QP_CAP, &qp_init_attr);
+    if (ret != 0) {
+        ucs_fatal("ibv_query_qp() failed: %m");
+    }
 
     memset(iface_attr, 0, sizeof(*iface_attr));
     /* TODO: set am attrs */
-    iface_attr->cap.am.max_short      = 0;
+    ucs_assert(qp_attr.cap.max_inline_data > UCT_UD_MIN_INLINE);
+    iface_attr->cap.am.max_short      = qp_attr.cap.max_inline_data - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = 0;
     iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
