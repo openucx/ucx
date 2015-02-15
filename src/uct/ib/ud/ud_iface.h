@@ -16,6 +16,10 @@
 #include "ud_def.h"
 #include "ud_ep.h"
 
+
+#define UCT_UD_MIN_INLINE   48
+
+
 typedef struct uct_ud_iface_addr {
     uct_iface_addr_t     super;
     uint32_t             qp_num;
