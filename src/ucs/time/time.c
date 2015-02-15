@@ -15,7 +15,7 @@
 #define UCS_SECONDS_PER_DAY  (60.0 * 60.0 * 24.0)
 
 
-double UCS_F_CTOR ucs_get_cpu_clocks_per_sec()
+double ucs_get_cpu_clocks_per_sec()
 {
     static double clocks_per_sec = 0.0;
     static int initialized = 0;
@@ -31,7 +31,7 @@ double UCS_F_CTOR ucs_get_cpu_clocks_per_sec()
  * Calculate how much we should shift the 64-bit time value, so that it will fit
  * a 32-bit integer, and cover an interval of at least one day.
  */
-unsigned UCS_F_CTOR ucs_get_short_time_shift()
+unsigned ucs_get_short_time_shift()
 {
     static unsigned time_shift = 0;
     static int initialized = 0;
