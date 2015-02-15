@@ -119,13 +119,24 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
     return iface->tx.cq_available > 0;
 }
 
-static inline ucs_status_t
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
                        uct_rc_hdr_t *hdr, unsigned byte_len)
 {
     ucs_trace_data("RX: AM [%d]", hdr->am_id);
     return uct_iface_invoke_am(&iface->super.super, hdr->am_id, desc, hdr + 1,
                                byte_len - sizeof(*hdr));
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_tx_posted(uct_rc_iface_t *iface, uct_rc_ep_t *ep, int signaled)
+{
+    if (signaled) {
+        ep->tx.unsignaled = 0;
+        --iface->tx.cq_available;
+    } else {
+        ++ep->tx.unsignaled;
+    }
 }
 
 #endif

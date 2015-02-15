@@ -12,13 +12,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_posted(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                        int signaled)
 {
-    if (signaled) {
-        ep->super.tx.unsignaled = 0;
-    } else {
-        ++ep->super.tx.unsignaled;
-        --iface->super.tx.cq_available;
-    }
-
+    uct_rc_iface_tx_posted(&iface->super, &ep->super, signaled);
     --ep->tx.available;
     ++ep->tx.post_count;
 }

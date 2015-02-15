@@ -135,14 +135,7 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     /* Flip BF register */
     ep->tx.bf_reg = (void*) ((uintptr_t) ep->tx.bf_reg ^ ep->tx.bf_size);
 
-    /* Count number of posts */
-    if (sig_flag) {
-        ep->super.tx.unsignaled = 0;
-        --iface->super.tx.cq_available;
-    } else {
-        ++ep->super.tx.unsignaled;
-    }
-
+    uct_rc_iface_tx_posted(&iface->super, &ep->super, sig_flag);
     return UCS_OK;
 }
 
