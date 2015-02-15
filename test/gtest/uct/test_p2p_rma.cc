@@ -75,10 +75,7 @@ public:
         mapped_buffer sendbuf(length, 1, SEED1, sender());
         mapped_buffer recvbuf(length, 1, SEED2, receiver());
 
-        unsigned count = m_completion_count;
-        ucs_status_t status = (this->*send)(sender_ep(), sendbuf, recvbuf);
-        wait_for_local(status, count);
-
+        blocking_send(send, sender_ep(), sendbuf, recvbuf, m_completion_count);
         if (direction == DIRECTION_SEND_TO_RECV) {
             sendbuf.pattern_fill(SEED3);
             wait_for_remote();

@@ -97,10 +97,10 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ucs_assert(ep != NULL);
 
     /* "cqe->wqe_counter" is the index of the completed wqe (modulo 2^16).
-     * So we can post additional "wqe_cnt" WQEs, plus the one just completed.
+     * Calculate new max_pi based on that value.
      */
     hw_ci         = ntohs(cqe->wqe_counter);
-    ep->tx.max_pi = hw_ci + iface->super.config.tx_qp_len + 1;
+    ep->tx.max_pi = uct_rc_mlx5_calc_max_pi(iface, hw_ci);
     ++iface->super.tx.cq_available;
 
     /* Process completions */
@@ -179,12 +179,14 @@ static void uct_rc_mlx5_iface_progress(void *arg)
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    size_t max_bb = MLX5_SEND_WQE_BB;
+    size_t max_wqe_size;
 
     uct_rc_iface_query(iface, iface_attr);
 
+    max_wqe_size = MLX5_SEND_WQE_BB * UCT_RC_MLX5_MAX_BB;
+
     /* PUT */
-    iface_attr->cap.put.max_short = max_bb
+    iface_attr->cap.put.max_short = max_wqe_size
                                         - sizeof(struct mlx5_wqe_ctrl_seg)
                                         - sizeof(struct mlx5_wqe_raddr_seg)
                                         - sizeof(struct mlx5_wqe_inl_data_seg);
@@ -196,7 +198,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
 
     /* AM */
-    iface_attr->cap.am.max_short  = max_bb
+    iface_attr->cap.am.max_short  = max_wqe_size
                                         - sizeof(struct mlx5_wqe_ctrl_seg)
                                         - sizeof(struct mlx5_wqe_inl_data_seg)
                                         - sizeof(uct_rc_hdr_t);
@@ -204,7 +206,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                         - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size
                                         - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.max_hdr    = max_bb
+    iface_attr->cap.am.max_hdr    = max_wqe_size
                                         - sizeof(struct mlx5_wqe_ctrl_seg)
                                         - sizeof(struct mlx5_wqe_inl_data_seg)
                                         - sizeof(uct_rc_hdr_t)
@@ -217,7 +219,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                              UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
                              UCT_IFACE_FLAG_ATOMIC_ADD64 |
                              UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                             /* TODO UCT_IFACE_FLAG_ATOMIC_CSWAP64 | */
+                             UCT_IFACE_FLAG_ATOMIC_SWAP64 |
                              UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
                              UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                              UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;

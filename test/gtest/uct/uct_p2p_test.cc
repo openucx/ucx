@@ -49,22 +49,41 @@ void uct_p2p_test::test_xfer(send_func_t send, size_t length, direction_t direct
     UCS_TEST_SKIP;
 }
 
+class size {
+public:
+    explicit size(size_t value) : m_value(value) {}
+
+    size_t value() const {
+        return m_value;
+    }
+private:
+    size_t m_value;
+};
+
+template <typename O>
+static O& operator<<(O& os, const size& sz)
+{
+    size_t v = sz.value();
+
+    os << std::fixed << std::setprecision(1);
+    if (v < 1024) {
+        os << v;
+    } else if (v < 1024 * 1024) {
+        os << (v / 1024.0) << "k";
+    } else if (v < 1024 * 1024 * 1024) {
+        os << (v / 1024.0 / 1024.0) << "m";
+    } else {
+        os << (v / 1024.0 / 1024.0 / 1024.0) << "g";
+    }
+
+    return os;
+}
+
 template <typename O>
 void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length,
                                    direction_t direction)
 {
-    os << std::fixed << std::setprecision(1);
-    if (length < 1024) {
-        os << length;
-    } else if (length < 1024 * 1024) {
-        os << (length / 1024.0) << "k";
-    } else if (length < 1024 * 1024 * 1024) {
-        os << (length / 1024.0 / 1024.0) << "m";
-    } else {
-        os << (length / 1024.0 / 1024.0 / 1024.0) << "g";
-    }
-
-    os << " " << std::flush;
+    os << size(length) << " " << std::flush;
     test_xfer(send, length, direction);
 }
 
@@ -75,7 +94,7 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
         max_length /= ucs::test_time_multiplier();
     }
 
-    if (!(max_length > min_length)) {
+    if (max_length <= min_length) {
         UCS_TEST_SKIP;
     }
 
@@ -90,16 +109,39 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
      */
     double log_min = log2(min_length + 1);
     double log_max = log2(max_length - 1);
-    int count = (int)sqrt(log_max - log_min);
-    for (int i = 0; i < count; ++i) {
+
+    /* How many times to repeat */
+    int repeat_count;
+    repeat_count = (1 * 1024 * 1024) / ((max_length + min_length) / 2);
+    if (repeat_count > 3000) {
+        repeat_count = 3000;
+    }
+    repeat_count /= ucs::test_time_multiplier();
+    if (repeat_count == 0) {
+        repeat_count = 1;
+    }
+
+    ms << repeat_count << "x{" << size(min_length) << ".." << size(max_length) << "} "
+                    << std::flush;
+    for (int i = 0; i < repeat_count; ++i) {
         double exp = (rand() * (log_max - log_min)) / RAND_MAX + log_min;
         ssize_t length = (ssize_t)pow(2.0, exp);
         ucs_assert(length > min_length && length < max_length);
-        test_xfer_print(ms, send, length, direction);
+        test_xfer(send, length, direction);
     }
+
+    sender().flush();
 }
 
-void uct_p2p_test::wait_for_local(ucs_status_t status, unsigned prev_comp_count) {
+void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
+                                 const mapped_buffer &sendbuf,
+                                 const mapped_buffer &recvbuf,
+                                 unsigned prev_comp_count)
+{
+    ucs_status_t status;
+    do {
+        status = (this->*send)(ep, sendbuf, recvbuf);
+    } while (status == UCS_ERR_WOULD_BLOCK);
     if (status == UCS_OK) {
         return;
     } else if (status == UCS_INPROGRESS) {

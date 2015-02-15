@@ -39,7 +39,8 @@ protected:
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction);
     void test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t max_length,
                          direction_t direction);
-    void wait_for_local(ucs_status_t status, unsigned prev_comp_count);
+    void blocking_send(send_func_t send, uct_ep_h ep, const mapped_buffer &sendbuf,
+                       const mapped_buffer &recvbuf, unsigned prev_comp_count);
     void wait_for_remote();
     const entity& sender() const;
     uct_ep_h sender_ep() const;
