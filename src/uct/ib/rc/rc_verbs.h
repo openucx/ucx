@@ -57,6 +57,19 @@ typedef struct uct_rc_verbs_iface {
 } uct_rc_verbs_iface_t;
 
 
+/*
+ * We can post if we're not starting further that max_pi.
+ * See also uct_rc_mlx5_calc_max_pi().
+ */
+#define UCT_RC_VERBS_CHECK_RES(_iface, _ep) \
+    if (!uct_rc_iface_have_tx_cqe_avail(&(_iface)->super)) { \
+        return UCS_ERR_WOULD_BLOCK; \
+    } \
+    if ((_ep)->tx.available == 0) { \
+        return UCS_ERR_WOULD_BLOCK; \
+    }
+
+
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 
