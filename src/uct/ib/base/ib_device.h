@@ -13,7 +13,19 @@
 #include <uct/api/uct.h>
 #include <ucs/type/status.h>
 
-#define UCT_IB_QPN_ORDER   24  /* How many bits can be an IB QP number */
+#define UCT_IB_QPN_ORDER         24  /* How many bits can be an IB QP number */
+#define UCT_IB_LRH_LEN           8
+#define UCT_IB_GRH_LEN           40
+#define UCT_IB_BTH_LEN           12
+#define UCT_IB_DETH_LEN          8
+#define UCT_IB_RETH_LEN          16
+#define UCT_IB_ATOMIC_ETH_LEN    28
+#define UCT_IB_AETH_LEN          4
+#define UCT_IB_PAYLOAD_ALIGN     4
+#define UCT_IB_ICRC_LEN          4
+#define UCT_IB_VCRC_LEN          2
+#define UCT_IB_DELIM_LEN         2
+#define UCT_IB_FDR_PACKET_GAP    64
 
 
 typedef struct uct_ib_device uct_ib_device_t;
@@ -41,6 +53,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags);
 
 ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
+                                             size_t tl_hdr_len, uint64_t tl_overhead_ns,
                                              uct_resource_desc_t *resource);
 
 const char *uct_ib_device_name(uct_ib_device_t *dev);
@@ -52,6 +65,13 @@ ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
  * @return 1 if the port is InfiniBand, 0 if the port is Ethernet.
  */
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
+
+
+/**
+ * @return Port active MTU.
+ */
+size_t uct_ib_device_port_active_mtu(uct_ib_device_t *dev, uint8_t port_num);
+
 
 static inline struct ibv_exp_port_attr* uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {
