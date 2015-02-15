@@ -203,7 +203,7 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_zcopy      = 0;
     iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
     iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
-    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT;
+    iface_attr->cap.flags             = 0; /* Not reliable yet */
     iface_attr->completion_priv_len   = 0;
 
 }
