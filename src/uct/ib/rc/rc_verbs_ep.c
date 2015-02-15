@@ -136,7 +136,7 @@ static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
                                              uint64_t remote_addr, uct_rkey_t rkey)
 {
     wr->wr.rdma.remote_addr = remote_addr;
-    wr->wr.rdma.rkey        = ntohl(rkey);
+    wr->wr.rdma.rkey        = rkey;
     wr->sg_list             = sge;
     wr->num_sge             = 1;
     wr->opcode              = opcode;
@@ -184,7 +184,7 @@ uct_rc_verbs_ep_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint64_t compare_
     wr.wr.atomic.compare_add = compare_add;
     wr.wr.atomic.swap        = swap;
     wr.wr.atomic.remote_addr = remote_addr;
-    wr.wr.atomic.rkey        = ntohl(rkey);
+    wr.wr.atomic.rkey        = rkey;
     sge.length               = sizeof(uint64_t);
 
     return uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, force_sig, success);
@@ -232,7 +232,7 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
 
     wr.ext_op.masked_atomics.log_arg_sz  = ucs_ilog2(length);
     wr.ext_op.masked_atomics.remote_addr = remote_addr;
-    wr.ext_op.masked_atomics.rkey        = htonl(rkey);
+    wr.ext_op.masked_atomics.rkey        = rkey;
 
     switch (opcode) {
     case IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP:
@@ -294,7 +294,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, void *buffer,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
 
     iface->inl_rwrite_wr.wr.rdma.remote_addr = remote_addr;
-    iface->inl_rwrite_wr.wr.rdma.rkey        = ntohl(rkey);
+    iface->inl_rwrite_wr.wr.rdma.rkey        = rkey;
     iface->inl_sge[0].addr                   = (uintptr_t)buffer;
     iface->inl_sge[0].length                 = length;
     return uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,

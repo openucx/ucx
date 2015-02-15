@@ -135,7 +135,7 @@ static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
     uint32_t *ptr = rkey_buffer;
 
     *(ptr++) = UCT_IB_RKEY_MAGIC;
-    *(ptr++) = htonl(mr->rkey); /* Use r-keys as big endian */
+    *(ptr++) = mr->rkey;
     return UCS_OK;
 }
 
