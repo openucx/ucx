@@ -107,7 +107,7 @@ typedef struct ucx_perf_test_rte {
     void        (*exchange_vec)(void *rte_group, void * req);
 
     /* Handle results */
-    void        (*report)(void *rte_group, ucx_perf_result_t *result);
+    void        (*report)(void *rte_group, ucx_perf_result_t *result, int is_final);
 
 } ucx_perf_test_rte_t;
 

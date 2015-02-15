@@ -578,6 +578,7 @@ ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *pa
 
     if (status == UCS_OK) {
         ucx_perf_calc_result(&perf.super, result);
+        rte_call(&perf.super, report, result, 1);
     }
 
     uct_perf_test_cleanup_endpoints(&perf);

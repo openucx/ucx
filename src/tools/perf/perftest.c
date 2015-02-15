@@ -32,11 +32,16 @@
 #   include<rte.h>
 #endif
 
+#define MAX_BATCH_FILES  32
+
+
 enum {
     TEST_FLAG_PRINT_RESULTS = UCS_BIT(0),
     TEST_FLAG_PRINT_TEST    = UCS_BIT(1),
     TEST_FLAG_SET_AFFINITY  = UCS_BIT(8),
-    TEST_FLAG_NUMERIC_FMT   = UCS_BIT(9)
+    TEST_FLAG_NUMERIC_FMT   = UCS_BIT(9),
+    TEST_FLAG_PRINT_FINAL   = UCS_BIT(10),
+    TEST_FLAG_PRINT_CSV     = UCS_BIT(11)
 };
 
 
@@ -57,7 +62,6 @@ typedef struct test_type {
 
 
 struct perftest_context {
-    test_type_t                  *test;
     ucx_perf_test_params_t       params;
 
     char                         dev_name[UCT_MAX_NAME_LEN];
@@ -70,8 +74,14 @@ struct perftest_context {
     unsigned                     cpu;
     unsigned                     flags;
 
+    unsigned                     num_batch_files;
+    char                         *batch_files[MAX_BATCH_FILES];
+    char                         *test_names[MAX_BATCH_FILES];
+
     sock_rte_group_t             sock_rte_group;
 };
+
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oq"
 
 
 test_type_t tests[] = {
@@ -140,28 +150,45 @@ static int safe_recv(int sock, void *data, size_t size)
     return 0;
 }
 
-static void print_progress(ucx_perf_result_t *result, unsigned flags)
+static void print_progress(char **test_names, unsigned num_names,
+                           ucx_perf_result_t *result, unsigned flags, int final)
 {
+    static const char *fmt_csv     =  "%.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f\n";
     static const char *fmt_numeric =  "%'14.0f %9.3f %9.3f %9.3f %10.2f %10.2f %'11.0f %'11.0f\n";
     static const char *fmt_plain   =  "%14.0f %9.3f %9.3f %9.3f %10.2f %10.2f %11.0f %11.0f\n";
+    unsigned i;
 
-    if (flags & TEST_FLAG_PRINT_RESULTS) {
-        printf((flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric : fmt_plain,
-               (double)result->iters,
-               result->latency.typical * 1000000.0,
-               result->latency.moment_average * 1000000.0,
-               result->latency.total_average * 1000000.0,
-               result->bandwidth.moment_average / (1024.0 * 1024.0),
-               result->bandwidth.total_average / (1024.0 * 1024.0),
-               result->msgrate.moment_average,
-               result->msgrate.total_average);
-        fflush(stdout);
+    if (!(flags & TEST_FLAG_PRINT_RESULTS) ||
+        (!final && (flags & TEST_FLAG_PRINT_FINAL)))
+    {
+        return;
     }
+
+    if (flags & TEST_FLAG_PRINT_CSV) {
+        for (i = 0; i < num_names; ++i) {
+            printf("%s,", test_names[i]);
+        }
+    }
+
+    printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
+           (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
+                                             fmt_plain,
+           (double)result->iters,
+           result->latency.typical * 1000000.0,
+           result->latency.moment_average * 1000000.0,
+           result->latency.total_average * 1000000.0,
+           result->bandwidth.moment_average / (1024.0 * 1024.0),
+           result->bandwidth.total_average / (1024.0 * 1024.0),
+           result->msgrate.moment_average,
+           result->msgrate.total_average);
+    fflush(stdout);
 }
 
 static void print_header(struct perftest_context *ctx)
 {
     const char *test_data_str;
+    test_type_t *test;
+    unsigned i;
 
     switch (ctx->params.data_layout) {
     case UCX_PERF_DATA_LAYOUT_SHORT:
@@ -179,28 +206,60 @@ static void print_header(struct perftest_context *ctx)
     }
 
     if (ctx->flags & TEST_FLAG_PRINT_TEST) {
-        printf("+------------------------------------------------------------------------------------------+\n");
-        printf("| Test:         %-60s               |\n", ctx->test->desc);
-        printf("| Data layout:  %-60s               |\n", test_data_str);
-        printf("| Message size: %-60zu               |\n", ctx->params.message_size);
+        for (test = tests; test->name; ++test) {
+            if ((test->command == ctx->params.command) && (test->test_type == ctx->params.test_type)) {
+                break;
+            }
+        }
+        if (test->name != NULL) {
+            printf("+------------------------------------------------------------------------------------------+\n");
+            printf("| Test:         %-60s               |\n", test->desc);
+            printf("| Data layout:  %-60s               |\n", test_data_str);
+            printf("| Message size: %-60zu               |\n", ctx->params.message_size);
+        }
     }
 
-    if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
-        printf("+--------------+-----------------------------+---------------------+-----------------------+\n");
-        printf("|              |       latency (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n");
-        printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
-        printf("| # iterations | typical | average | overall |  average |  overall |   average |   overall |\n");
-        printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
-    } else if (ctx->flags & TEST_FLAG_PRINT_TEST) {
-        printf("+------------------------------------------------------------------------------------------+\n");
+    if (ctx->flags & TEST_FLAG_PRINT_CSV) {
+        if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
+            for (i = 0; i < ctx->num_batch_files; ++i) {
+                printf("%s,", basename(ctx->batch_files[i]));
+            }
+            printf("iterations,typical_lat,avg_lat,overall_lat,avg_bw,overall_bw,avg_mr,overall_mr\n");
+        }
+    } else {
+        if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
+            printf("+--------------+-----------------------------+---------------------+-----------------------+\n");
+            printf("|              |       latency (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n");
+            printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
+            printf("| # iterations | typical | average | overall |  average |  overall |   average |   overall |\n");
+            printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
+        } else if (ctx->flags & TEST_FLAG_PRINT_TEST) {
+            printf("+------------------------------------------------------------------------------------------+\n");
+        }
     }
 }
 
-static void print_footer(struct perftest_context *ctx, ucx_perf_result_t *result)
+static void print_test_name(struct perftest_context *ctx)
 {
-    if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
-        printf("+Overall-------+---------+---------+---------+----------+----------+-----------+-----------+\n");
-        print_progress(result, ctx->flags);
+    char buf[200];
+    unsigned i, pos;
+
+    if (!(ctx->flags & TEST_FLAG_PRINT_CSV) && (ctx->num_batch_files > 0)) {
+        strcpy(buf, "+--------------+---------+---------+---------+----------+----------+-----------+-----------+");
+
+        pos = 1;
+        for (i = 0; i < ctx->num_batch_files; ++i) {
+           if (i != 0) {
+               buf[pos++] = '/';
+           }
+           memcpy(&buf[pos], ctx->test_names[i],
+                  ucs_min(strlen(ctx->test_names[i]), sizeof(buf) - pos - 1));
+           pos += strlen(ctx->test_names[i]);
+        }
+
+        if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
+            printf("%s\n", buf);
+        }
     }
 }
 
@@ -238,7 +297,12 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -W <count>     Flow control window size, for active messages. (%u)\n", ctx->params.fc_window);
     printf("     -O <count>     Maximal number of uncompleted outstanding sends. (%u)\n", ctx->params.max_outstanding);
     printf("     -N             Use numeric formatting - thousands separator.\n");
+    printf("     -f             Print only final numbers.\n");
+    printf("     -v             Print CSV-formatted output.\n");
     printf("     -p <port>      TCP port to use for data exchange. (%d)\n", ctx->port);
+    printf("     -b <batchfile> Batch mode. Read and execute tests from a file.\n");
+    printf("                       Every line of the file is a test to run. The first word is the\n");
+    printf("                       test name, and the rest are command-line arguments for the test.\n");
     printf("     -h             Show this help message.\n");
     printf("\n");
     printf("  Server options:\n");
@@ -280,32 +344,137 @@ void print_transports(struct perftest_context *ctx)
     uct_release_resource_list(resources);
 }
 
+static void init_test_params(ucx_perf_test_params_t *params)
+{
+    params->command         = UCX_PERF_TEST_CMD_LAST;
+    params->test_type       = UCX_PERF_TEST_TYPE_LAST;
+    params->data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
+    params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
+    params->fc_window       = 128;
+    params->max_outstanding = 1;
+    params->warmup_iter     = 10000;
+    params->message_size    = 8;
+    params->hdr_size        = 8;
+    params->alignment       = ucs_get_page_size();
+    params->max_iter        = 1000000l;
+    params->max_time        = 0.0;
+    params->report_interval = 1.0;
+    params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
+}
+
+static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, const char *optarg)
+{
+    test_type_t *test;
+
+    switch (opt) {
+    case 't':
+        for (test = tests; test->name; ++test) {
+            if (!strcmp(optarg, test->name)) {
+                params->command   = test->command;
+                params->test_type = test->test_type;
+                break;
+            }
+        }
+        if (test->name == NULL) {
+            ucs_error("Invalid option argument for -t");
+            return UCS_ERR_INVALID_PARAM;
+        }
+        return UCS_OK;
+    case 'D':
+        if (0 == strcmp(optarg, "short")) {
+            params->data_layout   = UCX_PERF_DATA_LAYOUT_SHORT;
+        } else if (0 == strcmp(optarg, "bcopy")) {
+            params->data_layout   = UCX_PERF_DATA_LAYOUT_BCOPY;
+        } else if (0 == strcmp(optarg, "zcopy")) {
+            params->data_layout   = UCX_PERF_DATA_LAYOUT_ZCOPY;
+        } else {
+            ucs_error("Invalid option argument for -D");
+            return -1;
+        }
+        return UCS_OK;
+    case 'n':
+        params->max_iter = atol(optarg);
+        return UCS_OK;
+    case 's':
+        params->message_size = atol(optarg);
+        return UCS_OK;
+    case 'H':
+        params->hdr_size = atol(optarg);
+        return UCS_OK;
+    case 'W':
+        params->fc_window = atoi(optarg);
+        return UCS_OK;
+    case 'O':
+        params->max_outstanding = atoi(optarg);
+        return UCS_OK;
+    case 'w':
+        params->warmup_iter = atol(optarg);
+        return UCS_OK;
+    case 'o':
+        params->flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
+        return UCS_OK;
+    case 'q':
+        params->flags &= ~UCX_PERF_TEST_FLAG_VERBOSE;
+        return UCS_OK;
+    default:
+       return UCS_ERR_INVALID_PARAM;
+    }
+}
+
+static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_test_params_t *params,
+                                    char** test_name_p)
+{
+#define MAX_SIZE 256
+    ucs_status_t status;
+    char buf[MAX_SIZE];
+    int argc;
+    char *argv[MAX_SIZE];
+    char c, *p;
+
+    do {
+        if (fgets(buf, sizeof(buf) - 1, batch_file) == NULL) {
+            return UCS_ERR_NO_ELEM;
+        }
+
+        argc = 0;
+        p = strtok(buf, " \t\n\r");
+        while (p && (argc < MAX_SIZE)) {
+            argv[argc++] = p;
+            p = strtok(NULL, " \t\n\r");
+        }
+        argv[argc] = NULL;
+    } while ((argc == 0) || (argv[0][0] == '#'));
+
+
+    optind = 1;
+    while ((c = getopt (argc, argv, TEST_PARAMS_ARGS)) != -1) {
+        status = parse_test_params(params, c, optarg);
+        if (status != UCS_OK) {
+            ucs_error("Invalid argument in batch file: -%c", c);
+            return status;
+        }
+    }
+
+    *test_name_p = strdup(argv[0]);
+    return UCS_OK;
+}
+
 static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
 {
+    ucs_status_t status;
     test_type_t *test;
     char c;
 
-    ctx->test                   = NULL;
-    ctx->params.command         = UCX_PERF_TEST_CMD_LAST;
-    ctx->params.test_type       = UCX_PERF_TEST_TYPE_LAST;
-    ctx->params.data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
-    ctx->params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    ctx->params.fc_window       = 128;
-    ctx->params.max_outstanding = 1;
-    ctx->params.warmup_iter     = 10000;
-    ctx->params.message_size    = 8;
-    ctx->params.hdr_size        = 8;
-    ctx->params.alignment       = ucs_get_page_size();
-    ctx->params.max_iter        = 1000000l;
-    ctx->params.max_time        = 0.0;
-    ctx->params.report_interval = 1.0;
-    strcpy(ctx->dev_name, "");
-    strcpy(ctx->tl_name, "");
+    init_test_params(&ctx->params);
     ctx->server_addr            = NULL;
+    ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
     ctx->flags                  = 0;
+    strcpy(ctx->dev_name, "");
+    strcpy(ctx->tl_name, "");
 
-    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:NlW:O:w:D:H:o")) != -1) {
+    optind = 1;
+    while ((c = getopt (argc, argv, "p:d:x:b:Nfvc:lh" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -316,67 +485,37 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
         case 'x':
             ucs_snprintf_zero(ctx->tl_name, sizeof(ctx->tl_name), "%s", optarg);
             break;
-        case 't':
-            for (test = tests; test->name; ++test) {
-                if (!strcmp(optarg, test->name)) {
-                    ctx->test             = test;
-                    ctx->params.command   = test->command;
-                    ctx->params.test_type = test->test_type;
-                    break;
-                }
+        case 'b':
+            if (ctx->num_batch_files < MAX_BATCH_FILES) {
+                ctx->batch_files[ctx->num_batch_files++] = strdup(optarg);
             }
-            if (ctx->test == NULL) {
-                ucs_error("Invalid option argument for -t");
-                return -1;
-            }
-            break;
-        case 'D':
-            if (0 == strcmp(optarg, "short")) {
-                ctx->params.data_layout   = UCX_PERF_DATA_LAYOUT_SHORT;
-            } else if (0 == strcmp(optarg, "bcopy")) {
-                ctx->params.data_layout   = UCX_PERF_DATA_LAYOUT_BCOPY;
-            } else if (0 == strcmp(optarg, "zcopy")) {
-                ctx->params.data_layout   = UCX_PERF_DATA_LAYOUT_ZCOPY;
-            } else {
-                ucs_error("Invalid option argument for -D");
-                return -1;
-            }
-            break;
-        case 'n':
-            ctx->params.max_iter = atol(optarg);
-            break;
-        case 's':
-            ctx->params.message_size = atol(optarg);
-            break;
-        case 'H':
-            ctx->params.hdr_size = atol(optarg);
             break;
         case 'N':
             ctx->flags |= TEST_FLAG_NUMERIC_FMT;
+            break;
+        case 'f':
+            ctx->flags |= TEST_FLAG_PRINT_FINAL;
+            break;
+        case 'v':
+            ctx->flags |= TEST_FLAG_PRINT_CSV;
             break;
         case 'c':
             ctx->flags |= TEST_FLAG_SET_AFFINITY;
             ctx->cpu = atoi(optarg);
             break;
-        case 'W':
-            ctx->params.fc_window = atoi(optarg);
-            break;
-        case 'O':
-            ctx->params.max_outstanding = atoi(optarg);
-            break;
-        case 'w':
-            ctx->params.warmup_iter = atol(optarg);
-            break;
-        case 'o':
-            ctx->params.flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
-            break;
         case 'l':
             print_transports(ctx);
             return UCS_ERR_CANCELED;
         case 'h':
+            usage(ctx, __basename(argv[0]));
+            return UCS_ERR_CANCELED;
         default:
-           usage(ctx, __basename(argv[0]));
-           return UCS_ERR_INVALID_PARAM;
+            status = parse_test_params(&ctx->params, c, optarg);
+            if (status != UCS_OK) {
+                usage(ctx, __basename(argv[0]));
+                return status;
+            }
+            break;
         }
     }
 
@@ -392,11 +531,6 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
     ucs_status_t status;
     uct_resource_desc_t *resources;
     unsigned num_resources;
-
-    if (ctx->test == NULL) {
-        ucs_error("Must specify test type");
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     status = uct_query_resources(ctx->ucth, &resources, &num_resources);
     if (status != UCS_OK) {
@@ -534,13 +668,11 @@ void sock_rte_exchange_vec(void *rte_group, void * req)
     sock_rte_barrier(rte_group);
 }
 
-static void sock_rte_report(void *rte_group, ucx_perf_result_t *result)
+static void sock_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
 {
-    sock_rte_group_t *group = rte_group;
-    unsigned flags =
-        ucs_container_of(group, struct perftest_context, sock_rte_group)->flags;
-
-    print_progress(result, flags);
+    struct perftest_context *ctx =
+                    ucs_container_of(rte_group, struct perftest_context, sock_rte_group);
+    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
 }
 
 ucx_perf_test_rte_t sock_rte = {
@@ -730,10 +862,10 @@ void mpi_rte_exchange_vec(void *rte_group, void * req)
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-static void mpi_rte_report(void *rte_group, ucx_perf_result_t *result)
+static void mpi_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
 {
     struct perftest_context *ctx = rte_group;
-    print_progress(result, ctx->flags);
+    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
 }
 
 ucx_perf_test_rte_t mpi_rte = {
@@ -838,10 +970,10 @@ void ext_rte_exchange_vec(void *rte_group, void * req)
     }
 }
 
-static void ext_rte_report(void *rte_group, ucx_perf_result_t *result)
+static void ext_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
 {
     struct perftest_context *ctx = rte_group;
-    print_progress(result, ctx->flags);
+    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
 }
 
 ucx_perf_test_rte_t ext_rte = {
@@ -950,6 +1082,38 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     return UCS_OK;
 }
 
+static ucs_status_t run_test_recurs(struct perftest_context *ctx,
+                                    ucx_perf_test_params_t *parent_params,
+                                    uct_iface_config_t *iface_config,
+                                    unsigned depth)
+{
+    ucx_perf_test_params_t params;
+    ucx_perf_result_t result;
+    ucs_status_t status;
+    FILE *batch_file;
+
+    if (depth >= ctx->num_batch_files) {
+        print_test_name(ctx);
+        return uct_perf_test_run(ctx->ucth, parent_params, ctx->tl_name,
+                                 ctx->dev_name, iface_config, &result);
+    }
+
+    batch_file = fopen(ctx->batch_files[depth], "r");
+    if (batch_file == NULL) {
+        ucs_error("Failed to open '%s': %m", optarg);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    params = *parent_params;
+    while ((status = read_batch_file(batch_file, &params, &ctx->test_names[depth])) == UCS_OK) {
+        status = run_test_recurs(ctx, &params, iface_config, depth + 1);
+        free(ctx->test_names[depth]);
+    }
+
+    fclose(batch_file);
+    return UCS_OK;
+}
+
 static ucs_status_t run_test(struct perftest_context *ctx)
 {
     uct_iface_config_t *iface_config;
@@ -964,16 +1128,12 @@ static ucs_status_t run_test(struct perftest_context *ctx)
     }
 
     print_header(ctx);
-    status = uct_perf_test_run(ctx->ucth, &ctx->params, ctx->tl_name, ctx->dev_name,
-                               iface_config, &result);
+
+    status = run_test_recurs(ctx, &ctx->params, iface_config, 0);
     if (status != UCS_OK) {
         ucs_error("Failed to run test: %s", ucs_status_string(status));
-        goto out_release_cfg;
     }
 
-    print_footer(ctx, &result);
-
-out_release_cfg:
     uct_iface_config_release(iface_config);
 out:
     return status;
@@ -1027,7 +1187,6 @@ int main(int argc, char **argv)
     }
 
     /* Run the test */
-
     status = run_test(&ctx);
     if (status != UCS_OK) {
         ret = -1;

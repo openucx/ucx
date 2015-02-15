@@ -135,7 +135,7 @@ public:
     {
     }
 
-    static void report(void *rte_group, ucx_perf_result_t *result)
+    static void report(void *rte_group, ucx_perf_result_t *result, int is_final)
     {
     }
 
