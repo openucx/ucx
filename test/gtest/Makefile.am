@@ -123,7 +123,7 @@ test: ucx gtest
 # Run unit tests with GDB
 #
 test_gdb: ucx gtest
-	echo -e 'r\nq' > .gdbcommands
+	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
 	env UCS_HANDLE_ERRORS=none \
 		UCS_GDB_PATH="" \
 		gdb -x .gdbcommands --args $(GDB_ARGS) \

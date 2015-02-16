@@ -572,8 +572,8 @@ static ucs_status_t ucs_error_freeze()
 
     if (pthread_mutex_trylock(&lock) == 0) {
 
-        if (strlen(ucs_global_opts.gdb_command) && isatty(fileno(stdout) &&
-            isatty(fileno(stdin))))
+        if (strlen(ucs_global_opts.gdb_command) && isatty(fileno(stdout)) &&
+            isatty(fileno(stdin)))
         {
             ucs_log_fatal_error("Process frozen, press Enter to attach a debugger...");
             ret = read(fileno(stdin), &response, 1); /* Use low-level input to avoid deadlock */
