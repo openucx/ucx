@@ -93,8 +93,13 @@ public:
     {
         char buf[200] = {0};
         if (level <= UCS_LOG_LEVEL_WARN) {
+            va_list ap_copy;
+            va_copy(ap_copy, ap); /* Create a copy of arglist, to use it 2nd time */
+
             ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG, prefix, message, ap);
-            vsnprintf(buf, sizeof(buf), message, ap);
+            vsnprintf(buf, sizeof(buf), message, ap_copy);
+            va_end(ap_copy);
+
             UCS_TEST_MESSAGE << "   < " << buf << " >";
             ++error_count;
         } else {
