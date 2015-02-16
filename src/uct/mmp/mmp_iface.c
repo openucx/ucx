@@ -13,12 +13,20 @@
 
 unsigned mmp_domain_global_counter = 0;
 
+/* called in the notifier chain and iface_flush */
 static void uct_mmp_progress(void *arg)
 {
+    /* FIXME not sure what this will do yet */
 }
 
 static ucs_status_t uct_mmp_iface_flush(uct_iface_h tl_iface)
 {
+    uct_mmp_iface_t *iface = ucs_derived_of(tl_iface, uct_mmp_iface_t);
+    if (0 == iface->outstanding) {
+        return UCS_OK;
+    }
+    uct_mmp_progress(iface);
+    return UCS_ERR_WOULD_BLOCK;
 }
 
 /* Forward declaration for the delete function */
@@ -27,16 +35,22 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_mmp_iface_t)(uct_iface_t*);
 ucs_status_t uct_mmp_iface_get_address(uct_iface_h tl_iface, 
                                        uct_iface_addr_t *iface_addr)
 {
+    uct_mmp_iface_t *iface = ucs_derived_of(tl_iface, uct_mmp_iface_t);
+
+    *(uct_mmp_iface_addr_t*)iface_addr = iface->address;
+    return UCS_OK;
 }
 
 ucs_status_t uct_mmp_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
-}
-
-#define UCT_mmp_RKEY_MAGIC  0xdeadbeefLL
-
-static ucs_status_t uct_mmp_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
-{
+    /* FIXME all of these values */
+    iface_attr->cap.put.max_short      = 2048;
+    iface_attr->cap.put.max_bcopy      = 2048;
+    iface_attr->cap.put.max_zcopy      = 0;
+    iface_attr->iface_addr_len         = sizeof(uct_mmp_iface_addr_t);
+    iface_attr->ep_addr_len            = sizeof(uct_mmp_ep_addr_t);
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_mmp_mem_map(uct_pd_h pd, void **address_p, 
@@ -47,6 +61,17 @@ static ucs_status_t uct_mmp_mem_map(uct_pd_h pd, void **address_p,
 
 static ucs_status_t uct_mmp_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 {
+}
+
+#define UCT_MMP_RKEY_MAGIC  0xdeadbeefLL /* FIXME what the deuce is this? */
+
+static ucs_status_t uct_mmp_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
+{
+    /* FIXME what are we going to use for keys here?
+    pd_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
+    */
+    return UCS_OK;
+
 }
 
 static ucs_status_t uct_mmp_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,

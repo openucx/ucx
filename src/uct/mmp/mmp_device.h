@@ -18,7 +18,7 @@
 
 typedef struct uct_mmp_device {
     uct_pd_t         super;                     /**< Protection domain */
-    gni_nic_device_t type;                      /**< Device type */
+    gni_nic_device_t type;                      /**< FIXME Device type */
     char             type_name[MAX_TYPE_NAME];  /**< Device type name */
     char             fname[UCT_MAX_NAME_LEN];   /**< Device full name */
     uint32_t         device_id;                 /**< Device id */
