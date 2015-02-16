@@ -19,6 +19,8 @@ static void UCS_F_CTOR ucs_init()
     ucs_log_early_init(); /* Must be called before all others */
     ucs_global_opts_init();
     ucs_log_init();
+    ucs_get_cpu_clocks_per_sec();
+    ucs_get_short_time_shift();
 #if ENABLE_STATS
     ucs_stats_init();
 #endif

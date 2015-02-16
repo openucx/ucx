@@ -61,6 +61,9 @@ protected:
     state_t              m_state;
     bool                 m_skip;
     int                  m_num_valgrind_errors_before;
+
+private:
+    void skipped(const test_skip_exception& e);
 };
 
 #define UCS_TEST_BASE_IMPL \

@@ -76,16 +76,43 @@ AS_IF([test "x$with_ib" == xyes],
            AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
            with_mlx5_hw=yes])
 
+       AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
+                       ibv_mlx5_exp_get_cq_info,
+                       ibv_mlx5_exp_get_srq_info,
+                       ibv_mlx5_exp_update_cq_ci],
+                      [], [], [[#include <infiniband/mlx5_hw.h>]])
+
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
-                       IBV_EXP_CQ_IGNORE_OVERRUN,
+                       IBV_EVENT_GID_CHANGE,
+                       IBV_DEVICE_MR_ALLOCATE,
+                       IBV_ACCESS_ALLOCATE_MR],
+                      [], [], [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_DECLS([IBV_EXP_CQ_IGNORE_OVERRUN,
                        IBV_EXP_ACCESS_ALLOCATE_MR,
+                       IBV_EXP_DEVICE_MR_ALLOCATE,
+                       IBV_EXP_WR_NOP,
                        IBV_EXP_DEVICE_DC_TRANSPORT,
+                       IBV_EXP_ATOMIC_HCA_REPLY_BE,
                        ibv_exp_create_qp,
                        ibv_exp_setenv],
                       [], [], [[#include <infiniband/verbs_exp.h>]])
 
+       AC_CHECK_DECLS([ibv_exp_post_send,
+                       IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP,
+                       IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,
+                       IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG,
+                       IBV_EXP_SEND_EXT_ATOMIC_INLINE],
+                      [],
+                      [have_ext_atomics=no],
+                      [[#include <infiniband/verbs_exp.h>]])
+       AS_IF([test "x$have_ext_atomics" != xno],
+             [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],
+             [AC_MSG_WARN([Compiling without extended atomics support])])
+
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
-                         struct ibv_exp_qp_init_attr.max_inl_recv],
+                         struct ibv_exp_qp_init_attr.max_inl_recv,
+                         struct ibv_async_event.element.dct],
                         [], [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_DEFINE([HAVE_IB], 1, [IB support])

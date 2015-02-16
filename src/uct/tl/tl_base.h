@@ -36,8 +36,8 @@ struct uct_tl_ops {
  * Active message handle table entry
  */
 typedef struct uct_am_handler {
-    uct_am_callback_t        cb;
-    void                     *arg;
+    uct_bcopy_recv_callback_t cb;
+    void                      *arg;
 } uct_am_handler_t;
 
 
@@ -73,17 +73,37 @@ typedef struct uct_iface_mpool_config {
 /**
  * Define configuration fields for memory pool parameters.
  */
-#define UCT_IFACE_MPOOL_CONFIG_FIELDS(_prefix, _dfl_max, _mp_name, _offset, _desc) \
+#define UCT_IFACE_MPOOL_CONFIG_FIELDS(_prefix, _dfl_max, _dfl_grow, _mp_name, _offset, _desc) \
     {_prefix "MAX_BUFS", UCS_PP_QUOTE(_dfl_max), \
      "Maximal number of " _mp_name " buffers for the interface. -1 is infinite." \
      _desc, \
      (_offset) + ucs_offsetof(uct_iface_mpool_config_t, max_bufs), UCS_CONFIG_TYPE_INT}, \
     \
-    {_prefix "BUFS_GROW", "0", \
+    {_prefix "BUFS_GROW", UCS_PP_QUOTE(_dfl_grow), \
      "How much buffers are added every time the " _mp_name " memory pool grows.\n" \
      "0 means the value is chosen by the transport.", \
      (_offset) + ucs_offsetof(uct_iface_mpool_config_t, bufs_grow), UCS_CONFIG_TYPE_UINT}
 
+
+/**
+ * Get a descriptor from memory pool, tell valgrind it's already defined, return
+ * error if the memory pool is empty.
+ *
+ * @param _mp     Memory pool to get descriptor from.
+ * @param _desc   Variable to assign descriptor to.
+ * @param _error  Error value to return if memory poll is empty.
+ *
+ * @return TX descriptor fetched from memory pool.
+ */
+#define UCT_TL_IFACE_GET_TX_DESC(_mp, _desc, _error) \
+    { \
+        _desc = ucs_mpool_get(_mp); \
+        if (_desc == NULL) { \
+            return _error; \
+        } \
+        \
+        VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
+    }
 
 
 typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj, uct_lkey_t lkey);
@@ -108,10 +128,10 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
 
 
 static inline ucs_status_t uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id,
-                                               void *data, unsigned length)
+                                               void *desc, void *data, unsigned length)
 {
     uct_am_handler_t *handler = &iface->am[id];
-    return handler->cb(data, length, handler->arg);
+    return handler->cb(desc, data, length, handler->arg);
 }
 
 #endif

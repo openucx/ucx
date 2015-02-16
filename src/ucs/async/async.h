@@ -12,8 +12,8 @@
 #include "signal.h"
 
 #include <ucs/config/types.h>
-#include <ucs/type/callback.h>
 #include <ucs/datastruct/mpmc.h>
+#include <ucs/datastruct/notifier.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
 

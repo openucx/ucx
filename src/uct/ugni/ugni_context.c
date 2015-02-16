@@ -22,7 +22,7 @@ ucs_config_field_t uct_ugni_iface_config_table[] = {
     {"", "", NULL,
     ucs_offsetof(uct_ugni_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, "fma",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, 0, "fma",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value
                                   != -1 is a dangerous thing\n" "and could

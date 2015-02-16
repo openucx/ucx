@@ -9,7 +9,6 @@
 #include "uct_test.h"
 
 #include <perf/libperf.h>
-#include <linux/sched.h>
 #include <pthread.h>
 #include <string>
 #include <vector>
@@ -168,6 +167,7 @@ protected:
         double               min;
         double               max;
         ucx_perf_cmd_t       command;
+        ucx_perf_data_layout_t data_layout;
         ucx_perf_test_type_t test_type;
         size_t               msglen;
         size_t               iters;
@@ -252,11 +252,12 @@ protected:
         ucx_perf_test_params_t params;
         params.command         = test.command;
         params.test_type       = test.test_type;
-        params.data_layout     = UCX_PERF_DATA_LAYOUT_BUFFER;
+        params.data_layout     = test.data_layout;
         params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
         params.flags           = 0;
         params.message_size    = test.msglen;
         params.alignment       = ucs_get_page_size();
+        params.am_window       = 128;
         params.warmup_iter     = test.iters / 10;
         params.max_iter        = test.iters;
         params.max_time        = 0.0;
@@ -308,28 +309,82 @@ protected:
     }
 
     static test_spec tests[];
+    static int can_run_test(const test_spec &test, uint32_t cap_flags);
 };
 
 
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
   { "active message latency", "usec", 0.1, 1.3,
-    UCX_PERF_TEST_CMD_AM_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+    UCX_PERF_TEST_CMD_AM,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
+    8, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+
+  { "active message rate", "Mpps", 4.0, 20.0,
+    UCX_PERF_TEST_CMD_AM, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    8, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
   { "put latency", "usec", 0.01, 1.5,
-    UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,   8, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
+    8, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "put msgrate", "Mpps", 5.0, 20.0,
-    UCX_PERF_TEST_CMD_PUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI, 8, 2000000l,
-    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
+  { "put rate", "Mpps", 5.0, 20.0,
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    8, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
+
+  { "put bcopy bandwidth", "MB/sec", 700.0, 10000.0,
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    2048, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
+
+  { "put zero-copy bandwidth", "MB/sec", 700.0, 10000.0,
+    UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    2048, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
+
+  { "active message bandwidth", "MB/sec", 700.0, 10000.0,
+    UCX_PERF_TEST_CMD_AM, UCX_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    2048, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
+
+  { "active message zero-copy bandwidth", "MB/sec", 700.0, 10000.0,
+    UCX_PERF_TEST_CMD_AM, UCX_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    2048, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
   { NULL }
 };
 
+int test_uct_perf::can_run_test(const test_spec &test, uint32_t cap_flags)
+{
+    switch (test.command) {
+        case UCX_PERF_TEST_CMD_AM:
+            switch (test.data_layout) {
+                case UCX_PERF_DATA_LAYOUT_SHORT:
+                    return cap_flags & UCT_IFACE_FLAG_AM_SHORT;
+                case UCX_PERF_DATA_LAYOUT_BCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_AM_BCOPY;
+                case UCX_PERF_DATA_LAYOUT_ZCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_AM_ZCOPY;
+                case UCX_PERF_DATA_LAYOUT_LAST:
+                    return 0;
+            }
+            return 0;
+        case UCX_PERF_TEST_CMD_PUT:
+            switch (test.data_layout) {
+                case UCX_PERF_DATA_LAYOUT_SHORT:
+                    return cap_flags & UCT_IFACE_FLAG_PUT_SHORT;
+                case UCX_PERF_DATA_LAYOUT_BCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_PUT_BCOPY;
+                case UCX_PERF_DATA_LAYOUT_ZCOPY:
+                    return cap_flags & UCT_IFACE_FLAG_PUT_ZCOPY;
+                case UCX_PERF_DATA_LAYOUT_LAST:
+                    return 0;
+            }
+        case UCX_PERF_TEST_CMD_LAST:
+            return 0;
+    }
+    return 0;
+}
+
 UCS_TEST_P(test_uct_perf, envelope) {
     uct_resource_desc_t resource = GetParam();
+    entity tl(resource);
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {
@@ -357,13 +412,19 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     /* Run all tests */
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
+        char result_str[200] = {0};
+        if (!can_run_test(*test, tl.iface_attr().cap.flags)) {
+            snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : SKIPPED",
+                    resource.tl_name, resource.dev_name, test->title);
+            UCS_TEST_MESSAGE << result_str;
+            continue;
+        }
         ucx_perf_result_t result = run_multi_threaded(*test,
                                                       resource.tl_name,
                                                       resource.dev_name,
                                                       cpus);
         double value = *(double*)( (char*)&result + test->field_offset) * test->norm;
-        char result_str[200] = {0};
-        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %25s : %.3f %s",
+        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %30s : %.3f %s",
                  resource.tl_name, resource.dev_name, test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {

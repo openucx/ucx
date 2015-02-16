@@ -20,8 +20,8 @@ BEGIN_C_DECLS
 
 
 typedef enum {
-    UCX_PERF_TEST_CMD_AM_SHORT,
-    UCX_PERF_TEST_CMD_PUT_SHORT,
+    UCX_PERF_TEST_CMD_AM,
+    UCX_PERF_TEST_CMD_PUT,
     UCX_PERF_TEST_CMD_LAST
 } ucx_perf_cmd_t;
 
@@ -35,7 +35,9 @@ typedef enum {
 
 
 typedef enum {
-    UCX_PERF_DATA_LAYOUT_BUFFER,
+    UCX_PERF_DATA_LAYOUT_SHORT,
+    UCX_PERF_DATA_LAYOUT_BCOPY,
+    UCX_PERF_DATA_LAYOUT_ZCOPY,
     UCX_PERF_DATA_LAYOUT_LAST
 } ucx_perf_data_layout_t;
 
@@ -114,6 +116,7 @@ typedef struct ucx_perf_test_params {
 
     size_t                 message_size;    /* Test message size */
     size_t                 alignment;       /* Message buffer alignment */
+    unsigned               am_window;       /* Window size for AM bandwidth */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
     double                 max_time;        /* Time limit (seconds), 0 - unlimited */

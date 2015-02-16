@@ -16,8 +16,12 @@
 #include <netinet/in.h>
 
 
+#define UCT_IB_MLX5_WQE_SEG_SIZE    16 /* Size of a segment in a WQE */
 #define UCT_IB_MLX5_CQE64_MAX_INL   32 /* Inline scatter size in 64-byte CQE */
 #define UCT_IB_MLX5_CQE128_MAX_INL  64 /* Inline scatter size in 128-byte CQE */
+
+#define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
+    ((8) | ((_log_arg_size) - 2))
 
 
 typedef struct uct_ib_mlx5_qp_info {
@@ -54,6 +58,27 @@ typedef struct uct_ib_mlx5_cq {
 } uct_ib_mlx5_cq_t;
 
 
+struct uct_ib_mlx5_atomic_masked_cswap32_seg {
+    uint32_t           swap;
+    uint32_t           compare;
+    uint32_t           swap_mask;
+    uint32_t           compare_mask;
+} UCS_S_PACKED;
+
+
+struct uct_ib_mlx5_atomic_masked_fadd32_seg {
+    uint32_t           add;
+    uint32_t           filed_boundary;
+    uint32_t           reserved[2];
+} UCS_S_PACKED;
+
+
+struct uct_ib_mlx5_atomic_masked_cswap64_seg {
+    uint64_t           swap;
+    uint64_t           compare;
+    uint64_t           swap_mask;
+    uint64_t           compare_mask;
+} UCS_S_PACKED;
 
 /**
  * Get internal QP information.
@@ -80,7 +105,7 @@ void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci);
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
-void uct_ib_mlx5_check_completion(struct mlx5_cqe64 *cqe);
+struct mlx5_cqe64*  uct_ib_mlx5_check_completion(struct mlx5_cqe64 *cqe);
 
 
 static inline void uct_ib_mlx5_wqe_set_data_seg(struct mlx5_wqe_data_seg *seg,
@@ -105,8 +130,7 @@ static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq)
     if ((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length)) {
         return NULL;
     } else if (op_own & 0x80) {
-        uct_ib_mlx5_check_completion(cqe);
-        return NULL;
+        return uct_ib_mlx5_check_completion(cqe);
     }
 
     cq->cq_ci = index + 1;

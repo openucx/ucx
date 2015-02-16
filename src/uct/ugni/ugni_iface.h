@@ -31,7 +31,6 @@ typedef struct uct_ugni_iface {
     uct_base_iface_t        super;
     uct_ugni_device_t       *dev;
     uct_ugni_pd_t           pd;
-    uct_ugni_iface_addr_t   addr;
     gni_cdm_handle_t        cdm_handle;                  /**< Ugni communication domain */
     gni_nic_handle_t        nic_handle;                  /**< Ugni NIC handle */
     uint32_t                pe_address;                  /**< PE address for the NIC that this

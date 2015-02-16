@@ -8,8 +8,8 @@
 #ifndef UCS_WHEEL_H
 #define UCS_WHEEL_H
 
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/list.h>
-#include <ucs/type/callback.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
 
@@ -36,9 +36,10 @@ typedef struct ucs_timer_wheel {
 
 /**
  * Initialize wheel timer
- * @param cb            Callback to call
+ *
+ * @param func          Callback to call
  */
-ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, void (*func)(ucs_callback_t *cb));
+ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, ucs_callback_func_t func);
 
 
 /**

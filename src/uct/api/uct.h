@@ -29,7 +29,6 @@ typedef struct uct_resource_desc {
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
     cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
-    socklen_t                addrlen;      /**< Size of address */
     struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
                                                 reach each other have same address */
 } uct_resource_desc_t;
@@ -53,29 +52,37 @@ struct uct_ep_addr {
  * Operation support flags.
  */
 enum {
+    /* Active message capabilities */
     UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0),
     UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1),
     UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2),
 
+    /* PUT capabilities */
     UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4),
     UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5),
     UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6),
 
+    /* GET capabilities */
     UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8),
     UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9),
     UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10),
 
+    /* Atomic operations capabilities */
     UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16),
     UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17),
-
     UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18),
     UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19),
-
     UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20),
     UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21),
-
     UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22),
     UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23),
+
+    /* Error handling capabilities */
+    UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF  = UCS_BIT(32), /* Invalid buffer for short */
+    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF  = UCS_BIT(33), /* Invalid buffer for bcopy */
+    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /* Invalid buffer for zcopy */
+    UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /* Invalid AM id on remote */
+    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /* Remote memory access */
 };
 
 
@@ -102,7 +109,7 @@ struct uct_iface_attr {
             size_t           max_hdr;    /* Max. header size for bcopy/zcopy */
         } am;
 
-        uint32_t             flags;
+        uint64_t             flags;
     } cap;
 
     size_t                   iface_addr_len;
@@ -278,7 +285,7 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
  * @param [in]  arg      Active message argument.
  */
 ucs_status_t uct_set_am_handler(uct_iface_h iface, uint8_t id,
-                                uct_am_callback_t cb, void *arg);
+                                uct_bcopy_recv_callback_t cb, void *arg);
 
 
 /**
@@ -358,68 +365,68 @@ ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
 void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob);
 
 
-static inline ucs_status_t uct_iface_query(uct_iface_h iface,
+UCT_INLINE_API ucs_status_t uct_iface_query(uct_iface_h iface,
                                            uct_iface_attr_t *iface_attr)
 {
     return iface->ops.iface_query(iface, iface_attr);
 }
 
-static inline ucs_status_t uct_iface_get_address(uct_iface_h iface,
+UCT_INLINE_API ucs_status_t uct_iface_get_address(uct_iface_h iface,
                                                  uct_iface_addr_t *iface_addr)
 {
     return iface->ops.iface_get_address(iface, iface_addr);
 }
 
-static inline ucs_status_t uct_iface_flush(uct_iface_h iface)
+UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface)
 {
     return iface->ops.iface_flush(iface);
 }
 
-static inline void uct_iface_close(uct_iface_h iface)
+UCT_INLINE_API void uct_iface_close(uct_iface_h iface)
 {
     iface->ops.iface_close(iface);
 }
 
-static inline ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
+UCT_INLINE_API ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
 {
     return iface->ops.ep_create(iface, ep_p);
 }
 
-static inline void uct_ep_destroy(uct_ep_h ep)
+UCT_INLINE_API void uct_ep_destroy(uct_ep_h ep)
 {
     ep->iface->ops.ep_destroy(ep);
 }
 
-static inline ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
+UCT_INLINE_API ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_get_address(ep, ep_addr);
 }
 
-static inline ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr)
+UCT_INLINE_API ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr)
 {
     return ep->iface->ops.ep_connect_to_iface(ep, iface_addr);
 }
 
-static inline ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
+UCT_INLINE_API ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
                                                 uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, iface_addr, ep_addr);
 }
 
-static inline ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned length,
+UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned length,
                                             uint64_t remote_addr, uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
 }
 
-static inline ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+UCT_INLINE_API ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
                                             void *arg, size_t length, uint64_t remote_addr,
                                             uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, length, remote_addr, rkey);
 }
 
-static inline ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
+UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
                                             uct_lkey_t lkey, uint64_t remote_addr,
                                             uct_rkey_t rkey, uct_completion_t *comp)
 {
@@ -427,20 +434,89 @@ static inline ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t le
                                        rkey, comp);
 }
 
-static inline ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
+UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, size_t length,
+                                            uint64_t remote_addr, uct_rkey_t rkey,
+                                            uct_bcopy_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_get_bcopy(ep, length, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
+                                            uct_lkey_t lkey, uint64_t remote_addr,
+                                            uct_rkey_t rkey, uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_get_zcopy(ep, buffer, length, lkey, remote_addr,
+                                       rkey, comp);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                            void *payload, unsigned length)
 {
     return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
 }
 
-static inline ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
+UCT_INLINE_API ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
                                            uct_pack_callback_t pack_cb,
                                            void *arg, size_t length)
 {
     return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg, length);
 }
 
-static inline ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
+UCT_INLINE_API ucs_status_t uct_ep_atomic_add64(uct_ep_h ep, uint64_t add,
+                                                uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_atomic_add64(ep, add, remote_addr, rkey);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd64(uct_ep_h ep, uint64_t add,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_swap64(uct_ep_h ep, uint64_t swap,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap64(uct_ep_h ep, uint64_t compare, uint64_t swap,
+                                                  uint64_t remote_addr, uct_rkey_t rkey,
+                                                  uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_add32(uct_ep_h ep, uint32_t add,
+                                                uint64_t remote_addr, uct_rkey_t rkey)
+{
+    return ep->iface->ops.ep_atomic_add32(ep, add, remote_addr, rkey);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd32(uct_ep_h ep, uint32_t add,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_swap32(uct_ep_h ep, uint32_t swap,
+                                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                                 uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare, uint32_t swap,
+                                                  uint64_t remote_addr, uct_rkey_t rkey,
+                                                  uct_imm_recv_callback_t cb, void *arg)
+{
+    return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, cb, arg);
+}
+
+UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
                                            unsigned header_length, void *payload,
                                            size_t length, uct_lkey_t lkey,
                                            uct_completion_t *comp)
@@ -449,7 +525,7 @@ static inline ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header
                                       length, lkey, comp);
 }
 
-static inline ucs_status_t uct_ep_flush(uct_ep_h ep)
+UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep)
 {
     return ep->iface->ops.ep_flush(ep);
 }

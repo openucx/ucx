@@ -36,7 +36,7 @@ void ucs_twheel_cleanup(ucs_twheel_t *twheel)
     free(twheel->wheel);
 }
 
-ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t,  void (*func)(ucs_callback_t *cb))
+ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, ucs_callback_func_t func)
 {
     t->cb.func   = func;
     t->is_active = 0;
@@ -86,7 +86,7 @@ void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
         while (!ucs_list_is_empty(&t->wheel[t->current])) {
             timer = ucs_list_extract_head(&t->wheel[t->current], ucs_wtimer_t, list);
             timer->is_active = 0;
-            ucs_invoke_callback(&timer->cb);
+            timer->cb.func(&timer->cb);
         }
     }
 }

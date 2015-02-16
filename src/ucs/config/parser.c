@@ -996,8 +996,10 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
         fprintf(stream, "\n");
     }
 
-    ucs_config_parser_print_opts_recurs(stream, opts, fields, flags, env_prefix,
-                                        table_prefix);
+    if (flags & UCS_CONFIG_PRINT_CONFIG) {
+        ucs_config_parser_print_opts_recurs(stream, opts, fields, flags, env_prefix,
+                                            table_prefix);
+    }
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");

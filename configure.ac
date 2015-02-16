@@ -18,12 +18,11 @@ define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs
 define([libucx_so_version], 2:1:0)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
-AC_USE_SYSTEM_EXTENSIONS
-
 
 config_flags="$*"
 valgrind_libpath=""
 
+AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADERS([config.h])
 
 AH_TOP([
@@ -89,6 +88,20 @@ m4_ifdef([AS_VAR_APPEND],
 #
 CFLAGS="-g -Wall -Werror $UCX_CFLAGS"
 CXXFLAGS="$CFLAGS"
+
+
+#
+# CHECK_CROSS_COMP (program, true-action, false-action)
+#
+# The macro checks if it can run the program; it executes
+# true action if the program can be executed, otherwise
+# false action is executed.
+# For cross-platform compilation we only check
+# if we can compile and link the program.
+AC_DEFUN([CHECK_CROSS_COMP], [
+         AC_RUN_IFELSE([$1], [$2], [$3],
+                       [AC_LINK_IFELSE([$1], [$2], [$3])])
+])
 
 
 #
@@ -189,6 +202,7 @@ AC_CONFIG_FILES([
                  src/uct/api/version.h
                  src/ucp/Makefile
                  src/tools/info/Makefile
+                 src/tools/hook/Makefile
                  test/gtest/Makefile
                  test/perf/Makefile
                  ])

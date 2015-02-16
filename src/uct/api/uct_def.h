@@ -12,10 +12,12 @@
 #include <ucs/type/status.h>
 #include <stdint.h>
 
+
 #define UCT_MAX_NAME_LEN         64
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_INVALID_MEM_KEY      ((uintptr_t)0)
+#define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
 typedef struct uct_context       *uct_context_h;
@@ -34,6 +36,7 @@ typedef struct uct_iface_attr    uct_iface_attr_t;
 typedef struct uct_pd_attr       uct_pd_attr_t;
 typedef struct uct_completion    uct_completion_t;
 
+
 /**
  * Remote key release function.
  */
@@ -41,18 +44,29 @@ typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
 
 
 /**
- * Active message handler.
+ * Callback to process incoming data buffer.
+ * Used for active messages, get bcopy.
  *
+ * @param [in]  desc     Points to the received descriptor, just after rx_headroom.
  * @param [in]  data     Points to the received data.
  * @param [in]  length   Length of data.
  * @param [in]  arg      User-defined argument.
  *
- * @note The reserved headroom is placed right before the data.
- *
- * @return UCS_OK - descriptor is used and should be release
- *         UCS_INPROGRESS - descriptor is owned by the user, and would be released later.
+ * @return UCS_OK - descriptor was consumed, and can be released by the caller.
+ *         UCS_INPROGRESS - descriptor is owned by the callee, and would be released later.
  */
-typedef ucs_status_t (*uct_am_callback_t)(void *data, unsigned length, void *arg);
+typedef ucs_status_t (*uct_bcopy_recv_callback_t)(void *desc, void *data,
+                                                  size_t length, void *arg);
+
+
+/**
+ * Callback to process incoming immediate data.
+ * Used for fetching results of atomic operations.
+ *
+ * @param [in]  arg      User-defined argument.
+ * @param [in]  data     Data received from remote.
+ */
+typedef void (*uct_imm_recv_callback_t)(void *arg, uint64_t data);
 
 
 /**

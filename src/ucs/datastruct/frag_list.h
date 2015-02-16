@@ -57,8 +57,20 @@ typedef enum {
 } ucs_frag_list_ooo_type_t;
 
 /* Sequence number type */
-typedef uint32_t   ucs_frag_list_sn_t;
+/* NOTE: it must be same type as UD transport psn */
+typedef uint16_t   ucs_frag_list_sn_t;
+#define UCS_FRAG_LIST_SN_CMP UCS_CIRCULAR_COMPARE16
 
+/**
+ * C standard specifies that short integer is promoted to int
+ * if there is an overflow. The following will be false when
+ * uint16_t is used for serial number:
+ * sn1=0; sn2=0xFFFF; sn1 == sn2+1
+ *
+ * So we must always use compare macro
+ */
+
+#define UCS_FRAG_LIST_NEXT_SN(sn) ((ucs_frag_list_sn_t)((sn)+1))
 /* part of skb */
 typedef struct ucs_frag_list_head {
     ucs_queue_head_t       list;
@@ -166,8 +178,8 @@ ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 #if ENABLE_STATS
     ucs_frag_list_ooo_type_t ret;
 
-    if (UCS_CIRCULAR_COMPARE32(sn, >, head->head_sn)) {
-        if (head->prev_sn + 1 != sn) {
+    if (UCS_FRAG_LIST_SN_CMP(sn, >, head->head_sn)) {
+        if (UCS_FRAG_LIST_SN_CMP(head->prev_sn + 1, !=,sn)) {
             UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_BURSTS, 1);
         } else if (ucs_unlikely(UCS_STATS_GET_COUNTER(head->stats, UCS_FRAG_LIST_STAT_BURST_LEN) == 0)) {
             /* initial burst */
@@ -178,7 +190,7 @@ ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
     }
 #endif
     /* in order arrival on empty list - inc sn and do nothing */
-    if (ucs_likely((sn == head->head_sn + 1) && (head->elem_count == 0))) {
+    if (ucs_likely(UCS_FRAG_LIST_SN_CMP(sn, ==, head->head_sn + 1) && (head->elem_count == 0))) {
         head->head_sn = sn;
         return UCS_FRAG_LIST_INSERT_FAST;
     }

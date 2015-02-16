@@ -12,6 +12,7 @@
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/math.h>
 
 
 typedef struct ucp_context {
@@ -47,10 +48,18 @@ typedef struct ucp_device_config {
     unsigned          count;    /* number of devices */
 } ucp_device_config_t;
 
+/**
+ * TL specification
+ */
+typedef struct ucp_tl_config {
+    char              **tl_name;
+    unsigned          count;      /* number of tls */
+} ucp_tl_config_t;
 
 struct ucp_iface_config {
     ucp_device_config_t   devices;
     int                   device_policy_force;
+    ucp_tl_config_t       tls;     /* UCTs to use */
 };
 
 /**

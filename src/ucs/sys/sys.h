@@ -17,7 +17,6 @@
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
 
-#include <linux/stddef.h>
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/time.h>

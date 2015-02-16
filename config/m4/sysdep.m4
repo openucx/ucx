@@ -100,3 +100,24 @@ AS_IF([test "x$with_valgrind" == xno],
       ]
 )
 
+
+#
+# Malloc hooks
+#
+AC_MSG_CHECKING([malloc hooks])
+CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
+                                  static int rc = 1;
+                                  void *myhook(size_t size, const void *caller) {
+                                      rc = 0;
+                                      return NULL;
+                                  }
+                                  int main() {
+                                      __malloc_hook = myhook;
+                                      (void)malloc(1);
+                                      return rc;
+                                  }])],
+                 [AC_MSG_RESULT([yes])
+                  AC_DEFINE([HAVE_MALLOC_HOOK], 1, [malloc hooks support])],
+                 [AC_MSG_RESULT([no])
+                  AC_MSG_WARN([malloc hooks are not supported])]
+                )

@@ -43,7 +43,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of send WQEs for which completion is requested.",
    ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, "send",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, "send",
                                 ucs_offsetof(uct_ib_iface_config_t, tx.mp),
       "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
       "in RC/DC and could cause deadlock or performance degradation."),
@@ -62,7 +62,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "size than requested with the same hardware resources, it will be used instead.",
    ucs_offsetof(uct_ib_iface_config_t, rx.inl), UCS_CONFIG_TYPE_MEMUNITS},
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, "receive",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
 
   {"GID_INDEX", "0",
@@ -138,7 +138,7 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
     }
 
     return uct_iface_mpool_create(&iface->super.super,
-                                  iface->config.rx_payload_offset + iface->config.rx_data_size,
+                                  iface->config.rx_payload_offset + iface->config.seg_size,
                                   iface->config.rx_hdr_offset,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &config->rx.mp,
@@ -156,7 +156,8 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
 static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
                            uct_context_h context, const char *dev_name,
                            unsigned rx_headroom, unsigned rx_priv_len,
-                           unsigned rx_hdr_len, uct_ib_iface_config_t *config)
+                           unsigned rx_hdr_len, unsigned tx_cq_len,
+                           uct_ib_iface_config_t *config)
 {
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
@@ -177,16 +178,15 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
                                      ucs_max(rx_headroom, rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
-    self->config.rx_data_size      = config->super.max_bcopy;
+    self->config.seg_size          = config->super.max_bcopy;
 
     ucs_debug("rx_headroom=%d payload_ofs=%d hdr_ofs=%d data_sz=%d",
               self->config.rx_headroom, self->config.rx_payload_offset,
-              self->config.rx_hdr_offset, self->config.rx_data_size);
+              self->config.rx_hdr_offset, self->config.seg_size);
 
     /* TODO comp_channel */
-    /* TODO inline scatter for SQ */
-    self->send_cq = ibv_create_cq(dev->ibv_context, config->tx.queue_len,
-                                  NULL, NULL, 0);
+    /* TODO inline scatter for send SQ */
+    self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len, NULL, NULL, 0);
     if (self->send_cq == NULL) {
         ucs_error("Failed to create send cq: %m");
         status = UCS_ERR_IO_ERROR;
@@ -254,9 +254,10 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
         if (desc == NULL) {
             break;
         }
+        VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
 
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
-        wrs[count].sg.length = iface->config.rx_data_size;
+        wrs[count].sg.length = iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;
         wrs[count].ibwr.num_sge = 1;
         wrs[count].ibwr.wr_id   = (uintptr_t)desc;

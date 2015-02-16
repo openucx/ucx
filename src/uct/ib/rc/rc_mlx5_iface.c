@@ -44,7 +44,7 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
     unsigned length;
 
     head   = iface->rx.head;
-    length = iface->super.super.config.rx_data_size;
+    length = iface->super.super.config.seg_size;
     count = 0;
     while (count < max) {
         ucs_assert(head != iface->rx.tail);
@@ -83,7 +83,7 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
-    uint16_t prev_pi, new_pi;
+    uint16_t hw_ci;
 
     cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq);
     if (cqe == NULL) {
@@ -92,18 +92,19 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 
     ucs_memory_cpu_load_fence();
 
-    qp_num = ntohl(cqe->sop_drop_qpn) & 0xffffff;
+    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num), uct_rc_mlx5_ep_t);
     ucs_assert(ep != NULL);
 
     /* "cqe->wqe_counter" is the index of the completed wqe (modulo 2^16).
-     * So we can post additional "wqe_cnt" WQEs, plus the one just completed.
+     * Calculate new max_pi based on that value.
      */
-    prev_pi  = ep->tx.max_pi;
-    new_pi   = ntohs(cqe->wqe_counter) + ep->tx.wqe_cnt + 1;
-    --iface->super.tx.sig_outstanding;
-    iface->super.tx.outstanding -= (uint16_t)(new_pi - prev_pi);
-    ep->tx.max_pi = new_pi;
+    hw_ci         = ntohs(cqe->wqe_counter);
+    ep->tx.max_pi = uct_rc_mlx5_calc_max_pi(iface, hw_ci);
+    ++iface->super.tx.cq_available;
+
+    /* Process completions */
+    ucs_callbackq_pull(&ep->super.tx.comp, hw_ci);
 }
 
 static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
@@ -135,21 +136,23 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     ucs_memory_cpu_load_fence();
 
     desc     = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q, uct_rc_mlx5_recv_desc_t, queue);
-    hdr      = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
     byte_len = ntohl(cqe->byte_cnt);
-    VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
 
+    /* Get a pointer to AM header (after which comes the payload)
+     * Support cases of inline scatter by pointing directly to CQE.
+     */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-        /* TODO avoid memcpy, pass CQE data to callback.
-         * Need API change for this...
-         */
-        memcpy(hdr, cqe, byte_len);
+        status = uct_rc_iface_invoke_am(&iface->super, &desc->super,
+                                        (uct_rc_hdr_t*)cqe, byte_len);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         /* TODO support inline scatter of 64b */
         ucs_fatal("inl data @ %p", cqe - 1);
+    } else {
+        hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
+        VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
+        status = uct_rc_iface_invoke_am(&iface->super, &desc->super, hdr,
+                                        byte_len);
     }
-
-    status = uct_rc_iface_invoke_am(&iface->super, hdr, byte_len);
     if (status == UCS_OK) {
         ucs_mpool_put(desc);
     }
@@ -176,10 +179,50 @@ static void uct_rc_mlx5_iface_progress(void *arg)
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    size_t max_wqe_size;
 
     uct_rc_iface_query(iface, iface_attr);
-    iface_attr->cap.put.max_short = MLX5_SEND_WQE_BB - sizeof(uct_rc_mlx5_wqe_rdma_inl_seg_t);  /* TODO */
-    iface_attr->cap.am.max_short = MLX5_SEND_WQE_BB - sizeof(uct_rc_mlx5_wqe_rdma_inl_seg_t);  /* TODO */
+
+    max_wqe_size = MLX5_SEND_WQE_BB * UCT_RC_MLX5_MAX_BB;
+
+    /* PUT */
+    iface_attr->cap.put.max_short = max_wqe_size
+                                        - sizeof(struct mlx5_wqe_ctrl_seg)
+                                        - sizeof(struct mlx5_wqe_raddr_seg)
+                                        - sizeof(struct mlx5_wqe_inl_data_seg);
+    iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+
+    /* GET */
+    iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+
+    /* AM */
+    iface_attr->cap.am.max_short  = max_wqe_size
+                                        - sizeof(struct mlx5_wqe_ctrl_seg)
+                                        - sizeof(struct mlx5_wqe_inl_data_seg)
+                                        - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size
+                                        - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size
+                                        - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_hdr    = max_wqe_size
+                                        - sizeof(struct mlx5_wqe_ctrl_seg)
+                                        - sizeof(struct mlx5_wqe_inl_data_seg)
+                                        - sizeof(uct_rc_hdr_t)
+                                        - sizeof(struct mlx5_wqe_data_seg);
+
+    /* Atomics */
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                             UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                             UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                             UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
+                             UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                             UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                             UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                             UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
+                             UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
+                             UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
     return UCS_OK;
 }
 
@@ -199,22 +242,35 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
 
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = uct_ib_mlx5_get_srq_info(self->super.rx.srq, &srq_info);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     if (srq_info.stride != UCT_RC_MLX5_SRQ_STRIDE) {
         ucs_error("SRQ stride is not %lu (%d)", UCT_RC_MLX5_SRQ_STRIDE, srq_info.stride);
-        return UCS_ERR_NO_DEVICE;
+        status = UCS_ERR_NO_DEVICE;
+        goto err;
+    }
+
+    status = uct_iface_mpool_create(&self->super.super.super.super,
+                                    sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
+                                    sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
+                                    UCS_SYS_CACHE_LINE_SIZE,
+                                    &config->super.super.tx.mp,
+                                    self->super.config.tx_qp_len,
+                                    uct_rc_iface_send_desc_init,
+                                    "rc_mlx5_atomic_desc", &self->tx.atomic_desc_mp);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     self->rx.buf   = srq_info.buf;
@@ -226,18 +282,25 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
 
     if (uct_rc_mlx5_iface_post_recv(self, self->super.rx.available) == 0) {
         ucs_error("Failed to post receives");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err_destroy_atomic_mp;
     }
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_mlx5_iface_progress,
                            self);
     return UCS_OK;
+
+err_destroy_atomic_mp:
+    ucs_mpool_destroy(self->tx.atomic_desc_mp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 {
     uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, self);
+    ucs_mpool_destroy(self->tx.atomic_desc_mp);
 }
 
 
@@ -255,7 +318,21 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
     .iface_query         = uct_rc_mlx5_iface_query,
     .ep_put_short        = uct_rc_mlx5_ep_put_short,
+    .ep_put_bcopy        = uct_rc_mlx5_ep_put_bcopy,
+    .ep_put_zcopy        = uct_rc_mlx5_ep_put_zcopy,
+    .ep_get_bcopy        = uct_rc_mlx5_ep_get_bcopy,
+    .ep_get_zcopy        = uct_rc_mlx5_ep_get_zcopy,
     .ep_am_short         = uct_rc_mlx5_ep_am_short,
+    .ep_am_bcopy         = uct_rc_mlx5_ep_am_bcopy,
+    .ep_am_zcopy         = uct_rc_mlx5_ep_am_zcopy,
+    .ep_atomic_add64     = uct_rc_mlx5_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_rc_mlx5_ep_atomic_fadd64,
+    .ep_atomic_swap64    = uct_rc_mlx5_ep_atomic_swap64,
+    .ep_atomic_cswap64   = uct_rc_mlx5_ep_atomic_cswap64,
+    .ep_atomic_add32     = uct_rc_mlx5_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_rc_mlx5_ep_atomic_fadd32,
+    .ep_atomic_swap32    = uct_rc_mlx5_ep_atomic_swap32,
+    .ep_atomic_cswap32   = uct_rc_mlx5_ep_atomic_cswap32,
     .ep_flush            = uct_rc_mlx5_ep_flush,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),

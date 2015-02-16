@@ -16,7 +16,6 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
-#include <linux/sched.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -121,16 +120,32 @@ static void print_header(struct perftest_context *ctx)
 {
     const char *test_cmd_str;
     const char *test_type_str;
+    const char *test_data_str;
 
     switch (ctx->params.command) {
-    case UCX_PERF_TEST_CMD_AM_SHORT:
-        test_cmd_str = "uct_am_short()";
+    case UCX_PERF_TEST_CMD_AM:
+        test_cmd_str = "Active message";
         break;
-    case UCX_PERF_TEST_CMD_PUT_SHORT:
-        test_cmd_str = "uct_put_short()";
+    case UCX_PERF_TEST_CMD_PUT:
+        test_cmd_str = "Put";
         break;
     default:
         test_cmd_str = "(undefined)";
+        break;
+    }
+
+    switch (ctx->params.data_layout) {
+    case UCX_PERF_DATA_LAYOUT_SHORT:
+        test_data_str = "short";
+        break;
+    case UCX_PERF_DATA_LAYOUT_BCOPY:
+        test_data_str = "bcopy";
+        break;
+    case UCX_PERF_DATA_LAYOUT_ZCOPY:
+        test_data_str = "zcopy";
+        break;
+    default:
+        test_data_str = "(undefined)";
         break;
     }
 
@@ -145,7 +160,8 @@ static void print_header(struct perftest_context *ctx)
 
     if (ctx->flags & TEST_FLAG_PRINT_TEST) {
         printf("+------------------------------------------------------------------------------------------+\n");
-        printf("| API:          %-60s               |\n", test_cmd_str);
+        printf("| Operation:    %-60s               |\n", test_cmd_str);
+        printf("| Data layout:  %-60s               |\n", test_data_str);
         printf("| Test type:    %-60s               |\n", test_type_str);
         printf("| Message size: %-60zu               |\n", ctx->params.message_size);
     }
@@ -190,9 +206,15 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                     put_lat  : put latency.\n");
     printf("                     put_bw   : put bandwidth / message rate.\n");
     printf("                     am_lat   : active message latency.\n");
+    printf("                     am_bw   : active message bandwidth.\n");
+    printf("     -D <layout>  Data layout:\n");
+    printf("                     short    : Use short messages API.\n");
+    printf("                     bcopy    : Use copy-out API.\n");
+    printf("                     zcopy    : Use zero-copy API.\n");
     printf("     -n <iters>   Number of iterations to run. (%ld)\n", ctx->params.max_iter);
     printf("     -s <size>    Message size. (%zu)\n", ctx->params.message_size);
     printf("     -w <iters>   Number of warm-up iterations. (%zu)\n", ctx->params.warmup_iter);
+    printf("     -W <count>   Window size for AM bandwidth. (%zu)\n", ctx->params.am_window);
     printf("     -N           Use numeric formatting - thousands separator.\n");
     printf("\n");
     printf("  Server options:\n");
@@ -240,8 +262,9 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
 
     ctx->params.command         = UCX_PERF_TEST_CMD_LAST;
     ctx->params.test_type       = UCX_PERF_TEST_TYPE_LAST;
-    ctx->params.data_layout     = UCX_PERF_DATA_LAYOUT_BUFFER;
+    ctx->params.data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
     ctx->params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
+    ctx->params.am_window       = 128;
     ctx->params.warmup_iter     = 10000;
     ctx->params.message_size    = 8;
     ctx->params.alignment       = ucs_get_page_size();
@@ -254,7 +277,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->port                   = 13337;
     ctx->flags                  = 0;
 
-    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:Nlw:")) != -1) {
+    while ((c = getopt (argc, argv, "p:d:x:t:n:s:c:NlW:w:D:")) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -267,16 +290,31 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             break;
         case 't':
             if (0 == strcmp(optarg, "am_lat")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_AM_SHORT;
+                ctx->params.command   = UCX_PERF_TEST_CMD_AM;
                 ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
             } else if (0 == strcmp(optarg, "put_lat")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_PUT_SHORT;
+                ctx->params.command   = UCX_PERF_TEST_CMD_PUT;
                 ctx->params.test_type = UCX_PERF_TEST_TYPE_PINGPONG;
+            } else if (0 == strcmp(optarg, "am_bw")) {
+                ctx->params.command   = UCX_PERF_TEST_CMD_AM;
+                ctx->params.test_type = UCX_PERF_TEST_TYPE_STREAM_UNI;
             } else if (0 == strcmp(optarg, "put_bw")) {
-                ctx->params.command   = UCX_PERF_TEST_CMD_PUT_SHORT;
+                ctx->params.command   = UCX_PERF_TEST_CMD_PUT;
                 ctx->params.test_type = UCX_PERF_TEST_TYPE_STREAM_UNI;
             } else {
                 ucs_error("Invalid option argument for -t");
+                return -1;
+            }
+            break;
+        case 'D':
+            if (0 == strcmp(optarg, "short")) {
+                ctx->params.data_layout   = UCX_PERF_DATA_LAYOUT_SHORT;
+            } else if (0 == strcmp(optarg, "bcopy")) {
+                ctx->params.data_layout   = UCX_PERF_DATA_LAYOUT_BCOPY;
+            } else if (0 == strcmp(optarg, "zcopy")) {
+                ctx->params.data_layout   = UCX_PERF_DATA_LAYOUT_ZCOPY;
+            } else {
+                ucs_error("Invalid option argument for -D");
                 return -1;
             }
             break;
@@ -292,6 +330,9 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
         case 'c':
             ctx->flags |= TEST_FLAG_SET_AFFINITY;
             ctx->cpu = atoi(optarg);
+            break;
+        case 'W':
+            ctx->params.am_window = atoi(optarg);
             break;
         case 'w':
             ctx->params.warmup_iter = atol(optarg);
@@ -925,9 +966,7 @@ int main(int argc, char **argv)
         rte = 1;
     }
 #elif HAVE_RTE
-    if (!isatty(0)) {
-        rte = 1;
-    }
+    rte = 1;
 #endif
 
     /* Create application context */
