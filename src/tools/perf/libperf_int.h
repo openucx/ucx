@@ -63,7 +63,6 @@ struct uct_perf_context {
     uct_peer_t                   *peers;
     uct_lkey_t                   send_lkey;
     uct_lkey_t                   recv_lkey;
-    uint64_t                     am_hdr;
 };
 
 
@@ -77,6 +76,9 @@ struct uct_perf_context {
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf);
 
 
+void uct_perf_iface_flush_b(uct_perf_context_t *perf);
+
+
 ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf);
 
 
@@ -85,7 +87,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result);
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {
-    return ucs_unlikely((perf->current.iters > perf->max_iter) ||
+    return ucs_unlikely((perf->current.iters >= perf->max_iter) ||
                         (perf->current.time  > perf->end_time));
 }
 
@@ -106,7 +108,7 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf, ucx_perf_counter_t 
 
     if (perf->current.time - perf->prev.time >= perf->report_interval) {
         ucx_perf_calc_result(perf, &result);
-        rte_call(perf, report, &result);
+        rte_call(perf, report, &result, 0);
         perf->prev = perf->current;
     }
 }

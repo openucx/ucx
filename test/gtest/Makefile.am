@@ -33,7 +33,7 @@ gtest_LDADD = \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucp/libucp.la \
 	$(top_builddir)/src/ucs/libucstest.la \
-	$(top_builddir)/test/perf/libucxperf.la \
+	$(top_builddir)/src/tools/perf/libucxperf.la \
 	$(GTEST_LIBS)
 
 gtest_CPPFLAGS = \
