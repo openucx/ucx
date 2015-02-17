@@ -7,7 +7,7 @@
 
 #include "rc_mlx5.h"
 
-#include <uct/api/uct.h>
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/base/ib_context.h>
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
@@ -138,10 +138,12 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     desc     = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q, uct_rc_mlx5_recv_desc_t, queue);
     byte_len = ntohl(cqe->byte_cnt);
 
+
     /* Get a pointer to AM header (after which comes the payload)
      * Support cases of inline scatter by pointing directly to CQE.
      */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+        uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, cqe, uct_rc_ep_am_packet_dump);
         status = uct_rc_iface_invoke_am(&iface->super, &desc->super,
                                         (uct_rc_hdr_t*)cqe, byte_len);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
@@ -150,6 +152,7 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
+        uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
         status = uct_rc_iface_invoke_am(&iface->super, &desc->super, hdr,
                                         byte_len);
     }

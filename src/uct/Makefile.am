@@ -22,7 +22,8 @@ nobase_dist_libuct_la_HEADERS = \
 
 noinst_HEADERS = \
 	tl/context.h \
-	tl/tl_base.h
+	tl/tl_base.h \
+	tl/tl_log.h
 
 libuct_la_SOURCES = \
 	tl/context.c \
@@ -35,18 +36,22 @@ noinst_HEADERS += \
 	ib/base/ib_context.h \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \
+	ib/base/ib_log.h \
 	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \
 	ib/base/ib_context.c \
 	ib/base/ib_device.c \
-	ib/base/ib_iface.c
+	ib/base/ib_iface.c \
+	ib/base/ib_log.c
 
 if HAVE_MLX5_HW
 libuct_la_SOURCES += \
+	ib/mlx5/ib_mlx5_log.c \
 	ib/mlx5/ib_mlx5.c
 	
 noinst_HEADERS += \
+	ib/mlx5/ib_mlx5_log.h \
 	ib/mlx5/ib_mlx5.h
 endif
 

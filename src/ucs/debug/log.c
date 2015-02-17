@@ -134,7 +134,7 @@ void ucs_log_default_handler(const char *file, unsigned line, const char *functi
     char *buf;
     char *valg_buf;
 
-    if (level > ucs_log_level) {
+    if (!ucs_log_enabled(level)) {
         return;
     }
 
@@ -153,17 +153,17 @@ void ucs_log_default_handler(const char *file, unsigned line, const char *functi
     if (RUNNING_ON_VALGRIND) {
         valg_buf = alloca(buffer_size + 1);
         snprintf(valg_buf, buffer_size,
-                 "[%lu.%06lu] %13s:%-4u %-4s %-5s %s\n", tv.tv_sec, tv.tv_usec,
+                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv.tv_sec, tv.tv_usec,
                  short_file, line, "UCX", ucs_log_level_names[level], buf);
         VALGRIND_PRINTF("%s", valg_buf);
     } else if (ucs_log_initialized) {
         fprintf(ucs_log_file,
-                "[%lu.%06lu] [%s:%-5d:%d] %13s:%-4u %-4s %-5s %s\n",
+                "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
                 tv.tv_sec, tv.tv_usec, ucs_log_hostname, ucs_log_pid, get_thread_num(),
                 short_file, line, "UCX", ucs_log_level_names[level], buf);
     } else {
         fprintf(stdout,
-                "[%lu.%06lu] %13s:%-4u %-4s %-5s %s\n",
+                "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
                 tv.tv_sec, tv.tv_usec, short_file, line,
                 "UCX", ucs_log_level_names[level], buf);
     }

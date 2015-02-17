@@ -7,6 +7,7 @@
 
 #include "rc_mlx5.h"
 
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/sys/arch.h>
 #include <ucs/sys/compiler.h>
 #include <arpa/inet.h> /* For htonl */
@@ -90,6 +91,8 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
 
     uct_rc_mlx5_set_ctrl_seg(ctrl, sw_pi, opcode, opmod, ep->qp_num, sig_flag,
                              num_seg);
+    uct_ib_mlx5_log_tx(IBV_QPT_RC, ctrl, ep->tx.qstart, ep->tx.qend,
+                       (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     /* TODO Put memory store fence here too, to prevent WC being flushed after DBrec */
     ucs_memory_cpu_store_fence();
@@ -129,7 +132,7 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     /* Flip BF register */
     ep->tx.bf_reg = (void*) ((uintptr_t) ep->tx.bf_reg ^ ep->tx.bf_size);
 
-    uct_rc_ep_tx_posted(&ep->super, sig_flag);
+    uct_rc_ep_tx_posted(&ep->super, sig_flag & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t

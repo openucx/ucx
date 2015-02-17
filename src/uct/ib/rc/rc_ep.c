@@ -130,7 +130,16 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
         return UCS_ERR_IO_ERROR;
     }
 
+    ucs_debug("connected rc qp 0x%x to lid %d remote_qp 0x%x", ep->qp->qp_num,
+              iface_addr->lid, ep_addr->qp_num);
     return UCS_OK;
+}
+
+void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
+                              char *buffer, size_t max)
+{
+    uct_rc_hdr_t *rch = data;
+    snprintf(buffer, max, " am_id %d", rch->am_id);
 }
 
 void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self)

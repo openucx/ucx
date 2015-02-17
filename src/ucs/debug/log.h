@@ -18,11 +18,12 @@
 #include <stdint.h>
 
 
-#define ucs_log_level  (ucs_global_opts.log_level)
+#define ucs_log_enabled(_level) \
+    ucs_unlikely(((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= (ucs_global_opts.log_level)))
 
 #define ucs_log(_level, _message, ...) \
     do { \
-        if (ucs_unlikely(((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= ucs_log_level))) { \
+        if (ucs_log_enabled(_level)) { \
             __ucs_log(__FILE__, __LINE__, __FUNCTION__, (_level), \
                       _message, ## __VA_ARGS__); \
         } \

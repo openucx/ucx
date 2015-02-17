@@ -129,7 +129,7 @@ ucs_mpool_create(const char *name, size_t elem_size, size_t align_offset,
 
     VALGRIND_CREATE_MEMPOOL(mp, 0, 0);
 
-    ucs_debug("mpool %s: align %lu, maxelems %u, elemsize %lu, padding %lu",
+    ucs_debug("mpool %s: align %lu, maxelems %d, elemsize %lu, padding %lu",
               mp->name, mp->alignment, mp->max_elems, mp->elem_size, mp->elem_padding);
     *mpp = mp;
     return UCS_OK;

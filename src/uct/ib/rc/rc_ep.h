@@ -40,6 +40,9 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_addr,
                                      uct_ep_addr_t *tl_ep_addr);
 
+void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
+                              char *buffer, size_t max);
+
 void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self);
 
 void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 0)(ucs_callback_t *self);
