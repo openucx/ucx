@@ -26,6 +26,7 @@
 #define UCT_IB_VCRC_LEN          2
 #define UCT_IB_DELIM_LEN         2
 #define UCT_IB_FDR_PACKET_GAP    64
+#define UCT_IB_MAX_MESSAGE_SIZE  (2 << 30)
 
 
 typedef struct uct_ib_device uct_ib_device_t;

@@ -18,7 +18,7 @@ uct_rc_verbs_ep_posted(uct_rc_verbs_ep_t* ep, int signaled)
     ++ep->tx.post_count;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                           struct ibv_send_wr *wr, int send_flags)
 {
@@ -36,15 +36,14 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     ret = ibv_post_send(ep->super.qp, wr, &bad_wr);
-    if (ret != 0) {
-        ucs_fatal("ibv_post_send() returned %d (%m)", ret);
-    }
+    UCT_CHECK_PARAM_FATAL(ret == 0, "ibv_post_send() returned %d (%m)", ret);
 
     uct_rc_verbs_ep_posted(ep, send_flags & IBV_SEND_SIGNALED);
+    return UCS_OK;
 }
 
 #if HAVE_DECL_IBV_EXP_POST_SEND
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
                            int signal)
 {
@@ -64,11 +63,10 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     ret = ibv_exp_post_send(ep->super.qp, wr, &bad_wr);
-    if (ret != 0) {
-        ucs_fatal("ibv_exp_post_send() returned %d (%m)", ret);
-    }
+    UCT_CHECK_PARAM_FATAL(ret == 0, "ibv_exp_post_send() returned %d (%m)", ret);
 
     uct_rc_verbs_ep_posted(ep, signal);
+    return UCS_OK;
 }
 #endif
 
@@ -94,6 +92,7 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
                                ucs_status_t success)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_verbs_iface_t);
+    ucs_status_t status;
     struct ibv_sge *sge;
 
     wr->next       = NULL;
@@ -101,7 +100,12 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
     sge->addr      = (uintptr_t)(desc + 1);
     sge->lkey      = desc->lkey;
 
-    uct_rc_verbs_ep_post_send(iface, ep, wr, send_flags);
+    status = uct_rc_verbs_ep_post_send(iface, ep, wr, send_flags);
+    if (status != UCS_OK) {
+        ucs_mpool_put(desc);
+        return status;
+    }
+
     uct_rc_verbs_ep_push_desc(ep, desc);
     return success;
 }
@@ -128,6 +132,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, void *buffer, size_t length,
                                                  uct_rc_verbs_iface_t);
     struct ibv_send_wr wr;
     struct ibv_sge sge;
+    ucs_status_t status;
 
     UCT_RC_VERBS_CHECK_RES(iface, ep);
 
@@ -136,7 +141,10 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, void *buffer, size_t length,
     sge.addr               = (uintptr_t)buffer;
     sge.lkey               = (lkey == UCT_INVALID_MEM_KEY) ? 0 : uct_ib_lkey_mr(lkey)->lkey;
 
-    uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
+    status = uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     uct_rc_ep_add_user_completion(&ep->super, comp, ep->tx.post_count);
     return UCS_INPROGRESS;
@@ -192,6 +200,7 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
 {
     struct ibv_exp_send_wr wr;
     struct ibv_sge sge;
+    ucs_status_t status;
 
     sge.addr          = (uintptr_t)(desc + 1);
     sge.lkey          = desc->lkey;
@@ -220,7 +229,12 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
         break;
     }
 
-    uct_rc_verbs_exp_post_send(ep, &wr, force_sig);
+    status = uct_rc_verbs_exp_post_send(ep, &wr, force_sig);
+    if (status != UCS_OK) {
+        ucs_mpool_put(desc);
+        return status;
+    }
+
     uct_rc_verbs_ep_push_desc(ep, desc);
     return success;
 }
@@ -262,14 +276,14 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, void *buffer,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
+    UCT_CHECK_LENGTH(length <= iface->config.max_inline, "put_short");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     iface->inl_rwrite_wr.wr.rdma.remote_addr = remote_addr;
     iface->inl_rwrite_wr.wr.rdma.rkey        = rkey;
     iface->inl_sge[0].addr                   = (uintptr_t)buffer;
     iface->inl_sge[0].length                 = length;
-    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
-                              IBV_SEND_INLINE | IBV_SEND_SIGNALED);
-    return UCS_OK;
+    return uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
+                                     IBV_SEND_INLINE | IBV_SEND_SIGNALED);
 }
 
 ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
@@ -282,12 +296,12 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
+    UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "put_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->super.tx.mp, desc, UCS_ERR_WOULD_BLOCK);
 
     desc->queue.super.func = (ucs_callback_func_t)ucs_mpool_put;
 
-    ucs_assert(length <= iface->super.super.config.seg_size);
     pack_cb(desc + 1, arg, length);
 
     uct_rc_verbs_fill_rdma_wr(&wr, IBV_WR_RDMA_WRITE, &sge, length, remote_addr,
@@ -315,6 +329,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep, size_t length,
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
+    UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "get_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->super.tx.mp, desc, UCS_ERR_WOULD_BLOCK);
 
@@ -348,6 +363,8 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_am_short_hdr_t am;
 
+    UCT_CHECK_AM_ID(id);
+    UCT_CHECK_LENGTH(sizeof(am) + length <= iface->config.max_inline, "am_short");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
 
     am.rc_hdr.am_id             = id;
@@ -356,8 +373,7 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     iface->inl_sge[0].length    = sizeof(am);
     iface->inl_sge[1].addr      = (uintptr_t)buffer;
     iface->inl_sge[1].length    = length;
-    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
-    return UCS_OK;
+    return uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
 }
 
 ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
@@ -371,6 +387,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     struct ibv_sge sge;
     uct_rc_hdr_t *rch;
 
+    UCT_CHECK_AM_ID(id);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->super.tx.mp, desc, UCS_ERR_WOULD_BLOCK);
     desc->queue.super.func = (void*)ucs_mpool_put;
@@ -410,6 +427,9 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
     uct_rc_hdr_t *rch;
     int send_flags;
 
+    UCT_CHECK_AM_ID(id);
+    UCT_CHECK_LENGTH(header_length + length <= iface->super.super.config.seg_size,
+                     "send");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->short_desc_mp, desc, UCS_ERR_WOULD_BLOCK);
 
@@ -575,14 +595,14 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
                 .exp_send_flags = IBV_EXP_SEND_FENCE,
                 .comp_mask      = 0
             };
-            uct_rc_verbs_exp_post_send(ep, &wr, IBV_EXP_SEND_SIGNALED);
+            status = uct_rc_verbs_exp_post_send(ep, &wr, IBV_EXP_SEND_SIGNALED);
         } else
 #endif
         {
             status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
-            if (status != UCS_OK) {
-                return status;
-            }
+        }
+        if (status != UCS_OK) {
+            return status;
         }
     }
 

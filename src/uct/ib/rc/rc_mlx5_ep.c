@@ -86,7 +86,7 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     uint16_t sw_pi;
 
     num_seg = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
-    num_bb = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+    num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
     sw_pi   = ep->tx.sw_pi;
 
     uct_rc_mlx5_set_ctrl_seg(ctrl, sw_pi, opcode, opmod, ep->qp_num, sig_flag,
@@ -203,6 +203,8 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
     case MLX5_OPCODE_SEND:
         /* Set inline segment which has AM id, AM header, and AM payload */
         wqe_size         = sizeof(*ctrl) + sizeof(*inl) + sizeof(*am) + length;
+        UCT_CHECK_LENGTH(wqe_size <= UCT_RC_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
+                         "am_short");
         inl              = (void*)(ctrl + 1);
         inl->byte_count  = htonl((length + sizeof(*am)) | MLX5_INLINE_SEG);
         am               = (void*)(inl + 1);
@@ -220,6 +222,8 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
         } else {
             wqe_size     = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*inl) + length;
         }
+        UCT_CHECK_LENGTH(wqe_size <= UCT_RC_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
+                        "put_short");
         raddr            = (void*)(ctrl + 1);
         uct_rc_mlx5_ep_set_rdma_seg(raddr, rdma_raddr, rdma_rkey);
         inl              = (void*)(raddr + 1);
@@ -256,7 +260,7 @@ uct_rc_mlx5_ep_inline_post(uct_ep_h tl_ep, unsigned opcode,
  * ATOMIC     | CTRL   | RADDR   | ATOMIC | DPSEG |
  *            +--------+---------+--------+-------+
  */
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
                          void *buffer, unsigned length, uint32_t *lkey_p,
                          /* SEND */ uint8_t am_id, void *am_hdr, unsigned am_hdr_len,
@@ -279,8 +283,8 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     ptrdiff_t           wraparound;
     uint8_t             opmod;
 
+    iface = ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
     if (!signal) {
-        iface  = ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
         signal = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
                                             MLX5_WQE_CTRL_CQ_UPDATE);
     } else {
@@ -291,6 +295,9 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     ctrl = ep->tx.seg;
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
+        UCT_CHECK_LENGTH(length + sizeof(*rch) + am_hdr_len <=
+                         iface->super.super.config.seg_size, "send");
+
         inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len,
                                              UCT_IB_MLX5_WQE_SEG_SIZE);
 
@@ -314,8 +321,10 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
 
     case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW:
         /* Data segment only */
+        UCT_CHECK_LENGTH((length <= iface->super.super.config.seg_size) && (length > 0),
+                         "send");
         ucs_assert(length < (2ul << 30));
-        ucs_assert(length > 0);
+
         wqe_size         = sizeof(*ctrl) + sizeof(*dptr);
         uct_rc_mlx5_ep_set_dptr_seg((void*)(ctrl + 1), buffer, length, *lkey_p);
         break;
@@ -323,7 +332,8 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     case MLX5_OPCODE_RDMA_READ:
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
-        ucs_assert(length < (2ul << 30));
+        UCT_CHECK_LENGTH(length <= UCT_IB_MAX_MESSAGE_SIZE, "put/get");
+
         raddr            = (void*)(ctrl + 1);
         uct_rc_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
@@ -414,11 +424,12 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
         break;
 
     default:
-        ucs_assert(0);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     uct_rc_mlx5_post_send(ep, ctrl, (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
                           opmod, signal, wqe_size);
+    return UCS_OK;
 }
 
 /*
@@ -433,10 +444,17 @@ uct_rc_mlx5_ep_bcopy_post(uct_rc_mlx5_ep_t *ep, unsigned opcode, unsigned length
                           int force_sig, uct_rc_iface_send_desc_t *desc,
                           ucs_status_t success)
 {
+    ucs_status_t status;
+
     desc->queue.sn = ep->tx.sw_pi;
-    uct_rc_mlx5_ep_dptr_post(ep, opcode, desc + 1, length, &desc->lkey,
-                             am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
-                             0, 0, 0, force_sig);
+    status = uct_rc_mlx5_ep_dptr_post(ep, opcode, desc + 1, length, &desc->lkey,
+                                      am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
+                                      0, 0, 0, force_sig);
+    if (status != UCS_OK) {
+        ucs_mpool_put(desc);
+        return status;
+    }
+
     ucs_callbackq_push(&ep->super.tx.comp, &desc->queue);
     return success;
 }
@@ -453,16 +471,21 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep, unsigned opcode, void *buffer,
                           int force_sig, uct_completion_t *comp)
 {
     uct_rc_mlx5_iface_t *iface  = ucs_derived_of(ep->super.super.iface, uct_rc_mlx5_iface_t);
+    ucs_status_t status;
     uint16_t sn;
 
     UCT_RC_MLX5_CHECK_RES(iface, ep);
 
     sn = ep->tx.sw_pi;
-    uct_rc_mlx5_ep_dptr_post(ep, opcode,
-                             buffer, length, &uct_ib_lkey_mr(lkey)->lkey,
-                             am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
-                             0, 0, 0,
-                             (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE);
+    status = uct_rc_mlx5_ep_dptr_post(ep, opcode,
+                                      buffer, length, &uct_ib_lkey_mr(lkey)->lkey,
+                                      am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
+                                      0, 0, 0,
+                                      (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_rc_ep_add_user_completion(&ep->super, comp, sn);
     return UCS_INPROGRESS;
 }
@@ -474,10 +497,16 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
                            uint64_t compare_mask, uint64_t compare,
                            uint64_t swap_add, int signal, ucs_status_t success)
 {
+    ucs_status_t status;
+
     desc->queue.sn = ep->tx.sw_pi;
-    uct_rc_mlx5_ep_dptr_post(ep, opcode, desc + 1, length, &desc->lkey,
-                             0, NULL, 0, remote_addr, rkey, compare_mask,
-                             compare, swap_add, signal);
+    status = uct_rc_mlx5_ep_dptr_post(ep, opcode, desc + 1, length, &desc->lkey,
+                                      0, NULL, 0, remote_addr, rkey, compare_mask,
+                                      compare, swap_add, signal);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ucs_callbackq_push(&ep->super.tx.comp, &desc->queue);
     return success;
 }
@@ -534,6 +563,7 @@ ucs_status_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_c
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_send_desc_t *desc;
 
+    UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "put_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->super.tx.mp, desc, UCS_ERR_WOULD_BLOCK);
 
@@ -562,6 +592,7 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep, size_t length,
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_send_desc_t *desc;
 
+    UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "get_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->super.tx.mp, desc, UCS_ERR_WOULD_BLOCK);
 
@@ -587,6 +618,7 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t lengt
 ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                      void *payload, unsigned length)
 {
+    UCT_CHECK_AM_ID(id);
     return uct_rc_mlx5_ep_inline_post(tl_ep, MLX5_OPCODE_SEND, payload, length,
                                       id, hdr, 0, 0);
 }
@@ -600,6 +632,7 @@ ucs_status_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_rc_iface_send_desc_t *desc;
     uct_rc_hdr_t *rch;
 
+    UCT_CHECK_AM_ID(id);
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_TL_IFACE_GET_TX_DESC(iface->super.tx.mp, desc, UCS_ERR_WOULD_BLOCK);
 
@@ -619,6 +652,7 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
                                      size_t length, uct_lkey_t lkey,
                                      uct_completion_t *comp)
 {
+    UCT_CHECK_AM_ID(id);
     return uct_rc_mlx5_ep_zcopy_post(ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t),
                                      MLX5_OPCODE_SEND, payload, length, lkey,
                                      id, header, header_length, 0, 0, 0, comp);

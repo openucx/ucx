@@ -53,6 +53,7 @@ gtest_SOURCES = \
 	uct/test_amo_fadd.cc \
 	uct/test_amo_swap.cc \
 	uct/test_p2p_am.cc \
+	uct/test_p2p_err.cc \
 	uct/test_p2p_rma.cc \
 	uct/test_uct_context.cc \
 	uct/test_uct_perf.cc \
