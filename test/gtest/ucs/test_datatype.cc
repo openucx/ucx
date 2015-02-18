@@ -234,7 +234,7 @@ UCS_TEST_F(test_datatype, queue_perf) {
     double lat = ucs_time_to_nsec(end_time - start_time) / count;
     UCS_TEST_MESSAGE << lat << " nsec per push+pull";
 
-    EXPECT_LT(lat, 10.0 * ucs::test_time_multiplier());
+    EXPECT_LT(lat, 15.0 * ucs::test_time_multiplier());
     EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
 }
 
@@ -439,7 +439,7 @@ UCS_TEST_F(test_datatype, ptr_array_perf) {
 
     EXPECT_LT(insert_ns, 1000.0);
     EXPECT_LT(remove_ns, 1000.0);
-    EXPECT_LT(lookup_ns, 10.0);
+    EXPECT_LT(lookup_ns, 15.0);
 }
 
 typedef struct {

@@ -62,6 +62,9 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_VERBOSE    = UCS_BIT(3)  /* Print error messages */
 };
 
+enum {
+    UCX_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
+};
 
 /**
  * Performance counter type.
@@ -125,7 +128,7 @@ typedef struct ucx_perf_test_params {
     size_t                 message_size;    /* Test message size */
     size_t                 hdr_size;        /* Header size (included in message size) */
     size_t                 alignment;       /* Message buffer alignment */
-    unsigned               fc_window;     /* Window size for flow control */
+    unsigned               fc_window;       /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
     unsigned               max_outstanding; /* Maximal number of outstanding sends */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */

@@ -194,12 +194,6 @@ void uct_perf_iface_flush_b(uct_perf_context_t *perf)
     }
 }
 
-static ucs_status_t ucx_perf_am_hander(void *desc, void *data, size_t length, void *arg)
-{
-    *(uint64_t*)arg = *(uint64_t*)data; /* Only copy out the header */
-    return UCS_OK;
-}
-
 static inline uint64_t __get_flag(ucx_perf_data_layout_t layout, uint64_t short_f,
                                   uint64_t bcopy_f, uint64_t zcopy_f)
 {
@@ -338,6 +332,14 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *par
             return UCS_ERR_INVALID_PARAM;
         }
 
+        if (params->fc_window > UCX_PERF_TEST_MAX_FC_WINDOW) {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("AM flow-control window too large (should be <= %d)",
+                          UCX_PERF_TEST_MAX_FC_WINDOW);
+            }
+            return UCS_ERR_INVALID_PARAM;
+        }
+
         if ((params->flags & UCX_PERF_TEST_FLAG_ONE_SIDED) &&
             (params->flags & UCX_PERF_TEST_FLAG_VERBOSE))
         {
@@ -457,13 +459,6 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
         }
     }
     uct_perf_iface_flush_b(perf);
-
-    status = uct_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID,
-                                ucx_perf_am_hander, perf->super.recv_buffer);
-    if (status != UCS_OK) {
-        ucs_error("Failed to uct_set_am_handler: %s", ucs_status_string(status));
-        goto err_destroy_eps;
-    }
 
     rte_call(&perf->super, barrier);
 
