@@ -55,10 +55,13 @@ UCS_TEST_F(instrument, record) {
     ucs_debug_address_info_t exp_info;
     unsigned long address;
     ucs_instrument_header_t hdr;
+    ucs_time_t start_time, end_time;
 
     /* Perform instrumentation */
     ucs_instrument_init();
+    start_time = ucs_get_time();
     test_func(&exp_info, &address);
+    end_time = ucs_get_time();
     ucs_instrument_cleanup();
 
     /* Read the file */
@@ -71,8 +74,8 @@ UCS_TEST_F(instrument, record) {
 
 //    ASSERT_EQ(UCS_API, hdr.ucs_lib.api_version); TODO
     if (ucs::test_time_multiplier() == 1) {
-        EXPECT_LE(record.timestamp, ucs_get_time());
-        EXPECT_GE(record.timestamp, ucs_get_time() - ucs_time_from_sec(0.1));
+        EXPECT_GE(record.timestamp, start_time);
+        EXPECT_LE(record.timestamp, end_time);
     }
     EXPECT_EQ(UCS_TEST_INSTR_LPARAM, record.lparam);
     EXPECT_EQ((uint32_t)UCS_TEST_INSTR_WPARAM, record.wparam);

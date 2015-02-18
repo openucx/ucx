@@ -37,9 +37,13 @@ public:
             m_completions[i]->uct.super.func = completion_cb;
             m_completions[i]->self           = this;
         }
+
+        uct_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, am_hander,
+                           m_perf.super.recv_buffer);
     }
 
     ~uct_perf_test_runner() {
+        uct_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
         free(m_completions[0]);
         free(m_completions);
     }
@@ -58,7 +62,13 @@ public:
     {
         comp *c = ucs_container_of(self, comp, uct);
         --c->self->m_outstanding;
-//        ucs_warn("outstanding=%d", c->outstanding);
+    }
+
+    static ucs_status_t am_hander(void *desc, void *data, size_t length, void *arg)
+    {
+        ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
+        *(psn_t*)arg = *(psn_t*)data;
+        return UCS_OK;
     }
 
     static ucs_status_t get_cb(void *desc, void *data, size_t length, void *arg)
@@ -187,6 +197,7 @@ public:
                 return;
             } else if (status == UCS_INPROGRESS) {
                 ++m_outstanding;
+                ucs_assert(m_outstanding <= m_max_outstanding);
                 return;
             } else if (status == UCS_ERR_WOULD_BLOCK) {
                 continue;
@@ -268,7 +279,7 @@ public:
     {
         unsigned long remote_addr;
         volatile psn_t *recv_sn;
-        psn_t send_sn;
+        psn_t sn, send_sn;
         uct_rkey_t rkey;
         void *buffer;
         unsigned completion_index, fc_window;
@@ -277,12 +288,12 @@ public:
         uct_ep_h ep;
 
         ucs_assert(m_perf.super.params.message_size >= sizeof(psn_t));
-        ucs_assert(m_perf.super.params.fc_window <= ((psn_t)-1));
+        ucs_assert(m_perf.super.params.fc_window <= ((psn_t)-1) / 2);
 
         recv_sn  = direction_to_responder ? (psn_t*)m_perf.super.recv_buffer :
                                             (psn_t*)m_perf.super.send_buffer;
-        *recv_sn = -1;
-        send_sn  = 0;
+        *recv_sn = 0;
+        send_sn  = 1;
         my_index = rte_call(&m_perf.super, group_index);
 
         rte_call(&m_perf.super, barrier);
@@ -297,12 +308,14 @@ public:
         fc_window   = m_perf.super.params.fc_window;
 
         completion_index  = 0;
-        *(psn_t*)buffer = 0;
+        *(psn_t*)buffer = send_sn;
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf.super) {
                 if (flow_control) {
                     /* Wait until getting ACK from responder */
+                    ucs_assertv(UCS_CIRCULAR_COMPARE8(send_sn - 1, >=, *recv_sn),
+                                "recv_sn=%d iters=%ld", *recv_sn, m_perf.super.current.iters);
                     while (UCS_CIRCULAR_COMPARE8(send_sn, >, (psn_t)(*recv_sn + fc_window))) {
                         progress_responder();
                     }
@@ -313,11 +326,11 @@ public:
                     while (m_outstanding >= m_max_outstanding) {
                         progress_requestor();
                     }
-                    ++completion_index;
                 }
 
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
                        rkey, &completion(completion_index)->uct);
+                ++completion_index;
 
                 ucx_perf_update(&m_perf.super, 1, length);
                 if (flow_control) {
@@ -325,13 +338,23 @@ public:
                 }
             }
 
-            /* Send "sentinel" value */
             if (!flow_control) {
+                /* Send "sentinel" value */
                 if (direction_to_responder) {
-                    *(psn_t*)buffer = 1;
-                    send_b(ep, 1, 0, buffer, length, remote_addr, rkey, NULL);
+                    while (m_outstanding >= m_max_outstanding) {
+                        progress_requestor();
+                    }
+                    *(psn_t*)buffer = 2;
+                    send_b(ep, 2, 1, buffer, length, remote_addr, rkey,
+                           &completion(completion_index)->uct);
                 } else {
-                    *(psn_t*)m_perf.super.recv_buffer = 1;
+                    *(psn_t*)m_perf.super.recv_buffer = 2;
+                }
+            } else {
+                /* Wait for last ACK, to make sure no more messages will arrive. */
+                ucs_assert(direction_to_responder);
+                while (UCS_CIRCULAR_COMPARE8((psn_t)(send_sn - 1), >, *recv_sn)) {
+                    progress_responder();
                 }
             }
         } else if (my_index == 1) {
@@ -339,26 +362,37 @@ public:
                 /* Since we're doing flow control, we can count exactly how
                  * many packets were received.
                  */
+                ucs_assert(direction_to_responder);
                 UCX_PERF_TEST_FOREACH(&m_perf.super) {
+                    sn = *recv_sn;
                     progress_responder();
-                    if (UCS_CIRCULAR_COMPARE8(*recv_sn, >, (psn_t)(send_sn + (fc_window / 2)))) {
+                    if (UCS_CIRCULAR_COMPARE8(sn, >, (psn_t)(send_sn + (fc_window / 2)))) {
                         /* Send ACK every half-window */
-                        send_b(ep, *recv_sn, send_sn, buffer, length, remote_addr,
-                               rkey, NULL);
-                        send_sn = *recv_sn;
+                        send_b(ep, sn, send_sn, buffer, length, remote_addr,
+                               rkey, &completion(completion_index)->uct);
+                        ++completion_index;
+                        send_sn = sn;
                     }
+
                     /* Calculate number of iterations */
                     m_perf.super.current.iters +=
-                                    (psn_t)(*recv_sn + 1 - (psn_t)m_perf.super.current.iters);
+                                    (psn_t)(sn - (psn_t)m_perf.super.current.iters);
+                }
+
+                /* Send ACK for last packet */
+                if (UCS_CIRCULAR_COMPARE8(*recv_sn, >, send_sn)) {
+                    send_b(ep, *recv_sn, send_sn, buffer, length, remote_addr,
+                           rkey, &completion(completion_index)->uct);
                 }
             } else {
                 /* Wait for "sentinel" value */
                 ucs_time_t poll_time = ucs_get_time();
-                while (*recv_sn != 1) {
+                while (*recv_sn != 2) {
                     progress_responder();
                     if (!direction_to_responder) {
                         if (ucs_get_time() > poll_time + ucs_time_from_msec(1.0)) {
-                            send_b(ep, 0, 0, buffer, length, remote_addr, rkey, NULL);
+                            send_b(ep, 0, 0, buffer, length, remote_addr, rkey,
+                                   &completion(completion_index)->uct);
                             poll_time = ucs_get_time();
                         }
                     }
@@ -367,6 +401,7 @@ public:
         }
 
         uct_perf_iface_flush_b(&m_perf);
+        ucs_assert(m_outstanding == 0);
         if (my_index == 0) {
             ucx_perf_update(&m_perf.super, 0, 0);
         }

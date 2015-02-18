@@ -265,7 +265,7 @@ protected:
         params.message_size    = test.msglen;
         params.hdr_size        = 8;
         params.alignment       = ucs_get_page_size();
-        params.fc_window       = 128;
+        params.fc_window       = UCX_PERF_TEST_MAX_FC_WINDOW;
         params.max_outstanding = test.max_outstanding;
         params.warmup_iter     = test.iters / 10;
         params.max_iter        = test.iters;

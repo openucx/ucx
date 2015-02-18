@@ -350,7 +350,7 @@ static void init_test_params(ucx_perf_test_params_t *params)
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
     params->data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    params->fc_window       = 128;
+    params->fc_window       = UCX_PERF_TEST_MAX_FC_WINDOW;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
     params->message_size    = 8;
