@@ -22,14 +22,19 @@ BEGIN_C_DECLS
 typedef enum {
     UCX_PERF_TEST_CMD_AM,
     UCX_PERF_TEST_CMD_PUT,
+    UCX_PERF_TEST_CMD_GET,
+    UCX_PERF_TEST_CMD_ADD,
+    UCX_PERF_TEST_CMD_FADD,
+    UCX_PERF_TEST_CMD_SWAP,
+    UCX_PERF_TEST_CMD_CSWAP,
     UCX_PERF_TEST_CMD_LAST
 } ucx_perf_cmd_t;
 
 
 typedef enum {
-    UCX_PERF_TEST_TYPE_PINGPONG,
-    UCX_PERF_TEST_TYPE_STREAM_UNI,
-    UCX_PERF_TEST_TYPE_STREAM_BI,
+    UCX_PERF_TEST_TYPE_PINGPONG,         /* Ping-pong mode */
+    UCX_PERF_TEST_TYPE_STREAM_UNI,       /* Unidirectional stream */
+    UCX_PERF_TEST_TYPE_STREAM_BI,        /* Bidirectional stream */
     UCX_PERF_TEST_TYPE_LAST
 } ucx_perf_test_type_t;
 
@@ -50,10 +55,16 @@ typedef enum {
 } ucx_perf_wait_mode_t;
 
 
-enum {
-    UCX_PERF_TEST_FLAG_VALIDATE   = UCS_BIT(1)  /* Validate data. Affects performance. */
+enum ucx_perf_test_flags {
+    UCX_PERF_TEST_FLAG_VALIDATE   = UCS_BIT(1), /* Validate data. Affects performance. */
+    UCX_PERF_TEST_FLAG_ONE_SIDED  = UCS_BIT(2), /* For test which involve only one side,
+                                                   the responder would not call progress(). */
+    UCX_PERF_TEST_FLAG_VERBOSE    = UCS_BIT(3)  /* Print error messages */
 };
 
+enum {
+    UCX_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
+};
 
 /**
  * Performance counter type.
@@ -99,7 +110,7 @@ typedef struct ucx_perf_test_rte {
     void        (*exchange_vec)(void *rte_group, void * req);
 
     /* Handle results */
-    void        (*report)(void *rte_group, ucx_perf_result_t *result);
+    void        (*report)(void *rte_group, ucx_perf_result_t *result, int is_final);
 
 } ucx_perf_test_rte_t;
 
@@ -112,11 +123,13 @@ typedef struct ucx_perf_test_params {
     ucx_perf_test_type_t   test_type;       /* Test communication type */
     ucx_perf_data_layout_t data_layout;     /* Data layout to use */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
-    unsigned               flags;           /* Additional flags */
+    unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 message_size;    /* Test message size */
+    size_t                 hdr_size;        /* Header size (included in message size) */
     size_t                 alignment;       /* Message buffer alignment */
-    unsigned               am_window;       /* Window size for AM bandwidth */
+    unsigned               fc_window;       /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
+    unsigned               max_outstanding; /* Maximal number of outstanding sends */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
     double                 max_time;        /* Time limit (seconds), 0 - unlimited */

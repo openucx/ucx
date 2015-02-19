@@ -187,16 +187,166 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 }
 
-static void uct_perf_iface_flush_b(uct_perf_context_t *perf)
+void uct_perf_iface_flush_b(uct_perf_context_t *perf)
 {
     while (uct_iface_flush(perf->iface) == UCS_ERR_WOULD_BLOCK) {
         uct_progress(perf->context);
     }
 }
 
-ucs_status_t ucx_perf_am_hander(void *desc, void *data, size_t length, void *arg)
+static inline uint64_t __get_flag(ucx_perf_data_layout_t layout, uint64_t short_f,
+                                  uint64_t bcopy_f, uint64_t zcopy_f)
 {
-    *(uint64_t*)arg = *(uint64_t*)data; /* Only copy out the header */
+    return (layout == UCX_PERF_DATA_LAYOUT_SHORT) ? short_f :
+           (layout == UCX_PERF_DATA_LAYOUT_BCOPY) ? bcopy_f :
+           (layout == UCX_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_f :
+           0;
+}
+
+static inline uint64_t __get_atomic_flag(size_t size, uint64_t flag32, uint64_t flag64)
+{
+    return (size == 4) ? flag32 :
+           (size == 8) ? flag64 :
+           0;
+}
+
+static inline size_t __get_max_size(ucx_perf_data_layout_t layout, size_t short_m,
+                                    size_t bcopy_m, uint64_t zcopy_m)
+{
+    return (layout == UCX_PERF_DATA_LAYOUT_SHORT) ? short_m :
+           (layout == UCX_PERF_DATA_LAYOUT_BCOPY) ? bcopy_m :
+           (layout == UCX_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_m :
+           0;
+}
+
+static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *params,
+                                                     uct_iface_h iface)
+{
+    uct_iface_attr_t attr;
+    ucs_status_t status;
+    uint64_t required_flags;
+    size_t max_size;
+
+    status = uct_iface_query(iface, &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    switch (params->command) {
+    case UCX_PERF_TEST_CMD_AM:
+        required_flags = __get_flag(params->data_layout, UCT_IFACE_FLAG_AM_SHORT,
+                                    UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_ZCOPY);
+        max_size = __get_max_size(params->data_layout, attr.cap.am.max_short,
+                                  attr.cap.am.max_bcopy, attr.cap.am.max_zcopy);
+        break;
+    case UCX_PERF_TEST_CMD_PUT:
+        required_flags = __get_flag(params->data_layout, UCT_IFACE_FLAG_PUT_SHORT,
+                                    UCT_IFACE_FLAG_PUT_BCOPY, UCT_IFACE_FLAG_PUT_ZCOPY);
+        max_size = __get_max_size(params->data_layout, attr.cap.put.max_short,
+                                  attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
+        break;
+    case UCX_PERF_TEST_CMD_GET:
+        required_flags = __get_flag(params->data_layout, 0,
+                                    UCT_IFACE_FLAG_GET_BCOPY, UCT_IFACE_FLAG_GET_ZCOPY);
+        max_size = __get_max_size(params->data_layout, 0,
+                                  attr.cap.get.max_bcopy, attr.cap.get.max_zcopy);
+        break;
+    case UCX_PERF_TEST_CMD_ADD:
+        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_ADD32,
+                                           UCT_IFACE_FLAG_ATOMIC_ADD64);
+        max_size = 8;
+        break;
+    case UCX_PERF_TEST_CMD_FADD:
+        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_FADD32,
+                                           UCT_IFACE_FLAG_ATOMIC_FADD64);
+        max_size = 8;
+        break;
+    case UCX_PERF_TEST_CMD_SWAP:
+        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_SWAP32,
+                                           UCT_IFACE_FLAG_ATOMIC_SWAP64);
+        max_size = 8;
+        break;
+    case UCX_PERF_TEST_CMD_CSWAP:
+        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_CSWAP32,
+                                           UCT_IFACE_FLAG_ATOMIC_CSWAP64);
+        max_size = 8;
+        break;
+    default:
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Invalid test command");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((attr.cap.flags & required_flags) == 0) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Device does not support required operation");
+        }
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (params->message_size > max_size) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Message size too big");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->message_size < 1) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Message size too small, need to be at least 1");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->max_outstanding < 1) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("max_outstanding, need to be at least 1");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->command == UCX_PERF_TEST_CMD_AM) {
+        if ((params->data_layout == UCX_PERF_DATA_LAYOUT_SHORT) &&
+            (params->hdr_size != sizeof(uint64_t)))
+        {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("Short AM header size must be 8 bytes");
+            }
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if ((params->data_layout == UCX_PERF_DATA_LAYOUT_ZCOPY) &&
+                        (params->hdr_size > attr.cap.am.max_hdr))
+        {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("AM header size too big");
+            }
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (params->hdr_size > params->message_size) {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("AM header size larger than message size");
+            }
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (params->fc_window > UCX_PERF_TEST_MAX_FC_WINDOW) {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("AM flow-control window too large (should be <= %d)",
+                          UCX_PERF_TEST_MAX_FC_WINDOW);
+            }
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if ((params->flags & UCX_PERF_TEST_FLAG_ONE_SIDED) &&
+            (params->flags & UCX_PERF_TEST_FLAG_VERBOSE))
+        {
+            ucs_warn("Running active-message test with on-sided progress");
+        }
+    }
+
     return UCS_OK;
 }
 
@@ -310,13 +460,6 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
     }
     uct_perf_iface_flush_b(perf);
 
-    status = uct_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID,
-                                ucx_perf_am_hander, perf->super.recv_buffer);
-    if (status != UCS_OK) {
-        ucs_error("Failed to uct_set_am_handler: %s", ucs_status_string(status));
-        goto err_destroy_eps;
-    }
-
     rte_call(&perf->super, barrier);
 
     free(iface_addr);
@@ -362,7 +505,7 @@ void uct_perf_test_cleanup_endpoints(uct_perf_context_t *perf)
 }
 
 
-ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *params,
+ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *params,
                                const char *tl_name, const char *dev_name,
                                uct_iface_config_t *iface_config,
                                ucx_perf_result_t *result)
@@ -388,6 +531,11 @@ ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *par
         goto out_test_cleanup;
     }
 
+    status = uct_perf_test_check_capabilities(params, perf.iface);
+    if (status != UCS_OK) {
+        goto out_iface_close;
+    }
+
     address = perf.super.send_buffer;
     length  = perf.super.params.message_size;
     status = uct_mem_map(perf.iface->pd, &address, &length, 0, &perf.send_lkey);
@@ -409,8 +557,9 @@ ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *par
     }
 
     if (params->warmup_iter > 0) {
-        perf.super.params.max_iter        = params->warmup_iter;
-        perf.super.params.report_interval = 1e10;
+        perf.super.max_iter         = ucs_min(params->warmup_iter,
+                                              params->max_iter / 10);
+        perf.super.report_interval  = -1;
         uct_perf_test_dispatch(&perf);
         uct_perf_iface_flush_b(&perf);
         rte_call(&perf.super, barrier);
@@ -424,6 +573,7 @@ ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *par
 
     if (status == UCS_OK) {
         ucx_perf_calc_result(&perf.super, result);
+        rte_call(&perf.super, report, result, 1);
     }
 
     uct_perf_test_cleanup_endpoints(&perf);
