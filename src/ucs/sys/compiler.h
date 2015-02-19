@@ -151,5 +151,21 @@
 /* Special pointer value */
 #define UCS_ERR_PTR(err)           ((void*)-(err + 1))
 
+/**
+ * Copy words from _src to _dst.
+ *
+ * @param _dst         Destination buffer.
+ * @param _src         Source buffer.
+ * @param _word_type   Type to use for copying.
+ * @param _size        Number of bytes to copy.
+ */
+#define UCS_WORD_COPY(_dst, _src, _word_type, _size) \
+    { \
+        unsigned i; \
+        for (i = 0; i < (_size) / sizeof(_word_type); ++i) { \
+            *((_word_type*)(_dst) + i) = *((_word_type*)(_src) + i); \
+        } \
+    }
+
 
 #endif

@@ -11,6 +11,14 @@
 #include <ucs/sys/compiler.h>
 #include <stdint.h>
 
+#ifdef __SSE4_1__
+#  include <smmintrin.h>
+#endif
+#ifdef __AVX__
+#  include <immintrin.h>
+#endif
+
+
 #define UCS_SYS_CACHE_LINE_SIZE    64
 
 /**

@@ -40,7 +40,7 @@ typedef struct uct_rc_mlx5_iface_config {
  */
 typedef struct uct_rc_mlx5_ep {
     uct_rc_ep_t      super;
-    unsigned         qpn_ds;
+    unsigned         qp_num;
 
     struct {
         uint16_t       sw_pi;      /* PI for next WQE */
