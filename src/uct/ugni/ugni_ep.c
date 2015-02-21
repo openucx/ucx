@@ -78,7 +78,7 @@ ucs_status_t uct_ugni_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 }
 
 ucs_status_t uct_ugni_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_addr,
-                                     uct_ep_addr_t *tl_ep_addr)
+                                       uct_ep_addr_t *tl_ep_addr)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, uct_ugni_iface_addr_t);
@@ -132,13 +132,14 @@ static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma,
 }
 
 static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_iface_t *iface,
-                                             uct_ugni_ep_t *ep,
-                                             uct_ugni_base_desc_t *rdma)
+                                              uct_ugni_ep_t *ep,
+                                              uct_ugni_base_desc_t *rdma)
 {
     gni_return_t ugni_rc;
 
     ugni_rc = GNI_PostRdma(ep->ep, &rdma->desc);
     if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_mpool_put(rdma);
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
             ucs_debug("GNI_PostRdma failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
@@ -164,6 +165,7 @@ static inline ucs_status_t uct_ugni_post_fma(uct_ugni_iface_t *iface,
 
     ugni_rc = GNI_PostFma(ep->ep, &fma->desc);
     if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_mpool_put(fma);
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
             ucs_debug("GNI_PostFma failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
@@ -189,8 +191,9 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *fma;
 
-    if (0 == length)
+    if (0 == length) {
         return UCS_OK;
+    }
 
     UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, fma, UCS_ERR_WOULD_BLOCK);
     uct_ugni_format_fma(fma, buffer, remote_addr, rkey, length, ep);
@@ -205,8 +208,8 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
 }
 
 ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                             void *arg, size_t length, uint64_t remote_addr,
-                             uct_rkey_t rkey)
+                                   void *arg, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey)
 {
     /* Since custom pack function is used
      * we have to allocate separate memory to pack
@@ -217,8 +220,9 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *fma;
 
-    if (0 == length)
+    if (0 == length) {
         return UCS_OK;
+    }
 
     UCT_TL_IFACE_GET_TX_DESC(iface->free_desc_buffer, fma, UCS_ERR_WOULD_BLOCK);
 
@@ -237,15 +241,16 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 }
 
 ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                             uct_lkey_t lkey, uint64_t remote_addr,
-                             uct_rkey_t rkey, uct_completion_t *comp)
+                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *rdma;
 
-    if (0 == length)
+    if (0 == length) {
         return UCS_OK;
+    }
 
     UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, rdma, UCS_ERR_WOULD_BLOCK);
     /* Setup Callback */
@@ -262,7 +267,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 }
 
 ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                            void *payload, unsigned length)
+                                  void *payload, unsigned length)
 {
     return UCS_ERR_UNSUPPORTED;
 }
