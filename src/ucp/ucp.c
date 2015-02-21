@@ -182,21 +182,21 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
 
     /* allocate a ucp context */
     context = ucs_malloc(sizeof(*context), "ucp context");
-    if (context == NULL) {
+    if (NULL == context) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
     /* initialize uct */
     status = uct_init(&context->uct_context);
-    if (status != UCS_OK) {
+    if (UCS_OK != status) {
         ucs_error("Failed to initialize UCT: %s", ucs_status_string(status));
         goto err_free_ctx;
     }
 
     /* check what are the available uct resources */
     status = uct_query_resources(context->uct_context, &resources, &num_resources);
-    if (status != UCS_OK) {
+    if (UCS_OK != status) {
         ucs_error("Failed to query resources: %s",ucs_status_string(status));
         goto err_free_uct;
     }
@@ -208,12 +208,12 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
 
     /* fill ucp configure options */
     status = ucs_config_parser_fill_opts(&ucp_config, ucp_iface_config_table, UCP_CONFIG_ENV_PREFIX, NULL, 0);
-    if (status != UCS_OK) {
+    if (UCS_OK != status) {
         goto err_free_resources;
     }
 
     tmp_resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "temporary resources list");
-    if (tmp_resources == NULL) {
+    if (NULL == tmp_resources) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_ucp_config;
     }
@@ -226,7 +226,7 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
     }
 
     context->resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "final resources list");
-    if (context->resources == NULL) {
+    if (NULL == context->resources) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_tmp_resources;
     }
@@ -279,7 +279,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
     ucs_status_t status;
 
     ucp_iface = ucs_malloc(sizeof(*ucp_iface), "ucp iface");
-    if (ucp_iface == NULL) {
+    if (NULL == ucp_iface) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
@@ -288,7 +288,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
     status = uct_iface_config_read(ucp_context->uct_context,
                                    ucp_context->resources[0].tl_name, env_prefix, NULL,
                                    &iface_config);
-    if (status != UCS_OK) {
+    if (UCS_OK != status) {
         ucs_error("Failed to read UCT config: %s", ucs_status_string(status));
         goto err_free_iface;
     }
@@ -298,7 +298,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
                             ucp_context->resources[0].tl_name,
                             ucp_context->resources[0].dev_name, 0, iface_config,
                             &ucp_iface->uct_iface);
-    if (status != UCS_OK) {
+    if (UCS_OK != status) {
         goto err_release_cfg;
     }
 
@@ -328,7 +328,7 @@ ucs_status_t ucp_ep_create(ucp_iface_h ucp_iface, ucp_ep_h *ucp_ep_p)
     ucs_status_t status;
 
     ucp_ep = ucs_malloc(sizeof(*ucp_ep), "ucp ep");
-    if (ucp_ep == NULL) {
+    if (NULL == ucp_ep) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
