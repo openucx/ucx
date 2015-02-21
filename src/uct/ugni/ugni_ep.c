@@ -78,7 +78,7 @@ ucs_status_t uct_ugni_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 }
 
 ucs_status_t uct_ugni_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_addr,
-                                     uct_ep_addr_t *tl_ep_addr)
+                                       uct_ep_addr_t *tl_ep_addr)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, uct_ugni_iface_addr_t);
@@ -96,23 +96,10 @@ ucs_status_t uct_ugni_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_ifac
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
-                                   unsigned length, uint64_t remote_addr,
-                                   uct_rkey_t rkey)
+static inline void uct_ugni_format_fma(uct_ugni_base_desc_t *fma, void *buffer,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       unsigned length, uct_ugni_ep_t *ep)
 {
-    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
-    uct_ugni_fma_desc_t *fma;
-    gni_return_t ugni_rc;
-
-    if (0 == length)
-        return UCS_OK;
-
-    fma = ucs_mpool_get(iface->free_fma_out);
-    if (NULL == fma) {
-        return UCS_ERR_WOULD_BLOCK;
-    }
-
     fma->desc.type = GNI_POST_FMA_PUT;
     fma->desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
     fma->desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
@@ -121,35 +108,166 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
     fma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
     fma->desc.length = length;
     fma->ep = ep;
+    fma->comp_cb = NULL;
+}
 
-#if 0
-    ucs_debug("Posting GNI_PostFma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
-              fma->desc.length,
-              (void *)fma->desc.local_addr,
-              (void *)fma->desc.remote_addr,
-              fma->desc.remote_mem_hndl.qword1,
-              fma->desc.remote_mem_hndl.qword2);
-#endif
+static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, 
+                                        void *buffer, uint64_t remote_addr,
+                                        uct_lkey_t lkey, uct_rkey_t rkey,
+                                        unsigned length, uct_ugni_ep_t *ep,
+                                        gni_cq_handle_t cq,
+                                        uct_completion_t *comp)
+{
+    rdma->desc.type = GNI_POST_RDMA_PUT;
+    rdma->desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
+    rdma->desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
+    rdma->desc.local_addr = (uint64_t) buffer;
+    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)lkey;
+    rdma->desc.remote_addr = remote_addr;
+    rdma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
+    rdma->desc.length = length;
+    rdma->desc.src_cq_hndl = cq;
+    rdma->ep = ep;
+    rdma->comp_cb = comp;
+}
 
-    ugni_rc = GNI_PostFma(ep->ep, &fma->desc);
+static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_iface_t *iface,
+                                              uct_ugni_ep_t *ep,
+                                              uct_ugni_base_desc_t *rdma)
+{
+    gni_return_t ugni_rc;
+
+    ugni_rc = GNI_PostRdma(ep->ep, &rdma->desc);
     if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_mpool_put(rdma);
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
+            ucs_debug("GNI_PostRdma failed, Error status: %s %d",
+                      gni_err_str[ugni_rc], ugni_rc);
             return UCS_ERR_WOULD_BLOCK;
         } else {
-            ucs_error("GNI_PostFma failed, Error status: %s %d",
-                     gni_err_str[ugni_rc], ugni_rc);
+            ucs_error("GNI_PostRdma failed, Error status: %s %d",
+                      gni_err_str[ugni_rc], ugni_rc);
             return UCS_ERR_IO_ERROR;
         }
     }
 
     ++ep->outstanding;
     ++iface->outstanding;
+
+    return UCS_INPROGRESS;
+}
+
+static inline ucs_status_t uct_ugni_post_fma(uct_ugni_iface_t *iface,
+                                             uct_ugni_ep_t *ep,
+                                             uct_ugni_base_desc_t *fma)
+{
+    gni_return_t ugni_rc;
+
+    ugni_rc = GNI_PostFma(ep->ep, &fma->desc);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_mpool_put(fma);
+        if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
+            ucs_debug("GNI_PostFma failed, Error status: %s %d",
+                      gni_err_str[ugni_rc], ugni_rc);
+            return UCS_ERR_WOULD_BLOCK;
+        } else {
+            ucs_error("GNI_PostFma failed, Error status: %s %d",
+                      gni_err_str[ugni_rc], ugni_rc);
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
+    ++ep->outstanding;
+    ++iface->outstanding;
+
     return UCS_OK;
 }
 
+ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
+                                   unsigned length, uint64_t remote_addr,
+                                   uct_rkey_t rkey)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_base_desc_t *fma;
+
+    if (0 == length) {
+        return UCS_OK;
+    }
+
+    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, fma, UCS_ERR_WOULD_BLOCK);
+    uct_ugni_format_fma(fma, buffer, remote_addr, rkey, length, ep);
+
+    ucs_trace_data("Posting PUT Short, GNI_PostFma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->desc.length,
+                   (void *)fma->desc.local_addr,
+                   (void *)fma->desc.remote_addr,
+                   fma->desc.remote_mem_hndl.qword1,
+                   fma->desc.remote_mem_hndl.qword2);
+    return uct_ugni_post_fma(iface, ep, fma);
+}
+
+ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                   void *arg, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey)
+{
+    /* Since custom pack function is used
+     * we have to allocate separate memory to pack
+     * the info and pass it to FMA 
+     * something like:
+     * pack_cb(desc + 1, arg, length); */
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_base_desc_t *fma;
+
+    if (0 == length) {
+        return UCS_OK;
+    }
+
+    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc_buffer, fma, UCS_ERR_WOULD_BLOCK);
+
+    ucs_assert(length <= iface->config.fma_seg_size);
+    pack_cb(fma + 1, arg, length);
+
+    uct_ugni_format_fma(fma, fma + 1, remote_addr, rkey, length, ep);
+
+    ucs_trace_data("Posting PUT BCOPY, GNI_PostFma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
+                   fma->desc.length,
+                   (void *)fma->desc.local_addr,
+                   (void *)fma->desc.remote_addr,
+                   fma->desc.remote_mem_hndl.qword1,
+                   fma->desc.remote_mem_hndl.qword2);
+    return uct_ugni_post_fma(iface, ep, fma);
+}
+
+ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_base_desc_t *rdma;
+
+    if (0 == length) {
+        return UCS_OK;
+    }
+
+    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, rdma, UCS_ERR_WOULD_BLOCK);
+    /* Setup Callback */
+    uct_ugni_format_rdma(rdma, buffer, remote_addr, lkey, rkey, length, ep,
+                         iface->local_cq, comp);
+
+    ucs_trace_data("Posting PUT ZCOPY, GNI_PostRdma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
+                   rdma->desc.length,
+                   (void *)rdma->desc.local_addr,
+                   (void *)rdma->desc.remote_addr,
+                   rdma->desc.remote_mem_hndl.qword1,
+                   rdma->desc.remote_mem_hndl.qword2);
+    return uct_ugni_post_rdma(iface, ep, rdma);
+}
+
 ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                            void *payload, unsigned length)
+                                  void *payload, unsigned length)
 {
     return UCS_ERR_UNSUPPORTED;
 }
-
