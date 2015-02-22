@@ -60,6 +60,7 @@ AS_IF([test "x$with_ib" == xyes],
             ],
             [AC_MSG_WARN([libibverbs not found]); with_ib=no])
 
+        have_ib_funcs=yes
         LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
         AC_CHECK_FUNCS([ibv_wc_status_str \
                         ibv_event_type_str \
@@ -68,7 +69,10 @@ AS_IF([test "x$with_ib" == xyes],
                         ibv_create_srq \
                         ibv_get_async_event],
                        [],
-                       [with_ib=no])
+                       [have_ib_funcs=no])
+        AS_IF([test "x$have_ib_funcs" != xyes],
+              [AC_MSG_WARN([Some IB verbs are not found. Please make sure OFED version is 1.5 or above.])
+               with_ib=no])
 
         LDFLAGS="$save_LDFLAGS"
         CFLAGS="$save_CFLAGS"
