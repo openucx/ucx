@@ -50,7 +50,8 @@ AS_IF([test "x$with_ib" == xyes],
         save_LDFLAGS="$LDFLAGS"
         save_CFLAGS="$CFLAGS"
         save_CPPFLAGS="$CPPFLAGS"
-        AC_CHECK_HEADER([infiniband/verbs.h], [], [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
+        AC_CHECK_HEADER([infiniband/verbs.h], [],
+                        [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
         AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
             [
             AC_SUBST(IBVERBS_LDFLAGS,  ["-L$with_verbs/lib64 -L$with_verbs/lib -libverbs"])
@@ -58,6 +59,17 @@ AS_IF([test "x$with_ib" == xyes],
             AC_SUBST(IBVERBS_CFLAGS,   [-I$with_verbs/include])
             ],
             [AC_MSG_WARN([libibverbs not found]); with_ib=no])
+
+        LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
+        AC_CHECK_FUNCS([ibv_wc_status_str \
+                        ibv_event_type_str \
+                        ibv_query_gid \
+                        ibv_get_device_name \
+                        ibv_create_srq \
+                        ibv_get_async_event],
+                       [],
+                       [with_ib=no])
+
         LDFLAGS="$save_LDFLAGS"
         CFLAGS="$save_CFLAGS"
         CPPFLAGS="$save_CPPFLAGS"
