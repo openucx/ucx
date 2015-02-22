@@ -20,7 +20,6 @@
 #define UCT_UD_QKEY             0x1ee7a330
 #define UCT_UD_MAX_SGE          2
 #define UCT_UD_MAX_WINDOW       1024 /* TODO: make it config param */
-#define UCT_UD_IB_GRH_LEN       40    
 #define UCT_UD_TX_MODERATION    64
     
 typedef uint16_t                uct_ud_psn_t;

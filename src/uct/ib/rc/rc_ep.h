@@ -8,10 +8,9 @@
 #ifndef UCT_RC_EP_H
 #define UCT_RC_EP_H
 
-#include "rc_def.h"
+#include "rc_iface.h"
 
 #include <uct/api/uct.h>
-#include <ucs/datastruct/callbackq.h>
 
 /*
  * Macro to generate functions for AMO completions.
@@ -34,23 +33,6 @@ struct uct_rc_ep {
         unsigned        unsignaled;
     } tx;
 };
-
-
-/**
- * RC network header.
- */
-typedef struct uct_rc_hdr {
-    uint8_t           am_id;  /* Active message ID */
-} UCS_S_PACKED uct_rc_hdr_t;
-
-
-/*
- * Short active message header (active message header is always 64 bit).
- */
-typedef struct uct_rc_am_short_hdr {
-    uct_rc_hdr_t      rc_hdr;
-    uint64_t          am_hdr;
-} UCS_S_PACKED uct_rc_am_short_hdr_t;
 
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
@@ -77,6 +59,26 @@ uct_rc_ep_add_user_completion(uct_rc_ep_t* ep, uct_completion_t* comp, uint16_t 
     cbq = ucs_derived_of(&comp->super, ucs_callbackq_elem_t);
     cbq->sn = sn;
     ucs_callbackq_push(&ep->tx.comp, cbq);
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rc_iface_tx_moderation(uct_rc_iface_t* iface, uct_rc_ep_t* ep, uint8_t flag)
+{
+    return (ep->tx.unsignaled >= iface->config.tx_moderation) ? flag : 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_tx_posted(uct_rc_ep_t *ep, int signaled)
+{
+    uct_rc_iface_t *iface;
+    if (signaled) {
+        iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
+        ucs_assert(uct_rc_iface_have_tx_cqe_avail(iface));
+        ep->tx.unsignaled = 0;
+        --iface->tx.cq_available;
+    } else {
+        ++ep->tx.unsignaled;
+    }
 }
 
 #endif

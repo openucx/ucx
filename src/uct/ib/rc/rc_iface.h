@@ -8,10 +8,11 @@
 #ifndef UCT_RC_IFACE_H
 #define UCT_RC_IFACE_H
 
-#include "rc_ep.h"
+#include "rc_def.h"
 
 #include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/debug/log.h>
 
 
@@ -79,6 +80,23 @@ struct uct_rc_iface_send_desc {
 };
 
 
+/**
+ * RC network header.
+ */
+typedef struct uct_rc_hdr {
+    uint8_t           am_id;  /* Active message ID */
+} UCS_S_PACKED uct_rc_hdr_t;
+
+
+/*
+ * Short active message header (active message header is always 64 bit).
+ */
+typedef struct uct_rc_am_short_hdr {
+    uct_rc_hdr_t      rc_hdr;
+    uint64_t          am_hdr;
+} UCS_S_PACKED uct_rc_am_short_hdr_t;
+
+
 extern ucs_config_field_t uct_rc_iface_config_table[];
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
@@ -107,19 +125,13 @@ static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
 }
 
 
-static UCS_F_ALWAYS_INLINE uint8_t
-uct_rc_iface_tx_moderation(uct_rc_iface_t* iface, uct_rc_ep_t* ep, uint8_t flag)
-{
-    return (ep->tx.unsignaled >= iface->config.tx_moderation) ? flag : 0;
-}
-
 static UCS_F_ALWAYS_INLINE int
 uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
 {
     return iface->tx.cq_available > 0;
 }
 
-static inline ucs_status_t
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
                        uct_rc_hdr_t *hdr, unsigned byte_len)
 {

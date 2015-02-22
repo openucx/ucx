@@ -14,6 +14,7 @@
 
 
 ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
+                                    size_t tl_hdr_len, uint64_t tl_overhead_ns,
                                     uct_resource_desc_t **resources_p,
                                     unsigned *num_resources_p)
 {
@@ -60,7 +61,8 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
 
             /* Get port information */
             rsc = &resources[num_resources];
-            status = uct_ib_device_port_get_resource(dev, port_num, rsc);
+            status = uct_ib_device_port_get_resource(dev, port_num, tl_hdr_len,
+                                                     tl_overhead_ns, rsc);
             if (status != UCS_OK) {
                 ucs_debug("failed to get port info for %s:%d: %s",
                           uct_ib_device_name(dev), port_num,

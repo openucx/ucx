@@ -406,7 +406,26 @@ int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
 #endif
 }
 
+size_t uct_ib_device_port_active_mtu(uct_ib_device_t *dev, uint8_t port_num)
+{
+    switch (uct_ib_device_port_attr(dev, port_num)->active_mtu) {
+    case IBV_MTU_256:
+        return 256;
+    case IBV_MTU_512:
+        return 512;
+    case IBV_MTU_1024:
+        return 1024;
+    case IBV_MTU_2048:
+        return 2048;
+    case IBV_MTU_4096:
+        return 4096;
+    }
+    ucs_fatal("Invalid port MTU value (%d)",
+              uct_ib_device_port_attr(dev, port_num)->active_mtu);
+}
+
 ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
+                                             size_t tl_hdr_len, uint64_t tl_overhead_ns,
                                              uct_resource_desc_t *resource)
 {
     static unsigned ib_port_widths[] = {
@@ -416,9 +435,11 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
         [3] = 12
     };
     struct sockaddr_in6 *in6_addr;
-    double encoding, signal_rate;
+    double encoding, signal_rate, wire_speed;
     union ibv_gid gid;
     unsigned active_width;
+    size_t extra_pkt_len;
+    size_t mtu;
     int ret;
 
     /* HCA:Port is the hardware resource name */
@@ -499,7 +520,13 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
         return UCS_ERR_IO_ERROR;
     }
 
-    resource->bandwidth = (long)((signal_rate * 1e9 * encoding *
-                                  ib_port_widths[ucs_ilog2(active_width)]) / 8.0 + 0.5);
+    mtu           = uct_ib_device_port_active_mtu(dev, port_num);
+    wire_speed    = (signal_rate * 1e9 * encoding *
+                     ib_port_widths[ucs_ilog2(active_width)]) / 8.0;
+    extra_pkt_len = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + tl_hdr_len +
+                    UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+
+    resource->latency   += tl_overhead_ns;
+    resource->bandwidth = (long)((wire_speed * mtu) / (mtu + extra_pkt_len) + 0.5);
     return UCS_OK;
 }

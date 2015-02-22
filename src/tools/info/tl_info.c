@@ -54,6 +54,7 @@ static void print_resource_info(uct_context_h context,
 
     printf("#   %s\n", resource->dev_name);
     printf("#      speed:         %.2f MB/sec\n", resource->bandwidth / 1024.0 / 1024.0);
+    printf("#      latency:       %.3f microsec\n", resource->latency * 1e-3);
 
     status = uct_iface_open(context, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);

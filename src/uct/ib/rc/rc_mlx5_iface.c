@@ -345,6 +345,8 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_context_h context,
 {
     /* TODO take transport overhead into account */
     return uct_ib_query_resources(context, UCT_IB_RESOURCE_FLAG_MLX5_PRM,
+                                  ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                                  40,
                                   resources_p, num_resources_p);
 }
 

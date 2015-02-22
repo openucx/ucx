@@ -347,7 +347,10 @@ static ucs_status_t uct_rc_verbs_query_resources(uct_context_h context,
                                                  unsigned *num_resources_p)
 {
     /* TODO take transport overhead into account */
-    return uct_ib_query_resources(context, 0, resources_p, num_resources_p);
+    return uct_ib_query_resources(context, 0,
+                                  ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                                  75,
+                                  resources_p, num_resources_p);
 }
 
 static uct_tl_ops_t uct_rc_verbs_tl_ops = {

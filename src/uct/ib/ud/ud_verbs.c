@@ -33,7 +33,10 @@ static ucs_status_t uct_ud_verbs_query_resources(uct_context_h context,
 {
     ucs_trace_func("");
     /* TODO take transport overhead into account */
-    return uct_ib_query_resources(context, 0, resources_p, num_resources_p);
+    return uct_ib_query_resources(context, 0,
+                                  UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
+                                  80,
+                                  resources_p, num_resources_p);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
@@ -171,8 +174,8 @@ static inline ucs_status_t uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *ifac
         VALGRIND_MAKE_MEM_DEFINED(packet, wc[i].byte_len);
 
         uct_ud_ep_process_rx(&iface->super, 
-                             (uct_ud_neth_t *)(packet + UCT_UD_IB_GRH_LEN),
-                             wc[i].byte_len - UCT_UD_IB_GRH_LEN,
+                             (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
+                             wc[i].byte_len - UCT_IB_GRH_LEN,
                              (uct_ud_recv_skb_t *)desc); 
     }
     iface->super.rx.available += ret;
