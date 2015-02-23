@@ -210,6 +210,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     struct ibv_exp_qp_init_attr qp_init_attr;
     struct ibv_qp *qp;
+    int inline_recv = 0;
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
@@ -255,7 +256,12 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
 
 #if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
     qp_init_attr.max_inl_recv = qp_init_attr.max_inl_recv / 2; /* Driver bug W/A */
+    inline_recv = qp_init_attr.max_inl_recv;
 #endif
+
+    ucs_debug("created rc qp 0x%x tx %d rx %d tx_inline %d rx_inline %d", qp->qp_num,
+              qp_init_attr.cap.max_send_wr, qp_init_attr.cap.max_recv_wr,
+              qp_init_attr.cap.max_inline_data, inline_recv);
 
     *qp_p = qp;
     *cap  = qp_init_attr.cap;

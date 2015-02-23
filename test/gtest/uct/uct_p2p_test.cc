@@ -10,6 +10,10 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
+
+int             uct_p2p_test::log_data_count = 0;
+ucs_log_level_t uct_p2p_test::orig_log_level;
+
 void uct_p2p_test::init() {
     uct_test::init();
 
@@ -79,12 +83,42 @@ static O& operator<<(O& os, const size& sz)
     return os;
 }
 
+void uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
+                               unsigned level, const char *prefix, const char *message,
+                               va_list ap)
+{
+    if (level == UCS_LOG_LEVEL_TRACE_DATA) {
+        ++log_data_count;
+    }
+    if (level <= orig_log_level) {
+        ucs_log_default_handler(file, line, function, level, prefix, message, ap);
+    }
+}
+
 template <typename O>
 void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length,
                                    direction_t direction)
 {
-    os << size(length) << " " << std::flush;
+    if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        os << size(length) << " " << std::flush;
+    }
+
+    /*
+     * Set our own log handler, and raise log level, to test that the transport
+     * prints log messages for the transfers.
+     */
+    int count_before = log_data_count;
+    ucs_log_set_handler(log_handler);
+    orig_log_level = ucs_global_opts.log_level;
+    ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+
     test_xfer(send, length, direction);
+
+    /* Restore logging */
+    ucs_global_opts.log_level = orig_log_level;
+    ucs_log_set_handler(ucs_log_default_handler);
+
+    EXPECT_GE(log_data_count - count_before, 1);
 }
 
 void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
@@ -121,8 +155,11 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
         repeat_count = 1;
     }
 
-    ms << repeat_count << "x{" << size(min_length) << ".." << size(max_length) << "} "
-                    << std::flush;
+    if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        ms << repeat_count << "x{" << size(min_length) << ".."
+           << size(max_length) << "} " << std::flush;
+    }
+
     for (int i = 0; i < repeat_count; ++i) {
         double exp = (rand() * (log_max - log_min)) / RAND_MAX + log_min;
         ssize_t length = (ssize_t)pow(2.0, exp);

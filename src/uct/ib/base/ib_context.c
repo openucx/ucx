@@ -129,9 +129,8 @@ ucs_status_t uct_ib_init(uct_context_h context)
         }
     }
 
-    /* If we don't have any IB devices, fail the component */
-    if (ibctx->num_devices > 0) {
-        ucs_debug("initialized IB component with %u devices", ibctx->num_devices);
+    if (ibctx->num_devices == 0) {
+        ucs_debug("no infiniband devices found");
     }
     status = UCS_OK;
 

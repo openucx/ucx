@@ -9,8 +9,10 @@
 #define UCT_IB_MLX5_H_
 
 
-#include <uct/api/uct_def.h>
+#include <uct/ib/base/ib_log.h>
 #include <ucs/type/status.h>
+#include <ucs/debug/log.h>
+
 #include <infiniband/mlx5_hw.h>
 #include <infiniband/arch.h>
 #include <netinet/in.h>

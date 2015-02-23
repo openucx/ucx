@@ -135,7 +135,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
                        uct_rc_hdr_t *hdr, unsigned byte_len)
 {
-    ucs_trace_data("RX: AM [%d]", hdr->am_id);
     return uct_iface_invoke_am(&iface->super.super, hdr->am_id, desc, hdr + 1,
                                byte_len - sizeof(*hdr));
 }
