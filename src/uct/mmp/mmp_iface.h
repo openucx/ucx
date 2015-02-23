@@ -33,9 +33,7 @@ typedef struct uct_mmp_iface {
     uct_mmp_pd_t           pd;
     uct_mmp_iface_addr_t   addr;
     int                    domain_id;       /**< Id for mmp domain creation */
-    uct_mmp_ep_t           *eps[UCT_mmp_HASH_SIZE];    /**< Array of QPs */
-    ucs_mpool_h            free_fma_out;    /**< FIXME Pool of FMA descriptors 
-                                                for outbound */
+    uct_mmp_ep_t           *eps[UCT_mmp_HASH_SIZE];    /**< Array of EPs */
     uint32_t               pe_address;      /**< PE address for the NIC that
                                               this function has attached to the
                                               communication domain. */
@@ -47,7 +45,6 @@ typedef struct uct_mmp_iface {
 
 typedef struct uct_mmp_iface_config {
     uct_iface_config_t       super;
-    uct_iface_mpool_config_t mpool;
 } uct_mmp_iface_config_t;
 
 static inline uct_mmp_device_t * uct_mmp_iface_device(uct_mmp_iface_t *iface)

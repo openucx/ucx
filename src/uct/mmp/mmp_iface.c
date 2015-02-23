@@ -99,7 +99,7 @@ static ucs_status_t uct_mmp_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
     return rc;
 }
 
-#define UCT_MMP_RKEY_MAGIC  0xdeadbeefLL /* FIXME what the deuce is this? */
+#define UCT_MMP_RKEY_MAGIC  0xdeadbeefLL /* FIXME change this for mmp */
 
 static ucs_status_t uct_mmp_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
