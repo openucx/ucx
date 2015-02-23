@@ -18,26 +18,35 @@
 
 
 std::vector<uct_resource_desc_t> uct_test::enum_resources(const std::string& tl_name) {
-    std::vector<uct_resource_desc_t> result;
-    uct_resource_desc_t *resources;
-    unsigned num_resources;
-    ucs_status_t status;
-    uct_context_h ucth;
+    static std::vector<uct_resource_desc_t> all_resources;
 
-    status = uct_init(&ucth);
-    ASSERT_UCS_OK(status);
+    if (all_resources.empty()) {
+        uct_resource_desc_t *resources;
+        unsigned num_resources;
+        ucs_status_t status;
+        uct_context_h ucth;
 
-    status = uct_query_resources(ucth, &resources, &num_resources);
-    ASSERT_UCS_OK(status);
+        status = uct_init(&ucth);
+        ASSERT_UCS_OK(status);
 
-    for (unsigned i = 0; i < num_resources; ++i) {
-        if (tl_name.empty() || (std::string(resources[i].tl_name) == tl_name)) {
-            result.push_back(resources[i]);
-        }
+        status = uct_query_resources(ucth, &resources, &num_resources);
+        ASSERT_UCS_OK(status);
+
+        std::copy(resources, resources + num_resources,
+                  std::back_inserter(all_resources));
+
+        uct_release_resource_list(resources);
+        uct_cleanup(ucth);
     }
 
-    uct_release_resource_list(resources);
-    uct_cleanup(ucth);
+    std::vector<uct_resource_desc_t> result;
+    for (std::vector<uct_resource_desc_t>::iterator iter = all_resources.begin();
+                    iter != all_resources.end(); ++iter)
+    {
+        if (tl_name.empty() || (std::string(iter->tl_name) == tl_name)) {
+            result.push_back(*iter);
+        }
+    }
     return result;
 }
 

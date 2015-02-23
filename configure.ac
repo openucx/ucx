@@ -84,41 +84,9 @@ m4_ifdef([AS_VAR_APPEND],
 
 
 #
-# Initialize CFLAGS
-#
-CFLAGS="-g -Wall -Werror $UCX_CFLAGS"
-CXXFLAGS="$CFLAGS"
-
-
-#
-# CHECK_CROSS_COMP (program, true-action, false-action)
-#
-# The macro checks if it can run the program; it executes
-# true action if the program can be executed, otherwise
-# false action is executed.
-# For cross-platform compilation we only check
-# if we can compile and link the program.
-AC_DEFUN([CHECK_CROSS_COMP], [
-         AC_RUN_IFELSE([$1], [$2], [$3],
-                       [AC_LINK_IFELSE([$1], [$2], [$3])])
-])
-
-
-#
-# Debug mode
-#
-AC_ARG_ENABLE(debug,
-        AC_HELP_STRING([--enable-debug], [Enable debug mode build]),
-        [],
-        [enable_debug=no])
-AS_IF([test "x$enable_debug" == xyes],
-        [CFLAGS="-O0 -D_DEBUG $CFLAGS"],
-        [CFLAGS="-O3 $CFLAGS"])
-
-
-#
 # Configure modules
 #
+m4_include([config/m4/compiler.m4])
 m4_include([config/m4/sysdep.m4])
 m4_include([config/m4/ucs.m4])
 m4_include([config/m4/ib.m4])

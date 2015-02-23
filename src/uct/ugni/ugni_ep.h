@@ -29,10 +29,17 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 ucs_status_t uct_ugni_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
-ucs_status_t uct_ugni_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t 
-                                       *tl_iface_addr, uct_ep_addr_t *tl_ep_addr);
-ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer, unsigned length, 
-                                   uint64_t remote_addr, uct_rkey_t rkey);
+ucs_status_t uct_ugni_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_addr,
+                                       uct_ep_addr_t *tl_ep_addr);
+ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
+                                   unsigned length, uint64_t remote_addr,
+                                   uct_rkey_t rkey);
+ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                   void *arg, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey);
+ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp);
 ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                            void *payload, unsigned length);
+                                  void *payload, unsigned length);
 #endif

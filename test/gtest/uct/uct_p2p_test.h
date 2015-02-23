@@ -51,11 +51,19 @@ protected:
 
 private:
 
+    static int             log_data_count;
+    static ucs_log_level_t orig_log_level;
+
     template <typename O>
     void test_xfer_print(const O& os, send_func_t send, size_t length,
                          direction_t direction);
 
     static void completion_cb(ucs_callback_t *self);
+
+    static void log_handler(const char *file, unsigned line, const char *function,
+                            unsigned level, const char *prefix, const char *message,
+                            va_list ap);
+
 };
 
 

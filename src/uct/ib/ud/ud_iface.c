@@ -120,7 +120,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops,
 
     UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, 
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
-                              UCT_UD_IB_GRH_LEN + sizeof(uct_ud_neth_t),
+                              UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
                               config->super.tx.queue_len, config);
  
     self->tx.unsignaled          = 0;

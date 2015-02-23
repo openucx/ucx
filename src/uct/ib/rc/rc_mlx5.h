@@ -40,7 +40,7 @@ typedef struct uct_rc_mlx5_iface_config {
  */
 typedef struct uct_rc_mlx5_ep {
     uct_rc_ep_t      super;
-    unsigned         qpn_ds;
+    unsigned         qp_num;
 
     struct {
         uint16_t       sw_pi;      /* PI for next WQE */
@@ -84,7 +84,10 @@ typedef struct {
  * We can post if we're not starting further that max_pi.
  * See also uct_rc_mlx5_calc_max_pi().
  */
-#define UCT_RC_MLX5_CHECK_SW_PI(_ep) \
+#define UCT_RC_MLX5_CHECK_RES(_iface, _ep) \
+    if (!uct_rc_iface_have_tx_cqe_avail(&(_iface)->super)) { \
+        return UCS_ERR_WOULD_BLOCK; \
+    } \
     if (UCS_CIRCULAR_COMPARE16((_ep)->tx.sw_pi, >, (_ep)->tx.max_pi)) { \
         return UCS_ERR_WOULD_BLOCK; \
     }

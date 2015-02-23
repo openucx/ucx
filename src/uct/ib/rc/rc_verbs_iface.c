@@ -9,6 +9,7 @@
 
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_context.h>
+#include <uct/ib/base/ib_log.h>
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
 #include <string.h>
@@ -117,6 +118,8 @@ static inline ucs_status_t uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *ifac
             desc = (void*)wc[i].wr_id;
             hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
             VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
+
+            uct_ib_log_recv_completion(IBV_QPT_RC, &wc[i], hdr, uct_rc_ep_am_packet_dump);
 
             status = uct_rc_iface_invoke_am(&iface->super, desc, hdr, wc[i].byte_len);
             if (status == UCS_OK) {
@@ -347,7 +350,10 @@ static ucs_status_t uct_rc_verbs_query_resources(uct_context_h context,
                                                  unsigned *num_resources_p)
 {
     /* TODO take transport overhead into account */
-    return uct_ib_query_resources(context, 0, resources_p, num_resources_p);
+    return uct_ib_query_resources(context, 0,
+                                  ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                                  75,
+                                  resources_p, num_resources_p);
 }
 
 static uct_tl_ops_t uct_rc_verbs_tl_ops = {

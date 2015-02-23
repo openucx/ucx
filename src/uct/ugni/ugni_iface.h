@@ -14,6 +14,7 @@
 #include "ugni_ep.h"
 
 #define UCT_UGNI_HASH_SIZE   256
+#define UCT_UGNI_MAX_FMA     2048
 
 struct uct_ugni_iface;
 
@@ -44,7 +45,13 @@ typedef struct uct_ugni_iface {
     uct_ugni_ep_t           *eps[UCT_UGNI_HASH_SIZE];    /**< Array of QPs */
     unsigned                outstanding;                 /**< Counter for outstanding packets
                                                               on the interface */
-    ucs_mpool_h             free_fma_out;                /**< Pool of FMA descriptors for outbound */
+    ucs_mpool_h             free_desc;                   /**< Pool of FMA descriptors for 
+                                                              requests without bouncing buffers */
+    ucs_mpool_h             free_desc_buffer;            /**< Pool of FMA descriptors for 
+                                                              requests with bouncing buffer*/
+    struct {
+        unsigned            fma_seg_size;                /**< FMA Segment size */
+    } config;
     bool                    activated;                   /**< nic status */
     /* list of ep */
 } uct_ugni_iface_t;
@@ -54,10 +61,11 @@ typedef struct uct_ugni_iface_config {
     uct_iface_mpool_config_t mpool;
 } uct_ugni_iface_config_t;
 
-typedef struct uct_ugni_fma_desc {
+typedef struct uct_ugni_base_desc {
     gni_post_descriptor_t desc;
+    uct_completion_t *comp_cb;
     uct_ugni_ep_t  *ep;
-} uct_ugni_fma_desc_t;
+} uct_ugni_base_desc_t;
 
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
 {

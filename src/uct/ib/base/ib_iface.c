@@ -180,10 +180,6 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.seg_size          = config->super.max_bcopy;
 
-    ucs_debug("rx_headroom=%d payload_ofs=%d hdr_ofs=%d data_sz=%d",
-              self->config.rx_headroom, self->config.rx_payload_offset,
-              self->config.rx_hdr_offset, self->config.seg_size);
-
     /* TODO comp_channel */
     /* TODO inline scatter for send SQ */
     self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len, NULL, NULL, 0);
@@ -213,6 +209,10 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
         ucs_error("Unsupported link layer");
         goto err_destroy_recv_cq;
     }
+
+    ucs_debug("created uct_ib_iface_t rx_headroom %d payload_ofs %d hdr_ofs %d data_sz %d",
+              self->config.rx_headroom, self->config.rx_payload_offset,
+              self->config.rx_hdr_offset, self->config.seg_size);
 
     return UCS_OK;
 
