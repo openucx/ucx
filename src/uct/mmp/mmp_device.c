@@ -13,7 +13,6 @@
 #include <ucs/debug/log.h>
 
 
-/* called by uct_mmp_query_resources to populate resources array */
 void uct_device_get_resource(uct_mmp_device_t *dev,
         uct_resource_desc_t *resource)
 {
@@ -27,34 +26,24 @@ void uct_device_get_resource(uct_mmp_device_t *dev,
     memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 }
 
-/* called by uct_mmp_device_create at the very beginning */
-static ucs_status_t get_nic_address(uct_mmp_device_t *dev_p)
-{
-    /* FIXME not sure yet what do here */
-}
-
-/* called by uct_mmp_init to populate devices array */
 ucs_status_t uct_mmp_device_create(uct_context_h context, int dev_id, 
                                    uct_mmp_device_t *dev_p)
 {
-    ucs_status_t rc;
-
     dev_p->device_id = (uint32_t)dev_id;
 
-    rc = get_nic_address(dev_p);
-    if (rc != UCS_OK) {
-        ucs_error("Failed to get NIC address");
-        return rc;
-    }
+    /* create names for the dummy mmp device */
 
-    /* FIXME create a name out of device type and address */
+    ucs_snprintf_zero(dev_p->type_name, sizeof(dev_p->type_name), "%s",
+                      "SM_MMP");
 
-    dev_p->attached = false;
+    ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->type_name), "%s:%u",
+                      dev_p->type_name, dev_p->device_id);
+
     return UCS_OK;
 }
 
-/* called by uct_mmp_cleanup */
+/* currently unused */
 void uct_mmp_device_destroy(uct_mmp_device_t *dev)
 {
-    /* FIXME possibly unmap files, free memory, etc. */
+    /* No op */
 }

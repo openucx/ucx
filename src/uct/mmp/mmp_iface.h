@@ -32,22 +32,16 @@ typedef struct uct_mmp_iface {
     uct_mmp_device_t       *dev;
     uct_mmp_pd_t           pd;
     uct_mmp_iface_addr_t   addr;
-    gni_cdm_handle_t       cdm_handle;      /**< FIXME mmp communication domain */
-    gni_nic_handle_t       nic_handle;      /**< FIXME mmp NIC handle */
+    int                    domain_id;       /**< Id for mmp domain creation */
+    uct_mmp_ep_t           *eps[UCT_mmp_HASH_SIZE];    /**< Array of QPs */
+    ucs_mpool_h            free_fma_out;    /**< FIXME Pool of FMA descriptors 
+                                                for outbound */
     uint32_t               pe_address;      /**< PE address for the NIC that
                                               this function has attached to the
                                               communication domain. */
     uct_mmp_iface_addr_t   address;         /**< PE address that is returned
                                               for the communication domain that
                                               this NIC is attached to. */
-    gni_cq_handle_t        local_cq;        /**< FIXME Completion queue */
-    int                    domain_id;       /**< Id for mmp domain creation */
-    uct_mmp_ep_t           *eps[UCT_mmp_HASH_SIZE];    /**< Array of QPs */
-    unsigned               outstanding;     /**< FIXME Counter for outstanding
-                                              packets on the interface */
-    ucs_mpool_h            free_fma_out;    /**< FIXME Pool of FMA descriptors 
-                                                for outbound */
-    bool                   activated;       /**< nic status */
     /* list of ep */
 } uct_mmp_iface_t;
 
@@ -55,12 +49,6 @@ typedef struct uct_mmp_iface_config {
     uct_iface_config_t       super;
     uct_iface_mpool_config_t mpool;
 } uct_mmp_iface_config_t;
-
-/* FIXME I don't think I need this at all */
-typedef struct uct_mmp_fma_desc {
-    gni_post_descriptor_t desc;
-    uct_mmp_ep_t  *ep;
-} uct_mmp_fma_desc_t;
 
 static inline uct_mmp_device_t * uct_mmp_iface_device(uct_mmp_iface_t *iface)
 {
@@ -73,6 +61,6 @@ extern uct_tl_ops_t uct_mmp_tl_ops;
 ucs_status_t uct_mmp_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                  uct_rkey_bundle_t *rkey_ob);
 
-ucs_status_t mmp_activate_iface(uct_mmp_iface_t *iface, uct_mmp_context_t
-                                *mmp_ctx);
+ucs_status_t mmp_activate_iface(uct_mmp_iface_t *iface,
+                                uct_mmp_context_t *mmp_ctx);
 #endif
