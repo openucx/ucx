@@ -9,14 +9,11 @@
 #define UCT_SYSV_IFACE_H
 
 #include <uct/tl/tl_base.h>
+#include <ucs/sys/sys.h>
 #include "sysv_context.h"
 #include "sysv_device.h"
 #include "sysv_ep.h"
 
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
 
 #define UCT_SYSV_HASH_SIZE   256
 

@@ -44,8 +44,8 @@ ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
 ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
     /* FIXME all of these values */
-    iface_attr->cap.put.max_short      = 2048;
-    iface_attr->cap.put.max_bcopy      = 2048;
+    iface_attr->cap.put.max_short      = SHMMAX;
+    iface_attr->cap.put.max_bcopy      = SHMMAX;
     iface_attr->cap.put.max_zcopy      = 0;
     iface_attr->iface_addr_len         = sizeof(uct_sysv_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_sysv_ep_addr_t);
@@ -58,73 +58,131 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
                                     uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t rc;
-    uct_sysv_pd_t *sysv_pd = ucs_derived_of(pd, uct_sysv_pd_t);
-    pid_t mypid;
+    uintptr_t *mem_hndl = NULL;
+    int *shmid;
 
     if (0 == *length_p) {
         return UCS_ERR_INVALID_PARAM;
     }
 
+    mem_hndl = ucs_malloc(2*sizeof(uintptr_t), "mem_hndl");
+    if (NULL == mem_hndl) {
+        ucs_error("Failed to allocate memory for mem_hndl");
+        return UCS_ERR_NO_MEMORY;
+    }
+
     if (NULL == *address_p) {
-        // build file name
-        mypid = getpid();
-
-        /* FIXME this is where to do the shared mapping
-        *address_p = ucs_malloc(*length_p, "uct_sysv_mem_map"); */
-        if (NULL == *address_p) {
-            ucs_error("Failed to allocate %zu bytes", *length_p);
-            rc = UCS_ERR_NO_MEMORY;
-            goto mem_err;
+        rc = ucs_sysv_alloc(length_p, address_p, flags, shmid);
+        if (rc != UCS_OK) {
+            ucs_error("Failed to attach %zu bytes", *length_p);
+            return rc;
         }
-        /* FIXME eh?
-        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL); */
+        /* FIXME eh? */
+        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL); 
     }
 
+    mem_hndl[0] = *shmid;
+    mem_hndl[1] = *address_p;
 
-mem_err:
-    if (inter_allocation) {
-        free(*address_p);
-    }
-    free(mem_hndl);
-    return rc;
+    /* FIXME no use for pd input argument? */
+
+    ucs_debug("Memory registration address %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
+              *address_p, *length_p, mem_hndl[0], mem_hndl[1]);
+    *lkey_p = (uintptr_t)mem_hndl;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_sysv_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 {
-    uct_sysv_pd_t *sysv_pd = ucs_derived_of(pd, uct_sysv_pd_t);
-    ucs_status_t rc = UCS_OK;
+    /* this releases the key allocated in mem_map */
 
-    /* FIXME unregister the memory */
+    ucs_sysv_free(lkey[1]);  /* detach the shared segment */
+    ucs_free((void *)lkey);
 
-    ucs_free(mem_hndl);
-    return rc;
+    return UCS_OK;
 }
 
-#define UCT_SYSV_RKEY_MAGIC  0xabbadabaLL /* FIXME change this for sysv */
+#define UCT_SYSV_RKEY_MAGIC  0xabbadabaLL
 
 static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    /* FIXME return info about (size of) rkey */
+    /* FIXME why does a query set the value? */
+    pd_attr->rkey_packed_size  = 4 * sizeof(uint64_t);
     return UCS_OK;
 }
 
 static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
                                       void *rkey_buffer)
 {
-    /* FIXME for keys, use something like: magic+filename+baseaddr 
-     * where filename is generated from PID + iface addr
-     * (iface addr is unique to each interface and therefore context) */
+    /* FIXME user is responsible to free rkey_buffer? */
+    uint64_t *ptr = rkey_buffer;
+    ptr[0] = 0; ptr[1] = 0; ptr[2] = 0; ptr[3] = 0;
+
+    ptr[0] = UCT_SYSV_RKEY_MAGIC;
+    ptr[1] = (uint64_t) lkey[0];
+    ptr[2] = (uint64_t) lkey[1]; /* FIXME always safe cast? */
+    ptr[3] = 0; /* will be attached addr on the remote PE - obtained at unpack */
+    ucs_debug("Packed [ %"PRIx64" %"PRIx64" %"PRIx64" ]", ptr[0], ptr[1], ptr[2]);
+    return UCS_OK;
 }
 
 static void uct_sysv_rkey_release(uct_context_h context, uct_rkey_t key)
 {
-    ucs_free((void *)key);
+    /* this releases the key allocated in unpack */
+
+    ucs_sysv_free(key[3]);  /* detach the shared segment */
+    ucs_free((void *)key); 
 }
 
 ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                  uct_rkey_bundle_t *rkey_ob)
 {
-    /* FIXME unpack the key, map the shared region, and store info */
+    /* FIXME user is responsible to free rkey_buffer? */
+    uint64_t *ptr = rkey_buffer;
+    uint64_t magic = 0;
+    uintptr_t *mem_hndl = NULL;
+    int shmid;
+
+    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]", 
+               ptr[0], ptr[1], ptr[2]);
+    magic = ptr[0];
+    if (magic != UCT_SYSV_RKEY_MAGIC) {
+        ucs_error("Failed to identify key. Expected %llx but received %"PRIx64"",
+                  UCT_SYSV_RKEY_MAGIC, magic);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    mem_hndl = ucs_malloc(3*sizeof(uintptr_t), "mem_hndl");
+    if (NULL == mem_hndl) {
+        ucs_error("Failed to allocate memory for mem_hndl");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    /* Attach segment FIXME would like to extend ucs_sysv_alloc to do this? */
+    shmid = (int) ptr[1];
+    ptr[3] = (uint64_t) shmat(shmid, NULL, 0); /* FIXME always a safe cast? */
+    /* Check if attachment was successful */
+    if (ptr == (void*)-1) {
+        if (errno == ENOMEM) {
+            return UCS_ERR_NO_MEMORY;
+        } else if (RUNNING_ON_VALGRIND && (errno == EINVAL)) {
+            return UCS_ERR_NO_MEMORY;
+        } else {
+            ucs_error("shmat(shmid=%d) returned unexpected error: %m", *shmid);
+            return UCS_ERR_SHMEM_SEGMENT;
+        }
+    }
+
+    mem_hndl[0] = ptr[1]; /* shmid */
+    mem_hndl[1] = ptr[2]; /* attached address on owner PE */
+    mem_hndl[2] = ptr[3]; /* attached address on remote PE */
+
+    /* FIXME is this a bug? */
+    rkey_ob->type = (void*)uct_sysv_rkey_release;
+    rkey_ob->rkey = (uintptr_t)mem_hndl;
+    return UCS_OK;
+
+    /* need to add rkey release */
 }
 
 /* FIXME make sure all of these are implemented */
@@ -154,8 +212,6 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
-    uct_sysv_iface_config_t *config = 
-        ucs_derived_of(tl_config, uct_sysv_iface_config_t);
     uct_sysv_context_t *sysv_ctx = 
         ucs_component_get(context, sysv, uct_sysv_context_t);
     uct_sysv_device_t *dev;
@@ -171,7 +227,7 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
 
     /* FIXME initialize structure contents 
      * most of these copied from ugni tl iface code */
-    self->pd.super.ops = &uct_ugni_pd_ops;
+    self->pd.super.ops = &uct_sysv_pd_ops;
     self->pd.super.context = context;
     self->pd.iface = self;
 
@@ -179,6 +235,8 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     self->dev              = dev;
 
     ucs_notifier_chain_add(&context->progress_chain, uct_sysv_progress, self);
+
+    /* FIXME no use for config input argument? */
 
     self->activated = false;
     /* TBD: atomic increment */
