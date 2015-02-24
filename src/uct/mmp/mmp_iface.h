@@ -13,6 +13,11 @@
 #include "mmp_device.h"
 #include "mmp_ep.h"
 
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
 #define UCT_mmp_HASH_SIZE   256
 
 struct uct_mmp_iface;

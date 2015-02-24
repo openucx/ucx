@@ -59,12 +59,16 @@ static ucs_status_t uct_mmp_mem_map(uct_pd_h pd, void **address_p,
 {
     ucs_status_t rc;
     uct_mmp_pd_t *mmp_pd = ucs_derived_of(pd, uct_mmp_pd_t);
+    pid_t mypid;
 
     if (0 == *length_p) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (NULL == *address_p) {
+        // build file name
+        mypid = getpid();
+
         /* FIXME this is where to do the shared mapping
         *address_p = ucs_malloc(*length_p, "uct_mmp_mem_map"); */
         if (NULL == *address_p) {
@@ -76,7 +80,6 @@ static ucs_status_t uct_mmp_mem_map(uct_pd_h pd, void **address_p,
         ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL); */
     }
 
-    /* FIXME register mapped memory */
 
 mem_err:
     if (inter_allocation) {
