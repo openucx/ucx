@@ -12,6 +12,14 @@
 
 #include <uct/api/uct.h>
 
+
+enum {
+    UCT_RC_EP_STAT_QP_FULL,
+    UCT_RC_EP_STAT_SINGAL,
+    UCT_RC_EP_STAT_LAST
+};
+
+
 /*
  * Macro to generate functions for AMO completions.
  */
@@ -26,12 +34,13 @@ struct uct_rc_ep_addr {
 
 
 struct uct_rc_ep {
-    uct_ep_t            super;
+    uct_base_ep_t       super;
     struct ibv_qp       *qp;
     ucs_callbackq_t     comp;
     unsigned            unsignaled;
     uint8_t             sl;
     uint8_t             path_bits;
+    UCS_STATS_NODE_DECLARE(stats);
 };
 
 
@@ -75,10 +84,11 @@ uct_rc_ep_tx_posted(uct_rc_ep_t *ep, int signaled)
 {
     uct_rc_iface_t *iface;
     if (signaled) {
-        iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
+        iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
         ucs_assert(uct_rc_iface_have_tx_cqe_avail(iface));
         ep->unsignaled = 0;
         --iface->tx.cq_available;
+        UCS_STATS_UPDATE_COUNTER(ep->stats, UCT_RC_EP_STAT_SINGAL, 1);
     } else {
         ++ep->unsignaled;
     }

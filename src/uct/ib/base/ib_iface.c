@@ -94,8 +94,9 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 };
 
 static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
-                                           uct_ib_iface_t *iface,
-                                           const char *dev_name)
+                                           const char *dev_name,
+                                           uct_ib_device_t **p_dev,
+                                           uint8_t *p_port_num)
 {
     uct_ib_device_t *dev;
     const char *ibdev_name;
@@ -124,8 +125,8 @@ static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
                 return UCS_ERR_NO_DEVICE; /* Port number out of range */
             }
 
-            iface->super.super.pd = &dev->super;
-            iface->port_num       = port_num;
+            *p_dev      = dev;
+            *p_port_num = port_num;
             return UCS_OK;
         }
     }
@@ -179,19 +180,18 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
     ucs_status_t status;
-    uint8_t lmc;
+    uint8_t port_num, lmc;
     unsigned i;
 
-    UCS_CLASS_CALL_SUPER_INIT(ops);
-
-    status = uct_ib_iface_find_port(ibctx, self, dev_name);
+    status = uct_ib_iface_find_port(ibctx, dev_name, &dev, &port_num);
     if (status != UCS_OK) {
         ucs_error("Failed to find port %s: %s", dev_name, ucs_status_string(status));
         goto err;
     }
 
-    dev = uct_ib_iface_device(self);
+    UCS_CLASS_CALL_SUPER_INIT(ops, &dev->super UCS_STATS_ARG(dev->stats));
 
+    self->port_num                 = port_num;
     self->gid_index                = config->gid_index;
     self->sl                       = config->sl;
     self->path_bits_count          = config->lid_path_bits.count;
@@ -298,12 +298,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
 
     count = 0;
     while (count < n) {
-        desc = ucs_mpool_get(rx_mp);
-        if (desc == NULL) {
-            break;
-        }
-        VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
-
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, rx_mp, desc, break);
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
         wrs[count].sg.length = iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;

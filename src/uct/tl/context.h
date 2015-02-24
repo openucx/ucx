@@ -47,7 +47,6 @@ struct uct_context {
     ucs_notifier_chain_t   progress_chain;
     unsigned               num_tls;
     uct_context_tl_info_t  *tls;
-    UCS_STATS_NODE_DECLARE(stats);
 };
 
 

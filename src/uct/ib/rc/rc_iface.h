@@ -22,6 +22,20 @@
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
 
+
+#define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
+                             return UCS_ERR_WOULD_BLOCK);
+
+
+enum {
+    UCT_RC_IFACE_STAT_RX_COMPLETION,
+    UCT_RC_IFACE_STAT_TX_COMPLETION,
+    UCT_RC_IFACE_STAT_NO_CQE,
+    UCT_RC_IFACE_STAT_LAST
+};
+
+
 struct uct_rc_iface {
     uct_ib_iface_t           super;
 
@@ -51,6 +65,8 @@ struct uct_rc_iface {
         uint8_t              sl;
         enum ibv_mtu         path_mtu;
     } config;
+
+    UCS_STATS_NODE_DECLARE(stats);
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
 };

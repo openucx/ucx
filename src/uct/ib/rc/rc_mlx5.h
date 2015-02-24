@@ -86,9 +86,11 @@ typedef struct {
  */
 #define UCT_RC_MLX5_CHECK_RES(_iface, _ep) \
     if (!uct_rc_iface_have_tx_cqe_avail(&(_iface)->super)) { \
+        UCS_STATS_UPDATE_COUNTER((_iface)->super.stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         return UCS_ERR_WOULD_BLOCK; \
     } \
     if (UCS_CIRCULAR_COMPARE16((_ep)->tx.sw_pi, >, (_ep)->tx.max_pi)) { \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_RC_EP_STAT_QP_FULL, 1); \
         return UCS_ERR_WOULD_BLOCK; \
     }
 

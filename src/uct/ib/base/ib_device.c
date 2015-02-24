@@ -25,6 +25,17 @@
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
+#if ENABLE_STATS
+static ucs_stats_class_t uct_ib_device_stats_class = {
+    .name           = "",
+    .num_counters   = UCT_IB_DEVICE_STAT_LAST,
+    .counter_names = {
+        [UCT_IB_DEVICE_STAT_MEM_MAP]     = "mem_map",
+        [UCT_IB_DEVICE_STAT_MEM_UNMAP]   = "mem_unmap",
+        [UCT_IB_DEVICE_STAT_ASYNC_EVENT] = "async_event"
+    }
+};
+#endif
 
 static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
 {
@@ -108,12 +119,14 @@ static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
         }
     }
 
+    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_MAP, +1);
     *lkey_p = (uintptr_t)mr;
     return UCS_OK;
 }
 
 static ucs_status_t uct_ib_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 {
+    uct_ib_device_t UCS_V_UNUSED *dev = ucs_derived_of(pd, uct_ib_device_t);
     struct ibv_mr *mr = uct_ib_lkey_mr(lkey);
     void UCS_V_UNUSED *address = mr->addr;
     int ret;
@@ -125,6 +138,7 @@ static ucs_status_t uct_ib_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
         return UCS_ERR_IO_ERROR;
     }
 
+    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_UNMAP, +1);
     return UCS_OK;
 }
 
@@ -226,6 +240,7 @@ static void uct_ib_async_event_handler(void *arg)
         break;
     };
 
+    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_ASYNC_EVENT, +1);
     ucs_warn("IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
     ibv_ack_async_event(&event);
 }
@@ -313,9 +328,15 @@ ucs_status_t uct_ib_device_create(uct_context_h context,
         goto err_free_device;
     }
 
-    status = ucs_sys_fcntl_modfl(dev->ibv_context->async_fd, O_NONBLOCK, 0);
+    status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class, NULL,
+                                  "%s-%p", uct_ib_device_name(dev), dev);
     if (status != UCS_OK) {
         goto err_destroy_pd;
+    }
+
+    status = ucs_sys_fcntl_modfl(dev->ibv_context->async_fd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        goto err_release_stats;
     }
 
     /* Register to IB async events
@@ -325,7 +346,7 @@ ucs_status_t uct_ib_device_create(uct_context_h context,
                                          dev->ibv_context->async_fd,
                                          POLLIN, uct_ib_async_event_handler, dev, NULL);
     if (status != UCS_OK) {
-        goto err_destroy_pd;
+        goto err_release_stats;
     }
 
     ucs_debug("created device '%s' (%s) with %d ports", uct_ib_device_name(dev),
@@ -335,6 +356,8 @@ ucs_status_t uct_ib_device_create(uct_context_h context,
     *dev_p = dev;
     return UCS_OK;
 
+err_release_stats:
+    UCS_STATS_NODE_FREE(dev->stats);
 err_destroy_pd:
     ibv_dealloc_pd(dev->pd);
 err_free_device:
@@ -348,6 +371,7 @@ err:
 void uct_ib_device_destroy(uct_ib_device_t *dev)
 {
     ucs_async_unset_event_handler(dev->ibv_context->async_fd);
+    UCS_STATS_NODE_FREE(dev->stats);
     ibv_dealloc_pd(dev->pd);
     ibv_close_device(dev->ibv_context);
     ucs_free(dev);
@@ -361,22 +385,27 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     if (uct_ib_device_port_attr(dev, port_num)->state != IBV_PORT_ACTIVE) {
+        ucs_trace("%s:%d is not active (state: %d)", uct_ib_device_name(dev),
+                  port_num, uct_ib_device_port_attr(dev, port_num)->state);
         return UCS_ERR_UNREACHABLE;
     }
 
     if (flags & UCT_IB_RESOURCE_FLAG_DC) {
         if (!IBV_DEVICE_HAS_DC(&dev->dev_attr)) {
+            ucs_trace("%s:%d does not support DC", uct_ib_device_name(dev), port_num);
             return UCS_ERR_UNSUPPORTED;
         }
     }
 
     if (flags & UCT_IB_RESOURCE_FLAG_MLX4_PRM) {
+        ucs_trace("%s:%d does not support mlx4 PRM", uct_ib_device_name(dev), port_num);
         return UCS_ERR_UNSUPPORTED; /* Unsupported yet */
     }
 
     if (flags & UCT_IB_RESOURCE_FLAG_MLX5_PRM) {
         /* TODO list all devices with their flags */
         if (dev->dev_attr.vendor_id != 0x02c9 || dev->dev_attr.vendor_part_id != 4113) {
+            ucs_trace("%s:%d does not support mlx5 PRM", uct_ib_device_name(dev), port_num);
             return UCS_ERR_UNSUPPORTED;
         }
     }

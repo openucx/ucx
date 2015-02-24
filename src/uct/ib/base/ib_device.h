@@ -11,6 +11,7 @@
 #include "ib_verbs.h"
 
 #include <uct/api/uct.h>
+#include <ucs/stats/stats.h>
 #include <ucs/type/status.h>
 
 #define UCT_IB_QPN_ORDER         24  /* How many bits can be an IB QP number */
@@ -28,6 +29,13 @@
 #define UCT_IB_FDR_PACKET_GAP    64
 #define UCT_IB_MAX_MESSAGE_SIZE  (2 << 30)
 
+enum {
+    UCT_IB_DEVICE_STAT_MEM_MAP,
+    UCT_IB_DEVICE_STAT_MEM_UNMAP,
+    UCT_IB_DEVICE_STAT_ASYNC_EVENT,
+    UCT_IB_DEVICE_STAT_LAST
+};
+
 
 typedef struct uct_ib_device uct_ib_device_t;
 struct uct_ib_device {
@@ -38,6 +46,8 @@ struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
+    UCS_STATS_NODE_DECLARE(stats);
+
     struct ibv_exp_port_attr    port_attr[0];    /* Cached port attributes */
 };
 

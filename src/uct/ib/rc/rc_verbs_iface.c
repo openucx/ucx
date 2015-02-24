@@ -85,6 +85,8 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
                 ucs_fatal("Send completion with error: %s", ibv_wc_status_str(wc[i].status));
             }
 
+            UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
+
             ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num), uct_rc_verbs_ep_t);
             ucs_assert(ep != NULL);
 
@@ -114,6 +116,8 @@ static inline ucs_status_t uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *ifac
             if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
                 ucs_fatal("Receive completion with error: %s", ibv_wc_status_str(wc[i].status));
             }
+
+            UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
 
             desc = (void*)wc[i].wr_id;
             hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);

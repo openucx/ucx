@@ -18,6 +18,34 @@ typedef struct {
 } uct_iface_mp_chunk_hdr_t;
 
 
+#if ENABLE_STATS
+static ucs_stats_class_t uct_ep_stats_class = {
+    .name = "uct_ep",
+    .num_counters = UCT_EP_STAT_LAST,
+    .counter_names = {
+        [UCT_EP_STAT_AM]          = "am",
+        [UCT_EP_STAT_PUT]         = "put",
+        [UCT_EP_STAT_GET]         = "get",
+        [UCT_EP_STAT_ATOMIC]      = "atomic",
+        [UCT_EP_STAT_BYTES_SHORT] = "bytes_short",
+        [UCT_EP_STAT_BYTES_BCOPY] = "bytes_bcopy",
+        [UCT_EP_STAT_BYTES_ZCOPY] = "bytes_zcopy",
+        [UCT_EP_STAT_FLUSH]       = "flush",
+    }
+};
+
+static ucs_stats_class_t uct_iface_stats_class = {
+    .name = "uct_iface",
+    .num_counters = UCT_IFACE_STAT_LAST,
+    .counter_names = {
+        [UCT_IFACE_STAT_RX_AM]      = "rx_am",
+        [UCT_IFACE_STAT_TX_NO_DESC] = "tx_no_desc",
+        [UCT_IFACE_STAT_RX_NO_DESC] = "rx_no_desc",
+        [UCT_IFACE_STAT_FLUSH]      = "flush",
+    }
+};
+#endif
+
 ucs_status_t uct_iface_mp_chunk_alloc(void *mp_context, size_t *size, void **chunk_p
                                       UCS_MEMTRACK_ARG)
 {
@@ -106,10 +134,10 @@ ucs_status_t uct_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
+static UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
 {
-
     self->ops = *ops;
+    self->pd  = pd;
     return UCS_OK;
 }
 
@@ -120,22 +148,32 @@ static UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops)
+static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd
+                           UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
+    ucs_status_t status;
     uint8_t id;
 
-    UCS_CLASS_CALL_SUPER_INIT(ops);
+    UCS_CLASS_CALL_SUPER_INIT(ops, pd);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         self->am[id].cb  = uct_iface_stub_am_handler;
         self->am[id].arg = (void*)(uintptr_t)id;
     }
+
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
+                                  stats_parent);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return UCS_OK;
 }
 
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
 {
+    UCS_STATS_NODE_FREE(self->stats);
 }
 
 UCS_CLASS_DEFINE(uct_base_iface_t, uct_iface_t);
@@ -152,6 +190,28 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ep_t, void);
+
+
+static UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
+{
+    ucs_status_t status;
+
+    UCS_CLASS_CALL_SUPER_INIT(&iface->super);
+
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
+{
+    UCS_STATS_NODE_FREE(self->stats);
+}
+
+UCS_CLASS_DEFINE(uct_base_ep_t, uct_ep_t);
 
 
 ucs_config_field_t uct_iface_config_table[] = {

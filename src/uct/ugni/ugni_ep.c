@@ -1,5 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -195,7 +196,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
         return UCS_OK;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, fma, UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, fma, return UCS_ERR_WOULD_BLOCK);
     uct_ugni_format_fma(fma, buffer, remote_addr, rkey, length, ep);
 
     ucs_trace_data("Posting PUT Short, GNI_PostFma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
@@ -224,7 +225,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
         return UCS_OK;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc_buffer, fma, UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_buffer, fma, return UCS_ERR_WOULD_BLOCK);
 
     ucs_assert(length <= iface->config.fma_seg_size);
     pack_cb(fma + 1, arg, length);
@@ -252,7 +253,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
         return UCS_OK;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, rdma, UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_WOULD_BLOCK);
     /* Setup Callback */
     uct_ugni_format_rdma(rdma, buffer, remote_addr, lkey, rkey, length, ep,
                          iface->local_cq, comp);

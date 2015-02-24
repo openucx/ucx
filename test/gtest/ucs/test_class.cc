@@ -25,6 +25,11 @@ typedef struct derived {
 } derived_t;
 UCS_CLASS_DECLARE(derived_t);
 
+typedef struct derived2 {
+    base_t         super;
+    int            field2;
+} derived2_t;
+UCS_CLASS_DECLARE(derived2_t);
 
 static int base_init_count = 0;
 static int derived_init_count = 0;
@@ -74,6 +79,30 @@ UCS_CLASS_DEFINE(derived_t, base_t);
 
 UCS_CLASS_DEFINE_NEW_FUNC(derived_t, derived_t, int, int);
 UCS_CLASS_DEFINE_DELETE_FUNC(derived_t, derived_t);
+
+
+/* Derived2 impl */
+
+UCS_CLASS_INIT_FUNC(derived2_t, int param1, int param2)
+{
+    if (param2 < 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    UCS_CLASS_CALL_SUPER_INIT(param1);
+
+    self->field2 = param2;
+    ++derived_init_count;
+    return UCS_OK;
+}
+
+UCS_CLASS_CLEANUP_FUNC(derived2_t)
+{
+    --derived_init_count;
+}
+
+UCS_CLASS_DEFINE(derived2_t, base_t);
+
 
 UCS_TEST_F(test_class, basic) {
     derived_t *derived;
@@ -140,6 +169,34 @@ UCS_TEST_F(test_class, failure) {
     /* Should fail on derived */
     derived = NULL;
     status = UCS_CLASS_NEW(derived_t, &derived, 1, -2);
+    ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
+    ASSERT_TRUE(NULL == derived);
+
+    /* Should be properly cleaned up */
+    EXPECT_EQ(0, base_init_count);
+    EXPECT_EQ(0, derived_init_count);
+}
+
+UCS_TEST_F(test_class, failure2) {
+    derived2_t *derived;
+    ucs_status_t status;
+
+    ASSERT_EQ(0, base_init_count);
+    ASSERT_EQ(0, derived_init_count);
+
+    /* Should fail on base */
+    derived = NULL;
+    status = UCS_CLASS_NEW(derived2_t, &derived, -1, 2);
+    ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
+    ASSERT_TRUE(NULL == derived);
+
+    /* Should be properly cleaned up */
+    EXPECT_EQ(0, base_init_count);
+    EXPECT_EQ(0, derived_init_count);
+
+    /* Should fail on derived */
+    derived = NULL;
+    status = UCS_CLASS_NEW(derived2_t, &derived, 1, -2);
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
     ASSERT_TRUE(NULL == derived);
 
