@@ -72,22 +72,24 @@ UCS_TEST_F(test_sys, fcntl) {
     int fd, fl;
 
     fd = open("/dev/null", O_RDONLY);
-    ASSERT_NE(fd, -1);
+    if (fd < 0) {
+        FAIL();
+    }
 
     /* Add */
     status = ucs_sys_fcntl_modfl(fd, O_NONBLOCK, 0);
-    ASSERT_UCS_OK(status);
+    EXPECT_TRUE(status == UCS_OK);
 
     fl = fcntl(fd, F_GETFL);
-    ASSERT_GE(fl, 0);
+    EXPECT_GE(fl, 0);
     EXPECT_TRUE(fl & O_NONBLOCK);
 
     /* Remove */
     status = ucs_sys_fcntl_modfl(fd, 0, O_NONBLOCK);
-    ASSERT_UCS_OK(status);
+    EXPECT_TRUE(status == UCS_OK);
 
     fl = fcntl(fd, F_GETFL);
-    ASSERT_GE(fl, 0);
+    EXPECT_GE(fl, 0);
     EXPECT_FALSE(fl & O_NONBLOCK);
 
     close(fd);

@@ -176,6 +176,14 @@ public:
     std::ostream& operator<<(const T& value) const {
         return std::cout << value;
     }
+
+    std::iostream::fmtflags flags() {
+        return std::cout.flags();
+    }
+
+    void flags(std::iostream::fmtflags f) {
+        std::cout.flags(f);
+    }
 };
 
 } // detail

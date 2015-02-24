@@ -134,6 +134,7 @@ UCS_TEST_F(twheel, precision_single) {
 
     UCS_TEST_SKIP; // Test is broken
 
+#if 0
     init_timer(&t, 0);
     for (k = 0; k < 10; k++ ) {
         set_timer_delta(&t, k);
@@ -152,6 +153,7 @@ UCS_TEST_F(twheel, precision_single) {
         }
         EXPECT_LE(fail_count, N_LOOPS / 3);
     }
+#endif
 }
 
 #define N_TIMERS 10000
@@ -162,6 +164,7 @@ UCS_TEST_F(twheel, precision_multi) {
 
     UCS_TEST_SKIP; // Test is broken
 
+#if 0
     init_timerv(&t[0], N_TIMERS);
     for (int i = 0; i < N_TIMERS; i++) {
         set_timer_delta(&t[i], i);
@@ -183,6 +186,7 @@ UCS_TEST_F(twheel, precision_multi) {
         EXPECT_NE(t[i].end_time, (ucs_time_t)0);
         EXPECT_NEAR(t[i].total_time,  t[i].d, 2 * m_wheel.res + eps);
     }
+#endif
 }
 
 UCS_TEST_F(twheel, add_twice) {
@@ -197,6 +201,7 @@ UCS_TEST_F(twheel, add_twice) {
     EXPECT_EQ(ucs_wtimer_add(&m_wheel, &t.timer, t.d), UCS_ERR_BUSY);
     do {
         ucs_twheel_sweep(&m_wheel, ucs_get_time());
+        /* coverity[loop_condition] */
     } while(t.end_time == 0);
 }
 
@@ -206,6 +211,7 @@ UCS_TEST_F(twheel, add_overflow) {
 
     UCS_TEST_SKIP; // Test is broken
 
+#if 0
     init_timer(&t, 0);
     ::srand(::time(NULL));
 
@@ -218,6 +224,7 @@ UCS_TEST_F(twheel, add_overflow) {
         } while (t.end_time == 0);
     }
     EXPECT_NEAR(t.total_time , t.d * N_LOOPS, 4 * N_LOOPS * m_wheel.res);
+#endif
 }
 
 UCS_TEST_F(twheel, delayed_sweep) {

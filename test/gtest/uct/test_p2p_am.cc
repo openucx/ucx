@@ -15,6 +15,9 @@ public:
     static const uint64_t SEED1 = 0xa1a1a1a1a1a1a1a1ul;
     static const uint64_t SEED2 = 0xa2a2a2a2a2a2a2a2ul;
 
+    uct_p2p_am_test() : m_am_count(0) {
+    }
+
     virtual void init() {
         uct_p2p_test::init();
         m_am_count = 0;

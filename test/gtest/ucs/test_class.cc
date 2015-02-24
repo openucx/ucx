@@ -85,6 +85,7 @@ UCS_TEST_F(test_class, basic) {
     status = UCS_CLASS_NEW(derived_t, &derived, 1, 2);
     ASSERT_UCS_OK(status);
 
+    /* coverity[uninit_use] */
     EXPECT_EQ(2, derived->field2);
     EXPECT_EQ(1, derived->super.field1);
 
