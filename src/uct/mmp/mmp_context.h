@@ -13,6 +13,7 @@ typedef struct uct_mmp_context {
     int                 num_devices;        /**< Number of devices */
     int                 num_ifaces;         /**< Number of active interfaces */
     bool                activated;          /**< Context status */
+    uct_mmp_device_t    device;             /**< Device belonging to this domain */
 } uct_mmp_context_t;
 
 /*

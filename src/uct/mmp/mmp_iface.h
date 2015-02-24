@@ -32,14 +32,8 @@ typedef struct uct_mmp_iface {
     uct_mmp_device_t       *dev;
     uct_mmp_pd_t           pd;
     uct_mmp_iface_addr_t   addr;
-    int                    domain_id;       /**< Id for mmp domain creation */
     uct_mmp_ep_t           *eps[UCT_mmp_HASH_SIZE];    /**< Array of EPs */
-    uint32_t               pe_address;      /**< PE address for the NIC that
-                                              this function has attached to the
-                                              communication domain. */
-    uct_mmp_iface_addr_t   address;         /**< PE address that is returned
-                                              for the communication domain that
-                                              this NIC is attached to. */
+    bool                   activated;                   /**< nic status */
     /* list of ep */
 } uct_mmp_iface_t;
 

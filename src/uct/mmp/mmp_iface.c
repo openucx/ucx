@@ -11,7 +11,7 @@
 #include "mmp_iface.h"
 #include "mmp_ep.h"
 
-unsigned mmp_domain_global_counter = 0;
+unsigned mmp_iface_global_counter = 0;
 
 /* called in the notifier chain and iface_flush */
 static void uct_mmp_progress(void *arg)
@@ -37,7 +37,7 @@ ucs_status_t uct_mmp_iface_get_address(uct_iface_h tl_iface,
 {
     uct_mmp_iface_t *iface = ucs_derived_of(tl_iface, uct_mmp_iface_t);
 
-    *(uct_mmp_iface_addr_t*)iface_addr = iface->address;
+    *(uct_mmp_iface_addr_t*)iface_addr = iface->addr;
     return UCS_OK;
 }
 
@@ -59,21 +59,21 @@ static ucs_status_t uct_mmp_mem_map(uct_pd_h pd, void **address_p,
 {
     ucs_status_t rc;
     uct_mmp_pd_t *mmp_pd = ucs_derived_of(pd, uct_mmp_pd_t);
-    bool inter_allocation = false;
 
     if (0 == *length_p) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (NULL == *address_p) {
-        *address_p = ucs_malloc(*length_p, "uct_mmp_mem_map");
+        /* FIXME this is where to do the shared mapping
+        *address_p = ucs_malloc(*length_p, "uct_mmp_mem_map"); */
         if (NULL == *address_p) {
             ucs_error("Failed to allocate %zu bytes", *length_p);
             rc = UCS_ERR_NO_MEMORY;
             goto mem_err;
         }
-        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
-        inter_allocation = true;
+        /* FIXME eh?
+        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL); */
     }
 
     /* FIXME register mapped memory */
@@ -91,27 +91,26 @@ static ucs_status_t uct_mmp_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
     uct_mmp_pd_t *mmp_pd = ucs_derived_of(pd, uct_mmp_pd_t);
     ucs_status_t rc = UCS_OK;
 
-    /* FIXME derive 'mem_hndl' from 'lkey' */
-
     /* FIXME unregister the memory */
 
     ucs_free(mem_hndl);
     return rc;
 }
 
-#define UCT_MMP_RKEY_MAGIC  0xdeadbeefLL /* FIXME change this for mmp */
+#define UCT_MMP_RKEY_MAGIC  0xabbadabaLL /* FIXME change this for mmp */
 
 static ucs_status_t uct_mmp_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    /* FIXME what are we going to use for keys here? */
+    /* FIXME return info about (size of) rkey */
     return UCS_OK;
-
 }
 
 static ucs_status_t uct_mmp_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
                                       void *rkey_buffer)
 {
-    /* FIXME what are we going to use for keys here? */
+    /* FIXME for keys, use something like: magic+filename+baseaddr 
+     * where filename is generated from PID + iface addr
+     * (iface addr is unique to each interface and therefore context) */
 }
 
 static void uct_mmp_rkey_release(uct_context_h context, uct_rkey_t key)
@@ -122,9 +121,10 @@ static void uct_mmp_rkey_release(uct_context_h context, uct_rkey_t key)
 ucs_status_t uct_mmp_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                  uct_rkey_bundle_t *rkey_ob)
 {
-    /* FIXME what are we going to use for keys here? */
+    /* FIXME unpack the key, map the shared region, and store info */
 }
 
+/* FIXME make sure all of these are implemented */
 uct_iface_ops_t uct_mmp_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_mmp_iface_t),
     .iface_get_address   = uct_mmp_iface_get_address,
@@ -139,6 +139,7 @@ uct_iface_ops_t uct_mmp_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_mmp_ep_t),
 };
 
+/* FIXME make sure all of these are implemented */
 uct_pd_ops_t uct_mmp_pd_ops = {
     .query        = uct_mmp_pd_query,
     .mem_map      = uct_mmp_mem_map,
@@ -159,26 +160,24 @@ static UCS_CLASS_INIT_FUNC(uct_mmp_iface_t, uct_context_h context,
 
     UCS_CLASS_CALL_SUPER_INIT(&uct_mmp_iface_ops);
 
-    dev = uct_mmp_device_by_name(mmp_ctx, dev_name);
+    dev = mmp_ctc->device;
     if (NULL == dev) {
         ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 
-    self->pd.super.ops = &uct_mmp_pd_ops;
+    /* FIXME initialize structure contents 
+     * most of these copied from ugni tl iface code */
+    self->pd.super.ops = &uct_ugni_pd_ops;
     self->pd.super.context = context;
     self->pd.iface = self;
 
     self->super.super.pd   = &self->pd.super;
     self->dev              = dev;
-    self->address.nic_addr = dev->address;
-
-    /* FIXME what else needs to happen for iface init? */
 
     ucs_notifier_chain_add(&context->progress_chain, uct_mmp_progress, self);
 
     self->activated = false;
-    self->outstanding = 0;
     /* TBD: atomic increment */
     ++mmp_ctx->num_ifaces;
     return mmp_activate_iface(self, mmp_ctx);
@@ -195,7 +194,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mmp_iface_t)
     }
 
     /* TBD: Clean endpoints first (unbind and destroy) ?*/
-    ucs_atomic_add32(&mmp_domain_global_counter, -1);
+    ucs_atomic_add32(&mmp_iface_global_counter, -1);
 
     /* FIXME tasks to tear down the domain */
 
@@ -213,11 +212,11 @@ uct_tl_ops_t uct_mmp_tl_ops = {
     .rkey_unpack         = uct_mmp_rkey_unpack,
 };
 
-#define UCT_mmp_LOCAL_CQ (8192) /* FIXME does mmp have a local cq? */
+/* FIXME why is this split out from the init function above? */
 ucs_status_t mmp_activate_iface(uct_mmp_iface_t *iface, 
                                 uct_mmp_context_t *mmp_ctx)
 {
-    int rc, d_id;
+    int rc, addr;
 
     if(iface->activated) {
         return UCS_OK;
@@ -230,13 +229,9 @@ ucs_status_t mmp_activate_iface(uct_mmp_iface_t *iface,
         return rc;
     }
 
-    d_id = ucs_atomic_fadd32(&mmp_domain_global_counter, 1);
+    addr = ucs_atomic_fadd32(&mmp_iface_global_counter, 1);
 
-    /* FIXME with rank info as decided in mmp context */
-    iface->domain_id = mmp_ctx->pmi_rank_id + mmp_ctx->pmi_num_of_ranks * d_id;
-
-    /* FIXME tasks to activate the domain */
-
+    iface->addr = addr;
     iface->activated = true;
 
     /* iface is activated */

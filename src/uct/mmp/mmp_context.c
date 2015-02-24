@@ -62,7 +62,7 @@ ucs_status_t uct_mmp_query_resources(uct_context_h context,
 ucs_status_t uct_mmp_init(uct_context_h context)
 {
     uct_mmp_context_t *mmp_ctx = ucs_component_get(context, mmp, 
-                                                     uct_mmp_context_t);
+                                                   uct_mmp_context_t);
 
     ucs_status_t status;
 
@@ -74,9 +74,9 @@ ucs_status_t uct_mmp_init(uct_context_h context)
 
     /* create the single dummy device */
 
-    status = uct_ugni_device_create(context, 1, &ugni_ctx->devices[i]);
+    status = uct_mmp_device_create(context, 1, &mmp_ctx->device);
     if (status != UCS_OK) {
-        ucs_warn("Failed to initialize ugni device %d (%s), ignoring it",
+        ucs_warn("Failed to initialize mmp device %d (%s), ignoring it",
                  i, ucs_status_string(status));
         /* FIXME howto bail? */
     } else {
