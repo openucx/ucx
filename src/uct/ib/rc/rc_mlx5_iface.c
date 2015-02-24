@@ -104,7 +104,7 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ++iface->super.tx.cq_available;
 
     /* Process completions */
-    ucs_callbackq_pull(&ep->super.tx.comp, hw_ci);
+    ucs_callbackq_pull(&ep->super.comp, hw_ci);
 }
 
 static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)

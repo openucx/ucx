@@ -30,7 +30,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                                                  IBV_SEND_SIGNALED);
     }
     wr->send_flags = send_flags;
-    wr->wr_id      = ep->super.tx.unsignaled;
+    wr->wr_id      = ep->super.unsignaled;
 
     uct_ib_log_post_send(ep->super.qp, wr,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
@@ -58,7 +58,7 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
                                              IBV_EXP_SEND_SIGNALED);
     }
     wr->exp_send_flags |= signal;
-    wr->wr_id          = ep->super.tx.unsignaled;
+    wr->wr_id          = ep->super.unsignaled;
 
     uct_ib_log_exp_post_send(ep->super.qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
@@ -80,7 +80,7 @@ static UCS_F_ALWAYS_INLINE void uct_rc_verbs_ep_push_desc(uct_rc_verbs_ep_t* ep,
      * than completion zero-based index).
      */
     desc->queue.sn = ep->tx.post_count;
-    ucs_callbackq_push(&ep->super.tx.comp, &desc->queue);
+    ucs_callbackq_push(&ep->super.comp, &desc->queue);
 }
 
 /*
@@ -589,7 +589,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
         return UCS_OK;
     }
 
-    if (ep->super.tx.unsignaled != 0) {
+    if (ep->super.unsignaled != 0) {
         if (IBV_DEVICE_HAS_NOP(&uct_ib_iface_device(&iface->super.super)->dev_attr)) {
             status = uct_rc_verbs_ep_nop(ep);
         } else {

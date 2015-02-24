@@ -28,8 +28,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
         return status;
     }
 
-    self->tx.unsignaled = 0;
-    ucs_callbackq_init(&self->tx.comp);
+    self->unsignaled = 0;
+    self->sl         = iface->config.sl;          /* TODO multi-rail */
+    self->path_bits  = iface->super.path_bits[0]; /* TODO multi-rail */
+    ucs_callbackq_init(&self->comp);
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
@@ -87,18 +89,19 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
          return UCS_ERR_IO_ERROR;
     }
 
+    ucs_assert((iface_addr->lid & ep->path_bits) == 0);
     qp_attr.qp_state              = IBV_QPS_RTR;
-    qp_attr.ah_attr.dlid          = iface_addr->lid; /* TODO LMC */
+    qp_attr.ah_attr.dlid          = iface_addr->lid | ep->path_bits;
     qp_attr.ah_attr.sl            = iface->super.sl;
-    qp_attr.ah_attr.src_path_bits = 0; /* TODO LMC */
+    qp_attr.ah_attr.src_path_bits = ep->path_bits;
     qp_attr.ah_attr.static_rate   = 0;
     qp_attr.ah_attr.is_global     = 0; /* TODO RoCE */
     qp_attr.ah_attr.port_num      = iface->super.port_num;
     qp_attr.dest_qp_num           = ep_addr->qp_num;
     qp_attr.rq_psn                = 0;
-    qp_attr.path_mtu              = IBV_MTU_2048; /* TODO select by device type */
-    qp_attr.max_dest_rd_atomic    = 4; /* TODO consider this in sender */
-    qp_attr.min_rnr_timer         = 14; /* TODO config */
+    qp_attr.path_mtu              = iface->config.path_mtu;
+    qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
+    qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     ret = ibv_modify_qp(ep->qp, &qp_attr,
                         IBV_QP_STATE              |
                         IBV_QP_AV                 |
@@ -114,10 +117,10 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
 
     qp_attr.qp_state              = IBV_QPS_RTS;
     qp_attr.sq_psn                = 0;
-    qp_attr.timeout               = 14; /* TODO config */
-    qp_attr.rnr_retry             = 7; /* TODO config */
-    qp_attr.retry_cnt             = 7; /* TODO config */
-    qp_attr.max_rd_atomic         = 4; /* TODO consider this in sender */
+    qp_attr.timeout               = iface->config.timeout;
+    qp_attr.rnr_retry             = iface->config.rnr_retry;
+    qp_attr.retry_cnt             = iface->config.retry_cnt;
+    qp_attr.max_rd_atomic         = iface->config.max_rd_atomic;
     ret = ibv_modify_qp(ep->qp, &qp_attr,
                         IBV_QP_STATE              |
                         IBV_QP_TIMEOUT            |
@@ -130,8 +133,12 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_debug("connected rc qp 0x%x to lid %d remote_qp 0x%x", ep->qp->qp_num,
-              iface_addr->lid, ep_addr->qp_num);
+    ucs_debug("connected rc qp 0x%x to lid %d(+%d) sl %d remote_qp 0x%x mtu %zu "
+              "timer %dx%d rnr %dx%d rd_atom %d",
+              ep->qp->qp_num, iface_addr->lid, ep->path_bits, qp_attr.ah_attr.sl,
+              qp_attr.dest_qp_num, uct_ib_mtu_value(qp_attr.path_mtu),
+              qp_attr.timeout, qp_attr.retry_cnt, qp_attr.min_rnr_timer,
+              qp_attr.rnr_retry, qp_attr.max_rd_atomic);
     return UCS_OK;
 }
 

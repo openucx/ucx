@@ -16,6 +16,18 @@
 #include <stdlib.h>
 
 
+static UCS_CONFIG_DEFINE_ARRAY(path_bits, sizeof(unsigned), UCS_CONFIG_TYPE_UINT);
+
+const char *uct_ib_mtu_values[] = {
+    [UCT_IB_MTU_DEFAULT]    = "default",
+    [UCT_IB_MTU_512]        = "512",
+    [UCT_IB_MTU_1024]       = "1024",
+    [UCT_IB_MTU_2048]       = "2048",
+    [UCT_IB_MTU_4096]       = "4096",
+    [UCT_IB_MTU_LAST]       = NULL
+};
+
+
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
@@ -72,6 +84,11 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"SL", "0",
    "While IB service level to use.\n",
    ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
+
+  {"LID_PATH_BITS", "0",
+   "list of IB Path bits separated by commma (a,b,c) "
+   "which will be the low portion of the LID, according to the LMC in the fabric.",
+   ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits)},
 
   {NULL}
 };
@@ -162,6 +179,8 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     uct_ib_context_t *ibctx = ucs_component_get(context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
     ucs_status_t status;
+    uint8_t lmc;
+    unsigned i;
 
     UCS_CLASS_CALL_SUPER_INIT(ops);
 
@@ -172,13 +191,38 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     }
 
     dev = uct_ib_iface_device(self);
+
     self->gid_index                = config->gid_index;
     self->sl                       = config->sl;
+    self->path_bits_count          = config->lid_path_bits.count;
     self->config.rx_headroom       = rx_headroom;
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
                                      ucs_max(rx_headroom, rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.seg_size          = config->super.max_bcopy;
+
+    if (self->path_bits_count == 0) {
+        ucs_error("List of path bits must not be empty");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    self->path_bits = ucs_malloc(self->path_bits_count * sizeof(*self->path_bits),
+                                 "ib_path_bits");
+    if (self->path_bits == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    lmc = uct_ib_iface_port_attr(self)->lmc;
+    for (i = 0; i < self->path_bits_count; ++i) {
+        if (config->lid_path_bits.bits[i] >= UCS_BIT(lmc)) {
+            ucs_error("Invalid value for path_bits - must be < 2^lmc (lmc=%d)", lmc);
+            status = UCS_ERR_INVALID_PARAM;
+            goto err_free_path_bits;
+        }
+        self->path_bits[i] = config->lid_path_bits.bits[i];
+    }
 
     /* TODO comp_channel */
     /* TODO inline scatter for send SQ */
@@ -186,7 +230,7 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     if (self->send_cq == NULL) {
         ucs_error("Failed to create send cq: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err;
+        goto err_free_path_bits;
     }
 
     /* TODO need exp API to set this value */
@@ -216,6 +260,8 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
 
     return UCS_OK;
 
+err_free_path_bits:
+    ucs_free(self->path_bits);
 err_destroy_recv_cq:
     ibv_destroy_cq(self->recv_cq);
 err_destroy_send_cq:
@@ -227,6 +273,8 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
+
+    ucs_free(self->path_bits);
 
     ret = ibv_destroy_cq(self->recv_cq);
     if (ret != 0) {

@@ -138,7 +138,7 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_mlx5_iface_tx_moderation(uct_rc_mlx5_ep_t* ep, uct_rc_mlx5_iface_t* iface)
 {
-    return (ep->super.tx.unsignaled >= iface->super.config.tx_moderation) ?
+    return (ep->super.unsignaled >= iface->super.config.tx_moderation) ?
            MLX5_WQE_CTRL_CQ_UPDATE : 0;
 }
 
@@ -455,7 +455,7 @@ uct_rc_mlx5_ep_bcopy_post(uct_rc_mlx5_ep_t *ep, unsigned opcode, unsigned length
         return status;
     }
 
-    ucs_callbackq_push(&ep->super.tx.comp, &desc->queue);
+    ucs_callbackq_push(&ep->super.comp, &desc->queue);
     return success;
 }
 
@@ -507,7 +507,7 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
         return status;
     }
 
-    ucs_callbackq_push(&ep->super.tx.comp, &desc->queue);
+    ucs_callbackq_push(&ep->super.comp, &desc->queue);
     return success;
 }
 
@@ -750,7 +750,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
         return UCS_OK;
     }
 
-    if (ep->super.tx.unsignaled != 0) {
+    if (ep->super.unsignaled != 0) {
         status = uct_rc_mlx5_ep_inline_post(tl_ep, MLX5_OPCODE_NOP, NULL, 0, 0,
                                             0, 0, 0);
         if (status != UCS_OK) {
