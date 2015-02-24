@@ -120,6 +120,20 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 #  define IBV_DEVICE_HAS_DC(_attr)                  0
 #endif /* HAVE_DECL_IBV_EXP_DEVICE_DC_TRANSPORT */
 
+
+/*
+ * NOP support
+ */
+#if HAVE_DECL_IBV_EXP_WR_NOP
+#  define IBV_DEVICE_HAS_NOP(_attr)                 ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_NOP)
+#else
+#  define IBV_DEVICE_HAS_NOP(_attr)                 0
+#endif /* HAVE_DECL_IBV_EXP_WR_NOP */
+
+
+/*
+ * Safe setenv
+ */
 #if !HAVE_DECL_IBV_EXP_SETENV
 #  define ibv_exp_setenv(_c, _n, _v, _o)            setenv(_n, _v, _o)
 #endif

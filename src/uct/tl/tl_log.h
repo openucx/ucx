@@ -25,20 +25,6 @@
         return UCS_ERR_INVALID_PARAM; \
     }
 
-/**
- * In release mode, if _condition is not true, generate fatal error.
- *
- * In debug mode, if _condition is not true, return an error. This could be less
- * optimal because compiler needs to generate code for error flow as well.
- */
-#define UCT_CHECK_PARAM_FATAL(_condition, _err_message, ...) \
-    if (!(_condition)) { \
-        if (ENABLE_PARAMS_CHECK) { \
-            ucs_error(_err_message, ## __VA_ARGS__); \
-            return UCS_ERR_INVALID_PARAM; \
-        } \
-        ucs_fatal(_err_message, ## __VA_ARGS__); \
-    }
 
 /**
  * In debug mode, if _condition is not true, generate 'Invalid length' error.
