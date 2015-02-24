@@ -4,24 +4,24 @@
  * $HEADER$
  */
 
-#ifndef UCT_MMP_CONTEXT_H
-#define UCT_MMP_CONTEXT_H
+#ifndef UCT_SYSV_CONTEXT_H
+#define UCT_SYSV_CONTEXT_H
 
-#include "mmp_device.h"
+#include "sysv_device.h"
 
-typedef struct uct_mmp_context {
+typedef struct uct_sysv_context {
     int                 num_devices;        /**< Number of devices */
     int                 num_ifaces;         /**< Number of active interfaces */
     bool                activated;          /**< Context status */
-    uct_mmp_device_t    device;             /**< Device belonging to this domain */
-} uct_mmp_context_t;
+    uct_sysv_device_t    device;             /**< Device belonging to this domain */
+} uct_sysv_context_t;
 
 /*
- * Helper function to list MMP resources
+ * Helper function to list sysv resources
  */
-ucs_status_t uct_mmp_query_resources(uct_context_h context,
+ucs_status_t uct_sysv_query_resources(uct_context_h context,
         uct_resource_desc_t **resources_p,
         unsigned *num_resources_p);
 
-ucs_status_t mmp_activate_domain(uct_mmp_context_t *mmp_ctx);
+ucs_status_t sysv_activate_domain(uct_sysv_context_t *sysv_ctx);
 #endif

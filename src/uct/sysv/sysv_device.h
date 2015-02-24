@@ -5,8 +5,8 @@
  * $HEADER$
  */
 
-#ifndef UCT_MMP_DEVICE_H
-#define UCT_MMP_DEVICE_H
+#ifndef UCT_SYSV_DEVICE_H
+#define UCT_SYSV_DEVICE_H
 
 #include <stdbool.h>
 
@@ -14,20 +14,20 @@
 
 
 #define MAX_TYPE_NAME     (10)
-#define TL_NAME           "mmp"
+#define TL_NAME           "sysv"
 
-typedef struct uct_mmp_device {
+typedef struct uct_sysv_device {
     uct_pd_t         super;                     /**< Protection domain */
     char             type_name[MAX_TYPE_NAME];  /**< Device type name */
     char             fname[UCT_MAX_NAME_LEN];   /**< Device full name */
     uint32_t         device_id;                 /**< Device id */
-} uct_mmp_device_t;
+} uct_sysv_device_t;
 
-ucs_status_t uct_mmp_device_create(uct_context_h context, int dev_id, 
-                                   uct_mmp_device_t *dev_p);
+ucs_status_t uct_sysv_device_create(uct_context_h context, int dev_id, 
+                                   uct_sysv_device_t *dev_p);
 
-void uct_mmp_device_destroy(uct_mmp_device_t *dev);
+void uct_sysv_device_destroy(uct_sysv_device_t *dev);
 
-void uct_device_get_resource(uct_mmp_device_t *dev,
+void uct_device_get_resource(uct_sysv_device_t *dev,
                              uct_resource_desc_t *resource);
 #endif
