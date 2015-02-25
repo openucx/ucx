@@ -17,6 +17,30 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
   {"IB_", "RX_INLINE=64", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
+  {"PATH_MTU", "default",
+   "Path MTU. \"default\" will select the best MTU for the device.",
+   ucs_offsetof(uct_rc_iface_config_t, path_mtu), UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
+
+  {"MAX_RD_ATOMIC", "4",
+   "Maximal number of outstanding read or atomic replies",
+   ucs_offsetof(uct_rc_iface_config_t, max_rd_atomic), UCS_CONFIG_TYPE_UINT},
+
+  {"TIMEOUT", "1.0s",
+   "Transport timeout",
+   ucs_offsetof(uct_rc_iface_config_t, tx.timeout), UCS_CONFIG_TYPE_TIME},
+
+  {"RETRY_COUNT", "7",
+   "Transport retries",
+   ucs_offsetof(uct_rc_iface_config_t, tx.retry_count), UCS_CONFIG_TYPE_UINT},
+
+  {"RNR_TIMEOUT", "1.0s",
+   "RNR timeout",
+   ucs_offsetof(uct_rc_iface_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
+
+  {"RNR_RETRY_COUNT", "7",
+   "RNR retries",
+   ucs_offsetof(uct_rc_iface_config_t, tx.rnr_retry_count), UCS_CONFIG_TYPE_UINT},
+
   {"TX_CQ_LEN", "4096",
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
    ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
@@ -115,6 +139,27 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lke
     desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
 }
 
+
+static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
+                                      uct_rc_iface_config_t *config)
+{
+    enum ibv_mtu port_mtu = uct_ib_iface_port_attr(&iface->super)->active_mtu;
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+
+    /* MTU is set by user configuration */
+    if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
+        iface->config.path_mtu = config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512);
+    } else if ((port_mtu > IBV_MTU_2048) && (dev->dev_attr.vendor_id == 0x02c9) &&
+        ((dev->dev_attr.vendor_part_id == 4099) || (dev->dev_attr.vendor_part_id == 4100) ||
+         (dev->dev_attr.vendor_part_id == 4103) || (dev->dev_attr.vendor_part_id == 4104)))
+    {
+        /* On some devices optimal path_mtu is 2048 */
+        iface->config.path_mtu = IBV_MTU_2048;
+    } else {
+        iface->config.path_mtu = port_mtu;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
                            uct_context_h context, const char *dev_name,
                            size_t rx_headroom, size_t rx_priv_len,
@@ -126,16 +171,24 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
     UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, rx_priv_len,
                               sizeof(uct_rc_hdr_t), config->tx.cq_len, config);
 
-    self->tx.cq_available        = config->tx.cq_len - 1; /* Reserve one for error */
-    self->rx.available           = config->super.rx.queue_len;
-    self->config.tx_qp_len       = config->super.tx.queue_len;
-    self->config.tx_min_sge      = config->super.tx.min_sge;
-    self->config.tx_min_inline   = config->super.tx.min_inline;
-    self->config.tx_moderation   = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
-                                           ucs_roundup_pow2(config->super.tx.queue_len / 4));
-    self->config.rx_max_batch    = ucs_min(config->super.rx.max_batch, config->super.rx.queue_len / 4);
-    self->config.rx_inline       = config->super.rx.inl;
+    self->tx.cq_available           = config->tx.cq_len - 1; /* Reserve one for error */
+    self->rx.available              = config->super.rx.queue_len;
+    self->config.tx_qp_len          = config->super.tx.queue_len;
+    self->config.tx_min_sge         = config->super.tx.min_sge;
+    self->config.tx_min_inline      = config->super.tx.min_inline;
+    self->config.tx_moderation      = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
+                                              ucs_roundup_pow2(config->super.tx.queue_len / 4));
+    self->config.rx_max_batch       = ucs_min(config->super.rx.max_batch, config->super.rx.queue_len / 4);
+    self->config.rx_inline          = config->super.rx.inl;
+    self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
+    self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);
+    self->config.rnr_retry          = ucs_min(config->tx.rnr_retry_count,
+                                              UCR_RC_QP_MAX_RETRY_COUNT);
+    self->config.retry_cnt          = ucs_min(config->tx.retry_count,
+                                              UCR_RC_QP_MAX_RETRY_COUNT);
+    self->config.max_rd_atomic      = config->max_rd_atomic;
 
+    uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
 
     /* Create RX buffers mempool */

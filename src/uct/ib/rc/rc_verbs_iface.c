@@ -93,7 +93,7 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             ep->tx.completion_count     += count;
             ++iface->super.tx.cq_available;
 
-            ucs_callbackq_pull(&ep->super.tx.comp, ep->tx.completion_count);
+            ucs_callbackq_pull(&ep->super.comp, ep->tx.completion_count);
         }
     } else if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll send CQ");

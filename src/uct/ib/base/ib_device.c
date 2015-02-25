@@ -406,9 +406,9 @@ int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
 #endif
 }
 
-size_t uct_ib_device_port_active_mtu(uct_ib_device_t *dev, uint8_t port_num)
+size_t uct_ib_mtu_value(enum ibv_mtu mtu)
 {
-    switch (uct_ib_device_port_attr(dev, port_num)->active_mtu) {
+    switch (mtu) {
     case IBV_MTU_256:
         return 256;
     case IBV_MTU_512:
@@ -420,8 +420,7 @@ size_t uct_ib_device_port_active_mtu(uct_ib_device_t *dev, uint8_t port_num)
     case IBV_MTU_4096:
         return 4096;
     }
-    ucs_fatal("Invalid port MTU value (%d)",
-              uct_ib_device_port_attr(dev, port_num)->active_mtu);
+    ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
 ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
@@ -520,7 +519,7 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
         return UCS_ERR_IO_ERROR;
     }
 
-    mtu           = uct_ib_device_port_active_mtu(dev, port_num);
+    mtu           = uct_ib_mtu_value(uct_ib_device_port_attr(dev, port_num)->active_mtu);
     wire_speed    = (signal_rate * 1e9 * encoding *
                      ib_port_widths[ucs_ilog2(active_width)]) / 8.0;
     extra_pkt_len = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + tl_hdr_len +
@@ -530,3 +529,21 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
     resource->bandwidth = (long)((wire_speed * mtu) / (mtu + extra_pkt_len) + 0.5);
     return UCS_OK;
 }
+
+uint8_t uct_ib_to_fabric_time(double time)
+{
+    double to;
+    long t;
+
+    to = log(time / 4.096e-6) / log(2.0);
+    if (to < 1) {
+        return 1; /* Very small timeout */
+    } else if (to > 30) {
+        return 0; /* No timeout */
+    } else {
+        t = (long)(to + 0.5);
+        ucs_assert(t >= 1 && t < 31);
+        return t;
+    }
+}
+

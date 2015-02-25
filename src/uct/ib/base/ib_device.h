@@ -38,8 +38,6 @@ struct uct_ib_device {
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
-    pthread_t                   async_thread;    /* Async event thread */
-    int                         stop_thread;
     struct ibv_exp_port_attr    port_attr[0];    /* Cached port attributes */
 };
 
@@ -69,9 +67,15 @@ int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
 
 
 /**
- * @return Port active MTU.
+ * Convert time-in-seconds to IB fabric time value
  */
-size_t uct_ib_device_port_active_mtu(uct_ib_device_t *dev, uint8_t port_num);
+uint8_t uct_ib_to_fabric_time(double time);
+
+
+/**
+ * @return MTU in bytes.
+ */
+size_t uct_ib_mtu_value(enum ibv_mtu mtu);
 
 
 static inline struct ibv_exp_port_attr* uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
