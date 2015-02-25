@@ -93,7 +93,7 @@ m4_include([config/m4/ib.m4])
 m4_include([config/m4/cray_ugni.m4])
 m4_include([config/m4/mpi.m4])
 m4_include([config/m4/rte.m4])
-
+m4_include([config/m4/ax_prog_doxygen.m4])
 
 #
 # Compile code with frame pointer. Optimizations usually omit the frame pointer,
@@ -154,6 +154,11 @@ AC_ARG_ENABLE([debug-data],
 #
 AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
 
+#
+#Doxygen options
+#
+
+DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 
 #
 # Print which transports are built

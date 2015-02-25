@@ -25,7 +25,7 @@ echo "Making a directory for test build"
 rm -rf build-test && mkdir -p build-test && cd build-test
 
 echo "Build release"
-../contrib/configure-release && make $make_opt && make $make_opt distcheck
+../contrib/configure-release && make $make_opt && make $make_opt distcheck && make docs
 
 echo "Running ucx_info"
 ./src/tools/info/ucx_info -v -f
