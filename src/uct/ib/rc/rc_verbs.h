@@ -53,6 +53,7 @@ typedef struct uct_rc_verbs_iface {
         size_t               short_desc_size;
         ucs_callback_func_t  atomic32_completoin;
         ucs_callback_func_t  atomic64_completoin;
+        size_t               max_inline;
     } config;
 } uct_rc_verbs_iface_t;
 
