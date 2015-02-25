@@ -389,7 +389,7 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
         } else if (status == UCS_ERR_NO_MESSAGE) {
             break; /* Sentinel */
         } else {
-            free(node); /* Error TODO free previous children */
+            free(ptr); /* Error TODO free previous children */
             return status;
         }
     } while (1);

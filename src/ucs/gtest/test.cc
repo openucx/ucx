@@ -14,7 +14,7 @@ extern "C" {
 
 namespace ucs {
 
-test_base::test_base() : m_state(NEW) {
+test_base::test_base() : m_state(NEW), m_num_valgrind_errors_before(0) {
 }
 
 test_base::~test_base() {

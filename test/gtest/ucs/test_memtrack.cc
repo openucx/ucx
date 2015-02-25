@@ -66,14 +66,14 @@ UCS_TEST_F(test_memtrack, sanity) {
     ucs_free(b);
     ucs_memtrack_total(&entry);
     if (ucs_memtrack_is_enabled()) {
-        ASSERT_EQ((size_t)(i + 1), entry.count);
+        EXPECT_EQ((size_t)(i + 1), entry.count);
     }
 
     b = ucs_malloc(4, ALLOC_NAME);
     ucs_free(b);
     ucs_memtrack_total( &entry);
     if (ucs_memtrack_is_enabled()) {
-        ASSERT_EQ((size_t)1, entry.count);
+        EXPECT_EQ((size_t)1, entry.count);
     }
     ucs_free(a);
 

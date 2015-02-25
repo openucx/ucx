@@ -262,6 +262,12 @@ class test_async_mt : public test_async {
 protected:
     static const unsigned NUM_THREADS = 32;
 
+    test_async_mt() {
+        for (unsigned i = 0; i < NUM_THREADS; ++i) {
+            m_ev[i] = NULL;
+        }
+    }
+
     virtual void init() {
         pthread_barrier_init(&m_barrier, NULL, NUM_THREADS + 1);
     }

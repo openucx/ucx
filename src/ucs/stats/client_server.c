@@ -460,21 +460,23 @@ static ucs_status_t ucs_stats_server_create_socket(int udp_port, int *p_sockfd,
     ret = bind(sockfd, (struct sockaddr*)&saddr, sizeof(saddr));
     if (ret < 0) {
         ucs_error("Failed to bind socket to port %u: %m", udp_port);
-        close(sockfd);
-        return UCS_ERR_INVALID_ADDR;
+        goto err_close_sock;
     }
 
     socklen = sizeof(saddr);
     ret = getsockname(sockfd, (struct sockaddr*)&saddr, &socklen);
     if (ret < 0) {
         ucs_error("getsockname(%d) failed: %m", sockfd);
-        close(sockfd);
-        return UCS_ERR_IO_ERROR;
+        goto err_close_sock;
     }
 
     *p_sockfd   = sockfd;
     *p_udp_port = ntohs(saddr.sin_port);
     return UCS_OK;
+
+err_close_sock:
+    close(sockfd);
+    return UCS_ERR_INVALID_ADDR;
 }
 
 static void ucs_stats_server_clear_old_enitities(ucs_stats_server_h server)

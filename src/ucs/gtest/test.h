@@ -59,7 +59,6 @@ protected:
 
     config_stack_t       m_config_stack;
     state_t              m_state;
-    bool                 m_skip;
     int                  m_num_valgrind_errors_before;
 
 private:
