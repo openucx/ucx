@@ -233,7 +233,6 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
         goto err_free_path_bits;
     }
 
-    /* TODO need exp API to set this value */
     if (config->rx.inl > 32 /*UCT_IB_MLX5_CQE64_MAX_INL*/) {
         ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "128", 1);
     }
