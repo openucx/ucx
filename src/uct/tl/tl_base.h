@@ -28,6 +28,7 @@ enum {
 
 enum {
     UCT_IFACE_STAT_RX_AM,
+    UCT_IFACE_STAT_RX_AM_BYTES,
     UCT_IFACE_STAT_TX_NO_DESC,
     UCT_IFACE_STAT_RX_NO_DESC,
     UCT_IFACE_STAT_FLUSH,
@@ -196,6 +197,7 @@ static inline ucs_status_t uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t 
 {
     uct_am_handler_t *handler = &iface->am[id];
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
+    UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
     return handler->cb(desc, data, length, handler->arg);
 }
 

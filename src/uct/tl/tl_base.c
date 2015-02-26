@@ -38,10 +38,11 @@ static ucs_stats_class_t uct_iface_stats_class = {
     .name = "uct_iface",
     .num_counters = UCT_IFACE_STAT_LAST,
     .counter_names = {
-        [UCT_IFACE_STAT_RX_AM]      = "rx_am",
-        [UCT_IFACE_STAT_TX_NO_DESC] = "tx_no_desc",
-        [UCT_IFACE_STAT_RX_NO_DESC] = "rx_no_desc",
-        [UCT_IFACE_STAT_FLUSH]      = "flush",
+        [UCT_IFACE_STAT_RX_AM]       = "rx_am",
+        [UCT_IFACE_STAT_RX_AM_BYTES] = "rx_am_bytes",
+        [UCT_IFACE_STAT_TX_NO_DESC]  = "tx_no_desc",
+        [UCT_IFACE_STAT_RX_NO_DESC]  = "rx_no_desc",
+        [UCT_IFACE_STAT_FLUSH]       = "flush",
     }
 };
 #endif
