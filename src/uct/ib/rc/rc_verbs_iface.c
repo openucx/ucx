@@ -93,7 +93,7 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             ep->tx.completion_count     += count;
             ++iface->super.tx.cq_available;
 
-            ucs_callbackq_pull(&ep->super.tx.comp, ep->tx.completion_count);
+            ucs_callbackq_pull(&ep->super.comp, ep->tx.completion_count);
         }
     } else if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll send CQ");
@@ -167,21 +167,10 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     struct ibv_exp_device_attr *dev_attr =
                     &uct_ib_iface_device(&iface->super.super)->dev_attr;
 
-    struct ibv_qp_cap cap;
-    struct ibv_qp *qp;
-    ucs_status_t status;
-
     uct_rc_iface_query(&iface->super, iface_attr);
 
-    /* Create a QP in order to find out capabilities */
-    status = uct_rc_iface_qp_create(&iface->super, &qp, &cap);
-    if (status != UCS_OK) {
-        return status;
-    }
-    ibv_destroy_qp(qp);
-
     /* PUT */
-    iface_attr->cap.put.max_short = cap.max_inline_data;
+    iface_attr->cap.put.max_short = iface->config.max_inline;
     iface_attr->cap.put.max_bcopy = iface->super.super.config.seg_size;
     iface_attr->cap.put.max_zcopy =
                         uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
@@ -192,7 +181,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                     uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
 
     /* AM */
-    iface_attr->cap.am.max_short  = cap.max_inline_data
+    iface_attr->cap.am.max_short  = iface->config.max_inline
                                         - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_bcopy  = iface->super.super.config.seg_size
                                         - sizeof(uct_rc_hdr_t);
@@ -237,6 +226,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
     struct ibv_exp_device_attr *dev_attr;
     size_t am_hdr_size;
     ucs_status_t status;
+    struct ibv_qp_cap cap;
+    struct ibv_qp *qp;
 
     extern uct_iface_ops_t uct_rc_verbs_iface_ops;
     UCS_CLASS_CALL_SUPER_INIT(&uct_rc_verbs_iface_ops, context, dev_name,
@@ -268,6 +259,14 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
         self->config.atomic32_completoin = uct_rc_ep_atomic_completion_32_be1;
         self->config.atomic64_completoin = uct_rc_ep_atomic_completion_64_be1;
     }
+
+    /* Create a dummy QP in order to find out max_inline */
+    status = uct_rc_iface_qp_create(&self->super, &qp, &cap);
+    if (status != UCS_OK) {
+        goto err;
+    }
+    ibv_destroy_qp(qp);
+    self->config.max_inline = cap.max_inline_data;
 
     /* Create AH headers and Atomic mempool */
     status = uct_iface_mpool_create(&self->super.super.super.super,

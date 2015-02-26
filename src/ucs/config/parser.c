@@ -399,6 +399,10 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     unsigned i;
 
     dup = strdup(buf);
+    if (dup == NULL) {
+        return 0;
+    }
+
     saveptr = NULL;
     token = strtok_r(dup, ",", &saveptr);
     field->data = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
@@ -499,19 +503,24 @@ void ucs_config_help_array(char *buf, size_t max, const void *arg)
 
 int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
 {
-    char *tokens = strdupa(buf);
+    char *tokens;
     char *token, *saveptr1;
     char *name, *value, *saveptr2;
     ucs_status_t status;
+
+    tokens = strdup(buf);
+    if (tokens == NULL) {
+        return 0;
+    }
 
     saveptr1 = NULL;
     saveptr2 = NULL;
     token = strtok_r(tokens, ";", &saveptr1);
     while (token != NULL) {
-
         name  = strtok_r(token, "=", &saveptr2);
         value = strtok_r(NULL,  "=", &saveptr2);
-        if (value == NULL) {
+        if (name == NULL || value == NULL) {
+            free(tokens);
             ucs_error("Could not parse list of values in '%s' (token: '%s')", buf, token);
             return 0;
         }
@@ -525,12 +534,14 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
                 ucs_debug("Failed to set %s to '%s': %s", name, value,
                           ucs_status_string(status));
             }
+            free(tokens);
             return 0;
         }
 
         token = strtok_r(NULL, ";", &saveptr1);
     }
 
+    free(tokens);
     return 1;
 }
 

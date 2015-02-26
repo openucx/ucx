@@ -55,7 +55,7 @@ private:
     static ucs_log_level_t orig_log_level;
 
     template <typename O>
-    void test_xfer_print(const O& os, send_func_t send, size_t length,
+    void test_xfer_print(O& os, send_func_t send, size_t length,
                          direction_t direction);
 
     static void completion_cb(ucs_callback_t *self);

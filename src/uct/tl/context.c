@@ -190,7 +190,7 @@ ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
 
     bundle->table        = tl->iface_config_table;
     bundle->table_prefix = tl->config_prefix;
-    *config_p = (uct_iface_config_t*)bundle->data;
+    *config_p = (uct_iface_config_t*)bundle->data; /* coverity[leaked_storage] */
     return UCS_OK;
 
 err_free_opts:

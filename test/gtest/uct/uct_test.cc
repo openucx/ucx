@@ -277,6 +277,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment,
     } else {
         m_lkey      = UCT_INVALID_MEM_KEY;
         m_rkey.rkey = UCT_INVALID_MEM_KEY;
+        m_rkey.type = NULL;
     }
 }
 

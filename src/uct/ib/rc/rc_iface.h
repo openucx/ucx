@@ -20,7 +20,7 @@
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
-
+#define UCR_RC_QP_MAX_RETRY_COUNT   7
 
 struct uct_rc_iface {
     uct_ib_iface_t           super;
@@ -43,6 +43,13 @@ struct uct_rc_iface {
         unsigned             tx_moderation;
         unsigned             rx_max_batch;
         unsigned             rx_inline;
+        uint8_t              min_rnr_timer;
+        uint8_t              timeout;
+        uint8_t              rnr_retry;
+        uint8_t              retry_cnt;
+        uint8_t              max_rd_atomic;
+        uint8_t              sl;
+        enum ibv_mtu         path_mtu;
     } config;
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
@@ -51,8 +58,14 @@ struct uct_rc_iface {
 
 struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
+    uct_ib_mtu_t             path_mtu;
+    unsigned                 max_rd_atomic;
 
     struct {
+        double               timeout;
+        unsigned             retry_count;
+        double               rnr_timeout;
+        unsigned             rnr_retry_count;
         unsigned             cq_len;
     } tx;
 };

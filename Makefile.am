@@ -1,5 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+# Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 #
 # $COPYRIGHT$
 # $HEADER$
@@ -9,6 +10,8 @@
 # the right time.
 
 ACLOCAL_AMFLAGS = -I config/m4
+
+pkginclude_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 
 SUBDIRS = \
 	src/ucs \
@@ -31,3 +34,12 @@ EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
 
+include $(srcdir)/doc/doxygen/doxygen.am
+
+.PHONY: docs
+
+docs: doc/doxygen/doxygen-doc/ucx.tag
+
+doc/doxygen/doxygen-doc/ucx.tag: $(pkginclude_HEADERS) doxygen-doc
+
+MOSTLYCLEANFILES = $(DX_CLEANFILES)

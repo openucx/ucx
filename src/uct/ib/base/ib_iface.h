@@ -16,6 +16,19 @@
 #include <ucs/config/parser.h>
 
 
+/**
+ * IB port/path MTU.
+ */
+typedef enum uct_ib_mtu {
+    UCT_IB_MTU_DEFAULT = 0,
+    UCT_IB_MTU_512     = 1,
+    UCT_IB_MTU_1024    = 2,
+    UCT_IB_MTU_2048    = 3,
+    UCT_IB_MTU_4096    = 4,
+    UCT_IB_MTU_LAST
+} uct_ib_mtu_t;
+
+
 typedef struct uct_ib_iface_addr {
     uct_iface_addr_t    super;
     uint16_t            lid; /* TODO support RoCE/GRH */
@@ -24,16 +37,16 @@ typedef struct uct_ib_iface_addr {
 
 typedef struct uct_ib_iface {
     uct_base_iface_t        super;
-    uint8_t                 port_num;
-    /* TODO
-     * lmc
-     * comp_channel;
-     */
-    unsigned                gid_index;
-    unsigned                sl;
     uct_ib_iface_addr_t     addr;
+    uint8_t                 *path_bits;
+    unsigned                path_bits_count;
+    uint16_t                gid_index;
+    uint8_t                 port_num;
+    uint8_t                 sl;
+
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
+    /* TODO comp_channel */
 
     struct {
         unsigned            rx_headroom;         /* user-requested headroom */
@@ -68,6 +81,13 @@ typedef struct uct_ib_iface_config {
 
     /* IB SL to use */
     unsigned                sl;
+
+    /* Path bits */
+    struct {
+        unsigned             *bits;
+        unsigned             count;
+    } lid_path_bits;
+
 
 } uct_ib_iface_config_t;
 
@@ -113,6 +133,7 @@ typedef struct uct_ib_iface_recv_desc {
 
 
 extern ucs_config_field_t uct_ib_iface_config_table[];
+extern const char *uct_ib_mtu_values[];
 
 
 /**

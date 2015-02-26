@@ -28,10 +28,10 @@ struct uct_rc_ep_addr {
 struct uct_rc_ep {
     uct_ep_t            super;
     struct ibv_qp       *qp;
-    struct {
-        ucs_callbackq_t comp;
-        unsigned        unsignaled;
-    } tx;
+    ucs_callbackq_t     comp;
+    unsigned            unsignaled;
+    uint8_t             sl;
+    uint8_t             path_bits;
 };
 
 
@@ -61,13 +61,13 @@ uct_rc_ep_add_user_completion(uct_rc_ep_t* ep, uct_completion_t* comp, uint16_t 
 
     cbq = ucs_derived_of(&comp->super, ucs_callbackq_elem_t);
     cbq->sn = sn;
-    ucs_callbackq_push(&ep->tx.comp, cbq);
+    ucs_callbackq_push(&ep->comp, cbq);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_iface_tx_moderation(uct_rc_iface_t* iface, uct_rc_ep_t* ep, uint8_t flag)
 {
-    return (ep->tx.unsignaled >= iface->config.tx_moderation) ? flag : 0;
+    return (ep->unsignaled >= iface->config.tx_moderation) ? flag : 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -77,10 +77,10 @@ uct_rc_ep_tx_posted(uct_rc_ep_t *ep, int signaled)
     if (signaled) {
         iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
         ucs_assert(uct_rc_iface_have_tx_cqe_avail(iface));
-        ep->tx.unsignaled = 0;
+        ep->unsignaled = 0;
         --iface->tx.cq_available;
     } else {
-        ++ep->tx.unsignaled;
+        ++ep->unsignaled;
     }
 }
 

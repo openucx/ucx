@@ -25,7 +25,7 @@ echo "Making a directory for test build"
 rm -rf build-test && mkdir -p build-test && cd build-test
 
 echo "Build release"
-../contrib/configure-release && make $make_opt && make $make_opt distcheck
+../contrib/configure-release && make $make_opt && make $make_opt distcheck && make docs
 
 echo "Running ucx_info"
 ./src/tools/info/ucx_info -v -f
@@ -67,11 +67,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     rm -rf $cov_build
     make clean
     cov-build --dir $cov_build make $make_opt all
-    nerrors=$(cov-analyze --dir $cov_build |grep "Defect occurrences found" | awk '{print $5}')
-    cov-format-errors --dir $cov_build
+    cov-analyze --dir $cov_build
+    nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
     rc=$(($rc+$nerrors))
 
-    cov_url="$WS_URL/$cov_build_id/c/output/errors/index.html"
+    cov_url="$WS_URL/$cov_build_id/output/errors/index.html"
     rm -f jenkins_sidelinks.txt
     echo 1..1 > coverity.tap
     if [ $nerrors -gt 0 ]; then

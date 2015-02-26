@@ -69,6 +69,9 @@ static O& operator<<(O& os, const size& sz)
 {
     size_t v = sz.value();
 
+    std::iostream::fmtflags f(os.flags());
+
+    /* coverity[format_changed] */
     os << std::fixed << std::setprecision(1);
     if (v < 1024) {
         os << v;
@@ -80,6 +83,7 @@ static O& operator<<(O& os, const size& sz)
         os << (v / 1024.0 / 1024.0 / 1024.0) << "g";
     }
 
+    os.flags(f);
     return os;
 }
 
@@ -96,7 +100,7 @@ void uct_p2p_test::log_handler(const char *file, unsigned line, const char *func
 }
 
 template <typename O>
-void uct_p2p_test::test_xfer_print(const O& os, send_func_t send, size_t length,
+void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
                                    direction_t direction)
 {
     if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
