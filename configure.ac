@@ -158,6 +158,9 @@ AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
 #Doxygen options
 #
 
+DX_PDF_FEATURE(OFF)
+DX_PS_FEATURE(OFF)
+DX_MAN_FEATURE(ON)
 DX_INIT_DOXYGEN([UCX],[doc/doxygen/ucxdox],[doc/doxygen-doc])
 
 #
