@@ -71,7 +71,8 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
     rc=$(($rc+$nerrors))
 
-    cov_url="$WS_URL/$cov_build_id/output/errors/index.html"
+    index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
+    cov_url="$WS_URL/$cov_build_id/${index_html}"
     rm -f jenkins_sidelinks.txt
     echo 1..1 > coverity.tap
     if [ $nerrors -gt 0 ]; then
