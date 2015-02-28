@@ -66,4 +66,4 @@ COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [yes],
                  int main() { return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3)); }])
 COMPILER_OPTION([avx], [AVX], [-mavx], [yes],
                 [#include <immintrin.h>
-                 int main() { __m256i x = _mm256_set1_epi32(0); return _mm256_extract_epi32(x, 0); }])
+                 int main() { return _mm256_testz_si256(_mm256_set1_epi32(1), _mm256_set1_epi32(3)); }])
