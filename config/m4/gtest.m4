@@ -1,3 +1,8 @@
+# Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+# $COPYRIGHT$
+# $HEADER$
+#
+
 dnl GTEST_LIB_CHECK([minimum version [,
 dnl                  action if found [,action if not found]]])
 dnl
@@ -15,7 +20,7 @@ AC_ARG_ENABLE([gtest],
                   [Enable tests using the Google C++ Testing Framework.
                   (Default is enabled.)])],
   [],
-  [enable_gtest=no])
+  [enable_gtest=check])
 AC_ARG_VAR([GTEST_CONFIG],
            [The exact path of Google Test's 'gtest-config' script.])
 AC_ARG_VAR([GTEST_CPPFLAGS],
@@ -30,7 +35,7 @@ AC_ARG_VAR([GTEST_VERSION],
            [The version of Google Test available.])
 HAVE_GTEST="no"
 AS_IF([test "x${enable_gtest}" != "xno"],
-  [AS_IF([test "x${enable_gtest}" != "xyes"],
+  [AS_IF([test "x${enable_gtest}" != "xyes" -a "x${enable_gtest}" != "xcheck"],
      [AC_MSG_CHECKING([for gtest-config])
 	AS_IF([test -x "${enable_gtest}/scripts/gtest-config"],
         [GTEST_CONFIG="${enable_gtest}/scripts/gtest-config"],
@@ -70,3 +75,4 @@ AS_IF([test "x$HAVE_GTEST" = "xyes"],
   [m4_ifval([$2], [$2])],
   [m4_ifval([$3], [$3])])
 ])
+
