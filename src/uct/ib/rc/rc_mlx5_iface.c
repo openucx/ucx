@@ -49,10 +49,8 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
     while (count < max) {
         ucs_assert(head != iface->rx.tail);
 
-        desc = ucs_mpool_get(iface->super.rx.mp);
-        if (desc == NULL) {
-            break;
-        }
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, iface->super.rx.mp,
+                                 desc, break);
 
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, head);
 
@@ -89,6 +87,8 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     if (cqe == NULL) {
         return;
     }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
 
     ucs_memory_cpu_load_fence();
 
@@ -127,6 +127,8 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
         }
         return;
     }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
 
     ucs_assert(!ucs_queue_is_empty(&iface->rx.desc_q));
 

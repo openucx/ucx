@@ -15,17 +15,34 @@
 #include <infiniband/arch.h>
 
 
+#if ENABLE_STATS
+static ucs_stats_class_t uct_rc_ep_stats_class = {
+    .name = "rc_ep",
+    .num_counters = UCT_RC_EP_STAT_LAST,
+    .counter_names = {
+        [UCT_RC_EP_STAT_QP_FULL]          = "qp_full",
+        [UCT_RC_EP_STAT_SINGAL]           = "signal"
+    }
+};
+#endif
+
 static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     struct ibv_qp_cap cap;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface)
+    UCS_CLASS_CALL_SUPER_INIT(&iface->super.super);
 
     status = uct_rc_iface_qp_create(iface, &self->qp, &cap);
     if (status != UCS_OK) {
-        return status;
+        goto err;
+    }
+
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_ep_stats_class,
+                                  self->super.stats);
+    if (status != UCS_OK) {
+        goto err_qp_destroy;
     }
 
     self->unsignaled = 0;
@@ -35,22 +52,28 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
+
+err_qp_destroy:
+    ibv_destroy_qp(self->qp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(self->super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rc_iface_t);
     int ret;
 
     uct_rc_iface_remove_ep(iface, self);
 
+    UCS_STATS_NODE_FREE(self->stats);
     ret = ibv_destroy_qp(self->qp);
     if (ret != 0) {
         ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
     }
 }
 
-UCS_CLASS_DEFINE(uct_rc_ep_t, uct_ep_t)
+UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 {
@@ -64,7 +87,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
                                      uct_ep_addr_t *tl_ep_addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     uct_ib_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, uct_ib_iface_addr_t);
     uct_rc_ep_addr_t *ep_addr = ucs_derived_of(tl_ep_addr, uct_rc_ep_addr_t);
     struct ibv_qp_attr qp_attr;

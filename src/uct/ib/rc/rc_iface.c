@@ -48,6 +48,19 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
   {NULL}
 };
 
+
+#if ENABLE_STATS
+static ucs_stats_class_t uct_rc_iface_stats_class = {
+    .name = "rc_iface",
+    .num_counters = UCT_RC_IFACE_STAT_LAST,
+    .counter_names = {
+        [UCT_RC_IFACE_STAT_RX_COMPLETION] = "rx_completion",
+        [UCT_RC_IFACE_STAT_TX_COMPLETION] = "tx_completion",
+        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe",
+    }
+};
+#endif
+
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
@@ -121,7 +134,7 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
                 continue;
             }
 
-            status = uct_ep_flush(&ep->super);
+            status = uct_ep_flush(&ep->super.super);
             if ((status == UCS_ERR_WOULD_BLOCK) || (status == UCS_INPROGRESS)) {
                 ++count;
             } else if (status != UCS_OK) {
@@ -130,7 +143,12 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
         }
     }
 
-    return (count == 0) ? UCS_OK : UCS_ERR_WOULD_BLOCK;
+    if (count != 0) {
+        return UCS_ERR_WOULD_BLOCK;
+    }
+
+    UCT_TL_IFACE_STAT_FLUSH(&iface->super.super);
+    return UCS_OK;
 }
 
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
@@ -224,8 +242,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
         goto err_destory_tx_mp;
     }
 
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
+                                  self->super.super.stats);
+    if (status != UCS_OK) {
+        goto err_destroy_srq;
+    }
+
     return UCS_OK;
 
+err_destroy_srq:
+    ibv_destroy_srq(self->rx.srq);
 err_destory_tx_mp:
     ucs_mpool_destroy(self->tx.mp);
 err_destroy_rx_mp:
@@ -243,6 +269,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
         ucs_free(self->eps[i]);
     }
+
+    UCS_STATS_NODE_FREE(self->stats);
 
     /* TODO flush RX buffers */
     ret = ibv_destroy_srq(self->rx.srq);
