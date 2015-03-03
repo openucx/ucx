@@ -66,7 +66,7 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
     memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
     iface_attr->iface_addr_len      = sizeof(uct_ib_iface_addr_t);
     iface_attr->ep_addr_len         = sizeof(uct_rc_ep_addr_t);
-    iface_attr->completion_priv_len = sizeof(ucs_callbackq_elem_t) - sizeof(uct_completion_t);
+    iface_attr->completion_priv_len = sizeof(uct_rc_completion_t) - sizeof(uct_completion_t);
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
                                       UCT_IFACE_FLAG_AM_BCOPY |
                                       UCT_IFACE_FLAG_AM_ZCOPY |

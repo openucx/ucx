@@ -78,6 +78,7 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
 
 static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 {
+    uct_rc_completion_t *comp;
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
@@ -104,7 +105,15 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ++iface->super.tx.cq_available;
 
     /* Process completions */
-    ucs_callbackq_pull(&ep->super.comp, hw_ci);
+    ucs_queue_for_each_extract(comp, &ep->super.comp, queue,
+                               UCS_CIRCULAR_COMPARE16(comp->sn, <=, hw_ci)) {
+        if (0 /*cqe->op_own & MLX5_INLINE_SCATTER_32 */ && (comp->sn == hw_ci)) {
+            uct_invoke_completion(&comp->super, cqe);
+        } else {
+            uct_invoke_completion(&comp->super,
+                                  ucs_derived_of(comp, uct_rc_iface_send_desc_t) + 1);
+        }
+    }
 }
 
 static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
@@ -146,8 +155,8 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
      */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
         uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, cqe, uct_rc_ep_am_packet_dump);
-        status = uct_rc_iface_invoke_am(&iface->super, &desc->super,
-                                        (uct_rc_hdr_t*)cqe, byte_len);
+        status = uct_rc_iface_invoke_am(&iface->super, (uct_rc_hdr_t*)cqe, byte_len,
+                                        &desc->super);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         /* TODO support inline scatter of 64b */
         ucs_fatal("inl data @ %p", cqe - 1);
@@ -155,8 +164,7 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
         uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
-        status = uct_rc_iface_invoke_am(&iface->super, &desc->super, hdr,
-                                        byte_len);
+        status = uct_rc_iface_invoke_am(&iface->super, hdr, byte_len, &desc->super);
     }
     if (status == UCS_OK) {
         ucs_mpool_put(desc);

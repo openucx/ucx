@@ -44,29 +44,30 @@ typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
 
 
 /**
- * Callback to process incoming data buffer.
- * Used for active messages, get bcopy.
+ * Callback to process incoming active message
  *
- * @param [in]  desc     Points to the received descriptor, just after rx_headroom.
+ * @param [in]  arg      User-defined argument.
  * @param [in]  data     Points to the received data.
  * @param [in]  length   Length of data.
- * @param [in]  arg      User-defined argument.
+ * @param [in]  desc     Points to the received descriptor, just after rx_headroom.
  *
  * @return UCS_OK - descriptor was consumed, and can be released by the caller.
  *         UCS_INPROGRESS - descriptor is owned by the callee, and would be released later.
  */
-typedef ucs_status_t (*uct_bcopy_recv_callback_t)(void *desc, void *data,
-                                                  size_t length, void *arg);
+typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
+                                          void *desc);
 
 
 /**
- * Callback to process incoming immediate data.
- * Used for fetching results of atomic operations.
+ * Callback to process send completion.
  *
- * @param [in]  arg      User-defined argument.
- * @param [in]  data     Data received from remote.
+ * @param [in]  self     Pointer to relevant completion structure, which was
+ *                       initially passed to the operation.
+ * @param [in]  data     Points to the reply data, if the particular send
+ *                       operation has it. The length of the data is defined by
+ *                       the send operation.
  */
-typedef void (*uct_imm_recv_callback_t)(void *arg, uint64_t data);
+typedef void (*uct_completion_callback_t)(uct_completion_t *self, void *data);
 
 
 /**

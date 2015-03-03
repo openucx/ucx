@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
 
 
@@ -78,7 +79,7 @@ struct uct_tl_ops {
  * Active message handle table entry
  */
 typedef struct uct_am_handler {
-    uct_bcopy_recv_callback_t cb;
+    uct_am_callback_t cb;
     void                      *arg;
 } uct_am_handler_t;
 
@@ -192,13 +193,37 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
                                     const char *name, ucs_mpool_h *mp_p);
 
 
-static inline ucs_status_t uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id,
-                                               void *desc, void *data, unsigned length)
+/**
+ * Invoke active message handler.
+ *
+ * @param iface    Interface to invoke the handler for.
+ * @param id       Active message ID.
+ * @param data     Received data.
+ * @param length   Length of received data.
+ * @param desc     Receive descriptor.
+ */
+static inline ucs_status_t
+uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
+                    unsigned length, void *desc)
 {
     uct_am_handler_t *handler = &iface->am[id];
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
-    return handler->cb(desc, data, length, handler->arg);
+    return handler->cb(handler->arg, data, length, desc);
+}
+
+
+/**
+ * Invoke send completion.
+ *
+ * @param comp   Completion to invoke.
+ * @param data   Optional completion data (operation reply).
+ */
+static UCS_F_ALWAYS_INLINE
+void uct_invoke_completion(uct_completion_t *comp, void *data)
+{
+    ucs_trace_func("comp=%p, data=%p", comp, data);
+    comp->func(comp, data);
 }
 
 #endif

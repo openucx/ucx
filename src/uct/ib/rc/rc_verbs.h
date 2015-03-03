@@ -51,8 +51,8 @@ typedef struct uct_rc_verbs_iface {
 
     struct {
         size_t               short_desc_size;
-        ucs_callback_func_t  atomic32_completoin;
-        ucs_callback_func_t  atomic64_completoin;
+        uct_completion_callback_t  atomic32_completoin;
+        uct_completion_callback_t  atomic64_completoin;
         size_t               max_inline;
     } config;
 } uct_rc_verbs_iface_t;
@@ -90,7 +90,7 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t leng
 
 ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep, size_t length,
                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                       uct_bcopy_recv_callback_t cb, void *arg);
+                                       uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                        uct_lkey_t lkey, uint64_t remote_addr,
@@ -113,30 +113,30 @@ ucs_status_t uct_rc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 
 ucs_status_t uct_rc_verbs_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_imm_recv_callback_t cb, void *arg);
+                                           uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_imm_recv_callback_t cb, void *arg);
+                                           uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
                                             uint64_t remote_addr, uct_rkey_t rkey,
-                                            uct_imm_recv_callback_t cb, void *arg);
+                                            uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
                                           uint64_t remote_addr, uct_rkey_t rkey);
 
 ucs_status_t uct_rc_verbs_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_imm_recv_callback_t cb, void *arg);
+                                           uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
                                            uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_imm_recv_callback_t cb, void *arg);
+                                           uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
                                             uint64_t remote_addr, uct_rkey_t rkey,
-                                            uct_imm_recv_callback_t cb, void *arg);
+                                            uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep);
 

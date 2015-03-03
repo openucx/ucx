@@ -14,12 +14,15 @@ public:
     static const uint64_t MISS = 0;
 
     template <typename T>
-    static void cswap_reply_cb(void *arg, uint64_t data) {
-        worker* w = reinterpret_cast<worker*>(arg);
+    static void cswap_reply_cb(uct_completion_t *self, void *data) {
+        completion *comp = ucs_container_of(self, completion, uct);
+        worker* w = comp->w;
+        T dataval;
 
         /* Compare after casting to T, since w->value is always 64 bit */
-        if (data == (T)w->value) {
-            w->test->add_reply_safe(data); /* Swapped */
+        dataval = *(T*)data;
+        if (dataval == (T)w->value) {
+            w->test->add_reply_safe(dataval); /* Swapped */
         } else {
             w->test->add_reply_safe(MISS); /* Miss value */
         }
@@ -28,24 +31,28 @@ public:
         --w->count; /* Allow one more operation */
     }
 
-    ucs_status_t cswap32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
+    ucs_status_t cswap32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                         completion *comp) {
         if (worker.count > 0) {
             return UCS_ERR_WOULD_BLOCK; /* Don't proceed until got a reply */
         }
+        comp->uct.func = cswap_reply_cb<uint32_t>;
+        comp->w        = &worker;
         return uct_ep_atomic_cswap32(ep, worker.value, hash64(worker.value),
                                      recvbuf.addr(), recvbuf.rkey(),
-                                     cswap_reply_cb<uint32_t>,
-                                     reinterpret_cast<void*>(&worker));
+                                     &comp->uct);
     }
 
-    ucs_status_t cswap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
+    ucs_status_t cswap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                         completion *comp) {
         if (worker.count > 0) {
             return UCS_ERR_WOULD_BLOCK; /* Don't proceed until got a reply */
         }
+        comp->uct.func = cswap_reply_cb<uint64_t>;
+        comp->w        = &worker;
         return uct_ep_atomic_cswap64(ep, worker.value, hash64(worker.value),
                                      recvbuf.addr(), recvbuf.rkey(),
-                                     cswap_reply_cb<uint64_t>,
-                                     reinterpret_cast<void*>(&worker));
+                                     &comp->uct);
     }
 
     template <typename T>

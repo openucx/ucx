@@ -10,6 +10,7 @@
 
 #include <uct/tl/context.h>
 #include <ucs/type/component.h>
+#include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 
 

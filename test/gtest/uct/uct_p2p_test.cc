@@ -31,8 +31,8 @@ void uct_p2p_test::init() {
     /* Allocate completion handle and set the callback */
     m_completion = (completion*)malloc(sizeof(completion) +
                                        sender().iface_attr().completion_priv_len);
-    m_completion->self           = this;
-    m_completion->uct.super.func = completion_cb;
+    m_completion->self     = this;
+    m_completion->uct.func = completion_cb;
 
     m_completion_count = 0;
 }
@@ -210,7 +210,8 @@ const uct_test::entity& uct_p2p_test::receiver() const {
     return ent(1);
 }
 
-void uct_p2p_test::completion_cb(ucs_callback_t *self) {
+void uct_p2p_test::completion_cb(uct_completion_t *self, void *data) {
     completion *comp = ucs_container_of(self, completion, uct);
+    memcpy(comp->dest, data, comp->length);
     ++comp->self->m_completion_count;
 }

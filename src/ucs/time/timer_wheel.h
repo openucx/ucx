@@ -8,10 +8,10 @@
 #ifndef UCS_WHEEL_H
 #define UCS_WHEEL_H
 
-#include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
+#include <ucs/type/callback.h>
 
 
 /**
