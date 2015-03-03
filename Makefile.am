@@ -11,7 +11,7 @@
 
 ACLOCAL_AMFLAGS = -I config/m4
 
-pkginclude_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
+noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 
 SUBDIRS = \
 	src/ucs \
@@ -40,6 +40,6 @@ include $(srcdir)/doc/doxygen/doxygen.am
 
 docs: doc/doxygen/doxygen-doc/ucx.tag
 
-doc/doxygen/doxygen-doc/ucx.tag: $(pkginclude_HEADERS) doxygen-doc
+doc/doxygen/doxygen-doc/ucx.tag: $(noinst_HEADERS) doxygen-doc
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES)
