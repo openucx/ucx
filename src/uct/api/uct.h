@@ -12,8 +12,6 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/config/types.h>
-#include <ucs/datastruct/queue.h>
-#include <ucs/type/callback.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -139,7 +137,7 @@ typedef struct uct_rkey_bundle {
  * Completion handle.
  */
 struct uct_completion {
-    ucs_callback_t            super;
+    uct_completion_callback_t func;    /**< User callback function */
     char                      priv[0]; /**< Actual size of this field is returned
                                             in completion_priv_len by uct_iface_query() */
 };
@@ -285,7 +283,7 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
  * @param [in]  arg      Active message argument.
  */
 ucs_status_t uct_set_am_handler(uct_iface_h iface, uint8_t id,
-                                uct_bcopy_recv_callback_t cb, void *arg);
+                                uct_am_callback_t cb, void *arg);
 
 
 /**
@@ -436,9 +434,9 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t l
 
 UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, size_t length,
                                             uint64_t remote_addr, uct_rkey_t rkey,
-                                            uct_bcopy_recv_callback_t cb, void *arg)
+                                            uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_get_bcopy(ep, length, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_get_bcopy(ep, length, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
@@ -470,23 +468,23 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_add64(uct_ep_h ep, uint64_t add,
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd64(uct_ep_h ep, uint64_t add,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_imm_recv_callback_t cb, void *arg)
+                                                 uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_swap64(uct_ep_h ep, uint64_t swap,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_imm_recv_callback_t cb, void *arg)
+                                                 uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap64(uct_ep_h ep, uint64_t compare, uint64_t swap,
                                                   uint64_t remote_addr, uct_rkey_t rkey,
-                                                  uct_imm_recv_callback_t cb, void *arg)
+                                                  uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_add32(uct_ep_h ep, uint32_t add,
@@ -497,23 +495,23 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_add32(uct_ep_h ep, uint32_t add,
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd32(uct_ep_h ep, uint32_t add,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_imm_recv_callback_t cb, void *arg)
+                                                 uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_swap32(uct_ep_h ep, uint32_t swap,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_imm_recv_callback_t cb, void *arg)
+                                                 uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare, uint32_t swap,
                                                   uint64_t remote_addr, uct_rkey_t rkey,
-                                                  uct_imm_recv_callback_t cb, void *arg)
+                                                  uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, cb, arg);
+    return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,

@@ -89,7 +89,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
     /* TODO: configurable max window size */
     ep->tx.max_psn   = ep->tx.psn + UCT_UD_MAX_WINDOW;
     ep->tx.acked_psn = 0;
-    ucs_callbackq_init(&ep->tx.window);
+    ucs_queue_head_init(&ep->tx.window);
 
     ep->rx.acked_psn = 0;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
@@ -109,6 +109,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
 
 static inline void uct_ud_ep_process_ack(uct_ud_ep_t *ep, uct_ud_psn_t ack_psn)
 {
+    uct_ud_send_skb_t *skb;
 
     if (ucs_unlikely(UCT_UD_PSN_COMPARE(ack_psn, <=, ep->tx.acked_psn))) {
         return;
@@ -117,7 +118,11 @@ static inline void uct_ud_ep_process_ack(uct_ud_ep_t *ep, uct_ud_psn_t ack_psn)
     ep->tx.acked_psn = ack_psn;
     
     /* Release acknowledged skb's */
-    ucs_callbackq_pull(&ep->tx.window, ack_psn);
+    ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
+                               UCT_UD_PSN_COMPARE(skb->neth[0].psn, <=, ack_psn)) {
+        /* TODO call zcopy completion */
+        ucs_mpool_put(skb);
+    }
 
     /* update window */
     ep->tx.max_psn =  ep->tx.acked_psn + UCT_UD_MAX_WINDOW;
@@ -166,8 +171,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         return;
     }
 
-    ret = uct_iface_invoke_am(&iface->super.super, am_id, skb, neth + 1,
-                              byte_len - sizeof(*neth));
+    ret = uct_iface_invoke_am(&iface->super.super, am_id, neth + 1,
+                              byte_len - sizeof(*neth), skb);
     if (ret == UCS_OK) {
         ucs_mpool_put(skb);
     }

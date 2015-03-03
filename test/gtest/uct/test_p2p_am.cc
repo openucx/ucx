@@ -23,7 +23,7 @@ public:
         m_am_count = 0;
     }
 
-    static ucs_status_t am_handler(void *desc, void *data, size_t length, void *arg) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length, void *desc) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
         self->am_handler(data, length);
         return UCS_OK; /* TODO test keeping data */
@@ -58,6 +58,7 @@ public:
         size_t max_hdr  = ucs_min(sender().iface_attr().cap.am.max_hdr,
                                   sendbuf.length());
         size_t hdr_size = rand() % (max_hdr + 1);
+        m_completion->length = 0;
         return uct_ep_am_zcopy(ep, AM_ID, sendbuf.ptr(), hdr_size,
                                (char*)sendbuf.ptr() + hdr_size, sendbuf.length() - hdr_size,
                                sendbuf.lkey(), &m_completion->uct);

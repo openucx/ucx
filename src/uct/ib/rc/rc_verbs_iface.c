@@ -73,32 +73,42 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
 
 static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
-    uct_rc_verbs_ep_t *ep;
     struct ibv_wc wc[UCT_IB_MAX_WC];
+    uct_rc_verbs_ep_t *ep;
+    uct_rc_completion_t *comp;
     unsigned count;
+    uint16_t sn;
     int i, ret;
 
     ret = ibv_poll_cq(iface->super.super.send_cq, UCT_IB_MAX_WC, wc);
-    if (ret > 0) {
-        for (i = 0; i < ret; ++i) {
-            if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-                ucs_fatal("Send completion with error: %s", ibv_wc_status_str(wc[i].status));
-            }
-
-            UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
-
-            ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num), uct_rc_verbs_ep_t);
-            ucs_assert(ep != NULL);
-
-            count = wc[i].wr_id + 1; /* Number of sends with WC completes in batch */
-            ep->tx.available            += count;
-            ep->tx.completion_count     += count;
-            ++iface->super.tx.cq_available;
-
-            ucs_callbackq_pull(&ep->super.comp, ep->tx.completion_count);
+    if (ucs_unlikely(ret <= 0)) {
+        if (ucs_unlikely(ret < 0)) {
+            ucs_fatal("Failed to poll send CQ");
         }
-    } else if (ucs_unlikely(ret < 0)) {
-        ucs_fatal("Failed to poll send CQ");
+        return;
+    }
+
+    for (i = 0; i < ret; ++i) {
+        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
+            ucs_fatal("Send completion with error: %s", ibv_wc_status_str(wc[i].status));
+        }
+
+        UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
+
+        ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num), uct_rc_verbs_ep_t);
+        ucs_assert(ep != NULL);
+
+        count = wc[i].wr_id + 1; /* Number of sends with WC completes in batch */
+        ep->tx.available            += count;
+        ep->tx.completion_count     += count;
+        ++iface->super.tx.cq_available;
+
+        sn = ep->tx.completion_count;
+        ucs_queue_for_each_extract(comp, &ep->super.comp, queue,
+                                   UCS_CIRCULAR_COMPARE16(comp->sn, <=, sn)) {
+            uct_invoke_completion(&comp->super,
+                                  ucs_derived_of(comp, uct_rc_iface_send_desc_t) + 1);
+        }
     }
 }
 
@@ -125,7 +135,7 @@ static inline ucs_status_t uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *ifac
 
             uct_ib_log_recv_completion(IBV_QPT_RC, &wc[i], hdr, uct_rc_ep_am_packet_dump);
 
-            status = uct_rc_iface_invoke_am(&iface->super, desc, hdr, wc[i].byte_len);
+            status = uct_rc_iface_invoke_am(&iface->super, hdr, wc[i].byte_len, desc);
             if (status == UCS_OK) {
                 ucs_mpool_put(desc);
             }

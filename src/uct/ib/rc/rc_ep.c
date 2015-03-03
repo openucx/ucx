@@ -48,7 +48,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
     self->unsignaled = 0;
     self->sl         = iface->config.sl;          /* TODO multi-rail */
     self->path_bits  = iface->super.path_bits[0]; /* TODO multi-rail */
-    ucs_callbackq_init(&self->comp);
+    ucs_queue_head_init(&self->comp);
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
@@ -172,36 +172,31 @@ void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
     snprintf(buffer, max, " am_id %d", rch->am_id);
 }
 
-void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self)
+void uct_rc_ep_get_bcopy_completion(uct_completion_t *self, void *data)
 {
-    uct_rc_iface_send_desc_t *desc = ucs_container_of(self, uct_rc_iface_send_desc_t,
-                                                      queue.super);
-    ucs_status_t status;
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(self, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->bcopy_recv.length);
-    status = desc->bcopy_recv.cb(desc, desc + 1, desc->bcopy_recv.length,
-                                 desc->bcopy_recv.arg);
-    if (status == UCS_OK) {
-        ucs_mpool_put(desc);
-    }
+    VALGRIND_MAKE_MEM_DEFINED(data, desc->super.length);
+    uct_invoke_completion(desc->comp, desc + 1);
+    ucs_mpool_put(desc);
 }
 
 #define UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(_num_bits, _is_be) \
-    void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be)(ucs_callback_t *self) \
+    void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be) \
+         (uct_completion_t *self, void *data) \
     { \
-        uct_rc_iface_send_desc_t *desc = ucs_container_of(self, uct_rc_iface_send_desc_t, \
-                                                          queue.super); \
-        uint##_num_bits##_t value; \
+        uct_rc_iface_send_desc_t *desc = \
+            ucs_derived_of(self, uct_rc_iface_send_desc_t); \
+        uint##_num_bits##_t *value = data; \
         \
-        VALGRIND_MAKE_MEM_DEFINED(desc + 1, sizeof(value)); \
-        value = *(uint##_num_bits##_t*)(desc + 1); \
+        VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
         if (_is_be && (_num_bits == 32)) { \
-            value = ntohl(value); \
+            *value = ntohl(*value); /* TODO swap in-place */ \
         } else if (_is_be && (_num_bits == 64)) { \
-            value = ntohll(value); \
+            *value = ntohll(*value); \
         } \
         \
-        desc->imm_recv.cb(desc->imm_recv.arg, value); \
+        uct_invoke_completion(desc->comp, value); \
         ucs_mpool_put(desc); \
     }
 

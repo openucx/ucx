@@ -32,7 +32,7 @@ typedef struct uct_ud_ep {
          uct_ud_psn_t       psn;          /* Next PSN to send */
          uct_ud_psn_t       max_psn;      /* Largest PSN that can be sent - (ack_psn + window) (from incoming packet) */
          uct_ud_psn_t       acked_psn;    /* last psn that was acked by remote side */
-         ucs_callbackq_t    window;       /* send window */
+         ucs_queue_head_t   window;       /* send window */
          UCS_STATS_NODE_DECLARE(stats);
     } tx;
     struct {

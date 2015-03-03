@@ -43,9 +43,7 @@ static void uct_ugni_progress(void *arg)
     ucs_trace_async("Completion received on %p", desc);
 
     if (NULL != desc->comp_cb) {
-        ucs_trace_async("Executing user defined callback %p",
-                        desc->comp_cb->super.func);
-        desc->comp_cb->super.func(&desc->comp_cb->super);
+        uct_invoke_completion(desc->comp_cb, desc + 1);
     }
     --iface->outstanding;
     --desc->ep->outstanding;

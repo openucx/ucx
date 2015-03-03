@@ -15,17 +15,6 @@ public:
     static const uint64_t SEED2 = 0x2222222222222222lu;
     static const uint64_t SEED3 = 0x3333333333333333lu;
 
-    static ucs_status_t get_bcopy_cb(void *desc, void *data, size_t length,
-                                     void *arg)
-    {
-        bcopy_ctx *ctx = reinterpret_cast<bcopy_ctx*>(arg);
-
-        memcpy(ctx->buf->ptr(), data, length);
-        ++ctx->self->m_completion_count;
-        delete ctx;
-        return UCS_OK;
-    }
-
     ucs_status_t put_short(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
@@ -45,6 +34,7 @@ public:
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
+        m_completion->length = 0;
         return uct_ep_put_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
                                 recvbuf.addr(), recvbuf.rkey(),
@@ -54,17 +44,16 @@ public:
     ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        bcopy_ctx *ctx = new bcopy_ctx();
-        ctx->self = this;
-        ctx->buf  = &sendbuf;
+        m_completion->dest   = sendbuf.ptr();
+        m_completion->length = sendbuf.length();
         return uct_ep_get_bcopy(ep, sendbuf.length(), recvbuf.addr(),
-                                recvbuf.rkey(), get_bcopy_cb,
-                                reinterpret_cast<void*>(ctx));
+                                recvbuf.rkey(), &m_completion->uct);
     }
 
     ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
+        m_completion->length = 0;
         return uct_ep_get_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
                                 recvbuf.addr(), recvbuf.rkey(),
@@ -86,12 +75,6 @@ public:
             wait_for_remote();
         }
     }
-
-private:
-    struct bcopy_ctx {
-        uct_p2p_rma_test     *self;
-        const mapped_buffer  *buf;
-    };
 };
 
 UCS_TEST_P(uct_p2p_rma_test, put_short) {

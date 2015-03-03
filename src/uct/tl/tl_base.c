@@ -118,7 +118,7 @@ static ucs_status_t uct_iface_stub_am_handler(void *desc, void *data,
 }
 
 ucs_status_t uct_set_am_handler(uct_iface_h tl_iface, uint8_t id,
-                                uct_bcopy_recv_callback_t cb, void *arg)
+                                uct_am_callback_t cb, void *arg)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 

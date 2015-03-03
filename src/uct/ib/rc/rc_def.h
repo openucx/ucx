@@ -12,6 +12,7 @@
 typedef struct uct_rc_ep                uct_rc_ep_t;
 typedef struct uct_rc_iface             uct_rc_iface_t;
 typedef struct uct_rc_ep_addr           uct_rc_ep_addr_t;
+typedef struct uct_rc_completion        uct_rc_completion_t;
 typedef struct uct_rc_iface_send_desc   uct_rc_iface_send_desc_t;
 typedef struct uct_rc_iface_config      uct_rc_iface_config_t;
 

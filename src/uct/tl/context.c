@@ -10,6 +10,7 @@
 #include "tl_base.h"
 
 #include <uct/api/uct.h>
+#include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 
 #define UCT_CONFIG_ENV_PREFIX "UCT_"

@@ -12,7 +12,7 @@
 
 #include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
-#include <ucs/datastruct/callbackq.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 
 
@@ -87,25 +87,20 @@ struct uct_rc_iface_config {
 };
 
 
+struct uct_rc_completion {
+    uct_completion_t         super;
+    ucs_queue_elem_t         queue;
+    uint16_t                 sn;
+#if ! NVALGRIND
+    unsigned                 length;
+#endif
+};
+
+
 struct uct_rc_iface_send_desc {
-    ucs_callbackq_elem_t     queue;
+    uct_rc_completion_t      super;
     uint32_t                 lkey;
-    union {
-        struct {
-            ucs_callback_t            *cb;
-        } callback;
-
-        struct {
-            uct_bcopy_recv_callback_t cb;
-            void                      *arg;
-            size_t                    length;
-        } bcopy_recv;
-
-        struct {
-            uct_imm_recv_callback_t   cb;
-            void                      *arg;
-        } imm_recv;
-    };
+    uct_completion_t         *comp;
 };
 
 
@@ -161,11 +156,11 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
-                       uct_rc_hdr_t *hdr, unsigned byte_len)
+uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned length,
+                       uct_ib_iface_recv_desc_t *desc)
 {
-    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, desc, hdr + 1,
-                               byte_len - sizeof(*hdr));
+    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                               length - sizeof(*hdr), desc);
 }
 
 #endif

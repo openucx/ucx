@@ -5,6 +5,10 @@
 * $HEADER$
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ucx_info.h"
 
 #include <ucs/sys/preprocessor.h>

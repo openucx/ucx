@@ -36,7 +36,7 @@ struct uct_rc_ep_addr {
 struct uct_rc_ep {
     uct_base_ep_t       super;
     struct ibv_qp       *qp;
-    ucs_callbackq_t     comp;
+    ucs_queue_head_t    comp;
     unsigned            unsignaled;
     uint8_t             sl;
     uint8_t             path_bits;
@@ -52,25 +52,25 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
 void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
                               char *buffer, size_t max);
 
-void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self);
+void uct_rc_ep_get_bcopy_completion(uct_completion_t *self, void *data);
 
-void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 0)(ucs_callback_t *self);
-void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 1)(ucs_callback_t *self);
-void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(64, 0)(ucs_callback_t *self);
-void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(64, 1)(ucs_callback_t *self);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 0)(uct_completion_t *self, void *data);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(32, 1)(uct_completion_t *self, void *data);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(64, 0)(uct_completion_t *self, void *data);
+void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(64, 1)(uct_completion_t *self, void *data);
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_ep_add_user_completion(uct_rc_ep_t* ep, uct_completion_t* comp, uint16_t sn)
 {
-    ucs_callbackq_elem_t* cbq;
+    uct_rc_completion_t* rc_comp;
 
     if (comp == NULL) {
         return;
     }
 
-    cbq = ucs_derived_of(&comp->super, ucs_callbackq_elem_t);
-    cbq->sn = sn;
-    ucs_callbackq_push(&ep->comp, cbq);
+    rc_comp = ucs_derived_of(comp, uct_rc_completion_t);
+    rc_comp->sn = sn;
+    ucs_queue_push(&ep->comp, &rc_comp->queue);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t

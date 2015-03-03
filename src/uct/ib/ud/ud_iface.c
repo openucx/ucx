@@ -256,7 +256,6 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_lkey
     uct_ud_send_skb_t *skb = obj;
 
     skb->lkey             = uct_ib_lkey_mr(lkey)->lkey; 
-    skb->queue.super.func = (void*)ucs_mpool_put; 
 }
 
 

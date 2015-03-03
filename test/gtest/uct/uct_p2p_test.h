@@ -33,6 +33,8 @@ protected:
 
     struct completion {
         uct_p2p_test     *self;
+        void             *dest;
+        size_t           length;
         uct_completion_t uct;
     };
 
@@ -58,7 +60,7 @@ private:
     void test_xfer_print(O& os, send_func_t send, size_t length,
                          direction_t direction);
 
-    static void completion_cb(ucs_callback_t *self);
+    static void completion_cb(uct_completion_t *self, void *data);
 
     static void log_handler(const char *file, unsigned line, const char *function,
                             unsigned level, const char *prefix, const char *message,
