@@ -67,12 +67,13 @@ uct_sysv_ep_t *uct_sysv_iface_lookup_ep(uct_sysv_iface_t *iface,
 ucs_status_t uct_sysv_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 {
     uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t);
-    ((uct_sysv_ep_addr_t*)ep_addr)->ep_id = iface->domain_id;
+    ((uct_sysv_ep_addr_t*)ep_addr)->ep_id = iface->addr;
     return UCS_OK;
 }
 
-ucs_status_t uct_sysv_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t 
-                                      *tl_iface_addr, uct_ep_addr_t *tl_ep_addr)
+ucs_status_t uct_sysv_ep_connect_to_ep(uct_ep_h tl_ep, 
+                                       uct_iface_addr_t *tl_iface_addr, 
+                                       uct_ep_addr_t *tl_ep_addr)
 {
     uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
     uct_sysv_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, 
@@ -97,7 +98,11 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
     if (0 == length)
         return UCS_OK;
 
-    /* FIXME do the short transfer */
+    /* FIXME add debug mode to check remote_addr within attached region */
+
+    memcpy(rkey[1], rkey[2], length);
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_sysv_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,

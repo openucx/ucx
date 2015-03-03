@@ -16,17 +16,12 @@ unsigned sysv_iface_global_counter = 0;
 /* called in the notifier chain and iface_flush */
 static void uct_sysv_progress(void *arg)
 {
-    /* FIXME not sure what this will do yet */
+    /* FIXME will need this for AM */
 }
 
 static ucs_status_t uct_sysv_iface_flush(uct_iface_h tl_iface)
 {
-    uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
-    if (0 == iface->outstanding) {
-        return UCS_OK;
-    }
-    uct_sysv_progress(iface);
-    return UCS_ERR_WOULD_BLOCK;
+    return UCS_OK;
 }
 
 /* Forward declaration for the delete function */
@@ -106,7 +101,6 @@ static ucs_status_t uct_sysv_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
 
 static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    /* FIXME why does a query set the value? */
     pd_attr->rkey_packed_size  = 4 * sizeof(uint64_t);
     return UCS_OK;
 }
@@ -158,7 +152,8 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
         return UCS_ERR_NO_MEMORY;
     }
 
-    /* Attach segment FIXME would like to extend ucs_sysv_alloc to do this? */
+    /* Attach segment */ 
+    /* FIXME would like to extend ucs_sysv_alloc to do this? */
     shmid = (int) ptr[1];
     ptr[3] = (uint64_t) shmat(shmid, NULL, 0); /* FIXME always a safe cast? */
     /* Check if attachment was successful */
@@ -185,7 +180,6 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
     /* need to add rkey release */
 }
 
-/* FIXME make sure all of these are implemented */
 uct_iface_ops_t uct_sysv_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t),
     .iface_get_address   = uct_sysv_iface_get_address,
@@ -200,7 +194,6 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
 
-/* FIXME make sure all of these are implemented */
 uct_pd_ops_t uct_sysv_pd_ops = {
     .query        = uct_sysv_pd_query,
     .mem_map      = uct_sysv_mem_map,

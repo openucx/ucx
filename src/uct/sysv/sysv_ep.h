@@ -18,7 +18,6 @@ typedef struct uct_sysv_ep_addr {
 
 typedef struct uct_sysv_ep {
     uct_ep_t          super;
-    gni_ep_handle_t   ep;
     unsigned          outstanding;
     uintptr_t         hash_key;
     struct uct_sysv_ep *next;
