@@ -24,10 +24,10 @@ static inline unsigned uct_sysv_ep_hash(uct_sysv_ep_t *ep)
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_sysv_ep_t, uct_sysv_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_sysv_ep_t, UCT_sysv_HASH_SIZE, 
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_sysv_ep_t, UCT_SYSV_HASH_SIZE, 
                                          uct_sysv_ep_hash);
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_sysv_ep_t, uct_sysv_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_sysv_ep_t, UCT_sysv_HASH_SIZE, 
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_sysv_ep_t, UCT_SYSV_HASH_SIZE, 
                                         uct_sysv_ep_hash);
 
 static UCS_CLASS_INIT_FUNC(uct_sysv_ep_t, uct_iface_t *tl_iface)
@@ -67,7 +67,7 @@ uct_sysv_ep_t *uct_sysv_iface_lookup_ep(uct_sysv_iface_t *iface,
 ucs_status_t uct_sysv_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 {
     uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t);
-    ((uct_sysv_ep_addr_t*)ep_addr)->ep_id = iface->addr;
+    ((uct_sysv_ep_addr_t*)ep_addr)->ep_id = iface->addr.nic_addr;
     return UCS_OK;
 }
 
@@ -92,15 +92,16 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
                                   unsigned length, uint64_t remote_addr,
                                   uct_rkey_t rkey)
 {
-    uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
-    uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t);
+    //uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
+    //uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t);
+    uintptr_t *mem_hndl = (void *)rkey;
 
     if (0 == length)
         return UCS_OK;
 
     /* FIXME add debug mode to check remote_addr within attached region */
 
-    memcpy(rkey[1], rkey[2], length);
+    memcpy((void *)mem_hndl[1], (void *)mem_hndl[2], length);
 
     return UCS_OK;
 }

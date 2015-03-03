@@ -23,6 +23,11 @@ ucs_config_field_t uct_sysv_iface_config_table[] = {
     {NULL}
 };
 
+ucs_status_t sysv_activate_domain(uct_sysv_context_t *sysv_ctx)
+{
+    return UCS_OK; /* No op */
+}
+
 ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resources_p,
                                       unsigned *num_resources_p)
@@ -31,14 +36,12 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                                    uct_sysv_context_t);
 
     uct_resource_desc_t *resources;
-    unsigned dev_index;
 
     if (sysv_ctx->num_devices == 0) {
         return UCS_ERR_NO_DEVICE;
     }
 
-    /* sysv tl currently supports only a single device.  
-     * leaving it general here for multiple devices. */
+    /* sysv tl currently supports only a single device */
 
     /* Allocate resources array */
     resources = ucs_calloc(sysv_ctx->num_devices, sizeof(uct_resource_desc_t),
@@ -48,10 +51,8 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
         return UCS_ERR_NO_MEMORY;
     }
 
-    for (dev_index = 0; dev_index < sysv_ctx->num_devices; ++dev_index) {
-        uct_device_get_resource(&sysv_ctx->devices[dev_index],
-                                &resources[dev_index]);
-    }
+    uct_device_get_resource(&sysv_ctx->device,
+                            &resources[0]);
 
     *num_resources_p = sysv_ctx->num_devices;
     *resources_p     = resources;
@@ -76,8 +77,8 @@ ucs_status_t uct_sysv_init(uct_context_h context)
 
     status = uct_sysv_device_create(context, 1, &sysv_ctx->device);
     if (status != UCS_OK) {
-        ucs_warn("Failed to initialize sysv device %d (%s), ignoring it",
-                 i, ucs_status_string(status));
+        ucs_warn("Failed to initialize sysv device 0 (%s), ignoring it",
+                  ucs_status_string(status));
         /* FIXME howto bail? */
     } else {
         ++sysv_ctx->num_devices;

@@ -29,6 +29,7 @@
 #include <sys/param.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
+#include <sys/ipc.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <stdint.h>

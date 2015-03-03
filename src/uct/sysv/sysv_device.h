@@ -21,6 +21,7 @@ typedef struct uct_sysv_device {
     char             type_name[MAX_TYPE_NAME];  /**< Device type name */
     char             fname[UCT_MAX_NAME_LEN];   /**< Device full name */
     uint32_t         device_id;                 /**< Device id */
+    cpu_set_t        cpu_mask;                  /**< CPU mask */
 } uct_sysv_device_t;
 
 ucs_status_t uct_sysv_device_create(uct_context_h context, int dev_id, 
