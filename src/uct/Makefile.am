@@ -12,7 +12,7 @@ libuct_la_LIBS     =
 libuct_la_CPPFLAGS = -I$(abs_top_srcdir)/src -I$(abs_top_builddir)/src 
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
-libuct_ladir       = $(includedir)
+libuct_ladir       = $(includedir)/uct
 
 nobase_dist_libuct_la_HEADERS = \
 	api/tl.h \

@@ -12,11 +12,11 @@ bin_PROGRAMS        =
 
 libucs_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libucs_la_LIBADD   = $(LIBM)
-libucs_ladir       = $(includedir)
+libucs_ladir       = $(includedir)/ucs
 
-noinst_HEADERS = \
-	async/async_int.h \
+nobase_dist_libucs_la_HEADERS = \
 	async/async.h \
+	async/async_int.h \
 	async/pipe.h \
 	async/signal.h \
 	async/thread.h \
@@ -33,32 +33,32 @@ noinst_HEADERS = \
 	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
-	debug/log.h \
 	debug/check.h \
 	debug/debug.h \
 	debug/instrument.h \
+	debug/log.h \
 	debug/memtrack.h \
-	gtest/test_helpers.h \
 	gtest/test.h \
-	stats/stats.h \
+	gtest/test_helpers.h \
 	stats/libstats.h \
+	stats/stats.h \
+	sys/arch.h \
 	sys/asm/asm-aarch64.h \
 	sys/asm/asm-ppc64.h \
 	sys/asm/asm-x86_64.h \
-	sys/arch.h \
 	sys/compiler.h \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/sys.h \
 	time/time.h \
-	time/timer_wheel.h \
 	time/timerq.h \
+	time/timer_wheel.h \
 	type/callback.h \
 	type/class.h \
 	type/component.h \
 	type/spinlock.h \
 	type/status.h 
-	
+
 libucs_la_SOURCES = \
 	async/async.c \
 	async/signal.c \

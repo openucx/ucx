@@ -7,7 +7,7 @@
 #ifndef UCP_H_
 #define UCP_H_
 
-#include "ucp_def.h"
+#include <ucp/api/ucp_def.h>
 #include <uct/api/uct.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
