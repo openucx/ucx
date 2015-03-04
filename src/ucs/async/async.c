@@ -40,6 +40,13 @@ static ucs_async_global_context_t ucs_async_global_context = {
     ((_mode) == UCS_ASYNC_MODE_THREAD) ? ucs_async_thread_ops._func(__VA_ARGS__) : \
                                            ucs_async_poll_ops._func(__VA_ARGS__)
 
+#define ucs_async_method_call_all(_func, ...) \
+    { \
+        ucs_async_signal_ops._func(__VA_ARGS__); \
+        ucs_async_thread_ops._func(__VA_ARGS__); \
+        ucs_async_poll_ops._func(__VA_ARGS__); \
+    }
+
 
 static ucs_status_t ucs_async_poll_init(ucs_async_context_t *async)
 {
@@ -50,6 +57,8 @@ static ucs_status_t ucs_async_poll_init(ucs_async_context_t *async)
 static ucs_async_ops_t ucs_async_poll_ops = {
     .init               = ucs_empty_function,
     .cleanup            = ucs_empty_function,
+    .block              = ucs_empty_function,
+    .unblock            = ucs_empty_function,
     .context_init       = ucs_async_poll_init,
     .context_try_block  = NULL,
     .context_unblock    = NULL,
@@ -190,9 +199,10 @@ static ucs_status_t ucs_async_add_handler(ucs_async_mode_t mode, int id,
     handler->arg        = arg;
     handler->async      = async;
     handler->miss_count = 0;
-
+    ucs_async_method_call(mode, block);
     status = ucs_hashed_ucs_async_handler_t_add(&ucs_async_global_context.handlers,
                                                 handler);
+    ucs_async_method_call(mode, unblock);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -217,8 +227,10 @@ static ucs_status_t ucs_async_remove_handler(int id,
     ucs_status_t status;
 
     search.id = id;
+    ucs_async_method_call_all(block);
     status = ucs_hashed_ucs_async_handler_t_remove(&ucs_async_global_context.handlers,
                                                    &search, &handler);
+    ucs_async_method_call_all(unblock);
     if (status != UCS_OK) {
         return status;
     }
@@ -347,7 +359,9 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
         }
 
         ucs_trace_async("handle missed event %d", value);
+        ucs_async_method_call_all(block);
         ucs_async_dispatch_handler(value, 0);
+        ucs_async_method_call_all(unblock);
     }
 }
 
@@ -373,22 +387,14 @@ void ucs_async_poll(ucs_async_context_t *async)
 
 void ucs_async_global_init()
 {
-    ucs_async_mode_t mode;
-
     ucs_hashed_ucs_async_handler_t_init(&ucs_async_global_context.handlers);
-    for (mode = 0; mode < UCS_ASYNC_MODE_LAST; ++mode) {
-        ucs_async_method_call(mode, init);
-    }
+    ucs_async_method_call_all(init);
 }
 
 void ucs_async_global_cleanup()
 {
-    ucs_async_mode_t mode;
-
     if (!ucs_hashed_ucs_async_handler_t_is_empty(&ucs_async_global_context.handlers)) {
         ucs_warn("async handler table is not empty during exit");
     }
-    for (mode = 0; mode < UCS_ASYNC_MODE_LAST; ++mode) {
-        ucs_async_method_call(mode, cleanup);
-    }
+    ucs_async_method_call_all(cleanup);
 }
