@@ -19,6 +19,13 @@
 #define UCT_RC_MLX5_MAX_BB   4 /* Max number of BB per WQE */
 
 
+enum {
+    UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
+    UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
+    UCT_RC_MLX5_IFACE_STAT_LAST
+};
+
+
 typedef struct uct_rc_mlx5_recv_desc uct_rc_mlx5_recv_desc_t;
 struct uct_rc_mlx5_recv_desc {
     uct_ib_iface_recv_desc_t   super;
@@ -76,6 +83,8 @@ typedef struct {
         uint16_t           tail;
         uint16_t           sw_pi;
     } rx;
+
+    UCS_STATS_NODE_DECLARE(stats);
 
 } uct_rc_mlx5_iface_t;
 

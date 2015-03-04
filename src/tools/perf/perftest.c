@@ -428,7 +428,7 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_test_params_t *pa
     ucs_status_t status;
     char buf[MAX_SIZE];
     int argc;
-    char *argv[MAX_SIZE];
+    char *argv[MAX_SIZE + 1];
     char c, *p;
 
     do {
