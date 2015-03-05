@@ -1,9 +1,10 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * @file        uct.h
+ * @date        2014-2015
+ * @copyright   Mellanox Technologies Ltd. All rights reserved.
+ * @copyright   Oak Ridge National Laboratory. All rights received.
+ * @brief       Unified Communication Transport
+ */
 
 #ifndef UCT_H_
 #define UCT_H_
@@ -17,9 +18,38 @@
 #include <stdio.h>
 #include <sched.h>
 
+/**
+* @defgroup RESOURCE   Communication Resource
+* @{
+* This section describes a concept of the Communication Resource and routines
+* associated with the concept.
+* @}
+*/
 
 /**
- * Communication resource.
+ * @defgroup CONTEXT    UCT Communication Context
+ * @{
+ * UCT context is a primary concept of UCX design which provides an isolation
+ * mechanism, allowing resources associated with the context to separate or
+ * share network communication context across multiple instances of parallel
+ * programming models.
+ *
+ * This section provides a detailed description of this concept and
+ * routines associated with it.
+ *
+ * @}
+ */
+
+/**
+ * @ingroup RESOURCE
+ * @brief Communication resource descriptor
+ *
+ * Resource descriptor is an object representing the network resource.
+ * Resource descriptor could represent a stand-alone communication resource
+ * such as a HCA port, network interface, or multiple resources such as
+ * multiple network interfaces or communication ports. It could also represent
+ * virtual communication resources that are defined over a single physical
+ * network interface.
  */
 typedef struct uct_resource_desc {
     char                     tl_name[UCT_MAX_NAME_LEN];   /**< Transport name */
@@ -45,42 +75,45 @@ struct uct_iface_addr {
 struct uct_ep_addr {
 };
 
-
 /**
- * Operation support flags.
+ * @ingroup RESOURCE
+ * @brief  List of capabilities supported by UCX API
+ *
+ * The enumeration list presents a full list of operations and capabilities
+ * exposed by UCX API.
  */
 enum {
     /* Active message capabilities */
-    UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0),
-    UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1),
-    UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2),
+    UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0), /**< Short active message */
+    UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1), /**< Buffered active message */
+    UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2), /**< Zero-copy active message */
 
     /* PUT capabilities */
-    UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4),
-    UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5),
-    UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6),
+    UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4), /**< Short put */
+    UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5), /**< Buffered put */
+    UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6), /**< Zero-copy put */
 
     /* GET capabilities */
-    UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8),
-    UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9),
-    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10),
+    UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8), /**< Short get */
+    UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9), /**< Buffered get */
+    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10) /**< Zero-copy get */,
 
     /* Atomic operations capabilities */
-    UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16),
-    UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17),
-    UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18),
-    UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19),
-    UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20),
-    UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21),
-    UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22),
-    UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23),
+    UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16), /**< 32bit atomic add */
+    UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17), /**< 64bit atomic add */
+    UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18), /**< 32bit atomic fetch-and-add */
+    UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19), /**< 64bit atomic fetch-and-add */
+    UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20), /**< 32bit atomic swap */
+    UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21), /**< 64bit atomic swap */
+    UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22), /**< 32bit atomic compare-and-swap */
+    UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23), /**< 64bit atomic compare-and-swap */
 
     /* Error handling capabilities */
-    UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF  = UCS_BIT(32), /* Invalid buffer for short */
-    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF  = UCS_BIT(33), /* Invalid buffer for bcopy */
-    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /* Invalid buffer for zcopy */
-    UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /* Invalid AM id on remote */
-    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /* Remote memory access */
+    UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF  = UCS_BIT(32), /**< Invalid buffer for short operation */
+    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF  = UCS_BIT(33), /**< Invalid buffer for buffered operation */
+    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
+    UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /**< Invalid AM id on remote */
+    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**<  Remote memory access */
 };
 
 
@@ -138,14 +171,33 @@ typedef struct uct_rkey_bundle {
  */
 struct uct_completion {
     uct_completion_callback_t func;    /**< User callback function */
-    char                      priv[0]; /**< Actual size of this field is returned
-                                            in completion_priv_len by uct_iface_query() */
+    char                      priv[0]; /**< Actual size of this field is
+                                            returned in completion_priv_len
+                                            by @ref uct_iface_query() */
 };
 
 
 /**
  * @ingroup CONTEXT
- * @brief Initialize global context.
+ * @brief   UCT global context initialization
+ *
+ * This routine creates and initializes a UCT @ref uct_context "global context".
+ *
+ * @warning The function must be called before any other UCT function call in
+ * the application.
+ *
+ * This routine discovers the available network interfaces, and initializes the
+ * network resources required for discovering the device.  This routine is
+ * responsible for inializing all information required for a particular
+ * communication scope, for example, MPI instance, OpenSHMEM instance.
+ *
+ * @note @li Higher level protocols can add additional communication isolation,
+ * as MPI does with it’s communicator object. A single communication context
+ * may be used to support multiple MPI communicators.  @li The context can be
+ * used to isolate the communication that corresponds to different protocols.
+ * For example, if MPI and OpenSHMEM are using UCCS to isolate the MPI
+ * communication from the OpenSHMEM communication, users should use different
+ * communication context for each of the protocol.
  *
  * @param [out] context_p   Filled with context handle.
  *
@@ -153,21 +205,46 @@ struct uct_completion {
  */
 ucs_status_t uct_init(uct_context_h *context_p);
 
-
 /**
  * @ingroup CONTEXT
- * @brief Destroy global context.
+ * @brief   UCT global context finalization
+ *
+ * This routine finalizes and releases the resources associated with a UCT
+ * global context.
+ *
+ * @warning Users cannot call any communication routines using the finalized
+ * UCT context.
+ *
+ * The finalization process releases and shuts down all resources associated
+ * with the @ref uct_context "context".  After calling this routine, calling
+ * any UCT routine without calling initialization routine is invalid.
  *
  * @param [in] context   Handle to context.
+ *
+ * @return void.
  */
 void uct_cleanup(uct_context_h context);
 
 
 /**
  * @ingroup CONTEXT
- * @brief Progress all communications of the context.
+ * @brief Explicit progress for UCT library
+ *
+ * This routine explicitly progresses any outstanding communication operations
+ * and active message requests.  Transport layers, implementing asynchronous
+ * progress using threads, require AM callbacks and other user code to be
+ * thread safe. This might not be desirable for some users, and this routine
+ * could be used by such users to progress the active message request and
+ * completing communication operations.
+ *
+ * @note @li In the current implementation, users @b MUST call the @ref
+ * uct_progress routine to receive the active message requests.  @li Typically,
+ * request wait and test routines call @ref uct_progress  to progress any
+ * outstanding operations.
  *
  * @param [in] context   Handle to context.
+ *
+ * @return void.
  */
 void uct_progress(uct_context_h context);
 
@@ -176,8 +253,15 @@ void uct_progress(uct_context_h context);
  * @ingroup CONTEXT
  * @brief Query for transport resources.
  *
+ * This routine queries the @ref uct_context "global context" for communication
+ * that are available for the context.
+ * As an input, users provide the @ref uct_context "global context" ,
+ * and as an output the routine returns an array of the resource @ref
+ * uct_resource_desc_t "descriptors".
+ *
  * @param [in]  context         Handle to context.
- * @param [out] resources_p     Filled with a pointer to an array of resource descriptors.
+ * @param [out] resources_p     Filled with a pointer to an array of resource
+ *                              descriptors.
  * @param [out] num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
@@ -189,10 +273,14 @@ ucs_status_t uct_query_resources(uct_context_h context,
 
 /**
  * @ingroup CONTEXT
- * @brief Release the list of resources returned from uct_query_resources.
+ * @brief Release the list of resources returned from @ref uct_query_resources.
+ *
+ * This routine releases the memory associated with the list of resources
+ * allocated by @ref uct_query_resources.
  *
  * @param [in] resources  Array of resource descriptors to release.
  *
+ * @return void.
  */
 void uct_release_resource_list(uct_resource_desc_t *resources);
 
