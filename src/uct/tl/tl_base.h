@@ -10,6 +10,7 @@
 
 
 #include <uct/api/uct.h>
+#include <uct/tl/context.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
@@ -92,6 +93,11 @@ typedef struct uct_base_iface {
     uct_iface_t       super;
     uct_am_handler_t  am[UCT_AM_ID_MAX];
     UCS_STATS_NODE_DECLARE(stats);
+
+    struct {
+        uint8_t       alloc_methods_count;
+        uint8_t       alloc_methods[UCT_ALLOC_METHOD_LAST];
+    } config;
 } uct_base_iface_t;
 
 
@@ -109,6 +115,11 @@ typedef struct uct_base_ep {
  * Specific transport extend this structure.
  */
 struct uct_iface_config {
+    struct {
+        uct_alloc_method_t *prio;
+        unsigned           count;
+    } alloc;
+
     size_t            max_short;
     size_t            max_bcopy;
 };
@@ -172,7 +183,12 @@ typedef struct uct_iface_mpool_config {
     }
 
 
-typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj, uct_lkey_t lkey);
+/**
+ * TL Memory pool object initialization callback.
+ */
+typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
+                uct_mem_h memh);
+
 
 /**
  * Create a memory pool for buffers used by TL interface.

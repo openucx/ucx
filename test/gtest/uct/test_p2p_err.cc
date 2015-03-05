@@ -40,7 +40,7 @@ public:
     }
 
     void test_error_run(enum operation op, uint8_t am_id,
-                        void *buffer, size_t length, uct_lkey_t lkey,
+                        void *buffer, size_t length, uct_mem_h memh,
                         uint64_t remote_addr, uct_rkey_t rkey)
     {
         error_count = 0;
@@ -58,7 +58,7 @@ public:
                                           buffer, length, remote_addr, rkey);
                 break;
             case OP_PUT_ZCOPY:
-                status = uct_ep_put_zcopy(sender_ep(), buffer, length, lkey,
+                status = uct_ep_put_zcopy(sender_ep(), buffer, length, memh,
                                           remote_addr, rkey, NULL);
                 break;
             case OP_AM_SHORT:
@@ -93,8 +93,10 @@ UCS_TEST_P(uct_p2p_err_test, local_access_error) {
     mapped_buffer sendbuf(16, 1, 1, sender());
     mapped_buffer recvbuf(16, 1, 2, receiver());
 
-    test_error_run(OP_PUT_ZCOPY, 0, sendbuf.ptr(), sendbuf.length() + 4,
-                   sendbuf.lkey(), recvbuf.addr(), recvbuf.rkey());
+    const size_t offset = 4 * 1024 * 1024;
+    test_error_run(OP_PUT_ZCOPY, 0,
+                   (char*)sendbuf.ptr() + offset, sendbuf.length() + offset,
+                   sendbuf.memh(), recvbuf.addr(), recvbuf.rkey());
 
     recvbuf.pattern_check(2);
 }
@@ -104,8 +106,10 @@ UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
     mapped_buffer sendbuf(16, 1, 1, sender());
     mapped_buffer recvbuf(16, 1, 2, receiver());
 
-    test_error_run(OP_PUT_ZCOPY, 0, sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
-                   recvbuf.addr() + 4, recvbuf.rkey());
+    const size_t offset = 4 * 1024 * 1024;
+    test_error_run(OP_PUT_ZCOPY, 0,
+                   (char*)sendbuf.ptr() + offset, sendbuf.length() + offset,
+                   sendbuf.memh(), recvbuf.addr() + 4, recvbuf.rkey());
 
     recvbuf.pattern_check(2);
 }
@@ -122,7 +126,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_bcopy_length) {
     mapped_buffer recvbuf(max_bcopy + 1, 1, 2, receiver());
 
     test_error_run(OP_PUT_BCOPY, 0, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_KEY, recvbuf.addr(), recvbuf.rkey());
+                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey());
 
     recvbuf.pattern_check(2);
 }
@@ -137,7 +141,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_short_length) {
     mapped_buffer sendbuf(max_short + 1, 1, 1, sender());
     mapped_buffer recvbuf(max_short + 1, 1, 2, receiver());
 
-    test_error_run(OP_PUT_SHORT, 0, sendbuf.ptr(), sendbuf.length(), UCT_INVALID_MEM_KEY,
+    test_error_run(OP_PUT_SHORT, 0, sendbuf.ptr(), sendbuf.length(), UCT_INVALID_MEM_HANDLE,
                    recvbuf.addr(), recvbuf.rkey());
 
     recvbuf.pattern_check(2);
@@ -149,7 +153,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_id) {
     mapped_buffer sendbuf(4, 1, 2, sender());
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_KEY, 0, UCT_INVALID_MEM_KEY);
+                   UCT_INVALID_MEM_HANDLE, 0, UCT_INVALID_MEM_HANDLE);
 }
 #endif
 

@@ -16,7 +16,7 @@
 #define UCT_MAX_NAME_LEN         64
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
-#define UCT_INVALID_MEM_KEY      ((uintptr_t)0)
+#define UCT_INVALID_MEM_HANDLE   NULL
 #define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
@@ -26,7 +26,7 @@ typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef struct uct_ep_addr       uct_ep_addr_t;
-typedef uintptr_t                uct_lkey_t;
+typedef void *                   uct_mem_h;
 typedef uintptr_t                uct_rkey_t;
 typedef struct uct_pd            *uct_pd_h;
 typedef struct uct_tl_ops        uct_tl_ops_t;

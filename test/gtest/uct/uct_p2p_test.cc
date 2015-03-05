@@ -115,6 +115,7 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     ucs_log_set_handler(log_handler);
     orig_log_level = ucs_global_opts.log_level;
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+    bool expect_log = ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA);
 
     test_xfer(send, length, direction);
 
@@ -122,7 +123,9 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     ucs_global_opts.log_level = orig_log_level;
     ucs_log_set_handler(ucs_log_default_handler);
 
-    EXPECT_GE(log_data_count - count_before, 1);
+    if (expect_log) {
+        EXPECT_GE(log_data_count - count_before, 1);
+    }
 }
 
 void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
