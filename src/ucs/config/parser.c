@@ -928,7 +928,7 @@ ucs_config_parser_print_field(FILE *stream, void *opts, const char *env_prefix,
         fprintf(stream, "#\n");
         ucs_config_print_doc_line_by_line(field, __print_stream_cb, stream);
         fprintf(stream, "#\n");
-        fprintf(stream, "# Value: %s\n", syntax_buf);
+        fprintf(stream, "# Syntax: %s\n", syntax_buf);
         fprintf(stream, "#\n");
 
         /* Extra docstring */
