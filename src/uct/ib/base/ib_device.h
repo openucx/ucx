@@ -30,8 +30,8 @@
 #define UCT_IB_MAX_MESSAGE_SIZE  (2 << 30)
 
 enum {
-    UCT_IB_DEVICE_STAT_MEM_MAP,
-    UCT_IB_DEVICE_STAT_MEM_UNMAP,
+    UCT_IB_DEVICE_STAT_MEM_ALLOC,
+    UCT_IB_DEVICE_STAT_MEM_REG,
     UCT_IB_DEVICE_STAT_ASYNC_EVENT,
     UCT_IB_DEVICE_STAT_LAST
 };
@@ -91,11 +91,6 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu);
 static inline struct ibv_exp_port_attr* uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {
     return &dev->port_attr[port_num - dev->first_port];
-}
-
-static inline struct ibv_mr* uct_ib_lkey_mr(uct_lkey_t lkey)
-{
-    return (struct ibv_mr *)(void*)lkey;
 }
 
 #endif

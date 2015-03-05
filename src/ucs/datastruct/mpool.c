@@ -235,7 +235,7 @@ static UCS_F_NOINLINE ucs_status_t ucs_mpool_allocate_chunk(ucs_mpool_h mp)
     status = mp->chunk_alloc_cb(mp->mp_context, &chunk_size, &ptr
                                 UCS_MEMTRACK_NAME(mp->name));
     if (status != UCS_OK) {
-        ucs_error("Failed to allocate memory pool chunk");
+        ucs_error("Failed to allocate memory pool chunk: %s", ucs_status_string(status));
         return status;
     }
 

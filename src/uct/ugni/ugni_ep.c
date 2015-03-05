@@ -130,7 +130,7 @@ static inline void uct_ugni_format_fma_amo(uct_ugni_base_desc_t *amo, gni_post_t
 
 static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, gni_post_type_t type,
                                         void *buffer, uint64_t remote_addr,
-                                        uct_lkey_t lkey, uct_rkey_t rkey,
+                                        uct_mem_h memh, uct_rkey_t rkey,
                                         unsigned length, uct_ugni_ep_t *ep,
                                         gni_cq_handle_t cq,
                                         uct_completion_t *comp)
@@ -139,7 +139,7 @@ static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, gni_post_typ
     rdma->desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
     rdma->desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
     rdma->desc.local_addr = (uint64_t) buffer;
-    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)lkey;
+    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
     rdma->desc.remote_addr = remote_addr;
     rdma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
     rdma->desc.length = length;
@@ -263,7 +263,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 }
 
 ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
@@ -274,7 +274,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
     UCT_CHECK_LENGTH(length <= iface->config.rdma_max_size, "put_zcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_WOULD_BLOCK);
     /* Setup Callback */
-    uct_ugni_format_rdma(rdma, GNI_POST_RDMA_PUT, buffer, remote_addr, lkey,
+    uct_ugni_format_rdma(rdma, GNI_POST_RDMA_PUT, buffer, remote_addr, memh,
                          rkey, length, ep, iface->local_cq, comp);
 
     ucs_trace_data("Posting PUT ZCOPY, GNI_PostRdma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
@@ -418,7 +418,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
 }
 
 ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
@@ -429,7 +429,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.rdma_max_size, "get_zcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_WOULD_BLOCK);
     /* Setup Callback */
-    uct_ugni_format_rdma(rdma, GNI_POST_RDMA_GET, buffer, remote_addr, lkey, rkey,
+    uct_ugni_format_rdma(rdma, GNI_POST_RDMA_GET, buffer, remote_addr, memh, rkey,
                          ucs_align_up_pow2(length, UGNI_GET_ALIGN), ep, iface->local_cq, comp);
 
     ucs_trace_data("Posting GET ZCOPY, GNI_PostRdma of size %"PRIx64" (%lu) "

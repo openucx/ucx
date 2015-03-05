@@ -102,34 +102,36 @@ uct_test::entity::~entity() {
     uct_cleanup(m_ucth);
 }
 
-uct_rkey_bundle_t uct_test::entity::mem_map(void *address, size_t length, uct_lkey_t *lkey_p) const {
+void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
+                                 size_t alignement, uct_mem_h *memh_p,
+                                 uct_rkey_bundle *rkey_bundle) const {
     ucs_status_t status;
     void *rkey_buffer;
     uct_pd_attr_t pd_attr;
-    uct_rkey_bundle_t rkey;
-
-    status = uct_mem_map(m_iface->pd, &address, &length, 0, lkey_p);
-    ASSERT_UCS_OK(status);
 
     status = uct_pd_query(m_iface->pd, &pd_attr);
     ASSERT_UCS_OK(status);
 
-    rkey_buffer = malloc(pd_attr.rkey_packed_size);
-
-    status = uct_rkey_pack(m_iface->pd, *lkey_p, rkey_buffer);
+    status = uct_pd_mem_alloc(m_iface->pd, UCT_ALLOC_METHOD_DEFAULT, length_p,
+                              alignement, address_p, memh_p, "test");
     ASSERT_UCS_OK(status);
 
-    status = uct_rkey_unpack(m_ucth, rkey_buffer, &rkey);
+    rkey_buffer = malloc(pd_attr.rkey_packed_size);
+
+    status = uct_rkey_pack(m_iface->pd, *memh_p, rkey_buffer);
+    ASSERT_UCS_OK(status);
+
+    status = uct_rkey_unpack(m_ucth, rkey_buffer, rkey_bundle);
     ASSERT_UCS_OK(status);
 
     free(rkey_buffer);
-    return rkey;
 }
 
-void uct_test::entity::mem_unmap(uct_lkey_t lkey, const uct_rkey_bundle_t& rkey) const {
+void uct_test::entity::mem_free(void *address, uct_mem_h memh,
+                                const uct_rkey_bundle_t& rkey) const {
     ucs_status_t status;
     uct_rkey_release(m_ucth, const_cast<uct_rkey_bundle_t*>(&rkey));
-    status = uct_mem_unmap(m_iface->pd, lkey);
+    status = uct_pd_mem_free(m_iface->pd, address, memh);
     ASSERT_UCS_OK(status);
 }
 
@@ -192,22 +194,31 @@ std::ostream& operator<<(std::ostream& os, const uct_resource_desc_t& resource) 
     return os << resource.tl_name << "/" << resource.dev_name;
 }
 
-uct_test::buffer::buffer(size_t size, size_t alignment, uint64_t seed)
+uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment,
+                                       uint64_t seed, const entity& entity) :
+    m_entity(entity)
 {
-    m_buf = (char*)memalign(alignment, ucs_align_up_pow2(size, sizeof(seed)));
-    if (m_buf == NULL) {
-        UCS_TEST_ABORT("Failed to allocate " << size << " bytes");
+    if (size > 0) {
+        size_t alloc_size = size;
+        m_entity.mem_alloc(&m_buf, &alloc_size, alignment, &m_memh, &m_rkey);
+        m_end = (char*)m_buf + size;
+    } else {
+        m_buf       = NULL;
+        m_end       = NULL;
+        m_memh      = UCT_INVALID_MEM_HANDLE;
+        m_rkey.rkey = UCT_INVALID_RKEY;
+        m_rkey.type = NULL;
     }
-
-    m_end = (char*)m_buf + size;
     pattern_fill(seed);
 }
 
-uct_test::buffer::~buffer() {
-    free(m_buf);
+uct_test::mapped_buffer::~mapped_buffer() {
+    if (m_memh != UCT_INVALID_MEM_HANDLE) {
+        m_entity.mem_free(m_buf, m_memh, m_rkey);
+    }
 }
 
-void uct_test::buffer::pattern_fill(uint64_t seed) {
+void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
     /* We may fill a little more; buffer has room for it */
     for (uint64_t *ptr = (uint64_t*)m_buf; (char*)ptr < m_end; ++ptr)
     {
@@ -216,11 +227,11 @@ void uct_test::buffer::pattern_fill(uint64_t seed) {
     }
 }
 
-void uct_test::buffer::pattern_check(uint64_t seed) {
+void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
     pattern_check(ptr(), length(), seed);
 }
 
-void uct_test::buffer::pattern_check(void *buffer, size_t length, uint64_t seed) {
+void uct_test::mapped_buffer::pattern_check(void *buffer, size_t length, uint64_t seed) {
     char* end = (char*)buffer + length;
     uint64_t *ptr = (uint64_t*)buffer;
     while ((char*)(ptr + 1) <= end) {
@@ -249,46 +260,26 @@ void uct_test::buffer::pattern_check(void *buffer, size_t length, uint64_t seed)
     }
 }
 
-void *uct_test::buffer::ptr() const {
+void *uct_test::mapped_buffer::ptr() const {
     return m_buf;
 }
 
-uintptr_t uct_test::buffer::addr() const {
+uintptr_t uct_test::mapped_buffer::addr() const {
     return (uintptr_t)m_buf;
 }
 
-size_t uct_test::buffer::length() const {
+size_t uct_test::mapped_buffer::length() const {
     return (char*)m_end - (char*)m_buf;
 }
 
-uint64_t uct_test::buffer::pat(uint64_t prev) {
+uint64_t uct_test::mapped_buffer::pat(uint64_t prev) {
     /* LFSR pattern */
     static const uint64_t polynom = 1337;
     return (prev << 1) | (__builtin_parityl(prev & polynom) & 1);
 }
 
-uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment,
-                                       uint64_t seed, const entity& entity) :
-    buffer(size, alignment, seed),
-    m_entity(entity)
-{
-    if (size > 0) {
-        m_rkey = m_entity.mem_map(ptr(), size, &m_lkey);
-    } else {
-        m_lkey      = UCT_INVALID_MEM_KEY;
-        m_rkey.rkey = UCT_INVALID_MEM_KEY;
-        m_rkey.type = NULL;
-    }
-}
-
-uct_test::mapped_buffer::~mapped_buffer() {
-    if (m_lkey != UCT_INVALID_MEM_KEY) {
-        m_entity.mem_unmap(m_lkey, m_rkey);\
-    }
-}
-
-uct_lkey_t uct_test::mapped_buffer::lkey() const {
-    return m_lkey;
+uct_mem_h uct_test::mapped_buffer::memh() const {
+    return m_memh;
 }
 
 uct_rkey_t uct_test::mapped_buffer::rkey() const {

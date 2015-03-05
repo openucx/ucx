@@ -30,8 +30,8 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_DEVICE_STAT_LAST,
     .counter_names = {
-        [UCT_IB_DEVICE_STAT_MEM_MAP]     = "mem_map",
-        [UCT_IB_DEVICE_STAT_MEM_UNMAP]   = "mem_unmap",
+        [UCT_IB_DEVICE_STAT_MEM_ALLOC]   = "mem_alloc",
+        [UCT_IB_DEVICE_STAT_MEM_REG]     = "mem_reg",
         [UCT_IB_DEVICE_STAT_ASYNC_EVENT] = "async_event"
     }
 };
@@ -76,76 +76,107 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
 
 static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    pd_attr->rkey_packed_size  = sizeof(uint32_t) * 2;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_mem_map(uct_pd_h pd, void **address_p,
-                                   size_t *length_p, unsigned flags,
-                                   uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
-{
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
-    struct ibv_mr *mr;
 
-    if (*address_p == NULL) {
-        if (IBV_EXP_HAVE_CONTIG_PAGES(&dev->dev_attr)) {
-            struct ibv_exp_reg_mr_in in = {
-                dev->pd,
-                NULL,
-                ucs_memtrack_adjust_alloc_size(*length_p),
-                UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
-                0
-            };
+    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s", uct_ib_device_name(dev));
+    pd_attr->rkey_packed_size  = sizeof(uint32_t) * 2;
+    pd_attr->cap.max_alloc     = ULONG_MAX; /* TODO query device */
+    pd_attr->cap.max_reg       = ULONG_MAX; /* TODO query device */
+    pd_attr->cap.flags         = UCT_PD_FLAG_REG;
 
-            mr = ibv_exp_reg_mr(&in);
-            if (mr == NULL) {
-                ucs_error("ibv_exp_reg_mr(NULL, length=%Zu) failed: %m", *length_p);
-                return UCS_ERR_IO_ERROR;
-            }
+    /* TODO make it configurable */
+    pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_HUGE;
+    pd_attr->alloc_methods.count = 1;
 
-            *address_p = mr->addr;
-            *length_p  = mr->length;
-            ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
-        } else {
-            ucs_error("Contig pages allocator not supported");
-            return UCS_ERR_UNSUPPORTED;
-        }
-    } else {
-        mr = ibv_reg_mr(dev->pd, *address_p, *length_p, UCT_IB_MEM_ACCESS_FLAGS);
-        if (mr == NULL) {
-            ucs_error("ibv_reg_mr(address=%p, length=%zu) failed: %m", *address_p,
-                      *length_p);
-            return UCS_ERR_IO_ERROR;
-        }
+    if (IBV_EXP_HAVE_CONTIG_PAGES(&dev->dev_attr)) {
+        pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
+        pd_attr->alloc_methods.methods[pd_attr->alloc_methods.count++] = UCT_ALLOC_METHOD_PD;
     }
 
-    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_MAP, +1);
-    *lkey_p = (uintptr_t)mr;
+    pd_attr->alloc_methods.methods[pd_attr->alloc_methods.count++] = UCT_ALLOC_METHOD_MMAP;
+    pd_attr->alloc_methods.methods[pd_attr->alloc_methods.count++] = UCT_ALLOC_METHOD_HEAP;
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
+static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
 {
-    uct_ib_device_t UCS_V_UNUSED *dev = ucs_derived_of(pd, uct_ib_device_t);
-    struct ibv_mr *mr = uct_ib_lkey_mr(lkey);
-    void UCS_V_UNUSED *address = mr->addr;
     int ret;
 
-    ucs_memtrack_releasing(&address);
     ret = ibv_dereg_mr(mr);
     if (ret != 0) {
         ucs_error("ibv_dereg_mr() failed: %m");
         return UCS_ERR_IO_ERROR;
     }
 
-    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_UNMAP, +1);
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
+static ucs_status_t uct_ib_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+                                     uct_mem_h *memh_p UCS_MEMTRACK_ARG)
+{
+    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
+    struct ibv_exp_reg_mr_in in = {
+        dev->pd,
+        NULL,
+        ucs_memtrack_adjust_alloc_size(*length_p),
+        UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
+        0
+    };
+    struct ibv_mr *mr;
+
+    mr = ibv_exp_reg_mr(&in);
+    if (mr == NULL) {
+        ucs_error("ibv_exp_reg_mr(in={NULL, length=%Zu, flags=0x%lx}) failed: %m",
+                  ucs_memtrack_adjust_alloc_size(*length_p),
+                  (unsigned long)(UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_ALLOC, +1);
+    *address_p = mr->addr;
+    *length_p  = mr->length;
+    ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
+    *memh_p = mr;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mem_free(uct_pd_h pd, uct_mem_h memh)
+{
+    struct ibv_mr *mr = memh;
+    void UCS_V_UNUSED *address = mr->addr;
+
+    ucs_memtrack_releasing(&address);
+    return uct_ib_dereg_mr(mr);
+}
+
+static ucs_status_t uct_ib_mem_reg(uct_pd_h pd, void *address, size_t length,
+                                   uct_mem_h *memh_p)
+{
+    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
+    struct ibv_mr *mr;
+
+    mr = ibv_reg_mr(dev->pd, address, length, UCT_IB_MEM_ACCESS_FLAGS);
+    if (mr == NULL) {
+        ucs_error("ibv_reg_mr(address=%p, length=%zu, flags=0x%x) failed: %m",
+                  address, length, UCT_IB_MEM_ACCESS_FLAGS);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_REG, +1);
+    *memh_p = mr;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mem_dereg(uct_pd_h pd, uct_mem_h memh)
+{
+    struct ibv_mr *mr = memh;
+    return uct_ib_dereg_mr(mr);
+}
+
+static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_mem_h memh,
                                      void *rkey_buffer)
 {
-    struct ibv_mr *mr = uct_ib_lkey_mr(lkey);
+    struct ibv_mr *mr = memh;
     uint32_t *ptr = rkey_buffer;
 
     *(ptr++) = UCT_IB_RKEY_MAGIC;
@@ -171,8 +202,10 @@ ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
 
 uct_pd_ops_t uct_ib_pd_ops = {
     .query        = uct_ib_pd_query,
-    .mem_map      = uct_ib_mem_map,
-    .mem_unmap    = uct_ib_mem_unmap,
+    .mem_alloc    = uct_ib_mem_alloc,
+    .mem_free     = uct_ib_mem_free,
+    .mem_reg      = uct_ib_mem_reg,
+    .mem_dereg    = uct_ib_mem_dereg,
     .rkey_pack    = uct_ib_rkey_pack,
 };
 

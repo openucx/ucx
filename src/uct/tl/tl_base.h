@@ -10,6 +10,7 @@
 
 
 #include <uct/api/uct.h>
+#include <uct/tl/context.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
@@ -173,7 +174,12 @@ typedef struct uct_iface_mpool_config {
     }
 
 
-typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj, uct_lkey_t lkey);
+/**
+ * TL Memory pool object initialization callback.
+ */
+typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
+                uct_mem_h memh);
+
 
 /**
  * Create a memory pool for buffers used by TL interface.

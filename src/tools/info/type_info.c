@@ -91,7 +91,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_context_tl_info_t);
         PRINT_SIZE(uct_ep_t);
         PRINT_SIZE(uct_ep_addr_t);
-        PRINT_SIZE(uct_lkey_t);
+        PRINT_SIZE(uct_mem_h);
         PRINT_SIZE(uct_rkey_t);
         PRINT_SIZE(uct_iface_t);
         PRINT_SIZE(uct_iface_addr_t);
@@ -100,6 +100,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_iface_mpool_config_t);
         PRINT_SIZE(uct_iface_ops_t);
         PRINT_SIZE(uct_pd_t);
+        PRINT_SIZE(uct_alloc_methods_t);
         PRINT_SIZE(uct_pd_attr_t);
         PRINT_SIZE(uct_pd_ops_t);
         PRINT_SIZE(uct_resource_desc_t);

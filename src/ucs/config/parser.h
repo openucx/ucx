@@ -139,7 +139,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_TYPE_UINT       {ucs_config_sscanf_uint,      ucs_config_sprintf_uint, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "unsigned"}
+                                    ucs_config_help_generic,     "unsigned integer"}
 
 #define UCS_CONFIG_TYPE_ULONG      {ucs_config_sscanf_ulong,     ucs_config_sprintf_ulong, \
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \

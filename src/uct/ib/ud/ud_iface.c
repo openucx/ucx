@@ -251,11 +251,11 @@ void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
 }
 
-static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
+static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {       
     uct_ud_send_skb_t *skb = obj;
-
-    skb->lkey             = uct_ib_lkey_mr(lkey)->lkey; 
+    struct ibv_mr *mr = memh;
+    skb->lkey = mr->lkey;
 }
 
 
