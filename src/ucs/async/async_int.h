@@ -42,6 +42,9 @@ typedef struct ucs_async_ops {
     void         (*init)();
     void         (*cleanup)();
 
+    void         (*block)();
+    void         (*unblock)();
+
     ucs_status_t (*context_init)(ucs_async_context_t *async);
     int          (*context_try_block)(ucs_async_context_t *async, int from_async);
     void         (*context_unblock)(ucs_async_context_t *async);

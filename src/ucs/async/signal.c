@@ -226,6 +226,20 @@ static void ucs_async_signal_allow(int allow)
     sigprocmask(allow ? SIG_UNBLOCK : SIG_BLOCK, &sigset, NULL);
 }
 
+static void ucs_async_signal_block_all()
+{
+    if (ucs_async_signal_global_context.event_count > 0) {
+        ucs_async_signal_allow(0);
+    }
+}
+
+static void ucs_async_signal_unblock_all()
+{
+    if (ucs_async_signal_global_context.event_count > 0) {
+        ucs_async_signal_allow(1);
+    }
+}
+
 static ucs_status_t ucs_async_signal_install_handler()
 {
     struct sigaction new_action;
@@ -528,6 +542,8 @@ static void ucs_async_signal_global_cleanup()
 ucs_async_ops_t ucs_async_signal_ops = {
     .init               = ucs_async_signal_global_init,
     .cleanup            = ucs_async_signal_global_cleanup,
+    .block              = ucs_async_signal_block_all,
+    .unblock            = ucs_async_signal_unblock_all,
     .context_init       = ucs_async_signal_init,
     .context_try_block  = ucs_async_signal_try_block,
     .context_unblock    = ucs_async_signal_unblock,

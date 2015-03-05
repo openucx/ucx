@@ -322,6 +322,8 @@ static void ucs_async_signal_global_cleanup()
 ucs_async_ops_t ucs_async_thread_ops = {
     .init               = ucs_empty_function,
     .cleanup            = ucs_async_signal_global_cleanup,
+    .block              = ucs_empty_function,
+    .unblock            = ucs_empty_function,
     .context_init       = ucs_async_thread_init,
     .context_try_block  = ucs_async_thread_try_block,
     .context_unblock    = ucs_async_thread_unblock,
