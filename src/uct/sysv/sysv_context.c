@@ -69,6 +69,7 @@ ucs_status_t uct_sysv_init(uct_context_h context)
 
     sysv_ctx->activated = false;
     sysv_ctx->num_ifaces = 0;
+    sysv_ctx->num_devices= 0;
 
     /* define one "device" for now. 
      * more complex logic for device(s) could be inserted here later on */

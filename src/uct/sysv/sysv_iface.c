@@ -54,7 +54,7 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
 {
     ucs_status_t rc;
     uintptr_t *mem_hndl = NULL;
-    int *shmid = NULL;
+    int *shmid = malloc(sizeof(int));
 
     if (0 == *length_p) {
         return UCS_ERR_INVALID_PARAM;
@@ -66,6 +66,9 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
+    /* debug
+    printf("mem_map *address_p(p) = %p\n", *address_p);
+    */
     if (NULL == *address_p) {
         rc = ucs_sysv_alloc(length_p, address_p, flags, shmid);
         if (rc != UCS_OK) {
@@ -73,11 +76,33 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
             return rc;
         }
         /* FIXME eh? */
-        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL); 
+        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
+    } else {
+        ucs_error("non-null shared memory attaching not yet supported");
+        return -1; /* FIXME how to bail? */
     }
+
+
+    /* debug
+    void * tmp = shmat(*shmid, NULL, 0);
+    printf("mem_map shmid(d) = %d\n", *shmid);
+    printf("mem_map tmp(p) = %p\n", (void *)tmp);
+    if ((void *)tmp == (void*)-1) {
+        if (errno == ENOMEM) {
+            return UCS_ERR_NO_MEMORY;
+        } else {
+            ucs_error("shmat(shmid=%d) returned unexpected error: %m", *shmid);
+        }
+    }
+    */
 
     mem_hndl[0] = *shmid;
     mem_hndl[1] = (uintptr_t)*address_p;
+    /* debug
+    printf("mem_map mem_hndl[0]u = %" PRIuPTR "\n", mem_hndl[0]);
+    printf("mem_map mem_hndl[1]x = %" PRIxPTR "\n", mem_hndl[1]);
+    printf("mem_map mem_hndl[1]p = %p\n", (void *)mem_hndl[1]);
+    */
 
     /* FIXME no use for pd input argument? */
 
@@ -116,7 +141,13 @@ static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
 
     ptr[0] = UCT_SYSV_RKEY_MAGIC;
     ptr[1] = mem_hndl[0];
-    ptr[2] = mem_hndl[1]; 
+    ptr[2] = mem_hndl[1];
+    /* debug
+    printf("rkey_pack ptr[1]u = %" PRIuPTR "\n", ptr[1]);
+    printf("rkey_pack ptr[2]x = %" PRIxPTR "\n", ptr[2]);
+    printf("rkey_pack ptr[2]p = %p\n", (void *)ptr[2]);
+    */
+
     ptr[3] = 0; /* will be attached addr on the remote PE - obtained at unpack */
     ucs_debug("Packed [ %"PRIx64" %"PRIx64" %"PRIx64" ]", ptr[0], ptr[1], ptr[2]);
     return UCS_OK;
@@ -128,8 +159,8 @@ static void uct_sysv_rkey_release(uct_context_h context, uct_rkey_t key)
     
     uintptr_t *mem_hndl = (void *)key;
 
-    ucs_sysv_free((void *)mem_hndl[3]);  /* detach the shared segment */
-    ucs_free(mem_hndl); 
+    ucs_sysv_free((void *)mem_hndl[2]);  /* detach the shared segment */
+    ucs_free(mem_hndl);
 }
 
 ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
@@ -141,7 +172,8 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
     uintptr_t *mem_hndl = NULL;
     int shmid;
 
-    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]", 
+    //ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]", 
+    printf("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]\n", 
                ptr[0], ptr[1], ptr[2]);
     magic = ptr[0];
     if (magic != UCT_SYSV_RKEY_MAGIC) {
@@ -160,8 +192,12 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
     /* FIXME would like to extend ucs_sysv_alloc to do this? */
     shmid = (int) ptr[1];
     ptr[3] = (uintptr_t) shmat(shmid, NULL, 0);
+    /* debug
+    printf("rkey_unpack shmid(d) = %d\n", shmid);
+    printf("rkey_unpack ptr[3](p) = %p\n", (void *)ptr[3]);
+    */
     /* Check if attachment was successful */
-    if (ptr == (void*)-1) {
+    if ((void *)ptr[3] == (void*)-1) {
         if (errno == ENOMEM) {
             return UCS_ERR_NO_MEMORY;
         } else if (RUNNING_ON_VALGRIND && (errno == EINVAL)) {
@@ -175,6 +211,14 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
     mem_hndl[0] = ptr[1]; /* shmid */
     mem_hndl[1] = ptr[2]; /* attached address on owner PE */
     mem_hndl[2] = ptr[3]; /* attached address on remote PE */
+    /* debug
+    printf("rkey_unpack mem_hndl[0]u = %" PRIuPTR "\n", mem_hndl[0]);
+    printf("rkey_unpack mem_hndl[1]x = %" PRIxPTR "\n", mem_hndl[1]);
+    printf("rkey_unpack mem_hndl[1]p = %p\n", (void *)  mem_hndl[1]);
+    printf("rkey_unpack mem_hndl[2]x = %" PRIxPTR "\n", mem_hndl[2]);
+    printf("rkey_unpack mem_hndl[2]p = %p\n", (void *)  mem_hndl[2]);
+    */
+
 
     /* FIXME is this a bug? */
     rkey_ob->type = (void*)uct_sysv_rkey_release;
@@ -211,11 +255,11 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
 {
     uct_sysv_context_t *sysv_ctx = 
         ucs_component_get(context, sysv, uct_sysv_context_t);
-    uct_sysv_device_t *dev; 
+    uct_sysv_device_t *dev;
 
     UCS_CLASS_CALL_SUPER_INIT(&uct_sysv_iface_ops);
 
-    dev = &sysv_ctx->device; 
+    dev = &sysv_ctx->device;
     if (NULL == dev) {
         ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
@@ -228,7 +272,7 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     self->pd.iface = self;
 
     self->super.super.pd   = &self->pd.super;
-    self->dev              = dev; 
+    self->dev              = dev;
 
     ucs_notifier_chain_add(&context->progress_chain, uct_sysv_progress, self);
 

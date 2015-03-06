@@ -112,6 +112,7 @@ libuct_la_SOURCES += \
     ugni/ugni_ep.c
 endif
 
+# FIXME these should be done conditionally
 noinst_HEADERS += \
     sysv/sysv_context.h \
     sysv/sysv_device.h \

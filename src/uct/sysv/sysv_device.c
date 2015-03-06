@@ -21,8 +21,8 @@ void uct_device_get_resource(uct_sysv_device_t *dev,
     ucs_snprintf_zero(resource->dev_name, 
                       sizeof(resource->dev_name), "%s", dev->fname);
     resource->local_cpus = dev->cpu_mask; /* FIXME */
-    resource->latency    = 0; /* FIXME */
-    resource->bandwidth  = 0; /* FIXME */
+    resource->latency    = 1; /* FIXME */
+    resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME */
     memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 }
 

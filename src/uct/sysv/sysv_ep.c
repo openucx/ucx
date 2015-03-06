@@ -101,7 +101,13 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
 
     /* FIXME add debug mode to check remote_addr within attached region */
 
-    memcpy((void *)mem_hndl[1], (void *)mem_hndl[2], length);
+    /* debug
+    printf("put_short mem_hndl[1]x = %" PRIxPTR "\n", mem_hndl[2]);
+    printf("put_short mem_hndl[1]p = %p\n", (void *)  mem_hndl[2]);
+    printf("put_short mem_hndl[2]x = %" PRIxPTR "\n", mem_hndl[2]);
+    printf("put_short mem_hndl[2]p = %p\n", (void *)  mem_hndl[2]);
+    */
+    memcpy((void *)mem_hndl[2], buffer, length);
 
     return UCS_OK;
 }

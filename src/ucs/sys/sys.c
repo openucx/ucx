@@ -432,7 +432,7 @@ size_t ucs_get_huge_page_size()
 ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid)
 {
     void *ptr;
-    int ret;
+    //int ret;
     struct shminfo shminfo, *shminfo_ptr;
 
     if (RUNNING_ON_VALGRIND) {
@@ -481,12 +481,26 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
 
     /* Attach segment */
     ptr = shmat(*shmid, NULL, 0);
+    /* debug
+    printf("sysv_alloc shmid(d) = %d\n", *shmid);
+    printf("sysv_alloc ptr(p) = %p\n", (void *)ptr);
+    */
+    if ((void *)ptr == (void*)-1) {
+        if (errno == ENOMEM) {
+            return UCS_ERR_NO_MEMORY;
+        } else {
+            ucs_error("shmat(shmid=%d) returned unexpected error: %m", *shmid);
+        }
+    }
+
 
     /* Remove segment, the attachment keeps a reference to the mapping */
-    ret = shmctl(*shmid, IPC_RMID, NULL);
-    if (ret != 0) {
-        ucs_warn("shmctl(IPC_RMID, shmid=%d) returned %d: %m", *shmid, ret);
-    }
+    /* FIXME having additional attaches to a removed segment is not portable
+    * behavior */
+    //ret = shmctl(*shmid, IPC_RMID, NULL);
+    //if (ret != 0) {
+    //    ucs_warn("shmctl(IPC_RMID, shmid=%d) returned %d: %m", *shmid, ret);
+    //}
 
     /* Check if attachment was successful */
     if (ptr == (void*)-1) {
