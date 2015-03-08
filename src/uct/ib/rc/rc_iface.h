@@ -25,7 +25,7 @@
 
 #define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
-                             return UCS_ERR_WOULD_BLOCK);
+                             return UCS_ERR_NO_RESOURCE);
 
 
 enum {

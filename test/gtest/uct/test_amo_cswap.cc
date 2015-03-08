@@ -34,7 +34,7 @@ public:
     ucs_status_t cswap32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
                          completion *comp) {
         if (worker.count > 0) {
-            return UCS_ERR_WOULD_BLOCK; /* Don't proceed until got a reply */
+            return UCS_ERR_NO_RESOURCE; /* Don't proceed until got a reply */
         }
         comp->uct.func = cswap_reply_cb<uint32_t>;
         comp->w        = &worker;
@@ -46,7 +46,7 @@ public:
     ucs_status_t cswap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
                          completion *comp) {
         if (worker.count > 0) {
-            return UCS_ERR_WOULD_BLOCK; /* Don't proceed until got a reply */
+            return UCS_ERR_NO_RESOURCE; /* Don't proceed until got a reply */
         }
         comp->uct.func = cswap_reply_cb<uint64_t>;
         comp->w        = &worker;

@@ -175,7 +175,7 @@ void uct_amo_test::worker::run() {
         ucs_status_t status;
         status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
                         get_completion(i));
-        while (status == UCS_ERR_WOULD_BLOCK) {
+        while (status == UCS_ERR_NO_RESOURCE) {
             m_entity.progress();
             status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
                             get_completion(i));

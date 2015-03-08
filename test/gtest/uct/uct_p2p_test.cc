@@ -185,7 +185,7 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
     ucs_status_t status;
     do {
         status = (this->*send)(ep, sendbuf, recvbuf);
-    } while (status == UCS_ERR_WOULD_BLOCK);
+    } while (status == UCS_ERR_NO_RESOURCE);
     if (status == UCS_OK) {
         return;
     } else if (status == UCS_INPROGRESS) {

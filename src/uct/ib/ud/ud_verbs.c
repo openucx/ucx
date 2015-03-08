@@ -73,19 +73,19 @@ static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_
      */
     if (iface->super.tx.available == 0) {
         ucs_trace_data("iface=%p out of tx wqe", iface);
-        return UCS_ERR_WOULD_BLOCK;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     skb = ucs_mpool_get(iface->super.tx.mp);
     if (!skb) {
         ucs_trace_data("iface=%p out of tx skbs", iface);
-        return UCS_ERR_WOULD_BLOCK;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (ep->super.tx.psn == ep->super.tx.max_psn) {
         ucs_trace_data("iface=%p ep=%p (%d->%d) tx window full (max_psn=%u)",
                        iface, ep, ep->super.ep_id, ep->super.dest_ep_id, (unsigned)ep->super.tx.max_psn);
-        return UCS_ERR_WOULD_BLOCK;
+        return UCS_ERR_NO_RESOURCE;
     } 
     neth = skb->neth;
     neth->psn = ep->super.tx.psn++;
