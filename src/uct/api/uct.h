@@ -555,6 +555,11 @@ UCT_INLINE_API void uct_iface_close(uct_iface_h iface)
     iface->ops.iface_close(iface);
 }
 
+UCT_INLINE_API void uct_iface_release_desc(uct_iface_h iface, void *desc)
+{
+    iface->ops.iface_release_desc(iface, desc);
+}
+
 UCT_INLINE_API ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
 {
     return iface->ops.ep_create(iface, ep_p);

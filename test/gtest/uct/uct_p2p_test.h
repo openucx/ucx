@@ -15,6 +15,8 @@
  */
 class uct_p2p_test : public uct_test {
 public:
+    uct_p2p_test(size_t rx_headroom);
+
     virtual void init();
     virtual void cleanup();
 
@@ -48,6 +50,7 @@ protected:
     uct_ep_h sender_ep() const;
     const entity& receiver() const;
 
+    const size_t m_rx_headroom;
     completion *m_completion;
     unsigned m_completion_count;
 

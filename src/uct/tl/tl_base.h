@@ -82,7 +82,7 @@ struct uct_tl_ops {
  */
 typedef struct uct_am_handler {
     uct_am_callback_t cb;
-    void                      *arg;
+    void              *arg;
 } uct_am_handler_t;
 
 

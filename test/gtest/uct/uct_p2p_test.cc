@@ -14,12 +14,20 @@ extern "C" {
 int             uct_p2p_test::log_data_count = 0;
 ucs_log_level_t uct_p2p_test::orig_log_level;
 
+
+uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
+    m_rx_headroom(rx_headroom),
+    m_completion(NULL),
+    m_completion_count(0)
+{
+}
+
 void uct_p2p_test::init() {
     uct_test::init();
 
     /* Create 2 connected endpoints */
-    entity *e1 = new entity(GetParam());
-    entity *e2 = new entity(GetParam());
+    entity *e1 = new entity(GetParam(), m_rx_headroom);
+    entity *e2 = new entity(GetParam(), m_rx_headroom);
     e1->add_ep();
     e2->add_ep();
     e1->connect(0, *e2, 0);

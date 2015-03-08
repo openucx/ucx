@@ -167,6 +167,15 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
                                   mp_p);
 }
 
+void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    void *ib_desc;
+
+    ib_desc = desc - iface->config.rx_headroom_offset;
+    ucs_mpool_put(ib_desc);
+}
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -196,10 +205,10 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
     self->gid_index                = config->gid_index;
     self->sl                       = config->sl;
     self->path_bits_count          = config->lid_path_bits.count;
-    self->config.rx_headroom       = rx_headroom;
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
                                      ucs_max(rx_headroom, rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
+    self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
     self->config.seg_size          = config->super.max_bcopy;
 
     if (self->path_bits_count == 0) {
@@ -254,8 +263,8 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
         goto err_destroy_recv_cq;
     }
 
-    ucs_debug("created uct_ib_iface_t rx_headroom %d payload_ofs %d hdr_ofs %d data_sz %d",
-              self->config.rx_headroom, self->config.rx_payload_offset,
+    ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
+              self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
 
     return UCS_OK;

@@ -15,6 +15,9 @@ public:
     static const uint64_t SEED2 = 0x2222222222222222lu;
     static const uint64_t SEED3 = 0x3333333333333333lu;
 
+    uct_p2p_rma_test() : uct_p2p_test(0) {
+    }
+
     ucs_status_t put_short(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {

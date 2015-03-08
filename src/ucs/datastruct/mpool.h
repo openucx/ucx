@@ -85,6 +85,11 @@ void ucs_mpool_destroy(ucs_mpool_h mp);
 void ucs_mpool_destroy_unchecked(ucs_mpool_h mp);
 
 /**
+ * Check that memory pool is empty. Also called from ucs_mpool_destroy().
+ */
+void ucs_mpool_check_empty(ucs_mpool_h mp);
+
+/**
  * Get an element from the memory pool.
  */
 void *ucs_mpool_get(ucs_mpool_h mp);

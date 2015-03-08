@@ -130,9 +130,9 @@ static inline ucs_status_t uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *ifac
             UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
 
             desc = (void*)wc[i].wr_id;
-            hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-            VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
+            uct_ib_iface_desc_received(&iface->super.super, desc, wc[i].byte_len, 1);
 
+            hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
             uct_ib_log_recv_completion(IBV_QPT_RC, &wc[i], hdr, uct_rc_ep_am_packet_dump);
 
             status = uct_rc_iface_invoke_am(&iface->super, hdr, wc[i].byte_len, desc);
@@ -329,13 +329,14 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_iface_t, uct_iface_t);
 
 
 uct_iface_ops_t uct_rc_verbs_iface_ops = {
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
+    .iface_query         = uct_rc_verbs_iface_query,
     .iface_get_address   = uct_rc_iface_get_address,
     .iface_flush         = uct_rc_iface_flush,
+    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
+    .iface_release_desc  = uct_ib_iface_release_desc,
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_iface = NULL,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
-    .iface_query         = uct_rc_verbs_iface_query,
     .ep_am_short         = uct_rc_verbs_ep_am_short,
     .ep_am_bcopy         = uct_rc_verbs_ep_am_bcopy,
     .ep_am_zcopy         = uct_rc_verbs_ep_am_zcopy,
