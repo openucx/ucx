@@ -92,19 +92,12 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
                                   unsigned length, uint64_t remote_addr,
                                   uct_rkey_t rkey)
 {
-    //uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
-    //uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t);
+    /*uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
+    uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t); */
     uintptr_t *mem_hndl = (void *)rkey;
     ptrdiff_t remote_offset;
 
-    /* FIXME add debug mode to check remote_addr within attached region */
-
-    /* debug
-    printf("put_short mem_hndl[1]x = %" PRIxPTR "\n", mem_hndl[2]);
-    printf("put_short mem_hndl[1]p = %p\n", (void *)  mem_hndl[2]);
-    printf("put_short mem_hndl[2]x = %" PRIxPTR "\n", mem_hndl[2]);
-    printf("put_short mem_hndl[2]p = %p\n", (void *)  mem_hndl[2]);
-    */
+    /* FIXME add debug/assertion to check remote_addr within attached region */
 
     /* num of bytes b/w desired put addr and start of remote region */
     remote_offset = remote_addr - mem_hndl[1];
