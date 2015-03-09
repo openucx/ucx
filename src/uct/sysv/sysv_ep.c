@@ -106,11 +106,8 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
     printf("put_short mem_hndl[2]p = %p\n", (void *)  mem_hndl[2]);
     */
 
-    /* dest addr -> (char *)addr_a + offset 
-     * where offset is gotten with diffptr using ptr_t or diffptr_t types 
-     * and use ucs_assert() to make sure the difference is positive */
-    remote_offset = (void *)mem_hndl[1] + (void *)remote_addr;
-    memcpy((void *)mem_hndl[2] + (void *)(remote_offset), buffer, length);
+    remote_offset = (void *)mem_hndl[1] - (void *)remote_addr;
+    memcpy((void *)(mem_hndl[2] + remote_offset), buffer, length);
 
     ucs_trace_data("Posting PUT Short, memcpy of size %u from %p to %p",
             length,
