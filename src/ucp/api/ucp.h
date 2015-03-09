@@ -146,13 +146,11 @@ typedef struct ucp_rkey {
  * @param [in]     context    UCP context to map memory on.
  * @param [out]    address_p  If != NULL, memory region to map.
  *                            If == NULL, filled with a pointer to allocated region.
- * @param [inout]  length_p   How many bytes to allocate. Filled with the actual
- *                            allocated size, which is larger than or equal to the
- *                            requested size.
+ * @param [inout]  length_p   How many bytes to allocate. 
  * @param [in]     flags      Allocation flags (currently reserved - set to 0).
  * @param [out]    lkey_p     Filled with local access key for allocated region.
  */
-ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t *length_p,
+ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
                          unsigned flags, ucp_lkey_h *lkey_p);
 
 /**
@@ -241,6 +239,6 @@ ucs_status_t ucp_ep_put(ucp_ep_h ep, void *buffer, unsigned length,
  * @ingroup CONTEXT
  * @brief Remote get. Returns when data are in local buffer
  */
-ucs_status_t ucp_ep_get(uct_ep_h ep, void *buffer, size_t length,
+ucs_status_t ucp_ep_get(ucp_ep_h ep, void *buffer, size_t length,
                         uint64_t remote_addr, ucp_rkey_h rkey);
 #endif
