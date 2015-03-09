@@ -62,6 +62,34 @@ struct ucp_iface_config {
     ucp_tl_config_t       tls;     /* UCTs to use */
 };
 
+struct ucp_ep_addr {
+};
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Serialize endpoint address
+ *
+ * Routine returns serialized address that can be used to connect
+ * to the endpoint.
+ * It is caller responsibility to free() serialized address
+ * @param [in]  ep             Handle to ucp endpoint
+ * @param [out] ep_addr_p      Fillled with the endpoint address
+ * @param [out] ep_addr_len_p  Length of the packed endpoint address
+ *
+ * @return Error code
+ */
+ucs_status_t ucp_ep_pack_address(ucp_ep_h ep, ucp_ep_addr_t **ep_addr_p, size_t *ep_addr_len_p);
+
+/**
+ *  @ingroup CONTEXT
+ *  @brief Connect to remote endpoint
+ *
+ *  @param [in] ep              Handle to ucp endpoint
+ *  @param [in] remote_ep_addr  Address of remote endpoint
+ *  @return Error code
+ */
+ucs_status_t ucp_ep_connect_to_ep(ucp_ep_h ep, ucp_ep_addr_t *remote_ep_addr);
 /**
  * @ingroup CONTEXT
  * @brief Initialize global ucp context.
