@@ -54,7 +54,7 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
 {
     ucs_status_t rc;
     uintptr_t *mem_hndl = NULL;
-    int *shmid = malloc(sizeof(int));
+    int shmid = 0;
 
     if (0 == *length_p) {
         return UCS_ERR_INVALID_PARAM;
@@ -70,7 +70,7 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
     printf("mem_map *address_p(p) = %p\n", *address_p);
     */
     if (NULL == *address_p) {
-        rc = ucs_sysv_alloc(length_p, address_p, flags, shmid);
+        rc = ucs_sysv_alloc(length_p, address_p, flags, &shmid);
         if (rc != UCS_OK) {
             ucs_error("Failed to attach %zu bytes", *length_p);
             return rc;
@@ -79,7 +79,7 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
         ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
     } else {
         ucs_error("non-null shared memory attaching not yet supported");
-        return -1; /* FIXME how to bail? */
+        return UCS_ERR_UNSUPPORTED; /* FIXME how to bail? */
     }
 
 
@@ -96,7 +96,7 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
     }
     */
 
-    mem_hndl[0] = *shmid;
+    mem_hndl[0] = shmid;
     mem_hndl[1] = (uintptr_t)*address_p;
     /* debug
     printf("mem_map mem_hndl[0]u = %" PRIuPTR "\n", mem_hndl[0]);
