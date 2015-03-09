@@ -147,13 +147,13 @@ struct uct_iface_attr {
         } get;
 
         struct {
-            size_t           max_short;  /*< Total max. size (incl. the header) */
-            size_t           max_bcopy;  /*< Total max. size (incl. the header) */
-            size_t           max_zcopy;  /*< Total max. size (incl. the header) */
-            size_t           max_hdr;    /*< Max. header size for bcopy/zcopy */
+            size_t           max_short;  /**< Total max. size (incl. the header) */
+            size_t           max_bcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_zcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_hdr;    /**< Max. header size for bcopy/zcopy */
         } am;
 
-        uint64_t             flags;      /*< Flags from UCT_IFACE_FLAG_xx */
+        uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
     } cap;
 
     size_t                   iface_addr_len;
@@ -167,8 +167,8 @@ struct uct_iface_attr {
  * @brief  Protection domain capability flags.
  */
 enum {
-    UCT_PD_FLAG_ALLOC     = UCS_BIT(0),  /*< PD support memory allocation */
-    UCT_PD_FLAG_REG       = UCS_BIT(1),  /*< PD support memory registration */
+    UCT_PD_FLAG_ALLOC     = UCS_BIT(0),  /**< PD support memory allocation */
+    UCT_PD_FLAG_REG       = UCS_BIT(1),  /**< PD support memory registration */
 };
 
 
