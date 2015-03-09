@@ -12,7 +12,7 @@
 
 #include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
-#include <ucs/datastruct/callbackq.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 
 
@@ -21,6 +21,20 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
+
+
+#define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
+                             return UCS_ERR_WOULD_BLOCK);
+
+
+enum {
+    UCT_RC_IFACE_STAT_RX_COMPLETION,
+    UCT_RC_IFACE_STAT_TX_COMPLETION,
+    UCT_RC_IFACE_STAT_NO_CQE,
+    UCT_RC_IFACE_STAT_LAST
+};
+
 
 struct uct_rc_iface {
     uct_ib_iface_t           super;
@@ -52,6 +66,8 @@ struct uct_rc_iface {
         enum ibv_mtu         path_mtu;
     } config;
 
+    UCS_STATS_NODE_DECLARE(stats);
+
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
 };
 
@@ -71,25 +87,20 @@ struct uct_rc_iface_config {
 };
 
 
+struct uct_rc_completion {
+    uct_completion_t         super;
+    ucs_queue_elem_t         queue;
+    uint16_t                 sn;
+#if ! NVALGRIND
+    unsigned                 length;
+#endif
+};
+
+
 struct uct_rc_iface_send_desc {
-    ucs_callbackq_elem_t     queue;
+    uct_rc_completion_t      super;
     uint32_t                 lkey;
-    union {
-        struct {
-            ucs_callback_t            *cb;
-        } callback;
-
-        struct {
-            uct_bcopy_recv_callback_t cb;
-            void                      *arg;
-            size_t                    length;
-        } bcopy_recv;
-
-        struct {
-            uct_imm_recv_callback_t   cb;
-            void                      *arg;
-        } imm_recv;
-    };
+    uct_completion_t         *comp;
 };
 
 
@@ -120,7 +131,7 @@ void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface);
-void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey);
+void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
 /**
  * Creates an RC QP and fills 'cap' with QP capabilities;
@@ -145,11 +156,11 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_ib_iface_recv_desc_t *desc,
-                       uct_rc_hdr_t *hdr, unsigned byte_len)
+uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned length,
+                       uct_ib_iface_recv_desc_t *desc)
 {
-    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, desc, hdr + 1,
-                               byte_len - sizeof(*hdr));
+    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                               length - sizeof(*hdr), desc);
 }
 
 #endif

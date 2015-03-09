@@ -134,6 +134,11 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cqe_size    = mcq->cqe_sz;
 #endif
 
+    /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
+     * 64b when polling.
+     */
+    mlx5_cq->cq_buf += mlx5_cq->cqe_size - sizeof(struct mlx5_cqe64);
+
     ret = ibv_exp_cq_ignore_overrun(cq);
     if (ret != 0) {
         ucs_error("Failed to modify send CQ to ignore overrun: %s", strerror(ret));

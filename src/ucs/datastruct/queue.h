@@ -226,6 +226,23 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
           iter = (*iter == &elem->member) ? &(*iter)->next : iter, \
             elem = ucs_container_of(*iter, typeof(*elem), member))
 
+/**
+ * Iterate and extract elements from the queue while a condition is true.
+ *
+ * @param elem    Variable which will hold point to the element in the queue.
+ * @param queue   Queue to iterate on.
+ * @param member  Member inside 'elem' which is the queue link.
+ * @param cond    Condition to continue iterating.
+ *
+ * TODO optimize
+ */
+#define ucs_queue_for_each_extract(elem, queue, member, cond) \
+    for (elem = ucs_container_of((queue)->head, typeof(*elem), member); \
+         \
+         !ucs_queue_is_empty(queue) && (cond) && ucs_queue_pull_non_empty(queue); \
+         \
+         elem = ucs_container_of((queue)->head, typeof(*elem), member))
+
 
 /*
  * Queue iteration

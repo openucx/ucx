@@ -31,8 +31,8 @@ void uct_p2p_test::init() {
     /* Allocate completion handle and set the callback */
     m_completion = (completion*)malloc(sizeof(completion) +
                                        sender().iface_attr().completion_priv_len);
-    m_completion->self           = this;
-    m_completion->uct.super.func = completion_cb;
+    m_completion->self     = this;
+    m_completion->uct.func = completion_cb;
 
     m_completion_count = 0;
 }
@@ -115,6 +115,7 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     ucs_log_set_handler(log_handler);
     orig_log_level = ucs_global_opts.log_level;
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+    bool expect_log = ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA);
 
     test_xfer(send, length, direction);
 
@@ -122,7 +123,9 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     ucs_global_opts.log_level = orig_log_level;
     ucs_log_set_handler(ucs_log_default_handler);
 
-    EXPECT_GE(log_data_count - count_before, 1);
+    if (expect_log) {
+        EXPECT_GE(log_data_count - count_before, 1);
+    }
 }
 
 void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
@@ -210,7 +213,8 @@ const uct_test::entity& uct_p2p_test::receiver() const {
     return ent(1);
 }
 
-void uct_p2p_test::completion_cb(ucs_callback_t *self) {
+void uct_p2p_test::completion_cb(uct_completion_t *self, void *data) {
     completion *comp = ucs_container_of(self, completion, uct);
+    memcpy(comp->dest, data, comp->length);
     ++comp->self->m_completion_count;
 }

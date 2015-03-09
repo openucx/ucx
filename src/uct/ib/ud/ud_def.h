@@ -13,7 +13,6 @@
 
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/frag_list.h>
-#include <ucs/datastruct/callbackq.h>
 #include <uct/ib/base/ib_iface.h>
 
 #define UCT_UD_QP_HASH_SIZE     256    
@@ -89,7 +88,7 @@ typedef struct uct_ud_neth {
 } UCS_S_PACKED uct_ud_neth_t;
 
 typedef struct uct_ud_send_skb {
-    ucs_callbackq_elem_t    queue;      /* in send window */
+    ucs_queue_elem_t        queue;      /* in send window */
     uint32_t                lkey;
     uint32_t                len;        /* data size */
     uct_ud_neth_t           neth[0];

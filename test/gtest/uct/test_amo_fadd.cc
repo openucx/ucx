@@ -11,14 +11,22 @@
 class uct_amo_fadd_test : public uct_amo_test {
 public:
 
-    ucs_status_t fadd32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
+    ucs_status_t fadd32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                        completion *comp) {
+        comp->self     = this;
+        comp->uct.func = atomic_reply_cb;
+        comp->atomic_size = sizeof(uint32_t);
         return uct_ep_atomic_fadd32(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    atomic_reply_cb, reinterpret_cast<void*>(this));
+                                    &comp->uct);
     }
 
-    ucs_status_t fadd64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf) {
+    ucs_status_t fadd64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
+                        completion *comp) {
+        comp->self     = this;
+        comp->uct.func = atomic_reply_cb;
+        comp->atomic_size = sizeof(uint64_t);
         return uct_ep_atomic_fadd64(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    atomic_reply_cb, reinterpret_cast<void*>(this));
+                                    &comp->uct);
     }
 
     template <typename T>
@@ -31,8 +39,8 @@ public:
 
         mapped_buffer recvbuf(sizeof(T), 1, 0, receiver());
 
-        T value = 0;//rand64();
-        T add   = 1;//rand64();
+        T value = rand64();
+        T add   = rand64();
         *(T*)recvbuf.ptr() = value;
 
         std::vector<uint64_t> exp_replies;

@@ -7,8 +7,11 @@
 
 #include "libperf_int.h"
 
+extern "C" {
+#include <ucs/debug/log.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/math.h>
+}
 
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, ucx_perf_data_layout_t DATA, bool ONESIDED>
@@ -28,14 +31,13 @@ public:
         uct_iface_attr_t attr;
         uct_iface_query(m_perf.iface, &attr);
 
-        m_completion_size = sizeof (comp) + attr.completion_priv_len;
+        m_completion_size = sizeof (comp_t) + attr.completion_priv_len;
         void *completions_buffer = malloc(m_completion_size * m_max_outstanding);
 
-        m_completions = (comp**)calloc(m_max_outstanding, sizeof(comp*));
+        m_completions = (comp_t**)calloc(m_max_outstanding, sizeof(comp_t*));
         for (unsigned i = 0; i < m_max_outstanding; ++i) {
-            m_completions[i] = (comp*)((char*)completions_buffer + i * m_completion_size);
-            m_completions[i]->uct.super.func = completion_cb;
-            m_completions[i]->self           = this;
+            m_completions[i] = (comp_t*)((char*)completions_buffer + i * m_completion_size);
+            m_completions[i]->self     = this;
         }
 
         uct_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, am_hander,
@@ -58,31 +60,23 @@ public:
         uct_progress(m_perf.context);
     }
 
-    static void completion_cb(ucs_callback_t *self)
-    {
-        comp *c = ucs_container_of(self, comp, uct);
-        --c->self->m_outstanding;
-    }
-
-    static ucs_status_t am_hander(void *desc, void *data, size_t length, void *arg)
+    static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)
     {
         ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
         *(psn_t*)arg = *(psn_t*)data;
         return UCS_OK;
     }
 
-    static ucs_status_t get_cb(void *desc, void *data, size_t length, void *arg)
+    static void zcopy_completion_cb(uct_completion_t *comp, void *data)
     {
-        uct_perf_test_runner *self = (uct_perf_test_runner*)arg;
-        *(psn_t*)self->m_perf.super.send_buffer = *(psn_t*)data;
+        uct_perf_test_runner *self = ucs_container_of(comp, comp_t, uct)->self;
         --self->m_outstanding;
-        return UCS_OK;
     }
 
-    static void atomic_cb(void *arg, uint64_t data)
+    static void fetch_completion_cb(uct_completion_t *comp, void *data)
     {
-        uct_perf_test_runner *self = (uct_perf_test_runner*)arg;
-        *(psn_t*)self->m_perf.super.send_buffer = (psn_t)data;
+        uct_perf_test_runner *self = ucs_container_of(comp, comp_t, uct)->self;
+        *(psn_t*)self->m_perf.super.send_buffer = *(psn_t*)data;
         --self->m_outstanding;
     }
 
@@ -108,10 +102,11 @@ public:
             case UCX_PERF_DATA_LAYOUT_ZCOPY:
                 *(psn_t*)buffer = sn;
                 header_size = m_perf.super.params.hdr_size;
+                comp->func = zcopy_completion_cb;
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID,
                                        buffer, header_size,
                                        (char*)buffer + header_size, length - header_size,
-                                       m_perf.send_lkey, comp);
+                                       m_perf.send_memh, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -126,7 +121,8 @@ public:
                 return uct_ep_put_bcopy(ep, (uct_pack_callback_t)memcpy, buffer,
                                         length, remote_addr, rkey);
             case UCX_PERF_DATA_LAYOUT_ZCOPY:
-                return uct_ep_put_zcopy(ep, buffer, length, m_perf.send_lkey,
+                comp->func = zcopy_completion_cb;
+                return uct_ep_put_zcopy(ep, buffer, length, m_perf.send_memh,
                                         remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
@@ -134,10 +130,11 @@ public:
         case UCX_PERF_TEST_CMD_GET:
             switch (DATA) {
             case UCX_PERF_DATA_LAYOUT_BCOPY:
-                return uct_ep_get_bcopy(ep, length, remote_addr, rkey,
-                                        get_cb, (void*)this);
+                comp->func = fetch_completion_cb;
+                return uct_ep_get_bcopy(ep, length, remote_addr, rkey, comp);
             case UCX_PERF_DATA_LAYOUT_ZCOPY:
-                return uct_ep_get_zcopy(ep, buffer, length, m_perf.send_lkey,
+                comp->func = zcopy_completion_cb;
+                return uct_ep_get_zcopy(ep, buffer, length, m_perf.send_memh,
                                         remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
@@ -151,32 +148,33 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_TEST_CMD_FADD:
+            comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_fadd32(ep, sn - prev_sn, remote_addr, rkey,
-                                            atomic_cb, (void*)this);
+                                            comp);
             } else if (length == sizeof(uint64_t)) {
                 return uct_ep_atomic_fadd64(ep, sn - prev_sn, remote_addr, rkey,
-                                            atomic_cb, (void*)this);
+                                            comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_TEST_CMD_SWAP:
+            comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey,
-                                            atomic_cb, (void*)this);
+                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey,
-                                            atomic_cb, (void*)this);
+                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_TEST_CMD_CSWAP:
+            comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_cswap32(ep, sn, prev_sn, remote_addr, rkey,
-                                            atomic_cb, (void*)this);
+                                             comp);
             } else if (length == sizeof(uint64_t)) {
                 return uct_ep_atomic_cswap64(ep, sn, prev_sn, remote_addr, rkey,
-                                            atomic_cb, (void*)this);
+                                             comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -450,12 +448,12 @@ public:
     }
 
 private:
-    struct comp {
+    typedef struct {
         uct_perf_test_runner *self;
         uct_completion_t     uct;
-    };
+    } comp_t;
 
-    comp * completion(unsigned index) {
+    comp_t *completion(unsigned index) {
         return m_completions[index % m_max_outstanding];
     }
 
@@ -463,7 +461,7 @@ private:
     unsigned           m_outstanding;
     const unsigned     m_max_outstanding;
     size_t             m_completion_size;
-    comp               **m_completions;
+    comp_t             **m_completions;
 };
 
 

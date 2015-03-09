@@ -21,15 +21,17 @@
 struct uct_pd_ops {
     ucs_status_t (*query)(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
-    /* TODO
-     * - support "mem attach", MPI-3 style, e.g by passing rkey
-     */
-    ucs_status_t (*mem_map)(uct_pd_h pd, void **address_p, size_t *length_p,
-                            unsigned flags, uct_lkey_t *lkey_p UCS_MEMTRACK_ARG);
+    ucs_status_t (*mem_alloc)(uct_pd_h pd, size_t *length_p, void **address_p,
+                              uct_mem_h *memh_p UCS_MEMTRACK_ARG);
 
-    ucs_status_t (*mem_unmap)(uct_pd_h pd, uct_lkey_t lkey);
+    ucs_status_t (*mem_free)(uct_pd_h pd, uct_mem_h memh);
 
-    ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer);
+    ucs_status_t (*mem_reg)(uct_pd_h pd, void *address, size_t length,
+                            uct_mem_h *memh_p);
+
+    ucs_status_t (*mem_dereg)(uct_pd_h pd, uct_mem_h memh);
+
+    ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
 };
 
 
@@ -47,7 +49,6 @@ struct uct_context {
     ucs_notifier_chain_t   progress_chain;
     unsigned               num_tls;
     uct_context_tl_info_t  *tls;
-    UCS_STATS_NODE_DECLARE(stats);
 };
 
 
@@ -56,6 +57,8 @@ struct uct_context {
 
 
 extern ucs_config_field_t uct_iface_config_table[];
+extern const char *uct_alloc_method_names[];
+
 
 /**
  * Add a transport to the list of existing transports on this context.
@@ -70,8 +73,5 @@ extern ucs_config_field_t uct_iface_config_table[];
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
                              ucs_config_field_t *config_table, size_t config_size,
                              const char *config_prefix, uct_tl_ops_t *tl_ops);
-
-
-
 
 #endif

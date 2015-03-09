@@ -48,6 +48,7 @@ static void print_resource_info(uct_context_h context,
                                 uct_iface_config_t *iface_config)
 {
     uct_iface_attr_t iface_attr;
+    uct_pd_attr_t pd_attr;
     ucs_status_t status;
     uct_iface_h iface;
     char buf[200] = {0};
@@ -63,66 +64,82 @@ static void print_resource_info(uct_context_h context,
         return;
     }
 
-    status = uct_iface_query(iface, &iface_attr);
+    printf("#\n");
+    status = uct_pd_query(iface->pd, &pd_attr);
+    if (status != UCS_OK) {
+        printf("#   < failed to query protection domain >\n");
+    } else {
+        printf("#      protection domain: %s\n", pd_attr.name);
+        if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
+            printf("#             allocate: <= %zu\n", pd_attr.cap.max_alloc);
+        }
+        if (pd_attr.cap.flags & UCT_PD_FLAG_REG) {
+            printf("#             register: <= %zu\n", pd_attr.cap.max_reg);
+        }
+        printf("#           remote key: %zu bytes\n", pd_attr.rkey_packed_size);
+    }
+
+    printf("#\n");
     printf("#      capabilities:\n");
+    status = uct_iface_query(iface, &iface_attr);
     if (status != UCS_OK) {
         printf("#   < failed to query interface >\n");
-        return;
-    }
+    } else {
+        PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
+        PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
+        PRINT_CAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_zcopy);
+        PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
+        PRINT_CAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_zcopy);
+        PRINT_CAP(AM_SHORT,  iface_attr.cap.flags, iface_attr.cap.am.max_short);
+        PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
+        PRINT_CAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_zcopy);
+        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
+            printf("#            am header: <= %zu\n", iface_attr.cap.am.max_hdr);
+        }
 
-    PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
-    PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
-    PRINT_CAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_zcopy);
-    PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
-    PRINT_CAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_zcopy);
-    PRINT_CAP(AM_SHORT,  iface_attr.cap.flags, iface_attr.cap.am.max_short);
-    PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
-    PRINT_CAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_zcopy);
-    if (iface_attr.cap.flags & (UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
-        printf("#            am header: <= %zu\n", iface_attr.cap.am.max_hdr);
-    }
+        PRINT_ATOMIC_CAP(ATOMIC_ADD,   iface_attr.cap.flags);
+        PRINT_ATOMIC_CAP(ATOMIC_FADD,  iface_attr.cap.flags);
+        PRINT_ATOMIC_CAP(ATOMIC_SWAP,  iface_attr.cap.flags);
+        PRINT_ATOMIC_CAP(ATOMIC_CSWAP, iface_attr.cap.flags);
 
-    PRINT_ATOMIC_CAP(ATOMIC_ADD,   iface_attr.cap.flags);
-    PRINT_ATOMIC_CAP(ATOMIC_FADD,  iface_attr.cap.flags);
-    PRINT_ATOMIC_CAP(ATOMIC_SWAP,  iface_attr.cap.flags);
-    PRINT_ATOMIC_CAP(ATOMIC_CSWAP, iface_attr.cap.flags);
-
-    buf[0] = '\0';
-    if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
-                                UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
-                                UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
-                                UCT_IFACE_FLAG_ERRHANDLE_AM_ID     |
-                                UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM))
-    {
+        buf[0] = '\0';
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
-                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF))
+                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
+                                    UCT_IFACE_FLAG_ERRHANDLE_AM_ID     |
+                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM))
         {
-            strncat(buf, " buffer (", sizeof(buf) - 1);
-            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF) {
-                strncat(buf, "short,", sizeof(buf) - 1);
+            if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
+                                        UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
+                                        UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF))
+            {
+                strncat(buf, " buffer (", sizeof(buf) - 1);
+                if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF) {
+                    strncat(buf, "short,", sizeof(buf) - 1);
+                }
+                if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF) {
+                    strncat(buf, "bcopy,", sizeof(buf) - 1);
+                }
+                if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF) {
+                    strncat(buf, "zcopy,", sizeof(buf) - 1);
+                }
+                buf[strlen(buf) - 1] = '\0';
+                strncat(buf, "),", sizeof(buf) - 1);
             }
-            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF) {
-                strncat(buf, "bcopy,", sizeof(buf) - 1);
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_AM_ID) {
+                strncat(buf, " active-message id,", sizeof(buf) - 1);
             }
-            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF) {
-                strncat(buf, "zcopy,", sizeof(buf) - 1);
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM) {
+                strncat(buf, " remote access,", sizeof(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
-            strncat(buf, "),", sizeof(buf) - 1);
+        } else {
+            strncat(buf, " none", sizeof(buf) - 1);
         }
-        if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_AM_ID) {
-            strncat(buf, " active-message id,", sizeof(buf) - 1);
-        }
-        if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM) {
-            strncat(buf, " remote access,", sizeof(buf) - 1);
-        }
-        buf[strlen(buf) - 1] = '\0';
-    } else {
-        strncat(buf, " none", sizeof(buf) - 1);
+        printf("#       error handling:%s\n", buf);
     }
-    printf("#       error handling:%s\n", buf);
 
+    uct_iface_close(iface);
     printf("#\n");
 }
 

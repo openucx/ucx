@@ -88,7 +88,7 @@ static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_
         return UCS_ERR_WOULD_BLOCK;
     } 
     neth = skb->neth;
-    skb->queue.sn = neth->psn = ep->super.tx.psn++;
+    neth->psn = ep->super.tx.psn++;
     neth->ack_psn = ep->super.rx.acked_psn = ucs_frag_list_sn(&ep->super.rx.ooo_pkts);
     uct_ud_neth_set_type_am(neth, &ep->super, id);
     
@@ -119,7 +119,7 @@ static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_
 
     skb->len = length;
     memcpy((char *)(am_hdr+1), buffer, length);
-    ucs_callbackq_push(&ep->super.tx.window, &skb->queue);
+    ucs_queue_push(&ep->super.tx.window, &skb->queue);
 
     return UCS_OK;
 }

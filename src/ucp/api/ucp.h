@@ -7,7 +7,7 @@
 #ifndef UCP_H_
 #define UCP_H_
 
-#include "ucp_def.h"
+#include <ucp/api/ucp_def.h>
 #include <uct/api/uct.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
@@ -125,5 +125,122 @@ ucs_status_t ucp_ep_create(ucp_iface_h ucp_iface, ucp_ep_h *ucp_ep);
  */
 void ucp_ep_destroy(ucp_ep_h ucp_ep);
 
+/* todo:
+ * atomic
+ *  non blocking put/get
+ *  thread safety
+ *  explicit connection establishment ?
+ *  upc: hint to ucp to use transport with ordered data delivery
+ */
 
+typedef struct ucp_lkey {
+} ucp_lkey_t;
+
+typedef struct ucp_rkey {
+} ucp_rkey_t;
+
+/**
+ * @ingroup CONTEXT
+ * @brief Map or allocate memory for zero-copy sends and remote access.
+ * 
+ * @param [in]     context    UCP context to map memory on.
+ * @param [out]    address_p  If != NULL, memory region to map.
+ *                            If == NULL, filled with a pointer to allocated region.
+ * @param [inout]  length_p   How many bytes to allocate. Filled with the actual
+ *                            allocated size, which is larger than or equal to the
+ *                            requested size.
+ * @param [in]     flags      Allocation flags (currently reserved - set to 0).
+ * @param [out]    lkey_p     Filled with local access key for allocated region.
+ */
+ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t *length_p,
+                         unsigned flags, ucp_lkey_h *lkey_p);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Undo the operation of uct_mem_map().
+ *
+ * @param [in]  context     UCP context which was used to allocate/map the memory.
+ * @paran [in]  lkey        Local access key to memory region.
+ */
+ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_lkey_h lkey);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Serialize memory region remote access key
+ *
+ * @param [in]  lkey          memory region local key.
+ * @param [out] rkey_buffer   contains serialized rkey. Caller is reponsible to free() it.
+ * @param [out] size          length of serialized rkey. 
+ */
+ucs_status_t ucp_rkey_pack(ucp_lkey_h lkey, void **rkey_buffer_p, size_t *size_p);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Create rkey from serialized data
+ *
+ * @param [in]  context       UCP context
+ * @param [in]  rkey_buffer   serialized rkey
+ * @param [out] rkey          filled with rkey
+ */
+ucs_status_t ucp_rkey_unpack(ucp_context_h context, void *rkey_buffer, ucp_rkey_h *rkey_p);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Destroy remote key.
+ *
+ * param [in] rkey
+ */
+ucs_status_t ucp_rkey_destroy(ucp_rkey_h rkey);
+
+/**
+ * @ingroup CONTEXT
+ * @brief If possible translate remote address into local address which can be used for direct memory access
+ * 
+ * @param [in]  ep              endpoint address
+ * @param [in]  remote_addr     address to translate
+ * @param [in]  rkey            remote memory key
+ * @param [out] local_addr      filled by local memory key
+ */
+ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey, void **local_addr_p);
+
+/**
+ * @ingroup CONTEXT
+ *
+ * @brief Force ordering between operations
+ *
+ * All operations started before fence will be completed before those
+ * issued after.
+ *
+ * @param [in] context  UCP context
+ */
+ucs_status_t ucp_fence(ucp_context_h context);
+
+
+/**
+ * @ingroup CONTEXT
+ *
+ * @brief Force remote completion
+ *
+ * All operations that were started before ucp_quiet will be completed on 
+ * remote when ucp_quiet returns
+ *
+ * @param [in] context  UCP context
+ */
+ucs_status_t ucp_quiet(ucp_context_h context);
+
+void ucp_progress(ucp_context_h context);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Remote put. Returns when local buffer is safe for reuse.
+ */
+ucs_status_t ucp_ep_put(ucp_ep_h ep, void *buffer, unsigned length,
+                        uint64_t remote_addr, ucp_rkey_h rkey);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Remote get. Returns when data are in local buffer
+ */
+ucs_status_t ucp_ep_get(uct_ep_h ep, void *buffer, size_t length,
+                        uint64_t remote_addr, ucp_rkey_h rkey);
 #endif

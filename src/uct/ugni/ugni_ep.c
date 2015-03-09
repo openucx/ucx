@@ -1,5 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -118,7 +119,7 @@ static inline void uct_ugni_format_fma(uct_ugni_base_desc_t *fma, void *buffer,
 
 static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, 
                                         void *buffer, uint64_t remote_addr,
-                                        uct_lkey_t lkey, uct_rkey_t rkey,
+                                        uct_mem_h memh, uct_rkey_t rkey,
                                         unsigned length, uct_ugni_ep_t *ep,
                                         gni_cq_handle_t cq,
                                         uct_completion_t *comp)
@@ -127,7 +128,7 @@ static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma,
     rdma->desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
     rdma->desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
     rdma->desc.local_addr = (uint64_t) buffer;
-    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)lkey;
+    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
     rdma->desc.remote_addr = remote_addr;
     rdma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
     rdma->desc.length = length;
@@ -200,7 +201,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
         return UCS_OK;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, fma, UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, fma, return UCS_ERR_WOULD_BLOCK);
     uct_ugni_format_fma(fma, buffer, remote_addr, rkey, length, ep);
 
     ucs_trace_data("Posting PUT Short, GNI_PostFma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
@@ -229,7 +230,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
         return UCS_OK;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc_buffer, fma, UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_buffer, fma, return UCS_ERR_WOULD_BLOCK);
 
     ucs_assert(length <= iface->config.fma_seg_size);
     pack_cb(fma + 1, arg, length);
@@ -246,7 +247,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 }
 
 ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
@@ -257,9 +258,9 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
         return UCS_OK;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(iface->free_desc, rdma, UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_WOULD_BLOCK);
     /* Setup Callback */
-    uct_ugni_format_rdma(rdma, buffer, remote_addr, lkey, rkey, length, ep,
+    uct_ugni_format_rdma(rdma, buffer, remote_addr, memh, rkey, length, ep,
                          iface->local_cq, comp);
 
     ucs_trace_data("Posting PUT ZCOPY, GNI_PostRdma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",

@@ -15,42 +15,65 @@
 #include <infiniband/arch.h>
 
 
+#if ENABLE_STATS
+static ucs_stats_class_t uct_rc_ep_stats_class = {
+    .name = "rc_ep",
+    .num_counters = UCT_RC_EP_STAT_LAST,
+    .counter_names = {
+        [UCT_RC_EP_STAT_QP_FULL]          = "qp_full",
+        [UCT_RC_EP_STAT_SINGAL]           = "signal"
+    }
+};
+#endif
+
 static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     struct ibv_qp_cap cap;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface)
+    UCS_CLASS_CALL_SUPER_INIT(&iface->super.super);
 
     status = uct_rc_iface_qp_create(iface, &self->qp, &cap);
     if (status != UCS_OK) {
-        return status;
+        goto err;
+    }
+
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_ep_stats_class,
+                                  self->super.stats);
+    if (status != UCS_OK) {
+        goto err_qp_destroy;
     }
 
     self->unsignaled = 0;
     self->sl         = iface->config.sl;          /* TODO multi-rail */
     self->path_bits  = iface->super.path_bits[0]; /* TODO multi-rail */
-    ucs_callbackq_init(&self->comp);
+    ucs_queue_head_init(&self->comp);
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
+
+err_qp_destroy:
+    ibv_destroy_qp(self->qp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(self->super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rc_iface_t);
     int ret;
 
     uct_rc_iface_remove_ep(iface, self);
 
+    UCS_STATS_NODE_FREE(self->stats);
     ret = ibv_destroy_qp(self->qp);
     if (ret != 0) {
         ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
     }
 }
 
-UCS_CLASS_DEFINE(uct_rc_ep_t, uct_ep_t)
+UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
 {
@@ -64,7 +87,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_iface_
                                      uct_ep_addr_t *tl_ep_addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.iface, uct_rc_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     uct_ib_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, uct_ib_iface_addr_t);
     uct_rc_ep_addr_t *ep_addr = ucs_derived_of(tl_ep_addr, uct_rc_ep_addr_t);
     struct ibv_qp_attr qp_attr;
@@ -149,36 +172,31 @@ void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
     snprintf(buffer, max, " am_id %d", rch->am_id);
 }
 
-void uct_rc_ep_get_bcopy_completion(ucs_callback_t *self)
+void uct_rc_ep_get_bcopy_completion(uct_completion_t *self, void *data)
 {
-    uct_rc_iface_send_desc_t *desc = ucs_container_of(self, uct_rc_iface_send_desc_t,
-                                                      queue.super);
-    ucs_status_t status;
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(self, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->bcopy_recv.length);
-    status = desc->bcopy_recv.cb(desc, desc + 1, desc->bcopy_recv.length,
-                                 desc->bcopy_recv.arg);
-    if (status == UCS_OK) {
-        ucs_mpool_put(desc);
-    }
+    VALGRIND_MAKE_MEM_DEFINED(data, desc->super.length);
+    uct_invoke_completion(desc->comp, desc + 1);
+    ucs_mpool_put(desc);
 }
 
 #define UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(_num_bits, _is_be) \
-    void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be)(ucs_callback_t *self) \
+    void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be) \
+         (uct_completion_t *self, void *data) \
     { \
-        uct_rc_iface_send_desc_t *desc = ucs_container_of(self, uct_rc_iface_send_desc_t, \
-                                                          queue.super); \
-        uint##_num_bits##_t value; \
+        uct_rc_iface_send_desc_t *desc = \
+            ucs_derived_of(self, uct_rc_iface_send_desc_t); \
+        uint##_num_bits##_t *value = data; \
         \
-        VALGRIND_MAKE_MEM_DEFINED(desc + 1, sizeof(value)); \
-        value = *(uint##_num_bits##_t*)(desc + 1); \
+        VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
         if (_is_be && (_num_bits == 32)) { \
-            value = ntohl(value); \
+            *value = ntohl(*value); /* TODO swap in-place */ \
         } else if (_is_be && (_num_bits == 64)) { \
-            value = ntohll(value); \
+            *value = ntohll(*value); \
         } \
         \
-        desc->imm_recv.cb(desc->imm_recv.arg, value); \
+        uct_invoke_completion(desc->comp, value); \
         ucs_mpool_put(desc); \
     }
 

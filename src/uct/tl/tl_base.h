@@ -10,7 +10,51 @@
 
 
 #include <uct/api/uct.h>
+#include <uct/tl/context.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/debug/log.h>
+#include <ucs/stats/stats.h>
+
+
+enum {
+    UCT_EP_STAT_AM,
+    UCT_EP_STAT_PUT,
+    UCT_EP_STAT_GET,
+    UCT_EP_STAT_ATOMIC,
+    UCT_EP_STAT_BYTES_SHORT,
+    UCT_EP_STAT_BYTES_BCOPY,
+    UCT_EP_STAT_BYTES_ZCOPY,
+    UCT_EP_STAT_FLUSH,
+    UCT_EP_STAT_LAST
+};
+
+enum {
+    UCT_IFACE_STAT_RX_AM,
+    UCT_IFACE_STAT_RX_AM_BYTES,
+    UCT_IFACE_STAT_TX_NO_DESC,
+    UCT_IFACE_STAT_RX_NO_DESC,
+    UCT_IFACE_STAT_FLUSH,
+    UCT_IFACE_STAT_LAST
+};
+
+
+#define UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_##_op, 1); \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_BYTES_##_method, _size);
+
+#define UCT_TL_EP_STAT_OP_IF_SUCCESS(_status, _ep, _op, _method, _size) \
+    if (_status >= 0) { \
+        UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
+    }
+
+#define UCT_TL_EP_STAT_ATOMIC(_ep) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_ATOMIC, 1);
+
+#define UCT_TL_EP_STAT_FLUSH(_ep) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1);
+
+#define UCT_TL_IFACE_STAT_FLUSH(_iface) \
+    UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH, 1);
 
 
 /**
@@ -36,7 +80,7 @@ struct uct_tl_ops {
  * Active message handle table entry
  */
 typedef struct uct_am_handler {
-    uct_bcopy_recv_callback_t cb;
+    uct_am_callback_t cb;
     void                      *arg;
 } uct_am_handler_t;
 
@@ -48,7 +92,22 @@ typedef struct uct_am_handler {
 typedef struct uct_base_iface {
     uct_iface_t       super;
     uct_am_handler_t  am[UCT_AM_ID_MAX];
+    UCS_STATS_NODE_DECLARE(stats);
+
+    struct {
+        uint8_t       alloc_methods_count;
+        uint8_t       alloc_methods[UCT_ALLOC_METHOD_LAST];
+    } config;
 } uct_base_iface_t;
+
+
+/**
+ * Base structure of all endpoints.
+ */
+typedef struct uct_base_ep {
+    uct_ep_t          super;
+    UCS_STATS_NODE_DECLARE(stats);
+} uct_base_ep_t;
 
 
 /**
@@ -56,6 +115,11 @@ typedef struct uct_base_iface {
  * Specific transport extend this structure.
  */
 struct uct_iface_config {
+    struct {
+        uct_alloc_method_t *prio;
+        unsigned           count;
+    } alloc;
+
     size_t            max_short;
     size_t            max_bcopy;
 };
@@ -89,24 +153,42 @@ typedef struct uct_iface_mpool_config {
  * Get a descriptor from memory pool, tell valgrind it's already defined, return
  * error if the memory pool is empty.
  *
- * @param _mp     Memory pool to get descriptor from.
- * @param _desc   Variable to assign descriptor to.
- * @param _error  Error value to return if memory poll is empty.
+ * @param _mp       Memory pool to get descriptor from.
+ * @param _desc     Variable to assign descriptor to.
+ * @param _failure  What do to if memory poll is empty.
  *
  * @return TX descriptor fetched from memory pool.
  */
-#define UCT_TL_IFACE_GET_TX_DESC(_mp, _desc, _error) \
+#define UCT_TL_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     { \
         _desc = ucs_mpool_get(_mp); \
         if (_desc == NULL) { \
-            return _error; \
+            UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_DESC, 1); \
+            _failure; \
         } \
         \
         VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
     }
 
 
-typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj, uct_lkey_t lkey);
+#define UCT_TL_IFACE_GET_RX_DESC(_iface, _mp, _desc, _failure) \
+    { \
+        _desc = ucs_mpool_get(_mp); \
+        if ((_desc) == NULL) { \
+            UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_RX_NO_DESC, 1); \
+            _failure; \
+        } \
+        \
+        VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
+    }
+
+
+/**
+ * TL Memory pool object initialization callback.
+ */
+typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
+                uct_mem_h memh);
+
 
 /**
  * Create a memory pool for buffers used by TL interface.
@@ -127,11 +209,37 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
                                     const char *name, ucs_mpool_h *mp_p);
 
 
-static inline ucs_status_t uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id,
-                                               void *desc, void *data, unsigned length)
+/**
+ * Invoke active message handler.
+ *
+ * @param iface    Interface to invoke the handler for.
+ * @param id       Active message ID.
+ * @param data     Received data.
+ * @param length   Length of received data.
+ * @param desc     Receive descriptor.
+ */
+static inline ucs_status_t
+uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
+                    unsigned length, void *desc)
 {
     uct_am_handler_t *handler = &iface->am[id];
-    return handler->cb(desc, data, length, handler->arg);
+    UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
+    UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
+    return handler->cb(handler->arg, data, length, desc);
+}
+
+
+/**
+ * Invoke send completion.
+ *
+ * @param comp   Completion to invoke.
+ * @param data   Optional completion data (operation reply).
+ */
+static UCS_F_ALWAYS_INLINE
+void uct_invoke_completion(uct_completion_t *comp, void *data)
+{
+    ucs_trace_func("comp=%p, data=%p", comp, data);
+    comp->func(comp, data);
 }
 
 #endif

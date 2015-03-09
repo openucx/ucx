@@ -11,7 +11,6 @@ extern "C" {
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/datastruct/callbackq.h>
 #include <ucs/time/time.h>
 }
 
@@ -273,6 +272,56 @@ UCS_TEST_F(test_datatype, queue_splice) {
     EXPECT_EQ(&elem2, elem);
 }
 
+typedef struct {
+    ucs_queue_elem_t queue;
+    uint16_t         sn;
+} ucs_test_callbackq_elem_t;
+
+static int ucs_test_callbackq_pull(ucs_queue_head_t *queue, uint16_t sn)
+{
+    ucs_test_callbackq_elem_t *elem;
+    int count = 0;
+
+    ucs_queue_for_each_extract(elem, queue, queue,
+                               UCS_CIRCULAR_COMPARE16(elem->sn, <=, sn)) {
+        elem->sn = 0;
+        ++count;
+    }
+
+    return count;
+}
+
+UCS_TEST_F(test_datatype, queue_extract_if) {
+    ucs_queue_head_t queue;
+    ucs_test_callbackq_elem_t elem1, elem2, elem3;
+    unsigned count;
+
+    ucs_queue_head_init(&queue);
+
+    elem1.sn = 1;
+    elem2.sn = 2;
+    elem3.sn = 3;
+
+    ucs_queue_push(&queue, &elem1.queue);
+    ucs_queue_push(&queue, &elem2.queue);
+    ucs_queue_push(&queue, &elem3.queue);
+
+    count = ucs_test_callbackq_pull(&queue, 0);
+    EXPECT_EQ(0u, count);
+
+    count = ucs_test_callbackq_pull(&queue, 1);
+    EXPECT_EQ(1u, count);
+
+    count = ucs_test_callbackq_pull(&queue, 2);
+    EXPECT_EQ(1u, count);
+    EXPECT_EQ(0u, elem1.sn); /* should be removed */
+    EXPECT_EQ(0u, elem2.sn); /* should be removed */
+
+    count = ucs_test_callbackq_pull(&queue, 10);
+    EXPECT_EQ(1u, count);
+    EXPECT_EQ(0u, elem3.sn); /* should be removed */
+}
+
 UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_t pa;
     uint32_t value;
@@ -519,15 +568,16 @@ UCS_TEST_F(test_datatype, notifier_chain) {
     }
 }
 
+#if 0
 void test_callbackq_cb(ucs_callback_t *self)
 {
-    ucs_callbackq_elem_t *elem = ucs_derived_of(self, ucs_callbackq_elem_t);
+    ucs_test_callbackq_elem_t *elem = ucs_derived_of(self, ucs_test_callbackq_elem_t);
     elem->sn = 0;
 }
 
 UCS_TEST_F(test_datatype, callbackq) {
     ucs_callbackq_t cbq;
-    ucs_callbackq_elem_t elem1, elem2, elem3;
+    ucs_test_callbackq_elem_t elem1, elem2, elem3;
     unsigned count;
 
     ucs_callbackq_init(&cbq);
@@ -543,20 +593,21 @@ UCS_TEST_F(test_datatype, callbackq) {
     ucs_callbackq_push(&cbq, &elem2);
     ucs_callbackq_push(&cbq, &elem3);
 
-    count = ucs_callbackq_pull(&cbq, 0);
+    count = ucs_test_callbackq_pull(&cbq, 0);
     EXPECT_EQ(0u, count);
 
-    count = ucs_callbackq_pull(&cbq, 1);
+    count = ucs_test_callbackq_pull(&cbq, 1);
     EXPECT_EQ(1u, count);
 
-    count = ucs_callbackq_pull(&cbq, 2);
+    count = ucs_test_callbackq_pull(&cbq, 2);
     EXPECT_EQ(1u, count);
     EXPECT_EQ(0u, elem1.sn); /* should be removed */
     EXPECT_EQ(0u, elem2.sn); /* should be removed */
 
-    count = ucs_callbackq_pull(&cbq, 10);
+    count = ucs_test_callbackq_pull(&cbq, 10);
     EXPECT_EQ(1u, count);
     EXPECT_EQ(0u, elem3.sn); /* should be removed */
 
     ucs_callbackq_cleanup(&cbq);
 }
+#endif

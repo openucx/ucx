@@ -18,11 +18,22 @@
 
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
-  {"RC_", "IB_RX_INLINE=32", NULL,
+  {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
   {NULL}
 };
+
+#if ENABLE_STATS
+ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
+    .name = "mlx5",
+    .num_counters = UCT_RC_MLX5_IFACE_STAT_LAST,
+    .counter_names = {
+     [UCT_RC_MLX5_IFACE_STAT_RX_INL_32] = "rx_inl_32",
+     [UCT_RC_MLX5_IFACE_STAT_RX_INL_64] = "rx_inl_64"
+    }
+};
+#endif
 
 static inline struct mlx5_wqe_srq_next_seg*
 uct_rc_mlx5_iface_get_srq_wqe(uct_rc_mlx5_iface_t *iface, unsigned index)
@@ -49,10 +60,8 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
     while (count < max) {
         ucs_assert(head != iface->rx.tail);
 
-        desc = ucs_mpool_get(iface->super.rx.mp);
-        if (desc == NULL) {
-            break;
-        }
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, iface->super.rx.mp,
+                                 desc, break);
 
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, head);
 
@@ -80,15 +89,18 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
 
 static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 {
+    uct_rc_completion_t *comp;
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
     uint16_t hw_ci;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq);
+    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, sizeof(struct mlx5_cqe64));
     if (cqe == NULL) {
         return;
     }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
 
     ucs_memory_cpu_load_fence();
 
@@ -104,7 +116,15 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ++iface->super.tx.cq_available;
 
     /* Process completions */
-    ucs_callbackq_pull(&ep->super.comp, hw_ci);
+    ucs_queue_for_each_extract(comp, &ep->super.comp, queue,
+                               UCS_CIRCULAR_COMPARE16(comp->sn, <=, hw_ci)) {
+        if (0 /*cqe->op_own & MLX5_INLINE_SCATTER_32 */ && (comp->sn == hw_ci)) {
+            uct_invoke_completion(&comp->super, cqe);
+        } else {
+            uct_invoke_completion(&comp->super,
+                                  ucs_derived_of(comp, uct_rc_iface_send_desc_t) + 1);
+        }
+    }
 }
 
 static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
@@ -118,7 +138,7 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     uint16_t wqe_ctr_be;
     ucs_status_t status;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq);
+    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size);
     if (cqe == NULL) {
         /* If not CQE - post receives */
         max_batch = iface->super.config.rx_max_batch;
@@ -128,11 +148,9 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
         return;
     }
 
+    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
+
     ucs_assert(!ucs_queue_is_empty(&iface->rx.desc_q));
-
-    /* TODO support CQE size of 128 */
-    ucs_assertv(iface->rx.cq.cqe_size == 64, "cqe_size=%d", iface->rx.cq.cqe_size);
-
     ucs_memory_cpu_load_fence();
 
     desc     = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q, uct_rc_mlx5_recv_desc_t, queue);
@@ -143,19 +161,18 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
      * Support cases of inline scatter by pointing directly to CQE.
      */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-        uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, cqe, uct_rc_ep_am_packet_dump);
-        status = uct_rc_iface_invoke_am(&iface->super, &desc->super,
-                                        (uct_rc_hdr_t*)cqe, byte_len);
+        hdr = (uct_rc_hdr_t*)cqe;
+        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_32, 1);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
-        /* TODO support inline scatter of 64b */
-        ucs_fatal("inl data @ %p", cqe - 1);
+        hdr = (uct_rc_hdr_t*)(cqe - 1);
+        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_64, 1);
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
-        uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
-        status = uct_rc_iface_invoke_am(&iface->super, &desc->super, hdr,
-                                        byte_len);
     }
+
+    uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
+    status = uct_rc_iface_invoke_am(&iface->super, hdr, byte_len, &desc->super);
     if (status == UCS_OK) {
         ucs_mpool_put(desc);
     }
@@ -248,6 +265,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
         goto err;
     }
 
+    if (self->tx.cq.cqe_size != sizeof(struct mlx5_cqe64)) {
+        ucs_error("TX CQE size is not 64");
+        goto err;
+    }
+
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
         goto err;
@@ -276,6 +298,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
         goto err;
     }
 
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_mlx5_iface_stats_class,
+                                  self->super.stats);
+    if (status != UCS_OK) {
+        goto err_destroy_atomic_mp;
+    }
+
     self->rx.buf   = srq_info.buf;
     self->rx.db    = srq_info.dbrec;
     self->rx.head  = srq_info.head;
@@ -286,13 +314,15 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_context_h context,
     if (uct_rc_mlx5_iface_post_recv(self, self->super.rx.available) == 0) {
         ucs_error("Failed to post receives");
         status = UCS_ERR_NO_MEMORY;
-        goto err_destroy_atomic_mp;
+        goto err_free_stats;
     }
 
     ucs_notifier_chain_add(&context->progress_chain, uct_rc_mlx5_iface_progress,
                            self);
     return UCS_OK;
 
+err_free_stats:
+    UCS_STATS_NODE_FREE(self->stats);
 err_destroy_atomic_mp:
     ucs_mpool_destroy(self->tx.atomic_desc_mp);
 err:
@@ -302,7 +332,9 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 {
     uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
+
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, self);
+    UCS_STATS_NODE_FREE(self->stats);
     ucs_mpool_destroy(self->tx.atomic_desc_mp);
 }
 
