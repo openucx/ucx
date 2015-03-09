@@ -12,6 +12,7 @@
 ACLOCAL_AMFLAGS = -I config/m4
 
 noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
+doxygen_doc_files = $(noinst_HEADERS)
 
 SUBDIRS = \
 	src/ucs \
@@ -36,10 +37,13 @@ EXTRA_DIST += contrib/configure-prof
 
 include $(srcdir)/doc/doxygen/doxygen.am
 
-.PHONY: docs
+.PHONY: docs docs-clean
 
 docs: doc/doxygen/doxygen-doc/ucx.tag
 
-doc/doxygen/doxygen-doc/ucx.tag: $(noinst_HEADERS) doxygen-doc
+docs-clean:
+	$(RM) $(DX_CLEANFILES)
+
+doc/doxygen/doxygen-doc/ucx.tag: $(doxygen_doc_files) doxygen-doc
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES)
