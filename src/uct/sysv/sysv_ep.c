@@ -95,6 +95,7 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
     //uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
     //uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t);
     uintptr_t *mem_hndl = (void *)rkey;
+    ptrdiff_t remote_offset;
 
     /* FIXME add debug mode to check remote_addr within attached region */
 
@@ -108,7 +109,8 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
     /* dest addr -> (char *)addr_a + offset 
      * where offset is gotten with diffptr using ptr_t or diffptr_t types 
      * and use ucs_assert() to make sure the difference is positive */
-    memcpy((void *)mem_hndl[2] + ( (void *)(mem_hndl[1]+remote_addr) ), buffer, length);
+    remote_offset = (void *)mem_hndl[1] + (void *)remote_addr;
+    memcpy((void *)mem_hndl[2] + (void *)(remote_offset), buffer, length);
 
     ucs_trace_data("Posting PUT Short, memcpy of size %u from %p to %p",
             length,
