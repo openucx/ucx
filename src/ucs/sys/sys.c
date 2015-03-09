@@ -481,10 +481,6 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
 
     /* Attach segment */
     ptr = shmat(*shmid, NULL, 0);
-    /* debug
-    printf("sysv_alloc shmid(d) = %d\n", *shmid);
-    printf("sysv_alloc ptr(p) = %p\n", (void *)ptr);
-    */
     if ((void *)ptr == (void*)-1) {
         if (errno == ENOMEM) {
             return UCS_ERR_NO_MEMORY;

@@ -48,15 +48,15 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_att
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p, 
-                                    size_t *length_p, unsigned flags, 
-                                    uct_lkey_t *lkey_p UCS_MEMTRACK_ARG)
+static ucs_status_t uct_sysv_mem_reg(uct_pd_h pd, void *address, size_t length, 
+                                     uct_mem_h *memh_p)
 {
     ucs_status_t rc;
     uintptr_t *mem_hndl = NULL;
     int shmid = 0;
 
-    if (0 == *length_p) {
+    if (0 == length) {
+        ucs_error("Unexpected length %zu", length);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -66,36 +66,35 @@ static ucs_status_t uct_sysv_mem_map(uct_pd_h pd, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (NULL == *address_p) {
-        rc = ucs_sysv_alloc(length_p, address_p, flags, &shmid);
+    if (NULL == address) {
+        /* FIXME used to pass in flags from the user, but no way for them to
+         * give us their flags anymore? */
+        rc = ucs_sysv_alloc(&length, &address, 0, &shmid);
         if (rc != UCS_OK) {
-            ucs_error("Failed to attach %zu bytes", *length_p);
+            ucs_error("Failed to attach %zu bytes", length);
             return rc;
         }
-        /* FIXME eh? */
-        ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
     } else {
         ucs_error("non-null shared memory attaching not yet supported");
-        return UCS_ERR_UNSUPPORTED; /* FIXME how to bail? */
+        return UCS_ERR_UNSUPPORTED; 
     }
 
-
     mem_hndl[0] = shmid;
-    mem_hndl[1] = (uintptr_t)*address_p;
+    mem_hndl[1] = (uintptr_t)address;
 
     /* FIXME no use for pd input argument? */
 
     ucs_debug("Memory registration address %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
-              *address_p, *length_p, mem_hndl[0], mem_hndl[1]);
-    *lkey_p = (uintptr_t)mem_hndl;
+              address, length, mem_hndl[0], mem_hndl[1]);
+    memh_p = (void *)mem_hndl;
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
+static ucs_status_t uct_sysv_mem_dereg(uct_pd_h pd, uct_mem_h memh)
 {
     /* this releases the key allocated in mem_map */
 
-    uintptr_t *mem_hndl = (void *)lkey;
+    uintptr_t *mem_hndl = memh;
     ucs_sysv_free((void *)mem_hndl[1]);  /* detach the shared segment */
     ucs_free(mem_hndl);
 
@@ -110,12 +109,12 @@ static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
+static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
                                       void *rkey_buffer)
 {
     /* FIXME user is responsible to free rkey_buffer? */
     uintptr_t *ptr = rkey_buffer;
-    uintptr_t *mem_hndl = (void *)lkey;
+    uintptr_t *mem_hndl = memh;
     ptr[0] = 0; ptr[1] = 0; ptr[2] = 0; ptr[3] = 0;
 
     ptr[0] = UCT_SYSV_RKEY_MAGIC;
@@ -205,8 +204,8 @@ uct_iface_ops_t uct_sysv_iface_ops = {
 
 uct_pd_ops_t uct_sysv_pd_ops = {
     .query        = uct_sysv_pd_query,
-    .mem_map      = uct_sysv_mem_map,
-    .mem_unmap    = uct_sysv_mem_unmap,
+    .mem_reg      = uct_sysv_mem_reg,
+    .mem_dereg    = uct_sysv_mem_dereg,
     .rkey_pack    = uct_sysv_rkey_pack,
 };
 
