@@ -136,7 +136,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_pd_h pd, void *address, size_t length,
 
     ucs_debug("Memory registration address %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
               address, length, mem_hndl->qword1, mem_hndl->qword2);
-    *memh_p = (uintptr_t)mem_hndl;
+    *memh_p = mem_hndl;
     return UCS_OK;
 
 mem_err:
@@ -144,10 +144,10 @@ mem_err:
     return rc;
 }
 
-static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_lkey_t lkey)
+static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_mem_h memh)
 {
     uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
-    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) lkey;
+    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
     gni_return_t ugni_rc;
     ucs_status_t rc = UCS_OK;
 
@@ -161,10 +161,10 @@ static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_lkey_t lkey)
     return rc;
 }
 
-static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_lkey_t lkey,
+static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
                                        void *rkey_buffer)
 {
-    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) lkey;
+    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
     uint64_t *ptr = rkey_buffer;
 
     ptr[0] = UCT_UGNI_RKEY_MAGIC;
@@ -180,7 +180,7 @@ static void uct_ugni_rkey_release(uct_context_h context, uct_rkey_t key)
 }
 
 ucs_status_t uct_ugni_rkey_unpack(uct_context_h context, void *rkey_buffer,
-        uct_rkey_bundle_t *rkey_ob)
+                                  uct_rkey_bundle_t *rkey_ob)
 {
     uint64_t *ptr = rkey_buffer;
     gni_mem_handle_t *mem_hndl = NULL;
