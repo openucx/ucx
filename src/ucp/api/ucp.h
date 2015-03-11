@@ -62,6 +62,50 @@ struct ucp_iface_config {
     ucp_tl_config_t       tls;     /* UCTs to use */
 };
 
+struct ucp_ep_addr {
+};
+
+struct ucp_iface_attr {
+    size_t ep_addr_len;
+};
+
+/**
+ * @ingroup CONTEXT
+ * @brief Query UCP interface attributes 
+ *
+ * @param [in]  iface        UCP interface handel
+ * @param [out] iface_attr   Filled with the interface attributes
+ *
+ * @return Error code
+ */
+ucs_status_t ucp_iface_query(ucp_iface_h iface, ucp_iface_attr_t *iface_attr);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Serialize endpoint address
+ *
+ * Routine returns serialized address that can be used to connect
+ * to the endpoint. 
+ * It is caller responsibility to allocate buffer that have enough room 
+ * to hold address and to free the buffer. Buffer size is obtained from 
+ * @ref ucp_iface_query()
+ *
+ * @param [in]  ep             Handle to ucp endpoint
+ * @param [out] ep_addr        Filled with the endpoint address
+ *
+ * @return Error code
+ */
+ucs_status_t ucp_ep_pack_address(ucp_ep_h ep, ucp_ep_addr_t *ep_addr);
+
+/**
+ *  @ingroup CONTEXT
+ *  @brief Connect to remote endpoint
+ *
+ *  @param [in] ep              Handle to ucp endpoint
+ *  @param [in] remote_ep_addr  Address of remote endpoint
+ *  @return Error code
+ */
+ucs_status_t ucp_ep_connect_to_ep(ucp_ep_h ep, ucp_ep_addr_t *remote_ep_addr);
 /**
  * @ingroup CONTEXT
  * @brief Initialize global ucp context.
@@ -146,13 +190,11 @@ typedef struct ucp_rkey {
  * @param [in]     context    UCP context to map memory on.
  * @param [out]    address_p  If != NULL, memory region to map.
  *                            If == NULL, filled with a pointer to allocated region.
- * @param [inout]  length_p   How many bytes to allocate. Filled with the actual
- *                            allocated size, which is larger than or equal to the
- *                            requested size.
+ * @param [in]     length     How many bytes to allocate. 
  * @param [in]     flags      Allocation flags (currently reserved - set to 0).
  * @param [out]    lkey_p     Filled with local access key for allocated region.
  */
-ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t *length_p,
+ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
                          unsigned flags, ucp_lkey_h *lkey_p);
 
 /**
@@ -241,6 +283,6 @@ ucs_status_t ucp_ep_put(ucp_ep_h ep, void *buffer, unsigned length,
  * @ingroup CONTEXT
  * @brief Remote get. Returns when data are in local buffer
  */
-ucs_status_t ucp_ep_get(uct_ep_h ep, void *buffer, size_t length,
+ucs_status_t ucp_ep_get(ucp_ep_h ep, void *buffer, size_t length,
                         uint64_t remote_addr, ucp_rkey_h rkey);
 #endif
