@@ -81,6 +81,7 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
     iface_attr->cap.put.max_bcopy      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size;
+    iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->iface_addr_len         = sizeof(uct_ugni_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_ugni_ep_addr_t);
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT |
@@ -89,7 +90,8 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
                                          UCT_IFACE_FLAG_ATOMIC_FADD64  |
                                          UCT_IFACE_FLAG_ATOMIC_ADD64   |
-                                         UCT_IFACE_FLAG_GET_BCOPY;
+                                         UCT_IFACE_FLAG_GET_BCOPY      |
+                                         UCT_IFACE_FLAG_GET_ZCOPY;
 
     iface_attr->completion_priv_len    = 0; /* TBD */
 
@@ -241,6 +243,7 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_atomic_fadd64    = uct_ugni_ep_atomic_fadd64,
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
+    .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
 };

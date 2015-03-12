@@ -53,9 +53,9 @@ ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
 ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
                                         uint64_t remote_addr, uct_rkey_t rkey,
                                         uct_completion_t *comp);
-ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h ep, size_t length, uint64_t remote_addr,
+ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp);
-ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
+ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                    uct_lkey_t lkey, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp);
 #endif
