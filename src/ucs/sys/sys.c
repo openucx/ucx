@@ -432,7 +432,7 @@ size_t ucs_get_huge_page_size()
 ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid)
 {
     void *ptr;
-    //int ret;
+    int ret;
     struct shminfo shminfo, *shminfo_ptr;
 
     if (RUNNING_ON_VALGRIND) {
@@ -493,10 +493,10 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     /* Remove segment, the attachment keeps a reference to the mapping */
     /* FIXME having additional attaches to a removed segment is not portable
     * behavior */
-    //ret = shmctl(*shmid, IPC_RMID, NULL);
-    //if (ret != 0) {
-    //    ucs_warn("shmctl(IPC_RMID, shmid=%d) returned %d: %m", *shmid, ret);
-    //}
+    ret = shmctl(*shmid, IPC_RMID, NULL);
+    if (ret != 0) {
+        ucs_warn("shmctl(IPC_RMID, shmid=%d) returned %d: %m", *shmid, ret);
+    }
 
     /* Check if attachment was successful */
     if (ptr == (void*)-1) {

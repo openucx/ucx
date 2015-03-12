@@ -36,6 +36,9 @@ typedef struct uct_sysv_iface {
     uct_sysv_iface_addr_t   addr;
     uct_sysv_ep_t           *eps[UCT_SYSV_HASH_SIZE];    /**< Array of EPs */
     bool                   activated;                   /**< nic status */
+    struct {
+        unsigned            max_put;
+    } config;
     /* list of ep */
 } uct_sysv_iface_t;
 

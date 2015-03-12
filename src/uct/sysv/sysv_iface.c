@@ -36,15 +36,19 @@ ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+#define SYSV_MAX_SHORT_PUT 2048 /* FIXME */
+
 ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
+    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+
     /* FIXME all of these values */
-    iface_attr->cap.put.max_short      = 2048; /* FIXME */
-    iface_attr->cap.put.max_bcopy      = 2048; /* FIXME */
-    iface_attr->cap.put.max_zcopy      = 0; /* FIXME */
+    iface_attr->cap.put.max_short      = SYSV_MAX_SHORT_PUT; /* FIXME */
     iface_attr->iface_addr_len         = sizeof(uct_sysv_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_sysv_ep_addr_t);
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT;
+
+    iface_attr->completion_priv_len    = 0; /* TBD */
     return UCS_OK;
 }
 
@@ -66,17 +70,12 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p, void **add
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (NULL == *address_p) {
-        /* FIXME used to pass in flags from the user, but no way for them to
-         * give us their flags anymore? */
-        rc = ucs_sysv_alloc(length_p, address_p, 0, &shmid);
-        if (rc != UCS_OK) {
-            ucs_error("Failed to attach %zu bytes", *length_p);
-            return rc;
-        }
-    } else {
-        ucs_error("non-null shared memory attaching not yet supported");
-        return UCS_ERR_UNSUPPORTED; 
+    /* FIXME used to pass in flags from the user, but no way for them to
+     * give us their flags anymore? */
+    rc = ucs_sysv_alloc(length_p, address_p, 0, &shmid);
+    if (rc != UCS_OK) {
+        ucs_error("Failed to attach %zu bytes", *length_p);
+        return rc;
     }
 
     mem_hndl[0] = shmid;
@@ -153,7 +152,7 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
     uintptr_t *mem_hndl = NULL;
     int shmid;
 
-    printf("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]\n", 
+    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]\n", 
                ptr[0], ptr[1], ptr[2]);
     magic = ptr[0];
     if (magic != UCT_SYSV_RKEY_MAGIC) {
@@ -241,6 +240,7 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
 
     self->super.super.pd   = &self->pd.super;
     self->dev              = dev;
+    self->config.max_put   = SYSV_MAX_SHORT_PUT;
 
     ucs_notifier_chain_add(&context->progress_chain, uct_sysv_progress, self);
 

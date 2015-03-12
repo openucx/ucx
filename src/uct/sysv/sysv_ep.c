@@ -7,6 +7,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
+#include <uct/tl/tl_log.h>
 
 #include "sysv_ep.h"
 #include "sysv_iface.h"
@@ -92,10 +93,17 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
                                   unsigned length, uint64_t remote_addr,
                                   uct_rkey_t rkey)
 {
-    /*uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t);
-    uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t); */
+    /*uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t); */
+    uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t); 
     uintptr_t *mem_hndl = (void *)rkey;
     ptrdiff_t remote_offset;
+
+    if (0 == length) {
+        ucs_trace_data("Zero length request: skip it");
+        return UCS_OK;
+    }
+    /* FIXME make this user-configurable */
+    UCT_CHECK_LENGTH(length <= iface->config.max_put, "put_short");
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
