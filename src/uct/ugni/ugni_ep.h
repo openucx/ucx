@@ -43,14 +43,19 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                   void *payload, unsigned length);
 ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                         uint64_t remote_addr, uct_rkey_t rkey);
+                                      uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uct_completion_t *comp);
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp);
 ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uct_completion_t *comp);
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp);
 ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_completion_t *comp);
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp);
+ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h ep, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp);
+ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
+                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp);
 #endif

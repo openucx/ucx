@@ -252,7 +252,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     pack_cb(fma + 1, arg, length);
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, fma + 1,
                         remote_addr, rkey, length, ep, NULL);
-    ucs_trace_data("Posting PUT BCOPY, GNI_PostFma of size %"PRIx64" from %p to"
+    ucs_trace_data("Posting PUT BCOPY, GNI_PostFma of size %"PRIx64" from %p to "
                    "%p, with [%"PRIx64" %"PRIx64"]",
                    fma->desc.length,
                    (void *)fma->desc.local_addr,
@@ -387,6 +387,39 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
 
 ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                   void *payload, unsigned length)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+/* Align to the next 4 bytes */
+#define ALIGN_HI4(n) ((((n) + 3) >> 2) << 2)
+
+ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_base_desc_t *fma;
+
+    UCT_UGNI_ZERO_LENGTH_POST(length);
+    UCT_CHECK_LENGTH(ALIGN_HI4(length) <= iface->config.fma_seg_size, "get_bcopy");
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
+                             fma, return UCS_ERR_WOULD_BLOCK);
+    uct_ugni_format_fma(fma, GNI_POST_FMA_GET, fma + 1, remote_addr, rkey,
+                        ALIGN_HI4(length), ep, comp);
+    ucs_trace_data("Posting GET BCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
+                   "%p, with [%"PRIx64" %"PRIx64"]",
+                   fma->desc.length, length,
+                   (void *)fma->desc.local_addr,
+                   (void *)fma->desc.remote_addr,
+                   fma->desc.remote_mem_hndl.qword1,
+                   fma->desc.remote_mem_hndl.qword2);
+    return uct_ugni_post_fma(iface, ep, fma, UCS_INPROGRESS);
+}
+
+ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
+                             uct_lkey_t lkey, uint64_t remote_addr,
+                             uct_rkey_t rkey, uct_completion_t *comp)
 {
     return UCS_ERR_UNSUPPORTED;
 }
