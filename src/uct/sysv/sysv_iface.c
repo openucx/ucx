@@ -48,15 +48,15 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_att
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_reg(uct_pd_h pd, void *address, size_t length, 
-                                     uct_mem_h *memh_p)
+static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+                                     uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t rc;
     uintptr_t *mem_hndl = NULL;
     int shmid = 0;
 
-    if (0 == length) {
-        ucs_error("Unexpected length %zu", length);
+    if (0 == *length_p) {
+        ucs_error("Unexpected length %zu", *length_p);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -66,12 +66,12 @@ static ucs_status_t uct_sysv_mem_reg(uct_pd_h pd, void *address, size_t length,
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (NULL == address) {
+    if (NULL == *address_p) {
         /* FIXME used to pass in flags from the user, but no way for them to
          * give us their flags anymore? */
-        rc = ucs_sysv_alloc(&length, &address, 0, &shmid);
+        rc = ucs_sysv_alloc(length_p, address_p, 0, &shmid);
         if (rc != UCS_OK) {
-            ucs_error("Failed to attach %zu bytes", length);
+            ucs_error("Failed to attach %zu bytes", *length_p);
             return rc;
         }
     } else {
@@ -80,17 +80,18 @@ static ucs_status_t uct_sysv_mem_reg(uct_pd_h pd, void *address, size_t length,
     }
 
     mem_hndl[0] = shmid;
-    mem_hndl[1] = (uintptr_t)address;
+    mem_hndl[1] = (uintptr_t) *address_p;
 
     /* FIXME no use for pd input argument? */
 
-    ucs_debug("Memory registration address %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
-              address, length, mem_hndl[0], mem_hndl[1]);
-    memh_p = (void *)mem_hndl;
+    ucs_debug("Memory registration address_p %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
+              *address_p, *length_p, mem_hndl[0], mem_hndl[1]);
+    *memh_p = mem_hndl;
+    ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_dereg(uct_pd_h pd, uct_mem_h memh)
+static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
 {
     /* this releases the key allocated in mem_map */
 
@@ -105,7 +106,14 @@ static ucs_status_t uct_sysv_mem_dereg(uct_pd_h pd, uct_mem_h memh)
 
 static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
+    uct_sysv_pd_t *sysv_pd = ucs_derived_of(pd, uct_sysv_pd_t);
+
+    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s",
+                      sysv_pd->iface->dev->fname);
     pd_attr->rkey_packed_size  = 4 * sizeof(uint64_t);
+    pd_attr->cap.flags         = UCT_PD_FLAG_ALLOC;
+    pd_attr->cap.max_alloc     = 0;
+    pd_attr->cap.max_reg       = ULONG_MAX;
     return UCS_OK;
 }
 
@@ -204,8 +212,8 @@ uct_iface_ops_t uct_sysv_iface_ops = {
 
 uct_pd_ops_t uct_sysv_pd_ops = {
     .query        = uct_sysv_pd_query,
-    .mem_reg      = uct_sysv_mem_reg,
-    .mem_dereg    = uct_sysv_mem_dereg,
+    .mem_alloc    = uct_sysv_mem_alloc,
+    .mem_free     = uct_sysv_mem_free,
     .rkey_pack    = uct_sysv_rkey_pack,
 };
 

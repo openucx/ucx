@@ -36,7 +36,7 @@ ucs_status_t uct_sysv_device_create(uct_context_h context, int dev_id,
     ucs_snprintf_zero(dev_p->type_name, sizeof(dev_p->type_name), "%s",
                       "SM_SYSV");
 
-    ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->type_name), "%s:%u",
+    ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->fname), "%s:%u",
                       dev_p->type_name, dev_p->device_id);
 
     return UCS_OK;
