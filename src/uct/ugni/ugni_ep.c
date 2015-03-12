@@ -290,7 +290,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 #define LEN_32 (sizeof(uint32_t)) /* Length fetch and add for 32 bit */
 
 ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                         uint64_t remote_addr, uct_rkey_t rkey)
+                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
@@ -310,8 +310,8 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 }
 
 ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uct_completion_t *comp)
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
@@ -331,15 +331,15 @@ ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
 }
 
 ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uct_completion_t *comp)
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_completion_t *comp)
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
@@ -359,28 +359,28 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
 }
 
 ucs_status_t uct_ugni_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                         uint64_t remote_addr, uct_rkey_t rkey)
+                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_ugni_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uct_completion_t *comp)
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_ugni_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                          uint64_t remote_addr, uct_rkey_t rkey,
-                                          uct_completion_t *comp)
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
 ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
-                                           uint64_t remote_addr, uct_rkey_t rkey,
-                                           uct_completion_t *comp)
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp)
 {
     return UCS_ERR_UNSUPPORTED;
 }
@@ -392,7 +392,7 @@ ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
 }
 
 /* Align to the next 4 bytes */
-#define ALIGN_HI4(n) ((((n) + 3) >> 2) << 2)
+#define UGNI_GET_ALIGN  (4)
 
 ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
@@ -402,11 +402,11 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
     uct_ugni_base_desc_t *fma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
-    UCT_CHECK_LENGTH(ALIGN_HI4(length) <= iface->config.fma_seg_size, "get_bcopy");
+    UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.fma_seg_size, "get_bcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
                              fma, return UCS_ERR_WOULD_BLOCK);
     uct_ugni_format_fma(fma, GNI_POST_FMA_GET, fma + 1, remote_addr, rkey,
-                        ALIGN_HI4(length), ep, comp);
+                        ucs_align_up_pow2(length, UGNI_GET_ALIGN), ep, comp);
     ucs_trace_data("Posting GET BCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
                    "%p, with [%"PRIx64" %"PRIx64"]",
                    fma->desc.length, length,
@@ -418,19 +418,19 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
 }
 
 ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                             uct_lkey_t lkey, uint64_t remote_addr,
-                             uct_rkey_t rkey, uct_completion_t *comp)
+                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *rdma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
-    UCT_CHECK_LENGTH(ALIGN_HI4(length) <= iface->config.rdma_max_size, "get_zcopy");
+    UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.rdma_max_size, "get_zcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_WOULD_BLOCK);
     /* Setup Callback */
     uct_ugni_format_rdma(rdma, GNI_POST_RDMA_GET, buffer, remote_addr, lkey, rkey,
-                         ALIGN_HI4(length), ep, iface->local_cq, comp);
+                         ucs_align_up_pow2(length, UGNI_GET_ALIGN), ep, iface->local_cq, comp);
 
     ucs_trace_data("Posting GET ZCOPY, GNI_PostRdma of size %"PRIx64" (%lu) "
                    "from %p to %p, with [%"PRIx64" %"PRIx64"]",
