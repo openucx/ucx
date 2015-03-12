@@ -429,24 +429,28 @@ size_t ucs_get_huge_page_size()
     return huge_page_size;
 }
 
-ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid)
+ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid
+                            UCS_MEMTRACK_ARG)
 {
+    struct shminfo shminfo, *shminfo_ptr;
+    size_t alloc_size;
     void *ptr;
     int ret;
-    struct shminfo shminfo, *shminfo_ptr;
 
     if (RUNNING_ON_VALGRIND) {
         flags &= ~SHM_HUGETLB;
     }
 
+    alloc_size = ucs_memtrack_adjust_alloc_size(*size);
+
     if (flags & SHM_HUGETLB){
-        *size = ucs_align_up(*size, ucs_get_huge_page_size());
+        alloc_size = ucs_align_up(alloc_size, ucs_get_huge_page_size());
     } else {
-        *size = ucs_align_up(*size, ucs_get_page_size());
+        alloc_size = ucs_align_up(alloc_size, ucs_get_page_size());
     }
 
     flags |= IPC_CREAT | SHM_R | SHM_W;
-    *shmid = shmget(IPC_PRIVATE, *size, flags);
+    *shmid = shmget(IPC_PRIVATE, alloc_size, flags);
     if (*shmid < 0) {
         switch (errno) {
         case ENFILE:
@@ -457,24 +461,22 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
                 shminfo_ptr = &shminfo;
                 if ((shmctl(0, IPC_INFO, (struct shmid_ds *) shminfo_ptr)) > -1) {
                     ucs_error("shmget failed (size=%zu): The max number of shared memory segments in the system is = %ld. "
-                    "Please try to increase this value through /proc/sys/kernel/shmmni",
-                    *size, shminfo.shmmni);
+                              "Please try to increase this value through /proc/sys/kernel/shmmni",
+                              alloc_size, shminfo.shmmni);
                 }
             }
 
             return UCS_ERR_NO_MEMORY;
-            break;
         case EINVAL:
             ucs_error("A new segment was to be created and size < SHMMIN or size > SHMMAX, "
-            "or no new segment was to be created. A segment with given key existed, "
-            "but size is greater than the size of that segment. "
-            "Please check shared memory limits by 'ipcs -l'.");
+                      "or no new segment was to be created. A segment with given key existed, "
+                      "but size is greater than the size of that segment. "
+                      "Please check shared memory limits by 'ipcs -l'.");
             return UCS_ERR_NO_MEMORY;
-            break;
         default:
             ucs_error("shmget(size=%zu, flags=0x%x) returned unexpected error: %m. "
-            "Please check shared memory limits by 'ipcs -l'.",
-                      *size, flags);
+                      "Please check shared memory limits by 'ipcs -l'.",
+                      alloc_size, flags);
             return UCS_ERR_SHMEM_SEGMENT;
         }
     }
@@ -501,6 +503,9 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     }
 
     *address_p = ptr;
+    *size      = alloc_size;
+
+    ucs_memtrack_allocated(address_p, size UCS_MEMTRACK_VAL);
     return UCS_OK;
 }
 
@@ -508,8 +513,8 @@ void ucs_sysv_free(void *address)
 {
     int ret;
 
+    ucs_memtrack_releasing(&address);
     ret = shmdt(address);
-
     if (ret) {
         ucs_warn("Unable to detach shared memory segment at %p: %m", address);
     }

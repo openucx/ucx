@@ -10,6 +10,8 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
+
 
 typedef struct ucs_mpool_elem {
     union {
@@ -321,7 +323,8 @@ ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chu
 
     /* First, try hugetlb */
     real_size = *size;
-    status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid);
+    status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid
+                            UCS_MEMTRACK_VAL);
     if (status == UCS_OK) {
         chunk = ptr;
         chunk->hugetlb = 1;

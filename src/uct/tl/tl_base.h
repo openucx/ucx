@@ -13,6 +13,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
+#include <ucs/sys/sys.h>
 
 
 enum {

@@ -8,10 +8,12 @@
 #ifndef UCS_MEMTRACK_H_
 #define UCS_MEMTRACK_H_
 
-#include <ucs/sys/sys.h>
-#include <ucs/stats/stats.h>
-#include <stdio.h>
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <sys/types.h>
+#include <stdio.h>
 
 
 enum {

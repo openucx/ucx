@@ -11,6 +11,7 @@
 #include <uct/tl/context.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/sys.h>
 
 
 void uct_device_get_resource(uct_ugni_device_t *dev,
