@@ -13,8 +13,9 @@
 #include "ugni_device.h"
 #include "ugni_ep.h"
 
-#define UCT_UGNI_HASH_SIZE   256
-#define UCT_UGNI_MAX_FMA     2048
+#define UCT_UGNI_HASH_SIZE   (256)
+#define UCT_UGNI_MAX_FMA     (2048)
+#define UCT_UGNI_MAX_RDMA    (512*1024*1024);
 
 struct uct_ugni_iface;
 
@@ -49,8 +50,12 @@ typedef struct uct_ugni_iface {
                                                               requests without bouncing buffers */
     ucs_mpool_h             free_desc_buffer;            /**< Pool of FMA descriptors for 
                                                               requests with bouncing buffer*/
+    ucs_mpool_h             free_desc_famo;              /**< Pool of FMA descriptors for 
+                                                              64/32 bit fetched-atomic operations
+                                                              (registered memory) */
     struct {
         unsigned            fma_seg_size;                /**< FMA Segment size */
+        unsigned            rdma_max_size;               /**< Max RDMA size */
     } config;
     bool                    activated;                   /**< nic status */
     /* list of ep */
