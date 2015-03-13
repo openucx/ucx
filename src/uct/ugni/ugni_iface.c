@@ -81,14 +81,19 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
     iface_attr->cap.put.max_short      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_bcopy      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
+    iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size;
+    iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->iface_addr_len         = sizeof(uct_ugni_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_ugni_ep_addr_t);
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT |
                                          UCT_IFACE_FLAG_PUT_BCOPY |
                                          UCT_IFACE_FLAG_PUT_ZCOPY |
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD64;
+                                         UCT_IFACE_FLAG_ATOMIC_FADD64  |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD64   |
+                                         UCT_IFACE_FLAG_GET_BCOPY      |
+                                         UCT_IFACE_FLAG_GET_ZCOPY;
+
     iface_attr->completion_priv_len    = 0; /* TBD */
 
     return UCS_OK;
@@ -231,6 +236,8 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_atomic_add64     = uct_ugni_ep_atomic_add64,
     .ep_atomic_fadd64    = uct_ugni_ep_atomic_fadd64,
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
+    .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
+    .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
 };
@@ -340,6 +347,21 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
         goto clean_buffer;
     }
 
+    rc = uct_iface_mpool_create(&self->super.super, 
+                                sizeof(uct_ugni_base_desc_t) +
+                                self->config.fma_seg_size,
+                                sizeof(uct_ugni_base_desc_t), /* alignment offset */
+                                UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                                &config->mpool,               /* mpool config */ 
+                                128 ,                         /* grow */
+                                uct_ugni_base_desc_key_init,  /* memory/key init */
+                                "UGNI-DESC-GET",              /* name */
+                                &self->free_desc_fget);       /* mpool */
+    if (UCS_OK != rc) {
+        ucs_error("Mpool creation failed");
+        goto clean_famo;
+    }
+
     ucs_notifier_chain_add(&context->progress_chain, uct_ugni_progress, self);
 
     self->activated = false;
@@ -353,6 +375,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
 
     ucs_error("Failed to activate interface");
 
+clean_famo:
     ucs_mpool_destroy(self->free_desc_famo);
 clean_buffer:
     ucs_mpool_destroy(self->free_desc_buffer);
@@ -373,6 +396,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
         return;
     }
 
+    ucs_mpool_destroy(self->free_desc_fget);
     ucs_mpool_destroy(self->free_desc_famo);
     ucs_mpool_destroy(self->free_desc_buffer);
     ucs_mpool_destroy(self->free_desc);

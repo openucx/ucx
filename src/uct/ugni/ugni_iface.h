@@ -53,6 +53,9 @@ typedef struct uct_ugni_iface {
     ucs_mpool_h             free_desc_famo;              /**< Pool of FMA descriptors for 
                                                               64/32 bit fetched-atomic operations
                                                               (registered memory) */
+    ucs_mpool_h             free_desc_fget;              /**< Pool of FMA descriptors for 
+                                                              FMA_SIZE fetch operations
+                                                              (registered memory) */
     struct {
         unsigned            fma_seg_size;                /**< FMA Segment size */
         unsigned            rdma_max_size;               /**< Max RDMA size */
