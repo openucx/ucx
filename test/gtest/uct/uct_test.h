@@ -33,9 +33,12 @@ protected:
         entity(const uct_resource_desc_t& resource);
         ~entity();
 
-        uct_rkey_bundle_t mem_map(void *address, size_t length, uct_lkey_t *lkey_p) const;
+        void mem_alloc(void **address_p, size_t *length_p, size_t alignement,
+                       uct_mem_h *memh_p, uct_alloc_method_t *method,
+                       uct_rkey_bundle *rkey_bundle) const;
 
-        void mem_unmap(uct_lkey_t lkey, const uct_rkey_bundle_t& rkey) const;
+        void mem_free(void *address, size_t length, uct_mem_h memh,
+                      uct_alloc_method_t method, const uct_rkey_bundle_t& rkey) const;
 
         void progress() const;
 
@@ -60,34 +63,32 @@ protected:
         uct_iface_attr_t      m_iface_attr;
     };
 
-    class buffer {
+    class mapped_buffer {
     public:
-        buffer(size_t size, size_t alignment, uint64_t seed);
-        virtual ~buffer();
+        mapped_buffer(size_t size, size_t alignment, uint64_t seed,
+                      const entity& entity);
+        virtual ~mapped_buffer();
 
-        static void pattern_check(void *buffer, size_t length, uint64_t seed);
-        void pattern_fill(uint64_t seed);
-        void pattern_check(uint64_t seed);
         void *ptr() const;
         uintptr_t addr() const;
         size_t length() const;
+        uct_mem_h memh() const;
+        uct_rkey_t rkey() const;
+
+        void pattern_fill(uint64_t seed);
+        void pattern_check(uint64_t seed);
+
+        static void pattern_check(void *buffer, size_t length, uint64_t seed);
     private:
         static uint64_t pat(uint64_t prev);
 
-        void             *m_buf;
-        void             *m_end;
-    };
-
-    class mapped_buffer : public buffer {
-    public:
-        mapped_buffer(size_t size, size_t alignment, uint64_t seed, const entity& entity);
-        ~mapped_buffer();
-
-        uct_lkey_t lkey() const;
-        uct_rkey_t rkey() const;
-    private:
+        size_t                  m_alloc_size;
         const uct_test::entity& m_entity;
-        uct_lkey_t              m_lkey;
+
+        void                    *m_buf;
+        void                    *m_end;
+        uct_mem_h               m_memh;
+        uct_alloc_method_t      m_method;
         uct_rkey_bundle_t       m_rkey;
     };
 
@@ -107,7 +108,8 @@ protected:
     rc_mlx5, \
     rc, \
     ud_verbs, \
-    ugni
+    ugni, \
+    sysv
 
 /**
  * Instantiate the parameterized test case for all transports.

@@ -24,8 +24,9 @@ ucs_config_field_t uct_ugni_iface_config_table[] = {
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
     UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, 0, "fma",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
-                                  "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
-                                  "and could cause deadlock or performance degradation."),
+                                  "\nAttention: Setting this param with value
+                                  != -1 is a dangerous thing\n" "and could
+                                  cause deadlock or performance degradation."),
 
     {NULL}
 };
@@ -76,7 +77,8 @@ ucs_status_t uct_ugni_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resources_p,
                                       unsigned *num_resources_p)
 {
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
+    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni,
+                                                     uct_ugni_context_t);
     uct_resource_desc_t *resources;
     unsigned dev_index;
 
@@ -156,7 +158,8 @@ ucs_status_t ugni_activate_domain(uct_ugni_context_t *ugni_ctx)
 
 ucs_status_t uct_ugni_init(uct_context_h context)
 {
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
+    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, 
+                                                     uct_ugni_context_t);
     ucs_status_t status;
     int i, num_devices;
     int *dev_ids = NULL;
@@ -208,7 +211,8 @@ ucs_status_t uct_ugni_init(uct_context_h context)
 
     num_devices = 0;
     for (i = 0; i < ugni_ctx->num_devices; i++) {
-        status = uct_ugni_device_create(context, dev_ids[i], &ugni_ctx->devices[i]);
+        status = uct_ugni_device_create(context, dev_ids[i], 
+                                        &ugni_ctx->devices[i]);
         if (status != UCS_OK) {
             ucs_warn("Failed to initialize ugni device %d (%s), ignoring it",
                      i, ucs_status_string(status));
@@ -223,7 +227,8 @@ ucs_status_t uct_ugni_init(uct_context_h context)
         goto err_dev;
     }
 
-    ucs_debug("Initialized UGNI component with %d devices", ugni_ctx->num_devices);
+    ucs_debug("Initialized UGNI component with %d devices", 
+               ugni_ctx->num_devices);
 
     status = uct_register_tl(context, "ugni", uct_ugni_iface_config_table,
                              sizeof(uct_ugni_iface_config_t), "UGNI_",
@@ -248,7 +253,8 @@ err_zero:
 
 void uct_ugni_cleanup(uct_context_t *context)
 {
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
+    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, 
+                                                     uct_ugni_context_t);
     int i;
 
     for (i = 0; i < ugni_ctx->num_devices; ++i) {
@@ -256,7 +262,8 @@ void uct_ugni_cleanup(uct_context_t *context)
     }
     ucs_free(ugni_ctx->devices);
 }
-UCS_COMPONENT_DEFINE(uct_context_t, ugni, uct_ugni_init, uct_ugni_cleanup, sizeof(uct_ugni_context_t))
+UCS_COMPONENT_DEFINE(uct_context_t, ugni, uct_ugni_init, uct_ugni_cleanup, 
+                     sizeof(uct_ugni_context_t))
 
 uct_ugni_device_t * uct_ugni_device_by_name(uct_ugni_context_t *ugni_ctx,
                                             const char *dev_name)

@@ -14,7 +14,9 @@
 
 
 typedef struct {
-    uct_lkey_t lkey;
+    uct_alloc_method_t method;
+    uct_mem_h                memh;
+    size_t                   length;
 } uct_iface_mp_chunk_hdr_t;
 
 
@@ -47,39 +49,62 @@ static ucs_stats_class_t uct_iface_stats_class = {
 };
 #endif
 
+
 ucs_status_t uct_iface_mp_chunk_alloc(void *mp_context, size_t *size, void **chunk_p
                                       UCS_MEMTRACK_ARG)
 {
-    uct_iface_t *iface = mp_context;
+    uct_base_iface_t *iface = mp_context;
+    uct_alloc_method_t method;
     uct_iface_mp_chunk_hdr_t *hdr;
     ucs_status_t status;
-    uct_lkey_t lkey;
+    uct_mem_h memh;
     size_t length;
+    uint8_t i;
     void *ptr;
 
-    ptr    = NULL;
-    length = sizeof(*hdr) + *size;
-    /* TODO use iface allocation flags */
-    status = iface->pd->ops->mem_map(iface->pd, &ptr, &length, 0, &lkey
-                                     UCS_MEMTRACK_VAL);
-    if (status != UCS_OK) {
-        return status;
+    if (iface->config.alloc_methods_count == 0) {
+        ucs_warn("no allocation methods selected");
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    hdr   = ptr;
-    *size = length - sizeof(*hdr);
-    hdr->lkey = lkey;
-    *chunk_p = hdr + 1;
-    return UCS_OK;
+    for (i = 0; i < iface->config.alloc_methods_count; ++i) {
+        ptr    = NULL;
+        length = sizeof(*hdr) + *size;
+        method = iface->config.alloc_methods[i];
+
+        status = uct_pd_mem_alloc(iface->super.pd, method, 1,
+                                  UCS_MEMTRACK_VAL_ALWAYS, &length, &ptr, &memh);
+        if (status == UCS_OK) {
+            ucs_debug("allocated %zu->%zu bytes using %s: %p",
+                      sizeof(*hdr) + *size, length, uct_alloc_method_names[method],
+                      ptr);
+            hdr         = ptr;
+            hdr->method = method;
+            hdr->length = length;
+            hdr->memh   = memh;
+            *size       = length - sizeof(*hdr);
+            *chunk_p    = hdr + 1;
+            return UCS_OK;
+        }
+
+        /* Fallback to next method in the list */
+        ucs_debug("failed to allocate %zu bytes using %s, %s",
+                  length, uct_alloc_method_names[method],
+                  ((i + 1) < iface->config.alloc_methods_count) ?
+                                  "trying next method" :
+                                  "no more methods to try");
+    }
+
+    return UCS_ERR_NO_MEMORY;
 }
 
 void uct_iface_mp_chunk_free(void *mp_context, void *chunk)
 {
-    uct_iface_t *iface = mp_context;
+    uct_base_iface_t *iface = mp_context;
     uct_iface_mp_chunk_hdr_t *hdr;
 
     hdr = chunk - sizeof(*hdr);
-    iface->pd->ops->mem_unmap(iface->pd, hdr->lkey);
+    uct_pd_mem_free(iface->super.pd, hdr->method, hdr, hdr->length, hdr->memh);
 }
 
 void uct_iface_mp_init_obj(void *mp_context, void *obj, void *chunk, void *arg)
@@ -90,7 +115,7 @@ void uct_iface_mp_init_obj(void *mp_context, void *obj, void *chunk, void *arg)
 
     hdr = chunk - sizeof(*hdr);
     if (cb) {
-        cb(iface, obj, hdr->lkey);
+        cb(iface, obj, hdr->memh);
     }
 }
 
@@ -149,10 +174,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd
+static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+                           uct_iface_config_t *config
                            UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     ucs_status_t status;
+    unsigned i;
     uint8_t id;
 
     UCS_CLASS_CALL_SUPER_INIT(ops, pd);
@@ -160,6 +187,12 @@ static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         self->am[id].cb  = uct_iface_stub_am_handler;
         self->am[id].arg = (void*)(uintptr_t)id;
+    }
+
+    ucs_assert(config->alloc.count <= UINT8_MAX);
+    self->config.alloc_methods_count = config->alloc.count;
+    for (i = 0; i < config->alloc.count; ++i) {
+        self->config.alloc_methods[i] = config->alloc.prio[i];
     }
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
@@ -215,7 +248,20 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
 UCS_CLASS_DEFINE(uct_base_ep_t, uct_ep_t);
 
 
+UCS_CONFIG_DEFINE_ARRAY(alloc_method, sizeof(uct_alloc_method_t),
+                        UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
+
 ucs_config_field_t uct_iface_config_table[] = {
+   {"ALLOC", "huge,pd,mmap,heap",
+    "How to allocate bounce buffers for the interface. Several allocation\n"
+    "methods can be specified, ordered by priority. The allocation methods are\n"
+    "attempted one-by-one until one is successful. Allocation methods are:\n"
+    " - pd    : Use the protection domain memory allocator.\n"
+    " - heap  : Allocate memory from the heap.\n"
+    " - mmap  : Request memory from the OS using mmap() call.\n"
+    " - huge  : Allocate huge pages.\n",
+    ucs_offsetof(uct_iface_config_t, alloc), UCS_CONFIG_TYPE_ARRAY(alloc_method)},
+
   {"MAX_SHORT", "128",
    "Maximal size of short sends. The transport is allowed to support any size up\n"
    "to this limit, the actual size can be lower due to transport constraints.",

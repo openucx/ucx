@@ -86,6 +86,6 @@ extern uct_tl_ops_t uct_ugni_tl_ops;
 ucs_status_t uct_ugni_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob);
 
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface, uct_ugni_context_t
-                                 *ugni_ctx);
+ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface,
+                                 uct_ugni_context_t *ugni_ctx);
 #endif

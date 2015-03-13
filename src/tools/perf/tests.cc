@@ -106,7 +106,7 @@ public:
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID,
                                        buffer, header_size,
                                        (char*)buffer + header_size, length - header_size,
-                                       m_perf.send_lkey, comp);
+                                       m_perf.send_memh, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -122,7 +122,7 @@ public:
                                         length, remote_addr, rkey);
             case UCX_PERF_DATA_LAYOUT_ZCOPY:
                 comp->func = zcopy_completion_cb;
-                return uct_ep_put_zcopy(ep, buffer, length, m_perf.send_lkey,
+                return uct_ep_put_zcopy(ep, buffer, length, m_perf.send_memh,
                                         remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
@@ -134,7 +134,7 @@ public:
                 return uct_ep_get_bcopy(ep, length, remote_addr, rkey, comp);
             case UCX_PERF_DATA_LAYOUT_ZCOPY:
                 comp->func = zcopy_completion_cb;
-                return uct_ep_get_zcopy(ep, buffer, length, m_perf.send_lkey,
+                return uct_ep_get_zcopy(ep, buffer, length, m_perf.send_memh,
                                         remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;

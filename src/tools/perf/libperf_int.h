@@ -29,7 +29,9 @@ struct ucx_perf_context {
 
     /* Buffers */
     void                         *send_buffer;
+    size_t                       send_alloc_len;
     void                         *recv_buffer;
+    size_t                       recv_alloc_len;
 
     /* Measurements */
     ucs_time_t                   start_time;
@@ -61,8 +63,9 @@ struct uct_perf_context {
     uct_context_h                context;
     uct_iface_h                  iface;
     uct_peer_t                   *peers;
-    uct_lkey_t                   send_lkey;
-    uct_lkey_t                   recv_lkey;
+    uct_alloc_method_t           alloc_method;
+    uct_mem_h                    send_memh;
+    uct_mem_h                    recv_memh;
 };
 
 

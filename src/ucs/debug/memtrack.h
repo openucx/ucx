@@ -46,6 +46,7 @@ void ucs_memtrack_total_reset(ucs_memtrack_entry_t* total);
 
 #define UCS_MEMTRACK_ARG        , const char* alloc_name
 #define UCS_MEMTRACK_VAL        , alloc_name
+#define UCS_MEMTRACK_VAL_ALWAYS alloc_name
 #define UCS_MEMTRACK_NAME(_n)   , _n
 
 
@@ -119,6 +120,7 @@ int ucs_munmap(void *addr, size_t length);
 
 #define UCS_MEMTRACK_ARG
 #define UCS_MEMTRACK_VAL
+#define UCS_MEMTRACK_VAL_ALWAYS                    ""
 #define UCS_MEMTRACK_NAME(_n)
 
 #define ucs_memtrack_init()                        UCS_EMPTY_STATEMENT

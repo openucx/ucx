@@ -14,7 +14,8 @@
 #include "ugni_iface.h"
 #include "ugni_device.h"
 
-static inline ptrdiff_t uct_ugni_ep_compare(uct_ugni_ep_t *ep1, uct_ugni_ep_t *ep2)
+static inline ptrdiff_t uct_ugni_ep_compare(uct_ugni_ep_t *ep1, 
+                                            uct_ugni_ep_t *ep2)
 {
     return ep1->hash_key - ep2->hash_key;
 }
@@ -25,9 +26,11 @@ static inline unsigned uct_ugni_ep_hash(uct_ugni_ep_t *ep)
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ugni_ep_t, uct_ugni_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, 
+                                         uct_ugni_ep_hash);
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ugni_ep_t, uct_ugni_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, 
+                                        uct_ugni_ep_hash);
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface)
 {
@@ -65,7 +68,8 @@ UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
-uct_ugni_ep_t *uct_ugni_iface_lookup_ep(uct_ugni_iface_t *iface, uintptr_t hash_key)
+uct_ugni_ep_t *uct_ugni_iface_lookup_ep(uct_ugni_iface_t *iface, 
+                                        uintptr_t hash_key)
 {
     uct_ugni_ep_t tmp;
     tmp.hash_key = hash_key;
@@ -83,7 +87,8 @@ ucs_status_t uct_ugni_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t *tl_ifac
                                        uct_ep_addr_t *tl_ep_addr)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, uct_ugni_iface_addr_t);
+    uct_ugni_iface_addr_t *iface_addr = ucs_derived_of(tl_iface_addr, 
+                                                       uct_ugni_iface_addr_t);
     uct_ugni_ep_addr_t *ep_addr = ucs_derived_of(tl_ep_addr, uct_ugni_ep_addr_t);
     gni_return_t ugni_rc;
 
@@ -130,7 +135,7 @@ static inline void uct_ugni_format_fma_amo(uct_ugni_base_desc_t *amo, gni_post_t
 
 static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, gni_post_type_t type,
                                         void *buffer, uint64_t remote_addr,
-                                        uct_lkey_t lkey, uct_rkey_t rkey,
+                                        uct_mem_h memh, uct_rkey_t rkey,
                                         unsigned length, uct_ugni_ep_t *ep,
                                         gni_cq_handle_t cq,
                                         uct_completion_t *comp)
@@ -139,7 +144,7 @@ static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, gni_post_typ
     rdma->desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
     rdma->desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
     rdma->desc.local_addr = (uint64_t) buffer;
-    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)lkey;
+    rdma->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
     rdma->desc.remote_addr = remote_addr;
     rdma->desc.remote_mem_hndl = *(gni_mem_handle_t *)rkey;
     rdma->desc.length = length;
@@ -263,7 +268,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 }
 
 ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                   uct_lkey_t lkey, uint64_t remote_addr,
+                                   uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);

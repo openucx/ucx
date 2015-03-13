@@ -71,17 +71,59 @@ static ucs_time_t __find_median_quick_select(ucs_time_t arr[], int n)
     }
 }
 
-static ucs_status_t ucx_perf_test_init(ucx_perf_context_t *perf,
-                                          ucx_perf_test_params_t *params)
+static ucs_status_t uct_perf_test_alloc_mem(uct_perf_context_t *perf,
+                                            ucx_perf_test_params_t *params)
 {
-    perf->send_buffer = memalign(params->alignment, params->message_size);
-    perf->recv_buffer = memalign(params->alignment, params->message_size);
-    if (perf->send_buffer == NULL || perf->recv_buffer == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    uct_pd_attr_t pd_attr;
+    ucs_status_t status;
+
+    status = uct_pd_query(perf->iface->pd, &pd_attr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to uct_pd_query: %s", ucs_status_string(status));
+        return status;
     }
-    ucs_debug("Allocating memory. Send buffer %p, Recv buffer %p",
-              perf->send_buffer, perf->recv_buffer);
+
+    /* TODO let user pass preferred allocation method. For now, keep previous
+     * default behavior - allocate on heap and register.
+     */
+    perf->alloc_method  = (pd_attr.cap.flags & UCT_PD_FLAG_REG) ?
+                            UCT_ALLOC_METHOD_HEAP :UCT_ALLOC_METHOD_PD;
+
+    perf->super.send_alloc_len = params->message_size;
+    status = uct_pd_mem_alloc(perf->iface->pd, perf->alloc_method, params->alignment,
+                              "perftest", &perf->super.send_alloc_len,
+                              &perf->super.send_buffer, &perf->send_memh);
+    if (status != UCS_OK) {
+        ucs_error("Failed allocate send buffer: %s", ucs_status_string(status));
+        goto err;
+    }
+
+    perf->super.recv_alloc_len = params->message_size;
+    status = uct_pd_mem_alloc(perf->iface->pd, perf->alloc_method, params->alignment,
+                              "perftest", &perf->super.recv_alloc_len,
+                              &perf->super.recv_buffer, &perf->recv_memh);
+    if (status != UCS_OK) {
+        ucs_error("Failed allocate receive buffer: %s", ucs_status_string(status));
+        goto err_free_send;
+    }
+
+    ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
+              perf->super.send_buffer, perf->super.recv_buffer);
     return UCS_OK;
+
+err_free_send:
+    uct_pd_mem_free(perf->iface->pd, perf->alloc_method, perf->super.send_buffer,
+                    perf->super.send_alloc_len, perf->send_memh);
+err:
+    return status;
+}
+
+static void uct_perf_test_free_mem(uct_perf_context_t *perf)
+{
+    uct_pd_mem_free(perf->iface->pd, perf->alloc_method, perf->super.send_buffer,
+                    perf->super.send_alloc_len, perf->send_memh);
+    uct_pd_mem_free(perf->iface->pd, perf->alloc_method, perf->super.recv_buffer,
+                    perf->super.recv_alloc_len, perf->recv_memh);
 }
 
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
@@ -388,7 +430,7 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
         goto err_free;
     }
 
-    status = uct_rkey_pack(perf->iface->pd, perf->recv_lkey, rkey_buffer);
+    status = uct_rkey_pack(perf->iface->pd, perf->recv_memh, rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
         goto err_free;
@@ -512,15 +554,8 @@ ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *pa
 {
     uct_perf_context_t perf;
     ucs_status_t status;
-    void *address;
-    size_t length;
 
     perf.context = context;
-
-    status = ucx_perf_test_init(&perf.super, params);
-    if (status != UCS_OK) {
-        goto out;
-    }
 
     ucx_perf_test_reset(&perf.super, params);
 
@@ -528,7 +563,7 @@ ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *pa
                             &perf.iface);
     if (status != UCS_OK) {
         ucs_error("Failed to open iface: %s", ucs_status_string(status));
-        goto out_test_cleanup;
+        goto out;
     }
 
     status = uct_perf_test_check_capabilities(params, perf.iface);
@@ -536,24 +571,15 @@ ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *pa
         goto out_iface_close;
     }
 
-    address = perf.super.send_buffer;
-    length  = perf.super.params.message_size;
-    status = uct_mem_map(perf.iface->pd, &address, &length, 0, &perf.send_lkey);
+    status = uct_perf_test_alloc_mem(&perf, params);
     if (status != UCS_OK) {
         goto out_iface_close;
-    }
-
-    address = perf.super.recv_buffer;
-    length  = perf.super.params.message_size;
-    status = uct_mem_map(perf.iface->pd, &address, &length, 0, &perf.recv_lkey);
-    if (status != UCS_OK) {
-        goto out_mem_unmap_send;
     }
 
     status = uct_perf_test_setup_endpoints(&perf);
     if (status != UCS_OK) {
         ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
-        goto out_mem_unmap_recv;
+        goto out_free_mem;
     }
 
     if (params->warmup_iter > 0) {
@@ -577,14 +603,10 @@ ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *pa
     }
 
     uct_perf_test_cleanup_endpoints(&perf);
-out_mem_unmap_recv:
-    uct_mem_unmap(perf.iface->pd, perf.recv_lkey);
-out_mem_unmap_send:
-    uct_mem_unmap(perf.iface->pd, perf.send_lkey);
+out_free_mem:
+    uct_perf_test_free_mem(&perf);
 out_iface_close:
     uct_iface_close(perf.iface);
-out_test_cleanup:
-    ucx_perf_test_cleanup(&perf.super);
 out:
     return status;
 }

@@ -16,8 +16,10 @@
 void uct_device_get_resource(uct_ugni_device_t *dev,
         uct_resource_desc_t *resource)
 {
-    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", TL_NAME);
-    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
+    ucs_snprintf_zero(resource->tl_name,  
+                      sizeof(resource->tl_name), "%s", TL_NAME);
+    ucs_snprintf_zero(resource->dev_name, 
+                      sizeof(resource->dev_name), "%s", dev->fname);
     resource->local_cpus = dev->cpu_mask;
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));
@@ -37,8 +39,9 @@ static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
         ugni_rc = GNI_CdmGetNicAddress(dev_p->device_id, &dev_p->address,
                                        &dev_p->cpu_id);
         if (GNI_RC_SUCCESS != ugni_rc) {
-            ucs_error("GNI_CdmGetNicAddress failed, device %d, Error status: %s %d",
-                      dev_p->device_id, gni_err_str[ugni_rc], ugni_rc);
+            ucs_error("GNI_CdmGetNicAddress failed, device %d, 
+                       Error status: %s %d", dev_p->device_id, 
+                       gni_err_str[ugni_rc], ugni_rc);
             return UCS_ERR_NO_DEVICE;
         }
         CPU_SET(dev_p->cpu_id, &(dev_p->cpu_mask));
@@ -71,7 +74,8 @@ static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, uct_ugni_device_t *dev_p)
+ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, 
+                                    uct_ugni_device_t *dev_p)
 {
     ucs_status_t rc;
     gni_return_t ugni_rc;
