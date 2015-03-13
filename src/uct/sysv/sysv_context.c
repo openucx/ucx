@@ -80,7 +80,7 @@ ucs_status_t uct_sysv_init(uct_context_h context)
     if (status != UCS_OK) {
         ucs_warn("Failed to initialize sysv device 0 (%s), ignoring it",
                   ucs_status_string(status));
-        /* FIXME howto bail? */
+        /* FIXME should I / howto bail? */
     } else {
         ++sysv_ctx->num_devices;
     }
@@ -91,7 +91,7 @@ ucs_status_t uct_sysv_init(uct_context_h context)
     if (UCS_OK != status) {
         ucs_error("Failed to register context (%s), ignoring it",
                   ucs_status_string(status));
-        /* FIXME howto bail? */
+        /* FIXME should I / howto bail? */
     }
 
     sysv_ctx->activated = true;

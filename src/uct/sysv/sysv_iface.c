@@ -16,7 +16,7 @@ unsigned sysv_iface_global_counter = 0;
 /* called in the notifier chain and iface_flush */
 static void uct_sysv_progress(void *arg)
 {
-    /* FIXME will need this for AM */
+    /* FIXME might need this for AM */
 }
 
 static ucs_status_t uct_sysv_iface_flush(uct_iface_h tl_iface)
@@ -36,14 +36,14 @@ ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-#define SYSV_MAX_SHORT_PUT 2048 /* FIXME */
+#define SYSV_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
 
 ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* FIXME all of these values */
-    iface_attr->cap.put.max_short      = SYSV_MAX_SHORT_PUT; /* FIXME */
+    iface_attr->cap.put.max_short      = SYSV_MAX_SHORT_LENGTH;
     iface_attr->iface_addr_len         = sizeof(uct_sysv_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_sysv_ep_addr_t);
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT;
@@ -119,7 +119,7 @@ static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
                                       void *rkey_buffer)
 {
-    /* FIXME user is responsible to free rkey_buffer? */
+    /* user is responsible to free rkey_buffer */
     uintptr_t *ptr = rkey_buffer;
     uintptr_t *mem_hndl = memh;
     ptr[0] = 0; ptr[1] = 0; ptr[2] = 0; ptr[3] = 0;
@@ -146,7 +146,7 @@ static void uct_sysv_rkey_release(uct_context_h context, uct_rkey_t key)
 ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                  uct_rkey_bundle_t *rkey_ob)
 {
-    /* FIXME user is responsible to free rkey_buffer? */
+    /* user is responsible to free rkey_buffer */
     uintptr_t *ptr = rkey_buffer;
     uintptr_t magic = 0;
     uintptr_t *mem_hndl = NULL;
@@ -192,7 +192,6 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
     rkey_ob->rkey = (uintptr_t)mem_hndl;
     return UCS_OK;
 
-    /* need to add rkey release */
 }
 
 uct_iface_ops_t uct_sysv_iface_ops = {
@@ -223,6 +222,7 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     uct_sysv_context_t *sysv_ctx = 
         ucs_component_get(context, sysv, uct_sysv_context_t);
     uct_sysv_device_t *dev;
+    int rc, addr;
 
     UCS_CLASS_CALL_SUPER_INIT(&uct_sysv_iface_ops);
 
@@ -240,7 +240,7 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
 
     self->super.super.pd   = &self->pd.super;
     self->dev              = dev;
-    self->config.max_put   = SYSV_MAX_SHORT_PUT;
+    self->config.max_put   = SYSV_MAX_SHORT_LENGTH;
 
     ucs_notifier_chain_add(&context->progress_chain, uct_sysv_progress, self);
 
@@ -249,7 +249,20 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     self->activated = false;
     /* TBD: atomic increment */
     ++sysv_ctx->num_ifaces;
-    return sysv_activate_iface(self, sysv_ctx);
+
+    /* Make sure that context is activated */
+    rc = sysv_activate_domain(sysv_ctx);
+    if (UCS_OK != rc) {
+        ucs_error("Failed to activate context, Error status: %d", rc);
+        return rc;
+    }
+
+    addr = ucs_atomic_fadd32(&sysv_iface_global_counter, 1);
+
+    self->addr.nic_addr = addr;
+    self->activated = true;
+
+    return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
@@ -265,7 +278,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
     /* TBD: Clean endpoints first (unbind and destroy) ?*/
     ucs_atomic_add32(&sysv_iface_global_counter, -1);
 
-    /* FIXME tasks to tear down the domain */
+    /* tasks to tear down the domain */
 
     self->activated = false;
 }
@@ -280,29 +293,3 @@ uct_tl_ops_t uct_sysv_tl_ops = {
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_iface_t),
     .rkey_unpack         = uct_sysv_rkey_unpack,
 };
-
-/* FIXME why is this split out from the init function above? */
-ucs_status_t sysv_activate_iface(uct_sysv_iface_t *iface, 
-                                uct_sysv_context_t *sysv_ctx)
-{
-    int rc, addr;
-
-    if(iface->activated) {
-        return UCS_OK;
-    }
-
-    /* Make sure that context is activated */
-    rc = sysv_activate_domain(sysv_ctx);
-    if (UCS_OK != rc) {
-        ucs_error("Failed to activate context, Error status: %d", rc);
-        return rc;
-    }
-
-    addr = ucs_atomic_fadd32(&sysv_iface_global_counter, 1);
-
-    iface->addr.nic_addr = addr;
-    iface->activated = true;
-
-    /* iface is activated */
-    return UCS_OK;
-}
