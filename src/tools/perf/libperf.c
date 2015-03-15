@@ -415,7 +415,7 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
         goto err_free;
     }
 
-    status = uct_rkey_pack(perf->iface->pd, perf->recv_memh, rkey_buffer);
+    status = uct_pd_rkey_pack(perf->iface->pd, perf->recv_memh, rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
         goto err_free;
@@ -472,7 +472,7 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
             rte_call(&perf->super, recv_vec, i, vec , 4, req);
 
             perf->peers[i].remote_addr = address;
-            status = uct_rkey_unpack(perf->context, rkey_buffer, &perf->peers[i].rkey);
+            status = uct_pd_rkey_unpack(perf->iface->pd, rkey_buffer, &perf->peers[i].rkey);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
                 return status;
@@ -498,7 +498,7 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
 err_destroy_eps:
     for (i = 0; i < group_size; ++i) {
         if (perf->peers[i].rkey.type != NULL) {
-            uct_rkey_release(perf->context, &perf->peers[i].rkey);
+            uct_pd_rkey_release(perf->iface->pd, &perf->peers[i].rkey);
         }
         if (perf->peers[i].ep != NULL) {
             uct_ep_destroy(perf->peers[i].ep);
@@ -519,11 +519,11 @@ void uct_perf_test_cleanup_endpoints(uct_perf_context_t *perf)
 
     rte_call(&perf->super, barrier);
 
-    uct_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
+    uct_iface_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
 
     group_size = rte_call(&perf->super, group_size);
     for (i = 0; i < group_size; ++i) {
-        uct_rkey_release(perf->context, &perf->peers[i].rkey);
+        uct_pd_rkey_release(perf->iface->pd, &perf->peers[i].rkey);
         if (perf->peers[i].ep) {
             uct_ep_destroy(perf->peers[i].ep);
         }

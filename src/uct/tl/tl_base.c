@@ -116,8 +116,8 @@ static ucs_status_t uct_iface_stub_am_handler(void *desc, void *data,
     return UCS_OK;
 }
 
-ucs_status_t uct_set_am_handler(uct_iface_h tl_iface, uint8_t id,
-                                uct_am_callback_t cb, void *arg)
+ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
+                                      uct_am_callback_t cb, void *arg)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
@@ -132,6 +132,21 @@ ucs_status_t uct_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     iface->am[id].cb  = cb;
     iface->am[id].arg = arg;
     return UCS_OK;
+}
+
+ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
+{
+    return iface->ops.iface_query(iface, iface_attr);
+}
+
+void uct_iface_close(uct_iface_h iface)
+{
+    iface->ops.iface_close(iface);
+}
+
+ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *iface_addr)
+{
+    return iface->ops.iface_get_address(iface, iface_addr);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
@@ -179,6 +194,32 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
 
 UCS_CLASS_DEFINE(uct_base_iface_t, uct_iface_t);
 
+
+ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
+{
+    return iface->ops.ep_create(iface, ep_p);
+}
+
+void uct_ep_destroy(uct_ep_h ep)
+{
+    ep->iface->ops.ep_destroy(ep);
+}
+
+ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
+{
+    return ep->iface->ops.ep_get_address(ep, ep_addr);
+}
+
+ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr)
+{
+    return ep->iface->ops.ep_connect_to_iface(ep, iface_addr);
+}
+
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
+                                  uct_ep_addr_t *ep_addr)
+{
+    return ep->iface->ops.ep_connect_to_ep(ep, iface_addr, ep_addr);
+}
 
 static UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
 {

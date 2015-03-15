@@ -39,12 +39,6 @@ typedef struct uct_completion    uct_completion_t;
 
 
 /**
- * Remote key release function.
- */
-typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
-
-
-/**
  * Callback to process incoming active message
  *
  * When the callback is called, `desc' does not necessarily contain the payload.

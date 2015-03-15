@@ -40,12 +40,12 @@ public:
             m_completions[i]->self     = this;
         }
 
-        uct_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, am_hander,
+        uct_iface_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, am_hander,
                            m_perf.super.recv_buffer);
     }
 
     ~uct_perf_test_runner() {
-        uct_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
+        uct_iface_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
         free(m_completions[0]);
         free(m_completions);
     }

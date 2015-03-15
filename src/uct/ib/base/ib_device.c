@@ -184,8 +184,8 @@ static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
-                                uct_rkey_bundle_t *rkey_ob)
+static ucs_status_t uct_ib_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+                                       uct_rkey_bundle_t *rkey_ob)
 {
     uint32_t *ptr = rkey_buffer;
     uint32_t magic;
@@ -196,7 +196,7 @@ ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
     }
 
     rkey_ob->rkey = *(ptr++);
-    rkey_ob->type = (void*)ucs_empty_function;
+    rkey_ob->type = NULL; /* Unused */
     return UCS_OK;
 }
 
@@ -207,6 +207,8 @@ uct_pd_ops_t uct_ib_pd_ops = {
     .mem_reg      = uct_ib_mem_reg,
     .mem_dereg    = uct_ib_mem_dereg,
     .rkey_pack    = uct_ib_rkey_pack,
+    .rkey_unpack  = uct_ib_rkey_unpack,
+    .rkey_release = (void*)ucs_empty_function,
 };
 
 static void uct_ib_async_event_handler(void *arg)
