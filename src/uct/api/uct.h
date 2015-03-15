@@ -92,6 +92,20 @@ typedef struct uct_resource_desc {
 
 
 /**
+ * @ingroup RESOURCE
+ * @brief Thread mode.
+ *
+ * Specifies thread sharing mode of the object.
+ */
+typedef enum {
+    UCT_THREAD_MODE_SINGLE,   /**< Only one thread can access */
+    UCT_THREAD_MODE_FUNNELED, /**< Multiple threads can access, but only one at a time */
+    UCT_THREAD_MODE_MULTI,    /**< Multiple threads can access concurrently */
+    UCT_THREAD_MODE_LAST
+} uct_thread_mode_t;
+
+
+/**
  * Opaque type for interface address.
  */
 struct uct_iface_addr {
@@ -288,6 +302,7 @@ struct uct_completion {
  */
 ucs_status_t uct_init(uct_context_h *context_p);
 
+
 /**
  * @ingroup CONTEXT
  * @brief   UCT global context finalization
@@ -307,29 +322,6 @@ ucs_status_t uct_init(uct_context_h *context_p);
  * @return void.
  */
 void uct_cleanup(uct_context_h context);
-
-
-/**
- * @ingroup CONTEXT
- * @brief Explicit progress for UCT library
- *
- * This routine explicitly progresses any outstanding communication operations
- * and active message requests.  Transport layers, implementing asynchronous
- * progress using threads, require AM callbacks and other user code to be
- * thread safe. This might not be desirable for some users, and this routine
- * could be used by such users to progress the active message request and
- * completing communication operations.
- *
- * @note @li In the current implementation, users @b MUST call the @ref
- * uct_progress routine to receive the active message requests.  @li Typically,
- * request wait and test routines call @ref uct_progress  to progress any
- * outstanding operations.
- *
- * @param [in] context   Handle to context.
- *
- * @return void.
- */
-void uct_progress(uct_context_h context);
 
 
 /**
@@ -366,6 +358,47 @@ ucs_status_t uct_query_resources(uct_context_h context,
  * @return void.
  */
 void uct_release_resource_list(uct_resource_desc_t *resources);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Create a worker object.
+ *
+ *  The worker represents a progress engine. Multiple progress engines can be
+ * created in an application, for example to be used by multiple threads.
+ * Every worker can be progressed independently of others.
+ *
+ * @param [in]  context       Handle to context.
+ * @param [in]  thread_mode   Thread access mode to the worker and resources
+ *                             created on it.
+ * @param [out] worker_p      Filled with a pointer to the worker object.
+ */
+ucs_status_t uct_worker_create(uct_context_h context, uct_thread_mode_t thread_mode,
+                               uct_worker_h *worker_p);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Destroy a worker object.
+ *
+ * @param [in]  worker        Worker object to destroy.
+ */
+void uct_worker_destroy(uct_worker_h worker);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Explicit progress for UCT worker.
+ *
+ * This routine explicitly progresses any outstanding communication operations
+ * and active message requests.
+ *
+ * @note @li In the current implementation, users @b MUST call this routine
+ * to receive the active message requests.
+ *
+ * @param [in] worker   Handle to worker.
+ */
+void uct_worker_progress(uct_worker_h worker);
 
 
 /**
@@ -428,7 +461,8 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @ingroup RESOURCE
  * @brief Open a communication interface.
  *
- * @param [in]  context       Handle to context.
+ * @param [in]  worker        Handle to worker which will be used to progress
+ *                             communications on this interface.
  * @param [in]  tl_name       Transport name.
  * @param [in]  dev_name      Hardware device name,
  * @param [in]  rx_headroom   How much bytes to reserve before the receive segment.
@@ -439,7 +473,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
+ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
                             const char *dev_name, size_t rx_headroom,
                             uct_iface_config_t *config, uct_iface_h *iface_p);
 

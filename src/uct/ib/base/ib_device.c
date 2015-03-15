@@ -334,7 +334,6 @@ ucs_status_t uct_ib_device_create(uct_context_h context,
 
     /* Save device information */
     dev->super.ops     = &uct_ib_pd_ops;
-    dev->super.context = context;
     dev->ibv_context   = ibv_context;
     dev->dev_attr      = dev_attr;
     dev->first_port    = first_port;

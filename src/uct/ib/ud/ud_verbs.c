@@ -254,14 +254,15 @@ uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface)
     uct_ud_verbs_iface_post_recv_always(iface, batch);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_context_h context,
-                                   const char *dev_name, size_t rx_headroom, uct_iface_config_t *tl_config)
+static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_worker_h worker,
+                           const char *dev_name, size_t rx_headroom,
+                           uct_iface_config_t *tl_config)
 {
-    uct_ud_iface_config_t *config =
-        ucs_derived_of(tl_config, uct_ud_iface_config_t);
+    uct_ud_iface_config_t *config = ucs_derived_of(tl_config, uct_ud_iface_config_t);
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(&uct_ud_verbs_iface_ops, context, dev_name, rx_headroom, 0,  &config->super);
+    UCS_CLASS_CALL_SUPER_INIT(&uct_ud_verbs_iface_ops, worker, dev_name,
+                              rx_headroom, 0,  &config->super);
 
     uct_ud_verbs_iface_post_recv_always(self, self->super.rx.available);
     
@@ -275,7 +276,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_context_h context,
     self->tx.wr.num_sge           = UCT_UD_MAX_SGE;
 
     /* TODO: add progress on first ep creation */
-    ucs_notifier_chain_add(&context->progress_chain, uct_ud_verbs_iface_progress,
+    ucs_notifier_chain_add(&worker->progress_chain, uct_ud_verbs_iface_progress,
                            self);
     return UCS_OK;
 }
@@ -283,14 +284,14 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_context_h context,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 {
-    uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
     ucs_trace_func("");
-    ucs_notifier_chain_remove(&context->progress_chain, uct_ud_verbs_iface_progress, self);
+    ucs_notifier_chain_remove(&self->super.super.super.worker->progress_chain,
+                              uct_ud_verbs_iface_progress, self);
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_iface_t, uct_ud_iface_t);
 
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_iface_t, uct_iface_t, uct_context_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, uct_iface_config_t*);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_iface_t, uct_iface_t);

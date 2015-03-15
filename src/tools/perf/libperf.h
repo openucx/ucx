@@ -122,6 +122,7 @@ typedef struct ucx_perf_test_params {
     ucx_perf_cmd_t         command;         /* Command to perform */
     ucx_perf_test_type_t   test_type;       /* Test communication type */
     ucx_perf_data_layout_t data_layout;     /* Data layout to use */
+    uct_thread_mode_t      thread_mode;     /* Thread mode for communication objects */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
@@ -143,7 +144,7 @@ typedef struct ucx_perf_test_params {
 /**
  * Run a performance test.
  */
-ucs_status_t uct_perf_test_run(uct_context_h context,ucx_perf_test_params_t *params,
+ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *params,
                                const char *tl_name, const char *dev_name,
                                uct_iface_config_t *iface_config,
                                ucx_perf_result_t *result);

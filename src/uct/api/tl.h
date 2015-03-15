@@ -124,7 +124,6 @@ typedef struct uct_iface_ops {
  */
 typedef struct uct_pd {
     uct_pd_ops_t             *ops;
-    uct_context_h            context;
 } uct_pd_t;
 
 

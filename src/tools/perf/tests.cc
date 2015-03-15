@@ -56,12 +56,12 @@ public:
 
     void UCS_F_ALWAYS_INLINE progress_responder() {
         if (!ONESIDED) {
-            uct_progress(m_perf.context);
+            uct_worker_progress(m_perf.worker);
         }
     }
 
     void UCS_F_ALWAYS_INLINE progress_requestor() {
-        uct_progress(m_perf.context);
+        uct_worker_progress(m_perf.worker);
     }
 
     static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)

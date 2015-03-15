@@ -59,6 +59,7 @@ struct uct_peer {
 struct uct_perf_context {
     ucx_perf_context_t           super;
     uct_context_h                context;
+    uct_worker_h                 worker;
     uct_iface_h                  iface;
     uct_peer_t                   *peers;
     uct_mem_h                    send_memh;

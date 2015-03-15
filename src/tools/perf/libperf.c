@@ -217,7 +217,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 void uct_perf_iface_flush_b(uct_perf_context_t *perf)
 {
     while (uct_iface_flush(perf->iface) == UCS_ERR_NO_RESOURCE) {
-        uct_progress(perf->context);
+        uct_worker_progress(perf->worker);
     }
 }
 
@@ -544,11 +544,17 @@ ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *pa
 
     ucx_perf_test_reset(&perf.super, params);
 
-    status = uct_iface_open(perf.context, tl_name, dev_name, 0, iface_config,
+    /* TODO allow user to configure tyhread mode */
+    status = uct_worker_create(perf.context, params->thread_mode, &perf.worker);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_iface_open(perf.worker, tl_name, dev_name, 0, iface_config,
                             &perf.iface);
     if (status != UCS_OK) {
         ucs_error("Failed to open iface: %s", ucs_status_string(status));
-        goto out;
+        goto out_destroy_worker;
     }
 
     status = uct_perf_test_check_capabilities(params, perf.iface);
@@ -592,6 +598,8 @@ out_free_mem:
     uct_perf_test_free_mem(&perf);
 out_iface_close:
     uct_iface_close(perf.iface);
+out_destroy_worker:
+    uct_worker_destroy(perf.worker);
 out:
     return status;
 }

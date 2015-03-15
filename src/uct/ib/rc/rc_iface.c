@@ -179,14 +179,14 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops,
-                           uct_context_h context, const char *dev_name,
+                           uct_worker_h worker, const char *dev_name,
                            size_t rx_headroom, size_t rx_priv_len,
                            uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, rx_priv_len,
+    UCS_CLASS_CALL_SUPER_INIT(ops, worker, dev_name, rx_headroom, rx_priv_len,
                               sizeof(uct_rc_hdr_t), config->tx.cq_len, config);
 
     self->tx.cq_available           = config->tx.cq_len - 1; /* Reserve one for error */

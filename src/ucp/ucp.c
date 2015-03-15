@@ -208,10 +208,16 @@ ucs_status_t ucp_init(ucp_context_h *context_p)
         goto err_free_resources;
     }
 
+    status = uct_worker_create(context->uct_context, UCT_THREAD_MODE_MULTI /* TODO */,
+                               &context->uct_worker);
+    if (status != UCS_OK) {
+        goto err_free_resources;
+    }
+
     /* fill ucp configure options */
     status = ucs_config_parser_fill_opts(&ucp_config, ucp_iface_config_table, UCP_CONFIG_ENV_PREFIX, NULL, 0);
     if (status != UCS_OK) {
-        goto err_free_resources;
+        goto err_destroy_worker;
     }
 
     tmp_resources = ucs_calloc(num_resources, sizeof(uct_resource_desc_t), "temporary resources list");
@@ -256,6 +262,8 @@ err_free_tmp_resources:
     ucs_free(tmp_resources);
 err_free_ucp_config:
     ucs_config_parser_release_opts(&ucp_config, ucp_iface_config_table);
+err_destroy_worker:
+    uct_worker_destroy(context->uct_worker);
 err_free_resources:
     uct_release_resource_list(resources);
 err_free_uct:
@@ -268,6 +276,7 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
+    uct_worker_destroy(context->uct_worker);
     uct_release_resource_list(context->resources);
     uct_cleanup(context->uct_context);
     ucs_free(context);
@@ -296,7 +305,7 @@ ucs_status_t ucp_iface_create(ucp_context_h ucp_context, const char *env_prefix,
     }
 
     /* TODO open the matched resources. for now we open just the 1st */
-    status = uct_iface_open(ucp_context->uct_context,
+    status = uct_iface_open(ucp_context->uct_worker,
                             ucp_context->resources[0].tl_name,
                             ucp_context->resources[0].dev_name, 0, iface_config,
                             &ucp_iface->uct_iface);

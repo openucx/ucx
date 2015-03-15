@@ -52,9 +52,16 @@ typedef struct uct_context_tl_info {
 
 typedef struct uct_context uct_context_t;
 struct uct_context {
-    ucs_notifier_chain_t   progress_chain;
     unsigned               num_tls;
     uct_context_tl_info_t  *tls;
+};
+
+
+typedef struct uct_worker uct_worker_t;
+struct uct_worker {
+    uct_context_h          context;
+    ucs_notifier_chain_t   progress_chain;
+    uct_thread_mode_t      thread_mode;
 };
 
 
