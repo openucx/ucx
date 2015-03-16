@@ -118,6 +118,20 @@ enum {
 
 
 /**
+ * @ingroup CONTEXT
+ * @brief  Memory allocation methods.
+ */
+typedef enum {
+    UCT_ALLOC_METHOD_PD,   /**< Allocate using protection domain */
+    UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap usign libc allocator */
+    UCT_ALLOC_METHOD_MMAP, /**< Allocate from OS using mmap() syscall */
+    UCT_ALLOC_METHOD_HUGE, /**< Allocate huge pages */
+    UCT_ALLOC_METHOD_LAST,
+    UCT_ALLOC_METHOD_DEFAULT = UCT_ALLOC_METHOD_LAST /**< Use default method */
+} uct_alloc_method_t;
+
+
+/**
  * Interface attributes: capabilities and limitations.
  */
 struct uct_iface_attr {
@@ -134,13 +148,13 @@ struct uct_iface_attr {
         } get;
 
         struct {
-            size_t           max_short;  /* Total max. size (incl. the header) */
-            size_t           max_bcopy;  /* Total max. size (incl. the header) */
-            size_t           max_zcopy;  /* Total max. size (incl. the header) */
-            size_t           max_hdr;    /* Max. header size for bcopy/zcopy */
+            size_t           max_short;  /**< Total max. size (incl. the header) */
+            size_t           max_bcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_zcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_hdr;    /**< Max. header size for bcopy/zcopy */
         } am;
 
-        uint64_t             flags;
+        uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
     } cap;
 
     size_t                   iface_addr_len;
@@ -150,10 +164,41 @@ struct uct_iface_attr {
 
 
 /**
- * Protection domain attributes
+ * @ingroup CONTEXT
+ * @brief  Protection domain capability flags.
+ */
+enum {
+    UCT_PD_FLAG_ALLOC     = UCS_BIT(0),  /**< PD support memory allocation */
+    UCT_PD_FLAG_REG       = UCS_BIT(1),  /**< PD support memory registration */
+};
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief  List of allocation methods, in order of priority (high to low).
+ */
+typedef struct uct_alloc_methods {
+    uint8_t                  count;  /**< Number of allocation methods in the array */
+    uint8_t                  methods[UCT_ALLOC_METHOD_LAST];
+                                     /**< Array of allocation methods */
+} uct_alloc_methods_t;
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief  Protection domain attributes.
  */
 struct uct_pd_attr {
-    size_t                   rkey_packed_size; /* Size of buffer needed for packed rkey */
+    char                     name[UCT_MAX_NAME_LEN]; /**< Protection domain name */
+
+    struct {
+        size_t               max_alloc;     /**< Maximal allocation size */
+        size_t               max_reg;       /**< Maximal registration size */
+        uint64_t             flags;         /**< UCT_PD_FLAG_xx */
+    } cap;
+
+    uct_alloc_methods_t      alloc_methods; /**< Allocation methods priority */
+    size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
 };
 
 
@@ -192,7 +237,7 @@ struct uct_completion {
  * communication scope, for example, MPI instance, OpenSHMEM instance.
  *
  * @note @li Higher level protocols can add additional communication isolation,
- * as MPI does with it’s communicator object. A single communication context
+ * as MPI does with it's communicator object. A single communication context
  * may be used to support multiple MPI communicators.  @li The context can be
  * used to isolate the communication that corresponds to different protocols.
  * For example, if MPI and OpenSHMEM are using UCCS to isolate the MPI
@@ -386,29 +431,66 @@ ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
 /**
  * @ingroup CONTEXT
- * @brief Map or allocate memory for zero-copy sends and remote access.
+ * @brief Register memory for zero-copy sends and remote access.
  *
- * @param [in]     pd         Protection domain to map memory on.
- * @param [out]    address_p  If != NULL, memory region to map.
- *                            If == NULL, filled with a pointer to allocated region.
- * @param [inout]  length_p   How many bytes to allocate. Filled with the actual
- *                           allocated size, which is larger than or equal to the
- *                           requested size.
- * @param [in]     flags      Allocation flags (currently reserved - set to 0).
- * @param [out]    lkey_p     Filled with local access key for allocated region.
+ * @param [in]     pd        Protection domain to register memory on.
+ * @param [out]    address   Memory to register.
+ * @param [in,out] length    Size of memory to register. Must be >0.
+ * @param [out]    memh_p    Filled with handle for allocated region.
  */
-ucs_status_t uct_mem_map(uct_pd_h pd, void **address_p, size_t *length_p,
-                         unsigned flags, uct_lkey_t *lkey_p);
+ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
+                            uct_mem_h *memh_p);
 
 
 /**
  * @ingroup CONTEXT
- * @brief Undo the operation of uct_mem_map().
+ * @brief Undo the operation of uct_pd_mem_reg().
  *
- * @param [in]  pd          Protection domain which was used to allocate/map the memory.
- * @paran [in]  lkey        Local access key to memory region.
+ * @param [in]  pd          Protection domain which was used to register the memory.
+ * @paran [in]  memh        Local access key to memory region.
  */
-ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey);
+ucs_status_t uct_pd_mem_dereg(uct_pd_h pd, uct_mem_h memh);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Allocate memory for zero-copy sends and remote access.
+ *
+ * Allocate registered memory. The memory would either be allocated with the
+ * protection domain, or allocated using other method and then registered with
+ * the protection domain.
+ *
+ * TODO allow passing multiple protection domains.
+ *
+ * @param [in]     pd          Protection domain to allocate memory on.
+ * @param [in]     method      Memory allocation method. Can be UCT_ALLOC_METHOD_DEFAULT.
+ * @param [in,out] length_p    Points to a value which specifies how many bytes to
+ *                              allocate. Filled with the actual allocated size,
+ *                              which is larger than or equal to the requested size.
+                                Must be >0.
+ * @param [in]     alignment   Allocation alignment, must be power-of-2.
+ * @param [out]    address_p   Filled with a pointer to allocated memory.
+ * @param [out]    memh_p      Filled with a handle for allocated memory, which can
+ *                              be used for zero-copy communications.
+ * @param [in]     alloc_name  Name of the allocation. Used for memory statistics.
+ */
+ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, uct_alloc_method_t method,
+                              size_t *length_p, size_t alignment, void **address_p,
+                              uct_mem_h *memh_p, const char *alloc_name);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Release allocated memory.
+ *
+ * Release the memory allocated by @ref uct_pd_mem_alloc. pd should be the same
+ * as passed to @ref uct_pd_mem_alloc, and address should be one returned from it.
+ *
+ * @param [in]  pd          Protection domain which was used to allocate the memory.
+ * @param [in]  address     Address of allocated memory.
+ * @paran [in]  memh        Local access key to memory region.
+ */
+ucs_status_t uct_pd_mem_free(uct_pd_h pd, void *address, uct_mem_h memh);
 
 
 /**
@@ -417,12 +499,12 @@ ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey);
  * @brief Pack a remote key.
  *
  * @param [in]  pd           Handle to protection domain.
- * @param [in]  lkey         Local key, whose remote key should be packed.
+ * @param [in]  memh         Local key, whose remote key should be packed.
  * @param [out] rkey_buffer  Filled with packed remote key.
  *
  * @return Error code.
  */
-ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer);
+ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
 
 
 /**
@@ -513,10 +595,10 @@ UCT_INLINE_API ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pa
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
-                                            uct_lkey_t lkey, uint64_t remote_addr,
+                                            uct_mem_h memh, uint64_t remote_addr,
                                             uct_rkey_t rkey, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_put_zcopy(ep, buffer, length, lkey, remote_addr,
+    return ep->iface->ops.ep_put_zcopy(ep, buffer, length, memh, remote_addr,
                                        rkey, comp);
 }
 
@@ -528,10 +610,10 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, size_t length,
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
-                                            uct_lkey_t lkey, uint64_t remote_addr,
+                                            uct_mem_h memh, uint64_t remote_addr,
                                             uct_rkey_t rkey, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_get_zcopy(ep, buffer, length, lkey, remote_addr,
+    return ep->iface->ops.ep_get_zcopy(ep, buffer, length, memh, remote_addr,
                                        rkey, comp);
 }
 
@@ -604,11 +686,11 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
 
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
                                            unsigned header_length, void *payload,
-                                           size_t length, uct_lkey_t lkey,
+                                           size_t length, uct_mem_h memh,
                                            uct_completion_t *comp)
 {
     return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, payload,
-                                      length, lkey, comp);
+                                      length, memh, comp);
 }
 
 UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep)

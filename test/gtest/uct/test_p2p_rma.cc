@@ -36,7 +36,7 @@ public:
     {
         m_completion->length = 0;
         return uct_ep_put_zcopy(ep,
-                                sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
+                                sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
                                 recvbuf.addr(), recvbuf.rkey(),
                                 &m_completion->uct);
     }
@@ -55,7 +55,7 @@ public:
     {
         m_completion->length = 0;
         return uct_ep_get_zcopy(ep,
-                                sendbuf.ptr(), sendbuf.length(), sendbuf.lkey(),
+                                sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
                                 recvbuf.addr(), recvbuf.rkey(),
                                 &m_completion->uct);
     }

@@ -61,8 +61,8 @@ struct uct_perf_context {
     uct_context_h                context;
     uct_iface_h                  iface;
     uct_peer_t                   *peers;
-    uct_lkey_t                   send_lkey;
-    uct_lkey_t                   recv_lkey;
+    uct_mem_h                    send_memh;
+    uct_mem_h                    recv_memh;
 };
 
 

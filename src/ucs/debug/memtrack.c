@@ -18,6 +18,7 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 
 
 #if ENABLE_MEMTRACK

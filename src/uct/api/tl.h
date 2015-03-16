@@ -52,7 +52,7 @@ typedef struct uct_iface_ops {
                                  uct_rkey_t rkey);
 
     ucs_status_t (*ep_put_zcopy)(uct_ep_h ep, void *buffer, size_t length,
-                                 uct_lkey_t lkey, uint64_t remote_addr,
+                                 uct_mem_h memh, uint64_t remote_addr,
                                  uct_rkey_t rkey, uct_completion_t *comp);
 
     /* Get */
@@ -61,7 +61,7 @@ typedef struct uct_iface_ops {
                                  uct_rkey_t rkey, uct_completion_t *comp);
 
     ucs_status_t (*ep_get_zcopy)(uct_ep_h ep, void *buffer, size_t length,
-                                 uct_lkey_t lkey, uint64_t remote_addr,
+                                 uct_mem_h memh, uint64_t remote_addr,
                                  uct_rkey_t rkey, uct_completion_t *comp);
 
     /* Active message */
@@ -75,7 +75,7 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_am_zcopy)(uct_ep_h ep, uint8_t id, void *header,
                                 unsigned header_length, void *payload,
-                                size_t length, uct_lkey_t lkey,
+                                size_t length, uct_mem_h memh,
                                 uct_completion_t *comp);
 
     /* Atomics */

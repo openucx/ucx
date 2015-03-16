@@ -220,7 +220,8 @@ size_t ucs_get_huge_page_size();
  *                  (also, whether or not to allocate memory with huge pages).
  * @param shmid     Filled with the shmid from the shmget call in the function.
  */
-ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shimd);
+ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shimd
+                            UCS_MEMTRACK_ARG);
 
 
 /**

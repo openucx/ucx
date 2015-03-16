@@ -85,7 +85,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
                                        uct_rkey_t rkey);
 
 ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                       uct_lkey_t lkey, uint64_t remote_addr,
+                                       uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep, size_t length,
@@ -93,7 +93,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep, size_t length,
                                        uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                       uct_lkey_t lkey, uint64_t remote_addr,
+                                       uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
@@ -105,7 +105,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
                                       unsigned header_length, void *payload,
-                                      size_t length, uct_lkey_t lkey,
+                                      size_t length, uct_mem_h memh,
                                       uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,

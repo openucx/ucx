@@ -135,10 +135,11 @@ static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
     return UCS_ERR_NO_DEVICE;
 }
 
-static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
+static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
-    desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
+    struct ibv_mr *mr = memh;
+    desc->lkey = mr->lkey;
 }
 
 ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
@@ -189,7 +190,7 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
         goto err;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(ops, &dev->super UCS_STATS_ARG(dev->stats));
+    UCS_CLASS_CALL_SUPER_INIT(ops, &dev->super, &config->super UCS_STATS_ARG(dev->stats));
 
     self->port_num                 = port_num;
     self->gid_index                = config->gid_index;

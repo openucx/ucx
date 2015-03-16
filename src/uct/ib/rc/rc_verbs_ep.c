@@ -119,7 +119,7 @@ static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
 
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, void *buffer, size_t length,
-                           uct_lkey_t lkey, uint64_t remote_addr,
+                           struct ibv_mr *mr, uint64_t remote_addr,
                            uct_rkey_t rkey, uct_completion_t *comp,
                            int opcode)
 {
@@ -133,7 +133,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, void *buffer, size_t length,
     uct_rc_verbs_fill_rdma_wr(&wr, opcode, &sge, length, remote_addr, rkey);
     wr.next                = NULL;
     sge.addr               = (uintptr_t)buffer;
-    sge.lkey               = (lkey == UCT_INVALID_MEM_KEY) ? 0 : uct_ib_lkey_mr(lkey)->lkey;
+    sge.lkey               = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
     uct_rc_ep_add_user_completion(&ep->super, comp, ep->tx.post_count);
@@ -299,13 +299,13 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
 }
 
 ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                       uct_lkey_t lkey, uint64_t remote_addr,
+                                       uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, lkey, remote_addr,
+    status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_WRITE);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY, length);
     return status;
@@ -340,13 +340,13 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep, size_t length,
 }
 
 ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                       uct_lkey_t lkey, uint64_t remote_addr,
+                                       uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, lkey, remote_addr,
+    status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_READ);
     if (status == UCS_INPROGRESS) {
         UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, length);
@@ -418,11 +418,12 @@ static void uct_rc_verbs_ep_am_zcopy_completion(uct_completion_t *self, void *da
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
                                       unsigned header_length, void *payload,
-                                      size_t length, uct_lkey_t lkey,
+                                      size_t length, uct_mem_h memh,
                                       uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    struct ibv_mr *mr = memh;
     uct_rc_iface_send_desc_t *desc;
     struct ibv_send_wr wr;
     struct ibv_sge sge[2];
@@ -455,7 +456,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
     sge[0].length = sizeof(*rch) + header_length;
     sge[1].addr   = (uintptr_t)payload;
     sge[1].length = length;
-    sge[1].lkey   = (lkey == UCT_INVALID_MEM_KEY) ? 0 : uct_ib_lkey_mr(lkey)->lkey;
+    sge[1].lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);

@@ -6,6 +6,8 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/type/component.h>
+#include <string.h>
+
 
 #define UCP_CONFIG_ENV_PREFIX "UCX_"
 

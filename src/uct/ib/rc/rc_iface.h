@@ -131,7 +131,7 @@ void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface);
-void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey);
+void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
 /**
  * Creates an RC QP and fills 'cap' with QP capabilities;

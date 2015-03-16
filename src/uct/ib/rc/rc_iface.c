@@ -151,12 +151,12 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
     return UCS_OK;
 }
 
-void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_lkey_t lkey)
+void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_rc_iface_send_desc_t *desc = obj;
-    desc->lkey = uct_ib_lkey_mr(lkey)->lkey;
+    struct ibv_mr *mr = memh;
+    desc->lkey = mr->lkey;
 }
-
 
 static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
                                       uct_rc_iface_config_t *config)

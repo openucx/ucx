@@ -10,6 +10,8 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
+
 
 typedef struct ucs_mpool_elem {
     union {
@@ -233,7 +235,7 @@ static UCS_F_NOINLINE ucs_status_t ucs_mpool_allocate_chunk(ucs_mpool_h mp)
     status = mp->chunk_alloc_cb(mp->mp_context, &chunk_size, &ptr
                                 UCS_MEMTRACK_NAME(mp->name));
     if (status != UCS_OK) {
-        ucs_error("Failed to allocate memory pool chunk");
+        ucs_error("Failed to allocate memory pool chunk: %s", ucs_status_string(status));
         return status;
     }
 
@@ -321,7 +323,8 @@ ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chu
 
     /* First, try hugetlb */
     real_size = *size;
-    status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid);
+    status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid
+                            UCS_MEMTRACK_VAL);
     if (status == UCS_OK) {
         chunk = ptr;
         chunk->hugetlb = 1;

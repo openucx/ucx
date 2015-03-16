@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucs/debug/memtrack.h>
+#include <ucs/sys/sys.h>
 }
 
 #include <stdio.h>
@@ -136,6 +137,23 @@ UCS_TEST_F(test_memtrack, calloc) {
     test_total(1, ALLOC_SIZE);
 }
 
+UCS_TEST_F(test_memtrack, sysv) {
+    ucs_status_t status;
+    void* ptr = NULL;
+    int shmid;
+    size_t size;
+
+    size = ALLOC_SIZE;
+
+    status = ucs_sysv_alloc(&size, &ptr, 0, &shmid, ALLOC_NAME);
+    ASSERT_UCS_OK(status);
+    ASSERT_NE((void *)NULL, ptr);
+
+    memset(ptr, 0xAA, size);
+    ucs_sysv_free(ptr);
+
+    test_total(1, size);
+}
 
 UCS_TEST_F(test_memtrack, memalign_realloc) {
     void* ptr;

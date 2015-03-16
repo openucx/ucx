@@ -12,6 +12,7 @@
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <malloc.h>
 
 #define UCT_CONFIG_ENV_PREFIX "UCT_"
 
@@ -26,6 +27,30 @@ typedef struct uct_config_bundle {
     const char         *table_prefix;
     char               data[];
 } uct_config_bundle_t;
+
+
+/**
+ * Header of allocated memory block. Stores information used later to release
+ * the memory.
+ *
+ * +---------+--------+-----------------+
+ * | padding | header | user memory ... |
+ * +---------+--------+-----------------+
+ */
+typedef struct uct_mem_block_header {
+    uct_alloc_method_t alloc_method;  /**< Method used to allocate the memory */
+    size_t             total_length;  /**< Total allocation length */
+    void               *mem_block;    /**< Points to the beginning of the whole block */
+} uct_mem_block_header_t;
+
+
+const char *uct_alloc_method_names[] = {
+    [UCT_ALLOC_METHOD_PD]   = "pd",
+    [UCT_ALLOC_METHOD_HEAP] = "heap",
+    [UCT_ALLOC_METHOD_MMAP] = "mmap",
+    [UCT_ALLOC_METHOD_HUGE] = "huge",
+    [UCT_ALLOC_METHOD_LAST] = NULL
+};
 
 
 ucs_status_t uct_init(uct_context_h *context_p)
@@ -239,9 +264,9 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
     return tl->ops->iface_open(context, dev_name, rx_headroom, config, iface_p);
 }
 
-ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_lkey_t lkey, void *rkey_buffer)
+ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
 {
-    return pd->ops->rkey_pack(pd, lkey, rkey_buffer);
+    return pd->ops->rkey_pack(pd, memh, rkey_buffer);
 }
 
 ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
@@ -273,14 +298,201 @@ ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     return pd->ops->query(pd, pd_attr);
 }
 
-ucs_status_t uct_mem_map(uct_pd_h pd, void **address_p, size_t *length_p,
-                         unsigned flags, uct_lkey_t *lkey_p)
+ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
+                            uct_mem_h *memh_p)
 {
-    return pd->ops->mem_map(pd, address_p, length_p, flags, lkey_p
-                            UCS_MEMTRACK_NAME("user"));
+    return pd->ops->mem_reg(pd, address, length, memh_p);
 }
 
-ucs_status_t uct_mem_unmap(uct_pd_h pd, uct_lkey_t lkey)
+ucs_status_t uct_pd_mem_dereg(uct_pd_h pd, uct_mem_h memh)
 {
-    return pd->ops->mem_unmap(pd, lkey);
+    return pd->ops->mem_dereg(pd, memh);
+}
+
+static void __uct_free_memory(uct_alloc_method_t method, void *address,
+                              size_t length)
+{
+    int ret;
+
+    switch (method) {
+    case UCT_ALLOC_METHOD_HEAP:
+        ucs_free(address);
+        break;
+
+    case UCT_ALLOC_METHOD_MMAP:
+        ret = ucs_munmap(address, length);
+        if (ret != 0) {
+            ucs_warn("munmap(address=%p, length=%zu) failed: %m", address, length);
+        }
+        break;
+
+    case UCT_ALLOC_METHOD_HUGE:
+        ucs_sysv_free(address);
+        break;
+
+    case UCT_ALLOC_METHOD_PD:
+    default:
+        break;
+    }
+}
+
+static ucs_status_t uct_pd_mem_alloc_method(uct_pd_h pd, uct_pd_attr_t *pd_attr,
+                                            uct_alloc_method_t method, size_t *length_p,
+                                            size_t alignment, void **address_p,
+                                            uct_mem_h *memh_p, const char *alloc_name)
+{
+    uct_mem_block_header_t *header;
+    ucs_status_t status;
+    size_t alloc_length;
+    void *block;
+    int shmid;
+
+    ucs_assert(alignment >= 1);
+    alloc_length = *length_p + alignment - 1 + sizeof(*header);
+
+    if (method == UCT_ALLOC_METHOD_PD) {
+        if (!(pd_attr->cap.flags & UCT_PD_FLAG_ALLOC)) {
+            ucs_debug("pd %s does not support allocation", pd_attr->name);
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        /* Allocate using protection domain */
+        status = pd->ops->mem_alloc(pd, &alloc_length, &block, memh_p
+                                    UCS_MEMTRACK_VAL);
+        if (status != UCS_OK) {
+            ucs_debug("failed to allocate memory using pd %s", pd_attr->name);
+            return status;
+        }
+
+    } else {
+        if (!(pd_attr->cap.flags & UCT_PD_FLAG_REG)) {
+            ucs_debug("pd %s does not support registration", pd_attr->name);
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        switch (method) {
+        case UCT_ALLOC_METHOD_HEAP:
+            /* Allocate aligned memory using libc allocator */
+            block = ucs_malloc(alloc_length UCS_MEMTRACK_VAL);
+            status = (block == NULL) ? UCS_ERR_NO_MEMORY : UCS_OK;
+            break;
+
+        case UCT_ALLOC_METHOD_MMAP:
+            /* Request memory from operating system using mmap() */
+            alloc_length = ucs_align_up_pow2(alloc_length, ucs_get_page_size());
+            block = ucs_mmap(NULL, alloc_length, PROT_READ|PROT_WRITE,
+                             MAP_PRIVATE|MAP_ANON, -1, 0 UCS_MEMTRACK_VAL);
+            status = (block == MAP_FAILED) ? UCS_ERR_NO_MEMORY : UCS_OK;
+            break;
+
+        case UCT_ALLOC_METHOD_HUGE:
+            /* Allocate huge pages */
+            status = ucs_sysv_alloc(&alloc_length, &block, SHM_HUGETLB, &shmid
+                                    UCS_MEMTRACK_VAL);
+            break;
+
+        default:
+            ucs_error("Invalid allocation method %d", method);
+            status = UCS_ERR_INVALID_PARAM;
+            break;
+        }
+
+        if (status != UCS_OK) {
+            ucs_debug("failed to allocate %zu bytes using %s", alloc_length,
+                      uct_alloc_method_names[method]);
+            return status;
+        }
+
+        /* Register memory on PD */
+        status = pd->ops->mem_reg(pd, block, alloc_length, memh_p);
+        if (status != UCS_OK) {
+            ucs_debug("failed to register memory");
+            __uct_free_memory(method, block, alloc_length);
+            return status;
+        }
+    }
+
+    /* Align the address returned to the user. */
+    *address_p = (void*)ucs_align_up_pow2((uintptr_t)(block + sizeof(*header)),
+                                          alignment);
+
+    /* Adjust the length. */
+    ucs_assert(block + alloc_length - *address_p >= *length_p);
+    *length_p  = block + alloc_length - *address_p;
+
+    /* Save memory block information in the header.
+     * (The header lies just before the pointer returned to the user).
+     */
+    header               = *address_p - sizeof(*header);
+    header->alloc_method = method;
+    header->total_length = alloc_length;
+    header->mem_block    = block;
+
+    VALGRIND_MAKE_MEM_NOACCESS(block, *address_p - block);
+    ucs_debug("allocated %zu (%zu) bytes using %s: %p (%p)", *length_p, alloc_length,
+              uct_alloc_method_names[method], *address_p, block);
+    return UCS_OK;
+}
+
+ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, uct_alloc_method_t method,
+                              size_t *length_p, size_t alignment, void **address_p,
+                              uct_mem_h *memh_p, const char *alloc_name)
+{
+    uct_pd_attr_t pd_attr;
+    ucs_status_t status;
+    uint8_t i;
+
+    if (*length_p == 0) {
+        ucs_error("Allocation length cannot be 0");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(alignment >= 1) || !ucs_is_pow2(alignment)) {
+        ucs_error("Allocation alignment must be power of 2 (got: %zu)", alignment);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_pd_query(pd, &pd_attr);
+    if (status != UCS_OK) {
+        ucs_debug("failed to query pd");
+        return status;
+    }
+
+    if (method != UCT_ALLOC_METHOD_DEFAULT) {
+        /* Allocate using specific method */
+        status = uct_pd_mem_alloc_method(pd, &pd_attr, method, length_p,
+                                         alignment, address_p, memh_p, alloc_name);
+    } else {
+        /* Allocate using default method */
+        for (i = 0; i < pd_attr.alloc_methods.count; ++i) {
+            status = uct_pd_mem_alloc_method(pd, &pd_attr,
+                                             pd_attr.alloc_methods.methods[i],
+                                             length_p, alignment, address_p,
+                                             memh_p, alloc_name);
+            if (status == UCS_OK) {
+                return UCS_OK;
+            }
+        }
+        status = UCS_ERR_NO_MEMORY; /* No more methods to try */
+    }
+
+    if (status != UCS_OK) {
+        ucs_debug("could not allocate memory");
+    }
+    return status;
+}
+
+ucs_status_t uct_pd_mem_free(uct_pd_h pd, void *address, uct_mem_h memh)
+{
+    uct_mem_block_header_t *header = address - sizeof(uct_mem_block_header_t);
+
+    VALGRIND_MAKE_MEM_DEFINED(header, sizeof(*header));
+
+    if (header->alloc_method == UCT_ALLOC_METHOD_PD) {
+        return pd->ops->mem_free(pd, memh);
+    } else {
+        __uct_free_memory(header->alloc_method, header->mem_block,
+                          header->total_length);
+        return pd->ops->mem_dereg(pd, memh);
+    }
 }
