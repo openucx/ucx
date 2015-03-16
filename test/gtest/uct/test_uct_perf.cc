@@ -398,7 +398,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     /* For SandyBridge CPUs, don't check performance of far-socket devices */
     check_perf = true;
-    if (ucs_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
+    if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
         for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
             if (!CPU_ISSET(*iter, &resource.local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";

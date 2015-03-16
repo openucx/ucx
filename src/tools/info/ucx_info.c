@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     print_opts  = 0;
     print_flags = 0;
     tl_name     = NULL;
-    while ((c = getopt(argc, argv, "fahvcydbt:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbst:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -56,6 +56,9 @@ int main(int argc, char **argv)
         case 'y':
             print_opts |= PRINT_TYPES;
             break;
+        case 's':
+            print_opts |= PRINT_SYS_INFO;
+            break;
         case 't':
             tl_name = optarg;
             break;
@@ -73,6 +76,10 @@ int main(int argc, char **argv)
 
     if (print_opts & PRINT_VERSION) {
         print_version();
+    }
+
+    if (print_opts & PRINT_SYS_INFO) {
+        print_sys_info();
     }
 
     if (print_opts & PRINT_BUILD_CONFIG) {

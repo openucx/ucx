@@ -51,15 +51,6 @@ UCS_TEST_F(test_time, get_time) {
     EXPECT_LT(nsec, 30.0) << "ucs_get_time() performance is too bad";
 }
 
-UCS_TEST_F(test_time, time_shift) {
-
-    double accuracy_usec = ucs_time_to_usec(1ull << ucs_get_short_time_shift());
-
-    UCS_TEST_MESSAGE << "Short time shift is " << ucs_get_short_time_shift() << " bit," <<
-                    " accuracy is " << accuracy_usec << " usec";
-    EXPECT_LT(accuracy_usec, 1000.0);
-}
-
 UCS_TEST_F(test_time, timerq) {
     static const int TIMER_ID_1  = 100;
     static const int TIMER_ID_2  = 200;

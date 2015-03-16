@@ -39,7 +39,6 @@ typedef uint32_t             ucs_short_time_t;
 
 
 double ucs_get_cpu_clocks_per_sec();
-unsigned ucs_get_short_time_shift();
 
 
 /**

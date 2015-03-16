@@ -15,6 +15,15 @@ libucs_la_LIBADD   = $(LIBM)
 libucs_ladir       = $(includedir)/ucs
 
 nobase_dist_libucs_la_HEADERS = \
+	arch/aarch64/bitops.h \
+	arch/aarch64/cpu.h \
+	arch/generic/atomic.h \
+	arch/ppc64/bitops.h \
+	arch/ppc64/cpu.h \
+	arch/x86_64/atomic.h \
+	arch/x86_64/bitops.h \
+	arch/x86_64/cpu.h \
+	arch/arch.h \
 	async/async.h \
 	async/async_int.h \
 	async/pipe.h \
@@ -42,10 +51,6 @@ nobase_dist_libucs_la_HEADERS = \
 	gtest/test_helpers.h \
 	stats/libstats.h \
 	stats/stats.h \
-	sys/arch.h \
-	sys/asm/asm-aarch64.h \
-	sys/asm/asm-ppc64.h \
-	sys/asm/asm-x86_64.h \
 	sys/compiler.h \
 	sys/math.h \
 	sys/preprocessor.h \
@@ -60,6 +65,8 @@ nobase_dist_libucs_la_HEADERS = \
 	type/status.h 
 
 libucs_la_SOURCES = \
+	arch/ppc64/timebase.c \
+	arch/x86_64/cpu.c \
 	async/async.c \
 	async/signal.c \
 	async/pipe.c \

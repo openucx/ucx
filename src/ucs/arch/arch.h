@@ -25,16 +25,18 @@ typedef enum ucs_cpu_model {
 #define UCS_SYS_PARAGRAPH_SIZE     16
 
 
-/* Forward declaration */
-double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
-
-
 #if defined(__x86_64__)
-#  include "asm/asm-x86_64.h"
+#  include "x86_64/cpu.h"
+#  include "x86_64/atomic.h"
+#  include "x86_64/bitops.h"
 #elif defined(__powerpc64__)
-#  include "asm/asm-ppc64.h"
+#  include "ppc64/cpu.h"
+#  include "generic/atomic.h"
+#  include "ppc64/bitops.h"
 #elif defined(__aarch64__)
-#  include "asm/asm-aarch64.h"
+#  include "aarch64/cpu.h"
+#  include "generic/atomic.h"
+#  include "aarch64/bitops.h"
 #else
 #  error "Unsupported architecture"
 #endif

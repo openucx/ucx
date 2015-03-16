@@ -649,57 +649,6 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
     return UCS_OK;
 }
 
-ucs_cpu_model_t ucs_get_cpu_model()
-{
-#ifdef __x86_64__
-    unsigned _eax, _ebx, _ecx, _edx;
-    unsigned model, family;
-    unsigned ext_model, ext_family;
-
-    /* Get CPU model/family */
-    ucs_cpuid(0x1, &_eax, &_ebx, &_ecx, &_edx);
-
-    model      = (_eax >> 4)  & UCS_MASK(8  - 4 );
-    family     = (_eax >> 8)  & UCS_MASK(12 - 8 );
-    ext_model  = (_eax >> 16) & UCS_MASK(20 - 16);
-    ext_family = (_eax >> 20) & UCS_MASK(28 - 20);
-
-    /* Adjust family/model */
-    if (family == 0xf) {
-        family += ext_family;
-    }
-    if (family == 0x6 || family == 0xf) {
-        model = (ext_model << 4) | model;
-    }
-
-    /* Check known CPUs */
-    if (family == 0x06) {
-       switch (model) {
-       case 0x3a:
-       case 0x3e:
-           return UCS_CPU_MODEL_INTEL_IVYBRIDGE;
-       case 0x2a:
-       case 0x2d:
-           return UCS_CPU_MODEL_INTEL_SANDYBRIDGE;
-       case 0x1a:
-       case 0x1e:
-       case 0x1f:
-       case 0x2e:
-           return UCS_CPU_MODEL_INTEL_NEHALEM;
-       case 0x25:
-       case 0x2c:
-       case 0x2f:
-           return UCS_CPU_MODEL_INTEL_WESTMERE;
-       }
-    }
-
-    return UCS_CPU_MODEL_UNKNOWN;
-
-#else
-    return UCS_CPU_MODEL_UNKNOWN;
-#endif
-}
-
 pid_t ucs_get_tid(void)
 {
     return syscall(SYS_gettid);
@@ -743,7 +692,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
     fclose(f);
 
     if (warn) {
-        ucs_warn("Conflicting CPU frequencies detected, using: %.2f", mhz);
+        ucs_warn("Conflicting CPU frequencies detected, using: %.2f MHz", mhz);
     }
     return mhz * 1e6;
 }
