@@ -195,6 +195,7 @@ ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
 
     tl = uct_find_tl(context, tl_name);
     if (tl == NULL) {
+        ucs_error("transport '%s' does not exist", tl_name);
         status = UCS_ERR_NO_ELEM; /* Non-existing transport */
         goto err;
     }
