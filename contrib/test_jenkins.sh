@@ -22,17 +22,25 @@ echo "Autogen"
 make distclean||:
 
 echo "Making a directory for test build"
-rm -rf build-test && mkdir -p build-test && cd build-test
+rm -rf build-test
+mkdir -p build-test
+cd build-test
 
 echo "Build release"
-../contrib/configure-release && make $make_opt && make $make_opt distcheck && make docs
+../contrib/configure-release
+make $make_opt
+make $make_opt distcheck
+
+echo "Build docs"
+make docs
 
 echo "Running ucx_info"
 ./src/tools/info/ucx_info -v -f
 ./src/tools/info/ucx_info -c
 
 echo "Build without IB verbs"
-../contrib/configure-release --without-verbs && make $make_opt
+../contrib/configure-release --without-verbs
+make $make_opt
 
 if [ -n "$JENKINS_RUN_TESTS" ]; then
     # Set CPU affinity to 2 cores, for performance tests
@@ -46,7 +54,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     echo "Build gtest"
     module load hpcx-gcc
-    make clean && ../contrib/configure-devel --with-mpi && make $make_opt
+    make clean
+    ../contrib/configure-devel --with-mpi
+    make $make_opt
     module unload hpcx-gcc
 
     echo "Running ucx_info"
