@@ -535,7 +535,7 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
     status = uct_query_resources(ctx->ucth, &resources, &num_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources");
-        return status;
+        goto error;
     }
 
     if (!strlen(ctx->tl_name)) {
@@ -563,7 +563,7 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
             }
         }
         if (!strlen(ctx->dev_name)) {
-            ucs_error("Device for trasport %s was not found", ctx->tl_name);
+            ucs_error("Device for transport %s was not found", ctx->tl_name);
             status = UCS_ERR_INVALID_PARAM;
             goto error;
         }
@@ -665,7 +665,6 @@ void sock_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size
 
 void sock_rte_exchange_vec(void *rte_group, void * req)
 {
-    sock_rte_barrier(rte_group);
 }
 
 static void sock_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
