@@ -21,7 +21,7 @@ typedef enum {
 
     /* Failure codes */
     UCS_ERR_NO_MESSAGE             =  -1,
-    UCS_ERR_WOULD_BLOCK            =  -2,
+    UCS_ERR_NO_RESOURCE            =  -2,
     UCS_ERR_IO_ERROR               =  -3,
     UCS_ERR_NO_MEMORY              =  -4,
     UCS_ERR_INVALID_PARAM          =  -5,

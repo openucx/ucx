@@ -58,7 +58,7 @@ static ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
         return UCS_OK;
     }
     uct_ugni_progress(iface);
-    return UCS_ERR_WOULD_BLOCK;
+    return UCS_ERR_NO_RESOURCE;
 }
 
 /* Forward declaration for the delete function */

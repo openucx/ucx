@@ -216,7 +216,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 void uct_perf_iface_flush_b(uct_perf_context_t *perf)
 {
-    while (uct_iface_flush(perf->iface) == UCS_ERR_WOULD_BLOCK) {
+    while (uct_iface_flush(perf->iface) == UCS_ERR_NO_RESOURCE) {
         uct_progress(perf->context);
     }
 }

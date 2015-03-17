@@ -160,7 +160,7 @@ static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_iface_t *iface,
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
             ucs_debug("GNI_PostRdma failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
-            return UCS_ERR_WOULD_BLOCK;
+            return UCS_ERR_NO_RESOURCE;
         } else {
             ucs_error("GNI_PostRdma failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
@@ -187,7 +187,7 @@ static inline ucs_status_t uct_ugni_post_fma(uct_ugni_iface_t *iface,
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
             ucs_debug("GNI_PostFma failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
-            return UCS_ERR_WOULD_BLOCK;
+            return UCS_ERR_NO_RESOURCE;
         } else {
             ucs_error("GNI_PostFma failed, Error status: %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
@@ -218,7 +218,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, void *buffer,
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length <= iface->config.fma_seg_size, "put_short");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, 
-                             fma, return UCS_ERR_WOULD_BLOCK);
+                             fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, buffer, 
                         remote_addr, rkey, length, ep, NULL);
     ucs_trace_data("Posting PUT Short, GNI_PostFma of size %"PRIx64" from %p to "
@@ -247,7 +247,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length <= iface->config.fma_seg_size, "put_bcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_buffer,
-                             fma, return UCS_ERR_WOULD_BLOCK);
+                             fma, return UCS_ERR_NO_RESOURCE);
     ucs_assert(length <= iface->config.fma_seg_size);
     pack_cb(fma + 1, arg, length);
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, fma + 1,
@@ -272,7 +272,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length <= iface->config.rdma_max_size, "put_zcopy");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_NO_RESOURCE);
     /* Setup Callback */
     uct_ugni_format_rdma(rdma, GNI_POST_RDMA_PUT, buffer, remote_addr, memh,
                          rkey, length, ep, iface->local_cq, comp);
@@ -296,7 +296,7 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *fma;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_ADD,
                             add, 0, NULL, remote_addr,
                             rkey, LEN_64, ep, NULL);
@@ -317,7 +317,7 @@ ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *fma;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_FADD,
                             add, 0, fma + 1, remote_addr,
                             rkey, LEN_64, ep, comp);
@@ -345,7 +345,7 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_base_desc_t *fma;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_WOULD_BLOCK);
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_CSWAP,
                             compare, swap, fma + 1, remote_addr,
                             rkey, LEN_64, ep, comp);

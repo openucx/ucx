@@ -197,7 +197,7 @@ public:
                 ++m_outstanding;
                 ucs_assert(m_outstanding <= m_max_outstanding);
                 return;
-            } else if (status == UCS_ERR_WOULD_BLOCK) {
+            } else if (status == UCS_ERR_NO_RESOURCE) {
                 continue;
             } else {
                 ucs_error("Failed to send: %s", ucs_status_string(status));

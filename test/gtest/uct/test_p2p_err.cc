@@ -65,7 +65,7 @@ public:
                 status = uct_ep_am_short(sender_ep(), am_id, 0, buffer, length);
                 break;
             }
-        } while (status == UCS_ERR_WOULD_BLOCK);
+        } while (status == UCS_ERR_NO_RESOURCE);
 
         if (status != UCS_OK && status != UCS_INPROGRESS) {
             last_error = status;

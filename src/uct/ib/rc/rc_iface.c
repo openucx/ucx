@@ -135,7 +135,7 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
             }
 
             status = uct_ep_flush(&ep->super.super);
-            if ((status == UCS_ERR_WOULD_BLOCK) || (status == UCS_INPROGRESS)) {
+            if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
                 ++count;
             } else if (status != UCS_OK) {
                 return status;
@@ -144,7 +144,7 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
     }
 
     if (count != 0) {
-        return UCS_ERR_WOULD_BLOCK;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     UCT_TL_IFACE_STAT_FLUSH(&iface->super.super);
