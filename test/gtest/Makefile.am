@@ -80,6 +80,7 @@ gtest_SOURCES = \
 	ucs/test_frag_list.cc
 
 noinst_HEADERS = \
+	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
 	ucp/ucp_test.h
