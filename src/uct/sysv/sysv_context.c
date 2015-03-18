@@ -22,38 +22,34 @@ ucs_config_field_t uct_sysv_iface_config_table[] = {
     {NULL}
 };
 
-ucs_status_t sysv_activate_domain(uct_sysv_context_t *sysv_ctx)
-{
-    return UCS_OK; /* No op */
-}
-
 ucs_status_t uct_sysv_query_resources(uct_context_h context,
-                                      uct_resource_desc_t **resources_p,
+                                      uct_resource_desc_t **resource_p,
                                       unsigned *num_resources_p)
 {
     uct_sysv_context_t *sysv_ctx = ucs_component_get(context, sysv,
                                                    uct_sysv_context_t);
 
-    uct_resource_desc_t *resources;
-
-    if (sysv_ctx->num_devices == 0) {
-        return UCS_ERR_NO_DEVICE;
-    }
+    uct_resource_desc_t *resource;
 
     /* sysv tl currently supports only a single device */
 
     /* Allocate resources array */
-    resources = ucs_calloc(sysv_ctx->num_devices, sizeof(uct_resource_desc_t),
-                           "resource desc");
-    if (NULL == resources) {
+    resource = ucs_calloc(1, sizeof(uct_resource_desc_t), "resource desc");
+    if (NULL == resource) {
         ucs_error("Failed to allocate memory");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_device_get_resource(&sysv_ctx->device, &resources[0]);
+    ucs_snprintf_zero(resource->tl_name,  
+                      sizeof(resource->tl_name), "%s", sysv_ctx->type_name);
+    ucs_snprintf_zero(resource->dev_name, 
+                      sizeof(resource->dev_name), "%s", sysv_ctx->type_name);
+    resource->latency    = 1; /* FIXME temp value */
+    resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
+    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 
-    *num_resources_p = sysv_ctx->num_devices;
-    *resources_p     = resources;
+    *num_resources_p = 1;
+    *resource_p     = resource;
 
     return UCS_OK;
 }
@@ -65,16 +61,8 @@ ucs_status_t uct_sysv_init(uct_context_h context)
 
     ucs_status_t status;
 
-    sysv_ctx->num_ifaces = 0;
-    sysv_ctx->num_devices= 0;
-
-    /* define one "device" for now. 
-     * more complex logic for device(s) could be inserted here later on */
-
-    /* create the single dummy device */
-
-    uct_sysv_device_create(context, &sysv_ctx->device);
-    sysv_ctx->num_devices = 1;
+    ucs_snprintf_zero(sysv_ctx->type_name, sizeof(sysv_ctx->type_name), 
+                      "%s", TL_NAME);
 
     status = uct_register_tl(context, "sysv", uct_sysv_iface_config_table,
                              sizeof(uct_sysv_iface_config_t), "sysv_",
@@ -85,8 +73,7 @@ ucs_status_t uct_sysv_init(uct_context_h context)
         return status;
     }
 
-    ucs_debug("Initialized sysv component with %d devices", 
-               sysv_ctx->num_devices);
+    ucs_debug("Initialized sysv component");
     ucs_debug("sysv context %p was activated", sysv_ctx);
 
     return UCS_OK;

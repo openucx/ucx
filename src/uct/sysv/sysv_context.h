@@ -7,12 +7,11 @@
 #ifndef UCT_SYSV_CONTEXT_H
 #define UCT_SYSV_CONTEXT_H
 
-#include "sysv_device.h"
+#define MAX_TYPE_NAME     (10)
+#define TL_NAME           "SM_SYSV"
 
 typedef struct uct_sysv_context {
-    int                 num_devices;        /**< Number of devices */
-    int                 num_ifaces;         /**< Number of active interfaces */
-    uct_sysv_device_t    device;             /**< Device belonging to this domain */
+    char                type_name[MAX_TYPE_NAME];  /**< Device type name */
 } uct_sysv_context_t;
 
 /*

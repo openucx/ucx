@@ -10,8 +10,8 @@
 
 #include <uct/tl/tl_base.h>
 #include <ucs/sys/sys.h>
+#include <stdbool.h>
 #include "sysv_context.h"
-#include "sysv_device.h"
 #include "sysv_ep.h"
 
 
@@ -31,8 +31,8 @@ typedef struct uct_sysv_pd {
 
 typedef struct uct_sysv_iface {
     uct_base_iface_t       super;
-    uct_sysv_device_t       *dev;
     uct_sysv_pd_t           pd;
+    uct_sysv_context_t      *ctx;
     uct_sysv_iface_addr_t   addr;
     uct_sysv_ep_t           *eps[UCT_SYSV_HASH_SIZE];    /**< Array of EPs */
     bool                   activated;                   /**< nic status */
@@ -45,11 +45,6 @@ typedef struct uct_sysv_iface {
 typedef struct uct_sysv_iface_config {
     uct_iface_config_t       super;
 } uct_sysv_iface_config_t;
-
-static inline uct_sysv_device_t * uct_sysv_iface_device(uct_sysv_iface_t *iface)
-{
-    return iface->dev;
-}
 
 extern ucs_config_field_t uct_sysv_iface_config_table[];
 extern uct_tl_ops_t uct_sysv_tl_ops;

@@ -11,7 +11,6 @@
 
 #include "sysv_ep.h"
 #include "sysv_iface.h"
-#include "sysv_device.h"
 
 static inline ptrdiff_t uct_sysv_ep_compare(uct_sysv_ep_t *ep1, 
                                             uct_sysv_ep_t *ep2)

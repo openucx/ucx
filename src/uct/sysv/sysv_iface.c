@@ -101,7 +101,7 @@ static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     uct_sysv_pd_t *sysv_pd = ucs_derived_of(pd, uct_sysv_pd_t);
 
     ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s",
-                      sysv_pd->iface->dev->fname);
+                      sysv_pd->iface->ctx->type_name);
     pd_attr->rkey_packed_size  = 4 * sizeof(uintptr_t);
     pd_attr->cap.flags         = UCT_PD_FLAG_ALLOC;
     pd_attr->cap.max_alloc     = ULONG_MAX;
@@ -215,13 +215,11 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
 {
     uct_sysv_context_t *sysv_ctx = 
         ucs_component_get(context, sysv, uct_sysv_context_t);
-    uct_sysv_device_t *dev;
-    int rc, addr;
+    int addr;
 
     UCS_CLASS_CALL_SUPER_INIT(&uct_sysv_iface_ops);
 
-    dev = &sysv_ctx->device;
-    if (NULL == dev) {
+    if(strcmp(dev_name, sysv_ctx->type_name) != 0) {
         ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
     }
@@ -233,21 +231,10 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     self->pd.iface = self;
 
     self->super.super.pd   = &self->pd.super;
-    self->dev              = dev;
+    self->ctx              = sysv_ctx;
     self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
 
     /* FIXME no use for config input argument? */
-
-    self->activated = false;
-    /* TBD: atomic increment */
-    ++sysv_ctx->num_ifaces;
-
-    /* Make sure that context is activated */
-    rc = sysv_activate_domain(sysv_ctx);
-    if (UCS_OK != rc) {
-        ucs_error("Failed to activate context, Error status: %d", rc);
-        return rc;
-    }
 
     addr = ucs_atomic_fadd32(&sysv_iface_global_counter, 1);
 
