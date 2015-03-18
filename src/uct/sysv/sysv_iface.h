@@ -46,6 +46,13 @@ typedef struct uct_sysv_iface_config {
     uct_iface_config_t       super;
 } uct_sysv_iface_config_t;
 
+typedef struct uct_sysv_key {
+    int                     shmid;
+    uintptr_t               owner_ptr;
+    uintptr_t               client_ptr;
+    long long int           magic;
+} uct_sysv_key_t;
+
 extern ucs_config_field_t uct_sysv_iface_config_table[];
 extern uct_tl_ops_t uct_sysv_tl_ops;
 

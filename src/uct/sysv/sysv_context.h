@@ -11,7 +11,7 @@
 #define TL_NAME           "SM_SYSV"
 
 typedef struct uct_sysv_context {
-    char                type_name[MAX_TYPE_NAME];  /**< Device type name */
+    char                type_name[MAX_TYPE_NAME];  /**< tl type name */
 } uct_sysv_context_t;
 
 /*
@@ -20,7 +20,5 @@ typedef struct uct_sysv_context {
 ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resources_p,
                                       unsigned *num_resources_p);
-
-ucs_status_t sysv_activate_domain(uct_sysv_context_t *sysv_ctx);
 
 #endif

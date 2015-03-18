@@ -50,7 +50,7 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p, void **add
                                        uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t rc;
-    uintptr_t *mem_hndl = NULL;
+    uct_sysv_key_t *key_hndl = NULL;
     int shmid = 0;
 
     if (0 == *length_p) {
@@ -58,9 +58,9 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p, void **add
         return UCS_ERR_INVALID_PARAM;
     }
 
-    mem_hndl = ucs_malloc(2*sizeof(uintptr_t), "mem_hndl");
-    if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for mem_hndl");
+    key_hndl = ucs_malloc(sizeof(uct_sysv_key_t), "key_hndl");
+    if (NULL == key_hndl) {
+        ucs_error("Failed to allocate memory for key_hndl");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -71,25 +71,25 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p, void **add
         return rc;
     }
 
-    mem_hndl[0] = shmid;
-    mem_hndl[1] = (uintptr_t) *address_p;
+    key_hndl->shmid = shmid;
+    key_hndl->owner_ptr = (uintptr_t) *address_p;
 
     /* FIXME no use for pd input argument? */
 
-    ucs_debug("Memory registration address_p %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
-              *address_p, *length_p, mem_hndl[0], mem_hndl[1]);
-    *memh_p = mem_hndl;
+    ucs_debug("Memory registration address_p %p, len %lu, keys [%d %"PRIx64"]",
+              *address_p, *length_p, key_hndl->shmid, key_hndl->owner_ptr);
+    *memh_p = key_hndl;
     ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
     return UCS_OK;
 }
 
 static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
 {
-    /* this releases the key allocated in mem_map */
+    /* this releases the key allocated in uct_sysv_mem_alloc */
 
-    uintptr_t *mem_hndl = memh;
-    ucs_sysv_free((void *)mem_hndl[1]);  /* detach the shared segment */
-    ucs_free(mem_hndl);
+    uct_sysv_key_t *key_hndl = memh;
+    ucs_sysv_free((void *)key_hndl->owner_ptr);  /* detach the shared segment */
+    ucs_free(key_hndl);
 
     return UCS_OK;
 }
@@ -102,7 +102,7 @@ static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 
     ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s",
                       sysv_pd->iface->ctx->type_name);
-    pd_attr->rkey_packed_size  = 4 * sizeof(uintptr_t);
+    pd_attr->rkey_packed_size  = sizeof(uct_sysv_key_t);
     pd_attr->cap.flags         = UCT_PD_FLAG_ALLOC;
     pd_attr->cap.max_alloc     = ULONG_MAX;
     pd_attr->cap.max_reg       = 0;
@@ -115,15 +115,15 @@ static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
                                       void *rkey_buffer)
 {
     /* user is responsible to free rkey_buffer */
-    uintptr_t *ptr = rkey_buffer;
-    uintptr_t *mem_hndl = memh;
+    uct_sysv_key_t *rkey = rkey_buffer;
+    uct_sysv_key_t *key_hndl = memh;
 
-    ptr[0] = UCT_SYSV_RKEY_MAGIC;
-    ptr[1] = mem_hndl[0];
-    ptr[2] = mem_hndl[1];
+    rkey->magic = UCT_SYSV_RKEY_MAGIC;
+    rkey->shmid = key_hndl->shmid;
+    rkey->owner_ptr = key_hndl->owner_ptr;
 
-    ptr[3] = 0; /* will be attached addr on the remote PE - obtained at unpack */
-    ucs_debug("Packed [ %"PRIx64" %"PRIx64" %"PRIx64" ]", ptr[0], ptr[1], ptr[2]);
+    rkey->client_ptr = 0; /* will be attached addr on the remote PE - obtained at unpack */
+    ucs_debug("Packed [ %d %llx %"PRIx64" ]", rkey->shmid, rkey->magic, rkey->owner_ptr); 
     return UCS_OK;
 }
 
@@ -131,42 +131,40 @@ static void uct_sysv_rkey_release(uct_context_h context, uct_rkey_t key)
 {
     /* this releases the key allocated in unpack */
     
-    uintptr_t *mem_hndl = (void *)key;
+    uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)key;
 
-    ucs_sysv_free((void *)mem_hndl[2]);  /* detach the shared segment */
-    ucs_free(mem_hndl);
+    ucs_sysv_free((void *)key_hndl->client_ptr);  /* detach the shared segment */
+    ucs_free(key_hndl);
 }
 
 ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob)
 {
     /* user is responsible to free rkey_buffer */
-    uintptr_t *ptr = rkey_buffer;
-    uintptr_t magic = 0;
-    uintptr_t *mem_hndl = NULL;
+    uct_sysv_key_t *rkey = rkey_buffer;
+    long long magic = 0;
+    uct_sysv_key_t *key_hndl = NULL;
     int shmid;
 
-    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64" ]\n", 
-               ptr[0], ptr[1], ptr[2]);
-    magic = ptr[0];
-    if (magic != UCT_SYSV_RKEY_MAGIC) {
-        ucs_error("Failed to identify key. Expected %llx but received %"PRIx64"",
+    ucs_debug("Unpacking[ %d %llx %"PRIx64" ]", rkey->shmid, rkey->magic, rkey->owner_ptr); 
+    if (rkey->magic != UCT_SYSV_RKEY_MAGIC) {
+        ucs_debug("Failed to identify key. Expected %llx but received %llx",
                   UCT_SYSV_RKEY_MAGIC, magic);
         return UCS_ERR_UNSUPPORTED;
     }
 
-    mem_hndl = ucs_malloc(3*sizeof(uintptr_t), "mem_hndl");
-    if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for mem_hndl");
+    key_hndl = ucs_malloc(sizeof(uct_sysv_key_t), "key_hndl");
+    if (NULL == key_hndl) {
+        ucs_error("Failed to allocate memory for key_hndl");
         return UCS_ERR_NO_MEMORY;
     }
 
     /* Attach segment */ 
     /* FIXME would like to extend ucs_sysv_alloc to do this? */
-    shmid = (int) ptr[1];
-    ptr[3] = (uintptr_t) shmat(shmid, NULL, 0);
+    shmid = rkey->shmid;
+    rkey->client_ptr = (uintptr_t) shmat(shmid, NULL, 0);
     /* Check if attachment was successful */
-    if ((void *)ptr[3] == (void*)-1) {
+    if ((void *)rkey->client_ptr == (void*)-1) {
         if (errno == ENOMEM) {
             return UCS_ERR_NO_MEMORY;
         } else if (RUNNING_ON_VALGRIND && (errno == EINVAL)) {
@@ -177,13 +175,13 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
         }
     }
 
-    mem_hndl[0] = ptr[1]; /* shmid */
-    mem_hndl[1] = ptr[2]; /* attached address on owner PE */
-    mem_hndl[2] = ptr[3]; /* attached address on remote PE */
+    key_hndl->shmid      = rkey->shmid;
+    key_hndl->magic      = rkey->magic;
+    key_hndl->owner_ptr  = rkey->owner_ptr;
+    key_hndl->client_ptr = rkey->client_ptr;
 
-    /* FIXME is this a bug? */
     rkey_ob->type = (void*)uct_sysv_rkey_release;
-    rkey_ob->rkey = (uintptr_t)mem_hndl;
+    rkey_ob->rkey = (uct_rkey_t)key_hndl;
     return UCS_OK;
 
 }

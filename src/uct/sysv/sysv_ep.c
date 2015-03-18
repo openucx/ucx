@@ -94,8 +94,8 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
 {
     /*uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t); */
     uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t); 
-    uintptr_t *mem_hndl = (void *)rkey;
-    ptrdiff_t remote_offset;
+    uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)rkey;
+    ptrdiff_t target_offset;
 
     if (0 == length) {
         ucs_trace_data("Zero length request: skip it");
@@ -107,14 +107,14 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
     /* num of bytes b/w desired put addr and start of remote region */
-    remote_offset = remote_addr - mem_hndl[1];
+    target_offset = remote_addr - key_hndl->owner_ptr;
     /* add integers uintptr_t + ptrdiff_t and convert back to an address */
-    memcpy((void *)(mem_hndl[2] + remote_offset), buffer, length);
+    memcpy((void *)(key_hndl->client_ptr + target_offset), buffer, length);
 
     ucs_trace_data("Posting PUT Short, memcpy of size %u from %p to %p",
                     length,
-                    (void *)(mem_hndl[1]+remote_addr),
-                    (void *)mem_hndl[2]);
+                    (void *)(key_hndl->client_ptr + target_offset),
+                    (void *)(remote_addr));
 
     return UCS_OK;
 }
