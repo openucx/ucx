@@ -30,7 +30,7 @@ protected:
 
     class entity {
     public:
-        entity(const uct_resource_desc_t& resource);
+        entity(const uct_resource_desc_t& resource, size_t rx_headroom);
         ~entity();
 
         void mem_alloc(void **address_p, size_t *length_p, size_t alignement,

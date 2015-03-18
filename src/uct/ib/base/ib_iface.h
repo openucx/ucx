@@ -49,9 +49,9 @@ typedef struct uct_ib_iface {
     /* TODO comp_channel */
 
     struct {
-        unsigned            rx_headroom;         /* user-requested headroom */
         unsigned            rx_payload_offset;   /* offset from desc to payload */
         unsigned            rx_hdr_offset;       /* offset from desc to network header */
+        unsigned            rx_headroom_offset;  /* offset from desc to user headroom */
         unsigned            seg_size;
     } config;
 
@@ -100,6 +100,9 @@ typedef struct uct_ib_iface_config {
  *
  * (1)
  *
+ * <rx_headroom_offset>
+ *                   |
+ *
  *                   am_callback
  *                   |
  * +------+----------+-----------+---------+
@@ -143,6 +146,8 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
                                             uct_ib_iface_config_t *config,
                                             const char *name, ucs_mpool_h *mp_p);
 
+void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc);
+
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {
     return ucs_derived_of(iface->super.super.pd, uct_ib_device_t);
@@ -173,5 +178,18 @@ typedef struct uct_ib_recv_wr {
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
                                 ucs_mpool_h rx_mp, uct_ib_recv_wr_t *wrs, unsigned n);
 
+
+static inline void uct_ib_iface_desc_received(uct_ib_iface_t *iface,
+                                              uct_ib_iface_recv_desc_t *desc,
+                                              unsigned byte_len, int has_data)
+{
+    if (has_data) {
+        /* Memory has valid data */
+        VALGRIND_MAKE_MEM_DEFINED((void*)desc + iface->config.rx_hdr_offset, byte_len);
+    } else {
+        /* Data is invalid, but memory is addressable */
+        VALGRIND_MAKE_MEM_UNDEFINED((void*)desc + iface->config.rx_hdr_offset, byte_len);
+    }
+}
 
 #endif

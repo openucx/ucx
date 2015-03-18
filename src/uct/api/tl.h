@@ -32,6 +32,8 @@ typedef struct uct_iface_ops {
 
     void         (*iface_close)(uct_iface_h iface);
 
+    void         (*iface_release_desc)(uct_iface_h iface, void *desc);
+
     ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
     void         (*ep_destroy)(uct_ep_h ep);
 

@@ -159,8 +159,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned length,
                        uct_ib_iface_recv_desc_t *desc)
 {
-    return uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
-                               length - sizeof(*hdr), desc);
+    return uct_iface_invoke_am(&iface->super.super,
+                               hdr->am_id, hdr + 1, length - sizeof(*hdr),
+                               (void*)desc + iface->super.config.rx_headroom_offset);
 }
 
 #endif

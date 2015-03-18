@@ -47,6 +47,11 @@ typedef void (*uct_rkey_release_func_t)(uct_context_h context, uct_rkey_t rkey);
 /**
  * Callback to process incoming active message
  *
+ * When the callback is called, `desc' does not necessarily contain the payload.
+ * In this case, `data' would not point inside `desc', and user may want copy the
+ * payload from `data' to `desc' before returning UCT_INPROGRESS (it's guaranteed
+ * `desc' has enough room to hold the payload).
+ *
  * @param [in]  arg      User-defined argument.
  * @param [in]  data     Points to the received data.
  * @param [in]  length   Length of data.

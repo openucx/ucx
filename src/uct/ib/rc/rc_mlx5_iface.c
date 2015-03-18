@@ -156,6 +156,8 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     desc     = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q, uct_rc_mlx5_recv_desc_t, queue);
     byte_len = ntohl(cqe->byte_cnt);
 
+    uct_ib_iface_desc_received(&iface->super.super, &desc->super, byte_len,
+                               !(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
 
     /* Get a pointer to AM header (after which comes the payload)
      * Support cases of inline scatter by pointing directly to CQE.
@@ -165,10 +167,9 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
         UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_32, 1);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         hdr = (uct_rc_hdr_t*)(cqe - 1);
-        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_64, 1);
+        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_64, 1)
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
-        VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
     }
 
     uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
@@ -186,6 +187,18 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     seg->next_wqe_index = wqe_ctr_be;
     iface->rx.tail = ntohs(wqe_ctr_be);
     ++iface->super.rx.available;
+}
+
+static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
+{
+    uct_rc_mlx5_recv_desc_t *desc;
+
+    while (!ucs_queue_is_empty(&iface->rx.desc_q)) {
+        desc = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q,
+                                             uct_rc_mlx5_recv_desc_t, queue);
+        ucs_mpool_put(desc);
+    }
+    ucs_mpool_check_empty(iface->super.rx.mp);
 }
 
 static void uct_rc_mlx5_iface_progress(void *arg)
@@ -334,6 +347,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
     uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
 
     ucs_notifier_chain_remove(&context->progress_chain, uct_rc_mlx5_iface_progress, self);
+    uct_rc_mlx5_iface_free_rx_descs(self);
     UCS_STATS_NODE_FREE(self->stats);
     ucs_mpool_destroy(self->tx.atomic_desc_mp);
 }
@@ -345,9 +359,10 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_get_address   = uct_rc_iface_get_address,
     .iface_flush         = uct_rc_iface_flush,
+    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
+    .iface_release_desc  = uct_ib_iface_release_desc,
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_iface = NULL,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,

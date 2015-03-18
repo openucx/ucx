@@ -137,16 +137,9 @@ ucs_mpool_create(const char *name, size_t elem_size, size_t align_offset,
     return UCS_OK;
 }
 
-static void __mpool_destroy(ucs_mpool_h mp, unsigned check_inuse)
+static void __mpool_destroy(ucs_mpool_h mp)
 {
     ucs_mpool_chunk_t *chunk;
-
-    /* Sanity check - all elements should be put back to the mpool */
-    if (check_inuse) {
-        ucs_assertv(mp->num_elems_inuse == 0,
-                    "destroying memory pool %s with %u used elements", mp->name,
-                    mp->num_elems_inuse);
-    }
 
     while (!ucs_queue_is_empty(&mp->chunks)) {
         chunk = ucs_queue_pull_elem_non_empty(&mp->chunks, ucs_mpool_chunk_t, queue);
@@ -161,12 +154,20 @@ static void __mpool_destroy(ucs_mpool_h mp, unsigned check_inuse)
 
 void ucs_mpool_destroy(ucs_mpool_h mp)
 {
-    __mpool_destroy(mp, 1);
+    ucs_mpool_check_empty(mp);
+    __mpool_destroy(mp);
 }
 
 void ucs_mpool_destroy_unchecked(ucs_mpool_h mp)
 {
-    __mpool_destroy(mp, 0);
+    __mpool_destroy(mp);
+}
+
+void ucs_mpool_check_empty(ucs_mpool_h mp)
+{
+    ucs_assertv(mp->num_elems_inuse == 0,
+                "destroying memory pool %s with %u used elements", mp->name,
+                mp->num_elems_inuse);
 }
 
 void *ucs_mpool_get(ucs_mpool_h mp)

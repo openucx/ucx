@@ -19,6 +19,9 @@ public:
         OP_AM_SHORT
     };
 
+    uct_p2p_err_test() : uct_p2p_test(0) {
+    }
+
     static void log_handler(const char *file, unsigned line, const char *function,
                             unsigned level, const char *prefix, const char *message,
                             va_list ap)
