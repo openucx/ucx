@@ -26,22 +26,26 @@ public:
         m_max_outstanding(m_perf.super.params.max_outstanding)
 
     {
-        ucs_assert(m_max_outstanding > 0);
+        ucs_assert_always(m_max_outstanding > 0);
 
         uct_iface_attr_t attr;
-        uct_iface_query(m_perf.iface, &attr);
+        ucs_status_t status = uct_iface_query(m_perf.iface, &attr);
+        ucs_assert_always(status == UCS_OK);
 
         m_completion_size = sizeof (comp_t) + attr.completion_priv_len;
         void *completions_buffer = malloc(m_completion_size * m_max_outstanding);
+        ucs_assert_always(completions_buffer != NULL);
 
         m_completions = (comp_t**)calloc(m_max_outstanding, sizeof(comp_t*));
+        ucs_assert_always(m_completions != NULL);
         for (unsigned i = 0; i < m_max_outstanding; ++i) {
             m_completions[i] = (comp_t*)((char*)completions_buffer + i * m_completion_size);
             m_completions[i]->self     = this;
         }
 
-        uct_iface_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, am_hander,
-                           m_perf.super.recv_buffer);
+        status = uct_iface_set_am_handler(m_perf.iface, UCT_PERF_TEST_AM_ID, am_hander,
+                                          m_perf.super.recv_buffer);
+        ucs_assert_always(status == UCS_OK);
     }
 
     ~uct_perf_test_runner() {
