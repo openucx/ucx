@@ -145,7 +145,10 @@ AC_ARG_ENABLE([params-check],
 AC_ARG_ENABLE([debug-data],
 	AS_HELP_STRING([--enable-debug-data],
 	               [Enable collecting data to ease debugging, default: NO]),
-	[AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])],
+    [
+     AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
+     AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1], [Enable packet header inspection/rewriting in UCT/UD])
+    ],
 	[AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
 
 

@@ -22,6 +22,7 @@ typedef struct {
     struct {
         struct ibv_sge      sge[UCT_UD_MAX_SGE];
         struct ibv_send_wr  wr;
+        struct ibv_send_wr  ctl_wr;
     } tx;
 } uct_ud_verbs_iface_t;
 

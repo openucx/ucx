@@ -47,6 +47,7 @@ struct uct_ud_iface {
         unsigned             available;
         /* TODO: move to base class as this is common with rc */
         unsigned             unsignaled;
+        ucs_queue_head_t     pending_ops;
     } tx;
     struct {
         unsigned             tx_qp_len;
@@ -72,6 +73,15 @@ void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface);
+
+static inline int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
+{
+    if (iface->tx.available == 0) {
+        ucs_trace_data("iface=%p out of tx wqe", iface);
+        return 0;
+    }
+    return 1;
+}
 
 #endif
 

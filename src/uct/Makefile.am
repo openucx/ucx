@@ -88,7 +88,8 @@ noinst_HEADERS += \
 	ib/ud/ud_iface.h \
 	ib/ud/ud_ep.h \
 	ib/ud/ud_def.h \
-	ib/ud/ud_verbs.h
+	ib/ud/ud_verbs.h \
+	ib/ud/ud_inl.h 
 endif
 
 endif

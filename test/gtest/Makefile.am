@@ -56,6 +56,7 @@ gtest_SOURCES = \
 	uct/test_p2p_err.cc \
 	uct/test_p2p_rma.cc \
 	uct/test_pd.cc \
+	uct/test_ud.cc \
 	uct/test_uct_context.cc \
 	uct/test_uct_perf.cc \
 	uct/uct_p2p_test.cc \
