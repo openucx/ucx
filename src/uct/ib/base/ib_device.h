@@ -67,9 +67,6 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
 
 const char *uct_ib_device_name(uct_ib_device_t *dev);
 
-ucs_status_t uct_ib_rkey_unpack(uct_context_h context, void *rkey_buffer,
-                                uct_rkey_bundle_t *rkey_ob);
-
 /**
  * @return 1 if the port is InfiniBand, 0 if the port is Ethernet.
  */

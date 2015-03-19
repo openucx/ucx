@@ -70,10 +70,6 @@ struct uct_tl_ops {
     ucs_status_t (*iface_open)(uct_context_h context, const char *dev_name,
                                size_t rx_headroom, uct_iface_config_t *config,
                                uct_iface_h *iface_p);
-
-    ucs_status_t (*rkey_unpack)(uct_context_h context, void *rkey_buffer,
-                                uct_rkey_bundle_t *rkey_ob);
-
 };
 
 

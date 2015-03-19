@@ -190,12 +190,12 @@ static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static void uct_ugni_rkey_release(uct_context_h context, uct_rkey_t key)
+static void uct_ugni_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
 {
-    ucs_free((void *)key);
+    ucs_free((void *)rkey_ob->rkey);
 }
 
-ucs_status_t uct_ugni_rkey_unpack(uct_context_h context, void *rkey_buffer,
+ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob)
 {
     uint64_t *ptr = rkey_buffer;
@@ -251,6 +251,8 @@ uct_pd_ops_t uct_ugni_pd_ops = {
     .mem_reg      = uct_ugni_mem_reg,
     .mem_dereg    = uct_ugni_mem_dereg,
     .rkey_pack    = uct_ugni_rkey_pack,
+    .rkey_unpack  = uct_ugni_rkey_unpack,
+    .rkey_release = uct_ugni_rkey_release
 };
 
 static void uct_ugni_base_desc_init(void *mp_context, void *obj, void *chunk, void *arg)
@@ -424,7 +426,6 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
 uct_tl_ops_t uct_ugni_tl_ops = {
     .query_resources     = uct_ugni_query_resources,
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_iface_t),
-    .rkey_unpack         = uct_ugni_rkey_unpack,
 };
 
 #define UCT_UGNI_LOCAL_CQ (8192)

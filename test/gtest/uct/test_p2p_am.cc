@@ -60,7 +60,7 @@ public:
             m_backlog.pop_back();
             EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
-            uct_iface_release_desc(receiver().iface(), (void*)my_desc);
+            uct_iface_release_am_desc(receiver().iface(), (void*)my_desc);
         }
     }
 
@@ -99,7 +99,7 @@ public:
 
         m_am_count = 0;
 
-        status = uct_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
         ASSERT_UCS_OK(status);
 
         mapped_buffer sendbuf(length, 1, SEED1, sender());
@@ -112,7 +112,7 @@ public:
             short_progress_loop();
         }
 
-        status = uct_set_am_handler(receiver().iface(), AM_ID, NULL, NULL);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL);
         ASSERT_UCS_OK(status);
 
         check_backlog();

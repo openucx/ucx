@@ -265,33 +265,20 @@ ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
     return tl->ops->iface_open(context, dev_name, rx_headroom, config, iface_p);
 }
 
-ucs_status_t uct_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
+ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
 {
     return pd->ops->rkey_pack(pd, memh, rkey_buffer);
 }
 
-ucs_status_t uct_rkey_unpack(uct_context_h context, void *rkey_buffer,
-                             uct_rkey_bundle_t *rkey_ob)
+ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+                                uct_rkey_bundle_t *rkey_ob)
 {
-    uct_context_tl_info_t *tl;
-    ucs_status_t status;
-
-    for (tl = context->tls; tl < context->tls + context->num_tls; ++tl) {
-        status = tl->ops->rkey_unpack(context, rkey_buffer, rkey_ob);
-        if (status != UCS_ERR_UNSUPPORTED) {
-            return status;
-        }
-    }
-
-    return UCS_ERR_INVALID_PARAM;
+    return pd->ops->rkey_unpack(pd, rkey_buffer, rkey_ob);
 }
 
-void uct_rkey_release(uct_context_h context, uct_rkey_bundle_t *rkey_ob)
+void uct_pd_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
 {
-    uct_rkey_release_func_t release = rkey_ob->type;
-    if (release) {
-        release(context, rkey_ob->rkey);
-    }
+    pd->ops->rkey_release(pd, rkey_ob);
 }
 
 ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
