@@ -298,7 +298,6 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_iface_t, uct_iface_t);
 static uct_tl_ops_t uct_ud_verbs_tl_ops = {
     .query_resources     = uct_ud_verbs_query_resources,
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_iface_t),
-    .rkey_unpack         = uct_ib_rkey_unpack,
 };
 
 static void uct_ud_verbs_register(uct_context_t *context)

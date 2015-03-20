@@ -118,10 +118,10 @@ void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
 
     rkey_buffer = malloc(pd_attr.rkey_packed_size);
 
-    status = uct_rkey_pack(m_iface->pd, *memh_p, rkey_buffer);
+    status = uct_pd_rkey_pack(m_iface->pd, *memh_p, rkey_buffer);
     ASSERT_UCS_OK(status);
 
-    status = uct_rkey_unpack(m_ucth, rkey_buffer, rkey_bundle);
+    status = uct_pd_rkey_unpack(m_iface->pd, rkey_buffer, rkey_bundle);
     ASSERT_UCS_OK(status);
 
     free(rkey_buffer);
@@ -130,7 +130,7 @@ void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
 void uct_test::entity::mem_free(void *address, uct_mem_h memh,
                                 const uct_rkey_bundle_t& rkey) const {
     ucs_status_t status;
-    uct_rkey_release(m_ucth, const_cast<uct_rkey_bundle_t*>(&rkey));
+    uct_pd_rkey_release(m_iface->pd, const_cast<uct_rkey_bundle_t*>(&rkey));
     status = uct_pd_mem_free(m_iface->pd, address, memh);
     ASSERT_UCS_OK(status);
 }

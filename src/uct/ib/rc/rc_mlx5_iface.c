@@ -359,14 +359,14 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_context_h
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
+    .iface_query         = uct_rc_mlx5_iface_query,
     .iface_get_address   = uct_rc_iface_get_address,
     .iface_flush         = uct_rc_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .iface_release_desc  = uct_ib_iface_release_desc,
+    .iface_release_am_desc= uct_ib_iface_release_desc,
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_iface = NULL,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
-    .iface_query         = uct_rc_mlx5_iface_query,
     .ep_put_short        = uct_rc_mlx5_ep_put_short,
     .ep_put_bcopy        = uct_rc_mlx5_ep_put_bcopy,
     .ep_put_zcopy        = uct_rc_mlx5_ep_put_zcopy,
@@ -403,7 +403,6 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_context_h context,
 static uct_tl_ops_t uct_rc_mlx5_tl_ops = {
     .query_resources     = uct_rc_mlx5_query_resources,
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .rkey_unpack         = uct_ib_rkey_unpack,
 };
 
 static void uct_rc_mlx5_register(uct_context_t *context)
