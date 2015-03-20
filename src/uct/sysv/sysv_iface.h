@@ -56,9 +56,6 @@ typedef struct uct_sysv_key {
 extern ucs_config_field_t uct_sysv_iface_config_table[];
 extern uct_tl_ops_t uct_sysv_tl_ops;
 
-ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
-                                 uct_rkey_bundle_t *rkey_ob);
-
 ucs_status_t sysv_activate_iface(uct_sysv_iface_t *iface,
                                 uct_sysv_context_t *sysv_ctx);
 #endif

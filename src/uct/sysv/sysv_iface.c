@@ -127,17 +127,22 @@ static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static void uct_sysv_rkey_release(uct_context_h context, uct_rkey_t key)
+static void uct_sysv_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
 {
     /* this releases the key allocated in unpack */
     
-    uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)key;
+    uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)rkey_ob->rkey;
 
-    ucs_sysv_free((void *)key_hndl->client_ptr);  /* detach the shared segment */
-    ucs_free(key_hndl);
+    printf("\n--- in release ---\n");
+    printf("rkey_ob = %p\n", rkey_ob);
+    printf("key_hndl = %p\n", key_hndl);
+    printf("rkey_ob->rkey = %"PRIxPTR"\n", rkey_ob->rkey);
+
+    ucs_sysv_free((void *)(key_hndl->client_ptr));  /* detach the shared segment */
+    ucs_free((void *)rkey_ob->rkey);
 }
 
-ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
+ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob)
 {
     /* user is responsible to free rkey_buffer */
@@ -182,6 +187,12 @@ ucs_status_t uct_sysv_rkey_unpack(uct_context_h context, void *rkey_buffer,
 
     rkey_ob->type = (void*)uct_sysv_rkey_release;
     rkey_ob->rkey = (uct_rkey_t)key_hndl;
+
+    printf("\n--- in unpack ---\n");
+    printf("rkey_ob = %p\n", rkey_ob);
+    printf("key_hndl = %p\n", key_hndl);
+    printf("rkey_ob->rkey = %"PRIxPTR"\n", rkey_ob->rkey);
+
     return UCS_OK;
 
 }
@@ -205,6 +216,8 @@ uct_pd_ops_t uct_sysv_pd_ops = {
     .mem_alloc    = uct_sysv_mem_alloc,
     .mem_free     = uct_sysv_mem_free,
     .rkey_pack    = uct_sysv_rkey_pack,
+    .rkey_unpack  = uct_sysv_rkey_unpack,
+    .rkey_release = uct_sysv_rkey_release
 };
 
 static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
@@ -265,5 +278,4 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
 uct_tl_ops_t uct_sysv_tl_ops = {
     .query_resources     = uct_sysv_query_resources,
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_iface_t),
-    .rkey_unpack         = uct_sysv_rkey_unpack,
 };
