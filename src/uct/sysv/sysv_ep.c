@@ -12,6 +12,8 @@
 #include "sysv_ep.h"
 #include "sysv_iface.h"
 
+unsigned sysv_ep_global_counter = 0;
+
 static inline ptrdiff_t uct_sysv_ep_compare(uct_sysv_ep_t *ep1, 
                                             uct_sysv_ep_t *ep2)
 {
@@ -36,9 +38,8 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_ep_t, uct_iface_t *tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(tl_iface)
 
-    /* FIXME create ep based from iface */
-
     /* add this ep to list of iface's eps */
+    self->hash_key = ucs_atomic_fadd32(&sysv_ep_global_counter, 1);
     sglib_hashed_uct_sysv_ep_t_add(iface->eps, self);
     return UCS_OK;
 }
@@ -46,8 +47,6 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_ep_t, uct_iface_t *tl_iface)
 static UCS_CLASS_CLEANUP_FUNC(uct_sysv_ep_t)
 {
     uct_sysv_iface_t *iface = ucs_derived_of(self->super.iface, uct_sysv_iface_t);
-
-    /* FIXME destroy ep */
 
     /* remove this ep from list of iface's eps */
     sglib_hashed_uct_sysv_ep_t_delete(iface->eps, self);
