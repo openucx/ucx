@@ -44,7 +44,6 @@ enum {
     TEST_FLAG_PRINT_CSV     = UCS_BIT(11)
 };
 
-
 typedef struct sock_rte_group {
     int                          is_server;
     int                          connfd;
@@ -55,6 +54,7 @@ typedef struct sock_rte_group {
 
 typedef struct test_type {
     const char                   *name;
+    ucx_perf_api_t               api;
     ucx_perf_cmd_t               command;
     ucx_perf_test_type_t         test_type;
     const char                   *desc;
@@ -62,13 +62,7 @@ typedef struct test_type {
 
 
 struct perftest_context {
-    ucx_perf_test_params_t       params;
-
-    char                         dev_name[UCT_MAX_NAME_LEN];
-    char                         tl_name[UCT_MAX_NAME_LEN];
-
-    uct_context_h                ucth;
-
+    ucx_perf_params_t            params;
     const char                   *server_addr;
     int                          port;
     unsigned                     cpu;
@@ -85,35 +79,41 @@ struct perftest_context {
 
 
 test_type_t tests[] = {
-    {"am_lat", UCX_PERF_TEST_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    {"am_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
      "active message latency"},
 
-    {"put_lat", UCX_PERF_TEST_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
+    {"put_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
      "put latency"},
 
-    {"add_lat", UCX_PERF_TEST_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
+    {"add_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
      "atomic add latency"},
 
-    {"get", UCX_PERF_TEST_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"get", UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "get latency / bandwidth / message rate"},
 
-    {"fadd", UCX_PERF_TEST_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"fadd", UCX_PERF_API_UCT, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic fetch-and-add latency / message rate"},
 
-    {"swap", UCX_PERF_TEST_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"swap", UCX_PERF_API_UCT, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic swap latency / message rate"},
 
-    {"cswap", UCX_PERF_TEST_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"cswap", UCX_PERF_API_UCT, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic compare-and-swap latency / message rate"},
 
-    {"am_bw", UCX_PERF_TEST_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"am_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "active message bandwidth / message rate"},
 
-    {"put_bw", UCX_PERF_TEST_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"put_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "put bandwidth / message rate"},
 
-    {"add_mr", UCX_PERF_TEST_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    {"add_mr", UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "atomic add message rate"},
+
+    {"tag_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+     "tag match latency"},
+
+    {"tag_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "tag match bandwidth"},
 
     {NULL}
 };
@@ -186,24 +186,10 @@ static void print_progress(char **test_names, unsigned num_names,
 
 static void print_header(struct perftest_context *ctx)
 {
+    const char *test_api_str;
     const char *test_data_str;
     test_type_t *test;
     unsigned i;
-
-    switch (ctx->params.data_layout) {
-    case UCX_PERF_DATA_LAYOUT_SHORT:
-        test_data_str = "short";
-        break;
-    case UCX_PERF_DATA_LAYOUT_BCOPY:
-        test_data_str = "bcopy";
-        break;
-    case UCX_PERF_DATA_LAYOUT_ZCOPY:
-        test_data_str = "zcopy";
-        break;
-    default:
-        test_data_str = "(undefined)";
-        break;
-    }
 
     if (ctx->flags & TEST_FLAG_PRINT_TEST) {
         for (test = tests; test->name; ++test) {
@@ -212,7 +198,31 @@ static void print_header(struct perftest_context *ctx)
             }
         }
         if (test->name != NULL) {
+            if (test->api == UCX_PERF_API_UCT) {
+                test_api_str = "transport layer";
+                switch (ctx->params.uct.data_layout) {
+                case UCT_PERF_DATA_LAYOUT_SHORT:
+                    test_data_str = "short";
+                    break;
+                case UCT_PERF_DATA_LAYOUT_BCOPY:
+                    test_data_str = "bcopy";
+                    break;
+                case UCT_PERF_DATA_LAYOUT_ZCOPY:
+                    test_data_str = "zcopy";
+                    break;
+                default:
+                    test_data_str = "(undefined)";
+                    break;
+                }
+            } else if (test->api == UCX_PERF_API_UCP) {
+                test_api_str = "protocol layer";
+                test_data_str = "(automatic)"; /* TODO contig/stride/stream */
+            } else {
+                return;
+            }
+
             printf("+------------------------------------------------------------------------------------------+\n");
+            printf("| API:          %-60s               |\n", test_api_str);
             printf("| Test:         %-60s               |\n", test->desc);
             printf("| Data layout:  %-60s               |\n", test_data_str);
             printf("| Message size: %-60zu               |\n", ctx->params.message_size);
@@ -292,9 +302,9 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -c <cpu>       Set affinity to this CPU. (off)\n");
     printf("     -n <iters>     Number of iterations to run. (%ld)\n", ctx->params.max_iter);
     printf("     -s <size>      Message size. (%zu)\n", ctx->params.message_size);
-    printf("     -H <size>      AM Header size. (%zu)\n", ctx->params.hdr_size);
+    printf("     -H <size>      AM Header size. (%zu)\n", ctx->params.am_hdr_size);
     printf("     -w <iters>     Number of warm-up iterations. (%zu)\n", ctx->params.warmup_iter);
-    printf("     -W <count>     Flow control window size, for active messages. (%u)\n", ctx->params.fc_window);
+    printf("     -W <count>     Flow control window size, for active messages. (%u)\n", ctx->params.uct.fc_window);
     printf("     -O <count>     Maximal number of uncompleted outstanding sends. (%u)\n", ctx->params.max_outstanding);
     printf("     -N             Use numeric formatting - thousands separator.\n");
     printf("     -f             Print only final numbers.\n");
@@ -321,54 +331,27 @@ const char *__basename(const char *path)
     return (p == NULL) ? path : p;
 }
 
-void print_transports(struct perftest_context *ctx)
+static void init_test_params(ucx_perf_params_t *params)
 {
-    uct_resource_desc_t *res, *resources;
-    ucs_status_t status;
-    unsigned num_resources;
-
-
-    status = uct_query_resources(ctx->ucth, &resources, &num_resources);
-    if (status != UCS_OK) {
-        ucs_error("Failed to query resources");
-        return;
-    }
-
-    printf("+-----------+-------------+-----------------+--------------+\n");
-    printf("| device    | transport   | bandwidth       | latency      |\n");
-    printf("+-----------+-------------+-----------------+--------------+\n");
-
-    for (res = resources; res < resources + num_resources; ++res) {
-       printf("| %-9s | %-11s | %10.2f MB/s | %7.3f usec |\n",
-               res->dev_name, res->tl_name,
-               res->bandwidth / (1024.0 * 1024.0),
-               res->latency / 1000.0);
-    }
-    printf("+-----------+-------------+-----------------+--------------+\n");
-
-    uct_release_resource_list(resources);
-}
-
-static void init_test_params(ucx_perf_test_params_t *params)
-{
-    params->command         = UCX_PERF_TEST_CMD_LAST;
+    params->api             = UCX_PERF_API_LAST;
+    params->command         = UCX_PERF_CMD_LAST;
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
-    params->data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
-    params->thread_mode     = UCT_THREAD_MODE_SINGLE;
+    params->thread_mode     = UCS_THREAD_MODE_SINGLE;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    params->fc_window       = UCX_PERF_TEST_MAX_FC_WINDOW;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
     params->message_size    = 8;
-    params->hdr_size        = 8;
+    params->am_hdr_size     = 8;
     params->alignment       = ucs_get_page_size();
     params->max_iter        = 1000000l;
     params->max_time        = 0.0;
     params->report_interval = 1.0;
     params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
+    params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
+    params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
 }
 
-static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, const char *optarg)
+static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
 {
     test_type_t *test;
 
@@ -376,6 +359,7 @@ static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, 
     case 't':
         for (test = tests; test->name; ++test) {
             if (!strcmp(optarg, test->name)) {
+                params->api       = test->api;
                 params->command   = test->command;
                 params->test_type = test->test_type;
                 break;
@@ -388,11 +372,11 @@ static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, 
         return UCS_OK;
     case 'D':
         if (0 == strcmp(optarg, "short")) {
-            params->data_layout   = UCX_PERF_DATA_LAYOUT_SHORT;
+            params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
         } else if (0 == strcmp(optarg, "bcopy")) {
-            params->data_layout   = UCX_PERF_DATA_LAYOUT_BCOPY;
+            params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
         } else if (0 == strcmp(optarg, "zcopy")) {
-            params->data_layout   = UCX_PERF_DATA_LAYOUT_ZCOPY;
+            params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
         } else {
             ucs_error("Invalid option argument for -D");
             return -1;
@@ -405,10 +389,10 @@ static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, 
         params->message_size = atol(optarg);
         return UCS_OK;
     case 'H':
-        params->hdr_size = atol(optarg);
+        params->am_hdr_size = atol(optarg);
         return UCS_OK;
     case 'W':
-        params->fc_window = atoi(optarg);
+        params->uct.fc_window = atoi(optarg);
         return UCS_OK;
     case 'O':
         params->max_outstanding = atoi(optarg);
@@ -424,13 +408,13 @@ static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, 
         return UCS_OK;
     case 'T':
         if (0 == strcmp(optarg, "single")) {
-            params->thread_mode = UCT_THREAD_MODE_SINGLE;
+            params->thread_mode = UCS_THREAD_MODE_SINGLE;
             return UCS_OK;
         } else if (0 == strcmp(optarg, "funneled")) {
-            params->thread_mode = UCT_THREAD_MODE_FUNNELED;
+            params->thread_mode = UCS_THREAD_MODE_FUNNELED;
             return UCS_OK;
         } else if (0 == strcmp(optarg, "multi")) {
-            params->thread_mode = UCT_THREAD_MODE_MULTI;
+            params->thread_mode = UCS_THREAD_MODE_MULTI;
             return UCS_OK;
         } else {
             ucs_error("Invalid option argument for -T");
@@ -441,7 +425,7 @@ static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, 
     }
 }
 
-static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_test_params_t *params,
+static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
                                     char** test_name_p)
 {
 #define MAX_SIZE 256
@@ -489,20 +473,22 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
     ctx->flags                  = 0;
-    strcpy(ctx->dev_name, "");
-    strcpy(ctx->tl_name, "");
+    strcpy(ctx->params.uct.dev_name, "");
+    strcpy(ctx->params.uct.tl_name, "");
 
     optind = 1;
-    while ((c = getopt (argc, argv, "p:d:x:b:Nfvc:lh" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt (argc, argv, "p:d:x:b:Nfvc:h" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
             break;
         case 'd':
-            ucs_snprintf_zero(ctx->dev_name, sizeof(ctx->dev_name), "%s", optarg);
+            ucs_snprintf_zero(ctx->params.uct.dev_name, sizeof(ctx->params.uct.dev_name),
+                              "%s", optarg);
             break;
         case 'x':
-            ucs_snprintf_zero(ctx->tl_name, sizeof(ctx->tl_name), "%s", optarg);
+            ucs_snprintf_zero(ctx->params.uct.tl_name, sizeof(ctx->params.uct.tl_name),
+                              "%s", optarg);
             break;
         case 'b':
             if (ctx->num_batch_files < MAX_BATCH_FILES) {
@@ -522,9 +508,6 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             ctx->flags |= TEST_FLAG_SET_AFFINITY;
             ctx->cpu = atoi(optarg);
             break;
-        case 'l':
-            print_transports(ctx);
-            return UCS_ERR_CANCELED;
         case 'h':
             usage(ctx, __basename(argv[0]));
             return UCS_ERR_CANCELED;
@@ -551,45 +534,50 @@ static ucs_status_t validate_params(struct perftest_context *ctx)
     uct_resource_desc_t *resources;
     unsigned num_resources;
 
-    status = uct_query_resources(ctx->ucth, &resources, &num_resources);
-    if (status != UCS_OK) {
-        ucs_error("Failed to query resources");
-        goto error;
-    }
-
-    if (!strlen(ctx->tl_name)) {
-        if (num_resources <= 0) {
-            ucs_error("Must specify transport");
-            status = UCS_ERR_INVALID_PARAM;
+    if (ctx->params.api == UCX_PERF_API_UCT) {
+        status = uct_query_resources(ctx->params.uct.context, &resources,
+                                     &num_resources);
+        if (status != UCS_OK) {
+            ucs_error("Failed to query resources");
             goto error;
         }
-        strncpy(ctx->tl_name, resources[0].tl_name, UCT_MAX_NAME_LEN);
-        printf("No transport was specified, selecting %s\n", ctx->tl_name); 
 
-    }
-
-    if (!strlen(ctx->dev_name)) {
-        int i;
-        if (num_resources <= 0) {
-            ucs_error("No specify device name");
-            status = UCS_ERR_INVALID_PARAM;
-            goto error;
+        if (!strlen(ctx->params.uct.tl_name)) {
+            if (num_resources <= 0) {
+                ucs_error("Must specify transport");
+                status = UCS_ERR_INVALID_PARAM;
+                goto error;
+            }
+            strncpy(ctx->params.uct.tl_name, resources[0].tl_name,
+                    sizeof(ctx->params.uct.tl_name));
+            ucs_info("No transport was specified, selecting %s\n", ctx->params.uct.tl_name);
         }
-        for (i = 0; i < num_resources; i++) {
-            if(!strcmp(ctx->tl_name, resources[i].tl_name)) {
-                strncpy(ctx->dev_name, resources[i].dev_name, UCT_MAX_NAME_LEN);
-                printf("No device was specified, selecting %s\n", ctx->dev_name); 
+
+        if (!strlen(ctx->params.uct.dev_name)) {
+            int i;
+            if (num_resources <= 0) {
+                ucs_error("No specify device name");
+                status = UCS_ERR_INVALID_PARAM;
+                goto error;
+            }
+            for (i = 0; i < num_resources; i++) {
+                if(!strcmp(ctx->params.uct.tl_name, resources[i].tl_name)) {
+                    strncpy(ctx->params.uct.dev_name, resources[i].dev_name,
+                            sizeof(ctx->params.uct.dev_name));
+                    ucs_info("No device was specified, selecting %s\n", ctx->params.uct.dev_name);
+                }
+            }
+            if (!strlen(ctx->params.uct.dev_name)) {
+                ucs_error("Device for transport %s was not found", ctx->params.uct.tl_name);
+                status = UCS_ERR_INVALID_PARAM;
+                goto error;
             }
         }
-        if (!strlen(ctx->dev_name)) {
-            ucs_error("Device for transport %s was not found", ctx->tl_name);
-            status = UCS_ERR_INVALID_PARAM;
-            goto error;
-        }
+    error:
+        uct_release_resource_list(resources);
+    } else {
+        status = UCS_OK;
     }
-
-error:
-    uct_release_resource_list(resources);
     return status;
 }
 
@@ -693,7 +681,7 @@ static void sock_rte_report(void *rte_group, ucx_perf_result_t *result, int is_f
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
 }
 
-ucx_perf_test_rte_t sock_rte = {
+ucx_perf_rte_t sock_rte = {
     .group_size    = sock_rte_group_size,
     .group_index   = sock_rte_group_index,
     .barrier       = sock_rte_barrier,
@@ -758,8 +746,6 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
         close(sockfd);
         safe_recv(connfd, &ctx->params, sizeof(ctx->params));
-        safe_recv(connfd, &ctx->dev_name, sizeof(ctx->dev_name));
-        safe_recv(connfd, &ctx->tl_name, sizeof(ctx->tl_name));
 
         ctx->sock_rte_group.connfd    = connfd;
         ctx->sock_rte_group.is_server = 1;
@@ -792,8 +778,6 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         }
 
         safe_send(sockfd, &ctx->params, sizeof(ctx->params));
-        safe_send(sockfd, &ctx->dev_name, sizeof(ctx->dev_name));
-        safe_send(sockfd, &ctx->tl_name, sizeof(ctx->tl_name));
 
         ctx->sock_rte_group.connfd    = sockfd;
         ctx->sock_rte_group.is_server = 0;
@@ -886,7 +870,7 @@ static void mpi_rte_report(void *rte_group, ucx_perf_result_t *result, int is_fi
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
 }
 
-ucx_perf_test_rte_t mpi_rte = {
+ucx_perf_rte_t mpi_rte = {
     .group_size    = mpi_rte_group_size,
     .group_index   = mpi_rte_group_index,
     .barrier       = mpi_rte_barrier,
@@ -994,7 +978,7 @@ static void ext_rte_report(void *rte_group, ucx_perf_result_t *result, int is_fi
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
 }
 
-ucx_perf_test_rte_t ext_rte = {
+ucx_perf_rte_t ext_rte = {
     .group_size    = ext_rte_group_size,
     .group_index   = ext_rte_group_index,
     .barrier       = ext_rte_barrier,
@@ -1101,19 +1085,17 @@ static ucs_status_t check_system(struct perftest_context *ctx)
 }
 
 static ucs_status_t run_test_recurs(struct perftest_context *ctx,
-                                    ucx_perf_test_params_t *parent_params,
-                                    uct_iface_config_t *iface_config,
+                                    ucx_perf_params_t *parent_params,
                                     unsigned depth)
 {
-    ucx_perf_test_params_t params;
+    ucx_perf_params_t params;
     ucx_perf_result_t result;
     ucs_status_t status;
     FILE *batch_file;
 
     if (depth >= ctx->num_batch_files) {
         print_test_name(ctx);
-        return uct_perf_test_run(ctx->ucth, parent_params, ctx->tl_name,
-                                 ctx->dev_name, iface_config, &result);
+        return ucx_perf_run(parent_params, &result);
     }
 
     batch_file = fopen(ctx->batch_files[depth], "r");
@@ -1124,7 +1106,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 
     params = *parent_params;
     while ((status = read_batch_file(batch_file, &params, &ctx->test_names[depth])) == UCS_OK) {
-        status = run_test_recurs(ctx, &params, iface_config, depth + 1);
+        status = run_test_recurs(ctx, &params, depth + 1);
         free(ctx->test_names[depth]);
     }
 
@@ -1134,26 +1116,54 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 
 static ucs_status_t run_test(struct perftest_context *ctx)
 {
-    uct_iface_config_t *iface_config;
     ucs_status_t status;
 
     setlocale(LC_ALL, "en_US");
 
-    status = uct_iface_config_read(ctx->ucth, ctx->tl_name, NULL, NULL, &iface_config);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     print_header(ctx);
 
-    status = run_test_recurs(ctx, &ctx->params, iface_config, 0);
+    status = run_test_recurs(ctx, &ctx->params, 0);
     if (status != UCS_OK) {
         ucs_error("Failed to run test: %s", ucs_status_string(status));
     }
 
-    uct_iface_config_release(iface_config);
-out:
     return status;
+}
+
+static ucs_status_t open_context(struct perftest_context *ctx)
+{
+    ucp_config_t *config;
+    ucs_status_t status;
+
+    switch (ctx->params.api) {
+    case UCX_PERF_API_UCT:
+        return uct_init(&ctx->params.uct.context);
+    case UCX_PERF_API_UCP:
+        status = ucp_config_read(NULL, NULL, &config);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = ucp_init(config, 0, &ctx->params.ucp.context);
+        ucp_config_release(config);
+        return status;
+    default:
+        return UCS_ERR_INVALID_PARAM;
+    }
+}
+
+static void close_context(struct perftest_context *ctx)
+{
+    switch (ctx->params.api) {
+    case UCX_PERF_API_UCT:
+        uct_cleanup(ctx->params.uct.context);
+        return;
+    case UCX_PERF_API_UCP:
+        ucp_cleanup(ctx->params.ucp.context);
+        return;
+    default:
+        return;
+    }
 }
 
 int main(int argc, char **argv)
@@ -1176,31 +1186,29 @@ int main(int argc, char **argv)
     rte = 1;
 #endif
 
-    /* Create application context */
-    status = uct_init(&ctx.ucth);
-    if (status != UCS_OK) {
-        ucs_error("Failed to initialize UCT: %s", ucs_status_string(status));
-        ret = -1;
-        goto out;
-    }
-
     /* Parse command line */
     if (parse_opts(&ctx, argc, argv) != UCS_OK) {
         ret = -127;
-        goto out_cleanup;
+        goto out;
     }
 
     status = check_system(&ctx);
     if (status != UCS_OK) {
         ret = -1;
-        goto out_cleanup;
+        goto out;
     }
 
     /* Create RTE */
     status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
     if (status != UCS_OK) {
         ret = -1;
-        goto out_cleanup;
+        goto out;
+    }
+
+    status = open_context(&ctx);
+    if (status != UCS_OK) {
+        ret = -1;
+        goto out_close_context;
     }
 
     /* Run the test */
@@ -1212,10 +1220,10 @@ int main(int argc, char **argv)
 
     ret = 0;
 
+out_close_context:
+    close_context(&ctx);
 out_cleanup_rte:
     (rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
-out_cleanup:
-    uct_cleanup(ctx.ucth);
 out:
     if (rte) {
 #if HAVE_MPI

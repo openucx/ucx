@@ -20,7 +20,7 @@
 typedef struct uct_ugni_device {
     gni_nic_device_t type;                      /**< Device type */
     char             type_name[MAX_TYPE_NAME];  /**< Device type name */
-    char             fname[UCT_MAX_NAME_LEN];   /**< Device full name */
+    char             fname[UCT_DEVICE_NAME_MAX];/**< Device full name */
     uint32_t         device_id;                 /**< Device id */
     uint32_t         address;                   /**< Device address */
     uint32_t         cpu_id;                    /**< CPU attached directly

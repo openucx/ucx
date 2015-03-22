@@ -13,7 +13,9 @@
 #include <stdint.h>
 
 
-#define UCT_MAX_NAME_LEN         64
+#define UCT_TL_NAME_MAX          8
+#define UCT_PD_NAME_MAX          32
+#define UCT_DEVICE_NAME_MAX      32
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_INVALID_MEM_HANDLE   NULL

@@ -61,7 +61,7 @@ typedef struct uct_worker uct_worker_t;
 struct uct_worker {
     uct_context_h          context;
     ucs_notifier_chain_t   progress_chain;
-    uct_thread_mode_t      thread_mode;
+    ucs_thread_mode_t      thread_mode;
 };
 
 

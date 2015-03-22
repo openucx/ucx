@@ -104,7 +104,7 @@ static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
     uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
 
-    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s",
+    ucs_snprintf_zero(pd_attr->name, sizeof(pd_attr->name), "%s",
                       iface->dev->fname);
     pd_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
     pd_attr->cap.flags         = UCT_PD_FLAG_REG;

@@ -71,44 +71,44 @@ static ucs_time_t __find_median_quick_select(ucs_time_t arr[], int n)
     }
 }
 
-static ucs_status_t uct_perf_test_alloc_mem(uct_perf_context_t *perf,
-                                            ucx_perf_test_params_t *params)
+static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
+                                            ucx_perf_params_t *params)
 {
     ucs_status_t status;
     size_t length;
 
     length = params->message_size;
-    status = uct_pd_mem_alloc(perf->iface->pd, UCT_ALLOC_METHOD_DEFAULT, &length,
-                              params->alignment, &perf->super.send_buffer,
-                              &perf->send_memh, "perftest");
+    status = uct_pd_mem_alloc(perf->uct.iface->pd, UCT_ALLOC_METHOD_DEFAULT, &length,
+                              params->alignment, &perf->send_buffer,
+                              &perf->uct.send_memh, "perftest");
     if (status != UCS_OK) {
         ucs_error("Failed allocate send buffer: %s", ucs_status_string(status));
         goto err;
     }
 
     length = params->message_size;
-    status = uct_pd_mem_alloc(perf->iface->pd, UCT_ALLOC_METHOD_DEFAULT, &length,
-                              params->alignment, &perf->super.recv_buffer,
-                              &perf->recv_memh, "perftest");
+    status = uct_pd_mem_alloc(perf->uct.iface->pd, UCT_ALLOC_METHOD_DEFAULT, &length,
+                              params->alignment, &perf->recv_buffer,
+                              &perf->uct.recv_memh, "perftest");
     if (status != UCS_OK) {
         ucs_error("Failed allocate receive buffer: %s", ucs_status_string(status));
         goto err_free_send;
     }
 
     ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
-              perf->super.send_buffer, perf->super.recv_buffer);
+              perf->send_buffer, perf->recv_buffer);
     return UCS_OK;
 
 err_free_send:
-    uct_pd_mem_free(perf->iface->pd, perf->super.send_buffer, perf->send_memh);
+    uct_pd_mem_free(perf->uct.iface->pd, perf->send_buffer, perf->uct.send_memh);
 err:
     return status;
 }
 
-static void uct_perf_test_free_mem(uct_perf_context_t *perf)
+static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 {
-    uct_pd_mem_free(perf->iface->pd, perf->super.send_buffer, perf->send_memh);
-    uct_pd_mem_free(perf->iface->pd, perf->super.recv_buffer, perf->recv_memh);
+    uct_pd_mem_free(perf->uct.iface->pd, perf->send_buffer, perf->uct.send_memh);
+    uct_pd_mem_free(perf->uct.iface->pd, perf->recv_buffer, perf->uct.recv_memh);
 }
 
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
@@ -119,7 +119,7 @@ void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 }
 
 static void ucx_perf_test_reset(ucx_perf_context_t *perf,
-                                ucx_perf_test_params_t *params)
+                                ucx_perf_params_t *params)
 {
     unsigned i;
 
@@ -214,19 +214,19 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 }
 
-void uct_perf_iface_flush_b(uct_perf_context_t *perf)
+void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
 {
-    while (uct_iface_flush(perf->iface) == UCS_ERR_NO_RESOURCE) {
-        uct_worker_progress(perf->worker);
+    while (uct_iface_flush(perf->uct.iface) == UCS_ERR_NO_RESOURCE) {
+        uct_worker_progress(perf->uct.worker);
     }
 }
 
-static inline uint64_t __get_flag(ucx_perf_data_layout_t layout, uint64_t short_f,
+static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_f,
                                   uint64_t bcopy_f, uint64_t zcopy_f)
 {
-    return (layout == UCX_PERF_DATA_LAYOUT_SHORT) ? short_f :
-           (layout == UCX_PERF_DATA_LAYOUT_BCOPY) ? bcopy_f :
-           (layout == UCX_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_f :
+    return (layout == UCT_PERF_DATA_LAYOUT_SHORT) ? short_f :
+           (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_f :
+           (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_f :
            0;
 }
 
@@ -237,16 +237,16 @@ static inline uint64_t __get_atomic_flag(size_t size, uint64_t flag32, uint64_t 
            0;
 }
 
-static inline size_t __get_max_size(ucx_perf_data_layout_t layout, size_t short_m,
+static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_m,
                                     size_t bcopy_m, uint64_t zcopy_m)
 {
-    return (layout == UCX_PERF_DATA_LAYOUT_SHORT) ? short_m :
-           (layout == UCX_PERF_DATA_LAYOUT_BCOPY) ? bcopy_m :
-           (layout == UCX_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_m :
+    return (layout == UCT_PERF_DATA_LAYOUT_SHORT) ? short_m :
+           (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_m :
+           (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_m :
            0;
 }
 
-static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *params,
+static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                                                      uct_iface_h iface)
 {
     uct_iface_attr_t attr;
@@ -260,40 +260,40 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *par
     }
 
     switch (params->command) {
-    case UCX_PERF_TEST_CMD_AM:
-        required_flags = __get_flag(params->data_layout, UCT_IFACE_FLAG_AM_SHORT,
+    case UCX_PERF_CMD_AM:
+        required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_AM_SHORT,
                                     UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_ZCOPY);
-        max_size = __get_max_size(params->data_layout, attr.cap.am.max_short,
+        max_size = __get_max_size(params->uct.data_layout, attr.cap.am.max_short,
                                   attr.cap.am.max_bcopy, attr.cap.am.max_zcopy);
         break;
-    case UCX_PERF_TEST_CMD_PUT:
-        required_flags = __get_flag(params->data_layout, UCT_IFACE_FLAG_PUT_SHORT,
+    case UCX_PERF_CMD_PUT:
+        required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_PUT_SHORT,
                                     UCT_IFACE_FLAG_PUT_BCOPY, UCT_IFACE_FLAG_PUT_ZCOPY);
-        max_size = __get_max_size(params->data_layout, attr.cap.put.max_short,
+        max_size = __get_max_size(params->uct.data_layout, attr.cap.put.max_short,
                                   attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
         break;
-    case UCX_PERF_TEST_CMD_GET:
-        required_flags = __get_flag(params->data_layout, 0,
+    case UCX_PERF_CMD_GET:
+        required_flags = __get_flag(params->uct.data_layout, 0,
                                     UCT_IFACE_FLAG_GET_BCOPY, UCT_IFACE_FLAG_GET_ZCOPY);
-        max_size = __get_max_size(params->data_layout, 0,
+        max_size = __get_max_size(params->uct.data_layout, 0,
                                   attr.cap.get.max_bcopy, attr.cap.get.max_zcopy);
         break;
-    case UCX_PERF_TEST_CMD_ADD:
+    case UCX_PERF_CMD_ADD:
         required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_ADD32,
                                            UCT_IFACE_FLAG_ATOMIC_ADD64);
         max_size = 8;
         break;
-    case UCX_PERF_TEST_CMD_FADD:
+    case UCX_PERF_CMD_FADD:
         required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_FADD32,
                                            UCT_IFACE_FLAG_ATOMIC_FADD64);
         max_size = 8;
         break;
-    case UCX_PERF_TEST_CMD_SWAP:
+    case UCX_PERF_CMD_SWAP:
         required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_SWAP32,
                                            UCT_IFACE_FLAG_ATOMIC_SWAP64);
         max_size = 8;
         break;
-    case UCX_PERF_TEST_CMD_CSWAP:
+    case UCX_PERF_CMD_CSWAP:
         required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_CSWAP32,
                                            UCT_IFACE_FLAG_ATOMIC_CSWAP64);
         max_size = 8;
@@ -333,9 +333,9 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *par
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (params->command == UCX_PERF_TEST_CMD_AM) {
-        if ((params->data_layout == UCX_PERF_DATA_LAYOUT_SHORT) &&
-            (params->hdr_size != sizeof(uint64_t)))
+    if (params->command == UCX_PERF_CMD_AM) {
+        if ((params->uct.data_layout == UCT_PERF_DATA_LAYOUT_SHORT) &&
+            (params->am_hdr_size != sizeof(uint64_t)))
         {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("Short AM header size must be 8 bytes");
@@ -343,8 +343,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *par
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if ((params->data_layout == UCX_PERF_DATA_LAYOUT_ZCOPY) &&
-                        (params->hdr_size > attr.cap.am.max_hdr))
+        if ((params->uct.data_layout == UCT_PERF_DATA_LAYOUT_ZCOPY) &&
+                        (params->am_hdr_size > attr.cap.am.max_hdr))
         {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("AM header size too big");
@@ -352,17 +352,17 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *par
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if (params->hdr_size > params->message_size) {
+        if (params->am_hdr_size > params->message_size) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("AM header size larger than message size");
             }
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if (params->fc_window > UCX_PERF_TEST_MAX_FC_WINDOW) {
+        if (params->uct.fc_window > UCT_PERF_TEST_MAX_FC_WINDOW) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("AM flow-control window too large (should be <= %d)",
-                          UCX_PERF_TEST_MAX_FC_WINDOW);
+                          UCT_PERF_TEST_MAX_FC_WINDOW);
             }
             return UCS_ERR_INVALID_PARAM;
         }
@@ -377,7 +377,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_test_params_t *par
     return UCS_OK;
 }
 
-ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
+static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, i, group_index;
     uct_iface_addr_t *iface_addr;
@@ -390,13 +390,13 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
     struct iovec vec[4];
     void *req;
 
-    status = uct_iface_query(perf->iface, &iface_attr);
+    status = uct_iface_query(perf->uct.iface, &iface_attr);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_iface_query: %s", ucs_status_string(status));
         goto err;
     }
 
-    status = uct_pd_query(perf->iface->pd, &pd_attr);
+    status = uct_pd_query(perf->uct.iface->pd, &pd_attr);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_pd_query: %s", ucs_status_string(status));
         goto err;
@@ -409,36 +409,36 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
         goto err_free;
     }
 
-    status = uct_iface_get_address(perf->iface, iface_addr);
+    status = uct_iface_get_address(perf->uct.iface, iface_addr);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_iface_get_address: %s", ucs_status_string(status));
         goto err_free;
     }
 
-    status = uct_pd_rkey_pack(perf->iface->pd, perf->recv_memh, rkey_buffer);
+    status = uct_pd_rkey_pack(perf->uct.iface->pd, perf->uct.recv_memh, rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
         goto err_free;
     }
 
-    address = (uintptr_t)perf->super.recv_buffer;
+    address = (uintptr_t)perf->recv_buffer;
 
-    group_size  = rte_call(&perf->super, group_size);
-    group_index = rte_call(&perf->super, group_index);
+    group_size  = rte_call(perf, group_size);
+    group_index = rte_call(perf, group_index);
 
-    perf->peers = calloc(group_size, sizeof(*perf->peers));
-    if (perf->peers == NULL) {
+    perf->uct.peers = calloc(group_size, sizeof(*perf->uct.peers));
+    if (perf->uct.peers == NULL) {
         goto err_free;
     }
 
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
-            status = uct_ep_create(perf->iface, &perf->peers[i].ep);
+            status = uct_ep_create(perf->uct.iface, &perf->uct.peers[i].ep);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_ep_create: %s", ucs_status_string(status));
                 goto err_destroy_eps;
             }
-            status = uct_ep_get_address(perf->peers[i].ep, ep_addr);
+            status = uct_ep_get_address(perf->uct.peers[i].ep, ep_addr);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_ep_get_address: %s", ucs_status_string(status));
                 goto err_destroy_eps;
@@ -455,8 +455,8 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
     vec[3].iov_base     = ep_addr;
     vec[3].iov_len      = iface_attr.ep_addr_len;
 
-    rte_call(&perf->super, post_vec, vec , 4, &req);
-    rte_call(&perf->super, exchange_vec, req);
+    rte_call(perf, post_vec, vec , 4, &req);
+    rte_call(perf, exchange_vec, req);
 
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
@@ -469,16 +469,17 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
             vec[3].iov_base     = ep_addr;
             vec[3].iov_len      = iface_attr.ep_addr_len;
 
-            rte_call(&perf->super, recv_vec, i, vec , 4, req);
+            rte_call(perf, recv_vec, i, vec , 4, req);
 
-            perf->peers[i].remote_addr = address;
-            status = uct_pd_rkey_unpack(perf->iface->pd, rkey_buffer, &perf->peers[i].rkey);
+            perf->uct.peers[i].remote_addr = address;
+            status = uct_pd_rkey_unpack(perf->uct.iface->pd, rkey_buffer,
+                                        &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
                 return status;
             }
 
-            status = uct_ep_connect_to_ep(perf->peers[i].ep, iface_addr, ep_addr);
+            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, iface_addr, ep_addr);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_ep_connect_to_ep: %s", ucs_status_string(status));
                 goto err_destroy_eps;
@@ -487,7 +488,7 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
     }
     uct_perf_iface_flush_b(perf);
 
-    rte_call(&perf->super, barrier);
+    rte_call(perf, barrier);
 
     free(iface_addr);
     free(ep_addr);
@@ -497,14 +498,14 @@ ucs_status_t uct_perf_test_setup_endpoints(uct_perf_context_t *perf)
 
 err_destroy_eps:
     for (i = 0; i < group_size; ++i) {
-        if (perf->peers[i].rkey.type != NULL) {
-            uct_pd_rkey_release(perf->iface->pd, &perf->peers[i].rkey);
+        if (perf->uct.peers[i].rkey.type != NULL) {
+            uct_pd_rkey_release(perf->uct.iface->pd, &perf->uct.peers[i].rkey);
         }
-        if (perf->peers[i].ep != NULL) {
-            uct_ep_destroy(perf->peers[i].ep);
+        if (perf->uct.peers[i].ep != NULL) {
+            uct_ep_destroy(perf->uct.peers[i].ep);
         }
     }
-    free(perf->peers);
+    free(perf->uct.peers);
 err_free:
     free(iface_addr);
     free(ep_addr);
@@ -513,98 +514,326 @@ err:
     return status;
 }
 
-void uct_perf_test_cleanup_endpoints(uct_perf_context_t *perf)
+static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, group_index, i;
 
-    rte_call(&perf->super, barrier);
+    rte_call(perf, barrier);
 
-    uct_iface_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
+    uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
 
-    group_size = rte_call(&perf->super, group_size);
-    group_index = rte_call(&perf->super, group_index);
+    group_size  = rte_call(perf, group_size);
+    group_index = rte_call(perf, group_index);
 
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
-            uct_pd_rkey_release(perf->iface->pd, &perf->peers[i].rkey);
-            if (perf->peers[i].ep) {
-                uct_ep_destroy(perf->peers[i].ep);
+            uct_pd_rkey_release(perf->uct.iface->pd, &perf->uct.peers[i].rkey);
+            if (perf->uct.peers[i].ep) {
+                uct_ep_destroy(perf->uct.peers[i].ep);
             }
         }
     }
-    free(perf->peers);
+    free(perf->uct.peers);
 }
 
-
-ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *params,
-                               const char *tl_name, const char *dev_name,
-                               uct_iface_config_t *iface_config,
-                               ucx_perf_result_t *result)
+static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params)
 {
-    uct_perf_context_t perf;
+    /* TODO */
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_params_t *params)
+{
+    perf->send_buffer = memalign(UCS_SYS_CACHE_LINE_SIZE, params->message_size);
+    if (perf->send_buffer == NULL) {
+        goto err;
+    }
+
+    perf->recv_buffer = memalign(UCS_SYS_CACHE_LINE_SIZE, params->message_size);
+    if (perf->recv_buffer == NULL) {
+        goto err_free_send_buffer;
+    }
+
+    /* TODO map memory / allocate with UCP */
+    return UCS_OK;
+
+err_free_send_buffer:
+    free(perf->send_buffer);
+err:
+    return UCS_ERR_NO_MEMORY;
+}
+
+static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
+{
+    free(perf->recv_buffer);
+    free(perf->send_buffer);
+}
+
+static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
+{
+    unsigned group_size, i, group_index;
+    ucp_address_t *address;
+    size_t address_length;
+    ucs_status_t status;
+    struct iovec vec[1];
+    void *req = NULL;
+
+    group_size  = rte_call(perf, group_size);
+    group_index = rte_call(perf, group_index);
+
+    perf->ucp.peers = calloc(group_size, sizeof(*perf->uct.peers));
+    if (perf->ucp.peers == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    for (i = 0; i < group_size; ++i) {
+        if (i == group_index) {
+            continue;
+        }
+
+        status = ucp_ep_create(perf->ucp.worker, &perf->ucp.peers[i].ep);
+        if (status != UCS_OK) {
+            ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
+            goto err_destroy_eps;
+        }
+
+        address_length = ucp_ep_address_length(perf->ucp.peers[i].ep);
+        address = malloc(address_length);
+        if (address == NULL) {
+            goto err_destroy_eps;
+        }
+
+        status = ucp_ep_pack_address(perf->ucp.peers[i].ep, address);
+        if (status != UCS_OK) {
+            free(address);
+            goto err_destroy_eps;
+        }
+
+        /* TODO exchange buffer address and rkey */
+        vec[0].iov_base = address;
+        vec[0].iov_len  = address_length;
+        rte_call(perf, post_vec, vec, 1, &req);
+
+        free(address);
+   }
+
+    ucs_assert(req != NULL);
+    rte_call(perf, exchange_vec, req);
+
+    for (i = 0; i < group_size; ++i) {
+        if (i == group_index) {
+            continue;
+        }
+
+        address = malloc(address_length);
+
+        vec[0].iov_base = address;
+        vec[0].iov_len  = address_length;
+        rte_call(perf, recv_vec, i, vec, 1, req);
+
+        status = ucp_ep_connect(perf->ucp.peers[i].ep, address);
+        if (status != UCS_OK) {
+            ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
+            free(address);
+            goto err_destroy_eps;
+        }
+
+        free(address);
+    }
+
+    rte_call(perf, barrier);
+
+
+    return UCS_OK;
+
+err_destroy_eps:
+    for (i = 0; i < group_size; ++i) {
+        if (perf->ucp.peers[i].ep != NULL) {
+            ucp_ep_destroy(perf->ucp.peers[i].ep);
+        }
+    }
+    free(perf->ucp.peers);
+err:
+    return status;
+}
+
+static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
+{
+    unsigned group_index, group_size, i;
+
+    rte_call(perf, barrier);
+
+    group_size  = rte_call(perf, group_size);
+    group_index = rte_call(perf, group_index);
+
+    for (i = 0; i < group_size; ++i) {
+        if (i != group_index) {
+            if (perf->ucp.peers[i].ep) {
+                ucp_ep_destroy(perf->ucp.peers[i].ep);
+            }
+        }
+    }
+    free(perf->ucp.peers);
+}
+
+static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
+{
+    perf->max_iter = ucs_min(params->warmup_iter, params->max_iter / 10);
+    perf->report_interval = -1;
+}
+
+static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
+{
+    uct_iface_config_t *iface_config;
     ucs_status_t status;
 
-    perf.context = context;
-
-    ucx_perf_test_reset(&perf.super, params);
-
-    /* TODO allow user to configure tyhread mode */
-    status = uct_worker_create(perf.context, params->thread_mode, &perf.worker);
+    status = uct_worker_create(params->uct.context, params->thread_mode,
+                               &perf->uct.worker);
     if (status != UCS_OK) {
         goto out;
     }
 
-    status = uct_iface_open(perf.worker, tl_name, dev_name, 0, iface_config,
-                            &perf.iface);
+    status = uct_iface_config_read(params->uct.context, params->uct.tl_name,
+                                   NULL, NULL, &iface_config);
+    if (status != UCS_OK) {
+        goto out_destroy_worker;
+    }
+
+    status = uct_iface_open(perf->uct.worker, params->uct.tl_name,
+                            params->uct.dev_name, 0, iface_config, &perf->uct.iface);
+    uct_iface_config_release(iface_config);
     if (status != UCS_OK) {
         ucs_error("Failed to open iface: %s", ucs_status_string(status));
         goto out_destroy_worker;
     }
 
-    status = uct_perf_test_check_capabilities(params, perf.iface);
+    status = uct_perf_test_check_capabilities(params, perf->uct.iface);
     if (status != UCS_OK) {
         goto out_iface_close;
     }
 
-    status = uct_perf_test_alloc_mem(&perf, params);
+    status = uct_perf_test_alloc_mem(perf, params);
     if (status != UCS_OK) {
         goto out_iface_close;
     }
 
-    status = uct_perf_test_setup_endpoints(&perf);
+    status = uct_perf_test_setup_endpoints(perf);
     if (status != UCS_OK) {
         ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
         goto out_free_mem;
     }
 
-    if (params->warmup_iter > 0) {
-        perf.super.max_iter         = ucs_min(params->warmup_iter,
-                                              params->max_iter / 10);
-        perf.super.report_interval  = -1;
-        uct_perf_test_dispatch(&perf);
-        uct_perf_iface_flush_b(&perf);
-        rte_call(&perf.super, barrier);
-        ucx_perf_test_reset(&perf.super, params);
-    }
+    return UCS_OK;
 
-    /* Run test */
-    status = uct_perf_test_dispatch(&perf);
-    uct_perf_iface_flush_b(&perf);
-    rte_call(&perf.super, barrier);
-
-    if (status == UCS_OK) {
-        ucx_perf_calc_result(&perf.super, result);
-        rte_call(&perf.super, report, result, 1);
-    }
-
-    uct_perf_test_cleanup_endpoints(&perf);
 out_free_mem:
-    uct_perf_test_free_mem(&perf);
+    uct_perf_test_free_mem(perf);
 out_iface_close:
-    uct_iface_close(perf.iface);
+    uct_iface_close(perf->uct.iface);
 out_destroy_worker:
-    uct_worker_destroy(perf.worker);
+    uct_worker_destroy(perf->uct.worker);
 out:
     return status;
 }
 
+static void uct_perf_cleanup(ucx_perf_context_t *perf)
+{
+    uct_perf_test_cleanup_endpoints(perf);
+    uct_perf_test_free_mem(perf);
+    uct_iface_close(perf->uct.iface);
+    uct_worker_destroy(perf->uct.worker);
+}
+
+static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
+{
+    ucs_status_t status;
+
+    status = ucp_perf_test_check_params(params);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucp_worker_create(params->ucp.context, params->thread_mode,
+                               &perf->ucp.worker);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucp_perf_test_alloc_mem(perf, params);
+    if (status != UCS_OK) {
+        goto out_destroy_worker;
+    }
+
+    status = ucp_perf_test_setup_endpoints(perf);
+    if (status != UCS_OK) {
+        ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
+        goto out_free_mem;
+    }
+
+    return UCS_OK;
+
+out_free_mem:
+    ucp_perf_test_free_mem(perf);
+out_destroy_worker:
+    ucp_worker_destroy(perf->ucp.worker);
+out:
+    return status;
+}
+
+static void ucp_perf_cleanup(ucx_perf_context_t *perf)
+{
+    ucp_perf_test_cleanup_endpoints(perf);
+    ucp_perf_test_free_mem(perf);
+    ucp_worker_destroy(perf->ucp.worker);
+}
+
+static struct {
+    ucs_status_t (*setup)(ucx_perf_context_t *perf, ucx_perf_params_t *params);
+    void         (*cleanup)(ucx_perf_context_t *perf);
+    ucs_status_t (*run)(ucx_perf_context_t *perf);
+} ucx_perf_funcs[] = {
+    [UCX_PERF_API_UCT] = {uct_perf_setup, uct_perf_cleanup, uct_perf_test_dispatch},
+    [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup, ucp_perf_test_dispatch}
+};
+
+ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
+{
+    ucx_perf_context_t perf;
+    ucs_status_t status;
+
+    if ((params->api != UCX_PERF_API_UCT) && (params->api != UCX_PERF_API_UCP)) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    ucx_perf_test_reset(&perf, params);
+
+    status = ucx_perf_funcs[params->api].setup(&perf, params);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (params->warmup_iter > 0) {
+        ucx_perf_set_warmup(&perf, params);
+        status = ucx_perf_funcs[params->api].run(&perf);
+        if (status != UCS_OK) {
+            goto out_cleanup;
+        }
+
+        rte_call(&perf, barrier);
+        ucx_perf_test_reset(&perf, params);
+    }
+
+    /* Run test */
+    status = ucx_perf_funcs[params->api].run(&perf);
+    rte_call(&perf, barrier);
+    if (status == UCS_OK) {
+        ucx_perf_calc_result(&perf, result);
+        rte_call(&perf, report, result, 1);
+    }
+
+out_cleanup:
+    ucx_perf_funcs[params->api].cleanup(&perf);
+out:
+    return status;
+}

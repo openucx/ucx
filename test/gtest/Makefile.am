@@ -61,7 +61,8 @@ gtest_SOURCES = \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
 	ucp/ucp_test.cc \
-	ucp/test_ucp_ep.cc \
+	ucp/test_ucp_basic.cc \
+	ucp/test_ucp_tag.cc \
 	ucs/test_async.cc \
 	ucs/test_class.cc \
 	ucs/test_component.cc \

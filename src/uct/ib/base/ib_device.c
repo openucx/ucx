@@ -78,7 +78,8 @@ static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
 
-    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s", uct_ib_device_name(dev));
+    ucs_snprintf_zero(pd_attr->name, sizeof(pd_attr->name), "%s",
+                      uct_ib_device_name(dev));
     pd_attr->rkey_packed_size  = sizeof(uint32_t) * 2;
     pd_attr->cap.max_alloc     = ULONG_MAX; /* TODO query device */
     pd_attr->cap.max_reg       = ULONG_MAX; /* TODO query device */

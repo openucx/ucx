@@ -17,7 +17,11 @@ nobase_dist_libucp_la_HEADERS = \
     api/ucp_def.h \
     api/ucp.h
 
-noinst_HEADERS = 
+noinst_HEADERS = \
+	proto/ucp_int.h
 
 libucp_la_SOURCES = \
-    ucp.c 
+    proto/ep.c \
+    proto/rma.c \
+    proto/tag.c \
+    proto/ucp.c

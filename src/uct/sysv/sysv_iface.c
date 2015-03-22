@@ -93,7 +93,7 @@ static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
 
 static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s", UCT_SYSV_TL_NAME);
+    ucs_snprintf_zero(pd_attr->name, sizeof(pd_attr->name), "%s", UCT_SYSV_TL_NAME);
     pd_attr->rkey_packed_size  = sizeof(uct_sysv_rkey_t);
     pd_attr->cap.flags         = UCT_PD_FLAG_ALLOC;
     pd_attr->cap.max_alloc     = ULONG_MAX;

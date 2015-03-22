@@ -38,7 +38,7 @@ UCS_TEST_F(test_uct, open_iface) {
                         " at " << (res->bandwidth / 1024.0 / 1024.0) << " MB/sec";
 
         uct_worker_h worker;
-        status = uct_worker_create(ucth, UCT_THREAD_MODE_SINGLE, &worker);
+        status = uct_worker_create(ucth, UCS_THREAD_MODE_SINGLE, &worker);
         ASSERT_UCS_OK(status);
 
         uct_iface_config_t *iface_config;
