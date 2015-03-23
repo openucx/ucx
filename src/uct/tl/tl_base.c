@@ -163,7 +163,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
+                           uct_worker_h worker, uct_pd_h pd,
                            uct_iface_config_t *config
                            UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
@@ -171,6 +172,8 @@ static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     uint8_t id;
 
     UCS_CLASS_CALL_SUPER_INIT(ops, pd);
+
+    self->worker = worker;
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         self->am[id].cb  = uct_iface_stub_am_handler;

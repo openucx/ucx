@@ -37,18 +37,24 @@ UCS_TEST_F(test_uct, open_iface) {
                         " on " << res->dev_name <<
                         " at " << (res->bandwidth / 1024.0 / 1024.0) << " MB/sec";
 
+        uct_worker_h worker;
+        status = uct_worker_create(ucth, UCT_THREAD_MODE_SINGLE, &worker);
+        ASSERT_UCS_OK(status);
+
         uct_iface_config_t *iface_config;
         status = uct_iface_config_read(ucth, res->tl_name, NULL, NULL, &iface_config);
         ASSERT_UCS_OK(status);
 
         uct_iface_h iface = NULL;
-        status = uct_iface_open(ucth, res->tl_name, res->dev_name, 0,
+        status = uct_iface_open(worker, res->tl_name, res->dev_name, 0,
                                 iface_config, &iface);
         ASSERT_TRUE(iface != NULL);
         ASSERT_UCS_OK(status);
 
         uct_iface_close(iface);
         uct_iface_config_release(iface_config);
+
+        uct_worker_destroy(worker);
     }
 
     uct_release_resource_list(resources);

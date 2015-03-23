@@ -43,7 +43,7 @@ static char *strduplower(const char *str)
     return s;
 }
 
-static void print_resource_info(uct_context_h context,
+static void print_resource_info(uct_worker_h worker,
                                 uct_resource_desc_t *resource,
                                 uct_iface_config_t *iface_config)
 {
@@ -57,7 +57,7 @@ static void print_resource_info(uct_context_h context,
     printf("#      speed:         %.2f MB/sec\n", resource->bandwidth / 1024.0 / 1024.0);
     printf("#      latency:       %.3f microsec\n", resource->latency * 1e-3);
 
-    status = uct_iface_open(context, resource->tl_name, resource->dev_name,
+    status = uct_iface_open(worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
     if (status != UCS_OK) {
         printf("#   < failed to open interface >\n");
@@ -151,12 +151,19 @@ static ucs_status_t print_transport_info(uct_context_h context,
                                          ucs_config_print_flags_t print_flags)
 {
     uct_iface_config_t *iface_config;
+    uct_worker_h worker;
     ucs_status_t status;
     unsigned i;
 
     status = uct_iface_config_read(context, tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
         goto out;
+    }
+
+    /* coverity[alloc_arg] */
+    status = uct_worker_create(context, UCT_THREAD_MODE_MULTI, &worker);
+    if (status != UCS_OK) {
+        goto out_release_config;
     }
 
     printf("#\n");
@@ -168,12 +175,15 @@ static ucs_status_t print_transport_info(uct_context_h context,
             printf("# (No supported devices found)\n");
         }
         for (i = 0; i < num_resources; ++i) {
-            print_resource_info(context, &resources[i], iface_config);
+            print_resource_info(worker, &resources[i], iface_config);
         }
     }
 
     uct_iface_config_print(iface_config, stdout, "UCT interface configuration",
                            print_flags);
+
+    uct_worker_destroy(worker);
+out_release_config:
     uct_iface_config_release(iface_config);
 out:
     return status;

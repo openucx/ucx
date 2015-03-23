@@ -17,6 +17,7 @@
 
 typedef struct ucp_context {
     uct_context_h       uct_context;
+    uct_worker_h        uct_worker;    /* TODO create UCP workers */
     uct_resource_desc_t *resources;    /* array of resources */
     unsigned            num_resources; /* number of the final resources for the ucp layer to use */
 } ucp_context_t;

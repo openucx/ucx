@@ -36,6 +36,7 @@ typedef void                     *uct_rkey_ctx_h;
 typedef struct uct_iface_attr    uct_iface_attr_t;
 typedef struct uct_pd_attr       uct_pd_attr_t;
 typedef struct uct_completion    uct_completion_t;
+typedef struct uct_worker        *uct_worker_h;
 
 
 /**

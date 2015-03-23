@@ -272,13 +272,13 @@ static void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h 
 }
   
 
-
-static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
+static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
     uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
+    uct_ugni_context_t *ugni_ctx = ucs_component_get(worker->context,
+                                                     ugni, uct_ugni_context_t);
     uct_ugni_device_t *dev;
     ucs_status_t rc;
 
@@ -293,8 +293,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
                               UCS_STATS_ARG(NULL));
 
     self->pd.super.ops = &uct_ugni_pd_ops;
-    self->pd.super.context = context;
-    self->pd.iface = self;
+    self->pd.iface     = self;
 
     self->dev              = dev;
     self->address.nic_addr = dev->address;
@@ -364,7 +363,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_context_h context,
         goto clean_famo;
     }
 
-    ucs_notifier_chain_add(&context->progress_chain, uct_ugni_progress, self);
+    ucs_notifier_chain_add(&worker->progress_chain, uct_ugni_progress, self);
 
     self->activated = false;
     self->outstanding = 0;
@@ -390,8 +389,9 @@ error:
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
 {
     gni_return_t ugni_rc;
-    uct_context_h context = self->super.super.pd->context;
-    ucs_notifier_chain_remove(&context->progress_chain, uct_ugni_progress, self);
+
+    ucs_notifier_chain_remove(&self->super.worker->progress_chain,
+                              uct_ugni_progress, self);
 
     if (!self->activated) {
         /* We done with release */
@@ -419,7 +419,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_context_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
 

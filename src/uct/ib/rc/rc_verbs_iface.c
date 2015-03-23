@@ -231,7 +231,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
+static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
@@ -244,7 +244,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
     struct ibv_qp *qp;
 
     extern uct_iface_ops_t uct_rc_verbs_iface_ops;
-    UCS_CLASS_CALL_SUPER_INIT(&uct_rc_verbs_iface_ops, context, dev_name,
+    UCS_CLASS_CALL_SUPER_INIT(&uct_rc_verbs_iface_ops, worker, dev_name,
                               rx_headroom, 0, &config->super);
 
     /* Initialize inline work request */
@@ -304,7 +304,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_context_h context,
         }
     }
 
-    ucs_notifier_chain_add(&context->progress_chain, uct_rc_verbs_iface_progress,
+    ucs_notifier_chain_add(&worker->progress_chain, uct_rc_verbs_iface_progress,
                            self);
     return UCS_OK;
 
@@ -316,14 +316,13 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    uct_context_h context = uct_ib_iface_device(&self->super.super)->super.context;
-
+    ucs_notifier_chain_remove(&self->super.super.super.worker->progress_chain,
+                              uct_rc_verbs_iface_progress, self);
     ucs_mpool_destroy(self->short_desc_mp);
-    ucs_notifier_chain_remove(&context->progress_chain, uct_rc_verbs_iface_progress, self);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_context_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_iface_t, uct_iface_t);
 

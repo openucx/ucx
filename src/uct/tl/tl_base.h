@@ -67,7 +67,7 @@ struct uct_tl_ops {
                                     uct_resource_desc_t **resources_p,
                                     unsigned *num_resources_p);
 
-    ucs_status_t (*iface_open)(uct_context_h context, const char *dev_name,
+    ucs_status_t (*iface_open)(uct_worker_h worker, const char *dev_name,
                                size_t rx_headroom, uct_iface_config_t *config,
                                uct_iface_h *iface_p);
 };
@@ -88,8 +88,9 @@ typedef struct uct_am_handler {
  */
 typedef struct uct_base_iface {
     uct_iface_t       super;
-    uct_am_handler_t  am[UCT_AM_ID_MAX];
-    UCS_STATS_NODE_DECLARE(stats);
+    uct_worker_h      worker;                /* Worker this interface is on */
+    UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
+    uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
 } uct_base_iface_t;
 
 

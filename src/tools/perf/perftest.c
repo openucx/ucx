@@ -81,7 +81,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oq"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqT:"
 
 
 test_type_t tests[] = {
@@ -303,6 +303,11 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -b <batchfile> Batch mode. Read and execute tests from a file.\n");
     printf("                       Every line of the file is a test to run. The first word is the\n");
     printf("                       test name, and the rest are command-line arguments for the test.\n");
+    printf("     -T <thread>    Thread support level for progress engine (single).\n");
+    printf("                     (The test itself is always single-threaded).\n");
+    printf("                        single   : Single thread can access.\n");
+    printf("                        funneled : One thread can access at a time.\n");
+    printf("                        multi    : Multiple threads can access.\n");
     printf("     -h             Show this help message.\n");
     printf("\n");
     printf("  Server options:\n");
@@ -349,6 +354,7 @@ static void init_test_params(ucx_perf_test_params_t *params)
     params->command         = UCX_PERF_TEST_CMD_LAST;
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
     params->data_layout     = UCX_PERF_DATA_LAYOUT_SHORT;
+    params->thread_mode     = UCT_THREAD_MODE_SINGLE;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params->fc_window       = UCX_PERF_TEST_MAX_FC_WINDOW;
     params->max_outstanding = 1;
@@ -416,6 +422,20 @@ static ucs_status_t parse_test_params(ucx_perf_test_params_t *params, char opt, 
     case 'q':
         params->flags &= ~UCX_PERF_TEST_FLAG_VERBOSE;
         return UCS_OK;
+    case 'T':
+        if (0 == strcmp(optarg, "single")) {
+            params->thread_mode = UCT_THREAD_MODE_SINGLE;
+            return UCS_OK;
+        } else if (0 == strcmp(optarg, "funneled")) {
+            params->thread_mode = UCT_THREAD_MODE_FUNNELED;
+            return UCS_OK;
+        } else if (0 == strcmp(optarg, "multi")) {
+            params->thread_mode = UCT_THREAD_MODE_MULTI;
+            return UCS_OK;
+        } else {
+            ucs_error("Invalid option argument for -T");
+            return UCS_ERR_INVALID_PARAM;
+        }
     default:
        return UCS_ERR_INVALID_PARAM;
     }

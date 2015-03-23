@@ -12,6 +12,7 @@
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/type/class.h>
 #include <malloc.h>
 
 #define UCT_CONFIG_ENV_PREFIX "UCT_"
@@ -66,7 +67,6 @@ ucs_status_t uct_init(uct_context_h *context_p)
 
     context->num_tls  = 0;
     context->tls      = NULL;
-    ucs_notifier_chain_init(&context->progress_chain);
 
     status = ucs_components_init_all(uct_context_t, context);
     if (status != UCS_OK) {
@@ -87,11 +87,6 @@ void uct_cleanup(uct_context_h context)
     ucs_free(context->tls);
     ucs_components_cleanup_all(uct_context_t, context);
     ucs_free(context);
-}
-
-void uct_progress(uct_context_h context)
-{
-    ucs_notifier_chain_call(&context->progress_chain);
 }
 
 ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
@@ -173,6 +168,32 @@ void uct_release_resource_list(uct_resource_desc_t *resources)
     ucs_free(resources);
 }
 
+
+static UCS_CLASS_INIT_FUNC(uct_worker_t, uct_context_h context,
+                           uct_thread_mode_t thread_mode)
+{
+    self->context     = context;
+    self->thread_mode = thread_mode;
+    ucs_notifier_chain_init(&self->progress_chain);
+    return UCS_OK;
+}
+
+static UCS_CLASS_CLEANUP_FUNC(uct_worker_t)
+{
+    /* TODO warn if notifier chain is non-empty */
+}
+
+void uct_worker_progress(uct_worker_h worker)
+{
+    ucs_notifier_chain_call(&worker->progress_chain);
+}
+
+UCS_CLASS_DEFINE(uct_worker_t, void);
+UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
+                                uct_context_h, uct_thread_mode_t)
+UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
+
+
 static uct_context_tl_info_t *uct_find_tl(uct_context_h context, const char *tl_name)
 {
     uct_context_tl_info_t *tl;
@@ -251,18 +272,18 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
     return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
 }
 
-ucs_status_t uct_iface_open(uct_context_h context, const char *tl_name,
+ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
                             const char *dev_name, size_t rx_headroom,
                             uct_iface_config_t *config, uct_iface_h *iface_p)
 {
-    uct_context_tl_info_t *tl = uct_find_tl(context, tl_name);
+    uct_context_tl_info_t *tl = uct_find_tl(worker->context, tl_name);
 
     if (tl == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;
     }
 
-    return tl->ops->iface_open(context, dev_name, rx_headroom, config, iface_p);
+    return tl->ops->iface_open(worker, dev_name, rx_headroom, config, iface_p);
 }
 
 ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
