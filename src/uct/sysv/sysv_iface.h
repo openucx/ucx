@@ -15,8 +15,6 @@
 #include "sysv_ep.h"
 
 
-#define UCT_SYSV_HASH_SIZE   256
-
 struct uct_sysv_iface;
 
 typedef struct uct_sysv_iface_addr {
@@ -26,14 +24,12 @@ typedef struct uct_sysv_iface_addr {
 
 typedef struct uct_sysv_pd {
     uct_pd_t      super;
-    struct uct_sysv_iface *iface;
 } uct_sysv_pd_t;
 
 typedef struct uct_sysv_iface {
     uct_base_iface_t       super;
     uct_sysv_pd_t           pd;
     uct_sysv_iface_addr_t   addr;
-    uct_sysv_ep_t           *eps[UCT_SYSV_HASH_SIZE];    /**< Array of EPs */
     struct {
         unsigned            max_put;
     } config;

@@ -69,6 +69,7 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
     rc = ucs_sysv_alloc(length_p, address_p, 0, &shmid UCS_MEMTRACK_VAL);
     if (rc != UCS_OK) {
         ucs_error("Failed to attach %zu bytes", *length_p);
+        ucs_free(key_hndl);
         return rc;
     }
 
@@ -129,9 +130,8 @@ static void uct_sysv_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
     /* this releases the key allocated in unpack */
     
     uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)rkey_ob->rkey;
-
     ucs_sysv_free((void *)(key_hndl->client_ptr));  /* detach shared segment */
-    ucs_free((void *)rkey_ob->rkey);
+    ucs_free(key_hndl);
 }
 
 ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
@@ -223,9 +223,8 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
 
     self->pd.super.ops = &uct_sysv_pd_ops;
     self->pd.super.context = context;
-    self->pd.iface = self;
-
     self->super.super.pd   = &self->pd.super;
+
     self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
 
     addr = ucs_atomic_fadd32(&sysv_iface_global_counter, 1);
