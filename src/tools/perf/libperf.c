@@ -515,17 +515,21 @@ err:
 
 void uct_perf_test_cleanup_endpoints(uct_perf_context_t *perf)
 {
-    unsigned group_size, i;
+    unsigned group_size, group_index, i;
 
     rte_call(&perf->super, barrier);
 
     uct_iface_set_am_handler(perf->iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
 
     group_size = rte_call(&perf->super, group_size);
+    group_index = rte_call(&perf->super, group_index);
+
     for (i = 0; i < group_size; ++i) {
-        uct_pd_rkey_release(perf->iface->pd, &perf->peers[i].rkey);
-        if (perf->peers[i].ep) {
-            uct_ep_destroy(perf->peers[i].ep);
+        if (i != group_index) {
+            uct_pd_rkey_release(perf->iface->pd, &perf->peers[i].rkey);
+            if (perf->peers[i].ep) {
+                uct_ep_destroy(perf->peers[i].ep);
+            }
         }
     }
     free(perf->peers);

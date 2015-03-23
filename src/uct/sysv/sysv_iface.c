@@ -46,7 +46,8 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_att
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
+                                       void **address_p,
                                        uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t rc;
@@ -88,7 +89,7 @@ static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
     /* this releases the key allocated in uct_sysv_mem_alloc */
 
     uct_sysv_key_t *key_hndl = memh;
-    ucs_sysv_free((void *)key_hndl->owner_ptr);  /* detach the shared segment */
+    ucs_sysv_free((void *)key_hndl->owner_ptr);  /* detach shared segment */
     ucs_free(key_hndl);
 
     return UCS_OK;
@@ -122,8 +123,9 @@ static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     rkey->shmid = key_hndl->shmid;
     rkey->owner_ptr = key_hndl->owner_ptr;
 
-    rkey->client_ptr = 0; /* will be attached addr on the remote PE - obtained at unpack */
-    ucs_debug("Packed [ %d %llx %"PRIx64" ]", rkey->shmid, rkey->magic, rkey->owner_ptr); 
+    rkey->client_ptr = 0; /* attached addr on remote PE - obtained at unpack */
+    ucs_debug("Packed [ %d %llx %"PRIx64" ]",
+              rkey->shmid, rkey->magic, rkey->owner_ptr);
     return UCS_OK;
 }
 
@@ -133,12 +135,7 @@ static void uct_sysv_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
     
     uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)rkey_ob->rkey;
 
-    printf("\n--- in release ---\n");
-    printf("rkey_ob = %p\n", rkey_ob);
-    printf("key_hndl = %p\n", key_hndl);
-    printf("rkey_ob->rkey = %"PRIxPTR"\n", rkey_ob->rkey);
-
-    ucs_sysv_free((void *)(key_hndl->client_ptr));  /* detach the shared segment */
+    ucs_sysv_free((void *)(key_hndl->client_ptr));  /* detach shared segment */
     ucs_free((void *)rkey_ob->rkey);
 }
 
@@ -151,7 +148,8 @@ ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
     uct_sysv_key_t *key_hndl = NULL;
     int shmid;
 
-    ucs_debug("Unpacking[ %d %llx %"PRIx64" ]", rkey->shmid, rkey->magic, rkey->owner_ptr); 
+    ucs_debug("Unpacking[ %d %llx %"PRIx64" ]",
+              rkey->shmid, rkey->magic, rkey->owner_ptr);
     if (rkey->magic != UCT_SYSV_RKEY_MAGIC) {
         ucs_debug("Failed to identify key. Expected %llx but received %llx",
                   UCT_SYSV_RKEY_MAGIC, magic);
@@ -187,11 +185,6 @@ ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
 
     rkey_ob->type = (void*)uct_sysv_rkey_release;
     rkey_ob->rkey = (uct_rkey_t)key_hndl;
-
-    printf("\n--- in unpack ---\n");
-    printf("rkey_ob = %p\n", rkey_ob);
-    printf("key_hndl = %p\n", key_hndl);
-    printf("rkey_ob->rkey = %"PRIxPTR"\n", rkey_ob->rkey);
 
     return UCS_OK;
 
