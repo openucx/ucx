@@ -8,11 +8,7 @@
 #define UCT_SYSV_CONTEXT_H
 
 #define MAX_TYPE_NAME     (10)
-#define TL_NAME           "SM_SYSV"
-
-typedef struct uct_sysv_context {
-    char                type_name[MAX_TYPE_NAME];  /**< tl type name */
-} uct_sysv_context_t;
+#define UCT_TL_NAME           "sysv"
 
 /*
  * Helper function to list sysv resources

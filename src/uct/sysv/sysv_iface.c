@@ -10,6 +10,7 @@
 
 #include "sysv_iface.h"
 #include "sysv_ep.h"
+#include "sysv_context.h"
 
 unsigned sysv_iface_global_counter = 0;
 
@@ -99,10 +100,7 @@ static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
 
 static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    uct_sysv_pd_t *sysv_pd = ucs_derived_of(pd, uct_sysv_pd_t);
-
-    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s",
-                      sysv_pd->iface->ctx->type_name);
+    ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s", UCT_TL_NAME);
     pd_attr->rkey_packed_size  = sizeof(uct_sysv_key_t);
     pd_attr->cap.flags         = UCT_PD_FLAG_ALLOC;
     pd_attr->cap.max_alloc     = ULONG_MAX;
@@ -217,13 +215,11 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
-    uct_sysv_context_t *sysv_ctx = 
-        ucs_component_get(context, sysv, uct_sysv_context_t);
     int addr;
 
     UCS_CLASS_CALL_SUPER_INIT(&uct_sysv_iface_ops);
 
-    if(strcmp(dev_name, sysv_ctx->type_name) != 0) {
+    if(strcmp(dev_name, UCT_TL_NAME) != 0) {
         ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
     }
@@ -235,7 +231,6 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     self->pd.iface = self;
 
     self->super.super.pd   = &self->pd.super;
-    self->ctx              = sysv_ctx;
     self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
 
     /* FIXME no use for config input argument? */

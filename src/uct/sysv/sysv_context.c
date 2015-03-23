@@ -26,9 +26,6 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resource_p,
                                       unsigned *num_resources_p)
 {
-    uct_sysv_context_t *sysv_ctx = ucs_component_get(context, sysv,
-                                                   uct_sysv_context_t);
-
     uct_resource_desc_t *resource;
 
     /* sysv tl currently supports only a single device */
@@ -41,9 +38,9 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
     }
 
     ucs_snprintf_zero(resource->tl_name,  
-                      sizeof(resource->tl_name), "%s", sysv_ctx->type_name);
+                      sizeof(resource->tl_name), "%s", UCT_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, 
-                      sizeof(resource->dev_name), "%s", sysv_ctx->type_name);
+                      sizeof(resource->dev_name), "%s", UCT_TL_NAME);
     resource->latency    = 1; /* FIXME temp value */
     resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
     memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
@@ -56,13 +53,7 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
 
 ucs_status_t uct_sysv_init(uct_context_h context)
 {
-    uct_sysv_context_t *sysv_ctx = ucs_component_get(context, sysv, 
-                                                   uct_sysv_context_t);
-
     ucs_status_t status;
-
-    ucs_snprintf_zero(sysv_ctx->type_name, sizeof(sysv_ctx->type_name), 
-                      "%s", TL_NAME);
 
     status = uct_register_tl(context, "sysv", uct_sysv_iface_config_table,
                              sizeof(uct_sysv_iface_config_t), "sysv_",
@@ -74,7 +65,6 @@ ucs_status_t uct_sysv_init(uct_context_h context)
     }
 
     ucs_debug("Initialized sysv component");
-    ucs_debug("sysv context %p was activated", sysv_ctx);
 
     return UCS_OK;
 
@@ -84,6 +74,4 @@ void uct_sysv_cleanup(uct_context_t *context)
 {
     /* no-op */
 }
-UCS_COMPONENT_DEFINE(uct_context_t, sysv, uct_sysv_init, uct_sysv_cleanup, 
-                     sizeof(uct_sysv_context_t))
-
+UCS_COMPONENT_DEFINE(uct_context_t, sysv, uct_sysv_init, uct_sysv_cleanup, 0)

@@ -32,7 +32,6 @@ typedef struct uct_sysv_pd {
 typedef struct uct_sysv_iface {
     uct_base_iface_t       super;
     uct_sysv_pd_t           pd;
-    uct_sysv_context_t      *ctx;
     uct_sysv_iface_addr_t   addr;
     uct_sysv_ep_t           *eps[UCT_SYSV_HASH_SIZE];    /**< Array of EPs */
     bool                   activated;                   /**< nic status */
@@ -56,6 +55,4 @@ typedef struct uct_sysv_key {
 extern ucs_config_field_t uct_sysv_iface_config_table[];
 extern uct_tl_ops_t uct_sysv_tl_ops;
 
-ucs_status_t sysv_activate_iface(uct_sysv_iface_t *iface,
-                                uct_sysv_context_t *sysv_ctx);
 #endif
