@@ -81,12 +81,15 @@ uct_test::entity::entity(const uct_resource_desc_t& resource, size_t rx_headroom
     status = uct_init(&m_ucth);
     ASSERT_UCS_OK(status);
 
+    status = uct_worker_create(m_ucth, UCT_THREAD_MODE_MULTI /* TODO */, &m_worker);
+    ASSERT_UCS_OK(status);
+
     uct_iface_config_t *iface_config;
     status = uct_iface_config_read(m_ucth, resource.tl_name, NULL, NULL,
                                    &iface_config);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_open(m_ucth, resource.tl_name, resource.dev_name,
+    status = uct_iface_open(m_worker, resource.tl_name, resource.dev_name,
                             rx_headroom, iface_config, &m_iface);
     ASSERT_UCS_OK(status);
 
@@ -99,6 +102,7 @@ uct_test::entity::entity(const uct_resource_desc_t& resource, size_t rx_headroom
 uct_test::entity::~entity() {
     std::for_each(m_eps.begin(), m_eps.end(), uct_ep_destroy);
     uct_iface_close(m_iface);
+    uct_worker_destroy(m_worker);
     uct_cleanup(m_ucth);
 }
 
@@ -136,7 +140,7 @@ void uct_test::entity::mem_free(void *address, uct_mem_h memh,
 }
 
 void uct_test::entity::progress() const {
-    uct_progress(m_ucth);
+    uct_worker_progress(m_worker);
 }
 
 uct_iface_h uct_test::entity::iface() const {
@@ -184,7 +188,7 @@ void uct_test::entity::connect(unsigned index, const entity& other, unsigned oth
 void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
-        uct_progress(m_ucth);
+        uct_worker_progress(m_worker);
         status = uct_iface_flush(m_iface);
     } while (status == UCS_ERR_NO_RESOURCE);
     ASSERT_UCS_OK(status);

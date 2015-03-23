@@ -185,8 +185,9 @@ struct ucs_class {
 
 
 /**
- * Define a function which creates an instance of a class.
+ * Declare / define a function which creates an instance of a class.
  *
+ * @param _name     Function name.
  * @param _type     Class type.
  * @param _argtype  Type to use for the instance argument. Should be a superclass of _type.
  * @param ...       List of types for initialization arguments (without variable names).
@@ -198,18 +199,26 @@ struct ucs_class {
  *      status = _type##_new(arg1, arg2, arg3, &obj);
  * }
  */
-#define UCS_CLASS_DECLARE_NEW_FUNC(_type, _argtype, ...) \
-    ucs_status_t UCS_CLASS_NEW_FUNC_NAME(_type)( \
-                    UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_DEFINE, _, \
-                                   UCS_PP_ZIP((UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__))), (__VA_ARGS__))) \
-                                   _argtype **obj_p)
-#define UCS_CLASS_DEFINE_NEW_FUNC(_type, _argtype, ...) \
-    UCS_CLASS_DECLARE_NEW_FUNC(_type, _argtype, ## __VA_ARGS__) { \
+#define UCS_CLASS_DECLARE_NAMED_NEW_FUNC(_name, _argtype, ...) \
+    ucs_status_t _name(UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_DEFINE, _, \
+                                      UCS_PP_ZIP((UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__))), \
+                                                 (__VA_ARGS__))) \
+                                      _argtype **obj_p)
+#define UCS_CLASS_DEFINE_NAMED_NEW_FUNC(_name, _type, _argtype, ...) \
+    UCS_CLASS_DECLARE_NAMED_NEW_FUNC(_name, _argtype, ## __VA_ARGS__) { \
         return UCS_CLASS_NEW(_type, obj_p \
                              UCS_PP_FOREACH(_UCS_CLASS_INIT_ARG_PASS, _, \
                                             UCS_PP_SEQ(UCS_PP_NUM_ARGS(__VA_ARGS__)))); \
     }
+#define UCS_CLASS_DECLARE_NEW_FUNC(_type, _argtype, ...) \
+    UCS_CLASS_DECLARE_NAMED_NEW_FUNC(UCS_CLASS_NEW_FUNC_NAME(_type), _argtype, ## __VA_ARGS__)
+#define UCS_CLASS_DEFINE_NEW_FUNC(_type, _argtype, ...) \
+    UCS_CLASS_DEFINE_NAMED_NEW_FUNC(UCS_CLASS_NEW_FUNC_NAME(_type), _type, _argtype, ## __VA_ARGS__)
 
+
+/*
+ * Helper macros for creating argument list
+ */
 #define _UCS_CLASS_INIT_ARG_DEFINE(_, _bundle) \
     __UCS_CLASS_INIT_ARG_DEFINE(_, UCS_PP_TUPLE_0 _bundle, UCS_PP_TUPLE_1 _bundle)
 #define __UCS_CLASS_INIT_ARG_DEFINE(_, _index, _type) \
@@ -238,13 +247,17 @@ struct ucs_class {
  *      _type *obj = ...;
  *      _type##_delete(obj);
  */
-#define UCS_CLASS_DECLARE_DELETE_FUNC(_type, _argtype) \
-    void UCS_CLASS_DELETE_FUNC_NAME(_type)(_argtype *self)
-#define UCS_CLASS_DEFINE_DELETE_FUNC(_type, _argtype) \
-    UCS_CLASS_DECLARE_DELETE_FUNC(_type, _argtype) \
+#define UCS_CLASS_DECLARE_NAMED_DELETE_FUNC(_name, _argtype) \
+    void _name(_argtype *self)
+#define UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(_name, _type, _argtype) \
+    UCS_CLASS_DECLARE_NAMED_DELETE_FUNC(_name, _argtype) \
     { \
         UCS_CLASS_DELETE(_type, self); \
     }
+#define UCS_CLASS_DECLARE_DELETE_FUNC(_type, _argtype) \
+    UCS_CLASS_DECLARE_NAMED_DELETE_FUNC(UCS_CLASS_DELETE_FUNC_NAME(_type), _argtype)
+#define UCS_CLASS_DEFINE_DELETE_FUNC(_type, _argtype) \
+    UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(UCS_CLASS_DELETE_FUNC_NAME(_type), _type, _argtype)
 
 
 /**

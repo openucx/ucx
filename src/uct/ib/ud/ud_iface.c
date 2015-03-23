@@ -109,16 +109,16 @@ err:
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops,
-                           uct_context_h context, const char *dev_name,
+                           uct_worker_h worker, const char *dev_name,
                            size_t rx_headroom, size_t rx_priv_len,
                            uct_ud_iface_config_t *config)
 {
     ucs_status_t status;
 
-    ucs_trace_func("%s: iface=%p ops=%p context=%p rx_headroom=%zu rx_priv_len=%zu",
-                   dev_name, self, ops, context, rx_headroom, rx_priv_len);
+    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu rx_priv_len=%zu",
+                   dev_name, self, ops, worker, rx_headroom, rx_priv_len);
 
-    UCS_CLASS_CALL_SUPER_INIT(ops, context, dev_name, rx_headroom, 
+    UCS_CLASS_CALL_SUPER_INIT(ops, worker, dev_name, rx_headroom,
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
                               UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
                               config->super.tx.queue_len, config);

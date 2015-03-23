@@ -57,6 +57,7 @@ protected:
         entity(const entity&);
 
         uct_context_h         m_ucth;
+        uct_worker_h          m_worker;
         uct_iface_h           m_iface;
         std::vector<uct_ep_h> m_eps;
         uct_iface_attr_t      m_iface_attr;

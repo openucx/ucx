@@ -260,6 +260,7 @@ protected:
         params.command         = test.command;
         params.test_type       = test.test_type;
         params.data_layout     = test.data_layout;
+        params.thread_mode     = UCT_THREAD_MODE_SINGLE;
         params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
         params.flags           = 0;
         params.message_size    = test.msglen;
