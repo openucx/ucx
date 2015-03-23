@@ -106,7 +106,8 @@ protected:
     rc_mlx5, \
     rc, \
     ud_verbs, \
-    ugni
+    ugni, \
+    sysv
 
 /**
  * Instantiate the parameterized test case for all transports.

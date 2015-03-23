@@ -485,6 +485,8 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     ptr = shmat(*shmid, NULL, 0);
 
     /* Remove segment, the attachment keeps a reference to the mapping */
+    /* FIXME having additional attaches to a removed segment is not portable
+    * behavior */
     ret = shmctl(*shmid, IPC_RMID, NULL);
     if (ret != 0) {
         ucs_warn("shmctl(IPC_RMID, shmid=%d) returned %d: %m", *shmid, ret);

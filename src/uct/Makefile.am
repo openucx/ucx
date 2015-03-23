@@ -111,3 +111,14 @@ libuct_la_SOURCES += \
     ugni/ugni_iface.c \
     ugni/ugni_ep.c
 endif
+
+# FIXME these should be done conditionally
+noinst_HEADERS += \
+    sysv/sysv_context.h \
+    sysv/sysv_iface.h \
+    sysv/sysv_ep.h
+
+libuct_la_SOURCES += \
+    sysv/sysv_context.c \
+    sysv/sysv_iface.c \
+    sysv/sysv_ep.c
