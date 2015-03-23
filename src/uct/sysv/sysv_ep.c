@@ -79,8 +79,6 @@ ucs_status_t uct_sysv_ep_connect_to_ep(uct_ep_h tl_ep,
                                                        uct_sysv_iface_addr_t);
     uct_sysv_ep_addr_t *ep_addr = ucs_derived_of(tl_ep_addr, uct_sysv_ep_addr_t);
 
-    /* FIXME bind the ep using the iface addr */
-
     ucs_debug("Binding ep %p to address (%d %d)",
               ep, iface_addr->nic_addr,
               ep_addr->ep_id);
@@ -91,7 +89,6 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
                                   unsigned length, uint64_t remote_addr,
                                   uct_rkey_t rkey)
 {
-    /*uct_sysv_ep_t *ep = ucs_derived_of(tl_ep, uct_sysv_ep_t); */
     uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t); 
     uct_sysv_key_t *key_hndl = (uct_sysv_key_t *)rkey;
     ptrdiff_t target_offset;
@@ -119,7 +116,7 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
 }
 
 ucs_status_t uct_sysv_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                            void *payload, unsigned length)
+                                  void *payload, unsigned length)
 {
     return UCS_ERR_UNSUPPORTED;
 }

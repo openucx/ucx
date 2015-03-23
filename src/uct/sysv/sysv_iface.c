@@ -23,7 +23,7 @@ static ucs_status_t uct_sysv_iface_flush(uct_iface_h tl_iface)
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
 
 ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface, 
-                                       uct_iface_addr_t *iface_addr)
+                                        uct_iface_addr_t *iface_addr)
 {
     uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
 
@@ -60,13 +60,12 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    key_hndl = ucs_malloc(sizeof(uct_sysv_key_t), "key_hndl");
+    key_hndl = ucs_malloc(sizeof(*key_hndl), "key_hndl");
     if (NULL == key_hndl) {
         ucs_error("Failed to allocate memory for key_hndl");
         return UCS_ERR_NO_MEMORY;
     }
 
-    /* FIXME is this the right usage of ucs_sysv_alloc? */
     rc = ucs_sysv_alloc(length_p, address_p, 0, &shmid UCS_MEMTRACK_VAL);
     if (rc != UCS_OK) {
         ucs_error("Failed to attach %zu bytes", *length_p);
@@ -75,8 +74,6 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
 
     key_hndl->shmid = shmid;
     key_hndl->owner_ptr = (uintptr_t) *address_p;
-
-    /* FIXME no use for pd input argument? */
 
     ucs_debug("Memory registration address_p %p, len %lu, keys [%d %"PRIx64"]",
               *address_p, *length_p, key_hndl->shmid, key_hndl->owner_ptr);
@@ -224,8 +221,6 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
         return UCS_ERR_NO_DEVICE;
     }
 
-    /* FIXME initialize structure contents 
-     * most of these copied from ugni tl iface code */
     self->pd.super.ops = &uct_sysv_pd_ops;
     self->pd.super.context = context;
     self->pd.iface = self;
@@ -233,29 +228,19 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     self->super.super.pd   = &self->pd.super;
     self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
 
-    /* FIXME no use for config input argument? */
-
     addr = ucs_atomic_fadd32(&sysv_iface_global_counter, 1);
 
     self->addr.nic_addr = addr;
-    self->activated = true;
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
 {
-    if (!self->activated) {
-        /* We done with release */
-        return;
-    }
-
     /* TBD: Clean endpoints first (unbind and destroy) ?*/
     ucs_atomic_add32(&sysv_iface_global_counter, -1);
 
     /* tasks to tear down the domain */
-
-    self->activated = false;
 }
 
 UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_iface_t);

@@ -28,9 +28,6 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
 {
     uct_resource_desc_t *resource;
 
-    /* sysv tl currently supports only a single device */
-
-    /* Allocate resources array */
     resource = ucs_calloc(1, sizeof(uct_resource_desc_t), "resource desc");
     if (NULL == resource) {
         ucs_error("Failed to allocate memory");
