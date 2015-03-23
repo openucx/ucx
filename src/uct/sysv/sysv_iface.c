@@ -208,7 +208,7 @@ uct_pd_ops_t uct_sysv_pd_ops = {
     .rkey_release = uct_sysv_rkey_release
 };
 
-static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
+static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
@@ -222,7 +222,6 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_context_h context,
     }
 
     self->pd.super.ops = &uct_sysv_pd_ops;
-    self->pd.super.context = context;
     self->super.super.pd   = &self->pd.super;
 
     self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
@@ -243,7 +242,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_context_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
 
