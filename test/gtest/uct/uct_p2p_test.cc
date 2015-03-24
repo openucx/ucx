@@ -96,7 +96,7 @@ static O& operator<<(O& os, const size& sz)
 }
 
 void uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
-                               unsigned level, const char *prefix, const char *message,
+                               ucs_log_level_t level, const char *prefix, const char *message,
                                va_list ap)
 {
     if (level == UCS_LOG_LEVEL_TRACE_DATA) {

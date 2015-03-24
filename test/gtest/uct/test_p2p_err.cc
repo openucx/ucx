@@ -23,7 +23,7 @@ public:
     }
 
     static void log_handler(const char *file, unsigned line, const char *function,
-                            unsigned level, const char *prefix, const char *message,
+                            ucs_log_level_t level, const char *prefix, const char *message,
                             va_list ap)
     {
         char buf[200] = {0};
@@ -49,7 +49,7 @@ public:
         error_count = 0;
 
         ucs_log_set_handler(log_handler);
-        ucs_status_t status;
+        ucs_status_t status = UCS_OK;
         do {
             switch (op) {
             case OP_PUT_SHORT:
