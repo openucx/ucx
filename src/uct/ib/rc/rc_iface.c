@@ -74,7 +74,8 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                                       UCT_IFACE_FLAG_PUT_BCOPY |
                                       UCT_IFACE_FLAG_PUT_ZCOPY |
                                       UCT_IFACE_FLAG_GET_BCOPY |
-                                      UCT_IFACE_FLAG_GET_ZCOPY;
+                                      UCT_IFACE_FLAG_GET_ZCOPY |
+                                      UCT_IFACE_FLAG_CONNECT_TO_EP;
 }
 
 ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)

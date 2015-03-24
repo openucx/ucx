@@ -122,7 +122,8 @@ protected:
 #define UCT_TEST_IB_TLS \
     rc_mlx5, \
     rc, \
-    ud
+    ud, \
+    cm
 
 /**
  * Instantiate the parameterized test case for all transports.

@@ -35,7 +35,10 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface,
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
                                          UCT_IFACE_FLAG_PUT_ZCOPY       |
                                          UCT_IFACE_FLAG_GET_BCOPY       |
-                                         UCT_IFACE_FLAG_GET_ZCOPY;
+                                         UCT_IFACE_FLAG_GET_ZCOPY       |
+                                         UCT_IFACE_FLAG_CONNECT_TO_EP;
+
+    iface_attr->completion_priv_len    = 0; /* TBD */
     return UCS_OK;
 }
 

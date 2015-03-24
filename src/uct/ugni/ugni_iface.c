@@ -94,7 +94,8 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_ATOMIC_FADD64  |
                                          UCT_IFACE_FLAG_ATOMIC_ADD64   |
                                          UCT_IFACE_FLAG_GET_BCOPY      |
-                                         UCT_IFACE_FLAG_GET_ZCOPY;
+                                         UCT_IFACE_FLAG_GET_ZCOPY      |
+                                         UCT_IFACE_FLAG_CONNECT_TO_EP;
 
     iface_attr->completion_priv_len    = 0; /* TBD */
 

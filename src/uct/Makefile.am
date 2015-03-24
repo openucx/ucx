@@ -92,6 +92,16 @@ noinst_HEADERS += \
 	ib/ud/ud_verbs.h \
 	ib/ud/ud_inl.h 
 endif
+
+if HAVE_TL_CM
+libuct_la_SOURCES += \
+	ib/cm/cm_iface.c \
+	ib/cm/cm_ep.c
+
+noinst_HEADERS += \
+	ib/cm/cm.h
+endif
+
 endif
 
 if HAVE_CRAY_UGNI 
