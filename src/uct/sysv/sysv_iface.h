@@ -1,6 +1,5 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
  */
@@ -40,12 +39,15 @@ typedef struct uct_sysv_iface_config {
     uct_iface_config_t       super;
 } uct_sysv_iface_config_t;
 
-typedef struct uct_sysv_key {
+typedef struct uct_sysv_lkey {
     int                     shmid;
-    uintptr_t               owner_ptr;
-    uintptr_t               client_ptr;
+    intptr_t                owner_ptr;
+} uct_sysv_lkey_t;
+
+typedef struct uct_sysv_rkey {
     long long int           magic;
-} uct_sysv_key_t;
+    uct_sysv_lkey_t         *lkey;
+} uct_sysv_rkey_t;
 
 extern ucs_config_field_t uct_sysv_iface_config_table[];
 extern uct_tl_ops_t uct_sysv_tl_ops;
