@@ -26,14 +26,18 @@ AC_ARG_WITH([rc],
             [with_rc=yes])
 
 
-
+#
+# UD Support
+#
 AC_ARG_WITH([ud],
             [AC_HELP_STRING([--with-ud], [Compile with IB Unreliable Datagram support])],
             [],
             [with_ud=yes])
 
 
-
+#
+# DC Support
+#
 AC_ARG_WITH([dc],
             [AC_HELP_STRING([--with-dc], [Compile with IB Dynamic Connection support])],
             [],
@@ -137,18 +141,17 @@ AS_IF([test "x$with_ib" == xyes],
            [AC_CHECK_DECLS(IBV_EXP_QPT_DC_INI, [], [with_dc=no], [[#include <infiniband/verbs.h>]])
            AC_CHECK_MEMBERS([struct ibv_exp_dct_init_attr.inline_size], [] , [with_dc=no], [[#include <infiniband/verbs.h>]])
            ])
-
        AS_IF([test "x$with_dc" != xno],
-               [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
-               transports="${transports},dc"])
+           [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
+           transports="${transports},dc"])
 
        AS_IF([test "x$with_rc" != xno], 
-               [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
-               transports="${transports},rc"])
+           [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
+           transports="${transports},rc"])
 
        AS_IF([test "x$with_ud" != xno],
-               [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])
-               transports="${transports},ud"])
+           [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])
+           transports="${transports},ud"])
 
        AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
@@ -160,14 +163,12 @@ AS_IF([test "x$with_ib" == xyes],
 ])
 
 
-
-
 #
 # For automake
 #
-AM_CONDITIONAL([HAVE_IB], [test "x$with_ib" != xno])
-AM_CONDITIONAL([HAVE_TL_RC], [test "x$with_rc" != xno])
-AM_CONDITIONAL([HAVE_TL_DC], [test "x$with_dc" != xno])
-AM_CONDITIONAL([HAVE_TL_UD], [test "x$with_ud" != xno])
+AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
+AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
+AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
+AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 

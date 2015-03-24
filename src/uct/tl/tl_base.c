@@ -108,12 +108,18 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
                             uct_iface_mp_init_obj, init_obj_cb, mp_p);
 }
 
-static ucs_status_t uct_iface_stub_am_handler(void *desc, void *data,
-                                              size_t length, void *arg)
+static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
+                                              size_t length, void *desc)
 {
     uint8_t id = (uintptr_t)arg;
     ucs_warn("got active message id %d, but no handler installed", id);
     return UCS_OK;
+}
+
+static void uct_iface_set_stub_am_handler(uct_base_iface_t *iface, uint8_t id)
+{
+    iface->am[id].cb  = uct_iface_stub_am_handler;
+    iface->am[id].arg = (void*)(uintptr_t)id;
 }
 
 ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
@@ -126,11 +132,11 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     }
 
     if (cb == NULL) {
-        cb = uct_iface_stub_am_handler;
+        uct_iface_set_stub_am_handler(iface, id);
+    } else {
+        iface->am[id].cb  = cb;
+        iface->am[id].arg = arg;
     }
-
-    iface->am[id].cb  = cb;
-    iface->am[id].arg = arg;
     return UCS_OK;
 }
 
@@ -176,8 +182,7 @@ static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     self->worker = worker;
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
-        self->am[id].cb  = uct_iface_stub_am_handler;
-        self->am[id].arg = (void*)(uintptr_t)id;
+        uct_iface_set_stub_am_handler(self, id);
     }
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,

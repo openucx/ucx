@@ -270,12 +270,12 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
 
     return UCS_OK;
 
-err_free_path_bits:
-    ucs_free(self->path_bits);
 err_destroy_recv_cq:
     ibv_destroy_cq(self->recv_cq);
 err_destroy_send_cq:
     ibv_destroy_cq(self->send_cq);
+err_free_path_bits:
+    ucs_free(self->path_bits);
 err:
     return status;
 }
@@ -283,8 +283,6 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
-
-    ucs_free(self->path_bits);
 
     ret = ibv_destroy_cq(self->recv_cq);
     if (ret != 0) {
@@ -295,6 +293,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
     if (ret != 0) {
         ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
     }
+
+    ucs_free(self->path_bits);
 }
 
 UCS_CLASS_DEFINE(uct_ib_iface_t, uct_base_iface_t);
