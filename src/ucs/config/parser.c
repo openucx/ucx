@@ -393,6 +393,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
 int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 {
     ucs_config_array_field_t *field = dest;
+    void *temp_field;
     const ucs_config_array_t *array = arg;
     char *dup, *token, *saveptr;
     int ret;
@@ -405,13 +406,13 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 
     saveptr = NULL;
     token = strtok_r(dup, ",", &saveptr);
-    field->data = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
+    temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
     i = 0;
     while (token != NULL) {
-        ret = array->parser.read(token, (char*)field->data + i * array->elem_size,
+        ret = array->parser.read(token, (char*)temp_field + i * array->elem_size,
                                  array->parser.arg);
         if (!ret) {
-            ucs_free(field->data);
+            ucs_free(temp_field);
             free(dup);
             return 0;
         }
@@ -423,6 +424,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
         token = strtok_r(NULL, ",", &saveptr);
     }
 
+    field->data = temp_field;
     field->count = i;
     free(dup);
     return 1;
@@ -769,9 +771,13 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             if (env_value != NULL) {
                 ucs_config_parser_release_field(field, var);
                 status = ucs_config_parser_parse_field(field, env_value, var);
-                if (status != UCS_OK && ignore_errors) {
+                if (status != UCS_OK) {
                     /* If set to ignore errors, restore the default value */
-                    status = ucs_config_parser_parse_field(field, field->dfl_value, var);
+                    ucs_status_t tmp_status =
+                                    ucs_config_parser_parse_field(field, field->dfl_value, var);
+                    if (ignore_errors) {
+                        status = tmp_status;
+                    }
                 }
                 if (status != UCS_OK) {
                     return status;
