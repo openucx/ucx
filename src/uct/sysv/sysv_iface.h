@@ -32,7 +32,6 @@ typedef struct uct_sysv_iface {
     struct {
         unsigned            max_put;
     } config;
-    /* list of ep */
 } uct_sysv_iface_t;
 
 typedef struct uct_sysv_iface_config {

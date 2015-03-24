@@ -106,7 +106,7 @@ static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 }
 
 static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
-                                      void *rkey_buffer)
+                                       void *rkey_buffer)
 {
     /* user is responsible to free rkey_buffer */
     uct_sysv_rkey_t *rkey = rkey_buffer;

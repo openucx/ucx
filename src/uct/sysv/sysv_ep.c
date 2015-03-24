@@ -40,8 +40,8 @@ ucs_status_t uct_sysv_ep_connect_to_ep(uct_ep_h tl_ep,
 }
 
 ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer,
-                                  unsigned length, uint64_t remote_addr,
-                                  uct_rkey_t rkey)
+                                   unsigned length, uint64_t remote_addr,
+                                   uct_rkey_t rkey)
 {
     uct_sysv_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sysv_iface_t); 
 
