@@ -127,14 +127,14 @@ void twheel::set_timer_delta(struct hr_timer *t, int how)
 #define N_LOOPS 20
 
 UCS_TEST_F(twheel, precision_single) {
+    UCS_TEST_SKIP; // Test is broken
+
+#if 0
     struct hr_timer t;
     ucs_time_t now;
     int i, k;
     int fail_count;
 
-    UCS_TEST_SKIP; // Test is broken
-
-#if 0
     init_timer(&t, 0);
     for (k = 0; k < 10; k++ ) {
         set_timer_delta(&t, k);
@@ -160,11 +160,11 @@ UCS_TEST_F(twheel, precision_single) {
 
 UCS_TEST_F(twheel, precision_multi) {
     std::vector<struct hr_timer> t(N_TIMERS);
-    ucs_time_t start, now, eps;
 
     UCS_TEST_SKIP; // Test is broken
 
 #if 0
+    ucs_time_t start, now, eps;
     init_timerv(&t[0], N_TIMERS);
     for (int i = 0; i < N_TIMERS; i++) {
         set_timer_delta(&t[i], i);
@@ -207,11 +207,11 @@ UCS_TEST_F(twheel, add_twice) {
 
 
 UCS_TEST_F(twheel, add_overflow) {
-    struct hr_timer t;
 
     UCS_TEST_SKIP; // Test is broken
 
 #if 0
+    struct hr_timer t;
     init_timer(&t, 0);
     ::srand(::time(NULL));
 

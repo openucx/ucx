@@ -482,7 +482,6 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_test_params_t *pa
 static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
 {
     ucs_status_t status;
-    test_type_t *test;
     char c;
 
     init_test_params(&ctx->params);
@@ -1010,7 +1009,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 {
 #if HAVE_MPI
     ucs_status_t status;
-    int rank, size;
+    int rank;
 
     status = validate_params(ctx);
     if (status != UCS_OK) {
@@ -1136,7 +1135,6 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 static ucs_status_t run_test(struct perftest_context *ctx)
 {
     uct_iface_config_t *iface_config;
-    ucx_perf_result_t result;
     ucs_status_t status;
 
     setlocale(LC_ALL, "en_US");

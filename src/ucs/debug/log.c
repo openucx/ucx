@@ -123,8 +123,8 @@ void ucs_log_flush()
 }
 
 void ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                             unsigned level, const char *prefix, const char *message,
-                             va_list ap)
+                             ucs_log_level_t level, const char *prefix,
+                             const char *message, va_list ap)
 {
     size_t buffer_size = ucs_global_opts.log_buffer_size;
     const char *short_file;
@@ -180,7 +180,7 @@ void ucs_log_set_handler(ucs_log_func_t handler)
 }
 
 void __ucs_log(const char *file, unsigned line, const char *function,
-               unsigned level, const char *message, ...)
+               ucs_log_level_t level, const char *message, ...)
 {
     va_list ap;
 
