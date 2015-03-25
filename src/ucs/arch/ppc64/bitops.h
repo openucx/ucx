@@ -5,8 +5,8 @@
 * $HEADER$
 */
 
-#ifndef UCS_AARCH64_BITOPS_H_
-#define UCS_AARCH64_BITOPS_H_
+#ifndef UCS_PPC64_BITOPS_H_
+#define UCS_PPC64_BITOPS_H_
 
 #include <stdint.h>
 
