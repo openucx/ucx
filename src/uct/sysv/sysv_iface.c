@@ -71,9 +71,9 @@ static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
     }
 
     key_hndl->shmid = shmid;
-    key_hndl->owner_ptr = (intptr_t) *address_p;
+    key_hndl->owner_ptr = *address_p;
 
-    ucs_debug("Memory registration address_p %p, len %lu, keys [%d %"PRIx64"]",
+    ucs_debug("Memory registration address_p %p, len %lu, keys [%d %p]",
               *address_p, *length_p, key_hndl->shmid, key_hndl->owner_ptr);
     *memh_p = key_hndl;
     ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
@@ -85,7 +85,7 @@ static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
     /* this releases the key allocated in uct_sysv_mem_alloc */
 
     uct_sysv_lkey_t *key_hndl = memh;
-    ucs_sysv_free((void *)key_hndl->owner_ptr);  /* detach shared segment */
+    ucs_sysv_free(key_hndl->owner_ptr);  /* detach shared segment */
     ucs_free(key_hndl);
 
     return UCS_OK;
@@ -113,21 +113,18 @@ static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     uct_sysv_lkey_t *key_hndl = memh;
 
     rkey->magic = UCT_SYSV_RKEY_MAGIC;
-    rkey->lkey = key_hndl;
+    rkey->shmid = key_hndl->shmid;
+    rkey->owner_ptr = (uintptr_t)key_hndl->owner_ptr;
 
-    ucs_debug("Packed [ %d %llx %"PRIx64" ]",
-              rkey->lkey->shmid, rkey->magic, rkey->lkey->owner_ptr);
+    ucs_debug("Packed [ %d %llx %"PRIxPTR" ]",
+              rkey->shmid, rkey->magic, rkey->owner_ptr);
     return UCS_OK;
 }
 
 static void uct_sysv_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
 {
-    /* this releases the key allocated in unpack */
-    
-    uct_sysv_lkey_t *key_hndl = (uct_sysv_lkey_t *) rkey_ob->type;
     /* detach shared segment */
-    ucs_sysv_free((void *)(key_hndl->owner_ptr + rkey_ob->rkey));
-    ucs_free(key_hndl);
+    shmdt((void *)((intptr_t)rkey_ob->type + rkey_ob->rkey));
 }
 
 ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
@@ -135,36 +132,27 @@ ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
 {
     /* user is responsible to free rkey_buffer */
     uct_sysv_rkey_t *rkey = rkey_buffer;
-    uct_sysv_lkey_t *key_hndl = NULL;
     long long magic = 0;
     int shmid;
+    void *client_ptr;
 
-    ucs_debug("Unpacking[ %d %llx %"PRIx64" ]",
-              rkey->lkey->shmid, rkey->magic, rkey->lkey->owner_ptr);
+    ucs_debug("Unpacking[ %d %llx %"PRIxPTR" ]",
+              rkey->shmid, rkey->magic, rkey->owner_ptr);
     if (rkey->magic != UCT_SYSV_RKEY_MAGIC) {
         ucs_debug("Failed to identify key. Expected %llx but received %llx",
                   UCT_SYSV_RKEY_MAGIC, magic);
         return UCS_ERR_UNSUPPORTED;
     }
 
-    key_hndl = ucs_malloc(sizeof(uct_sysv_lkey_t), "key_hndl");
-    if (NULL == key_hndl) {
-        ucs_error("Failed to allocate memory for key_hndl");
-        return UCS_ERR_NO_MEMORY;
-    }
-
     /* cache the local key on the rkey_ob */
-    key_hndl->shmid = rkey->lkey->shmid;
-    key_hndl->owner_ptr = rkey->lkey->owner_ptr;
-    rkey_ob->type = key_hndl;
+    rkey_ob->type = (void *)rkey->owner_ptr;
 
     /* Attach segment */ 
     /* FIXME would like to extend ucs_sysv_alloc to do this? */
-    shmid = rkey->lkey->shmid;
-    /* store the client-side ptr */
-    rkey_ob->rkey = (intptr_t) shmat(shmid, NULL, 0);
+    shmid = rkey->shmid;
+    client_ptr = shmat(shmid, NULL, 0);
     /* Check if attachment was successful */
-    if ((void *)rkey_ob->rkey == (void*)-1) {
+    if (client_ptr == (void*)-1) {
         if (errno == ENOMEM) {
             return UCS_ERR_NO_MEMORY;
         } else if (RUNNING_ON_VALGRIND && (errno == EINVAL)) {
@@ -175,8 +163,8 @@ ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
         }
     }
 
-    /* store the offset of the addresses (client-side ptr - owner ptr) */
-    rkey_ob->rkey = rkey_ob->rkey - key_hndl->owner_ptr;
+    /* store the offset of the addresses */
+    rkey_ob->rkey = (uintptr_t)client_ptr - rkey->owner_ptr;
 
     return UCS_OK;
 

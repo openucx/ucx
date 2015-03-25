@@ -40,12 +40,13 @@ typedef struct uct_sysv_iface_config {
 
 typedef struct uct_sysv_lkey {
     int                     shmid;
-    intptr_t                owner_ptr;
+    void                    *owner_ptr;
 } uct_sysv_lkey_t;
 
 typedef struct uct_sysv_rkey {
     long long int           magic;
-    uct_sysv_lkey_t         *lkey;
+    int                     shmid;
+    uintptr_t               owner_ptr;
 } uct_sysv_rkey_t;
 
 extern ucs_config_field_t uct_sysv_iface_config_table[];
