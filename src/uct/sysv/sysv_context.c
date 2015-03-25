@@ -1,6 +1,5 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
  */
@@ -35,9 +34,9 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
     }
 
     ucs_snprintf_zero(resource->tl_name,  
-                      sizeof(resource->tl_name), "%s", UCT_TL_NAME);
+                      sizeof(resource->tl_name), "%s", UCT_SYSV_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, 
-                      sizeof(resource->dev_name), "%s", UCT_TL_NAME);
+                      sizeof(resource->dev_name), "%s", UCT_SYSV_TL_NAME);
     resource->latency    = 1; /* FIXME temp value */
     resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
     memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));

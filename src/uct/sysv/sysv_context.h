@@ -7,8 +7,7 @@
 #ifndef UCT_SYSV_CONTEXT_H
 #define UCT_SYSV_CONTEXT_H
 
-#define MAX_TYPE_NAME     (10)
-#define UCT_TL_NAME           "sysv"
+#define UCT_SYSV_TL_NAME    "sysv"
 
 /*
  * Helper function to list sysv resources
