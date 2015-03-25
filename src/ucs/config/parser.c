@@ -1022,4 +1022,3 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
         fprintf(stream, "\n");
     }
 }
-

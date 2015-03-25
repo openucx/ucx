@@ -15,7 +15,7 @@
 enum {
     UCT_IB_RESOURCE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
     UCT_IB_RESOURCE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
-    UCT_IB_RESOURCE_FLAG_DC       = UCS_BIT(3)   /* Device supports DC */
+    UCT_IB_RESOURCE_FLAG_DC       = UCS_BIT(3)    /* Device supports DC */
 };
 
 typedef struct uct_ib_context uct_ib_context_t;
