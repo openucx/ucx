@@ -4,12 +4,10 @@
  * $HEADER$
  */
 
-#include "ucs/type/class.h"
-#include "uct/tl/context.h"
-
 #include "sysv_iface.h"
-#include "sysv_ep.h"
-#include "sysv_context.h"
+
+#include <uct/tl/context.h>
+
 
 static ucs_status_t uct_sysv_iface_flush(uct_iface_h tl_iface)
 {
@@ -184,7 +182,7 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
 
-uct_pd_ops_t uct_sysv_pd_ops = {
+static uct_pd_ops_t uct_sysv_pd_ops = {
     .query        = uct_sysv_pd_query,
     .mem_alloc    = uct_sysv_mem_alloc,
     .mem_free     = uct_sysv_mem_free,
@@ -193,21 +191,23 @@ uct_pd_ops_t uct_sysv_pd_ops = {
     .rkey_release = uct_sysv_rkey_release
 };
 
+static uct_pd_t uct_sysv_pd = {
+    .ops = &uct_sysv_pd_ops
+};
+
 static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            uct_iface_config_t *tl_config)
 {
     int addr;
 
-    UCS_CLASS_CALL_SUPER_INIT(&uct_sysv_iface_ops);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_sysv_iface_ops, worker,
+                              &uct_sysv_pd, tl_config UCS_STATS_ARG(NULL));
 
     if(strcmp(dev_name, UCT_SYSV_TL_NAME) != 0) {
         ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
     }
-
-    self->pd.super.ops = &uct_sysv_pd_ops;
-    self->super.super.pd   = &self->pd.super;
 
     self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
 

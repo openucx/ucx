@@ -181,11 +181,10 @@ void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc)
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
  * @param rx_hdr_len    Length of transport network header.
  */
-static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
-                           uct_worker_h worker, const char *dev_name,
-                           unsigned rx_headroom, unsigned rx_priv_len,
-                           unsigned rx_hdr_len, unsigned tx_cq_len,
-                           uct_ib_iface_config_t *config)
+UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
+                    const char *dev_name, unsigned rx_headroom, unsigned rx_priv_len,
+                    unsigned rx_hdr_len, unsigned tx_cq_len,
+                    uct_ib_iface_config_t *config)
 {
     uct_ib_context_t *ibctx = ucs_component_get(worker->context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
@@ -199,8 +198,8 @@ static UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops,
         goto err;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(ops, worker, &dev->super, &config->super
-                              UCS_STATS_ARG(dev->stats));
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, worker, &dev->super,
+                              &config->super UCS_STATS_ARG(dev->stats));
 
     self->port_num                 = port_num;
     self->gid_index                = config->gid_index;

@@ -41,8 +41,9 @@ static ucs_status_t uct_ud_verbs_query_resources(uct_context_h context,
 
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
 {
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_verbs_iface_t);
     ucs_trace_func("");
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super);
     return UCS_OK;
 }
 
@@ -261,8 +262,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_worker_h worker,
     uct_ud_iface_config_t *config = ucs_derived_of(tl_config, uct_ud_iface_config_t);
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(&uct_ud_verbs_iface_ops, worker, dev_name,
-                              rx_headroom, 0,  &config->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, worker,
+                              dev_name, rx_headroom, 0, config);
 
     uct_ud_verbs_iface_post_recv_always(self, self->super.rx.available);
     

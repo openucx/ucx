@@ -628,7 +628,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
     self->tx.available        = iface->super.config.tx_qp_len;
     self->tx.post_count       = 0;

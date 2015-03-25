@@ -11,15 +11,13 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
-#include <ucs/type/class.h>
 
-static UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_iface_t *tl_iface)
+
+UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
-
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->ah         = NULL;
@@ -30,7 +28,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_iface_t *tl_iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(self->super.iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
     ucs_trace_func("");
 
@@ -41,7 +39,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
    /* TODO: in disconnect ucs_frag_list_cleanup(&self->rx.ooo_pkts); */
 }
 
-UCS_CLASS_DEFINE(uct_ud_ep_t, uct_ep_t);
+UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
 
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)

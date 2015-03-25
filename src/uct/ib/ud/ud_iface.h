@@ -30,6 +30,11 @@ typedef struct uct_ud_iface_addr {
 
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
+typedef struct uct_ud_iface_config {
+    uct_ib_iface_config_t    super;
+} uct_ud_iface_config_t;
+
+
 struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;
@@ -49,10 +54,8 @@ struct uct_ud_iface {
     } config;
     ucs_ptr_array_t eps;
 };
-
-typedef struct uct_ud_iface_config {
-    uct_ib_iface_config_t    super;
-} uct_ud_iface_config_t;
+UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_worker_h, const char *,
+                  unsigned, unsigned, uct_ud_iface_config_t*)
 
 
 extern ucs_config_field_t uct_ud_iface_config_table[];

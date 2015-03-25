@@ -1,5 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -8,6 +9,7 @@
 #define UCT_SYSV_EP_H
 
 #include <uct/api/uct.h>
+#include <uct/tl/tl_base.h>
 
 #include "ucs/type/class.h"
 
@@ -17,7 +19,7 @@ typedef struct uct_sysv_ep_addr {
 } uct_sysv_ep_addr_t;
 
 typedef struct uct_sysv_ep {
-    uct_ep_t          super;
+    uct_base_ep_t      super;
     struct uct_sysv_ep *next;
 } uct_sysv_ep_t;
 

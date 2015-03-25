@@ -17,16 +17,16 @@
 struct uct_sysv_iface;
 
 typedef struct uct_sysv_iface_addr {
-    uct_iface_addr_t    super;
-    uint32_t            nic_addr;
+    uct_iface_addr_t        super;
+    uint32_t                nic_addr;
 } uct_sysv_iface_addr_t;
 
 typedef struct uct_sysv_pd {
-    uct_pd_t      super;
+    uct_pd_t                super;
 } uct_sysv_pd_t;
 
 typedef struct uct_sysv_iface {
-    uct_base_iface_t       super;
+    uct_base_iface_t        super;
     uct_sysv_pd_t           pd;
     uct_sysv_iface_addr_t   addr;
     struct {
@@ -35,7 +35,7 @@ typedef struct uct_sysv_iface {
 } uct_sysv_iface_t;
 
 typedef struct uct_sysv_iface_config {
-    uct_iface_config_t       super;
+    uct_iface_config_t      super;
 } uct_sysv_iface_config_t;
 
 typedef struct uct_sysv_lkey {

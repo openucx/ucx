@@ -244,8 +244,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_worker_h worker,
     struct ibv_qp *qp;
 
     extern uct_iface_ops_t uct_rc_verbs_iface_ops;
-    UCS_CLASS_CALL_SUPER_INIT(&uct_rc_verbs_iface_ops, worker, dev_name,
-                              rx_headroom, 0, &config->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, worker,
+                              dev_name, rx_headroom, 0, &config->super);
 
     /* Initialize inline work request */
     memset(&self->inl_am_wr, 0, sizeof(self->inl_am_wr));

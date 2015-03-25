@@ -289,8 +289,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
         goto error;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(&uct_ugni_iface_ops, &dev->super, &config->super
-                              UCS_STATS_ARG(NULL));
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ugni_iface_ops, worker,
+                              &dev->super, &config->super UCS_STATS_ARG(NULL));
 
     self->pd.super.ops = &uct_ugni_pd_ops;
     self->pd.iface     = self;

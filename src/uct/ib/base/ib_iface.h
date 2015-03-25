@@ -35,28 +35,6 @@ typedef struct uct_ib_iface_addr {
 } uct_ib_iface_addr_t;
 
 
-typedef struct uct_ib_iface {
-    uct_base_iface_t        super;
-    uct_ib_iface_addr_t     addr;
-    uint8_t                 *path_bits;
-    unsigned                path_bits_count;
-    uint16_t                gid_index;
-    uint8_t                 port_num;
-    uint8_t                 sl;
-
-    struct ibv_cq           *send_cq;
-    struct ibv_cq           *recv_cq;
-    /* TODO comp_channel */
-
-    struct {
-        unsigned            rx_payload_offset;   /* offset from desc to payload */
-        unsigned            rx_hdr_offset;       /* offset from desc to network header */
-        unsigned            rx_headroom_offset;  /* offset from desc to user headroom */
-        unsigned            seg_size;
-    } config;
-
-} uct_ib_iface_t;
-
 typedef struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -90,6 +68,31 @@ typedef struct uct_ib_iface_config {
 
 
 } uct_ib_iface_config_t;
+
+
+typedef struct uct_ib_iface {
+    uct_base_iface_t        super;
+    uct_ib_iface_addr_t     addr;
+    uint8_t                 *path_bits;
+    unsigned                path_bits_count;
+    uint16_t                gid_index;
+    uint8_t                 port_num;
+    uint8_t                 sl;
+
+    struct ibv_cq           *send_cq;
+    struct ibv_cq           *recv_cq;
+    /* TODO comp_channel */
+
+    struct {
+        unsigned            rx_payload_offset;   /* offset from desc to payload */
+        unsigned            rx_hdr_offset;       /* offset from desc to network header */
+        unsigned            rx_headroom_offset;  /* offset from desc to user headroom */
+        unsigned            seg_size;
+    } config;
+
+} uct_ib_iface_t;
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_worker_h, const char*,
+                  unsigned, unsigned, unsigned, unsigned, uct_ib_iface_config_t*)
 
 
 /*

@@ -36,6 +36,21 @@ enum {
 };
 
 
+struct uct_rc_iface_config {
+    uct_ib_iface_config_t    super;
+    uct_ib_mtu_t             path_mtu;
+    unsigned                 max_rd_atomic;
+
+    struct {
+        double               timeout;
+        unsigned             retry_count;
+        double               rnr_timeout;
+        unsigned             rnr_retry_count;
+        unsigned             cq_len;
+    } tx;
+};
+
+
 struct uct_rc_iface {
     uct_ib_iface_t           super;
 
@@ -70,21 +85,8 @@ struct uct_rc_iface {
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
 };
-
-
-struct uct_rc_iface_config {
-    uct_ib_iface_config_t    super;
-    uct_ib_mtu_t             path_mtu;
-    unsigned                 max_rd_atomic;
-
-    struct {
-        double               timeout;
-        unsigned             retry_count;
-        double               rnr_timeout;
-        unsigned             rnr_retry_count;
-        unsigned             cq_len;
-    } tx;
-};
+UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_worker_h,
+                  const char*, unsigned, unsigned, uct_rc_iface_config_t*)
 
 
 struct uct_rc_completion {

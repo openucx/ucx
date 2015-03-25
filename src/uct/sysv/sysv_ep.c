@@ -1,19 +1,23 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
+
+#include "sysv_ep.h"
+#include "sysv_iface.h"
+
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <uct/tl/tl_log.h>
 
-#include "sysv_ep.h"
-#include "sysv_iface.h"
 
 static UCS_CLASS_INIT_FUNC(uct_sysv_ep_t, uct_iface_t *tl_iface)
 {
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface)
+    uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
     return UCS_OK;
 }
 
@@ -21,7 +25,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_ep_t)
 {
     /* No op */
 }
-UCS_CLASS_DEFINE(uct_sysv_ep_t, uct_ep_t)
+UCS_CLASS_DEFINE(uct_sysv_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_ep_t, uct_ep_t);
 
