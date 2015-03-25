@@ -13,9 +13,10 @@
 
 enum {
     PRINT_VERSION        = UCS_BIT(0),
-    PRINT_BUILD_CONFIG   = UCS_BIT(1),
-    PRINT_TYPES          = UCS_BIT(2),
-    PRINT_DEVICES        = UCS_BIT(3)
+    PRINT_SYS_INFO       = UCS_BIT(1),
+    PRINT_BUILD_CONFIG   = UCS_BIT(2),
+    PRINT_TYPES          = UCS_BIT(3),
+    PRINT_DEVICES        = UCS_BIT(4)
 };
 
 
@@ -23,6 +24,8 @@ ucs_status_t print_uct_info(int print_opts, ucs_config_print_flags_t print_flags
                             const char *req_tl_name);
 
 void print_version();
+
+void print_sys_info();
 
 void print_build_config();
 

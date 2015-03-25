@@ -13,7 +13,7 @@
 #endif
 
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/arch.h>
+#include <ucs/arch/arch.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
 
@@ -261,12 +261,6 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove);
  * Get process command line
  */
 const char* ucs_get_process_cmdline();
-
-
-/**
- * Get model of currently running cpu.
- */
-ucs_cpu_model_t ucs_get_cpu_model();
 
 
 /**

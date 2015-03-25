@@ -9,8 +9,8 @@
 #ifndef UCS_MATH_H
 #define UCS_MATH_H
 
-#include "arch.h"
-#include "compiler.h"
+#include <ucs/sys/compiler.h>
+#include <ucs/arch/arch.h>
 
 #include <math.h>
 
