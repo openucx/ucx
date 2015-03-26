@@ -164,7 +164,7 @@ static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *i
 static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
                                                uct_ib_iface_recv_desc_t *desc)
 {
-    return (void*)desc + iface->config.rx_hdr_offset;
+    return (void*)((char *)desc + iface->config.rx_hdr_offset);
 }
 
 typedef struct uct_ib_recv_wr {
@@ -188,10 +188,10 @@ static inline void uct_ib_iface_desc_received(uct_ib_iface_t *iface,
 {
     if (has_data) {
         /* Memory has valid data */
-        VALGRIND_MAKE_MEM_DEFINED((void*)desc + iface->config.rx_hdr_offset, byte_len);
+        VALGRIND_MAKE_MEM_DEFINED((char*)desc + iface->config.rx_hdr_offset, byte_len);
     } else {
         /* Data is invalid, but memory is addressable */
-        VALGRIND_MAKE_MEM_UNDEFINED((void*)desc + iface->config.rx_hdr_offset, byte_len);
+        VALGRIND_MAKE_MEM_UNDEFINED((char*)desc + iface->config.rx_hdr_offset, byte_len);
     }
 }
 
