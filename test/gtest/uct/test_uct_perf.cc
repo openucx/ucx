@@ -329,7 +329,7 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_TEST_CMD_AM,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "am rate", "Mpps", 3.0, 20.0,
+  { "am rate", "Mpps", 3.0, 24.0,
     UCX_PERF_TEST_CMD_AM, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
@@ -345,7 +345,7 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "put rate", "Mpps", 1.5, 20.0,
+  { "put rate", "Mpps", 1.5, 24.0,
     UCX_PERF_TEST_CMD_PUT, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
