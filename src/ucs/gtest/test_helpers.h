@@ -218,7 +218,7 @@ public:
 
 
 /* UCS error check */
-#define EXPECT_UCS_OK(_error)  EXPECT_EQ(UCS_OK, _error) << "Error: " << ucs_error_string(_error)
+#define EXPECT_UCS_OK(_error)  EXPECT_EQ(UCS_OK, _error) << "Error: " << ucs_status_string(_error)
 #define ASSERT_UCS_OK(_error) \
     do { \
         if ((_error) != UCS_OK) { \

@@ -17,8 +17,8 @@ public:
     virtual void init() {
         uct_test::init();
 
-        m_e1 = new entity(GetParam());
-        m_e2 = new entity(GetParam());
+        m_e1 = new entity(GetParam(), 0);
+        m_e2 = new entity(GetParam(), 0);
 
         m_e1->add_ep();
         m_e2->add_ep();
@@ -160,16 +160,6 @@ static ucs_status_t ack_req_count_tx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
         tx_ack_psn = neth->psn;
         ack_req_tx_cnt++;
-    }
-    return UCS_OK;
-}
-
-static int ack_req_rx_cnt;
-static ucs_status_t ack_req_count_rx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
-        clear_ack_req(ep, neth);
-        ack_req_rx_cnt++;
     }
     return UCS_OK;
 }
