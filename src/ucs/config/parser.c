@@ -390,6 +390,70 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     return 1;
 }
 
+int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
+{
+    ucs_range_spec_t *range_spec = dest;
+    unsigned first, last;
+    char *p, *str;
+    int ret = 1;
+
+    str = strdup(buf);
+    if (str == NULL) {
+        return 0;
+    }
+
+    /* Check if got a range or a single number */
+    p = strchr(str, '-');
+    if (p == NULL) {
+        /* got only one value (not a range) */
+        if (1 != sscanf(buf, "%u", &first)) {
+            ret = 0;
+            goto out;
+        }
+        last = first;
+    } else {
+        /* got a range of numbers */
+        *p = 0;      /* split str */
+
+        if ((1 != sscanf(str, "%u", &first))
+            || (1 != sscanf(p + 1, "%u", &last))) {
+            ret = 0;
+            goto out;
+        }
+    }
+
+    range_spec->first = first;
+    range_spec->last = last;
+
+out:
+    free (str);
+    return ret;
+}
+
+int ucs_config_sprintf_range_spec(char *buf, size_t max, void *src, const void *arg)
+{
+    ucs_range_spec_t *range_spec = src;
+
+    if (range_spec->first == range_spec->last) {
+        snprintf(buf, max, "%d", range_spec->first);
+    } else {
+        snprintf(buf, max, "%d-%d", range_spec->first, range_spec->last);
+    }
+
+    return 1;
+}
+
+ucs_status_t ucs_config_clone_range_spec(void *src, void *dest, const void *arg)
+{
+    ucs_range_spec_t *src_range_spec  = src;
+    ucs_range_spec_t *dest_ragne_spec = dest;
+
+    dest_ragne_spec->first = src_range_spec->first;
+    dest_ragne_spec->last = src_range_spec->last;
+
+    return UCS_OK;
+}
+
 int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 {
     ucs_config_array_field_t *field = dest;
