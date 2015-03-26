@@ -112,6 +112,18 @@ libuct_la_SOURCES += \
     ugni/ugni_ep.c
 endif
 
+if HAVE_CUDA
+noinst_HEADERS += \
+    cuda/cuda_context.h \
+    cuda/cuda_iface.h \
+    cuda/cuda_ep.h
+
+libuct_la_SOURCES += \
+    cuda/cuda_context.c \
+    cuda/cuda_iface.c \
+    cuda/cuda_ep.c
+endif
+
 # FIXME these should be done conditionally
 noinst_HEADERS += \
     sysv/sysv_context.h \
