@@ -223,7 +223,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
     /* No op */
 }
 
-UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_iface_t);
+UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_base_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
