@@ -60,6 +60,12 @@ typedef struct ucs_ib_port_spec {
 } ucs_ib_port_spec_t;
 
 
+typedef struct ucs_range_spec {
+    unsigned    first;  /* the first value in the range */
+    unsigned    last;   /* the last value in the range */
+} ucs_range_spec_t;
+
+
 /*
  * Parsing and printing different data types
  */
@@ -110,6 +116,10 @@ int ucs_config_sprintf_signo(char *buf, size_t max, void *src, const void *arg);
 
 int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *arg);
+
+int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_range_spec(char *buf, size_t max, void *src, const void *arg);
+ucs_status_t ucs_config_clone_range_spec(void *src, void *dest, const void *arg);
 
 int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_array(char *buf, size_t max, void *src, const void *arg);
@@ -189,6 +199,9 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_clone_table,      ucs_config_release_table, \
                                     ucs_config_help_table,       t}
 
+#define UCS_CONFIG_TYPE_RANGE_SPEC {ucs_config_sscanf_range_spec,ucs_config_sprintf_range_spec, \
+                                    ucs_config_clone_range_spec, ucs_config_release_nop, \
+                                    ucs_config_help_generic,     "numbers range: <number>-<number>"}
 
 /**
  * Set default values for options.
