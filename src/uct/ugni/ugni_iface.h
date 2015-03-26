@@ -24,15 +24,10 @@ typedef struct uct_ugni_iface_addr {
     uint32_t            nic_addr;
 } uct_ugni_iface_addr_t;
 
-typedef struct uct_ugni_pd {
-    uct_pd_t      super;
-    struct uct_ugni_iface *iface;
-} uct_ugni_pd_t;
-
 typedef struct uct_ugni_iface {
     uct_base_iface_t        super;
     uct_ugni_device_t       *dev;
-    uct_ugni_pd_t           pd;
+    uct_pd_t                pd;
     gni_cdm_handle_t        cdm_handle;                  /**< Ugni communication domain */
     gni_nic_handle_t        nic_handle;                  /**< Ugni NIC handle */
     uint32_t                pe_address;                  /**< PE address for the NIC that this
