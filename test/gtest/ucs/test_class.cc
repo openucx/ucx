@@ -17,19 +17,19 @@ class test_class : public ucs::test {
 typedef struct base {
     int            field1;
 } base_t;
-UCS_CLASS_DECLARE(base_t);
+UCS_CLASS_DECLARE(base_t, int);
 
 typedef struct derived {
     base_t         super;
     int            field2;
 } derived_t;
-UCS_CLASS_DECLARE(derived_t);
+UCS_CLASS_DECLARE(derived_t, int, int);
 
 typedef struct derived2 {
     base_t         super;
     int            field2;
 } derived2_t;
-UCS_CLASS_DECLARE(derived2_t);
+UCS_CLASS_DECLARE(derived2_t, int, int);
 
 static int base_init_count = 0;
 static int derived_init_count = 0;
@@ -39,8 +39,6 @@ static int derived_init_count = 0;
 
 UCS_CLASS_INIT_FUNC(base_t, int param)
 {
-    UCS_CLASS_CALL_SUPER_INIT();
-
     if (param < 0) {
         return UCS_ERR_INVALID_PARAM;
     }
@@ -60,7 +58,7 @@ UCS_CLASS_DEFINE(base_t, void);
 
 UCS_CLASS_INIT_FUNC(derived_t, int param1, int param2)
 {
-    UCS_CLASS_CALL_SUPER_INIT(param1);
+    UCS_CLASS_CALL_SUPER_INIT(base_t, param1);
 
     if (param2 < 0) {
         return UCS_ERR_INVALID_PARAM;
@@ -89,7 +87,7 @@ UCS_CLASS_INIT_FUNC(derived2_t, int param1, int param2)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(param1);
+    UCS_CLASS_CALL_SUPER_INIT(base_t, param1);
 
     self->field2 = param2;
     ++derived_init_count;

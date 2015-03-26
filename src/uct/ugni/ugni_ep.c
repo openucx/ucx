@@ -7,7 +7,6 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
-#include <ucs/type/class.h>
 #include <uct/tl/tl_log.h>
 
 #include "ugni_ep.h"
@@ -34,7 +33,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface)
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     gni_return_t ugni_rc;
 
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface)
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
 
     ugni_rc = GNI_EpCreate(iface->nic_handle, iface->local_cq, &self->ep);
     if (GNI_RC_SUCCESS != ugni_rc) {
@@ -51,7 +50,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
 {
-    uct_ugni_iface_t *iface = ucs_derived_of(self->super.iface, uct_ugni_iface_t);
+    uct_ugni_iface_t *iface = ucs_derived_of(self->super.super.iface,
+                                             uct_ugni_iface_t);
     gni_return_t ugni_rc;
 
     ugni_rc = GNI_EpDestroy(self->ep);
@@ -61,7 +61,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
     }
     sglib_hashed_uct_ugni_ep_t_delete(iface->eps, self);
 }
-UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_ep_t)
+UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 

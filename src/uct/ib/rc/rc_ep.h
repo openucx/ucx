@@ -42,6 +42,7 @@ struct uct_rc_ep {
     uint8_t             path_bits;
     UCS_STATS_NODE_DECLARE(stats);
 };
+UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);

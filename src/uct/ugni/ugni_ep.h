@@ -1,5 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -9,8 +10,9 @@
 
 #include <gni_pub.h>
 #include <uct/api/uct.h>
+#include <uct/tl/tl_base.h>
+#include <ucs/type/class.h>
 
-#include "ucs/type/class.h"
 
 typedef struct uct_ugni_ep_addr {
     uct_ep_addr_t     super;
@@ -18,12 +20,13 @@ typedef struct uct_ugni_ep_addr {
 } uct_ugni_ep_addr_t;
 
 typedef struct uct_ugni_ep {
-    uct_ep_t          super;
+    uct_base_ep_t     super;
     gni_ep_handle_t   ep;
     unsigned          outstanding;
     uintptr_t         hash_key;
     struct uct_ugni_ep *next;
 } uct_ugni_ep_t;
+
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);

@@ -268,8 +268,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_worker_h worker,
     ucs_status_t status;
 
     extern uct_iface_ops_t uct_rc_mlx5_iface_ops;
-    UCS_CLASS_CALL_SUPER_INIT(&uct_rc_mlx5_iface_ops, worker, dev_name,
-                              rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, worker,
+                              dev_name, rx_headroom,
                               sizeof(uct_rc_mlx5_recv_desc_t) - sizeof(uct_ib_iface_recv_desc_t),
                               &config->super);
 

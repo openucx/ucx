@@ -41,15 +41,6 @@ struct ucs_class {
     UCS_PP_TOKENPASTE(_type, _cleanup)
 
 /**
- * Declare a class.
- *
- * @param _type     Class type.
- */
-#define UCS_CLASS_DECLARE(_type) \
-    extern ucs_class_t _UCS_CLASS_DECL_NAME(_type);
-
-
-/**
  * Class initialization/cleanup function prototypes.
  */
 #define UCS_CLASS_INIT_FUNC(_type, ...) \
@@ -60,13 +51,23 @@ struct ucs_class {
 
 
 /**
+ * Declare a class.
+ *
+ * @param _type     Class type.
+ */
+#define UCS_CLASS_DECLARE(_type, ...) \
+    extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
+    UCS_CLASS_INIT_FUNC(_type, ## __VA_ARGS__);
+
+
+/**
  * Define a class.
  *
  * @param _type     Class type.
  * @param _super    Superclass type (may be void to indicate top-level class)
  */
 #define UCS_CLASS_DEFINE(_type, _super) \
-    UCS_CLASS_DECLARE(_super) \
+    extern ucs_class_t _UCS_CLASS_DECL_NAME(_super); \
     ucs_class_t _UCS_CLASS_DECL_NAME(_type) = { \
         UCS_PP_QUOTE(_type), \
         sizeof(_type), \
@@ -87,7 +88,7 @@ struct ucs_class {
  */
 #define UCS_CLASS_INIT(_type, _obj, ...) \
     ({ \
-        UCS_CLASS_DECLARE(_type) \
+        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
         int init_count = 1; \
         ucs_status_t status; \
@@ -111,7 +112,7 @@ struct ucs_class {
  */
 #define UCS_CLASS_CLEANUP(_type, _obj) \
     { \
-        UCS_CLASS_DECLARE(_type) \
+        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         _ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), _obj, -1); \
     }
 
@@ -129,7 +130,7 @@ struct ucs_class {
     _UCS_CLASS_NEW (_type, _obj, ## __VA_ARGS__)
 #define _UCS_CLASS_NEW(_type, _obj, ...) \
     ({ \
-        UCS_CLASS_DECLARE(_type) \
+        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
         ucs_status_t status; \
         void *obj; \
@@ -167,19 +168,22 @@ struct ucs_class {
  * Invoke the parent constructor.
  * Should be used only from init function (which defines "self" and "_myclass")
  *
- * @param ...     Arguments to parent constructor.
+ * @param _superclass  Type of the superclass.
+ * @param ...          Arguments to parent constructor.
  */
-#define UCS_CLASS_CALL_SUPER_INIT(...) \
+#define UCS_CLASS_CALL_SUPER_INIT(_superclass, ...) \
     { \
         ucs_assert(*_init_count >= 1); \
-        ucs_status_t status = \
-            _myclass->superclass->init(self, _myclass->superclass, _init_count, \
-                                       ## __VA_ARGS__); \
-        if (status != UCS_OK) { \
-            return status; \
-        } \
-        if (_myclass->superclass != &_UCS_CLASS_DECL_NAME(void)) { \
-            ++(*_init_count); \
+        ucs_assert(&_UCS_CLASS_DECL_NAME(_superclass) == _myclass->superclass); \
+        { \
+            ucs_status_t status = _UCS_CLASS_INIT_NAME(_superclass)\
+                    (&self->super, _myclass->superclass, _init_count, ## __VA_ARGS__); \
+            if (status != UCS_OK) { \
+                return status; \
+            } \
+            if (_myclass->superclass != &_UCS_CLASS_DECL_NAME(void)) { \
+                ++(*_init_count); \
+            } \
         } \
     }
 

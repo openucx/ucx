@@ -102,10 +102,10 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
 
 static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
+    uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
 
     ucs_snprintf_zero(pd_attr->name, UCT_MAX_NAME_LEN, "%s",
-                      ugni_pd->iface->dev->fname);
+                      iface->dev->fname);
     pd_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
     pd_attr->cap.flags         = UCT_PD_FLAG_REG;
     pd_attr->cap.max_alloc     = 0;
@@ -124,7 +124,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_pd_h pd, void *address, size_t length,
 {
     ucs_status_t rc;
     gni_return_t ugni_rc;
-    uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
+    uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
     gni_mem_handle_t * mem_hndl = NULL;
 
     if (0 == length) {
@@ -139,7 +139,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_pd_h pd, void *address, size_t length,
         goto mem_err;
     }
 
-    ugni_rc = GNI_MemRegister(ugni_pd->iface->nic_handle, (uint64_t)address,
+    ugni_rc = GNI_MemRegister(iface->nic_handle, (uint64_t)address,
                               length, NULL,
                               GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
                               -1, mem_hndl);
@@ -162,12 +162,12 @@ mem_err:
 
 static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_mem_h memh)
 {
-    uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
+    uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
     gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
     gni_return_t ugni_rc;
     ucs_status_t rc = UCS_OK;
 
-    ugni_rc = GNI_MemDeregister(ugni_pd->iface->nic_handle, mem_hndl);
+    ugni_rc = GNI_MemDeregister(iface->nic_handle, mem_hndl);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed, Error status: %s %d",
                  gni_err_str[ugni_rc], ugni_rc);
@@ -289,12 +289,10 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
         goto error;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(&uct_ugni_iface_ops, &dev->super, &config->super
-                              UCS_STATS_ARG(NULL));
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ugni_iface_ops, worker,
+                              &self->pd, &config->super UCS_STATS_ARG(NULL));
 
-    self->pd.super.ops = &uct_ugni_pd_ops;
-    self->pd.iface     = self;
-
+    self->pd.ops           = &uct_ugni_pd_ops;
     self->dev              = dev;
     self->address.nic_addr = dev->address;
 
@@ -418,7 +416,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
     self->activated = false;
 }
 
-UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_iface_t);
+UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);

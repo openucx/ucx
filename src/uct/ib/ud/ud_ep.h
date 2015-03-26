@@ -23,7 +23,7 @@ typedef struct uct_ud_ep_addr {
 
 
 typedef struct uct_ud_ep {
-    uct_ep_t                super;
+    uct_base_ep_t           super;
     uint32_t                ep_id;
     uint32_t                dest_ep_id;
     uint32_t                dest_qpn;
@@ -42,6 +42,7 @@ typedef struct uct_ud_ep {
         UCS_STATS_NODE_DECLARE(stats);
     } rx;
 } uct_ud_ep_t;
+UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);

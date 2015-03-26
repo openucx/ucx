@@ -26,13 +26,12 @@ static ucs_stats_class_t uct_rc_ep_stats_class = {
 };
 #endif
 
-static UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_iface_t *tl_iface)
+UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     struct ibv_qp_cap cap;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(&iface->super.super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     status = uct_rc_iface_qp_create(iface, &self->qp, &cap);
     if (status != UCS_OK) {

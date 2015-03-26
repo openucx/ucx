@@ -802,7 +802,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
     uct_ib_mlx5_qp_info_t qp_info;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(tl_iface);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
     status = uct_ib_mlx5_get_qp_info(self->super.qp, &qp_info);
     if (status != UCS_OK) {

@@ -10,7 +10,6 @@
 #include "context.h"
 
 #include <uct/api/uct.h>
-#include <ucs/type/class.h>
 
 
 typedef struct {
@@ -155,7 +154,7 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *iface_ad
     return iface->ops.iface_get_address(iface, iface_addr);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
+UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
 {
     self->ops = *ops;
     self->pd  = pd;
@@ -169,15 +168,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-static UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
-                           uct_worker_h worker, uct_pd_h pd,
-                           uct_iface_config_t *config
-                           UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
+                    uct_pd_h pd, uct_iface_config_t *config
+                    UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     ucs_status_t status;
     uint8_t id;
 
-    UCS_CLASS_CALL_SUPER_INIT(ops, pd);
+    UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops, pd);
 
     self->worker = worker;
 
@@ -242,11 +240,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 UCS_CLASS_DEFINE(uct_ep_t, void);
 
 
-static UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
+UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(&iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats);
     if (status != UCS_OK) {
