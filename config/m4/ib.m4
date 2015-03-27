@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+# Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -66,14 +66,15 @@ AS_IF([test "x$with_ib" == xyes],
 
         have_ib_funcs=yes
         LDFLAGS="$LDFLAGS $IBVERBS_LDFLAGS"
-        AC_CHECK_FUNCS([ibv_wc_status_str \
-                        ibv_event_type_str \
-                        ibv_query_gid \
-                        ibv_get_device_name \
-                        ibv_create_srq \
+        AC_CHECK_DECLS([ibv_wc_status_str, \
+                        ibv_event_type_str, \
+                        ibv_query_gid, \
+                        ibv_get_device_name, \
+                        ibv_create_srq, \
                         ibv_get_async_event],
                        [],
-                       [have_ib_funcs=no])
+                       [have_ib_funcs=no],
+                       [#include <infiniband/verbs.h>])
         AS_IF([test "x$have_ib_funcs" != xyes],
               [AC_MSG_WARN([Some IB verbs are not found. Please make sure OFED version is 1.5 or above.])
                with_ib=no])
