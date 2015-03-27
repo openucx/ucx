@@ -325,11 +325,11 @@ protected:
 
 test_uct_perf::test_spec test_uct_perf::tests[] =
 {
-  { "am latency", "usec", 0.1, 1.3,
+  { "am latency", "usec", 0.1, 2.5,
     UCX_PERF_TEST_CMD_AM,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "am rate", "Mpps", 3.0, 24.0,
+  { "am rate", "Mpps", 1.5, 24.0,
     UCX_PERF_TEST_CMD_AM, UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
@@ -361,7 +361,7 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_TEST_CMD_GET,  UCX_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "atomic add latency", "usec", 0.1, 2.5,
+  { "atomic add latency", "usec", 0.1, 3.5,
     UCX_PERF_TEST_CMD_ADD,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
@@ -369,11 +369,11 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_TEST_CMD_ADD,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "atomic fadd latency", "usec", 0.1, 2.5,
+  { "atomic fadd latency", "usec", 0.1, 3.5,
     UCX_PERF_TEST_CMD_FADD,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "atomic cswap latency", "usec", 0.1, 2.5,
+  { "atomic cswap latency", "usec", 0.1, 3.5,
     UCX_PERF_TEST_CMD_CSWAP,  UCX_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
