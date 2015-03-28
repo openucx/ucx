@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * $COPYRIGHT$
 * $HEADER$
@@ -9,7 +10,7 @@
 
 #if defined(__powerpc64__)
 
-static inline double ucs_arch_get_clocks_per_sec()
+double ucs_arch_get_clocks_per_sec()
 {
 #if HAVE_DECL___PPC_GET_TIMEBASE_FREQ
     return __ppc_get_timebase_freq();
