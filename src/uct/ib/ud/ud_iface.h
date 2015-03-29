@@ -77,7 +77,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface);
 static inline int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 {
     if (iface->tx.available == 0) {
-        ucs_trace_data("iface=%p out of tx wqe", iface);
+        ucs_trace_poll("iface=%p out of tx wqe", iface);
         return 0;
     }
     return 1;

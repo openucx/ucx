@@ -62,7 +62,7 @@ protected:
 };
 
 UCS_TEST_P(test_ud, basic_tx) {
-    int i, N=13;
+    unsigned i, N=13;
 
     set_tx_win(m_e1, 1024);
     for (i = 0; i < N; i++) {
@@ -84,7 +84,7 @@ UCS_TEST_P(test_ud, basic_tx) {
 }
 
 UCS_TEST_P(test_ud, duplex_tx) {
-    int i, N=5;
+    unsigned i, N=5;
 
     set_tx_win(m_e1, 1024);
     set_tx_win(m_e2, 1024);
@@ -112,7 +112,7 @@ UCS_TEST_P(test_ud, duplex_tx) {
 
 /* send full window, rcv ack after progreess, send some more */
 UCS_TEST_P(test_ud, tx_window1) {
-    int i, N=13;
+    unsigned i, N=13;
 
     set_tx_win(m_e1, N+1);
     for (i = 0; i < N; i++) {
@@ -137,7 +137,7 @@ static ucs_status_t clear_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
  * should not be able to send some more 
  */
 UCS_TEST_P(test_ud, tx_window2) {
-    int i, N=13;
+    unsigned i, N=13;
 
     set_tx_win(m_e1, N+1);
     ep(m_e1)->tx.tx_hook = clear_ack_req;
@@ -186,7 +186,7 @@ UCS_TEST_P(test_ud, ack_req_single) {
 
 /* test that ack request is sent on 1/4 of window */
 UCS_TEST_P(test_ud, ack_req_window) {
-    int i, N=16;
+    unsigned i, N=16;
 
     set_tx_win(m_e1, N);
     ack_req_tx_cnt = 0;

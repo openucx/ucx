@@ -1,5 +1,17 @@
+
+static inline void uct_ud_iface_queue_pending(uct_ud_iface_t *iface,
+                                              uct_ud_ep_t *ep, int op)
+{
+    if (ep->tx.pending.ops == UCT_UD_EP_OP_NONE) {
+        ucs_queue_push(&iface->tx.pending_ops, &ep->tx.pending.queue);
+        ep->tx.pending.ops |= UCT_UD_EP_OP_INPROGRESS;
+    }
+    ep->tx.pending.ops |= op;
+}
+
+
 static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, uct_ud_ep_t **r_ep,
-                                      uct_ud_neth_t *neth)
+                                                         uct_ud_neth_t *neth)
 {
     uct_ud_ep_t *ep;
     ucs_status_t ret;
@@ -19,7 +31,7 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
          --iface->tx.available;
     } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
         /* someone already cleared this */
-        *r_ep = NULL;
+        return UCS_INPROGRESS;
     } else {
         /* TODO: support other ops */
         ucs_fatal("unsupported pending op mask: %x", ep->tx.pending.ops);

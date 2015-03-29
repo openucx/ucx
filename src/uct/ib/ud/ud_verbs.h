@@ -15,6 +15,7 @@
 
 typedef struct {
     uct_ud_ep_t          super;
+    struct ibv_ah       *ah;
 } uct_ud_verbs_ep_t;
 
 typedef struct {
