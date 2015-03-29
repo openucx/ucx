@@ -60,9 +60,9 @@ typedef struct uct_ib_iface_config {
     /* IB SL to use */
     unsigned                sl;
 
-    /* Path bits */
+    /* Ranges of path bits */
     struct {
-        unsigned             *bits;
+        ucs_range_spec_t     *ranges;
         unsigned             count;
     } lid_path_bits;
 
