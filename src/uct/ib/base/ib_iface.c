@@ -16,7 +16,9 @@
 #include <stdlib.h>
 
 
-static UCS_CONFIG_DEFINE_ARRAY(path_bits, sizeof(unsigned), UCS_CONFIG_TYPE_UINT);
+static UCS_CONFIG_DEFINE_ARRAY(path_bits_spec,
+                               sizeof(ucs_range_spec_t),
+                               UCS_CONFIG_TYPE_RANGE_SPEC);
 
 const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_DEFAULT]    = "default",
@@ -85,10 +87,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "While IB service level to use.\n",
    ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
 
-  {"LID_PATH_BITS", "0",
-   "list of IB Path bits separated by commma (a,b,c) "
+  {"LID_PATH_BITS", "0-17",
+   "list of IB Path bits separated by comma (a,b,c) "
    "which will be the low portion of the LID, according to the LMC in the fabric.",
-   ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits)},
+   ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
 
   {NULL}
 };
@@ -190,7 +192,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     uct_ib_device_t *dev;
     ucs_status_t status;
     uint8_t port_num, lmc;
-    unsigned i;
+    unsigned i, j, first, last, range_values_count;
+    int step;
 
     status = uct_ib_iface_find_port(ibctx, dev_name, &dev, &port_num);
     if (status != UCS_OK) {
@@ -204,34 +207,58 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     self->port_num                 = port_num;
     self->gid_index                = config->gid_index;
     self->sl                       = config->sl;
-    self->path_bits_count          = config->lid_path_bits.count;
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
                                      ucs_max(rx_headroom, rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
     self->config.seg_size          = config->super.max_bcopy;
 
-    if (self->path_bits_count == 0) {
+    if (config->lid_path_bits.count == 0) {
         ucs_error("List of path bits must not be empty");
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
 
-    self->path_bits = ucs_malloc(self->path_bits_count * sizeof(*self->path_bits),
-                                 "ib_path_bits");
+    /* count the number of lid_path_bits */
+    range_values_count = 0;
+    for (i = 0; i < config->lid_path_bits.count; i++) {
+        range_values_count += 1 + abs(config->lid_path_bits.ranges[i].first - config->lid_path_bits.ranges[i].last);
+    }
+
+    self->path_bits = ucs_malloc(range_values_count * sizeof(*self->path_bits), "ib_path_bits");
     if (self->path_bits == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
     lmc = uct_ib_iface_port_attr(self)->lmc;
-    for (i = 0; i < self->path_bits_count; ++i) {
-        if (config->lid_path_bits.bits[i] >= UCS_BIT(lmc)) {
-            ucs_error("Invalid value for path_bits - must be < 2^lmc (lmc=%d)", lmc);
-            status = UCS_ERR_INVALID_PARAM;
-            goto err_free_path_bits;
+    self->path_bits_count = 0;
+    /* go over the list of values (ranges) for the lid_path_bits and set them */
+    for (i = 0; i < config->lid_path_bits.count; ++i) {
+
+        first = config->lid_path_bits.ranges[i].first;
+        last  = config->lid_path_bits.ranges[i].last;
+
+        /* range of values or one value */
+        if (first < last) {
+            step = 1;
+        } else {
+            step = -1;
         }
-        self->path_bits[i] = config->lid_path_bits.bits[i];
+        /* fill the value/s */
+        for (j = first; j != (last + step); j += step) {
+            if (j >= UCS_BIT(lmc)) {
+                ucs_debug("Invalid value for path_bits: %d. must be < 2^lmc (lmc=%d)",
+                          j, lmc);
+                if (step == 1) {
+                    break;
+                } else {
+                    continue;
+                }
+            }
+            self->path_bits[self->path_bits_count] = j;
+            self->path_bits_count++;
+        }
     }
 
     /* TODO comp_channel */
