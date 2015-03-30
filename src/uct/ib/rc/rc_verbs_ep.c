@@ -37,7 +37,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
 
     ret = ibv_post_send(ep->super.qp, wr, &bad_wr);
     if (ret != 0) {
-        ucs_fatal("ibv_exp_post_send() returned %d (%m)", ret);
+        ucs_fatal("ibv_post_send() returned %d (%m)", ret);
     }
 
     uct_rc_verbs_ep_posted(ep, send_flags & IBV_SEND_SIGNALED);

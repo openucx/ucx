@@ -15,19 +15,28 @@ BEGIN_C_DECLS
 
 #include <sys/uio.h>
 #include <uct/api/uct.h>
+#include <ucp/api/ucp.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
 
 
 typedef enum {
-    UCX_PERF_TEST_CMD_AM,
-    UCX_PERF_TEST_CMD_PUT,
-    UCX_PERF_TEST_CMD_GET,
-    UCX_PERF_TEST_CMD_ADD,
-    UCX_PERF_TEST_CMD_FADD,
-    UCX_PERF_TEST_CMD_SWAP,
-    UCX_PERF_TEST_CMD_CSWAP,
-    UCX_PERF_TEST_CMD_LAST
+    UCX_PERF_API_UCT,
+    UCX_PERF_API_UCP,
+    UCX_PERF_API_LAST
+} ucx_perf_api_t;
+
+
+typedef enum {
+    UCX_PERF_CMD_AM,
+    UCX_PERF_CMD_PUT,
+    UCX_PERF_CMD_GET,
+    UCX_PERF_CMD_ADD,
+    UCX_PERF_CMD_FADD,
+    UCX_PERF_CMD_SWAP,
+    UCX_PERF_CMD_CSWAP,
+    UCX_PERF_CMD_TAG,
+    UCX_PERF_CMD_LAST
 } ucx_perf_cmd_t;
 
 
@@ -40,11 +49,11 @@ typedef enum {
 
 
 typedef enum {
-    UCX_PERF_DATA_LAYOUT_SHORT,
-    UCX_PERF_DATA_LAYOUT_BCOPY,
-    UCX_PERF_DATA_LAYOUT_ZCOPY,
-    UCX_PERF_DATA_LAYOUT_LAST
-} ucx_perf_data_layout_t;
+    UCT_PERF_DATA_LAYOUT_SHORT,
+    UCT_PERF_DATA_LAYOUT_BCOPY,
+    UCT_PERF_DATA_LAYOUT_ZCOPY,
+    UCT_PERF_DATA_LAYOUT_LAST
+} uct_perf_data_layout_t;
 
 
 typedef enum {
@@ -63,7 +72,7 @@ enum ucx_perf_test_flags {
 };
 
 enum {
-    UCX_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
+    UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
 };
 
 /**
@@ -94,7 +103,7 @@ typedef struct ucx_perf_result {
 /**
  * RTE used to bring-up the test
  */
-typedef struct ucx_perf_test_rte {
+typedef struct ucx_perf_rte {
     /* @return Group size */
     unsigned   (*group_size)(void *rte_group);
 
@@ -112,24 +121,23 @@ typedef struct ucx_perf_test_rte {
     /* Handle results */
     void        (*report)(void *rte_group, ucx_perf_result_t *result, int is_final);
 
-} ucx_perf_test_rte_t;
+} ucx_perf_rte_t;
 
 
 /**
  * Describes a performance test.
  */
-typedef struct ucx_perf_test_params {
+typedef struct ucx_perf_params {
+    ucx_perf_api_t         api;             /* Which API to test */
     ucx_perf_cmd_t         command;         /* Command to perform */
     ucx_perf_test_type_t   test_type;       /* Test communication type */
-    ucx_perf_data_layout_t data_layout;     /* Data layout to use */
-    uct_thread_mode_t      thread_mode;     /* Thread mode for communication objects */
+    ucs_thread_mode_t      thread_mode;     /* Thread mode for communication objects */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 message_size;    /* Test message size */
-    size_t                 hdr_size;        /* Header size (included in message size) */
+    size_t                 am_hdr_size;     /* Active message header size (included in message size) */
     size_t                 alignment;       /* Message buffer alignment */
-    unsigned               fc_window;       /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
     unsigned               max_outstanding; /* Maximal number of outstanding sends */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
@@ -137,17 +145,28 @@ typedef struct ucx_perf_test_params {
     double                 report_interval; /* Interval at which to call the report callback */
 
     void                   *rte_group;      /* Opaque RTE group handle */
-    ucx_perf_test_rte_t    *rte;            /* RTE functions used to exchange data */
-} ucx_perf_test_params_t;
+    ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
+
+    struct {
+        uct_context_h          context;
+        char                   dev_name[UCT_DEVICE_NAME_MAX]; /* Device name to use */
+        char                   tl_name[UCT_TL_NAME_MAX];  /* Transport to use */
+        uct_perf_data_layout_t data_layout; /* Data layout to use */
+        unsigned               fc_window;   /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
+    } uct;
+
+    struct {
+        ucp_context_h          context;
+        unsigned               nonblocking_mode; /* TBD */
+    } ucp;
+
+} ucx_perf_params_t;
 
 
 /**
- * Run a performance test.
+ * Run a UCT performance test.
  */
-ucs_status_t uct_perf_test_run(uct_context_h context, ucx_perf_test_params_t *params,
-                               const char *tl_name, const char *dev_name,
-                               uct_iface_config_t *iface_config,
-                               ucx_perf_result_t *result);
+ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result);
 
 
 END_C_DECLS

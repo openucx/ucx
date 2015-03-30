@@ -13,6 +13,8 @@
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/config/types.h>
+#include <ucs/type/status.h>
+#include <ucs/type/thread_mode.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -81,28 +83,14 @@
  * network interface.
  */
 typedef struct uct_resource_desc {
-    char                     tl_name[UCT_MAX_NAME_LEN];   /**< Transport name */
-    char                     dev_name[UCT_MAX_NAME_LEN];  /**< Hardware device name */
+    char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
+    char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
     cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
     struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
                                                 reach each other have same address */
 } uct_resource_desc_t;
-
-
-/**
- * @ingroup RESOURCE
- * @brief Thread mode.
- *
- * Specifies thread sharing mode of the object.
- */
-typedef enum {
-    UCT_THREAD_MODE_SINGLE,   /**< Only one thread can access */
-    UCT_THREAD_MODE_FUNNELED, /**< Multiple threads can access, but only one at a time */
-    UCT_THREAD_MODE_MULTI,    /**< Multiple threads can access concurrently */
-    UCT_THREAD_MODE_LAST
-} uct_thread_mode_t;
 
 
 /**
@@ -233,7 +221,7 @@ typedef struct uct_alloc_methods {
  * @brief  Protection domain attributes.
  */
 struct uct_pd_attr {
-    char                     name[UCT_MAX_NAME_LEN]; /**< Protection domain name */
+    char                     name[UCT_PD_NAME_MAX]; /**< Protection domain name */
 
     struct {
         size_t               max_alloc;     /**< Maximal allocation size */
@@ -373,7 +361,7 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
  *                             created on it.
  * @param [out] worker_p      Filled with a pointer to the worker object.
  */
-ucs_status_t uct_worker_create(uct_context_h context, uct_thread_mode_t thread_mode,
+ucs_status_t uct_worker_create(uct_context_h context, ucs_thread_mode_t thread_mode,
                                uct_worker_h *worker_p);
 
 

@@ -24,13 +24,15 @@ noinst_HEADERS = \
 	libperf_int.h
 libucxperf_la_SOURCES = \
 	libperf.c \
-	tests.cc
+	uct_tests.cc \
+	ucp_tests.cc
 libucxperf_la_LDFLAGS = \
 	$(RTE_LDFLAGS)
 libucxperf_la_CXXFLAGS = \
 	-nostdlib -fno-exceptions -fno-rtti
 libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/uct/libuct.la \
+	$(abs_top_builddir)/src/ucp/libucp.la \
 	$(abs_top_builddir)/src/ucs/libucs.la
 #libucxperf_la_LINK = $(CXX)
 
@@ -39,6 +41,7 @@ ucx_perftest_LDFLAGS    = \
      $(RTE_LDFLAGS)
 ucx_perftest_LDADD    = \
      $(abs_top_builddir)/src/uct/libuct.la \
+     $(abs_top_builddir)/src/ucp/libucp.la \
      $(abs_top_builddir)/src/ucs/libucs.la \
      libucxperf.la
 ucx_perftest_SOURCE_FILES = \

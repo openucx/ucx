@@ -81,7 +81,7 @@ uct_test::entity::entity(const uct_resource_desc_t& resource, size_t rx_headroom
     status = uct_init(&m_ucth);
     ASSERT_UCS_OK(status);
 
-    status = uct_worker_create(m_ucth, UCT_THREAD_MODE_MULTI /* TODO */, &m_worker);
+    status = uct_worker_create(m_ucth, UCS_THREAD_MODE_MULTI /* TODO */, &m_worker);
     ASSERT_UCS_OK(status);
 
     uct_iface_config_t *iface_config;

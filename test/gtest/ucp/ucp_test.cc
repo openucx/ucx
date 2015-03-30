@@ -8,53 +8,57 @@
 
 #include <ucs/gtest/test_helpers.h>
 
-std::vector<uct_resource_desc_t> ucp_test::enum_resources() {
-    std::vector<uct_resource_desc_t> result;
-    uct_resource_desc_t *resources;
-    unsigned num_resources;
-    ucs_status_t status;
-    uct_context_h ucth;
-
-    status = uct_init(&ucth);
-    ASSERT_UCS_OK(status);
-
-    status = uct_query_resources(ucth, &resources, &num_resources);
-    ASSERT_UCS_OK(status);
-
-    if (num_resources > 0) {
-        result.push_back(resources[0]);
-    }
-
-    uct_release_resource_list(resources);
-    uct_cleanup(ucth);
-    return result;
-}
 
 ucp_test::entity::entity() {
     ucs_status_t status;
+    ucp_config_t *config;
 
-    status = ucp_init(&m_ucph);
+    status = ucp_config_read(NULL, NULL, &config);
     ASSERT_UCS_OK(status);
 
-    status = ucp_iface_create(m_ucph, NULL, &m_iface);
+    status = ucp_init(config, 0, &m_ucph);
     ASSERT_UCS_OK(status);
 
-    status = ucp_ep_create(m_iface, &m_ep);
+    ucp_config_release(config);
+
+    status = ucp_worker_create(m_ucph, UCS_THREAD_MODE_MULTI, &m_worker);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_ep_create(m_worker, &m_ep);
     ASSERT_UCS_OK(status);
 }
 
 ucp_test::entity::~entity() {
     ucp_ep_destroy(m_ep);
-    ucp_iface_close(m_iface);
+    ucp_worker_destroy(m_worker);
     ucp_cleanup(m_ucph);
 }
 
 void ucp_test::entity::connect(const ucp_test::entity& other) {
+    ucs_status_t status;
+    ucp_address_t *address;
 
+    address = (ucp_address_t*)malloc(ucp_ep_address_length(other.m_ep));
+
+    status = ucp_ep_pack_address(other.m_ep, address);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_ep_connect(m_ep, address);
+    ASSERT_UCS_OK(status);
+
+    free(address);
 }
 
 ucp_ep_h ucp_test::entity::ep() const {
     return m_ep;
+}
+
+ucp_worker_h ucp_test::entity::worker() const {
+    return m_worker;
+}
+
+ucp_context_h ucp_test::entity::ucph() const {
+    return m_ucph;
 }
 
 void ucp_test::entity::flush() const {

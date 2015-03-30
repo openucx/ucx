@@ -143,6 +143,12 @@ ucs_status_t uct_query_resources(uct_context_h context,
 
         /* Append TL resources to the array. Set TL name. */
         for (i = 0; i < num_tl_resources; ++i) {
+            if (strlen(tl->name) > (UCT_TL_NAME_MAX - 1)) {
+                ucs_error("transport '%s' name too long, max: %d", tl->name,
+                          UCT_TL_NAME_MAX - 1);
+                goto err_free;
+            }
+
             resources[num_resources] = tl_resources[i];
             ucs_snprintf_zero(resources[num_resources].tl_name,
                               sizeof(resources[num_resources].tl_name),
@@ -154,6 +160,7 @@ ucs_status_t uct_query_resources(uct_context_h context,
         ucs_free(tl_resources);
     }
 
+    ucs_assert(num_resources != 0 || resources == NULL);
     *resources_p     = resources;
     *num_resources_p = num_resources;
     return UCS_OK;
@@ -170,7 +177,7 @@ void uct_release_resource_list(uct_resource_desc_t *resources)
 
 
 static UCS_CLASS_INIT_FUNC(uct_worker_t, uct_context_h context,
-                           uct_thread_mode_t thread_mode)
+                           ucs_thread_mode_t thread_mode)
 {
     self->context     = context;
     self->thread_mode = thread_mode;
@@ -190,7 +197,7 @@ void uct_worker_progress(uct_worker_h worker)
 
 UCS_CLASS_DEFINE(uct_worker_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
-                                uct_context_h, uct_thread_mode_t)
+                                uct_context_h, ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
 

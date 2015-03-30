@@ -161,7 +161,7 @@ static ucs_status_t print_transport_info(uct_context_h context,
     }
 
     /* coverity[alloc_arg] */
-    status = uct_worker_create(context, UCT_THREAD_MODE_MULTI, &worker);
+    status = uct_worker_create(context, UCS_THREAD_MODE_MULTI, &worker);
     if (status != UCS_OK) {
         goto out_release_config;
     }

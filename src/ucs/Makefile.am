@@ -62,7 +62,8 @@ nobase_dist_libucs_la_HEADERS = \
 	type/class.h \
 	type/component.h \
 	type/spinlock.h \
-	type/status.h 
+	type/status.h \
+	type/thread_mode.h
 
 libucs_la_SOURCES = \
 	arch/ppc64/timebase.c \

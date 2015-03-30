@@ -21,11 +21,11 @@ BEGIN_C_DECLS
 
 typedef struct ucx_perf_context  ucx_perf_context_t;
 typedef struct uct_peer          uct_peer_t;
-typedef struct uct_perf_context  uct_perf_context_t;
+typedef struct ucp_peer          ucp_peer_t;
 
 
 struct ucx_perf_context {
-    ucx_perf_test_params_t       params;
+    ucx_perf_params_t            params;
 
     /* Buffers */
     void                         *send_buffer;
@@ -46,6 +46,21 @@ struct ucx_perf_context {
 
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
+
+    union {
+        struct {
+            uct_worker_h         worker;
+            uct_iface_h          iface;
+            uct_peer_t           *peers;
+            uct_mem_h            send_memh;
+            uct_mem_h            recv_memh;
+        } uct;
+
+        struct {
+            ucp_worker_h         worker;
+            ucp_peer_t           *peers;
+        } ucp;
+    };
 };
 
 
@@ -56,14 +71,8 @@ struct uct_peer {
 };
 
 
-struct uct_perf_context {
-    ucx_perf_context_t           super;
-    uct_context_h                context;
-    uct_worker_h                 worker;
-    uct_iface_h                  iface;
-    uct_peer_t                   *peers;
-    uct_mem_h                    send_memh;
-    uct_mem_h                    recv_memh;
+struct ucp_peer {
+    ucp_ep_h                     ep;
 };
 
 
@@ -77,10 +86,13 @@ struct uct_perf_context {
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf);
 
 
-void uct_perf_iface_flush_b(uct_perf_context_t *perf);
+void uct_perf_iface_flush_b(ucx_perf_context_t *perf);
 
 
-ucs_status_t uct_perf_test_dispatch(uct_perf_context_t *perf);
+ucs_status_t uct_perf_test_dispatch(ucx_perf_context_t *perf);
+
+
+ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf);
 
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result);

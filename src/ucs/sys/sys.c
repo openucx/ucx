@@ -344,7 +344,7 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
 
     memset(buf, 0, size);
     va_start(ap, fmt);
-    vsnprintf(buf, size - 1, fmt, ap);
+    vsnprintf(buf, size, fmt, ap);
     va_end(ap);
 }
 
