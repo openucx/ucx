@@ -79,6 +79,13 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
 
+if HAVE_IB 
+if HAVE_TL_UD
+gtest_SOURCES += \
+	uct/test_ud.cc
+endif
+endif
+
 noinst_HEADERS = \
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \

@@ -24,19 +24,26 @@
 typedef uint16_t                uct_ud_psn_t;
 #define UCT_UD_PSN_COMPARE      UCS_CIRCULAR_COMPARE16
 typedef struct uct_ud_iface     uct_ud_iface_t;
+typedef struct uct_ud_ep        uct_ud_ep_t;
 
 enum {
-    UCT_UD_PACKET_AM_ID_SHIFT   = 3,
-    UCT_UD_PACKET_DEST_ID_SHIFT = 8,
+    UCT_UD_PACKET_ACK_REQ_SHIFT   = 25,
+    UCT_UD_PACKET_AM_ID_SHIFT     = 27,
+    UCT_UD_PACKET_DEST_ID_SHIFT   = 0,
+    UCT_UD_PACKET_PUT_SHIFT       = 28,
 };
 
 enum {
-    UCT_UD_PACKET_FLAG_AM      = UCS_BIT(0),
-    UCT_UD_PACKET_FLAG_ACK_REQ = UCS_BIT(1),
-    UCT_UD_PACKET_FLAG_ECN     = UCS_BIT(2),
+    UCT_UD_PACKET_FLAG_AM      = UCS_BIT(24),
+    UCT_UD_PACKET_FLAG_ACK_REQ = UCS_BIT(25),
+    UCT_UD_PACKET_FLAG_ECN     = UCS_BIT(26),
+    UCT_UD_PACKET_FLAG_NAK     = UCS_BIT(27),
+    UCT_UD_PACKET_FLAG_PUT     = UCS_BIT(28),
 
-    UCT_UD_PACKET_AM_ID_MASK   = UCS_MASK(UCT_UD_PACKET_AM_ID_SHIFT),
+    UCT_UD_PACKET_AM_ID_MASK     = UCS_MASK(UCT_UD_PACKET_AM_ID_SHIFT),
+    UCT_UD_PACKET_DEST_ID_MASK   = UCS_MASK(UCT_UD_PACKET_DEST_ID_SHIFT),
 };
+
 
 /*
 network header layout
@@ -47,30 +54,34 @@ N - negative acknoledgement
 
 Active message packet header
 
-31                                             8 7       3 2 1 0
+ 3         2 2 2 2             1 1 
+ 1         6 5 4 3             6 5                             0 
 +---------------------------------------------------------------+
-|         dest_ep_id (24 bit)                   | am_id   |E|A|1| 
+| am_id   |E|A|1|            dest_ep_id (24 bit)                | 
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
 
 Control packet header
 
-31                                             8 7     4 3 2 1 0
+ 3     2 2 2 2 2 2             1 1 
+ 1     8 7 6 5 4 3             6 5                             0 
 +---------------------------------------------------------------+
-|         dest_ep_id (24 bit)                   | reserv|N|E|A|0| 
+|rsrv |P|N|E|A|0|            dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
 
     // neth layout in human readable form 
+    uint32_t           dest_ep_id:24;
     uint8_t            is_am:1;
     union {
         struct { // am false 
             uint8_t ack_req:1;
             uint8_t ecn:1;
             uint8_t nak:1;
-            uint8_t reserved:4;
+            uint8_t put:1;
+            uint8_t reserved:3;
         } ctl;
         struct { // am true 
             uint8_t ack_req:1;
@@ -78,7 +89,6 @@ Control packet header
             uint8_t am_id:5;
         } am;
     };
-    uint32_t            dest_ep_id:24;
 */
 
 typedef struct uct_ud_neth {
@@ -103,13 +113,17 @@ typedef struct uct_ud_am_short_hdr {
     uint64_t hdr;
 } UCS_S_PACKED uct_ud_am_short_hdr_t;
 
+typedef struct uct_ud_put_hdr {
+    uint64_t rva;
+} UCS_S_PACKED uct_ud_put_hdr_t;
+
 static inline uint32_t uct_ud_neth_get_dest_id(uct_ud_neth_t *neth)
 {
-    return neth->packet_type >> UCT_UD_PACKET_DEST_ID_SHIFT;
+    return neth->packet_type & UCT_UD_PACKET_DEST_ID_MASK;
 }
 static inline void uct_ud_neth_set_dest_id(uct_ud_neth_t *neth, uint32_t id)
 {
-    neth->packet_type |= (id << UCT_UD_PACKET_DEST_ID_SHIFT);
+    neth->packet_type |= id;
 }
 
 static inline uint8_t uct_ud_neth_get_am_id(uct_ud_neth_t *neth)
@@ -120,6 +134,23 @@ static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
 {
     neth->packet_type |= (id << UCT_UD_PACKET_AM_ID_SHIFT);
 }
+
+/* 
+ * Allow sceduling of 'operation' on the interface. The operations
+ * are executed in time of progress in round robin fashion. 
+ */
+enum {
+    UCT_UD_EP_OP_NONE       = 0,
+    UCT_UD_EP_OP_ACK        = UCS_BIT(0),  /* ack data */
+    UCT_UD_EP_OP_ACK_REQ    = UCS_BIT(1),  /* request ack of sent packets */
+    UCT_UD_EP_OP_RESEND     = UCS_BIT(2),  /* resend un acked packets */
+    UCT_UD_EP_OP_INPROGRESS = UCS_BIT(7)   /* bit is set when op is sceduled */
+};
+
+typedef struct uct_ud_ep_pending_op {
+    ucs_queue_elem_t   queue;      
+    uint32_t           ops;     /* bitmask that describes which op are sceduled */
+} uct_ud_ep_pending_op_t;
 
 #endif
 

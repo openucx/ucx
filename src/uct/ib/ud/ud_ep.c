@@ -7,6 +7,7 @@
 
 #include "ud_ep.h"
 #include "ud_iface.h"
+#include "ud_inl.h"
 
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
@@ -20,8 +21,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
-    self->ah         = NULL;
     uct_ud_iface_add_ep(iface, self);
+    UCT_UD_EP_HOOK_INIT(self);
 
     return UCS_OK;
 }
@@ -32,9 +33,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     ucs_trace_func("");
 
-    if (self->ah) { 
-        ibv_destroy_ah(self->ah);
-    }
     uct_ud_iface_remove_ep(iface, self);
    /* TODO: in disconnect ucs_frag_list_cleanup(&self->rx.ooo_pkts); */
 }
@@ -51,6 +49,21 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
     return UCS_OK;
 }
 
+static void uct_ud_ep_reset(uct_ud_ep_t *ep)
+{
+    ep->tx.psn         = 1;
+    /* TODO: configurable max window size */
+    ep->tx.max_psn     = ep->tx.psn + UCT_UD_MAX_WINDOW;
+    ep->tx.acked_psn   = 0;
+    ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    ucs_queue_head_init(&ep->tx.window);
+
+    ep->rx.acked_psn = 0;
+    ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
+                       UCS_STATS_ARG(ep->rx.stats));
+}
+
+
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
                                      uct_iface_addr_t *tl_iface_addr,
                                      uct_ep_addr_t *tl_ep_addr)
@@ -61,46 +74,21 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
     uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
     uct_ud_ep_addr_t *ep_addr = ucs_derived_of(tl_ep_addr, uct_ud_ep_addr_t);
 
-    struct ibv_ah_attr ah_attr;
-    struct ibv_ah *ah;
-
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_trace_func("");
 
-    memset(&ah_attr, 0, sizeof(ah_attr));
-    ah_attr.port_num = iface->super.port_num; 
-    ah_attr.sl = 0; /* TODO: sl */
-    ah_attr.is_global = 0;
-    ah_attr.dlid = if_addr->lid;
-
-    ah = ibv_create_ah(dev->pd, &ah_attr);
-    if (ah == NULL) {
-        ucs_error("failed to create address handle: %m");
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    ep->ah = ah;
     ep->dest_ep_id = ep_addr->ep_id;
     ep->dest_qpn = if_addr->qp_num;
 
-    ep->tx.psn       = 1;
-    /* TODO: configurable max window size */
-    ep->tx.max_psn   = ep->tx.psn + UCT_UD_MAX_WINDOW;
-    ep->tx.acked_psn = 0;
-    ucs_queue_head_init(&ep->tx.window);
+    uct_ud_ep_reset(ep);
 
-    ep->rx.acked_psn = 0;
-    ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
-                       UCS_STATS_ARG(ep->rx.stats));
-
-    ucs_debug("%s:%d slid=%d qpn=%d ep=%u connected to dlid=%d qpn=%d ep=%u ah=%p", 
+    ucs_debug("%s:%d slid=%d qpn=%d ep=%u connected to dlid=%d qpn=%d ep=%u", 
               ibv_get_device_name(dev->ibv_context->device),
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, 
-              if_addr->lid, if_addr->qp_num, ep->dest_ep_id, ah);
-
+              if_addr->lid, if_addr->qp_num, ep->dest_ep_id);
 
     return UCS_OK;
 }
@@ -129,7 +117,7 @@ static inline void uct_ud_ep_process_ack(uct_ud_ep_t *ep, uct_ud_psn_t ack_psn)
 void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len, uct_ud_recv_skb_t *skb)
 {
     uint32_t dest_id;
-    uint8_t is_am, am_id;
+    uint32_t is_am, is_put, am_id;
     uct_ud_ep_t *ep = 0; /* todo: check why gcc complaints about uninitialized var */
     ucs_frag_list_ooo_type_t ooo_type;
     ucs_status_t ret;
@@ -137,6 +125,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     dest_id = uct_ud_neth_get_dest_id(neth);
     am_id   = uct_ud_neth_get_am_id(neth);
     is_am   = neth->packet_type & UCT_UD_PACKET_FLAG_AM;
+    is_put  = !is_am && (neth->packet_type & UCT_UD_PACKET_FLAG_PUT);
 
     ucs_trace_data("src_ep= dest_ep=%d psn=%d ack_psn=%d am_id=%d is_am=%d len=%d packet_type=%08x",
                    dest_id, (int)neth->psn, (int)neth->ack_psn, (int)am_id, (int)is_am, byte_len, neth->packet_type);
@@ -147,12 +136,16 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         return;
     } 
     ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);
+    UCT_UD_EP_HOOK_CALL_RX(ep, neth);
     
-    /* todo: process ack */
     uct_ud_ep_process_ack(ep, neth->ack_psn);
 
-    if (ucs_unlikely(!is_am)) {
-        ucs_fatal("Control packet received - not implemented!");
+    if (ucs_unlikely(neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ)) {
+        uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_ACK);
+    }
+
+    if (!is_am && !is_put) {
+        ucs_mpool_put(skb);
         return;
     }
 
@@ -164,8 +157,14 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         return;
     }
 
-    if (ucs_unlikely(neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ)) {
-        ucs_fatal("ACK REQ handling is not implemented");
+    if (is_put) {
+        uct_ud_put_hdr_t *put_hdr;
+
+        put_hdr = (uct_ud_put_hdr_t *)neth+1;
+
+        memcpy((void *)put_hdr->rva, put_hdr+1, 
+                byte_len - sizeof(*neth) - sizeof(*put_hdr));
+        ucs_mpool_put(skb);
         return;
     }
 

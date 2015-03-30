@@ -148,6 +148,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
         goto err_mpool;
     }
 
+    ucs_queue_head_init(&self->tx.pending_ops);
     return UCS_OK;
 
 err_mpool:
@@ -195,14 +196,19 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     }
 
     memset(iface_attr, 0, sizeof(*iface_attr));
-    /* TODO: set am attrs */
+    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT; /* | UCT_IFACE_FLAG_PUT_SHORT; */ 
+
     ucs_assert(qp_attr.cap.max_inline_data > UCT_UD_MIN_INLINE);
     iface_attr->cap.am.max_short      = qp_attr.cap.max_inline_data - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = 0;
+
+    iface_attr->cap.put.max_short     = qp_attr.cap.max_inline_data - sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
+    iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_zcopy      = 0;
+
     iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
     iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
-    iface_attr->cap.flags             = 0; /* Not reliable yet */
     iface_attr->completion_priv_len   = 0;
 
 }
