@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * $COPYRIGHT$
 * $HEADER$
@@ -29,7 +30,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp) {
                           0x1337, 0xffff, &comp);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(0x111337, comp.sender_tag);
+    EXPECT_EQ((ucp_tag_t)0x111337, comp.sender_tag);
     EXPECT_EQ(send_data, recv_data);
 }
 
@@ -56,6 +57,6 @@ UCS_TEST_F(test_ucp_tag, send_recv_unexp) {
                           0x1337, 0xffff, &comp);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(0x111337, comp.sender_tag);
+    EXPECT_EQ((ucp_tag_t)0x111337, comp.sender_tag);
     EXPECT_EQ(send_data, recv_data);
 }
