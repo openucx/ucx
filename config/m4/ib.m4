@@ -160,7 +160,13 @@ AS_IF([test "x$with_ib" == xyes],
        AS_IF([test -d "$mlnx_valg_libdir"],
                [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
                valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
-])
+    ],
+    [
+        with_dc=no
+        with_rc=no
+        with_ud=no
+        with_mlx5_hw=no
+    ])
 
 
 #

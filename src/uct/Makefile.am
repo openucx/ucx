@@ -77,6 +77,7 @@ libuct_la_SOURCES += \
 	ib/rc/rc_mlx5_ep.c \
 	ib/rc/rc_mlx5_iface.c
 endif
+endif
 
 if HAVE_TL_UD
 libuct_la_SOURCES += \
@@ -90,8 +91,6 @@ noinst_HEADERS += \
 	ib/ud/ud_def.h \
 	ib/ud/ud_verbs.h \
 	ib/ud/ud_inl.h 
-endif
-
 endif
 endif
 
