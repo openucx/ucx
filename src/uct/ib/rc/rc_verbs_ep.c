@@ -12,11 +12,11 @@
 
 
 
-#define UCT_RC_VERBS_ZERO_LENGTH_POST(len)          \
-if (ucs_unlikely(len == 0)) {                       \
-    ucs_trace_data("Zero length request: skip it"); \
-    return UCS_OK;                                  \
-}
+#define UCT_RC_VERBS_ZERO_LENGTH_POST(len)              \
+    if (ucs_unlikely(len == 0)) {                       \
+        ucs_trace_data("Zero length request: skip it"); \
+        return UCS_OK;                                  \
+    }
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_posted(uct_rc_verbs_ep_t* ep, int signaled)
