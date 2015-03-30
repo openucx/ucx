@@ -106,7 +106,7 @@ UCS_TEST_P(test_ud, duplex_tx) {
     EXPECT_EQ(ep(m_e2)->tx.acked_psn, N-1);
     EXPECT_EQ(ep(m_e1)->rx.acked_psn, N-1);
     EXPECT_EQ(ep(m_e2)->rx.acked_psn, N);
-    EXPECT_EQ(ucs_queue_length(&ep(m_e2)->tx.window), 1);
+    EXPECT_EQ(ucs_queue_length(&ep(m_e2)->tx.window), 1U);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
 }
 
