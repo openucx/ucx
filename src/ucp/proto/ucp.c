@@ -258,7 +258,7 @@ void ucp_cleanup(ucp_context_h context)
     ucs_free(context);
 }
 
-static void __ucp_worker_close_ifaces(ucp_worker_h worker)
+static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
     unsigned i;
 
@@ -367,7 +367,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     return UCS_OK;
 
 err_close_ifaces:
-    __ucp_worker_close_ifaces(worker);
+    ucp_worker_close_ifaces(worker);
     uct_worker_destroy(worker->uct);
 err_free:
     ucs_free(worker);
@@ -377,7 +377,7 @@ err:
 
 void ucp_worker_destroy(ucp_worker_h worker)
 {
-    __ucp_worker_close_ifaces(worker);
+    ucp_worker_close_ifaces(worker);
     uct_worker_destroy(worker->uct);
     ucs_free(worker);
 }
