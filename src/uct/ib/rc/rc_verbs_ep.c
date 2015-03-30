@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * $COPYRIGHT$
 * $HEADER$
@@ -9,6 +10,13 @@
 
 #include <uct/ib/base/ib_log.h>
 
+
+
+#define UCT_RC_VERBS_ZERO_LENGTH_POST(len)          \
+if (ucs_unlikely(len == 0)) {                       \
+    ucs_trace_data("Zero length request: skip it"); \
+    return UCS_OK;                                  \
+}
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_posted(uct_rc_verbs_ep_t* ep, int signaled)
@@ -128,6 +136,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, void *buffer, size_t length,
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
+    UCT_RC_VERBS_ZERO_LENGTH_POST(length);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
 
     uct_rc_verbs_fill_rdma_wr(&wr, opcode, &sge, length, remote_addr, rkey);
@@ -285,6 +294,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
     struct ibv_sge sge;
 
     UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "put_bcopy");
+    UCT_RC_VERBS_ZERO_LENGTH_POST(length);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
 
@@ -451,12 +461,17 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
     memcpy(rch + 1, header, header_length);
 
     wr.sg_list    = sge;
-    wr.num_sge    = 2;
     wr.opcode     = IBV_WR_SEND;
     sge[0].length = sizeof(*rch) + header_length;
-    sge[1].addr   = (uintptr_t)payload;
-    sge[1].length = length;
-    sge[1].lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
+
+    if (ucs_unlikely(length == 0)) {
+        wr.num_sge    = 1;
+    } else {
+        wr.num_sge    = 2;
+        sge[1].addr   = (uintptr_t)payload;
+        sge[1].length = length;
+        sge[1].lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
+    }
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);
