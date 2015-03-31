@@ -157,13 +157,12 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
     return iface->tx.cq_available > 0;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned length,
                        uct_ib_iface_recv_desc_t *desc)
 {
-    return uct_iface_invoke_am(&iface->super.super,
-                               hdr->am_id, hdr + 1, length - sizeof(*hdr),
-                               (void*)desc + iface->super.config.rx_headroom_offset);
+    uct_ib_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
+                           length - sizeof(*hdr), desc);
 }
 
 #endif

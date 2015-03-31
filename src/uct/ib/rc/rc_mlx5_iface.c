@@ -136,7 +136,6 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     unsigned byte_len;
     unsigned max_batch;
     uint16_t wqe_ctr_be;
-    ucs_status_t status;
 
     cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size);
     if (cqe == NULL) {
@@ -173,10 +172,7 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     }
 
     uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
-    status = uct_rc_iface_invoke_am(&iface->super, hdr, byte_len, &desc->super);
-    if (status == UCS_OK) {
-        ucs_mpool_put(desc);
-    }
+    uct_rc_iface_invoke_am(&iface->super, hdr, byte_len, &desc->super);
 
     /* Add completed SRQ WQE to the tail
      * TODO return the descriptor directly to SRQ
@@ -362,7 +358,7 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_get_address   = uct_rc_iface_get_address,
     .iface_flush         = uct_rc_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .iface_release_am_desc= uct_ib_iface_release_desc,
+    .iface_release_am_desc= uct_ib_iface_release_am_desc,
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_iface = NULL,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,

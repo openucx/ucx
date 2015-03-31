@@ -149,7 +149,20 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
                                             uct_ib_iface_config_t *config,
                                             const char *name, ucs_mpool_h *mp_p);
 
-void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc);
+void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
+                       unsigned length, uct_ib_iface_recv_desc_t *desc)
+{
+    ucs_status_t status;
+    status = uct_iface_invoke_am(&iface->super, am_id, data, length,
+                                 (char*)desc + iface->config.rx_headroom_offset);
+    if (status == UCS_OK) {
+        ucs_mpool_put(desc);
+    }
+}
 
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {
