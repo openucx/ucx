@@ -120,7 +120,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     uint32_t is_am, is_put, am_id;
     uct_ud_ep_t *ep = 0; /* todo: check why gcc complaints about uninitialized var */
     ucs_frag_list_ooo_type_t ooo_type;
-    ucs_status_t ret;
 
     dest_id = uct_ud_neth_get_dest_id(neth);
     am_id   = uct_ud_neth_get_am_id(neth);
@@ -168,9 +167,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         return;
     }
 
-    ret = uct_iface_invoke_am(&iface->super.super, am_id, neth + 1,
-                              byte_len - sizeof(*neth), skb);
-    if (ret == UCS_OK) {
-        ucs_mpool_put(skb);
-    }
+    uct_ib_iface_invoke_am(&iface->super, am_id, neth + 1,
+                           byte_len - sizeof(*neth), &skb->super);
 }

@@ -169,7 +169,7 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
                                   mp_p);
 }
 
-void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     void *ib_desc;
