@@ -573,7 +573,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, i, group_index;
     ucp_address_t *address;
-    size_t address_length;
+    size_t address_length = 0;
     ucs_status_t status;
     struct iovec vec[1];
     void *req = NULL;
