@@ -14,7 +14,7 @@
 #include "ugni_ep.h"
 
 #define UCT_UGNI_HASH_SIZE   (256)
-#define UCT_UGNI_MAX_FMA     (2048)
+#define UCT_UGNI_MAX_FMA     (2048-4)
 #define UCT_UGNI_MAX_RDMA    (512*1024*1024);
 
 struct uct_ugni_iface;
@@ -69,6 +69,13 @@ typedef struct uct_ugni_base_desc {
     uct_completion_t *comp_cb;
     uct_ugni_ep_t  *ep;
 } uct_ugni_base_desc_t;
+
+typedef struct uct_ugni_get_desc {
+    uct_ugni_base_desc_t super;
+    uct_completion_t tmp;
+    uct_completion_t *orig_comp_cb;
+    size_t padding;
+} uct_ugni_get_desc_t;
 
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
 {

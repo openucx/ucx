@@ -393,28 +393,71 @@ ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
 
 /* Align to the next 4 bytes */
 #define UGNI_GET_ALIGN  (4)
+#define UGNI_CHECK_ALIGN(a) (a & (UGNI_GET_ALIGN-1))
+
+static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, void *data)
+{
+    uct_ugni_get_desc_t *fma = (uct_ugni_get_desc_t *)
+                               ((char *)data - sizeof(uct_ugni_base_desc_t));
+    if (ucs_likely(NULL != fma->orig_comp_cb)) {
+        /* Call the orignal callback and skip padding */
+        uct_invoke_completion(fma->orig_comp_cb, (char *)(fma + 1) +
+                              fma->padding);
+    }
+}
+
+static inline void uct_ugni_format_get_fma(uct_ugni_get_desc_t *fma,
+                                           gni_post_type_t type, uint64_t
+                                           remote_addr, uct_rkey_t rkey,
+                                           unsigned length, uct_ugni_ep_t *ep,
+                                           uct_completion_t *cp,
+                                           uct_completion_callback_t cb)
+{
+    uint64_t addr;
+    void *buffer;
+    uct_completion_t *comp;
+    if (ucs_unlikely(UGNI_CHECK_ALIGN(remote_addr))) {
+        /* unalign access */
+        fma->tmp.func = cb;
+        fma->padding = ucs_padding(remote_addr, UGNI_GET_ALIGN);
+        fma->orig_comp_cb = cp;
+
+        addr = ucs_align_up_pow2(remote_addr, UGNI_GET_ALIGN);
+        comp = &fma->tmp;
+        buffer = (fma + 1);
+    } else {
+        /* align access */
+        addr = remote_addr;
+        comp = cp;
+        buffer = (&fma->super + 1);
+    }
+    uct_ugni_format_fma(&fma->super, type, buffer, addr, rkey, length, ep, comp);
+}
 
 ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
-    uct_ugni_base_desc_t *fma;
+    uct_ugni_get_desc_t *fma;
+    unsigned align_length = ucs_align_up_pow2(length, UGNI_GET_ALIGN);
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.fma_seg_size, "get_bcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
                              fma, return UCS_ERR_NO_RESOURCE);
-    uct_ugni_format_fma(fma, GNI_POST_FMA_GET, fma + 1, remote_addr, rkey,
-                        ucs_align_up_pow2(length, UGNI_GET_ALIGN), ep, comp);
+
+    uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, remote_addr, rkey,
+                            align_length, ep, comp, uct_ugni_unalign_fma_get_cb);
+
     ucs_trace_data("Posting GET BCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
                    "%p, with [%"PRIx64" %"PRIx64"]",
-                   fma->desc.length, length,
-                   (void *)fma->desc.local_addr,
-                   (void *)fma->desc.remote_addr,
-                   fma->desc.remote_mem_hndl.qword1,
-                   fma->desc.remote_mem_hndl.qword2);
-    return uct_ugni_post_fma(iface, ep, fma, UCS_INPROGRESS);
+                   fma->super.desc.length, length,
+                   (void *)fma->super.desc.local_addr,
+                   (void *)fma->super.desc.remote_addr,
+                   fma->super.desc.remote_mem_hndl.qword1,
+                   fma->super.desc.remote_mem_hndl.qword2);
+    return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
 ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,

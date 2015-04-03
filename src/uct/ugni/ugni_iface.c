@@ -347,9 +347,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
     }
 
     rc = uct_iface_mpool_create(&self->super.super, 
-                                sizeof(uct_ugni_base_desc_t) +
+                                sizeof(uct_ugni_get_desc_t) +
                                 self->config.fma_seg_size,
-                                sizeof(uct_ugni_base_desc_t), /* alignment offset */
+                                sizeof(uct_ugni_get_desc_t), /* alignment offset */
                                 UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                                 &config->mpool,               /* mpool config */ 
                                 128 ,                         /* grow */
