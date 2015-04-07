@@ -259,6 +259,23 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     free(addr);
 }
 
+void uct_test::entity::connect_to_iface(unsigned index, const entity& other) const {
+    ucs_status_t status;
+
+    uct_iface_attr_t iface_attr;
+    status = uct_iface_query(other.m_iface, &iface_attr);
+    ASSERT_UCS_OK(status);
+
+    uct_iface_addr_t *iface_addr = (uct_iface_addr_t*)malloc(iface_attr.iface_addr_len);
+
+    status = uct_iface_get_address(other.m_iface, iface_addr);
+    ASSERT_UCS_OK(status);
+
+    status = uct_ep_connect_to_iface(m_eps[index], iface_addr);
+    ASSERT_UCS_OK(status);
+
+    free(iface_addr);
+}
 void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
