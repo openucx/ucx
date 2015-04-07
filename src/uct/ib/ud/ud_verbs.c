@@ -58,6 +58,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
     ucs_trace_func("");
     if (self->ah) { 
         ibv_destroy_ah(self->ah);
+        self->ah = NULL;
     }
 }
 
@@ -78,17 +79,25 @@ static inline void uct_ud_verbs_iface_fill_tx_wr(uct_ud_verbs_iface_t *iface, uc
     wr->wr.ud.ah         = ep->ah;
 }
     
+static inline void uct_ud_verbs_iface_tx_ctl(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep)
+{
+    int UCS_V_UNUSED ret;
+    struct ibv_send_wr *bad_wr;
+
+    uct_ud_verbs_iface_fill_tx_wr(iface, ep, &iface->tx.ctl_wr);
+    ret = ibv_post_send(iface->super.qp, &iface->tx.ctl_wr, &bad_wr);
+    ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
+}
 
 static void uct_ud_verbs_iface_progress_pending(uct_ud_verbs_iface_t *iface)
 {
     uct_ud_ep_t *ep;
     ucs_status_t status;
     uct_ud_neth_t neth;
-    int UCS_V_UNUSED ret;
-    struct ibv_send_wr *bad_wr;
+    uct_ud_send_skb_t *skb;
 
     while (!ucs_queue_is_empty(&iface->super.tx.pending_ops)) {
-        status = uct_ud_iface_get_next_pending(&iface->super, &ep, &neth);
+        status = uct_ud_iface_get_next_pending(&iface->super, &ep, &neth, &skb);
         if (status == UCS_ERR_NO_RESOURCE) {
             return;
         }
@@ -96,14 +105,18 @@ static void uct_ud_verbs_iface_progress_pending(uct_ud_verbs_iface_t *iface)
             continue;
         }
 
-        iface->tx.sge[0].addr   = (uintptr_t)&neth;
-        iface->tx.sge[0].length = sizeof(neth);
-        uct_ud_verbs_iface_fill_tx_wr(iface, 
-                                      ucs_derived_of(ep, uct_ud_verbs_ep_t),
-                                      &iface->tx.ctl_wr);
-        UCT_UD_EP_HOOK_CALL_TX(ep, &neth);
-        ret = ibv_post_send(iface->super.qp, &iface->tx.ctl_wr, &bad_wr);
-        ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
+        if (ucs_unlikely(skb != NULL)) {
+            iface->tx.sge[0].addr   = (uintptr_t) (skb->neth);
+            iface->tx.sge[0].length = skb->len;
+            ucs_trace_data("TX_PENDING(SKB): ep=%p (ep_id=%d, dest_ep_id=%d) packet_type=0x%0x psn=%u", ep, ep->ep_id, ep->dest_ep_id, skb->neth->packet_type, skb->neth->psn);
+        } 
+        else {
+            iface->tx.sge[0].addr   = (uintptr_t)&neth;
+            iface->tx.sge[0].length = sizeof(neth);
+            UCT_UD_EP_HOOK_CALL_TX(ep, &neth);
+            ucs_trace_data("TX_PENDING(NETH): ep=%p (ep_id=%d, dest_ep_id=%d) packet_type=0x%0x psn=%u", ep, ep->ep_id, ep->dest_ep_id, neth.packet_type, neth.psn);
+        }
+        uct_ud_verbs_iface_tx_ctl(iface, ucs_derived_of(ep, uct_ud_verbs_ep_t));
     }
 }
 
@@ -273,27 +286,96 @@ static ucs_status_t uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr)
+static struct ibv_ah *uct_ud_verbs_create_ah(uct_ib_iface_t *iface, uct_ud_iface_addr_t *if_addr)
 {
-    uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
-    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    const uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
     struct ibv_ah_attr ah_attr;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    memset(&ah_attr, 0, sizeof(ah_attr));
+    ah_attr.port_num = iface->port_num;
+    ah_attr.sl = 0; /* TODO: sl */
+    ah_attr.is_global = 0;
+    ah_attr.dlid = if_addr->lid;
+
+    return ibv_create_ah(dev->pd, &ah_attr);
+}
+
+void uct_ud_ep_verbs_cp(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
+{
+    uct_ud_verbs_ep_t *old_ep_v = ucs_derived_of(old_ep, uct_ud_verbs_ep_t);
+    uct_ud_verbs_ep_t *new_ep_v = ucs_derived_of(new_ep, uct_ud_verbs_ep_t);
+
+    uct_ud_ep_cp(old_ep, new_ep);
+    new_ep_v->ah = old_ep_v->ah;
+    /* make sure ah in old ep is not destroyed */
+    old_ep_v->ah = NULL;
+}
+
+ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_addr_t *tl_iface_addr)
+{
+    uct_ud_ep_t *ready_ep;
+    uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_verbs_iface_t);
+    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
+    uct_ud_send_skb_t *skb;
+    struct ibv_ah *ah;
+    ucs_status_t status;
+
+    /* TODO: proper cleanup */
+    /* check if we can reuse half duplex ep */
+    ready_ep = uct_ud_iface_cep_lookup(&iface->super, if_addr, UCT_UD_EP_CONN_ID_MAX);
+    if (ready_ep) {
+        uct_ud_iface_cep_replace(ready_ep, &ep->super, uct_ud_ep_verbs_cp);
+        return UCS_OK;
+    }
+
+    status = uct_ud_ep_connect_to_iface(tl_ep, tl_iface_addr);
+    if (status != UCS_OK) {
+        return status;
+    }
+    ucs_assert_always(ep->ah == NULL);
+    ah = uct_ud_verbs_create_ah(&iface->super.super, if_addr);
+    if (ah == NULL) {
+        ucs_error("failed to create address handle: %m");
+        return UCS_ERR_INVALID_ADDR;
+    }
+    ep->ah = ah;
+    
+    status = uct_ud_iface_cep_insert(&iface->super, if_addr, &ep->super, UCT_UD_EP_CONN_ID_MAX);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    skb = uct_ud_ep_prepare_creq(&ep->super);
+    if (!skb) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
+    iface->tx.sge[0].length = skb->len;
+    uct_ud_verbs_iface_tx_ctl(iface, ep);
+    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+    return UCS_OK;
+}
+
+
+ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                                           const uct_iface_addr_t *tl_iface_addr,
+                                           const uct_ep_addr_t *tl_ep_addr)
+{
     ucs_status_t status;
     struct ibv_ah *ah;
+    uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
+    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
+    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
 
     status = uct_ud_ep_connect_to_ep(&ep->super, addr);
     if (status != UCS_OK) {
         return status;
     }
 
-    memset(&ah_attr, 0, sizeof(ah_attr));
-    ah_attr.port_num  = iface->port_num;
-    ah_attr.sl        = 0; /* TODO: sl */
-    ah_attr.is_global = 0;
-    ah_attr.dlid      = ib_addr->lid;
-
-    ah = ibv_create_ah(uct_ib_iface_device(iface)->pd, &ah_attr);
+    ucs_assert_always(ep->ah == NULL);
+    ah = uct_ud_verbs_create_ah(iface, if_addr);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         return UCS_ERR_INVALID_ADDR;
@@ -311,6 +393,7 @@ uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_release_am_desc=uct_ib_iface_release_am_desc,
     .ep_get_address      = uct_ud_ep_get_address,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
+    .ep_connect_to_iface = uct_ud_verbs_ep_connect_to_iface,
     .ep_connect_to_ep    = uct_ud_verbs_ep_connect_to_ep, 
     .iface_get_address   = uct_ib_iface_get_subnet_address,
     .iface_is_reachable  = uct_ib_iface_is_reachable,

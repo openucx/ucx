@@ -12,6 +12,181 @@
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 
+SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
+                                        UCT_UD_HASH_SIZE,
+                                        uct_ud_iface_peer_hash)
+
+void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
+{
+    sglib_hashed_uct_ud_iface_peer_t_init(iface->peers);
+}
+
+static void uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
+{
+    uct_ud_ep_t *ep;
+    struct sglib_hashed_uct_ud_ep_t_iterator it_ep;
+    uct_iface_t *iface_h = &iface->super.super.super;
+
+    for (ep = sglib_hashed_uct_ud_ep_t_it_init(&it_ep, peer->eps);
+         ep != NULL;
+         ep = sglib_hashed_uct_ud_ep_t_it_next(&it_ep)) {
+        if (ep->is_passive) {
+            uct_ep_t *ep_h = &ep->super.super;
+            ucs_trace_data("cep:ep_destroy(%p)", ep);
+            iface_h->ops.ep_destroy(ep_h);
+        }
+    }
+}
+
+void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
+{
+    uct_ud_iface_peer_t *peer;
+    struct sglib_hashed_uct_ud_iface_peer_t_iterator it_peer;
+
+    for (peer = sglib_hashed_uct_ud_iface_peer_t_it_init(&it_peer, 
+                                                         iface->peers);
+         peer != NULL;
+         peer = sglib_hashed_uct_ud_iface_peer_t_it_next(&it_peer)) {
+
+        if (peer->ep_count) {
+            uct_ud_iface_cep_cleanup_eps(iface, peer);
+        }
+        free(peer);
+    }
+}
+
+static uct_ud_iface_peer_t *uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr)
+{
+    uct_ud_iface_peer_t *peer, key;
+
+    key.dest_iface.qp_num = src_if_addr->qp_num;
+    key.dest_iface.lid    = src_if_addr->lid;
+
+    peer = sglib_hashed_uct_ud_iface_peer_t_find_member(iface->peers, &key);
+    return peer;
+}
+
+
+static uct_ud_ep_t *uct_ud_iface_cep_lookup_ep(uct_ud_iface_peer_t *peer, uint32_t conn_id)
+{
+    uct_ud_ep_t key;
+
+    if (conn_id != UCT_UD_EP_CONN_ID_MAX) {
+        key.conn_id = conn_id;
+    } else {
+        key.conn_id = peer->conn_id_last;
+    }
+    return sglib_hashed_uct_ud_ep_t_find_member(peer->eps, &key);
+}
+
+static uint32_t uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
+{
+    uint32_t new_id;
+    /* uct_ud_ep_t *ep; */
+
+    if (conn_id != UCT_UD_EP_CONN_ID_MAX) {
+        return conn_id;
+    }
+#if 0
+    /* IMHO there is no need for this search. */
+    /* autoassign: find first unused slot */
+    for (new_id = peer->conn_id_last; new_id < UCT_UD_EP_CONN_ID_MAX; new_id++) {
+        ep = uct_ud_iface_cep_lookup_ep(peer, new_id);
+        if (!ep)  {
+            goto found;
+        }
+    }
+    return UCT_UD_EP_CONN_ID_MAX;
+found: 
+    if (new_id == peer->conn_id_last) {
+        peer->conn_id_last++;
+    }
+#endif
+    new_id = peer->conn_id_last++;
+    ucs_assert_always(uct_ud_iface_cep_lookup_ep(peer, new_id) == NULL);
+    return new_id;
+}
+
+/* insert new ep that is connected to src_if_addr */
+ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id)
+{
+    uct_ud_iface_peer_t *peer;
+
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+    if (!peer) {
+        peer = (uct_ud_iface_peer_t *)malloc(sizeof(*peer));
+        if (!peer) {
+            return UCS_ERR_NO_MEMORY;
+        }
+        peer->dest_iface.qp_num = src_if_addr->qp_num;
+        peer->dest_iface.lid    = src_if_addr->lid;
+        sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
+        sglib_hashed_uct_ud_ep_t_init(peer->eps);
+        peer->ep_count = 0;
+        peer->conn_id_last = 0;
+    }
+
+    ep->conn_id = uct_ud_iface_cep_getid(peer, conn_id);
+    if (ep->conn_id == UCT_UD_EP_CONN_ID_MAX) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+    ep->dest_if = peer;
+    sglib_hashed_uct_ud_ep_t_add(peer->eps, ep);
+    peer->ep_count++;
+    return UCS_OK;
+}
+
+void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
+{
+  uct_ud_iface_peer_t *peer;
+
+  peer = ep->dest_if;
+  if (!peer) {
+      return;
+  }
+  ucs_trace_data("iface(%p) cep_remove:ep(%p)", ep->super.super.iface, ep);
+  sglib_hashed_uct_ud_ep_t_delete(peer->eps, ep);
+  ep->dest_if = NULL;
+}
+
+void uct_ud_iface_cep_replace(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep, uct_ud_ep_copy_func_t cp)
+{
+    uct_ud_iface_peer_t *peer;
+    uct_ep_t *ep_h = &old_ep->super.super;
+    uct_iface_t *iface_h = ep_h->iface;
+
+    ucs_assert_always(old_ep != new_ep);
+
+    peer = old_ep->dest_if;
+    ucs_assert_always(old_ep->conn_id == peer->conn_id_last);
+    
+    sglib_hashed_uct_ud_ep_t_delete(peer->eps, old_ep);
+    sglib_hashed_uct_ud_ep_t_add(peer->eps, new_ep);
+    new_ep->dest_if = peer;
+    peer->conn_id_last++;
+    cp(old_ep, new_ep);
+    new_ep->is_passive = 0;
+    
+    /* call destructor but disable cep and ep table cleanups */
+    old_ep->ep_id   = UCT_UD_EP_NULL_ID;
+    old_ep->dest_if = NULL;
+    ucs_trace_data("iface(%p) cep_replace:ep_destroy(%p) new_ep=%p", iface_h, old_ep, new_ep);
+    iface_h->ops.ep_destroy(ep_h);
+}
+
+uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uint32_t conn_id)
+{
+    uct_ud_iface_peer_t *peer;
+
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+    if (!peer) {
+        return NULL;
+    }
+
+    return uct_ud_iface_cep_lookup_ep(peer, conn_id);
+}
+
 static ucs_status_t uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
                                                  uct_ib_iface_config_t *config, 
                                                  const char *name, ucs_mpool_h *mp_p);
@@ -134,6 +309,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     }
 
     ucs_ptr_array_init(&self->eps, 0, "ud_eps");
+    uct_ud_iface_cep_init(self);    
 
     /* TODO: correct hdr + payload offset  */
     status = uct_ib_iface_recv_mpool_create(&self->super, &config->super,
@@ -164,10 +340,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_trace_func("");
 
     /* TODO: proper flush and connection termination */
+    ucs_trace_data("iface(%p): cep cleanup", self);
+    uct_ud_iface_cep_cleanup(self);
     ucs_mpool_destroy_unchecked(self->tx.mp);
     /* TODO: qp to error state and cleanup all wqes */
     ucs_mpool_destroy_unchecked(self->rx.mp);
     ibv_destroy_qp(self->qp);
+    ucs_trace_data("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
 }
 
@@ -216,6 +395,22 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
 }
 
+ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    uct_ud_iface_addr_t *addr = ucs_derived_of(iface_addr, uct_ud_iface_addr_t);
+    uct_ib_device_t *dev;
+    uint32_t lid;
+
+    addr->qp_num = iface->qp->qp_num;
+    dev = uct_ib_iface_device(&iface->super);
+    lid = dev->port_attr[iface->super.port_num-dev->first_port].lid;
+    addr->lid = lid; 
+    ucs_debug("qpnum=%d lid=%d", addr->qp_num, addr->lid);
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
 {
 #if 0
@@ -240,7 +435,21 @@ void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
+    if (ep->ep_id != UCT_UD_EP_NULL_ID) {
+        ucs_trace_data("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
+        ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
+    }
+}
+
+void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
+{
+    void *p;
+    ucs_assert_always(old_ep != new_ep);
+    ucs_assert_always(old_ep->ep_id != new_ep->ep_id);
+    p = ucs_ptr_array_replace(&iface->eps, old_ep->ep_id, new_ep);
+    ucs_assert_always(p == (void *)old_ep);
+    ucs_trace_data("replace_ep: old(%p) id=%d new(%p) id=%d", old_ep, old_ep->ep_id, new_ep, new_ep->ep_id);
+    ucs_ptr_array_remove(&iface->eps, new_ep->ep_id, 0);
 }
 
 static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
