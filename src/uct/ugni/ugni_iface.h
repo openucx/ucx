@@ -14,7 +14,7 @@
 #include "ugni_ep.h"
 
 #define UCT_UGNI_HASH_SIZE   (256)
-#define UCT_UGNI_MAX_FMA     (2048-4)
+#define UCT_UGNI_MAX_FMA     (2048)
 #define UCT_UGNI_MAX_RDMA    (512*1024*1024);
 
 struct uct_ugni_iface;

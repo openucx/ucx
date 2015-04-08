@@ -416,22 +416,25 @@ static inline void uct_ugni_format_get_fma(uct_ugni_get_desc_t *fma,
     uint64_t addr;
     void *buffer;
     uct_completion_t *comp;
+    unsigned align_length;
+
     if (ucs_unlikely(UGNI_CHECK_ALIGN(remote_addr))) {
         /* unalign access */
         fma->tmp.func = cb;
-        fma->padding = ucs_padding(remote_addr, UGNI_GET_ALIGN);
+        fma->padding = remote_addr & (UGNI_GET_ALIGN - 1);
         fma->orig_comp_cb = cp;
-
-        addr = ucs_align_up_pow2(remote_addr, UGNI_GET_ALIGN);
+        addr = remote_addr - fma->padding;
         comp = &fma->tmp;
         buffer = (fma + 1);
+        align_length =  ucs_align_up_pow2((length + fma->padding), UGNI_GET_ALIGN);
     } else {
         /* align access */
         addr = remote_addr;
         comp = cp;
         buffer = (&fma->super + 1);
+        align_length = ucs_align_up_pow2(length, UGNI_GET_ALIGN);
     }
-    uct_ugni_format_fma(&fma->super, type, buffer, addr, rkey, length, ep, comp);
+    uct_ugni_format_fma(&fma->super, type, buffer, addr, rkey, align_length, ep, comp);
 }
 
 ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remote_addr,
@@ -440,7 +443,6 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_get_desc_t *fma;
-    unsigned align_length = ucs_align_up_pow2(length, UGNI_GET_ALIGN);
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.fma_seg_size, "get_bcopy");
@@ -448,7 +450,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
                              fma, return UCS_ERR_NO_RESOURCE);
 
     uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, remote_addr, rkey,
-                            align_length, ep, comp, uct_ugni_unalign_fma_get_cb);
+                            length, ep, comp, uct_ugni_unalign_fma_get_cb);
 
     ucs_trace_data("Posting GET BCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
                    "%p, with [%"PRIx64" %"PRIx64"]",
