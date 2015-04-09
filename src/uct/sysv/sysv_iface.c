@@ -27,16 +27,34 @@ ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
 }
 
 #define UCT_SYSV_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
+#define UCT_SYSV_MAX_BCOPY_LENGTH 40960 /* FIXME temp value for now */
+#define UCT_SYSV_MAX_ZCOPY_LENGTH 81920 /* FIXME temp value for now */
 
-ucs_status_t uct_sysv_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
+ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
+    uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
+
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* FIXME all of these values */
-    iface_attr->cap.put.max_short      = UCT_SYSV_MAX_SHORT_LENGTH;
+    iface_attr->cap.put.max_short      = iface->config.max_put;
+    iface_attr->cap.put.max_bcopy      = iface->config.max_bcopy;
+    iface_attr->cap.put.max_zcopy      = iface->config.max_zcopy;
+    iface_attr->cap.get.max_bcopy      = iface->config.max_bcopy;
+    iface_attr->cap.get.max_zcopy      = iface->config.max_zcopy;
     iface_attr->iface_addr_len         = sizeof(uct_sysv_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_sysv_ep_addr_t);
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT;
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT       |
+                                         UCT_IFACE_FLAG_PUT_BCOPY       |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD32    |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD64    |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD64   |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD32   |
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP64  |
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
+                                         UCT_IFACE_FLAG_PUT_ZCOPY       |
+                                         UCT_IFACE_FLAG_GET_BCOPY       |
+                                         UCT_IFACE_FLAG_GET_ZCOPY;
 
     iface_attr->completion_priv_len    = 0; /* TBD */
     return UCS_OK;
@@ -177,7 +195,19 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .ep_connect_to_ep    = uct_sysv_ep_connect_to_ep,
     .iface_query         = uct_sysv_iface_query,
     .ep_put_short        = uct_sysv_ep_put_short,
+    .ep_put_bcopy        = uct_sysv_ep_put_bcopy,
+    .ep_put_zcopy        = uct_sysv_ep_put_zcopy,
+    .ep_get_bcopy        = uct_sysv_ep_get_bcopy,
+    .ep_get_zcopy        = uct_sysv_ep_get_zcopy,
     .ep_am_short         = uct_sysv_ep_am_short,
+    .ep_atomic_add64     = uct_sysv_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_sysv_ep_atomic_fadd64,
+    .ep_atomic_cswap64   = uct_sysv_ep_atomic_cswap64,
+    .ep_atomic_swap64    = uct_sysv_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_sysv_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_sysv_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_sysv_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_sysv_ep_atomic_swap32,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
@@ -209,7 +239,9 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
         return UCS_ERR_NO_DEVICE;
     }
 
-    self->config.max_put   = UCT_SYSV_MAX_SHORT_LENGTH;
+    self->config.max_put     = UCT_SYSV_MAX_SHORT_LENGTH;
+    self->config.max_bcopy   = UCT_SYSV_MAX_BCOPY_LENGTH;
+    self->config.max_zcopy   = UCT_SYSV_MAX_ZCOPY_LENGTH;
 
     addr = ucs_generate_uuid((intptr_t)self);
 

@@ -12,6 +12,7 @@
 #include <uct/tl/tl_base.h>
 
 #include "ucs/type/class.h"
+#include "ucs/arch/arch.h"
 
 typedef struct uct_sysv_ep_addr {
     uct_ep_addr_t     super;
@@ -31,6 +32,39 @@ ucs_status_t uct_sysv_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t
                                        *tl_iface_addr, uct_ep_addr_t *tl_ep_addr);
 ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, void *buffer, unsigned length, 
                                    uint64_t remote_addr, uct_rkey_t rkey);
+ucs_status_t uct_sysv_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                   void *arg, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey);
+ucs_status_t uct_sysv_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+                                   uct_mem_h memh, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp);
 ucs_status_t uct_sysv_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                   void *payload, unsigned length);
+ucs_status_t uct_sysv_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
+                                      uint64_t remote_addr, uct_rkey_t rkey);
+ucs_status_t uct_sysv_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
+                                      uint64_t remote_addr, uct_rkey_t rkey);
+ucs_status_t uct_sysv_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
+                                        uint64_t remote_addr, uct_rkey_t rkey,
+                                        uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp);
+ucs_status_t uct_sysv_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+                                   uct_mem_h memh, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp);
 #endif
