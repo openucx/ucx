@@ -335,19 +335,19 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "put bcopy bw", "MB/sec", 700.0, 10000.0,
+  { "put bcopy bw", "MB/sec", 700.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "put zcopy bw", "MB/sec", 700.0, 10000.0,
+  { "put zcopy bw", "MB/sec", 700.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "get latency", "usec", 0.05, 2.5,
+  { "get latency", "usec", 0.015, 2.5,
     UCX_PERF_CMD_GET,  UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "atomic add latency", "usec", 0.1, 3.5,
+  { "atomic add latency", "usec", 0.025, 3.5,
     UCX_PERF_CMD_ADD,  UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
