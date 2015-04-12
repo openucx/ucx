@@ -76,7 +76,7 @@ typedef struct uct_rc_verbs_iface {
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 
-ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, void *buffer,
+ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        unsigned length, uint64_t remote_addr,
                                        uct_rkey_t rkey);
 
@@ -84,7 +84,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
                                        void *arg, size_t length, uint64_t remote_addr,
                                        uct_rkey_t rkey);
 
-ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
                                        uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp);
 
@@ -97,14 +97,14 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t leng
                                        uct_rkey_t rkey, uct_completion_t *comp);
 
 ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
-                                      void *buffer, unsigned length);
+                                      const void *buffer, unsigned length);
 
 ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                       uct_pack_callback_t pack_cb, void *arg,
                                       size_t length);
 
-ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
-                                      unsigned header_length, void *payload,
+ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                                      unsigned header_length, const void *payload,
                                       size_t length, uct_mem_h memh,
                                       uct_completion_t *comp);
 

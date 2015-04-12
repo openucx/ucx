@@ -33,10 +33,10 @@ struct uct_pd_ops {
 
     ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
 
-    ucs_status_t (*rkey_unpack)(uct_pd_h pd, void *rkey_buffer,
+    ucs_status_t (*rkey_unpack)(uct_pd_h pd, const void *rkey_buffer,
                                 uct_rkey_bundle_t *rkey_ob);
 
-    void         (*rkey_release)(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob);
+    void         (*rkey_release)(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob);
 
 };
 

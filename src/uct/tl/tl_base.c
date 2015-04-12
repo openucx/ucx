@@ -169,7 +169,7 @@ UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
 UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
-                    uct_pd_h pd, uct_iface_config_t *config
+                    uct_pd_h pd, const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     ucs_status_t status;
@@ -216,13 +216,13 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
     return ep->iface->ops.ep_get_address(ep, ep_addr);
 }
 
-ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr)
+ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr)
 {
     return ep->iface->ops.ep_connect_to_iface(ep, iface_addr);
 }
 
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
-                                  uct_ep_addr_t *ep_addr)
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_iface_addr_t *iface_addr,
+                                  const uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, iface_addr, ep_addr);
 }

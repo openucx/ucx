@@ -904,7 +904,7 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
     return UCS_ERR_INVALID_PARAM;
 }
 
-ucs_status_t ucs_config_parser_clone_opts(void *src, void *dst,
+ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
                                          ucs_config_field_t *fields)
 {
     ucs_status_t status;

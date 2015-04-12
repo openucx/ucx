@@ -126,7 +126,7 @@ static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
 }
 
 static inline ucs_status_t
-uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, void *buffer, size_t length,
+uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const void *buffer, size_t length,
                            struct ibv_mr *mr, uint64_t remote_addr,
                            uct_rkey_t rkey, uct_completion_t *comp,
                            int opcode)
@@ -263,7 +263,7 @@ uct_rc_verbs_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode,uint32_t length,
 }
 #endif
 
-ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, void *buffer,
+ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        unsigned length, uint64_t remote_addr,
                                        uct_rkey_t rkey)
 {
@@ -308,7 +308,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
                                        uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp)
 {
@@ -365,7 +365,7 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t leng
 }
 
 ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
-                                      void *buffer, unsigned length)
+                                      const void *buffer, unsigned length)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -426,8 +426,8 @@ static void uct_rc_verbs_ep_am_zcopy_completion(uct_completion_t *self, void *da
     ucs_mpool_put(desc);
 }
 
-ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, void *header,
-                                      unsigned header_length, void *payload,
+ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                                      unsigned header_length, const void *payload,
                                       size_t length, uct_mem_h memh,
                                       uct_completion_t *comp)
 {

@@ -77,7 +77,7 @@ void ucp_config_release(ucp_config_t *config)
 }
 
 static int ucp_is_resource_enabled(uct_resource_desc_t *resource,
-                                   ucp_config_t *config,
+                                   const ucp_config_t *config,
                                    uint64_t *devices_mask_p)
 {
     int device_enabled, tl_enabled;
@@ -122,7 +122,7 @@ static int ucp_is_resource_enabled(uct_resource_desc_t *resource,
     return device_enabled && tl_enabled;
 }
 
-static ucs_status_t ucp_fill_resources(ucp_context_h context, ucp_config_t *config)
+static ucs_status_t ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 {
     uct_resource_desc_t *resources;
     unsigned i, num_resources;
@@ -205,7 +205,7 @@ err:
     return status;
 }
 
-ucs_status_t ucp_init(ucp_config_t *config, size_t request_headroom,
+ucs_status_t ucp_init(const ucp_config_t *config, size_t request_headroom,
                       ucp_context_h *context_p)
 {
     ucp_context_t *context;

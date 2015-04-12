@@ -76,7 +76,7 @@ static ucs_status_t ucp_tag_eager_am_handler(void *arg, void *data, size_t lengt
     return UCS_INPROGRESS;
 }
 
-ucs_status_t ucp_tag_send(ucp_ep_h ep, void *buffer, size_t length,
+ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length,
                           ucp_tag_t tag)
 {
     ucs_status_t status;

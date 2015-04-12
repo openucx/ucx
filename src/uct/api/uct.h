@@ -427,7 +427,7 @@ void uct_iface_config_release(uct_iface_config_t *config);
  * @param [in]  title         Title to the output.
  * @param [in]  print_flags   Controls how the configuration is printed.
  */
-void uct_iface_config_print(uct_iface_config_t *config, FILE *stream,
+void uct_iface_config_print(const uct_iface_config_t *config, FILE *stream,
                             const char *title, ucs_config_print_flags_t print_flags);
 
 
@@ -463,7 +463,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  */
 ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
                             const char *dev_name, size_t rx_headroom,
-                            uct_iface_config_t *config, uct_iface_h *iface_p);
+                            const uct_iface_config_t *config, uct_iface_h *iface_p);
 
 
 /**
@@ -547,7 +547,7 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr);
  *
  * TODO
  */
-ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr);
+ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr);
 
 
 /**
@@ -558,8 +558,8 @@ ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, uct_iface_addr_t *iface_addr);
  * @param [in] iface_addr   Remote interface address.
  * @param [in] ep_addr      Remote endpoint address.
  */
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, uct_iface_addr_t *iface_addr,
-                                  uct_ep_addr_t *ep_addr);
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_iface_addr_t *iface_addr,
+                                  const uct_ep_addr_t *ep_addr);
 
 
 /**
@@ -661,7 +661,7 @@ ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
                                 uct_rkey_bundle_t *rkey_ob);
 
 
@@ -673,7 +673,7 @@ ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
  * @param [in]  pd           Handle to protection domain.
  * @param [in]  rkey_ob      Remote key to release.
  */
-void uct_pd_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob);
+void uct_pd_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob);
 
 
 /**
@@ -701,7 +701,7 @@ UCT_INLINE_API void uct_iface_release_am_desc(uct_iface_h iface, void *desc)
  * @ingroup RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, void *buffer, unsigned length,
+UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, const void *buffer, unsigned length,
                                              uint64_t remote_addr, uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_short(ep, buffer, length, remote_addr, rkey);
@@ -724,7 +724,7 @@ UCT_INLINE_API ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pa
  * @ingroup RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, void *buffer, size_t length,
+UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, const void *buffer, size_t length,
                                              uct_mem_h memh, uint64_t remote_addr,
                                              uct_rkey_t rkey, uct_completion_t *comp)
 {
@@ -763,7 +763,7 @@ UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t l
  * @brief
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                                            void *payload, unsigned length)
+                                            const void *payload, unsigned length)
 {
     return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
 }
@@ -786,7 +786,7 @@ UCT_INLINE_API ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * @brief
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
-                                            unsigned header_length, void *payload,
+                                            unsigned header_length, const void *payload,
                                             size_t length, uct_mem_h memh,
                                             uct_completion_t *comp)
 {

@@ -65,8 +65,8 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
-                                     uct_iface_addr_t *tl_iface_addr,
-                                     uct_ep_addr_t *tl_ep_addr)
+                                     const uct_iface_addr_t *tl_iface_addr,
+                                     const uct_ep_addr_t *tl_ep_addr)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);

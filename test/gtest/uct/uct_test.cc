@@ -134,7 +134,7 @@ void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
 void uct_test::entity::mem_free(void *address, uct_mem_h memh,
                                 const uct_rkey_bundle_t& rkey) const {
     ucs_status_t status;
-    uct_pd_rkey_release(m_iface->pd, const_cast<uct_rkey_bundle_t*>(&rkey));
+    uct_pd_rkey_release(m_iface->pd, &rkey);
     status = uct_pd_mem_free(m_iface->pd, address, memh);
     ASSERT_UCS_OK(status);
 }

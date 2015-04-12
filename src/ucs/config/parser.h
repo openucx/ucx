@@ -235,7 +235,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
  * @param dst    User-defined options structure to copy to.
  * @param table  Array of fields which define the structure of the options.
  */
-ucs_status_t ucs_config_parser_clone_opts(void *src, void *dst,
+ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
                                          ucs_config_field_t *fields);
 
 /**
