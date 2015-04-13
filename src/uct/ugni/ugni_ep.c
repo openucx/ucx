@@ -392,8 +392,6 @@ ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
 }
 
 /* Align to the next 4 bytes */
-#define UGNI_GET_ALIGN  (4)
-#define UGNI_CHECK_ALIGN(a) (a & (UGNI_GET_ALIGN-1))
 
 static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, void *data)
 {
@@ -405,6 +403,8 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, void *data)
                               fma->padding);
     }
 }
+
+#define UGNI_GET_ALIGN (4)
 
 static inline void uct_ugni_format_get_fma(uct_ugni_get_desc_t *fma,
                                            gni_post_type_t type, uint64_t
@@ -418,10 +418,10 @@ static inline void uct_ugni_format_get_fma(uct_ugni_get_desc_t *fma,
     uct_completion_t *comp;
     unsigned align_length;
 
-    if (ucs_unlikely(UGNI_CHECK_ALIGN(remote_addr))) {
+    if (ucs_unlikely(ucs_check_if_align_pow2(remote_addr, UGNI_GET_ALIGN))) {
         /* unalign access */
         fma->tmp.func = cb;
-        fma->padding = remote_addr & (UGNI_GET_ALIGN - 1);
+        fma->padding = ucs_padding_pow2(remote_addr, UGNI_GET_ALIGN);
         fma->orig_comp_cb = cp;
         addr = remote_addr - fma->padding;
         comp = &fma->tmp;
