@@ -153,7 +153,16 @@ ucs_status_t uct_sysv_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    return UCS_ERR_UNSUPPORTED;
+    uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
+    uint64_t val;
+    val = ucs_atomic_swap64(ptr, swap);
+    ucs_trace_data("Posting atomic_swap64, value %"PRIx64" to %p",
+                    swap,
+                    (void *)(remote_addr));
+    if (NULL != comp) {
+        uct_invoke_completion(comp, &val);
+    }
+    return UCS_INPROGRESS; /* FIXME Pasha hates that this works */
 }
 
 ucs_status_t uct_sysv_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
@@ -203,7 +212,16 @@ ucs_status_t uct_sysv_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    return UCS_ERR_UNSUPPORTED;
+    uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
+    uint32_t val;
+    val = ucs_atomic_swap32(ptr, swap);
+    ucs_trace_data("Posting atomic_swap32, value %"PRIx32" to %p",
+                    swap,
+                    (void *)(remote_addr));
+    if (NULL != comp) {
+        uct_invoke_completion(comp, &val);
+    }
+    return UCS_INPROGRESS; /* FIXME Pasha hates that this works */
 }
 
 ucs_status_t uct_sysv_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,

@@ -50,6 +50,8 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_ATOMIC_ADD64    |
                                          UCT_IFACE_FLAG_ATOMIC_FADD64   |
                                          UCT_IFACE_FLAG_ATOMIC_FADD32   |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP64   |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP32   |
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64  |
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
                                          UCT_IFACE_FLAG_PUT_ZCOPY       |
