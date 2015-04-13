@@ -57,6 +57,12 @@
         pow2; \
     })
 
+/* Return values: 0 - aligned, non-0 - unaligned */
+#define ucs_check_if_align_pow2(n, p) ((n) & (p-1))
+
+/* Return values: off-set from the alignment */
+#define ucs_padding_pow2(n, p) ucs_check_if_align_pow2(n, p)
+
 /* The i-th bit */
 #define UCS_BIT(i)               (1ull << (i))
 

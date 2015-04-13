@@ -70,6 +70,13 @@ typedef struct uct_ugni_base_desc {
     uct_ugni_ep_t  *ep;
 } uct_ugni_base_desc_t;
 
+typedef struct uct_ugni_get_desc {
+    uct_ugni_base_desc_t super;
+    uct_completion_t tmp;
+    uct_completion_t *orig_comp_cb;
+    size_t padding;
+} uct_ugni_get_desc_t;
+
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
 {
     return iface->dev;
