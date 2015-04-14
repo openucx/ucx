@@ -108,7 +108,8 @@ protected:
     rc, \
     ud, \
     ugni, \
-    sysv
+    sysv, \
+    cuda
 
 /**
  * Instantiate the parameterized test case for all transports.
