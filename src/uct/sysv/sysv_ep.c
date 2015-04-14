@@ -280,7 +280,7 @@ ucs_status_t uct_sysv_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
-    memcpy((void *)buffer, (void *)(rkey + remote_addr), length);
+    memcpy(buffer, (void *)(rkey + remote_addr), length);
 
     ucs_trace_data("Posting GET ZCOPY of size %zd to %p",
                     length,
