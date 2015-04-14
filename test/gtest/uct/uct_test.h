@@ -65,8 +65,8 @@ protected:
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, size_t alignment, uint64_t seed,
-                      const entity& entity);
+        mapped_buffer(size_t size, size_t alignment, uint64_t seed, 
+                      const entity& entity, size_t offset = 0);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -85,6 +85,7 @@ protected:
         const uct_test::entity& m_entity;
 
         void                    *m_buf;
+        void                    *m_buf_real;
         void                    *m_end;
         uct_mem_h               m_memh;
         uct_rkey_bundle_t       m_rkey;
@@ -107,7 +108,8 @@ protected:
     rc, \
     ud, \
     ugni, \
-    sysv
+    sysv, \
+    cuda
 
 /**
  * Instantiate the parameterized test case for all transports.

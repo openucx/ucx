@@ -198,16 +198,18 @@ std::ostream& operator<<(std::ostream& os, const uct_resource_desc_t& resource) 
     return os << resource.tl_name << "/" << resource.dev_name;
 }
 
-uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment,
-                                       uint64_t seed, const entity& entity) :
+uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment, uint64_t seed, 
+                                       const entity& entity, size_t offset) :
     m_entity(entity)
 {
-    if (size > 0) {
-        size_t alloc_size = size;
-        m_entity.mem_alloc(&m_buf, &alloc_size, alignment, &m_memh, &m_rkey);
+    if (size > 0)  {
+        size_t alloc_size = size + offset;
+        m_entity.mem_alloc(&m_buf_real, &alloc_size, alignment, &m_memh, &m_rkey);
+        m_buf = (char*)m_buf_real + offset;
         m_end = (char*)m_buf + size;
     } else {
         m_buf       = NULL;
+        m_buf_real  = NULL;
         m_end       = NULL;
         m_memh      = UCT_INVALID_MEM_HANDLE;
         m_rkey.rkey = UCT_INVALID_RKEY;
@@ -218,7 +220,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment,
 
 uct_test::mapped_buffer::~mapped_buffer() {
     if (m_memh != UCT_INVALID_MEM_HANDLE) {
-        m_entity.mem_free(m_buf, m_memh, m_rkey);
+        m_entity.mem_free(m_buf_real, m_memh, m_rkey);
     }
 }
 
@@ -258,6 +260,7 @@ void uct_test::mapped_buffer::pattern_check(void *buffer, size_t length, uint64_
              UCS_TEST_ABORT("At offset " << ((char*)ptr - (char*)buffer) <<
                             " (remainder " << remainder << ") : " <<
                             "Expected: 0x" << std::hex << (seed & mask) << " " <<
+                            "Mask: 0x" << std::hex << mask << " " <<
                             "Got: 0x" << std::hex << value << std::dec);
          }
 

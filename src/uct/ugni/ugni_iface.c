@@ -80,7 +80,7 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
     iface_attr->cap.put.max_short      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_bcopy      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
-    iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size;
+    iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
     iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->iface_addr_len         = sizeof(uct_ugni_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_ugni_ep_addr_t);
@@ -346,9 +346,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
     }
 
     rc = uct_iface_mpool_create(&self->super.super, 
-                                sizeof(uct_ugni_base_desc_t) +
+                                sizeof(uct_ugni_get_desc_t) +
                                 self->config.fma_seg_size,
-                                sizeof(uct_ugni_base_desc_t), /* alignment offset */
+                                sizeof(uct_ugni_get_desc_t), /* alignment offset */
                                 UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                                 &config->mpool,               /* mpool config */ 
                                 128 ,                         /* grow */

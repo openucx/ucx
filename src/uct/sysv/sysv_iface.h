@@ -31,6 +31,8 @@ typedef struct uct_sysv_iface {
     uct_sysv_iface_addr_t   addr;
     struct {
         unsigned            max_put;
+        unsigned            max_bcopy;
+        unsigned            max_zcopy;
     } config;
 } uct_sysv_iface_t;
 

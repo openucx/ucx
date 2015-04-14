@@ -64,8 +64,8 @@ public:
     }
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
-        mapped_buffer sendbuf(length, 1, SEED1, sender());
-        mapped_buffer recvbuf(length, 1, SEED2, receiver());
+        mapped_buffer sendbuf(length, 1, SEED1, sender(), 1);
+        mapped_buffer recvbuf(length, 1, SEED2, receiver(), 3);
 
         blocking_send(send, sender_ep(), sendbuf, recvbuf, m_completion_count);
         if (direction == DIRECTION_SEND_TO_RECV) {
