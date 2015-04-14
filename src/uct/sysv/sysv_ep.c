@@ -91,7 +91,7 @@ ucs_status_t uct_sysv_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return UCS_OK;
 }
 
-ucs_status_t uct_sysv_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+ucs_status_t uct_sysv_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
                                    uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
@@ -280,7 +280,7 @@ ucs_status_t uct_sysv_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
-    memcpy(buffer, (void *)(rkey + remote_addr), length);
+    memcpy((void *)buffer, (void *)(rkey + remote_addr), length);
 
     ucs_trace_data("Posting GET ZCOPY of size %zd to %p",
                     length,

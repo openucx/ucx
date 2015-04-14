@@ -35,7 +35,7 @@ ucs_status_t uct_sysv_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned 
 ucs_status_t uct_sysv_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
                                    void *arg, size_t length, uint64_t remote_addr,
                                    uct_rkey_t rkey);
-ucs_status_t uct_sysv_ep_put_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
+ucs_status_t uct_sysv_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
                                    uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp);
 ucs_status_t uct_sysv_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
