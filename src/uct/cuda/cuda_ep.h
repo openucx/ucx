@@ -27,10 +27,10 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cuda_ep_t, uct_ep_t);
 
 ucs_status_t uct_cuda_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
-ucs_status_t uct_cuda_ep_connect_to_ep(uct_ep_h tl_ep, uct_iface_addr_t 
-                                       *tl_iface_addr, uct_ep_addr_t *tl_ep_addr);
-ucs_status_t uct_cuda_ep_put_short(uct_ep_h tl_ep, void *buffer, unsigned length, 
+ucs_status_t uct_cuda_ep_connect_to_ep(uct_ep_h tl_ep, const uct_iface_addr_t 
+                                       *tl_iface_addr, const uct_ep_addr_t *tl_ep_addr);
+ucs_status_t uct_cuda_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length, 
                                    uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_cuda_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                                  void *payload, unsigned length);
+                                  const void *payload, unsigned length);
 #endif

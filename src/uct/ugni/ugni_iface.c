@@ -190,15 +190,15 @@ static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static void uct_ugni_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
+static void uct_ugni_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
 {
     ucs_free((void *)rkey_ob->rkey);
 }
 
-ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob)
 {
-    uint64_t *ptr = rkey_buffer;
+    const uint64_t *ptr = rkey_buffer;
     gni_mem_handle_t *mem_hndl = NULL;
     uint64_t magic = 0;
 
@@ -271,10 +271,9 @@ static void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h 
     base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
 }
   
-
 static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
-                           uct_iface_config_t *tl_config)
+                           const uct_iface_config_t *tl_config)
 {
     uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
     uct_ugni_context_t *ugni_ctx = ucs_component_get(worker->context,
@@ -418,7 +417,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, uct_iface_config_t *);
+                                 const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
 
 uct_tl_ops_t uct_ugni_tl_ops = {

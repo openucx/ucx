@@ -185,10 +185,10 @@ static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+static ucs_status_t uct_ib_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
                                        uct_rkey_bundle_t *rkey_ob)
 {
-    uint32_t *ptr = rkey_buffer;
+    const uint32_t *ptr = rkey_buffer;
     uint32_t magic;
 
     magic = *(ptr++);

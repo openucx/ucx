@@ -263,7 +263,7 @@ void uct_iface_config_release(uct_iface_config_t *config)
     ucs_free(bundle);
 }
 
-void uct_iface_config_print(uct_iface_config_t *config, FILE *stream,
+void uct_iface_config_print(const uct_iface_config_t *config, FILE *stream,
                             const char *title, ucs_config_print_flags_t print_flags)
 {
     uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
@@ -281,7 +281,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
 
 ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
                             const char *dev_name, size_t rx_headroom,
-                            uct_iface_config_t *config, uct_iface_h *iface_p)
+                            const uct_iface_config_t *config, uct_iface_h *iface_p)
 {
     uct_context_tl_info_t *tl = uct_find_tl(worker->context, tl_name);
 
@@ -298,13 +298,13 @@ ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
     return pd->ops->rkey_pack(pd, memh, rkey_buffer);
 }
 
-ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
                                 uct_rkey_bundle_t *rkey_ob)
 {
     return pd->ops->rkey_unpack(pd, rkey_buffer, rkey_ob);
 }
 
-void uct_pd_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
+void uct_pd_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
 {
     pd->ops->rkey_release(pd, rkey_ob);
 }

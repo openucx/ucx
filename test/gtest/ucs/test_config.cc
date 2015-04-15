@@ -117,7 +117,7 @@ protected:
 
         car_opts(const car_opts& orig)
         {
-            ucs_status_t status = ucs_config_parser_clone_opts(const_cast<car_opts_t*>(&orig.m_opts),
+            ucs_status_t status = ucs_config_parser_clone_opts(&orig.m_opts,
                                                                &m_opts,
                                                                car_opts_table);
             ASSERT_UCS_OK(status);

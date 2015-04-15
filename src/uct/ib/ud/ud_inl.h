@@ -64,7 +64,7 @@ static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
 static inline void uct_ud_iface_complete_tx(uct_ud_iface_t *iface,
                                            uct_ud_ep_t *ep,
                                            uct_ud_send_skb_t *skb,
-                                           void *data, void *buffer, unsigned length)
+                                           void *data, const void *buffer, unsigned length)
 {
     ep->tx.psn++;
     --iface->tx.available;

@@ -97,7 +97,7 @@ void ucp_config_release(ucp_config_t *config);
  *
  * @return Error code.
  */
-ucs_status_t ucp_init(ucp_config_t *config, size_t request_headroom,
+ucs_status_t ucp_init(const ucp_config_t *config, size_t request_headroom,
                       ucp_context_h *context_p);
 
 
@@ -300,7 +300,7 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * @param [in]  length      Message length to send.
  * @param [in]  tag         Message tag to send.
  */
-ucs_status_t ucp_tag_send(ucp_ep_h ep, void *buffer, size_t length, ucp_tag_t tag);
+ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length, ucp_tag_t tag);
 
 
 /**
@@ -331,7 +331,7 @@ ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t length,
  * @param [in]  remote_addr  Remote address to write to.
  * @param [in]  rkey         Remote memory key.
  */
-ucs_status_t ucp_rma_put(ucp_ep_h ep, void *buffer, size_t length,
+ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey);
 
 

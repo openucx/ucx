@@ -69,7 +69,7 @@ struct uct_tl_ops {
                                     unsigned *num_resources_p);
 
     ucs_status_t (*iface_open)(uct_worker_h worker, const char *dev_name,
-                               size_t rx_headroom, uct_iface_config_t *config,
+                               size_t rx_headroom, const uct_iface_config_t *config,
                                uct_iface_h *iface_p);
 };
 
@@ -94,7 +94,7 @@ typedef struct uct_base_iface {
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
 } uct_base_iface_t;
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_worker_h, uct_pd_h,
-                  uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
+                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
 
 
 /**

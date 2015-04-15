@@ -35,7 +35,7 @@ ucs_status_t ucp_rkey_destroy(ucp_rkey_h rk_rkey_destrey)
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
-ucs_status_t ucp_rma_put(ucp_ep_h ep, void *buffer, size_t length,
+ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {
     return UCS_ERR_UNSUPPORTED;

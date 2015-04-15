@@ -139,17 +139,17 @@ static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static void uct_sysv_rkey_release(uct_pd_h pd, uct_rkey_bundle_t *rkey_ob)
+static void uct_sysv_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
 {
     /* detach shared segment */
     shmdt((void *)((intptr_t)rkey_ob->type + rkey_ob->rkey));
 }
 
-ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, void *rkey_buffer,
+ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob)
 {
     /* user is responsible to free rkey_buffer */
-    uct_sysv_rkey_t *rkey = rkey_buffer;
+    const uct_sysv_rkey_t *rkey = rkey_buffer;
     long long magic = 0;
     int shmid;
     void *client_ptr;
@@ -229,7 +229,7 @@ static uct_pd_t uct_sysv_pd = {
 
 static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
-                           uct_iface_config_t *tl_config)
+                           const uct_iface_config_t *tl_config)
 {
     int addr;
 
@@ -259,7 +259,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
 
 UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_base_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, uct_iface_config_t *);
+                                 const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
 
 uct_tl_ops_t uct_sysv_tl_ops = {

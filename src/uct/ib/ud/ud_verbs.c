@@ -107,7 +107,7 @@ static void uct_ud_verbs_iface_progress_pending(uct_ud_verbs_iface_t *iface)
     }
 }
 
-static inline void uct_ud_verbs_iface_tx_data(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep, void *buffer, unsigned length)
+static inline void uct_ud_verbs_iface_tx_data(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep, const void *buffer, unsigned length)
 {
     int UCS_V_UNUSED ret;
     struct ibv_send_wr *bad_wr;
@@ -121,7 +121,7 @@ static inline void uct_ud_verbs_iface_tx_data(uct_ud_verbs_iface_t *iface, uct_u
 }
 
 static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
-                                              void *buffer, unsigned length)
+                                              const void *buffer, unsigned length)
 {
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_verbs_iface_t);
@@ -155,7 +155,7 @@ static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_
 }
 
 static ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep, 
-                                              void *buffer, unsigned length,
+                                              const void *buffer, unsigned length,
                                               uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
@@ -272,8 +272,8 @@ static ucs_status_t uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
 }
 
 ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           uct_iface_addr_t *tl_iface_addr,
-                                           uct_ep_addr_t *tl_ep_addr)
+                                           const uct_iface_addr_t *tl_iface_addr,
+                                           const uct_ep_addr_t *tl_ep_addr)
 {
     ucs_status_t status;
     struct ibv_ah_attr ah_attr;
@@ -357,7 +357,7 @@ uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface)
 
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
-                           uct_iface_config_t *tl_config)
+                           const uct_iface_config_t *tl_config)
 {
     uct_ud_iface_config_t *config = ucs_derived_of(tl_config, uct_ud_iface_config_t);
     ucs_trace_func("");
@@ -401,7 +401,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 UCS_CLASS_DEFINE(uct_ud_verbs_iface_t, uct_ud_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, uct_iface_config_t*);
+                                 const char*, size_t, const uct_iface_config_t*);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_iface_t, uct_iface_t);
 
