@@ -75,6 +75,13 @@ typedef struct uct_ugni_get_desc {
     uct_completion_t tmp;
     uct_completion_t *orig_comp_cb;
     size_t padding;
+
+    /* Handling unalined composed get messages */
+    size_t expected_bytes;          /**< Number of bytes expected to be delivered
+                                         including padding */
+    size_t network_completed_bytes; /**< Total number of delivered bytes */
+    struct uct_ugni_get_desc* head; /**< Pointer to the head descriptor
+                                         that manages the completion of the operation */
 } uct_ugni_get_desc_t;
 
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)

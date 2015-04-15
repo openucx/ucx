@@ -462,6 +462,43 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
+static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self, void *data)
+{
+    uct_ugni_get_desc_t *fma = (uct_ugni_get_desc_t *)
+                               ((char *)data - sizeof(uct_ugni_base_desc_t));
+    uct_ugni_get_desc_t *head_fma = fma->head;
+
+    ucs_assert(fma->network_completed_bytes == 0 &&
+               fma->expected_bytes != 0);
+
+    head_fma->network_completed_bytes += fma->super.desc.length;
+
+    ucs_assert(fma->network_completed_bytes <= fma->expected_bytes);
+    /* Check if messages is completed */
+    if (fma->network_completed_bytes == fma->expected_bytes) {
+        if (ucs_likely(NULL != fma->orig_comp_cb)) {
+            /* Call the orignal callback and skip padding */
+            uct_invoke_completion(head_fma->orig_comp_cb, (char *)(head_fma + 1) +
+                                  head_fma->padding);
+        }
+    }
+}
+
+static ucs_status_t uct_ugni_ep_get_composed(uct_ep_h tl_ep, void *buffer, size_t length,
+                                   uct_mem_h memh, uint64_t remote_addr,
+                                   uct_rkey_t rkey, uct_completion_t *comp)
+{
+    uct_ugni_get_desc_t *fma = NULL;
+    /* Allocate up to 2-4 requests */
+    /* Format requests */
+    /* Post all requests */
+
+    /* Supress the warning */
+    uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, remote_addr, rkey,
+                            length, (uct_ugni_ep_t *)tl_ep, comp, uct_ugni_unalign_fma_composed_cb);
+    return UCS_ERR_UNSUPPORTED;
+}
+
 ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                    uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
@@ -472,6 +509,16 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.rdma_max_size, "get_zcopy");
+
+    /* Special flow for an unalign data */
+    if (ucs_unlikely(ucs_check_if_align_pow2(remote_addr, UGNI_GET_ALIGN)       ||
+                     ucs_check_if_align_pow2((uintptr_t)buffer, UGNI_GET_ALIGN) ||
+                     ucs_check_if_align_pow2(length, UGNI_GET_ALIGN))) {
+        return uct_ugni_ep_get_composed(tl_ep, buffer, length, memh,
+                                        remote_addr, rkey, comp);
+    } 
+
+    /* Everything is perfectly aligned */
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_NO_RESOURCE);
     /* Setup Callback */
     uct_ugni_format_rdma(rdma, GNI_POST_RDMA_GET, buffer, remote_addr, memh, rkey,
