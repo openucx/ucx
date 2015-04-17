@@ -47,7 +47,10 @@ static void uct_ugni_progress(void *arg)
     }
     --iface->outstanding;
     --desc->ep->outstanding;
-    ucs_mpool_put(desc);
+
+    if(ucs_likely(desc->not_ready_to_free == 0)){
+        ucs_mpool_put(desc);
+    }
     return;
 }
 

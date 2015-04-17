@@ -68,6 +68,7 @@ typedef struct uct_ugni_base_desc {
     gni_post_descriptor_t desc;
     uct_completion_t *comp_cb;
     uct_ugni_ep_t  *ep;
+    int not_ready_to_free;
 } uct_ugni_base_desc_t;
 
 typedef struct uct_ugni_get_desc {
@@ -82,6 +83,8 @@ typedef struct uct_ugni_get_desc {
     size_t network_completed_bytes; /**< Total number of delivered bytes */
     struct uct_ugni_get_desc* head; /**< Pointer to the head descriptor
                                          that manages the completion of the operation */
+    void *user_buffer;              /**< Pointer to user's buffer, here to ensure it's always available for composed messages */
+    size_t tail;                    /**< Tail parameter to specify how many bytes at the end of a fma/rdma are garbage*/
 } uct_ugni_get_desc_t;
 
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
