@@ -99,6 +99,13 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned index,
 
 
 /**
+ * Replace pointer in the array
+ * @param  index    index of slot
+ * @param  new_val  value to put into slot given by index
+ * @return old value of the slot
+ */
+void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned index, void *new_val);
+/**
  * Retrieve a value from the array.
  *
  * @param index   Index to retrieve the value from.
