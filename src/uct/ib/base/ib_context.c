@@ -71,7 +71,7 @@ ucs_status_t uct_ib_query_resources(uct_context_h context, unsigned flags,
                 continue;
             }
 
-            ucs_debug("using port %s:%d", uct_ib_device_name(dev), port_num);
+            ucs_debug("found usable port %s:%d", uct_ib_device_name(dev), port_num);
             num_resources++;
         }
     }

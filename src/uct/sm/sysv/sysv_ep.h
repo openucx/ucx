@@ -15,7 +15,8 @@ typedef struct uct_sysv_ep {
     struct uct_sysv_ep *next;
 } uct_sysv_ep_t;
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_sysv_ep_t, uct_ep_t, uct_iface_t*);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_sysv_ep_t, uct_ep_t, uct_iface_t*,
+                           const struct sockaddr *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_sysv_ep_t, uct_ep_t);
 
 #endif

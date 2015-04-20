@@ -67,12 +67,28 @@ static ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t)(uct_iface_t*);
 
-ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
+
+static ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
+                                               struct sockaddr *addr)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
+    uct_sockaddr_ugni_t *iface_addr = (uct_sockaddr_ugni_t*)addr;
 
-    *(uct_ugni_iface_addr_t*)iface_addr = iface->address;
+    iface_addr->sgni_family = UCT_AF_UGNI;
+    iface_addr->nic_addr    = iface->nic_addr;
+    iface_addr->domain_id   = iface->domain_id;
     return UCS_OK;
+}
+
+static int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
+{
+    const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
+
+    if (iface_addr->sgni_family != UCT_AF_UGNI) {
+        return 0;
+    }
+
+    return 1;
 }
 
 ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -85,8 +101,8 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
     iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
-    iface_attr->iface_addr_len         = sizeof(uct_ugni_iface_addr_t);
-    iface_attr->ep_addr_len            = sizeof(uct_ugni_ep_addr_t);
+    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
+    iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT |
                                          UCT_IFACE_FLAG_PUT_BCOPY |
                                          UCT_IFACE_FLAG_PUT_ZCOPY |
@@ -95,7 +111,7 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_ATOMIC_ADD64   |
                                          UCT_IFACE_FLAG_GET_BCOPY      |
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
-                                         UCT_IFACE_FLAG_CONNECT_TO_EP;
+                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     iface_attr->completion_priv_len    = 0; /* TBD */
 
@@ -230,13 +246,13 @@ ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
 }
 
 uct_iface_ops_t uct_ugni_iface_ops = {
+    .iface_query         = uct_ugni_iface_query,
+    .iface_flush         = uct_ugni_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t),
     .iface_get_address   = uct_ugni_iface_get_address,
-    .iface_flush         = uct_ugni_iface_flush,
-    .ep_get_address      = uct_ugni_ep_get_address,
-    .ep_connect_to_iface = NULL,
-    .ep_connect_to_ep    = uct_ugni_ep_connect_to_ep,
-    .iface_query         = uct_ugni_iface_query,
+    .iface_is_reachable  = uct_ugni_iface_is_reachable,
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
     .ep_put_short        = uct_ugni_ep_put_short,
     .ep_put_bcopy        = uct_ugni_ep_put_bcopy,
     .ep_put_zcopy        = uct_ugni_ep_put_zcopy,
@@ -246,8 +262,6 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
 };
 
 uct_pd_ops_t uct_ugni_pd_ops = {
@@ -295,9 +309,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ugni_iface_ops, worker,
                               &self->pd, &config->super UCS_STATS_ARG(NULL));
 
-    self->pd.ops           = &uct_ugni_pd_ops;
-    self->dev              = dev;
-    self->address.nic_addr = dev->address;
+    self->pd.ops   = &uct_ugni_pd_ops;
+    self->dev      = dev;
+    self->nic_addr = dev->address;
 
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;

@@ -181,6 +181,8 @@ static ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     iface->tx.sge[0].addr   = (uintptr_t)neth;
     iface->tx.sge[0].length = sizeof(*neth) + sizeof(*put_hdr);
 
+    ucs_trace_data("TX: neth->type=0x%08x", neth->packet_type);
+
     uct_ud_verbs_iface_tx_data(iface, ep, buffer, length);
     ucs_trace_data("TX: PUT [%0llx] buf=%p len=%u", (unsigned long long)remote_addr, buffer, length);
 
@@ -271,30 +273,27 @@ static ucs_status_t uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           const uct_iface_addr_t *tl_iface_addr,
-                                           const uct_ep_addr_t *tl_ep_addr)
+ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr)
 {
-    ucs_status_t status;
-    struct ibv_ah_attr ah_attr;
-    struct ibv_ah *ah;
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
+    const uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
+    struct ibv_ah_attr ah_attr;
+    ucs_status_t status;
+    struct ibv_ah *ah;
 
-    status = uct_ud_ep_connect_to_ep(tl_ep, tl_iface_addr, tl_ep_addr);
+    status = uct_ud_ep_connect_to_ep(&ep->super, addr);
     if (status != UCS_OK) {
         return status;
     }
 
     memset(&ah_attr, 0, sizeof(ah_attr));
-    ah_attr.port_num = iface->port_num;
-    ah_attr.sl = 0; /* TODO: sl */
+    ah_attr.port_num  = iface->port_num;
+    ah_attr.sl        = 0; /* TODO: sl */
     ah_attr.is_global = 0;
-    ah_attr.dlid = if_addr->lid;
+    ah_attr.dlid      = ib_addr->lid;
 
-    ah = ibv_create_ah(dev->pd, &ah_attr);
+    ah = ibv_create_ah(uct_ib_iface_device(iface)->pd, &ah_attr);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         return UCS_ERR_INVALID_ADDR;
@@ -308,17 +307,17 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
 uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
-    .iface_get_address   = uct_ud_iface_get_address,
     .iface_flush         = uct_ud_iface_flush,
     .iface_release_am_desc=uct_ib_iface_release_am_desc,
     .ep_get_address      = uct_ud_ep_get_address,
-    .ep_connect_to_iface = NULL,
+    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
     .ep_connect_to_ep    = uct_ud_verbs_ep_connect_to_ep, 
+    .iface_get_address   = uct_ib_iface_get_subnet_address,
+    .iface_is_reachable  = uct_ib_iface_is_reachable,
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .iface_query         = uct_ud_verbs_iface_query,
     .ep_put_short        = uct_ud_verbs_ep_put_short,
     .ep_am_short         = uct_ud_verbs_ep_am_short,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
 };
 
 static UCS_F_NOINLINE void

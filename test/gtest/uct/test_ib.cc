@@ -21,8 +21,6 @@ public:
         m_e1 = uct_test::create_entity(0);
         m_e2 = uct_test::create_entity(0);
 
-        m_e1->add_ep();
-        m_e2->add_ep();
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
 

@@ -31,10 +31,6 @@ void uct_p2p_test::init() {
     m_entities.push_back(e1);
     m_entities.push_back(e2);
 
-    check_caps(UCT_IFACE_FLAG_CONNECT_TO_EP);
-
-    e1->add_ep();
-    e2->add_ep();
     e1->connect(0, *e2, 0);
     e2->connect(0, *e1, 0);
 

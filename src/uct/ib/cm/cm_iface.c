@@ -35,6 +35,16 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
 static uct_iface_ops_t uct_cm_iface_ops;
 
 
+static void uct_cm_iface_notify(uct_cm_iface_t *iface)
+{
+    uct_cm_completion_t *cm_comp;
+
+    while ((iface->inflight == 0) && !ucs_queue_is_empty(&iface->notify)) {
+        cm_comp = ucs_queue_pull_elem_non_empty(&iface->notify, uct_cm_completion_t, queue);
+        uct_invoke_completion(&cm_comp->super, NULL);
+    }
+}
+
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
@@ -44,7 +54,7 @@ ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
     }
 
     sched_yield();
-    return UCS_INPROGRESS;
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
@@ -53,7 +63,7 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     uct_cm_hdr_t *hdr = event->private_data;
     struct ib_cm_sidr_rep_param rep;
     ucs_status_t status;
-    void *desc;
+    void *cm_desc, *desc;
     int ret;
 
     VALGRIND_MAKE_MEM_DEFINED(hdr, sizeof(hdr));
@@ -63,18 +73,11 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
                    hdr->length);
 
     /* Allocate temporary buffer to serve as receive descriptor */
-    desc = ucs_malloc(iface->super.config.rx_payload_offset + hdr->length,
-                      "cm_recv_desc");
-    if (desc == NULL) {
+    cm_desc = ucs_malloc(iface->super.config.rx_payload_offset + hdr->length,
+                         "cm_recv_desc");
+    if (cm_desc == NULL) {
         ucs_error("failed to allocate cm receive descriptor");
         return;
-    }
-
-    /* Call active message handler */
-    status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1, hdr->length,
-                                 desc + iface->super.config.rx_headroom_offset);
-    if (status == UCS_OK) {
-        ucs_free(desc);
     }
 
     /* Send reply */
@@ -84,6 +87,16 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     ret = ib_cm_send_sidr_rep(event->cm_id, &rep);
     if (ret) {
         ucs_error("ib_cm_send_sidr_rep() failed: %m");
+    }
+
+    /* Call active message handler */
+    desc = cm_desc + iface->super.config.rx_headroom_offset;
+    status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                                 hdr->length, desc);
+    if (status == UCS_OK) {
+        ucs_free(cm_desc);
+    } else {
+        uct_recv_desc_iface(desc) = &iface->super.super.super;
     }
 }
 
@@ -146,13 +159,15 @@ static void uct_cm_iface_event_handler(void *arg)
                 ucs_error("ib_cm_destroy_id() failed: %m");
             }
         }
+
+        uct_cm_iface_notify(iface);
     }
 }
 
 static void uct_cm_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
-    ucs_free(desc - iface->super.config.rx_payload_offset);
+    ucs_free(desc - iface->super.config.rx_headroom_offset);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_worker_h worker,
@@ -173,12 +188,13 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_worker_h worker,
     self->service_id         = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
                                             (~IB_CM_ASSIGN_SERVICE_ID_MASK));
     self->inflight           = 0;
+    ucs_queue_head_init(&self->notify);
     self->config.timeout_ms  = (int)(config->timeout * 1e3 + 0.5);
     self->config.retry_count = ucs_min(config->retry_count, UINT8_MAX);
 
     self->cmdev = ib_cm_open_device(uct_ib_iface_device(&self->super)->ibv_context);
     if (self->cmdev == NULL) {
-        ucs_error("ib_cm_open_device() failed: %m");
+        ucs_error("ib_cm_open_device() failed: %m. Check if ib_ucm.ko module is loaded.");
         status = UCS_ERR_NO_DEVICE;
         goto err;
     }
@@ -208,7 +224,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_worker_h worker,
 
     status = ucs_async_set_event_handler(config->async_mode, self->cmdev->fd,
                                          POLLIN, uct_cm_iface_event_handler, self,
-                                         NULL);
+                                         worker->async);
     if (status != UCS_OK) {
         ucs_error("failed to set event handler");
         goto err_destroy_id;
@@ -231,7 +247,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
     ucs_trace_func("");
 
     if (self->inflight) {
-        ucs_debug("waiting for %d in-flight requests to complete", self->inflight);
+        ucs_warn("waiting for %d in-flight requests to complete", self->inflight);
         while (self->inflight) {
             sched_yield();
         }
@@ -258,48 +274,40 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_short      = mtu;
     iface_attr->cap.am.max_bcopy      = mtu;
     iface_attr->cap.am.max_zcopy      = 0;
-    iface_attr->iface_addr_len        = sizeof(struct ibv_sa_path_rec);
+    iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = 0;
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-    iface_attr->completion_priv_len   = 0;
-    return UCS_OK;
-}
-
-ucs_status_t uct_cm_iface_get_addr(uct_cm_iface_t *iface, uct_cm_iface_addr_t *addr)
-{
-    int ret;
-
-    ret = ibv_query_gid(uct_ib_iface_device(&iface->super)->ibv_context,
-                        iface->super.port_num, 0 /* TODO */, &addr->gid);
-    if (ret) {
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    addr->lid        = iface->super.addr.lid;
-    addr->service_id = iface->service_id;
+    iface_attr->completion_priv_len   = sizeof(uct_cm_completion_t) -
+                                            sizeof(uct_completion_t);
     return UCS_OK;
 }
 
 static ucs_status_t uct_cm_iface_get_address(uct_iface_h tl_iface,
-                                             uct_iface_addr_t *iface_addr)
+                                             struct sockaddr *addr)
 {
-    return uct_cm_iface_get_addr(ucs_derived_of(tl_iface, uct_cm_iface_t),
-                                 ucs_derived_of(iface_addr, uct_cm_iface_addr_t));
+    uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
+    uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
+
+    uct_ib_iface_get_address(&iface->super.super.super, addr);
+    ib_addr->id = iface->service_id;
+    return UCS_OK;
 }
+
 
 static uct_iface_ops_t uct_cm_iface_ops = {
     .iface_query           = uct_cm_iface_query,
-    .iface_get_address     = uct_cm_iface_get_address,
     .iface_flush           = uct_cm_iface_flush,
     .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
-    .iface_release_am_desc = uct_cm_iface_release_desc,
-    .ep_connect_to_iface   = uct_cm_ep_connect_to_iface,
-    .ep_am_short           = uct_cm_ep_am_short,
-    .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
+    .iface_get_address     = uct_cm_iface_get_address,
+    .iface_is_reachable    = uct_ib_iface_is_reachable,
+    .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
+    .iface_release_am_desc = uct_cm_iface_release_desc,
+    .ep_am_short           = uct_cm_ep_am_short,
     .ep_am_bcopy           = uct_cm_ep_am_bcopy,
+    .ep_req_notify         = uct_cm_ep_req_notify,
     .ep_flush              = uct_cm_ep_flush,
 };
 

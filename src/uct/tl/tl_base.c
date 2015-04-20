@@ -144,14 +144,20 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
+ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr)
+{
+    return iface->ops.iface_get_address(iface, addr);
+}
+
+int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr)
+{
+    return iface->ops.iface_is_reachable(iface, addr);
+
+}
+
 void uct_iface_close(uct_iface_h iface)
 {
     iface->ops.iface_close(iface);
-}
-
-ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *iface_addr)
-{
-    return iface->ops.iface_get_address(iface, iface_addr);
 }
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
@@ -161,7 +167,7 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
     return UCS_OK;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
+UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 {
 }
 
@@ -211,29 +217,23 @@ void uct_ep_destroy(uct_ep_h ep)
     ep->iface->ops.ep_destroy(ep);
 }
 
-ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr)
+ucs_status_t uct_ep_get_address(uct_ep_h ep, struct sockaddr *addr)
 {
-    return ep->iface->ops.ep_get_address(ep, ep_addr);
+    return ep->iface->ops.ep_get_address(ep, addr);
 }
 
-ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr)
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const struct sockaddr *addr)
 {
-    return ep->iface->ops.ep_connect_to_iface(ep, iface_addr);
+    return ep->iface->ops.ep_connect_to_ep(ep, addr);
 }
 
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_iface_addr_t *iface_addr,
-                                  const uct_ep_addr_t *ep_addr)
-{
-    return ep->iface->ops.ep_connect_to_ep(ep, iface_addr, ep_addr);
-}
-
-static UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
+UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
 {
     self->iface = iface;
     return UCS_OK;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
+UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 {
 }
 

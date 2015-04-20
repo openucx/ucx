@@ -19,11 +19,13 @@ typedef struct uct_cm_iov {
 } uct_cm_iov_t;
 
 
-static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface)
+static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface, const struct sockaddr *addr)
+
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
-    ucs_trace_func("");
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
+    self->dest_addr = *(const uct_sockaddr_ib_t*)addr;
     return UCS_OK;
 }
 
@@ -33,30 +35,16 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_cm_ep_t, uct_base_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h, const struct sockaddr *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 
-
-ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_addr_t *iface_addr)
-{
-    uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
-    ep->dest_addr = *ucs_derived_of(iface_addr, uct_cm_iface_addr_t);
-    return UCS_OK;
-}
 
 static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
                                             struct ibv_sa_path_rec *path)
 {
     uct_cm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_cm_iface_t);
-    uct_cm_iface_addr_t local_addr;
-    ucs_status_t status;
     uint16_t pkey;
     int ret;
-
-    status = uct_cm_iface_get_addr(iface, &local_addr);
-    if (status != UCS_OK) {
-        return status;
-    }
 
     ret = ibv_query_pkey(uct_ib_iface_device(&iface->super)->ibv_context,
                          iface->super.port_num, 0 /*TODO config */, &pkey);
@@ -65,10 +53,11 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    path->dgid                      = ep->dest_addr.gid;
-    path->sgid                      = local_addr.gid;
+    path->dgid.global.subnet_prefix = ep->dest_addr.subnet_prefix;
+    path->dgid.global.interface_id  = ep->dest_addr.guid;
+    path->sgid                      = iface->super.gid;
     path->dlid                      = htons(ep->dest_addr.lid);
-    path->slid                      = htons(local_addr.lid);
+    path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
     path->raw_traffic               = 0; /* IB traffic */
     path->flow_label                = 0;
     path->hop_limit                 = 0;
@@ -161,7 +150,7 @@ static ucs_status_t uct_cm_ep_send(uct_cm_ep_t *ep, uct_cm_iov_t *iov, int iovcn
     /* Fill SIDR request */
     memset(&req, 0, sizeof req);
     req.path             = &path;
-    req.service_id       = ep->dest_addr.service_id;
+    req.service_id       = ep->dest_addr.id;
     req.timeout_ms       = iface->config.timeout_ms;
     req.private_data     = buffer;
     req.private_data_len = length;
@@ -250,6 +239,15 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     status = uct_cm_ep_send(ep, iov, 2);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super, AM, BCOPY, length);
     return status;
+}
+
+ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, uct_completion_t *comp)
+{
+    uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
+    uct_cm_completion_t *cm_comp = ucs_derived_of(comp, uct_cm_completion_t);
+
+    ucs_queue_push(&iface->notify, &cm_comp->queue);
+    return UCS_OK;
 }
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep)

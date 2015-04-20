@@ -39,13 +39,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
 UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
 
-
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
 
-    ((uct_ud_ep_addr_t*)ep_addr)->ep_id = ep->ep_id;
-    ucs_debug("ep_addr=%d", ep->ep_id);
+    uct_ib_iface_get_address(&iface->super.super.super, addr);
+    ib_addr->qp_num  = iface->qp->qp_num;
+    ib_addr->id      = ep->ep_id;
     return UCS_OK;
 }
 
@@ -64,21 +66,17 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 }
 
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
-                                     const uct_iface_addr_t *tl_iface_addr,
-                                     const uct_ep_addr_t *tl_ep_addr)
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, const struct sockaddr *addr)
 {
-    uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
-    uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
-    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
-    uct_ud_ep_addr_t *ep_addr = ucs_derived_of(tl_ep_addr, uct_ud_ep_addr_t);
+    const uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_trace_func("");
 
-    ep->dest_ep_id = ep_addr->ep_id;
-    ep->dest_qpn = if_addr->qp_num;
+    ep->dest_ep_id = ib_addr->id;
+    ep->dest_qpn   = ib_addr->qp_num;
 
     uct_ud_ep_reset(ep);
 
@@ -88,7 +86,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, 
-              if_addr->lid, if_addr->qp_num, ep->dest_ep_id);
+              ib_addr->lid, ep->dest_qpn, ep->dest_ep_id);
 
     return UCS_OK;
 }

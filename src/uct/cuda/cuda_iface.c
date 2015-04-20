@@ -20,24 +20,33 @@ static ucs_status_t uct_cuda_iface_flush(uct_iface_h tl_iface)
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t)(uct_iface_t*);
 
-ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface, 
-                                        uct_iface_addr_t *iface_addr)
+static ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface,
+                                               struct sockaddr *iface_addr)
 {
-    uct_cuda_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_iface_t);
+    uct_sockaddr_process_t *cuda_addr = (uct_sockaddr_process_t*)iface_addr;
 
-    *(uct_cuda_iface_addr_t*)iface_addr = iface->addr;
+    cuda_addr->sp_family = UCT_AF_PROCESS;
+    cuda_addr->node_guid = ucs_machine_guid();
+    cuda_addr->cookie    = 0;
     return UCS_OK;
+}
+
+static int uct_cuda_iface_is_reachable(uct_iface_h iface,
+                                       const struct sockaddr* addr)
+{
+    return 0;
 }
 
 #define UCT_CUDA_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
 
-ucs_status_t uct_cuda_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
+static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
+                                         uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* FIXME all of these values */
-    iface_attr->iface_addr_len         = sizeof(uct_cuda_iface_addr_t);
-    iface_attr->ep_addr_len            = sizeof(uct_cuda_ep_addr_t);
+    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
+    iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = 0;
 
     iface_attr->cap.put.max_short      = 0;
@@ -83,7 +92,7 @@ static void uct_cuda_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
   return;
 }
 
-ucs_status_t uct_cuda_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
+static ucs_status_t uct_cuda_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
                                   uct_rkey_bundle_t *rkey_ob)
 {
     return UCS_OK;
@@ -93,14 +102,12 @@ uct_iface_ops_t uct_cuda_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t),
     .iface_get_address   = uct_cuda_iface_get_address,
     .iface_flush         = uct_cuda_iface_flush,
-    .ep_get_address      = uct_cuda_ep_get_address,
-    .ep_connect_to_iface = NULL,
-    .ep_connect_to_ep    = uct_cuda_ep_connect_to_ep,
     .iface_query         = uct_cuda_iface_query,
+    .iface_is_reachable  = uct_cuda_iface_is_reachable,
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ep_t),
     .ep_put_short        = uct_cuda_ep_put_short,
     .ep_am_short         = uct_cuda_ep_am_short,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ep_t),
 };
 
 static ucs_status_t uct_cuda_mem_reg(uct_pd_h pd, void *address, size_t length,

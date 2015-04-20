@@ -22,7 +22,6 @@ void uct_device_get_resource(uct_ugni_device_t *dev,
     resource->local_cpus = dev->cpu_mask;
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));
-    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 }
 
 static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)

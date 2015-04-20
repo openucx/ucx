@@ -183,6 +183,49 @@ void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put(ib_desc);
 }
 
+ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)addr;
+
+    /* TODO LMC */
+    ib_addr->sib_family    = UCT_AF_INFINIBAND;
+    ib_addr->lid           = uct_ib_iface_port_attr(iface)->lid;
+    ib_addr->id            = 0;
+    ib_addr->guid          = iface->gid.global.interface_id;
+    ib_addr->subnet_prefix = iface->gid.global.subnet_prefix;
+    ib_addr->qp_num        = 0;
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
+                                             struct sockaddr *addr)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_sockaddr_ib_subnet_t *subn_addr = (uct_sockaddr_ib_subnet_t*)addr;
+
+    subn_addr->sib_family    = UCT_AF_INFINIBAND_SUBNET;
+    subn_addr->subnet_prefix = iface->gid.global.subnet_prefix;
+    return UCS_OK;
+}
+
+int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+
+    if (addr->sa_family == UCT_AF_INFINIBAND) {
+        return iface->gid.global.subnet_prefix ==
+                        ((const uct_sockaddr_ib_t*)addr)->subnet_prefix;
+    }
+
+    if (addr->sa_family == UCT_AF_INFINIBAND_SUBNET) {
+        return iface->gid.global.subnet_prefix ==
+                        ((const uct_sockaddr_ib_subnet_t*)addr)->subnet_prefix;
+    }
+
+    return 0;
+}
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -199,7 +242,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     uint8_t port_num, lmc;
     uint16_t pkey, pkey_partition, cfg_partition_value, tbl_index;
     unsigned i, j, first, last, range_values_count;
-    int step, found_pkey;
+    int ret, step, found_pkey;
 
     status = uct_ib_iface_find_port(ibctx, dev_name, &dev, &port_num);
     if (status != UCS_OK) {
@@ -211,10 +254,10 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
                               &config->super UCS_STATS_ARG(dev->stats));
 
     self->port_num                 = port_num;
-    self->gid_index                = config->gid_index;
     self->sl                       = config->sl;
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
-                                     ucs_max(rx_headroom, rx_priv_len + rx_hdr_len);
+                                     ucs_max(sizeof(uct_am_recv_desc_t) + rx_headroom,
+                                             rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
     self->config.seg_size          = config->super.max_bcopy;
@@ -246,6 +289,19 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
                  "It wasn't found or the configured pkey doesn't have full membership.",
                  config->pkey_value);
         status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    ret = ibv_query_gid(dev->ibv_context, port_num, config->gid_index, &self->gid);
+    if (ret != 0) {
+        ucs_error("ibv_query_gid(index=%d) failed: %m", config->gid_index);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+    if ((self->gid.global.interface_id == 0) && (self->gid.global.subnet_prefix == 0)) {
+        ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
+                  uct_ib_device_name(dev), port_num);
+        status = UCS_ERR_INVALID_ADDR;
         goto err;
     }
 
@@ -319,9 +375,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
         goto err_destroy_send_cq;
     }
 
-    if (uct_ib_device_is_port_ib(dev, self->port_num)) {
-        self->addr.lid = uct_ib_device_port_attr(dev, self->port_num)->lid;
-    } else {
+    if (!uct_ib_device_is_port_ib(dev, self->port_num)) {
         ucs_error("Unsupported link layer");
         goto err_destroy_recv_cq;
     }

@@ -20,14 +20,6 @@
 #define UCT_UD_MIN_INLINE   48
 
 
-typedef struct uct_ud_iface_addr {
-    uct_iface_addr_t     super;
-    uint32_t             qp_num;
-    uint32_t             lid;
-    /* TODO: add mtu */
-} uct_ud_iface_addr_t;
-
-
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
 typedef struct uct_ud_iface_config {
@@ -62,8 +54,6 @@ UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_worker_h, const char *,
 extern ucs_config_field_t uct_ud_iface_config_table[];
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr);
-
-ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
 
 #if 0
 uct_ud_ep_t *uct_ud_iface_lookup_ep(uct_ud_iface_t *iface, unsigned qp_num);

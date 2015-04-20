@@ -497,37 +497,16 @@ ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_
         [2] = 8,
         [3] = 12
     };
-    struct sockaddr_in6 *in6_addr;
     double encoding, signal_rate, wire_speed;
-    union ibv_gid gid;
     unsigned active_width;
     size_t extra_pkt_len;
     size_t mtu;
-    int ret;
 
     /* HCA:Port is the hardware resource name */
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s:%d",
                       uct_ib_device_name(dev), port_num);
 
-    /* Port network address */
-    if (uct_ib_device_is_port_ib(dev, port_num)) {
-        /*
-         * For Infiniband, take the subnet prefix.
-         */
-        in6_addr = (struct sockaddr_in6 *)&(resource->subnet_addr);
-        in6_addr->sin6_family  = AF_INET6;
-        ret = ibv_query_gid(dev->ibv_context, port_num, 0, &gid);
-        if (ret != 0) {
-            ucs_error("ibv_query_gid(%s:%d) failed: %m", uct_ib_device_name(dev),
-                      port_num);
-            return UCS_ERR_IO_ERROR;
-
-        }
-
-        gid.global.interface_id = 0; /* Zero-out GUID, keep only subnet prefix */
-        UCS_STATIC_ASSERT(sizeof(in6_addr->sin6_addr) == sizeof(gid.raw));
-        memcpy(&in6_addr->sin6_addr, &gid.raw, sizeof(gid.raw));
-    } else {
+    if (!uct_ib_device_is_port_ib(dev, port_num)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

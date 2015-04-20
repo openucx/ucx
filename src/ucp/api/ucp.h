@@ -138,6 +138,33 @@ void ucp_worker_destroy(ucp_worker_h worker);
 
 /**
  * @ingroup CONTEXT
+ * @brief Get the address of worker object.
+ *
+ *  Returns the address of a worker object. This address should be passed to any
+ * remote entity wishing to connect to this worker.
+ *  The address buffer is allocated by this function, and should be released by
+ * calling @ref ucp_worker_release_address().
+ *
+ * @param [in]  worker            Worker object whose address to return.
+ * @param [out] address_p         Filled with a pointer to worker address.
+ * @param [out] address_length_p  Filled with the size of the address.
+ */
+ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
+                                    size_t *address_length_p);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Release an address of worker object.
+ *
+ * @param [in] address            Address to release, returned from
+ *                                @ref ucp_worker_get_address()
+ */
+void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
+
+
+/**
+ * @ingroup CONTEXT
  * @brief Progress all communications on a specific worker.
  *
  *  This function progresses all communications and returns handles to completed
@@ -162,11 +189,14 @@ void ucp_worker_progress(ucp_worker_h worker);
  * process is not completed, communications will be dealyed.
  *
  * @param [in]  worker      Handle to the worker on which the endpoint is created.
+ * @param [in]  address     Destination address, originally obtained from @ref
+ *                            ucp_worker_get_address().
  * @param [out] ep_p        Filled with a handle to the opened endpoint.
  *
  * @return Error code.
  */
-ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_ep_h *ep_p);
+ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
+                           ucp_ep_h *ep_p);
 
 
 /**
@@ -176,47 +206,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_ep_h *ep_p);
  * @param [in]  ep   Handle to the remote endpoint.
  */
 void ucp_ep_destroy(ucp_ep_h ep);
-
-
-/**
- * TODO ep->worker
- * @ingroup CONTEXT
- * @brief Get worker address length.
- *
- * @param [in]  worker         Worker to get address from.
- *
- * @return Worker address length.
- */
-size_t ucp_ep_address_length(ucp_ep_h ep);
-
-
-/**
- * TODO ep->worker
- * @ingroup CONTEXT
- * @brief Serialize worker address.
- *
- * Routine returns serialized address that can be used to connect
- * to the worker.
- * It is caller responsibility to allocate buffer that have enough room
- * to hold address and to free the buffer. Buffer size is obtained from
- * @ref ucp_worker_address_length().
- *
- * @param [in]  worker         Worker to get address from.
- * @param [out] address        Filled with the worker address.
- *
- * @return Error code.
- */
-ucs_status_t ucp_ep_pack_address(ucp_ep_h ep, ucp_address_t *address);
-
-
-/*
- * @ingroup CONTEXT
- * @brief Connect to remote endpoint.
- *
- * @param [in]  dest_addr   Destination address, originally obtained from @ref
- *                          ucp_ep_pack_address().
- */
-ucs_status_t ucp_ep_connect(ucp_ep_h ep, ucp_address_t *dest_addr);
 
 
 /**

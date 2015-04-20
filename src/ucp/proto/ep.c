@@ -12,35 +12,67 @@
 #include <string.h>
 
 
-ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_ep_h *ep_p)
+static void ucp_ep_progress_pending(uct_completion_t *self, void *data)
 {
-    uct_iface_attr_t iface_attr;
+    ucp_ep_h ep = ucs_container_of(self, ucp_ep_t, notify_comp);
+    ucp_worker_h worker = ep->worker;
+    ucp_ep_pending_op_t *op;
     ucs_status_t status;
-    ucp_ep_t *ep;
+    uct_ep_h uct_ep;
 
-    ep = ucs_malloc(sizeof(*ep), "ucp ep");
+    ucs_trace_func("ep=%p", ep);
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    while (!ucs_queue_is_empty(&ep->pending_q)) {
+        op = ucs_queue_head_elem_non_empty(&ep->pending_q, ucp_ep_pending_op_t,
+                                           queue);
+        status = op->progress(ep, op, &uct_ep);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            /* We could not progress the operation. Request another notification
+             * from the transport, and keep the endpoint in pending state.
+             */
+            uct_ep_req_notify(uct_ep, &ep->notify_comp);
+            goto out;
+        }
+
+        ucs_queue_pull_non_empty(&ep->pending_q);
+        ucs_free(op);
+    }
+
+    ep->state &= ~UCP_EP_STATE_PENDING;
+
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
+                           ucp_ep_h *ep_p)
+{
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    ep = ucs_calloc(1, sizeof(*ep) + worker->uct_comp_priv, "ucp ep");
     if (ep == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
-    status = uct_iface_query(worker->ifaces[0], &iface_attr);
-    if (status != UCS_OK) {
-        goto err_free_ep;
-    }
-
     ep->worker               = worker;
-    ep->config.max_short_tag = iface_attr.cap.am.max_short - sizeof(uint64_t);
+    ep->config.max_short_tag = SIZE_MAX;
+    ep->notify_comp.func     = ucp_ep_progress_pending;
+    ep->state                = 0;
+    ucs_queue_head_init(&ep->pending_q);
 
-    status = uct_ep_create(worker->ifaces[0], &ep->uct);
+    status = ucp_ep_wireup_start(ep, address);
     if (status != UCS_OK) {
-        goto err_free_ep;
+        goto err_free;
     }
 
     *ep_p = ep;
     return UCS_OK;
 
-err_free_ep:
+err_free:
     ucs_free(ep);
 err:
     return status;
@@ -48,29 +80,11 @@ err:
 
 void ucp_ep_destroy(ucp_ep_h ep)
 {
-    uct_ep_destroy(ep->uct);
+    ucp_ep_wireup_stop(ep);
+    while (uct_ep_flush(ep->uct.ep) != UCS_OK) {
+        ucp_worker_progress(ep->worker);
+    }
+    uct_ep_destroy(ep->uct.ep);
     ucs_free(ep);
 }
 
-size_t ucp_ep_address_length(ucp_ep_h ep)
-{
-    uct_iface_attr_t iface_attr;
-    uct_iface_query(ep->uct->iface, &iface_attr);
-    return iface_attr.iface_addr_len + iface_attr.ep_addr_len;
-}
-
-ucs_status_t ucp_ep_pack_address(ucp_ep_h ep, ucp_address_t *address)
-{
-    uct_iface_attr_t iface_attr;
-    uct_iface_query(ep->uct->iface, &iface_attr);
-    uct_iface_get_address(ep->uct->iface, (void*)address);
-    return uct_ep_get_address(ep->uct, (void*)address + iface_attr.iface_addr_len);
-}
-
-ucs_status_t ucp_ep_connect(ucp_ep_h ep, ucp_address_t *dest_addr)
-{
-    uct_iface_attr_t iface_attr;
-    uct_iface_query(ep->uct->iface, &iface_attr);
-    return uct_ep_connect_to_ep(ep->uct, (void*)dest_addr,
-                                (void*)dest_addr + iface_attr.iface_addr_len);
-}

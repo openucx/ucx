@@ -7,6 +7,7 @@
 
 #include "sm_ep.h"
 
+
 UCS_CLASS_INIT_FUNC(uct_sm_ep_t, uct_sm_iface_t *sm_iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &sm_iface->super)
@@ -21,21 +22,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sm_ep_t)
 UCS_CLASS_DEFINE(uct_sm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_sm_ep_t, uct_sm_iface_t, uct_sm_iface_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sm_ep_t, uct_ep_t);
-
-ucs_status_t uct_sm_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
-{
-    /* fake uuid address from iface - use it for ep as well */
-    uct_sm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sm_iface_t);
-    ((uct_sm_ep_addr_t*)ep_addr)->ep_id = iface->addr.nic_addr;
-    return UCS_OK;
-}
-
-ucs_status_t uct_sm_ep_connect_to_ep(uct_ep_h tl_ep, 
-                                     const uct_iface_addr_t *tl_iface_addr,
-                                     const uct_ep_addr_t *tl_ep_addr)
-{
-    return UCS_OK; /* No op */
-}
 
 ucs_status_t uct_sm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,

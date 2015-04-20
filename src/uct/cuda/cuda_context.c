@@ -38,7 +38,6 @@ ucs_status_t uct_cuda_query_resources(uct_context_h context,
                       sizeof(resource->dev_name), "%s", UCT_CUDA_TL_NAME);
     resource->latency    = 1; /* FIXME temp value */
     resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
-    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
     *num_resources_p = 1;
     *resource_p     = resource;
 

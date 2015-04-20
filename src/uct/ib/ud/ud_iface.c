@@ -196,7 +196,10 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     }
 
     memset(iface_attr, 0, sizeof(*iface_attr));
-    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT; /* | UCT_IFACE_FLAG_PUT_SHORT; */ 
+    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
+                                        UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                        UCT_IFACE_FLAG_AM_THREAD_SINGLE;
+                                    /* | UCT_IFACE_FLAG_PUT_SHORT; */
 
     ucs_assert(qp_attr.cap.max_inline_data > UCT_UD_MIN_INLINE);
     iface_attr->cap.am.max_short      = qp_attr.cap.max_inline_data - sizeof(uct_ud_neth_t);
@@ -207,26 +210,10 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = 0;
 
-    iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
-    iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
+    iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_subnet_t);
+    iface_attr->ep_addr_len           = sizeof(uct_sockaddr_ib_t);
     iface_attr->completion_priv_len   = 0;
 
-}
-
-ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
-{
-    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
-    uct_ud_iface_addr_t *addr = (uct_ud_iface_addr_t *)iface_addr;
-    uct_ib_device_t *dev;
-    uint32_t lid;
-
-    addr->qp_num = iface->qp->qp_num;
-    dev = uct_ib_iface_device(&iface->super);
-    lid = dev->port_attr[iface->super.port_num-dev->first_port].lid;
-    addr->lid = lid; 
-    ucs_debug("qpnum=%d lid=%d", addr->qp_num, addr->lid);
-
-    return UCS_OK;
 }
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
