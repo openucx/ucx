@@ -19,12 +19,12 @@ void uct_amo_test::init() {
 
     srand48(rand());
 
-    entity *receiver = new entity(GetParam(), 0);
+    entity *receiver = uct_test::create_entity(0);
     m_entities.push_back(receiver);
 
     for (unsigned i = 0; i < num_senders(); ++i) {
         receiver->add_ep();
-        entity *sender = new entity(GetParam(), 0);
+        entity *sender = uct_test::create_entity(0);
         m_entities.push_back(sender);
         sender->add_ep();
         sender->connect(0, *receiver, i);

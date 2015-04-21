@@ -28,25 +28,22 @@ void test_base::set_config(const std::string& config_str)
 {
     std::string::size_type pos = config_str.find("=");
     if (pos == std::string::npos) {
-        set_config(config_str, "");
+        modify_config(config_str, "");
     } else {
-        set_config(config_str.substr(0, pos), config_str.substr(pos + 1));
+        modify_config(config_str.substr(0, pos), config_str.substr(pos + 1));
     }
 }
 
-void test_base::set_config(void *opts, ucs_config_field_t *fields,
-                           const std::string& name, const std::string& value)
+void test_base::modify_config(const std::string& name, const std::string& value)
 {
-    ucs_status_t status = ucs_config_parser_set_value(opts, fields, name.c_str(),
+    ucs_status_t status = ucs_config_parser_set_value(&ucs_global_opts,
+                                                      ucs_global_opts_table,
+                                                      name.c_str(),
                                                       value.c_str());
     if (status != UCS_OK) {
-        GTEST_FAIL() << "Invalid UCS configuration for " << name << " : " << value;
+        GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
+                        << value ;
     }
-}
-
-void test_base::set_config(const std::string& name, const std::string& value)
-{
-    set_config(&ucs_global_opts, ucs_global_opts_table, name, value);
 }
 
 void test_base::push_config()

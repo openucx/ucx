@@ -28,7 +28,7 @@ protected:
     void init() {
         ucs_memtrack_cleanup();
         push_config();
-        set_config("MEMTRACK_DEST", "/dev/null");
+        modify_config("MEMTRACK_DEST", "/dev/null");
         ucs_memtrack_init();
     }
 

@@ -368,7 +368,7 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
 
 UCS_TEST_P(test_uct_perf, envelope) {
     uct_resource_desc_t resource = GetParam();
-    entity tl(resource, 0);
+    entity tl(resource, m_iface_config, 0);
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {

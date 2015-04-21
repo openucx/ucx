@@ -11,7 +11,7 @@ class test_pd : public uct_test {
 public:
     virtual void init() {
         uct_test::init();
-        m_entities.push_back(new entity(GetParam(), 0));
+        m_entities.push_back(uct_test::create_entity(0));
     }
 
 protected:
