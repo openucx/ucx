@@ -28,8 +28,8 @@ public:
         ucs::test::init();
         ucs_stats_cleanup();
         push_config();
-        set_config("STATS_DEST",    stats_dest_config().c_str());
-        set_config("STATS_TRIGGER", stats_trigger_config().c_str());
+        modify_config("STATS_DEST",    stats_dest_config().c_str());
+        modify_config("STATS_TRIGGER", stats_trigger_config().c_str());
         ucs_stats_init();
         ASSERT_TRUE(ucs_stats_is_active());
     }

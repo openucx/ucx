@@ -17,8 +17,8 @@ public:
     virtual void init() {
         uct_test::init();
 
-        m_e1 = new entity(GetParam(), 0);
-        m_e2 = new entity(GetParam(), 0);
+        m_e1 = uct_test::create_entity(0);
+        m_e2 = uct_test::create_entity(0);
 
         m_e1->add_ep();
         m_e2->add_ep();

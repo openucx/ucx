@@ -16,6 +16,24 @@
     for (ucs::ptr_vector<entity>::const_iterator _iter = m_entities.begin(); \
          _iter != m_entities.end(); ++_iter) \
 
+uct_test::uct_test() {
+    ucs_status_t status;
+
+    status = uct_init(&m_dummy_ctx);
+    ASSERT_UCS_OK(status);
+
+    status = uct_worker_create(m_dummy_ctx, UCS_THREAD_MODE_MULTI, &m_dummy_worker);
+    ASSERT_UCS_OK(status);
+
+    status = uct_iface_config_read(m_dummy_ctx, GetParam().tl_name, NULL, NULL, &m_iface_config);
+    ASSERT_UCS_OK(status);
+}
+
+uct_test::~uct_test() {
+    uct_iface_config_release(m_iface_config);
+    uct_worker_destroy(m_dummy_worker);
+    uct_cleanup(m_dummy_ctx);
+}
 
 std::vector<uct_resource_desc_t> uct_test::enum_resources(const std::string& tl_name) {
     static std::vector<uct_resource_desc_t> all_resources;
@@ -65,6 +83,23 @@ void uct_test::check_caps(uint64_t flags) {
     }
 }
 
+void uct_test::modify_config(const std::string& name, const std::string& value) {
+    ucs_status_t status;
+    status = uct_iface_config_modify(m_iface_config, name.c_str(), value.c_str());
+
+    if (status == UCS_ERR_INVALID_PARAM) {
+        test_base::modify_config(name, value);
+    } else if (status != UCS_OK) {
+        UCS_TEST_ABORT("Couldn't modify config parameter: "
+                        << name.c_str() << " to " << value.c_str());
+    }
+}
+
+uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
+    entity *new_ent = new entity(GetParam(), m_iface_config, rx_headroom);
+    return new_ent;
+}
+
 const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
@@ -75,7 +110,7 @@ void uct_test::progress() const {
     }
 }
 
-uct_test::entity::entity(const uct_resource_desc_t& resource, size_t rx_headroom) {
+uct_test::entity::entity(const uct_resource_desc_t& resource, const uct_iface_config_t* iface_config ,size_t rx_headroom) {
     ucs_status_t status;
 
     status = uct_init(&m_ucth);
@@ -84,19 +119,12 @@ uct_test::entity::entity(const uct_resource_desc_t& resource, size_t rx_headroom
     status = uct_worker_create(m_ucth, UCS_THREAD_MODE_MULTI /* TODO */, &m_worker);
     ASSERT_UCS_OK(status);
 
-    uct_iface_config_t *iface_config;
-    status = uct_iface_config_read(m_ucth, resource.tl_name, NULL, NULL,
-                                   &iface_config);
-    ASSERT_UCS_OK(status);
-
     status = uct_iface_open(m_worker, resource.tl_name, resource.dev_name,
                             rx_headroom, iface_config, &m_iface);
     ASSERT_UCS_OK(status);
 
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
-
-    uct_iface_config_release(iface_config);
 }
 
 uct_test::entity::~entity() {
@@ -145,6 +173,10 @@ void uct_test::entity::progress() const {
 
 uct_iface_h uct_test::entity::iface() const {
     return m_iface;
+}
+
+uct_worker_h uct_test::entity::worker() const {
+    return m_worker;
 }
 
 const uct_iface_attr& uct_test::entity::iface_attr() const {

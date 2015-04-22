@@ -21,7 +21,7 @@ protected:
     virtual void init() {
         ucs_instrument_cleanup();
         push_config();
-        set_config("INSTRUMENT", UCS_INSTR_FILENAME);
+        modify_config("INSTRUMENT", UCS_INSTR_FILENAME);
     }
 
     virtual void cleanup() {

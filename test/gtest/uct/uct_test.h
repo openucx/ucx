@@ -26,11 +26,14 @@ public:
 
     static std::vector<uct_resource_desc_t> enum_resources(const std::string& tl_name);
 
+    uct_test();
+    virtual ~uct_test();
+
 protected:
 
     class entity {
     public:
-        entity(const uct_resource_desc_t& resource, size_t rx_headroom);
+        entity(const uct_resource_desc_t& resource, const uct_iface_config_t* iface_config, size_t rx_headroom);
         ~entity();
 
         void mem_alloc(void **address_p, size_t *length_p, size_t alignement,
@@ -42,6 +45,8 @@ protected:
         void progress() const;
 
         uct_iface_h iface() const;
+
+        uct_worker_h worker() const;
 
         const uct_iface_attr& iface_attr() const;
 
@@ -94,12 +99,17 @@ protected:
 
     virtual void init();
     virtual void cleanup();
+    virtual void modify_config(const std::string& name, const std::string& value);
 
     void check_caps(uint64_t flags);
     const entity& ent(unsigned index) const;
     void progress() const;
+    uct_test::entity* create_entity(size_t rx_headroom);
 
     ucs::ptr_vector<entity> m_entities;
+    uct_iface_config_t      *m_iface_config;
+    uct_context_h           m_dummy_ctx;
+    uct_worker_h            m_dummy_worker;
 };
 
 

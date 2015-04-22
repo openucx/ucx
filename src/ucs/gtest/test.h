@@ -32,13 +32,9 @@ protected:
     virtual ~test_base();
 
     virtual void set_config(const std::string& config_str);
-    virtual void set_config(const std::string& name, const std::string& value);
+    virtual void modify_config(const std::string& name, const std::string& value);
     virtual void push_config();
     virtual void pop_config();
-
-    /* Helpers */
-    void set_config(void *opts, ucs_config_field_t *fields,
-                    const std::string& name, const std::string& value);
 
 protected:
 

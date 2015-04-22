@@ -26,8 +26,8 @@ void uct_p2p_test::init() {
     uct_test::init();
 
     /* Create 2 connected endpoints */
-    entity *e1 = new entity(GetParam(), m_rx_headroom);
-    entity *e2 = new entity(GetParam(), m_rx_headroom);
+    entity *e1 = uct_test::create_entity(m_rx_headroom);
+    entity *e2 = uct_test::create_entity(m_rx_headroom);
     e1->add_ep();
     e2->add_ep();
     e1->connect(0, *e2, 0);
