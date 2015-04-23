@@ -8,7 +8,7 @@
 #include "rc_mlx5.h"
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/base/ib_context.h>
+#include <uct/ib/base/ib_device.h>
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
 
@@ -255,7 +255,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
@@ -264,7 +264,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_worker_h worker,
     ucs_status_t status;
 
     extern uct_iface_ops_t uct_rc_mlx5_iface_ops;
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, pd, worker,
                               dev_name, rx_headroom,
                               sizeof(uct_rc_mlx5_recv_desc_t) - sizeof(uct_ib_iface_recv_desc_t),
                               &config->super);
@@ -349,8 +349,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_rc_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, const uct_iface_config_t*);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_pd_h,
+                                 uct_worker_h, const char*, size_t,
+                                 const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
@@ -384,26 +385,22 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
 };
 
 
-static ucs_status_t uct_rc_mlx5_query_resources(uct_context_h context,
-                                                uct_resource_desc_t **resources_p,
+static ucs_status_t uct_rc_mlx5_query_resources(uct_pd_h pd,
+                                                uct_tl_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p)
 {
-    /* TODO take transport overhead into account */
-    return uct_ib_query_resources(context, UCT_IB_RESOURCE_FLAG_MLX5_PRM,
-                                  ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
-                                  40,
-                                  resources_p, num_resources_p);
+    return uct_ib_device_query_tl_resources(ucs_derived_of(pd, uct_ib_device_t),
+                                            "rc_mlx5",
+                                            UCT_IB_DEVICE_FLAG_MLX5_PRM,
+                                            ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                                            40,
+                                            resources_p, num_resources_p);
 }
 
-static uct_tl_ops_t uct_rc_mlx5_tl_ops = {
-    .query_resources     = uct_rc_mlx5_query_resources,
-    .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_iface_t),
-};
-
-static void uct_rc_mlx5_register(uct_context_t *context)
-{
-    uct_register_tl(context, "rc_mlx5", uct_rc_mlx5_iface_config_table,
-                    sizeof(uct_rc_mlx5_iface_config_t), "RC_MLX5_", &uct_rc_mlx5_tl_ops);
-}
-
-UCS_COMPONENT_DEFINE(uct_context_t, rc_mlx5, uct_rc_mlx5_register, ucs_empty_function, 0)
+UCT_TL_COMPONENT_DEFINE(&uct_ib_pd, uct_rc_mlx5_tl,
+                        uct_rc_mlx5_query_resources,
+                        uct_rc_mlx5_iface_t,
+                        "rc_mlx5",
+                        "RC_MLX5_",
+                        uct_rc_mlx5_iface_config_table,
+                        uct_rc_mlx5_iface_config_t);

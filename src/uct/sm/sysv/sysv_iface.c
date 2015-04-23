@@ -1,17 +1,26 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
  */
 
+#include "sysv_pd.h"
 #include "sysv_iface.h"
+
+
+static ucs_config_field_t uct_sysv_iface_config_table[] = {
+    {"", "", NULL,
+    ucs_offsetof(uct_sysv_iface_config_t, super),
+    UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
+    {NULL}
+};
+
 
 #define UCT_SYSV_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
 #define UCT_SYSV_MAX_BCOPY_LENGTH 40960 /* FIXME temp value for now */
 #define UCT_SYSV_MAX_ZCOPY_LENGTH 81920 /* FIXME temp value for now */
 
-/* Forward declaration for the delete function */
-static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
 
 ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, 
                                   uct_iface_attr_t *iface_attr)
@@ -42,132 +51,6 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
-                                       void **address_p,
-                                       uct_mem_h *memh_p UCS_MEMTRACK_ARG)
-{
-    ucs_status_t rc;
-    uct_sysv_lkey_t *key_hndl = NULL;
-    int shmid = 0;
-
-    if (0 == *length_p) {
-        ucs_error("Unexpected length %zu", *length_p);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    key_hndl = ucs_malloc(sizeof(*key_hndl), "key_hndl");
-    if (NULL == key_hndl) {
-        ucs_error("Failed to allocate memory for key_hndl");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    rc = ucs_sysv_alloc(length_p, address_p, 0, &shmid UCS_MEMTRACK_VAL);
-    if (rc != UCS_OK) {
-        ucs_error("Failed to attach %zu bytes", *length_p);
-        ucs_free(key_hndl);
-        return rc;
-    }
-
-    key_hndl->shmid = shmid;
-    key_hndl->owner_ptr = *address_p;
-
-    ucs_debug("Memory registration address_p %p, len %lu, keys [%d %p]",
-              *address_p, *length_p, key_hndl->shmid, key_hndl->owner_ptr);
-    *memh_p = key_hndl;
-    ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
-    return UCS_OK;
-}
-
-static ucs_status_t uct_sysv_mem_free(uct_pd_h pd, uct_mem_h memh)
-{
-    /* this releases the key allocated in uct_sysv_mem_alloc */
-
-    uct_sysv_lkey_t *key_hndl = memh;
-    ucs_sysv_free(key_hndl->owner_ptr);  /* detach shared segment */
-    ucs_free(key_hndl);
-
-    return UCS_OK;
-}
-
-#define UCT_SYSV_RKEY_MAGIC  0xabbadabaLL
-
-static ucs_status_t uct_sysv_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
-{
-    ucs_snprintf_zero(pd_attr->name, sizeof(pd_attr->name), "%s", UCT_SYSV_TL_NAME);
-    pd_attr->rkey_packed_size  = sizeof(uct_sysv_rkey_t);
-    pd_attr->cap.flags         = UCT_PD_FLAG_ALLOC;
-    pd_attr->cap.max_alloc     = ULONG_MAX;
-    pd_attr->cap.max_reg       = 0;
-    pd_attr->alloc_methods.count = 1;
-    pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_PD;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_sysv_rkey_pack(uct_pd_h pd, uct_mem_h memh,
-                                       void *rkey_buffer)
-{
-    /* user is responsible to free rkey_buffer */
-    uct_sysv_rkey_t *rkey = rkey_buffer;
-    uct_sysv_lkey_t *key_hndl = memh;
-
-    rkey->magic = UCT_SYSV_RKEY_MAGIC;
-    rkey->shmid = key_hndl->shmid;
-    rkey->owner_ptr = (uintptr_t)key_hndl->owner_ptr;
-
-    ucs_debug("Packed [ %d %llx %"PRIxPTR" ]",
-              rkey->shmid, rkey->magic, rkey->owner_ptr);
-    return UCS_OK;
-}
-
-static void uct_sysv_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
-{
-    /* detach shared segment */
-    shmdt((void *)((intptr_t)rkey_ob->type + rkey_ob->rkey));
-}
-
-ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                  uct_rkey_bundle_t *rkey_ob)
-{
-    /* user is responsible to free rkey_buffer */
-    const uct_sysv_rkey_t *rkey = rkey_buffer;
-    long long magic = 0;
-    int shmid;
-    void *client_ptr;
-
-    ucs_debug("Unpacking[ %d %llx %"PRIxPTR" ]",
-              rkey->shmid, rkey->magic, rkey->owner_ptr);
-    if (rkey->magic != UCT_SYSV_RKEY_MAGIC) {
-        ucs_debug("Failed to identify key. Expected %llx but received %llx",
-                  UCT_SYSV_RKEY_MAGIC, magic);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    /* cache the local key on the rkey_ob */
-    rkey_ob->type = (void *)rkey->owner_ptr;
-
-    /* Attach segment */ 
-    /* FIXME would like to extend ucs_sysv_alloc to do this? */
-    shmid = rkey->shmid;
-    client_ptr = shmat(shmid, NULL, 0);
-    /* Check if attachment was successful */
-    if (client_ptr == (void*)-1) {
-        if (errno == ENOMEM) {
-            return UCS_ERR_NO_MEMORY;
-        } else if (RUNNING_ON_VALGRIND && (errno == EINVAL)) {
-            return UCS_ERR_NO_MEMORY;
-        } else {
-            ucs_error("shmat(shmid=%d) returned unexpected error: %m", shmid);
-            return UCS_ERR_SHMEM_SEGMENT;
-        }
-    }
-
-    /* store the offset of the addresses */
-    rkey_ob->rkey = (uintptr_t)client_ptr - rkey->owner_ptr;
-
-    return UCS_OK;
-
-}
-
 static ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
                                                struct sockaddr *addr)
 {
@@ -178,6 +61,9 @@ static ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
     iface_addr->cookie = 0; /* TODO AM fifo id */
     return UCS_OK;
 }
+
+/* Forward declaration for the delete function */
+static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
 
 /* point as much to sm_base as possible
  * to override, create a uct_sysv_* function and update the table here
@@ -206,27 +92,13 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
 
-static uct_pd_ops_t uct_sysv_pd_ops = {
-    .query        = uct_sysv_pd_query,
-    .mem_alloc    = uct_sysv_mem_alloc,
-    .mem_free     = uct_sysv_mem_free,
-    .rkey_pack    = uct_sysv_rkey_pack,
-    .rkey_unpack  = uct_sysv_rkey_unpack,
-    .rkey_release = uct_sysv_rkey_release
-};
-
-static uct_pd_t uct_sysv_pd = {
-    .ops = &uct_sysv_pd_ops
-};
-
-static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
     /* initialize with the base sm constructor */
-    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_sysv_iface_ops, worker,
-                              &uct_sysv_pd, tl_config, dev_name, 
-                              UCT_SYSV_TL_NAME);
+    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_sysv_iface_ops, pd, worker,
+                              tl_config);
 
     /* can override default max size values 
      * from base sm (self->super.config.*) here */
@@ -239,16 +111,43 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
 {
-    /* No op */
 }
 
 /* point to sm_base */
 UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_sm_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_worker_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_pd_h, uct_worker_h,
                                  const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
 
-uct_tl_ops_t uct_sysv_tl_ops = {
-    .query_resources     = uct_sysv_query_resources, 
-    .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_iface_t),
-};
+
+static ucs_status_t uct_sysv_query_tl_resources(uct_pd_h pd,
+                                                uct_tl_resource_desc_t **resource_p,
+                                                unsigned *num_resources_p)
+{
+    uct_tl_resource_desc_t *resource;
+
+    resource = ucs_calloc(1, sizeof(uct_tl_resource_desc_t), "resource desc");
+    if (NULL == resource) {
+        ucs_error("Failed to allocate memory");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
+                      UCT_SYSV_TL_NAME);
+    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
+                      UCT_SYSV_TL_NAME);
+    resource->latency    = 1; /* FIXME temp value */
+    resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
+
+    *num_resources_p = 1;
+    *resource_p     = resource;
+    return UCS_OK;
+}
+
+UCT_TL_COMPONENT_DEFINE(&uct_sysv_pd, uct_sysv_tl,
+                        uct_sysv_query_tl_resources,
+                        uct_sysv_iface_t,
+                        UCT_SYSV_TL_NAME,
+                        "SYSV_",
+                        uct_sysv_iface_config_table,
+                        uct_sysv_iface_config_t);

@@ -75,7 +75,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqT:"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqT:d:x:"
 
 
 test_type_t tests[] = {
@@ -349,6 +349,8 @@ static void init_test_params(ucx_perf_params_t *params)
     params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
     params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
+    strcpy(params->uct.dev_name, "");
+    strcpy(params->uct.tl_name, "");
 }
 
 static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
@@ -356,6 +358,14 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
     test_type_t *test;
 
     switch (opt) {
+    case 'd':
+        ucs_snprintf_zero(params->uct.dev_name, sizeof(params->uct.dev_name),
+                          "%s", optarg);
+        return UCS_OK;
+    case 'x':
+        ucs_snprintf_zero(params->uct.tl_name, sizeof(params->uct.tl_name),
+                          "%s", optarg);
+        return UCS_OK;
     case 't':
         for (test = tests; test->name; ++test) {
             if (!strcmp(optarg, test->name)) {
@@ -468,27 +478,19 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ucs_status_t status;
     char c;
 
+    ucs_trace_func("");
+
     init_test_params(&ctx->params);
     ctx->server_addr            = NULL;
     ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
     ctx->flags                  = 0;
-    strcpy(ctx->params.uct.dev_name, "");
-    strcpy(ctx->params.uct.tl_name, "");
 
     optind = 1;
-    while ((c = getopt (argc, argv, "p:d:x:b:Nfvc:h" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt (argc, argv, "p:b:Nfvc:h" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
-            break;
-        case 'd':
-            ucs_snprintf_zero(ctx->params.uct.dev_name, sizeof(ctx->params.uct.dev_name),
-                              "%s", optarg);
-            break;
-        case 'x':
-            ucs_snprintf_zero(ctx->params.uct.tl_name, sizeof(ctx->params.uct.tl_name),
-                              "%s", optarg);
             break;
         case 'b':
             if (ctx->num_batch_files < MAX_BATCH_FILES) {
@@ -526,59 +528,6 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     }
 
     return UCS_OK;
-}
-
-static ucs_status_t validate_params(struct perftest_context *ctx)
-{
-    ucs_status_t status;
-    uct_resource_desc_t *resources;
-    unsigned num_resources;
-
-    if (ctx->params.api == UCX_PERF_API_UCT) {
-        status = uct_query_resources(ctx->params.uct.context, &resources,
-                                     &num_resources);
-        if (status != UCS_OK) {
-            ucs_error("Failed to query resources");
-            goto error;
-        }
-
-        if (!strlen(ctx->params.uct.tl_name)) {
-            if (num_resources <= 0) {
-                ucs_error("Must specify transport");
-                status = UCS_ERR_INVALID_PARAM;
-                goto error;
-            }
-            strncpy(ctx->params.uct.tl_name, resources[0].tl_name,
-                    sizeof(ctx->params.uct.tl_name));
-            ucs_info("No transport was specified, selecting %s\n", ctx->params.uct.tl_name);
-        }
-
-        if (!strlen(ctx->params.uct.dev_name)) {
-            int i;
-            if (num_resources <= 0) {
-                ucs_error("No specify device name");
-                status = UCS_ERR_INVALID_PARAM;
-                goto error;
-            }
-            for (i = 0; i < num_resources; i++) {
-                if(!strcmp(ctx->params.uct.tl_name, resources[i].tl_name)) {
-                    strncpy(ctx->params.uct.dev_name, resources[i].dev_name,
-                            sizeof(ctx->params.uct.dev_name));
-                    ucs_info("No device was specified, selecting %s\n", ctx->params.uct.dev_name);
-                }
-            }
-            if (!strlen(ctx->params.uct.dev_name)) {
-                ucs_error("Device for transport %s was not found", ctx->params.uct.tl_name);
-                status = UCS_ERR_INVALID_PARAM;
-                goto error;
-            }
-        }
-    error:
-        uct_release_resource_list(resources);
-    } else {
-        status = UCS_OK;
-    }
-    return status;
 }
 
 unsigned sock_rte_group_size(void *rte_group)
@@ -751,11 +700,6 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         ctx->sock_rte_group.is_server = 1;
 
     } else {
-        status = validate_params(ctx);
-        if (status != UCS_OK) {
-            goto err_close_sockfd;
-        }
-
         he = gethostbyname(ctx->server_addr);
         if (he == NULL || he->h_addr_list == NULL) {
             ucs_error("host %s not found: %s", ctx->server_addr,
@@ -1001,14 +945,10 @@ ucx_perf_rte_t ext_rte = {
 
 static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 {
-#if HAVE_MPI
-    ucs_status_t status;
-    int rank;
+    ucs_trace_func("");
 
-    status = validate_params(ctx);
-    if (status != UCS_OK) {
-        return status;;
-    }
+#if HAVE_MPI
+    int rank;
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (rank == 0) {
@@ -1020,13 +960,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.rte_group         = ctx;
     ctx->params.rte               = &mpi_rte;
 #elif HAVE_RTE
-    ucs_status_t status;
     rte_group_t group;
-
-    status = validate_params(ctx);
-    if (status != UCS_OK) {
-        return status;;
-    }
 
     rte_init(NULL, NULL, &group);
     if (0 == rte_group_rank(group)) {
@@ -1056,6 +990,8 @@ static ucs_status_t check_system(struct perftest_context *ctx)
     cpu_set_t cpuset;
     unsigned i, count, nr_cpus;
     int ret;
+
+    ucs_trace_func("");
 
     ret = sysconf(_SC_NPROCESSORS_CONF);
     if (ret < 0) {
@@ -1108,6 +1044,8 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
     ucs_status_t status;
     FILE *batch_file;
 
+    ucs_trace_func("depth=%u", depth);
+
     if (depth >= ctx->num_batch_files) {
         print_test_name(ctx);
         return ucx_perf_run(parent_params, &result);
@@ -1133,6 +1071,8 @@ static ucs_status_t run_test(struct perftest_context *ctx)
 {
     ucs_status_t status;
 
+    ucs_trace_func("");
+
     setlocale(LC_ALL, "en_US");
 
     print_header(ctx);
@@ -1143,42 +1083,6 @@ static ucs_status_t run_test(struct perftest_context *ctx)
     }
 
     return status;
-}
-
-static ucs_status_t open_context(struct perftest_context *ctx)
-{
-    ucp_config_t *config;
-    ucs_status_t status;
-
-    switch (ctx->params.api) {
-    case UCX_PERF_API_UCT:
-        return uct_init(&ctx->params.uct.context);
-    case UCX_PERF_API_UCP:
-        status = ucp_config_read(NULL, NULL, &config);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = ucp_init(config, 0, &ctx->params.ucp.context);
-        ucp_config_release(config);
-        return status;
-    default:
-        return UCS_ERR_INVALID_PARAM;
-    }
-}
-
-static void close_context(struct perftest_context *ctx)
-{
-    switch (ctx->params.api) {
-    case UCX_PERF_API_UCT:
-        uct_cleanup(ctx->params.uct.context);
-        return;
-    case UCX_PERF_API_UCP:
-        ucp_cleanup(ctx->params.ucp.context);
-        return;
-    default:
-        return;
-    }
 }
 
 int main(int argc, char **argv)
@@ -1213,17 +1117,11 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    status = open_context(&ctx);
-    if (status != UCS_OK) {
-        ret = -1;
-        goto out;
-    }
-
     /* Create RTE */
     status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
     if (status != UCS_OK) {
         ret = -1;
-        goto out_close_context;
+        goto out_cleanup_rte;
     }
 
     /* Run the test */
@@ -1235,8 +1133,6 @@ int main(int argc, char **argv)
 
     ret = 0;
 
-out_close_context:
-    close_context(&ctx);
 out_cleanup_rte:
     (rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
 out:

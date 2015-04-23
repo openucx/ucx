@@ -8,7 +8,7 @@
 #include "rc_verbs.h"
 
 #include <uct/api/uct.h>
-#include <uct/ib/base/ib_context.h>
+#include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
@@ -227,7 +227,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
@@ -240,8 +240,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_worker_h worker,
     struct ibv_qp *qp;
 
     extern uct_iface_ops_t uct_rc_verbs_iface_ops;
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, worker,
-                              dev_name, rx_headroom, 0, &config->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, pd,
+                              worker, dev_name, rx_headroom, 0, &config->super);
 
     /* Initialize inline work request */
     memset(&self->inl_am_wr, 0, sizeof(self->inl_am_wr));
@@ -318,8 +318,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, const uct_iface_config_t*);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_pd_h,
+                                 uct_worker_h, const char*, size_t,
+                                 const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_iface_t, uct_iface_t);
 
 
@@ -353,27 +354,22 @@ uct_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_flush            = uct_rc_verbs_ep_flush
 };
 
-
-static ucs_status_t uct_rc_verbs_query_resources(uct_context_h context,
-                                                 uct_resource_desc_t **resources_p,
+static ucs_status_t uct_rc_verbs_query_resources(uct_pd_h pd,
+                                                 uct_tl_resource_desc_t **resources_p,
                                                  unsigned *num_resources_p)
 {
-    /* TODO take transport overhead into account */
-    return uct_ib_query_resources(context, 0,
-                                  ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
-                                  75,
-                                  resources_p, num_resources_p);
+    return uct_ib_device_query_tl_resources(ucs_derived_of(pd, uct_ib_device_t),
+                                            "rc",
+                                            0,
+                                            ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                                            75,
+                                            resources_p, num_resources_p);
 }
 
-static uct_tl_ops_t uct_rc_verbs_tl_ops = {
-    .query_resources     = uct_rc_verbs_query_resources,
-    .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_iface_t),
-};
-
-static void uct_rc_verbs_register(uct_context_t *context)
-{
-    uct_register_tl(context, "rc", uct_rc_verbs_iface_config_table,
-                    sizeof(uct_rc_verbs_iface_config_t), "RC_VERBS_", &uct_rc_verbs_tl_ops);
-}
-
-UCS_COMPONENT_DEFINE(uct_context_t, rc_verbs, uct_rc_verbs_register, ucs_empty_function, 0)
+UCT_TL_COMPONENT_DEFINE(&uct_ib_pd, uct_rc_verbs_tl,
+                        uct_rc_verbs_query_resources,
+                        uct_rc_verbs_iface_t,
+                        "rc",
+                        "RC_VERBS_",
+                        uct_rc_verbs_iface_config_table,
+                        uct_rc_verbs_iface_config_t);

@@ -47,8 +47,8 @@ struct uct_ud_iface {
     } config;
     ucs_ptr_array_t eps;
 };
-UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_worker_h, const char *,
-                  unsigned, unsigned, uct_ud_iface_config_t*)
+UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h,
+                  const char *, unsigned, unsigned, uct_ud_iface_config_t*)
 
 
 extern ucs_config_field_t uct_ud_iface_config_table[];

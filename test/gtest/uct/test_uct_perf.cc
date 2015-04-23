@@ -225,14 +225,9 @@ protected:
         thread_arg *a = (thread_arg*)arg;
         test_result *result;
 
-        ucs_status_t status = uct_init(&a->params.uct.context);
-        ASSERT_UCS_OK(status);
         set_affinity(a->cpu);
-
         result = new test_result();
         result->status = ucx_perf_run(&a->params, &result->result);
-
-        uct_cleanup(a->params.uct.context);
         return result;
     }
 
@@ -367,15 +362,13 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
 };
 
 UCS_TEST_P(test_uct_perf, envelope) {
-    uct_resource_desc_t resource = GetParam();
-    entity tl(resource, m_iface_config, 0);
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {
         UCS_TEST_SKIP;
     }
 
-    if (!strcmp(resource.tl_name, "cm")) {
+    if (GetParam().tl_name == "cm") {
         /* TODO calibrate expected performance and iterations based on transport */
         UCS_TEST_SKIP;
     }
@@ -391,7 +384,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
     check_perf = true;
     if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
         for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
-            if (!CPU_ISSET(*iter, &resource.local_cpus)) {
+            if (!CPU_ISSET(*iter, &GetParam().local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
                 check_perf = false;
                 break;
@@ -403,8 +396,8 @@ UCS_TEST_P(test_uct_perf, envelope) {
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
         char result_str[200] = {0};
         test_result result = run_multi_threaded(*test,
-                                                resource.tl_name,
-                                                resource.dev_name,
+                                                GetParam().tl_name,
+                                                GetParam().dev_name,
                                                 cpus);
         if (result.status == UCS_ERR_UNSUPPORTED) {
             continue;
@@ -414,8 +407,8 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
         double value = *(double*)( ((char*)&result.result) + test->field_offset) * test->norm;
         snprintf(result_str, sizeof(result_str) - 1,
-                 UCT_RESOURCE_DESC_FMT " %25s : %.3f %s",
-                 UCT_RESOURCE_DESC_ARG(&resource), test->title, value, test->units);
+                 "%s %25s : %.3f %s",
+                 GetParam().dev_name.c_str(), test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
             /* TODO take expected values from resource advertised capabilities */

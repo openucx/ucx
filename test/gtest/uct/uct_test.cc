@@ -18,50 +18,62 @@
 
 uct_test::uct_test() {
     ucs_status_t status;
-
-    status = uct_init(&m_dummy_ctx);
-    ASSERT_UCS_OK(status);
-
-    status = uct_worker_create(m_dummy_ctx, NULL, UCS_THREAD_MODE_MULTI, &m_dummy_worker);
-    ASSERT_UCS_OK(status);
-
-    status = uct_iface_config_read(m_dummy_ctx, GetParam().tl_name, NULL, NULL, &m_iface_config);
+    status = uct_iface_config_read(GetParam().tl_name.c_str(), NULL, NULL,
+                                   &m_iface_config);
     ASSERT_UCS_OK(status);
 }
 
 uct_test::~uct_test() {
     uct_iface_config_release(m_iface_config);
-    uct_worker_destroy(m_dummy_worker);
-    uct_cleanup(m_dummy_ctx);
 }
 
-std::vector<uct_resource_desc_t> uct_test::enum_resources(const std::string& tl_name) {
-    static std::vector<uct_resource_desc_t> all_resources;
+std::vector<resource> uct_test::enum_resources(const std::string& tl_name) {
+    static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
-        uct_resource_desc_t *resources;
-        unsigned num_resources;
+        uct_pd_resource_desc_t *pd_resources;
+        unsigned num_pd_resources;
+        uct_tl_resource_desc_t *tl_resources;
+        unsigned num_tl_resources;
         ucs_status_t status;
-        uct_context_h ucth;
 
-        status = uct_init(&ucth);
+        status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
         ASSERT_UCS_OK(status);
 
-        status = uct_query_resources(ucth, &resources, &num_resources);
-        ASSERT_UCS_OK(status);
+        for (unsigned i = 0; i < num_pd_resources; ++i) {
+            uct_pd_h pd;
+            status = uct_pd_open(pd_resources[i].pd_name, &pd);
+            ASSERT_UCS_OK(status);
 
-        std::copy(resources, resources + num_resources,
-                  std::back_inserter(all_resources));
+            uct_pd_attr_t pd_attr;
+            status = uct_pd_query(pd, &pd_attr);
+            ASSERT_UCS_OK(status);
 
-        uct_release_resource_list(resources);
-        uct_cleanup(ucth);
+            status = uct_pd_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+            ASSERT_UCS_OK(status);
+
+            for (unsigned j = 0; j < num_tl_resources; ++j) {
+                resource rsc = { pd_resources[i].pd_name,
+                                 pd_attr.local_cpus,
+                                 tl_resources[j].tl_name,
+                                 tl_resources[j].dev_name };
+                all_resources.push_back(rsc);
+            }
+
+            uct_release_tl_resource_list(tl_resources);
+
+
+            uct_pd_close(pd);
+        }
+
+        uct_release_pd_resource_list(pd_resources);
     }
 
-    std::vector<uct_resource_desc_t> result;
-    for (std::vector<uct_resource_desc_t>::iterator iter = all_resources.begin();
+    std::vector<resource> result;
+    for (std::vector<resource>::iterator iter = all_resources.begin();
                     iter != all_resources.end(); ++iter)
     {
-        if (tl_name.empty() || (std::string(iter->tl_name) == tl_name)) {
+        if (tl_name.empty() || (iter->tl_name == tl_name)) {
             result.push_back(*iter);
         }
     }
@@ -110,17 +122,19 @@ void uct_test::progress() const {
     }
 }
 
-uct_test::entity::entity(const uct_resource_desc_t& resource, const uct_iface_config_t* iface_config ,size_t rx_headroom) {
+uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
+                         size_t rx_headroom) {
     ucs_status_t status;
 
-    status = uct_init(&m_ucth);
+    status = uct_worker_create(NULL, UCS_THREAD_MODE_MULTI /* TODO */, &m_worker);
     ASSERT_UCS_OK(status);
 
-    status = uct_worker_create(m_ucth, NULL, UCS_THREAD_MODE_MULTI /* TODO */, &m_worker);
+    status = uct_pd_open(resource.pd_name.c_str(), &m_pd);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_open(m_worker, resource.tl_name, resource.dev_name,
-                            rx_headroom, iface_config, &m_iface);
+    status = uct_iface_open(m_pd, m_worker, resource.tl_name.c_str(),
+                            resource.dev_name.c_str(), rx_headroom, iface_config,
+                            &m_iface);
     ASSERT_UCS_OK(status);
 
     status = uct_iface_query(m_iface, &m_iface_attr);
@@ -137,8 +151,8 @@ uct_test::entity::~entity() {
         }
     }
     uct_iface_close(m_iface);
+    uct_pd_close(m_pd);
     uct_worker_destroy(m_worker);
-    uct_cleanup(m_ucth);
 }
 
 void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
@@ -148,19 +162,19 @@ void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
     void *rkey_buffer;
     uct_pd_attr_t pd_attr;
 
-    status = uct_pd_query(m_iface->pd, &pd_attr);
+    status = uct_pd_query(m_pd, &pd_attr);
     ASSERT_UCS_OK(status);
 
-    status = uct_pd_mem_alloc(m_iface->pd, UCT_ALLOC_METHOD_DEFAULT, length_p,
+    status = uct_pd_mem_alloc(m_pd, UCT_ALLOC_METHOD_DEFAULT, length_p,
                               alignement, address_p, memh_p, "test");
     ASSERT_UCS_OK(status);
 
     rkey_buffer = malloc(pd_attr.rkey_packed_size);
 
-    status = uct_pd_rkey_pack(m_iface->pd, *memh_p, rkey_buffer);
+    status = uct_pd_rkey_pack(m_pd, *memh_p, rkey_buffer);
     ASSERT_UCS_OK(status);
 
-    status = uct_pd_rkey_unpack(m_iface->pd, rkey_buffer, rkey_bundle);
+    status = uct_pd_rkey_unpack(m_pd, rkey_buffer, rkey_bundle);
     ASSERT_UCS_OK(status);
 
     free(rkey_buffer);
@@ -169,8 +183,8 @@ void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
 void uct_test::entity::mem_free(void *address, uct_mem_h memh,
                                 const uct_rkey_bundle_t& rkey) const {
     ucs_status_t status;
-    uct_pd_rkey_release(m_iface->pd, &rkey);
-    status = uct_pd_mem_free(m_iface->pd, address, memh);
+    uct_pd_rkey_release(m_pd, &rkey);
+    status = uct_pd_mem_free(m_pd, address, memh);
     ASSERT_UCS_OK(status);
 }
 
@@ -178,12 +192,16 @@ void uct_test::entity::progress() const {
     uct_worker_progress(m_worker);
 }
 
-uct_iface_h uct_test::entity::iface() const {
-    return m_iface;
+uct_pd_h uct_test::entity::pd() const {
+    return m_pd;
 }
 
 uct_worker_h uct_test::entity::worker() const {
     return m_worker;
+}
+
+uct_iface_h uct_test::entity::iface() const {
+    return m_iface;
 }
 
 const uct_iface_attr& uct_test::entity::iface_attr() const {
@@ -268,7 +286,7 @@ void uct_test::entity::flush() const {
     ASSERT_UCS_OK(status);
 }
 
-std::ostream& operator<<(std::ostream& os, const uct_resource_desc_t& resource) {
+std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource) {
     return os << resource.tl_name << "/" << resource.dev_name;
 }
 
@@ -367,3 +385,8 @@ uct_mem_h uct_test::mapped_buffer::memh() const {
 uct_rkey_t uct_test::mapped_buffer::rkey() const {
     return m_rkey.rkey;
 }
+
+std::ostream& operator<<(std::ostream& os, const resource& resource) {
+    return os << resource.tl_name << "/" << resource.dev_name;
+}
+

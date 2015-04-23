@@ -85,7 +85,7 @@ struct uct_rc_iface {
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
 };
-UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_worker_h,
+UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char*, unsigned, unsigned, uct_rc_iface_config_t*)
 
 
