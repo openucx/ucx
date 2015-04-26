@@ -21,7 +21,7 @@
 #define UCT_UD_MAX_WINDOW       1024 /* TODO: make it config param */
 #define UCT_UD_TX_MODERATION    64
 #define UCT_UD_MIN_INLINE       48
-#define UCT_UD_HASH_SIZE        251
+#define UCT_UD_HASH_SIZE        997
 
 typedef uint16_t                 uct_ud_psn_t;
 #define UCT_UD_PSN_COMPARE       UCS_CIRCULAR_COMPARE16

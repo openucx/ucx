@@ -46,7 +46,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     uct_ud_ep_reset(self);
     uct_ud_iface_add_ep(iface, self);
     UCT_UD_EP_HOOK_INIT(self);
-    ucs_trace_data("NEW EP: iface=%p ep=%p id=%d", iface, self, self->ep_id);
+    ucs_debug("NEW EP: iface=%p ep=%p id=%d", iface, self, self->ep_id);
     return UCS_OK;
 }
 
@@ -62,7 +62,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
 UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
 
-void uct_ud_ep_cp(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
+void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
 {
     uct_ep_t *ep_h = &old_ep->super.super;
     uct_iface_t *iface_h = ep_h->iface;
@@ -161,6 +161,28 @@ static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
             byte_len - sizeof(*neth) - sizeof(*put_hdr));
 }
 
+static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_hdr_t *ctl)
+{
+    uct_ud_ep_t *ep;
+    ucs_status_t status;
+    uct_ep_t *ep_h;
+    uct_iface_t *iface_h =  &iface->super.super.super;
+    /* create new endpoint */
+    status = iface_h->ops.ep_create(iface_h, &ep_h);
+    ucs_assert_always(status == UCS_OK);
+    ep = ucs_derived_of(ep_h, uct_ud_ep_t);
+
+    status = iface_h->ops.ep_connect_to_ep(ep_h, 
+            (uct_iface_addr_t *)&ctl->conn_req.if_addr, 
+            (uct_ep_addr_t *)&ctl->conn_req.ep_addr);
+    ucs_assert_always(status == UCS_OK);
+
+    status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.if_addr, ep, ctl->conn_req.conn_id);
+    ucs_assert_always(status == UCS_OK);
+    ep->is_passive = 1;
+    return ep;
+}
+
 static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 {
     uct_ud_ep_t *ep;
@@ -177,29 +199,15 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ep = uct_ud_iface_cep_lookup(iface, &ctl->conn_req.if_addr, ctl->conn_req.conn_id);
     if (!ep) {
-        ucs_status_t status;
-        uct_ep_t *ep_h;
-        uct_iface_t *iface_h =  &iface->super.super.super;
-        /* create new endpoint */
-        status = iface_h->ops.ep_create(iface_h, &ep_h);
-        ucs_assert_always(status == UCS_OK);
-        ep = ucs_derived_of(ep_h, uct_ud_ep_t);
-
-        status = iface_h->ops.ep_connect_to_ep(ep_h, 
-                (uct_iface_addr_t *)&ctl->conn_req.if_addr, 
-                (uct_ep_addr_t *)&ctl->conn_req.ep_addr);
-        ucs_assert_always(status == UCS_OK);
-
-        status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.if_addr, ep, ctl->conn_req.conn_id);
-        ucs_assert_always(status == UCS_OK);
+        ep = uct_ud_ep_create_passive(iface, ctl);
+        ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
-        ep->is_passive = 1;
-        ucs_trace_data("created ep=%p (conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
             /* simultaniuos CREQ */
             ep->dest_ep_id = ctl->conn_req.ep_addr.ep_id;
             ep->rx.ooo_pkts.head_sn = neth->psn;
+            ucs_debug("created ep=%p (conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
         }
     }
 

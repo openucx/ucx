@@ -101,7 +101,7 @@ struct uct_ud_ep {
     uct_ud_ep_t             *next;
     uct_ud_iface_peer_t     *dest_if;
     uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
-    int                     is_passive;   
+    uint32_t                 is_passive;   
 };
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
@@ -115,7 +115,7 @@ ucs_status_t uct_ud_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_addr_t *
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep);
 
-void uct_ud_ep_cp(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
+void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
 static inline void uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
 {

@@ -491,3 +491,16 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
     return count;
 }
 
+struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    memset(&ah_attr, 0, sizeof(ah_attr));
+    ah_attr.port_num = iface->port_num;
+    ah_attr.sl = iface->sl; 
+    ah_attr.is_global = 0;
+    ah_attr.dlid = dlid;
+
+    return ibv_create_ah(dev->pd, &ah_attr);
+}

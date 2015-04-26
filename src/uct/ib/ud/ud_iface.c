@@ -33,7 +33,7 @@ static void uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_pee
          ep = sglib_hashed_uct_ud_ep_t_it_next(&it_ep)) {
         if (ep->is_passive) {
             uct_ep_t *ep_h = &ep->super.super;
-            ucs_trace_data("cep:ep_destroy(%p)", ep);
+            ucs_trace("cep:ep_destroy(%p)", ep);
             iface_h->ops.ep_destroy(ep_h);
         }
     }
@@ -145,7 +145,7 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
   if (!peer) {
       return;
   }
-  ucs_trace_data("iface(%p) cep_remove:ep(%p)", ep->super.super.iface, ep);
+  ucs_trace("iface(%p) cep_remove:ep(%p)", ep->super.super.iface, ep);
   sglib_hashed_uct_ud_ep_t_delete(peer->eps, ep);
   ep->dest_if = NULL;
 }
@@ -171,7 +171,7 @@ void uct_ud_iface_cep_replace(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep, uct_ud_e
     /* call destructor but disable cep and ep table cleanups */
     old_ep->ep_id   = UCT_UD_EP_NULL_ID;
     old_ep->dest_if = NULL;
-    ucs_trace_data("iface(%p) cep_replace:ep_destroy(%p) new_ep=%p", iface_h, old_ep, new_ep);
+    ucs_trace("iface(%p) cep_replace:ep_destroy(%p) new_ep=%p", iface_h, old_ep, new_ep);
     iface_h->ops.ep_destroy(ep_h);
 }
 
@@ -340,13 +340,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_trace_func("");
 
     /* TODO: proper flush and connection termination */
-    ucs_trace_data("iface(%p): cep cleanup", self);
+    ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_cep_cleanup(self);
     ucs_mpool_destroy_unchecked(self->tx.mp);
     /* TODO: qp to error state and cleanup all wqes */
     ucs_mpool_destroy_unchecked(self->rx.mp);
     ibv_destroy_qp(self->qp);
-    ucs_trace_data("iface(%p): ptr_array cleanup", self);
+    ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
 }
 
@@ -436,7 +436,7 @@ void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ep->ep_id != UCT_UD_EP_NULL_ID) {
-        ucs_trace_data("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
+        ucs_trace("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
         ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
     }
 }
@@ -448,7 +448,7 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_
     ucs_assert_always(old_ep->ep_id != new_ep->ep_id);
     p = ucs_ptr_array_replace(&iface->eps, old_ep->ep_id, new_ep);
     ucs_assert_always(p == (void *)old_ep);
-    ucs_trace_data("replace_ep: old(%p) id=%d new(%p) id=%d", old_ep, old_ep->ep_id, new_ep, new_ep->ep_id);
+    ucs_trace("replace_ep: old(%p) id=%d new(%p) id=%d", old_ep, old_ep->ep_id, new_ep, new_ep->ep_id);
     ucs_ptr_array_remove(&iface->eps, new_ep->ep_id, 0);
 }
 

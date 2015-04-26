@@ -286,26 +286,12 @@ static ucs_status_t uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-static struct ibv_ah *uct_ud_verbs_create_ah(uct_ib_iface_t *iface, uct_ud_iface_addr_t *if_addr)
-{
-    struct ibv_ah_attr ah_attr;
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-
-    memset(&ah_attr, 0, sizeof(ah_attr));
-    ah_attr.port_num = iface->port_num;
-    ah_attr.sl = 0; /* TODO: sl */
-    ah_attr.is_global = 0;
-    ah_attr.dlid = if_addr->lid;
-
-    return ibv_create_ah(dev->pd, &ah_attr);
-}
-
-void uct_ud_ep_verbs_cp(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
+void uct_ud_ep_verbs_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
 {
     uct_ud_verbs_ep_t *old_ep_v = ucs_derived_of(old_ep, uct_ud_verbs_ep_t);
     uct_ud_verbs_ep_t *new_ep_v = ucs_derived_of(new_ep, uct_ud_verbs_ep_t);
 
-    uct_ud_ep_cp(old_ep, new_ep);
+    uct_ud_ep_clone(old_ep, new_ep);
     new_ep_v->ah = old_ep_v->ah;
     /* make sure ah in old ep is not destroyed */
     old_ep_v->ah = NULL;
@@ -325,7 +311,7 @@ ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_ad
     /* check if we can reuse half duplex ep */
     ready_ep = uct_ud_iface_cep_lookup(&iface->super, if_addr, UCT_UD_EP_CONN_ID_MAX);
     if (ready_ep) {
-        uct_ud_iface_cep_replace(ready_ep, &ep->super, uct_ud_ep_verbs_cp);
+        uct_ud_iface_cep_replace(ready_ep, &ep->super, uct_ud_ep_verbs_clone);
         return UCS_OK;
     }
 
@@ -334,7 +320,7 @@ ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_ad
         return status;
     }
     ucs_assert_always(ep->ah == NULL);
-    ah = uct_ud_verbs_create_ah(&iface->super.super, if_addr);
+    ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         return UCS_ERR_INVALID_ADDR;
@@ -375,7 +361,7 @@ ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     ucs_assert_always(ep->ah == NULL);
-    ah = uct_ud_verbs_create_ah(iface, if_addr);
+    ah = uct_ib_create_ah(iface, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         return UCS_ERR_INVALID_ADDR;

@@ -105,6 +105,8 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned index,
  * @return old value of the slot
  */
 void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned index, void *new_val);
+
+
 /**
  * Retrieve a value from the array.
  *
