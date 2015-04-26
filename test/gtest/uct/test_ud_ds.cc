@@ -19,8 +19,8 @@ public:
     virtual void init() {
         uct_test::init();
 
-        m_e1 = new entity(GetParam(), 0);
-        m_e2 = new entity(GetParam(), 0);
+        m_e1 = create_entity(0);
+        m_e2 = create_entity(0);
 
         uct_iface_get_address(m_e1->iface(), &adr1.super);
         uct_iface_get_address(m_e2->iface(), &adr2.super);
@@ -118,7 +118,7 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     /* replace ep */
     m_e1->add_ep();
     ep(m_e1, N+4)->conn_id = my_ep->conn_id;
-    uct_ud_iface_cep_replace(my_ep, ep(m_e1, N+4), uct_ud_ep_cp);
+    uct_ud_iface_cep_replace(my_ep, ep(m_e1, N+4), uct_ud_ep_clone);
     EXPECT_EQ(ep(m_e1, N+4)->dest_if->conn_id_last, N+2);
     my_ep = uct_ud_iface_cep_lookup(iface(m_e1), &adr1, N+1);
     EXPECT_TRUE(my_ep != NULL);
