@@ -13,6 +13,7 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/sglib.h>
+#include <ucs/datastruct/list.h>
 
 #include "ud_def.h"
 #include "ud_ep.h"
@@ -36,9 +37,8 @@ typedef struct uct_ud_iface_config {
 struct uct_ud_iface_peer {
     uct_ud_iface_peer_t   *next;
     uct_ud_iface_addr_t    dest_iface;
-    uct_ud_ep_t           *eps[UCT_UD_HASH_SIZE];
-    int                    ep_count;
     uint32_t               conn_id_last;
+    ucs_list_link_t        ep_list; /* ep list ordered by connection id */
 };
 
 static inline int uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b) {
@@ -163,8 +163,17 @@ application calls connect_to_iface().
 
 Data structure
 
-Two level hash table:
-(src_if_addr) -> peer (conn_id)->ep
+Hash table and double linked sorted list:
+hash(src_if_addr) -> peer ->ep (list sorted in descending order)
+
+List is used to save memory (8 bytes instead of 500-1000 bytes of hashtable)
+In many cases list will provide fast lookup and insertion. 
+It is expected that most of connect requests will arrive in order. In
+such case the insertion is O(1) because it is done to the head of the 
+list. Lookup is O(number of 'passive' eps) which is expected to be small.
+
+TODO: add and maintain pointer to the list element with conn_id equal to
+conn_last_id. This will allow for O(1) endpoint lookup.
 
 Connection id assignment:
 
@@ -191,9 +200,17 @@ uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_ud_iface_addr_t 
 /* remove ep */
 void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
 
-/* replace already existing ep, new_ep must be setup by caller */
-typedef void (*uct_ud_ep_copy_func_t)(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
-void uct_ud_iface_cep_replace(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep, uct_ud_ep_copy_func_t f);
+/*
+ * replace already existing ep, new_ep must be setup by caller 
+ * old ep connection id must be equal to conn_last_id
+ */
+typedef void (*uct_ud_ep_clone_func_t)(uct_ud_ep_t *old_ep, 
+                                       uct_ud_ep_t *new_ep);
+
+void uct_ud_iface_cep_replace(uct_ud_iface_t *iface, 
+                              uct_ud_iface_addr_t *src_if_addr, 
+                              uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep,
+                              uct_ud_ep_clone_func_t f);
 
 /* insert new ep that is connected to src_if_addr */
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id);

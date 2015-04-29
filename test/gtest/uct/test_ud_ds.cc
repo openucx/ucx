@@ -59,7 +59,6 @@ void test_ud_ds::test_cep_insert(entity *e, uct_ud_iface_addr_t *adr)
 
     for (i = 0; i < N; i++) {
         e->add_ep();
-        //printf("ep id: %d", ep(e, i)->ep_id);
         EXPECT_EQ(ep(e, i)->ep_id, i);
         EXPECT_EQ(ep(e, i)->dest_ep_id, UCT_UD_EP_NULL_ID);
         EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(e), adr, ep(e, i), UCT_UD_EP_CONN_ID_MAX));
@@ -118,8 +117,7 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     /* replace ep */
     m_e1->add_ep();
     ep(m_e1, N+4)->conn_id = my_ep->conn_id;
-    uct_ud_iface_cep_replace(my_ep, ep(m_e1, N+4), uct_ud_ep_clone);
-    EXPECT_EQ(ep(m_e1, N+4)->dest_if->conn_id_last, N+2);
+    uct_ud_iface_cep_replace(iface(m_e1), &adr1, my_ep, ep(m_e1, N+4), uct_ud_ep_clone);
     my_ep = uct_ud_iface_cep_lookup(iface(m_e1), &adr1, N+1);
     EXPECT_TRUE(my_ep != NULL);
     EXPECT_EQ(my_ep, ep(m_e1, N+4));

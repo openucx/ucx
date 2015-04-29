@@ -13,11 +13,6 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 
-SGLIB_DEFINE_LIST_FUNCTIONS(uct_ud_ep_t, uct_ud_ep_compare, next)
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_ep_t,
-                                        UCT_UD_HASH_SIZE,
-                                        uct_ud_ep_hash)
-
 static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
     ep->tx.psn         = 1;
@@ -41,9 +36,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
-    self->is_passive = 0;
-    self->dest_if    = NULL;
     uct_ud_ep_reset(self);
+    ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("NEW EP: iface=%p ep=%p id=%d", iface, self, self->ep_id);
@@ -54,7 +48,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 {
     uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
-    ucs_trace_func("ep=%p id=%d", self, self->ep_id);
+    ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
    /* TODO: in disconnect ucs_frag_list_cleanup(&self->rx.ooo_pkts); */
@@ -179,7 +173,6 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
 
     status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.if_addr, ep, ctl->conn_req.conn_id);
     ucs_assert_always(status == UCS_OK);
-    ep->is_passive = 1;
     return ep;
 }
 

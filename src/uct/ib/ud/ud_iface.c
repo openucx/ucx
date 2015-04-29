@@ -24,18 +24,21 @@ void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
 
 static void uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
 {
-    uct_ud_ep_t *ep;
-    struct sglib_hashed_uct_ud_ep_t_iterator it_ep;
+    uct_ud_ep_t *ep, *tmp;
     uct_iface_t *iface_h = &iface->super.super.super;
 
-    for (ep = sglib_hashed_uct_ud_ep_t_it_init(&it_ep, peer->eps);
-         ep != NULL;
-         ep = sglib_hashed_uct_ud_ep_t_it_next(&it_ep)) {
-        if (ep->is_passive) {
-            uct_ep_t *ep_h = &ep->super.super;
-            ucs_trace("cep:ep_destroy(%p)", ep);
-            iface_h->ops.ep_destroy(ep_h);
+    ucs_list_for_each_safe(ep, tmp, &peer->ep_list, cep_list) {
+        if (ep->conn_id < peer->conn_id_last) {
+            /* active connection should already be cleaned by owner */
+            ucs_warn("iface (%p) peer (qpn=%d lid=%d) cleanup with %d endpoints still active",
+                     iface, peer->dest_iface.qp_num, peer->dest_iface.lid, 
+                     (int)ucs_list_length(&peer->ep_list));
+            return;
         }
+        ucs_list_del(&ep->cep_list);
+        uct_ep_t *ep_h = &ep->super.super;
+        ucs_trace("cep:ep_destroy(%p) conn_id %d", ep, ep->conn_id);
+        iface_h->ops.ep_destroy(ep_h);
     }
 }
 
@@ -49,9 +52,7 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
          peer != NULL;
          peer = sglib_hashed_uct_ud_iface_peer_t_it_next(&it_peer)) {
 
-        if (peer->ep_count) {
-            uct_ud_iface_cep_cleanup_eps(iface, peer);
-        }
+        uct_ud_iface_cep_cleanup_eps(iface, peer);
         free(peer);
     }
 }
@@ -70,41 +71,34 @@ static uct_ud_iface_peer_t *uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, 
 
 static uct_ud_ep_t *uct_ud_iface_cep_lookup_ep(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 {
-    uct_ud_ep_t key;
+    uint32_t id;
+    uct_ud_ep_t *ep;
 
     if (conn_id != UCT_UD_EP_CONN_ID_MAX) {
-        key.conn_id = conn_id;
+        id = conn_id;
     } else {
-        key.conn_id = peer->conn_id_last;
+        id = peer->conn_id_last;
+        /* TODO: O(1) lookup in this case (new connection) */
     }
-    return sglib_hashed_uct_ud_ep_t_find_member(peer->eps, &key);
+    ucs_list_for_each(ep, &peer->ep_list, cep_list) {
+        if (ep->conn_id == id) {
+            return ep;
+        }
+        if (ep->conn_id < id) {
+            break;
+        }
+    }
+    return NULL;
 }
 
 static uint32_t uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 {
     uint32_t new_id;
-    /* uct_ud_ep_t *ep; */
 
     if (conn_id != UCT_UD_EP_CONN_ID_MAX) {
         return conn_id;
     }
-#if 0
-    /* IMHO there is no need for this search. */
-    /* autoassign: find first unused slot */
-    for (new_id = peer->conn_id_last; new_id < UCT_UD_EP_CONN_ID_MAX; new_id++) {
-        ep = uct_ud_iface_cep_lookup_ep(peer, new_id);
-        if (!ep)  {
-            goto found;
-        }
-    }
-    return UCT_UD_EP_CONN_ID_MAX;
-found: 
-    if (new_id == peer->conn_id_last) {
-        peer->conn_id_last++;
-    }
-#endif
     new_id = peer->conn_id_last++;
-    ucs_assert_always(uct_ud_iface_cep_lookup_ep(peer, new_id) == NULL);
     return new_id;
 }
 
@@ -112,6 +106,7 @@ found:
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
+    uct_ud_ep_t *cep;
 
     peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
     if (!peer) {
@@ -122,8 +117,7 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t 
         peer->dest_iface.qp_num = src_if_addr->qp_num;
         peer->dest_iface.lid    = src_if_addr->lid;
         sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
-        sglib_hashed_uct_ud_ep_t_init(peer->eps);
-        peer->ep_count = 0;
+        ucs_list_head_init(&peer->ep_list);
         peer->conn_id_last = 0;
     }
 
@@ -131,46 +125,52 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t 
     if (ep->conn_id == UCT_UD_EP_CONN_ID_MAX) {
         return UCS_ERR_NO_RESOURCE;
     }
-    ep->dest_if = peer;
-    sglib_hashed_uct_ud_ep_t_add(peer->eps, ep);
-    peer->ep_count++;
+
+    if (ucs_list_is_empty(&peer->ep_list)) {
+            ucs_list_add_head(&peer->ep_list, &ep->cep_list);
+            return UCS_OK;
+    }
+    ucs_list_for_each(cep, &peer->ep_list, cep_list) {
+        ucs_assert_always(cep->conn_id != ep->conn_id);
+        if (cep->conn_id < ep->conn_id) {
+            ucs_list_insert_before(&cep->cep_list, &ep->cep_list);
+            return UCS_OK;
+        }
+    }
     return UCS_OK;
 }
 
 void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
 {
-  uct_ud_iface_peer_t *peer;
-
-  peer = ep->dest_if;
-  if (!peer) {
+  if (ucs_list_is_empty(&ep->cep_list)) {
       return;
   }
   ucs_trace("iface(%p) cep_remove:ep(%p)", ep->super.super.iface, ep);
-  sglib_hashed_uct_ud_ep_t_delete(peer->eps, ep);
-  ep->dest_if = NULL;
+  ucs_list_del(&ep->cep_list);
+  ucs_list_head_init(&ep->cep_list);
 }
 
-void uct_ud_iface_cep_replace(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep, uct_ud_ep_copy_func_t cp)
+void uct_ud_iface_cep_replace(uct_ud_iface_t *iface,
+                              uct_ud_iface_addr_t *src_if_addr,
+                              uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep,
+                              uct_ud_ep_clone_func_t clone)
 {
-    uct_ud_iface_peer_t *peer;
     uct_ep_t *ep_h = &old_ep->super.super;
     uct_iface_t *iface_h = ep_h->iface;
+    uct_ud_iface_peer_t *peer;
 
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+    ucs_assert_always(peer != NULL);
     ucs_assert_always(old_ep != new_ep);
-
-    peer = old_ep->dest_if;
     ucs_assert_always(old_ep->conn_id == peer->conn_id_last);
-    
-    sglib_hashed_uct_ud_ep_t_delete(peer->eps, old_ep);
-    sglib_hashed_uct_ud_ep_t_add(peer->eps, new_ep);
-    new_ep->dest_if = peer;
+
+    clone(old_ep, new_ep);
+
+    ucs_list_insert_after(&old_ep->cep_list, &new_ep->cep_list);
+    uct_ud_iface_cep_remove(old_ep);
     peer->conn_id_last++;
-    cp(old_ep, new_ep);
-    new_ep->is_passive = 0;
     
-    /* call destructor but disable cep and ep table cleanups */
     old_ep->ep_id   = UCT_UD_EP_NULL_ID;
-    old_ep->dest_if = NULL;
     ucs_trace("iface(%p) cep_replace:ep_destroy(%p) new_ep=%p", iface_h, old_ep, new_ep);
     iface_h->ops.ep_destroy(ep_h);
 }

@@ -98,11 +98,10 @@ struct uct_ud_ep {
         UCS_STATS_NODE_DECLARE(stats);
         UCT_UD_EP_HOOK_DECLARE(rx_hook);
     } rx;
-    uct_ud_ep_t             *next;
-    uct_ud_iface_peer_t     *dest_if;
+    ucs_list_link_t          cep_list;
     uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
-    uint32_t                 is_passive;   
 };
+
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
 

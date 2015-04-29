@@ -311,7 +311,7 @@ ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_ad
     /* check if we can reuse half duplex ep */
     ready_ep = uct_ud_iface_cep_lookup(&iface->super, if_addr, UCT_UD_EP_CONN_ID_MAX);
     if (ready_ep) {
-        uct_ud_iface_cep_replace(ready_ep, &ep->super, uct_ud_ep_verbs_clone);
+        uct_ud_iface_cep_replace(&iface->super, if_addr, ready_ep, &ep->super, uct_ud_ep_verbs_clone);
         return UCS_OK;
     }
 
