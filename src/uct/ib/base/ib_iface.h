@@ -15,6 +15,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 
+#define UCT_PKEY_MASK 0x7fff
 
 /**
  * IB port/path MTU.
@@ -66,6 +67,8 @@ typedef struct uct_ib_iface_config {
         unsigned             count;
     } lid_path_bits;
 
+    /* IB PKEY to use */
+    unsigned                pkey_value;
 
 } uct_ib_iface_config_t;
 
@@ -78,6 +81,7 @@ typedef struct uct_ib_iface {
     uint16_t                gid_index;
     uint8_t                 port_num;
     uint8_t                 sl;
+    uint16_t                pkey_index;
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;

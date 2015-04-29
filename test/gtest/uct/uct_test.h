@@ -121,16 +121,30 @@ protected:
     sysv, \
     cuda
 
+#define UCT_TEST_IB_TLS \
+    rc_mlx5, \
+    rc, \
+    ud
+
 /**
  * Instantiate the parameterized test case for all transports.
  *
- * @param _test_case  Test case class, derived form uct_test.
+ * @param _test_case  Test case class, derived from uct_test.
  */
 #define UCT_INSTANTIATE_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
     INSTANTIATE_TEST_CASE_P(_tl_name, _test_case, \
                             testing::ValuesIn(uct_test::enum_resources(UCS_PP_QUOTE(_tl_name))));
+
+
+/**
+ * Instantiate the parameterized test case for the IB transports.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_IB_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_IB_TLS)
 
 std::ostream& operator<<(std::ostream& os, const uct_resource_desc_t& resource);
 

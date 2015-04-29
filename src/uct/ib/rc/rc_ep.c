@@ -95,7 +95,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_iface_addr_t *tl_
     memset(&qp_attr, 0, sizeof(qp_attr));
 
     qp_attr.qp_state              = IBV_QPS_INIT;
-    qp_attr.pkey_index            = 0;
+    qp_attr.pkey_index            = iface->super.pkey_index;
     qp_attr.port_num              = iface->super.port_num;
     qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE|
                                     IBV_ACCESS_REMOTE_WRITE|

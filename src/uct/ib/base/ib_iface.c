@@ -84,13 +84,18 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, gid_index), UCS_CONFIG_TYPE_UINT},
 
   {"SL", "0",
-   "While IB service level to use.\n",
+   "Which IB service level to use.\n",
    ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
 
   {"LID_PATH_BITS", "0-17",
    "list of IB Path bits separated by comma (a,b,c) "
    "which will be the low portion of the LID, according to the LMC in the fabric.",
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
+
+   {"PKEY_VALUE", "0x7fff",
+   "Which pkey value to use. Only the partition number (lower 15 bits) is used.",
+   ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
+
 
   {NULL}
 };
@@ -192,8 +197,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     uct_ib_device_t *dev;
     ucs_status_t status;
     uint8_t port_num, lmc;
+    uint16_t pkey, pkey_partition, cfg_partition_value, tbl_index;
     unsigned i, j, first, last, range_values_count;
-    int step;
+    int step, found_pkey;
 
     status = uct_ib_iface_find_port(ibctx, dev_name, &dev, &port_num);
     if (status != UCS_OK) {
@@ -212,6 +218,36 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
     self->config.seg_size          = config->super.max_bcopy;
+
+    /* get the user's pkey value and find its index in the port's pkey table */
+    cfg_partition_value = config->pkey_value & UCT_PKEY_MASK;
+    self->pkey_index = 0;
+    found_pkey = 0;
+    for (tbl_index = 0; tbl_index < uct_ib_iface_port_attr(self)->pkey_tbl_len; tbl_index++) {
+        /* get the pkey values from the port's pkeys table */
+        if (ibv_query_pkey(dev->ibv_context, port_num, tbl_index, &pkey)) {
+            ucs_error("failed to get the pkey value from %s, port %d, table_index: %d: %m",
+                      dev_name, port_num, tbl_index);
+        }
+        /* take only the lower 15 bits for the comparison */
+        pkey = ntohs(pkey);
+        pkey_partition = pkey & UCT_PKEY_MASK;
+        if (pkey_partition == cfg_partition_value) {
+            self->pkey_index = tbl_index;
+            found_pkey = 1;
+            ucs_debug("using pkey: 0x%x. partition value: 0x%x. on %s, port %d, table_index: %d",
+                      pkey, pkey_partition, dev_name, port_num, tbl_index);
+            break;
+        }
+    }
+
+    if ((!found_pkey) || (pkey == 0) || ((pkey & ~UCT_PKEY_MASK) == 0)) {
+        ucs_error("The requested pkey: 0x%x, cannot be used. "
+                 "It wasn't found or the configured pkey doesn't have full membership.",
+                 config->pkey_value);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
 
     if (config->lid_path_bits.count == 0) {
         ucs_error("List of path bits must not be empty");

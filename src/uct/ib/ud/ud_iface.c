@@ -67,10 +67,10 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
 
     memset(&qp_attr, 0, sizeof(qp_attr));
     /* Modify QP to INIT state */
-    qp_attr.qp_state = IBV_QPS_INIT;
-    qp_attr.pkey_index = 0;
-    qp_attr.port_num = self->super.port_num;
-    qp_attr.qkey = UCT_UD_QKEY;
+    qp_attr.qp_state   = IBV_QPS_INIT;
+    qp_attr.pkey_index = self->super.pkey_index;
+    qp_attr.port_num   = self->super.port_num;
+    qp_attr.qkey       = UCT_UD_QKEY;
     ret = ibv_modify_qp(self->qp, &qp_attr,
             IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_QKEY);
     if (ret) {
