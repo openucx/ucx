@@ -41,6 +41,7 @@ public:
         for (unsigned i = 0; i < m_max_outstanding; ++i) {
             m_completions[i] = (comp_t*)((char*)completions_buffer + i * m_completion_size);
             m_completions[i]->self     = this;
+            m_completions[i]->uct.func = completion_func();
         }
 
         status = uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, am_hander,
@@ -84,6 +85,42 @@ public:
         --self->m_outstanding;
     }
 
+    static uct_completion_callback_t completion_func() {
+        switch (CMD) {
+        case UCX_PERF_CMD_AM:
+            switch (DATA) {
+            case UCT_PERF_DATA_LAYOUT_ZCOPY:
+                return zcopy_completion_cb;
+            default:
+                return NULL;
+            }
+        case UCX_PERF_CMD_PUT:
+            switch (DATA) {
+            case UCT_PERF_DATA_LAYOUT_ZCOPY:
+                return zcopy_completion_cb;
+            default:
+                return NULL;
+            }
+        case UCX_PERF_CMD_GET:
+            switch (DATA) {
+            case UCT_PERF_DATA_LAYOUT_BCOPY:
+                return fetch_completion_cb;
+            case UCT_PERF_DATA_LAYOUT_ZCOPY:
+                return zcopy_completion_cb;
+            default:
+                return NULL;
+            }
+        case UCX_PERF_CMD_ADD:
+            return NULL;
+        case UCX_PERF_CMD_FADD:
+        case UCX_PERF_CMD_SWAP:
+        case UCX_PERF_CMD_CSWAP:
+            return fetch_completion_cb;
+        default:
+            return NULL;
+        }
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(uct_ep_h ep, psn_t sn, psn_t prev_sn, void *buffer, unsigned length,
          uint64_t remote_addr, uct_rkey_t rkey, uct_completion_t *comp)
@@ -106,7 +143,6 @@ public:
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 *(psn_t*)buffer = sn;
                 header_size = m_perf.params.am_hdr_size;
-                comp->func = zcopy_completion_cb;
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID,
                                        buffer, header_size,
                                        (char*)buffer + header_size, length - header_size,
@@ -125,7 +161,6 @@ public:
                 return uct_ep_put_bcopy(ep, (uct_pack_callback_t)memcpy, buffer,
                                         length, remote_addr, rkey);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                comp->func = zcopy_completion_cb;
                 return uct_ep_put_zcopy(ep, buffer, length, m_perf.uct.send_memh,
                                         remote_addr, rkey, comp);
             default:
@@ -134,10 +169,8 @@ public:
         case UCX_PERF_CMD_GET:
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_BCOPY:
-                comp->func = fetch_completion_cb;
                 return uct_ep_get_bcopy(ep, length, remote_addr, rkey, comp);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                comp->func = zcopy_completion_cb;
                 return uct_ep_get_zcopy(ep, buffer, length, m_perf.uct.send_memh,
                                         remote_addr, rkey, comp);
             default:
@@ -152,7 +185,6 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_FADD:
-            comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_fadd32(ep, sn - prev_sn, remote_addr, rkey,
                                             comp);
@@ -163,7 +195,6 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_SWAP:
-            comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey, comp);
             } else if (length == sizeof(uint64_t)) {
@@ -172,7 +203,6 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_CSWAP:
-            comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_cswap32(ep, sn, prev_sn, remote_addr, rkey,
                                              comp);
