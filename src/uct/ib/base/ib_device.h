@@ -28,6 +28,7 @@
 #define UCT_IB_DELIM_LEN         2
 #define UCT_IB_FDR_PACKET_GAP    64
 #define UCT_IB_MAX_MESSAGE_SIZE  (2 << 30)
+#define UCT_IB_PKEY_MASK         0x7fff
 
 enum {
     UCT_IB_DEVICE_STAT_MEM_ALLOC,

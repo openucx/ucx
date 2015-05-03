@@ -138,23 +138,11 @@ ucs_status_t ucs_config_clone_double(void *src, void *dest, const void *arg)
 
 int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 {
-    char *str;
-    int ret;
-
-    str = strdup(buf);
-    if (str == NULL) {
+    if (strncasecmp(buf, "0x", 2) == 0) {
+        return (sscanf(buf + 2, "%x", (unsigned int*)dest));
+    } else {
         return 0;
     }
-
-    /* search for '0x' and split str */
-    if (strncasecmp(str, "0x", 2) == 0) {
-        ret = sscanf(str + 2, "%x", (unsigned int*)dest);
-    } else {
-        ret = 0;
-    }
-
-    free (str);
-    return ret;
 }
 
 int ucs_config_sprintf_hex(char *buf, size_t max, void *src, const void *arg)

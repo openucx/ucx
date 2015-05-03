@@ -15,7 +15,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 
-#define UCT_PKEY_MASK 0x7fff
 
 /**
  * IB port/path MTU.

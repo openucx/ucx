@@ -114,9 +114,7 @@ protected:
 
 
 #define UCT_TEST_TLS \
-    rc_mlx5, \
-    rc, \
-    ud, \
+    UCT_TEST_IB_TLS, \
     ugni, \
     sysv, \
     cuda

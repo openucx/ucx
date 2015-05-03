@@ -89,8 +89,8 @@ public:
             if(ibv_query_pkey(ibctx, port_num, table_idx, &pkey)) {
                 UCS_TEST_ABORT("Failed to query pkey on port " << port_num << " on device: " << dev_name);
             }
-            pkey_partition = ntohs(pkey) & UCT_PKEY_MASK;
-            if (pkey_partition == (ib_config->pkey_value & UCT_PKEY_MASK)) {
+            pkey_partition = ntohs(pkey) & UCT_IB_PKEY_MASK;
+            if (pkey_partition == (ib_config->pkey_value & UCT_IB_PKEY_MASK)) {
                 found = 1;
                 break;
             }

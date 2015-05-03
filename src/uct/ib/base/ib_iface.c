@@ -220,7 +220,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     self->config.seg_size          = config->super.max_bcopy;
 
     /* get the user's pkey value and find its index in the port's pkey table */
-    cfg_partition_value = config->pkey_value & UCT_PKEY_MASK;
+    cfg_partition_value = config->pkey_value & UCT_IB_PKEY_MASK;
     self->pkey_index = 0;
     found_pkey = 0;
     for (tbl_index = 0; tbl_index < uct_ib_iface_port_attr(self)->pkey_tbl_len; tbl_index++) {
@@ -231,7 +231,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
         }
         /* take only the lower 15 bits for the comparison */
         pkey = ntohs(pkey);
-        pkey_partition = pkey & UCT_PKEY_MASK;
+        pkey_partition = pkey & UCT_IB_PKEY_MASK;
         if (pkey_partition == cfg_partition_value) {
             self->pkey_index = tbl_index;
             found_pkey = 1;
@@ -241,7 +241,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
         }
     }
 
-    if ((!found_pkey) || (pkey == 0) || ((pkey & ~UCT_PKEY_MASK) == 0)) {
+    if ((!found_pkey) || (pkey == 0) || ((pkey & ~UCT_IB_PKEY_MASK) == 0)) {
         ucs_error("The requested pkey: 0x%x, cannot be used. "
                  "It wasn't found or the configured pkey doesn't have full membership.",
                  config->pkey_value);
