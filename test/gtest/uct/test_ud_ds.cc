@@ -81,6 +81,20 @@ UCS_TEST_P(test_ud_ds, cep_insert) {
     test_cep_insert(m_e1, &adr2);
 }
 
+UCS_TEST_P(test_ud_ds, cep_rollback) {
+
+    m_e1->add_ep();
+    EXPECT_EQ(ep(m_e1, 0)->ep_id, 0);
+    EXPECT_EQ(ep(m_e1, 0)->dest_ep_id, UCT_UD_EP_NULL_ID);
+    EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(m_e1), &adr1, ep(m_e1, 0), UCT_UD_EP_CONN_ID_MAX));
+    EXPECT_EQ(ep(m_e1, 0)->conn_id, 0);
+
+    uct_ud_iface_cep_rollback(iface(m_e1), &adr1, ep(m_e1, 0));
+
+    EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(m_e1), &adr1, ep(m_e1, 0), UCT_UD_EP_CONN_ID_MAX));
+    EXPECT_EQ(ep(m_e1, 0)->conn_id, 0);
+}
+
 UCS_TEST_P(test_ud_ds, cep_replace) {
 
     uct_ud_ep_t *my_ep;

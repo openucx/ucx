@@ -187,6 +187,23 @@ uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_ud_iface_addr_t 
     return uct_ud_iface_cep_lookup_ep(peer, conn_id);
 }
 
+void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep)
+{
+    uct_ud_iface_peer_t *peer;
+
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+
+    ucs_assert_always(peer != NULL);
+    ucs_assert_always(peer->conn_id_last > 0);
+    ucs_assert_always(ep->conn_id + 1 == peer->conn_id_last);
+    ucs_assert_always(!ucs_list_is_empty(&peer->ep_list));
+    ucs_assert_always(!ucs_list_is_empty(&ep->cep_list));
+
+    peer->conn_id_last--;
+    uct_ud_iface_cep_remove(ep);
+}
+
+
 static ucs_status_t uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
                                                  uct_ib_iface_config_t *config, 
                                                  const char *name, ucs_mpool_h *mp_p);

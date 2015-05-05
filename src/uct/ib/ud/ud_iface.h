@@ -212,6 +212,11 @@ void uct_ud_iface_cep_replace(uct_ud_iface_t *iface,
                               uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep,
                               uct_ud_ep_clone_func_t f);
 
+/*
+ * rollback last ordered insert (conn_id == UCT_UD_EP_CONN_ID_MAX).
+ */
+void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep);
+
 /* insert new ep that is connected to src_if_addr */
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id);
 

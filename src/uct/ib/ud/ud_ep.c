@@ -99,7 +99,19 @@ ucs_status_t uct_ud_ep_connect_to_iface(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, const struct sockaddr *addr)
+ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
+{
+    uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
+
+    uct_ud_ep_reset(ep);
+    ep->dest_ep_id = UCT_UD_EP_NULL_ID;
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
+                                     const uct_iface_addr_t *tl_iface_addr,
+                                     const uct_ep_addr_t *tl_ep_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);

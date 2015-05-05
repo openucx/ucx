@@ -307,7 +307,6 @@ ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_ad
     struct ibv_ah *ah;
     ucs_status_t status;
 
-    /* TODO: proper cleanup */
     /* check if we can reuse half duplex ep */
     ready_ep = uct_ud_iface_cep_lookup(&iface->super, if_addr, UCT_UD_EP_CONN_ID_MAX);
     if (ready_ep) {
@@ -323,18 +322,20 @@ ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_ad
     ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
-        return UCS_ERR_INVALID_ADDR;
+        status = UCS_ERR_INVALID_ADDR;
+        goto err1;
     }
     ep->ah = ah;
     
     status = uct_ud_iface_cep_insert(&iface->super, if_addr, &ep->super, UCT_UD_EP_CONN_ID_MAX);
     if (status != UCS_OK) {
-        return status;
+        goto err2;
     }
 
     skb = uct_ud_ep_prepare_creq(&ep->super);
     if (!skb) {
-        return UCS_ERR_NO_RESOURCE;
+        status = UCS_ERR_NO_RESOURCE;
+        goto err3;
     }
 
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
@@ -342,6 +343,15 @@ ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_ad
     uct_ud_verbs_iface_tx_ctl(iface, ep);
     ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
     return UCS_OK;
+
+err3:
+    uct_ud_iface_cep_rollback(&iface->super, if_addr, &ep->super);
+err2:
+    ibv_destroy_ah(ep->ah);
+    ep->ah = NULL;
+err1:
+    uct_ud_ep_disconnect_from_iface(tl_ep);
+    return status;
 }
 
 
