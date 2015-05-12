@@ -91,6 +91,9 @@ int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_double(char *buf, size_t max, void *src, const void *arg);
 ucs_status_t ucs_config_clone_double(void *src, void *dest, const void *arg);
 
+int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_hex(char *buf, size_t max, void *src, const void *arg);
+
 int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bool(char *buf, size_t max, void *src, const void *arg);
 
@@ -158,6 +161,10 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_DOUBLE     {ucs_config_sscanf_double,    ucs_config_sprintf_double, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     "floating point number"}
+
+#define UCS_CONFIG_TYPE_HEX        {ucs_config_sscanf_hex,       ucs_config_sprintf_hex, \
+                                    ucs_config_clone_uint,       ucs_config_release_nop, \
+                                    ucs_config_help_generic,     "hex representation of a number"}
 
 #define UCS_CONFIG_TYPE_BOOL       {ucs_config_sscanf_bool,      ucs_config_sprintf_bool, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
