@@ -134,13 +134,10 @@ UCS_TEST_F(test_math, atomic_fadd) {
 
 UCS_TEST_F(test_math, atomic_swap) {
     for (unsigned count = 0; count < ATOMIC_COUNT; ++count) {
-#ifndef __powerpc__
-        // TODO enable when we'll support atomic swap on powerpc
         TEST_ATOMIC_SWAP(8);
         TEST_ATOMIC_SWAP(16);
         TEST_ATOMIC_SWAP(32);
         TEST_ATOMIC_SWAP(64);
-#endif
     }
 }
 
