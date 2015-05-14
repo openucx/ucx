@@ -84,7 +84,7 @@ static void uct_ud_verbs_iface_progress_pending(uct_ud_verbs_iface_t *iface)
     uct_ud_ep_t *ep;
     ucs_status_t status;
     uct_ud_neth_t neth;
-    int ret;
+    int UCS_V_UNUSED ret;
     struct ibv_send_wr *bad_wr;
 
     while (!ucs_queue_is_empty(&iface->super.tx.pending_ops)) {
