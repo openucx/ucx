@@ -239,6 +239,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment, uint64_t s
         m_entity.mem_alloc(&m_buf_real, &alloc_size, alignment, &m_memh, &m_rkey);
         m_buf = (char*)m_buf_real + offset;
         m_end = (char*)m_buf + size;
+        pattern_fill(seed);
     } else {
         m_buf       = NULL;
         m_buf_real  = NULL;
@@ -247,7 +248,6 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment, uint64_t s
         m_rkey.rkey = UCT_INVALID_RKEY;
         m_rkey.type = NULL;
     }
-    pattern_fill(seed);
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
@@ -257,12 +257,13 @@ uct_test::mapped_buffer::~mapped_buffer() {
 }
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
-    /* We may fill a little more; buffer has room for it */
-    for (uint64_t *ptr = (uint64_t*)m_buf; (char*)ptr < m_end; ++ptr)
-    {
+    uint64_t *ptr = (uint64_t*)m_buf;
+    while ((char*)(ptr + 1) <= m_end) {
         *ptr = seed;
         seed = pat(seed);
+        ++ptr;
     }
+    memcpy(ptr, &seed, (char*)m_end - (char*)ptr);
 }
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
