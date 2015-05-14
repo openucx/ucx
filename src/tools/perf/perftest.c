@@ -882,18 +882,25 @@ ucx_perf_rte_t mpi_rte = {
 #elif HAVE_RTE
 unsigned ext_rte_group_size(void *rte_group)
 {
-    return rte_group_size((rte_group_t)rte_group);
+    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+    return rte_group_size(group);
 }
 
 unsigned ext_rte_group_index(void *rte_group)
 {
-    return rte_group_rank((rte_group_t)rte_group);
+    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+    return rte_group_rank(group);
 }
 
 void ext_rte_barrier(void *rte_group)
 {
     int rc;
-    rc = rte_barrier((rte_group_t)rte_group);
+    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+
+    rc = rte_barrier(group);
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_barrier");
     }
@@ -902,7 +909,8 @@ void ext_rte_barrier(void *rte_group)
 void ext_rte_post_vec(void *rte_group, struct iovec* iovec, size_t num, void **req)
 {
     int i, rc;
-    rte_group_t group = (rte_group_t)rte_group;
+    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
     rte_srs_session_t session;
     rte_iovec_t *r_vec;
 
@@ -930,8 +938,9 @@ void ext_rte_post_vec(void *rte_group, struct iovec* iovec, size_t num, void **r
 
 void ext_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
 {
+    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
     rte_srs_session_t session = (rte_srs_session_t)req;
-    rte_group_t group = (rte_group_t)rte_group;
     void *buffer = NULL;
     int size;
     uint32_t offset = 0;
@@ -974,8 +983,9 @@ void ext_rte_exchange_vec(void *rte_group, void * req)
 
 static void ext_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
 {
-    struct perftest_context *ctx = rte_group;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
+    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
+                   is_final);
 }
 
 ucx_perf_rte_t ext_rte = {
@@ -1023,9 +1033,9 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
-    ctx->sock_rte_group.self      = NULL;
+    ctx->sock_rte_group.self      = group;
     ctx->sock_rte_group.self_size = 0;
-    ctx->params.rte_group         = (void *)group;
+    ctx->params.rte_group         = ctx;
     ctx->params.rte               = &ext_rte;
 #endif
     return UCS_OK;
@@ -1033,6 +1043,11 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 {
+#if HAVE_MPI
+    MPI_Finalize();
+#elif HAVE_RTE
+    rte_finalize();
+#endif
     return UCS_OK;
 }
 
@@ -1198,14 +1213,14 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    /* Create RTE */
-    status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
+    status = open_context(&ctx);
     if (status != UCS_OK) {
         ret = -1;
         goto out;
     }
 
-    status = open_context(&ctx);
+    /* Create RTE */
+    status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
     if (status != UCS_OK) {
         ret = -1;
         goto out_close_context;
@@ -1225,12 +1240,5 @@ out_close_context:
 out_cleanup_rte:
     (rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
 out:
-    if (rte) {
-#if HAVE_MPI
-        MPI_Finalize();
-#elif HAVE_RTE
-        rte_finalize();
-#endif
-    }
     return ret;
 }
