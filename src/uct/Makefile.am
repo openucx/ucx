@@ -126,11 +126,22 @@ endif
 
 # FIXME these should be done conditionally
 noinst_HEADERS += \
-    sysv/sysv_context.h \
-    sysv/sysv_iface.h \
-    sysv/sysv_ep.h
+    sm/base/sm_context.h \
+    sm/base/sm_iface.h \
+    sm/base/sm_ep.h
 
 libuct_la_SOURCES += \
-    sysv/sysv_context.c \
-    sysv/sysv_iface.c \
-    sysv/sysv_ep.c
+    sm/base/sm_context.c \
+    sm/base/sm_iface.c \
+    sm/base/sm_ep.c
+
+noinst_HEADERS += \
+    sm/sysv/sysv_context.h \
+    sm/sysv/sysv_iface.h \
+    sm/sysv/sysv_ep.h
+
+libuct_la_SOURCES += \
+    sm/sysv/sysv_context.c \
+    sm/sysv/sysv_iface.c \
+    sm/sysv/sysv_ep.c
+
