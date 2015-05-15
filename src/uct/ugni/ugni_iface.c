@@ -317,6 +317,21 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
         goto error;
     }
 
+    rc = ucs_mpool_create("UGNI-GET-DESC-ONLY", sizeof(uct_ugni_get_desc_t),
+                          0,                            /* alignment offset */
+                          UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                          128 ,                         /* grow */
+                          config->mpool.max_bufs,       /* max buffers */
+                          &self->super.super,           /* iface */
+                          ucs_mpool_hugetlb_malloc,     /* allocation hooks */
+                          ucs_mpool_hugetlb_free,       /* free hook */
+                          uct_ugni_base_desc_init,      /* init func */
+                          NULL , &self->free_get_desc_only);
+    if (UCS_OK != rc) {
+      ucs_error("Mpool creation failed");
+      goto error;
+    }
+
     rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
                           sizeof(uct_ugni_base_desc_t) +
                           self->config.fma_seg_size,

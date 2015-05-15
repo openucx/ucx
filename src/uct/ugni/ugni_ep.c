@@ -455,20 +455,20 @@ static inline void uct_ugni_format_get_fma_cb(uct_ugni_get_desc_t *fma,
     fma->orig_comp_cb = cp;
     addr = remote_addr - fma->padding;
     comp = &fma->tmp;
-    buffer = (fma + 1);
+    buffer = fma + 1;
     
     ucs_assert(ucs_check_if_align_pow2(addr, UGNI_GET_ALIGN)==0);
     ucs_assert(ucs_check_if_align_pow2(length, UGNI_GET_ALIGN)==0);
     uct_ugni_format_fma(&fma->super, type, buffer, addr, rkey, length, ep, comp);
 }
 
-static inline void uct_ugni_format_get_rdma(uct_ugni_get_desc_t *rdma, gni_post_type_t type,
-                                            const void *buffer, uint64_t remote_addr,
-                                            uct_mem_h memh, uct_rkey_t rkey,
-                                            unsigned length, uct_ugni_ep_t *ep,
-                                            gni_cq_handle_t cq,
-                                            uct_completion_t *original_comp,
-                                            uct_completion_callback_t new_callback)
+static inline void uct_ugni_format_unaligned_rdma(uct_ugni_get_desc_t *rdma, gni_post_type_t type,
+                                                  const void *buffer, uint64_t remote_addr,
+                                                  uct_mem_h memh, uct_rkey_t rkey,
+                                                  unsigned length, uct_ugni_ep_t *ep,
+                                                  gni_cq_handle_t cq,
+                                                  uct_completion_t *original_comp,
+                                                  uct_completion_callback_t new_callback)
 {
   uint64_t addr;
   unsigned align_len;
@@ -571,7 +571,6 @@ static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self, void *data)
 
   ucs_assert(head_fma->network_completed_bytes <= head_fma->expected_bytes);
 
-
   /* Check if messages is completed */
   if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
     assemble_composed_unaligned(head_fma);
@@ -608,7 +607,8 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
 
   UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
                            fma, return UCS_ERR_NO_RESOURCE);
-  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, 
+
+  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_get_desc_only, 
                            rdma, return UCS_ERR_NO_RESOURCE);
 
   rdma_remote_start = remote_addr;
@@ -620,9 +620,9 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
 
   fma->tail = aligned_fma_remote_start - fma_remote_start;
 
-  uct_ugni_format_get_rdma(rdma, GNI_POST_RDMA_GET, buffer, rdma_remote_start, memh, rkey,
-                           rdma_length+fma->tail, ep, iface->local_cq, comp,
-                           uct_ugni_unalign_rdma_composed_cb);
+  uct_ugni_format_unaligned_rdma(rdma, GNI_POST_RDMA_GET, buffer, rdma_remote_start, memh, rkey,
+                                 rdma_length+fma->tail, ep, iface->local_cq, comp,
+                                 uct_ugni_unalign_rdma_composed_cb);
 
   fma->head = rdma;
   rdma->head = fma;
@@ -666,6 +666,7 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_only(uct_ep_h tl_ep, void *buff
   uint64_t fetch_length = length + remote_padding;
 
   fma_length = ucs_align_up_pow2(fetch_length, UGNI_GET_ALIGN);
+
   UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
                            fma, return UCS_ERR_NO_RESOURCE);
   fma->head = NULL;
