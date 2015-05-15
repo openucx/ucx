@@ -131,7 +131,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
                      ep->ep_id != dest_id)) {
         /* TODO: in the future just drop the packet */
-        ucs_fatal("Faied to find ep(%d)", dest_id);
+        ucs_fatal("Failed to find ep(%d)", dest_id);
         return;
     } 
     ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);

@@ -80,7 +80,9 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
 
-if HAVE_IB 
+if HAVE_IB
+gtest_SOURCES += \
+    uct/test_ib.cc
 if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/test_ud.cc
