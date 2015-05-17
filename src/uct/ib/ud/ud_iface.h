@@ -54,6 +54,7 @@ struct uct_ud_iface {
         unsigned             available;
     } rx;
     struct {
+        uct_ud_send_skb_t   *skb; /* ready to use skb */
         ucs_mpool_h          mp;
         unsigned             available;
         /* TODO: move to base class as this is common with rc */

@@ -231,9 +231,9 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
 #endif
     if (self->qp == NULL) {
         ucs_error("Failed to create qp: %m [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",
-                qp_init_attr.cap.max_inline_data, qp_init_attr.cap.max_recv_sge,
-                qp_init_attr.cap.max_send_sge, qp_init_attr.cap.max_recv_wr,
-                qp_init_attr.cap.max_send_wr);
+                  qp_init_attr.cap.max_inline_data, qp_init_attr.cap.max_recv_sge,
+                  qp_init_attr.cap.max_send_sge, qp_init_attr.cap.max_recv_wr,
+                  qp_init_attr.cap.max_send_wr);
         goto err;
     }
 
@@ -247,7 +247,7 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
     qp_attr.port_num   = self->super.port_num;
     qp_attr.qkey       = UCT_UD_QKEY;
     ret = ibv_modify_qp(self->qp, &qp_attr,
-            IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_QKEY);
+                        IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_QKEY);
     if (ret) {
         ucs_error("Failed to modify UD QP to INIT: %m");
         goto err_destroy_qp;
@@ -323,6 +323,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     if (status != UCS_OK) {
         goto err_mpool;
     }
+    self->tx.skb = ucs_mpool_get(self->tx.mp);
 
     ucs_queue_head_init(&self->tx.pending_ops);
     return UCS_OK;

@@ -818,6 +818,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
+
+    /* TODO: must be common code with UD */
     status = uct_ib_mlx5_get_qp_info(self->super.qp, &qp_info);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");

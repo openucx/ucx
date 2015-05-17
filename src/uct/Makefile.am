@@ -93,6 +93,14 @@ noinst_HEADERS += \
 	ib/ud/ud_verbs.h \
 	ib/ud/ud_inl.h \
 	ib/ud/ud_log.h
+
+if HAVE_MLX5_HW
+noinst_HEADERS += \
+	ib/ud/ud_mlx5.h
+
+libuct_la_SOURCES += \
+	ib/ud/ud_mlx5.c 
+endif
 endif
 
 if HAVE_TL_CM

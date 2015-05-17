@@ -119,8 +119,9 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         sg->lkey   = 0;
         sg->length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
         *is_inline = 1;
-        ds         = ucs_div_round_up(sizeof(inl) + sg->length,
+        ds         = ucs_div_round_up(sizeof(*inl) + sg->length,
                                      UCT_IB_MLX5_WQE_SEG_SIZE);
+        ucs_warn("inline_seg_blocks=%d length=%d size=%d", ds, sg->length, (int)sizeof(*inl));
     } else {
         dpseg      = *dseg_p;
         sg->addr   = ntohll(dpseg->addr);
@@ -264,8 +265,11 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
     /* Data segments*/
     i = 0;
     inline_bitmap = 0;
+    ucs_warn("ds = %d", ds);
+
     while ((ds > 0) && (i < sizeof(sg_list) / sizeof(sg_list[0]))) {
         ds -= uct_ib_mlx5_parse_dseg(&seg, qstart, qend, &sg_list[i], &is_inline);
+        ucs_warn("i=%d is_inline=%d", i, is_inline);
         if (is_inline) {
             inline_bitmap |= UCS_BIT(i);
         }
@@ -273,7 +277,7 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
         ++i;
     }
 
-    uct_ib_log_dump_sg_list(sg_list, i, inline_bitmap, packet_dump_cb, s, ends - s);
+    //uct_ib_log_dump_sg_list(sg_list, i, inline_bitmap, packet_dump_cb, s, ends - s);
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
@@ -286,11 +290,28 @@ void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
     uct_log_data(file, line, function, buf);
 }
 
+void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function, struct mlx5_cqe64 *cqe)
+{
+    char buf[256] = {0};
+
+    snprintf(buf, sizeof(buf) - 1,
+            "CQE(op_own 0x%x) qp 0x%x sqp 0x%x slid %d bytes %d wqe_idx %d ",
+            (unsigned)cqe->op_own,
+            (unsigned)(ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)),
+            (unsigned)(ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER)),
+            (unsigned)ntohs(cqe->slid),
+            (unsigned)ntohl(cqe->byte_cnt),
+            (unsigned)ntohs(cqe->wqe_counter));
+
+    uct_log_data(file, line, function, buf);
+}
+
 void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                           enum ibv_qp_type qp_type, struct mlx5_cqe64 *cqe, void *data,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
+
     uct_ib_log_dump_recv_completion(qp_type,
                                     ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER),
                                     ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER),

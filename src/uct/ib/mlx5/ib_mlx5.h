@@ -132,7 +132,7 @@ static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,
     cqe    = cq->cq_buf + (index & (cq->cq_length - 1)) * cqe_size;
     op_own = cqe->op_own;
 
-    if ((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length)) {
+    if (ucs_likely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
         return NULL;
     } else if (op_own & 0x80) {
         return uct_ib_mlx5_check_completion(cq, cqe);

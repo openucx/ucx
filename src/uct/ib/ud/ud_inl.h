@@ -48,7 +48,7 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
     return UCS_OK;
 }
 
-/* TODO: relay on window check instead */
+/* TODO: relay on window check instead. max_psn = psn  */
 static inline int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
 {
     if (ucs_unlikely(ep->dest_ep_id == UCT_UD_EP_NULL_ID)) {
@@ -72,7 +72,7 @@ static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         return NULL;
     }
 
-    skb = ucs_mpool_get(iface->tx.mp);
+    skb = iface->tx.skb;
     if (!skb) {
         ucs_trace_data("iface=%p out of tx skbs", iface);
         return NULL;
@@ -85,6 +85,7 @@ static inline void uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface,
                                                       uct_ud_send_skb_t *skb,
                                                       void *data, const void *buffer, unsigned length)
 {
+    iface->tx.skb = ucs_mpool_get(iface->tx.mp);
     ep->tx.psn++;
     --iface->tx.available;
     skb->len += length;
@@ -100,6 +101,7 @@ static inline void uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface,
                                                       uct_ud_ep_t *ep,
                                                       uct_ud_send_skb_t *skb)
 {
+    iface->tx.skb = ucs_mpool_get(iface->tx.mp);
     ep->tx.psn++;
     --iface->tx.available;
     ucs_queue_push(&ep->tx.window, &skb->queue);

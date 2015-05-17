@@ -134,7 +134,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     return UCS_OK;
 }
 
-static inline void uct_ud_ep_process_ack(uct_ud_ep_t *ep, uct_ud_psn_t ack_psn)
+static inline void uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_psn_t ack_psn)
 {
     uct_ud_send_skb_t *skb;
 
@@ -147,12 +147,15 @@ static inline void uct_ud_ep_process_ack(uct_ud_ep_t *ep, uct_ud_psn_t ack_psn)
     /* Release acknowledged skb's */
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                UCT_UD_PSN_COMPARE(skb->neth[0].psn, <=, ack_psn)) {
-        /* TODO call zcopy completion */
         ucs_mpool_put(skb);
     }
 
     /* update window */
     ep->tx.max_psn =  ep->tx.acked_psn + UCT_UD_MAX_WINDOW;
+
+    if (ucs_unlikely(iface->tx.skb == NULL)) {
+        iface->tx.skb = ucs_mpool_get(iface->tx.mp);
+    }
 }
 
 static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
@@ -332,7 +335,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);
     UCT_UD_EP_HOOK_CALL_RX(ep, neth);
     
-    uct_ud_ep_process_ack(ep, neth->ack_psn);
+    uct_ud_ep_process_ack(iface, ep, neth->ack_psn);
 
     if (ucs_unlikely(neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ)) {
         uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_ACK);

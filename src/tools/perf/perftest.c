@@ -719,7 +719,7 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
         ctx->sock_rte_group.connfd    = connfd;
         ctx->sock_rte_group.is_server = 1;
-
+        /* uncomment to force tl     strcpy(ctx->params.uct.tl_name, "ud_mlx5"); */
     } else {
         he = gethostbyname(ctx->server_addr);
         if (he == NULL || he->h_addr_list == NULL) {
