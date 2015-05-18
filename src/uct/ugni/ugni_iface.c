@@ -326,7 +326,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                           ucs_mpool_hugetlb_malloc,     /* allocation hooks */
                           ucs_mpool_hugetlb_free,       /* free hook */
                           uct_ugni_base_desc_init,      /* init func */
-                          NULL , &self->free_get_desc_only);
+                          NULL , &self->free_desc_get);
     if (UCS_OK != rc) {
       ucs_error("Mpool creation failed");
       goto error;
@@ -372,7 +372,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                                 128 ,                         /* grow */
                                 uct_ugni_base_desc_key_init,  /* memory/key init */
                                 "UGNI-DESC-GET",              /* name */
-                                &self->free_desc_fget);       /* mpool */
+                                &self->free_desc_get_buffer); /* mpool */
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
         goto clean_famo;
@@ -413,7 +413,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
         return;
     }
 
-    ucs_mpool_destroy(self->free_desc_fget);
+    ucs_mpool_destroy(self->free_desc_get_buffer);
+    ucs_mpool_destroy(self->free_desc_get);
     ucs_mpool_destroy(self->free_desc_famo);
     ucs_mpool_destroy(self->free_desc_buffer);
     ucs_mpool_destroy(self->free_desc);

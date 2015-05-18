@@ -43,7 +43,7 @@ typedef struct uct_ugni_iface {
                                                               on the interface */
     ucs_mpool_h             free_desc;                   /**< Pool of FMA descriptors for 
                                                               requests without bouncing buffers */
-    ucs_mpool_h             free_get_desc_only;          /**< Pool of FMA descriptors for
+    ucs_mpool_h             free_desc_get;               /**< Pool of FMA descriptors for
                                                               unaligned get requests without 
                                                               bouncing buffers */
     ucs_mpool_h             free_desc_buffer;            /**< Pool of FMA descriptors for 
@@ -51,7 +51,7 @@ typedef struct uct_ugni_iface {
     ucs_mpool_h             free_desc_famo;              /**< Pool of FMA descriptors for 
                                                               64/32 bit fetched-atomic operations
                                                               (registered memory) */
-    ucs_mpool_h             free_desc_fget;              /**< Pool of FMA descriptors for 
+    ucs_mpool_h             free_desc_get_buffer;        /**< Pool of FMA descriptors for 
                                                               FMA_SIZE fetch operations
                                                               (registered memory) */
     struct {

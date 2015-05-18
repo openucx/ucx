@@ -503,7 +503,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, size_t length, uint64_t remot
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN) <= iface->config.fma_seg_size, "get_bcopy");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
 
     uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, remote_addr, rkey,
@@ -605,10 +605,10 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
   rdma_length = length - iface->config.fma_seg_size;
   fma_length = iface->config.fma_seg_size;
 
-  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
+  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                            fma, return UCS_ERR_NO_RESOURCE);
 
-  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_get_desc_only, 
+  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get, 
                            rdma, return UCS_ERR_NO_RESOURCE);
 
   rdma_remote_start = remote_addr;
@@ -667,7 +667,7 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_only(uct_ep_h tl_ep, void *buff
 
   fma_length = ucs_align_up_pow2(fetch_length, UGNI_GET_ALIGN);
 
-  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_fget,
+  UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                            fma, return UCS_ERR_NO_RESOURCE);
   fma->head = NULL;
   fma->expected_bytes = fma_length;
