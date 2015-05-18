@@ -139,7 +139,7 @@ test_gdb: ucx gtest
 	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
 	env UCS_HANDLE_ERRORS=none \
 		UCS_GDB_PATH="" \
-		gdb -x .gdbcommands --args $(GDB_ARGS) \
+		$(LAUNCHER) gdb -x .gdbcommands --args $(GDB_ARGS) \
 			$(abs_builddir)/gtest $(GTEST_ARGS)
 
 #
@@ -147,4 +147,4 @@ test_gdb: ucx gtest
 #
 test_valgrind: ucx gtest
 	env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
-	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
+	$(LAUNCHER) valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)
