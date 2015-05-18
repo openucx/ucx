@@ -43,12 +43,15 @@ typedef struct uct_ugni_iface {
                                                               on the interface */
     ucs_mpool_h             free_desc;                   /**< Pool of FMA descriptors for 
                                                               requests without bouncing buffers */
+    ucs_mpool_h             free_desc_get;               /**< Pool of FMA descriptors for
+                                                              unaligned get requests without 
+                                                              bouncing buffers */
     ucs_mpool_h             free_desc_buffer;            /**< Pool of FMA descriptors for 
                                                               requests with bouncing buffer*/
     ucs_mpool_h             free_desc_famo;              /**< Pool of FMA descriptors for 
                                                               64/32 bit fetched-atomic operations
                                                               (registered memory) */
-    ucs_mpool_h             free_desc_fget;              /**< Pool of FMA descriptors for 
+    ucs_mpool_h             free_desc_get_buffer;        /**< Pool of FMA descriptors for 
                                                               FMA_SIZE fetch operations
                                                               (registered memory) */
     struct {
@@ -68,6 +71,7 @@ typedef struct uct_ugni_base_desc {
     gni_post_descriptor_t desc;
     uct_completion_t *comp_cb;
     uct_ugni_ep_t  *ep;
+    int not_ready_to_free;
 } uct_ugni_base_desc_t;
 
 typedef struct uct_ugni_get_desc {
@@ -75,6 +79,15 @@ typedef struct uct_ugni_get_desc {
     uct_completion_t tmp;
     uct_completion_t *orig_comp_cb;
     size_t padding;
+
+    /* Handling unalined composed get messages */
+    size_t expected_bytes;          /**< Number of bytes expected to be delivered
+                                         including padding */
+    size_t network_completed_bytes; /**< Total number of delivered bytes */
+    struct uct_ugni_get_desc* head; /**< Pointer to the head descriptor
+                                         that manages the completion of the operation */
+    void *user_buffer;              /**< Pointer to user's buffer, here to ensure it's always available for composed messages */
+    size_t tail;                    /**< Tail parameter to specify how many bytes at the end of a fma/rdma are garbage*/
 } uct_ugni_get_desc_t;
 
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)

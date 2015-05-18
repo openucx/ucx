@@ -47,7 +47,10 @@ static void uct_ugni_progress(void *arg)
     }
     --iface->outstanding;
     --desc->ep->outstanding;
-    ucs_mpool_put(desc);
+
+    if(ucs_likely(desc->not_ready_to_free == 0)){
+        ucs_mpool_put(desc);
+    }
     return;
 }
 
@@ -314,6 +317,21 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
         goto error;
     }
 
+    rc = ucs_mpool_create("UGNI-GET-DESC-ONLY", sizeof(uct_ugni_get_desc_t),
+                          0,                            /* alignment offset */
+                          UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                          128 ,                         /* grow */
+                          config->mpool.max_bufs,       /* max buffers */
+                          &self->super.super,           /* iface */
+                          ucs_mpool_hugetlb_malloc,     /* allocation hooks */
+                          ucs_mpool_hugetlb_free,       /* free hook */
+                          uct_ugni_base_desc_init,      /* init func */
+                          NULL , &self->free_desc_get);
+    if (UCS_OK != rc) {
+      ucs_error("Mpool creation failed");
+      goto error;
+    }
+
     rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
                           sizeof(uct_ugni_base_desc_t) +
                           self->config.fma_seg_size,
@@ -354,7 +372,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                                 128 ,                         /* grow */
                                 uct_ugni_base_desc_key_init,  /* memory/key init */
                                 "UGNI-DESC-GET",              /* name */
-                                &self->free_desc_fget);       /* mpool */
+                                &self->free_desc_get_buffer); /* mpool */
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
         goto clean_famo;
@@ -395,7 +413,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
         return;
     }
 
-    ucs_mpool_destroy(self->free_desc_fget);
+    ucs_mpool_destroy(self->free_desc_get_buffer);
+    ucs_mpool_destroy(self->free_desc_get);
     ucs_mpool_destroy(self->free_desc_famo);
     ucs_mpool_destroy(self->free_desc_buffer);
     ucs_mpool_destroy(self->free_desc);
