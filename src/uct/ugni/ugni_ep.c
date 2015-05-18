@@ -669,13 +669,16 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_only(uct_ep_h tl_ep, void *buff
 
   UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                            fma, return UCS_ERR_NO_RESOURCE);
+
+  uct_ugni_format_get_fma_cb(fma, GNI_POST_FMA_GET, remote_addr, rkey,
+                             fma_length, ep, comp, uct_ugni_unalign_fma_composed_cb);
+
   fma->head = NULL;
   fma->expected_bytes = fma_length;
   fma->network_completed_bytes = 0;
   fma->user_buffer = buffer;
-  uct_ugni_format_get_fma_cb(fma, GNI_POST_FMA_GET, remote_addr, rkey,
-                             fma_length, ep, comp, uct_ugni_unalign_fma_composed_cb);
   fma->tail = fma_length - fetch_length;
+
   ucs_trace_data("Posting GET ZCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
                  "%p, with [%"PRIx64" %"PRIx64"]",
                  fma->super.desc.length, length,
