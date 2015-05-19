@@ -60,7 +60,7 @@ void test_ud_ds::test_cep_insert(entity *e, uct_ud_iface_addr_t *adr)
     for (i = 0; i < N; i++) {
         e->add_ep();
         EXPECT_EQ(ep(e, i)->ep_id, i);
-        EXPECT_EQ(ep(e, i)->dest_ep_id, UCT_UD_EP_NULL_ID);
+        EXPECT_EQ(ep(e, i)->dest_ep_id, (unsigned)UCT_UD_EP_NULL_ID);
         EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(e), adr, ep(e, i), UCT_UD_EP_CONN_ID_MAX));
         EXPECT_EQ(ep(e, i)->conn_id, i);
     }
@@ -85,7 +85,7 @@ UCS_TEST_P(test_ud_ds, cep_rollback) {
 
     m_e1->add_ep();
     EXPECT_EQ(ep(m_e1, 0)->ep_id, 0);
-    EXPECT_EQ(ep(m_e1, 0)->dest_ep_id, UCT_UD_EP_NULL_ID);
+    EXPECT_EQ(ep(m_e1, 0)->dest_ep_id, (unsigned)UCT_UD_EP_NULL_ID);
     EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(m_e1), &adr1, ep(m_e1, 0), UCT_UD_EP_CONN_ID_MAX));
     EXPECT_EQ(ep(m_e1, 0)->conn_id, 0);
 
