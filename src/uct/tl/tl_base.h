@@ -228,10 +228,10 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
  * @param data   Optional completion data (operation reply).
  */
 static UCS_F_ALWAYS_INLINE
-void uct_invoke_completion(uct_completion_t *comp, void *data)
+void uct_invoke_completion(uct_completion_t *comp)
 {
-    ucs_trace_func("comp=%p, data=%p", comp, data);
-    comp->func(comp, data);
+    ucs_trace_func("comp=%p", comp);
+    comp->func(comp);
 }
 
 #endif
