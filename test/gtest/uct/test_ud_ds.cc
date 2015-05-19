@@ -42,10 +42,10 @@ public:
 protected:
     entity *m_e1, *m_e2;
     uct_ud_iface_addr_t adr1, adr2;
-    static int N;
+    static unsigned N;
 };
 
-int test_ud_ds::N = 1000;
+unsigned test_ud_ds::N = 1000;
 
 UCS_TEST_P(test_ud_ds, if_addr) {
     EXPECT_EQ(adr1.lid, adr2.lid);
@@ -54,7 +54,7 @@ UCS_TEST_P(test_ud_ds, if_addr) {
 
 void test_ud_ds::test_cep_insert(entity *e, uct_ud_iface_addr_t *adr)
 {
-    int i;
+    unsigned i;
     uct_ud_ep_t *my_ep;
 
     for (i = 0; i < N; i++) {

@@ -223,7 +223,7 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop();
-    EXPECT_EQ(ep(m_e1)->dest_ep_id, 1);
+    EXPECT_EQ(ep(m_e1)->dest_ep_id, 1U);
     EXPECT_EQ(ep(m_e1)->conn_id, 0);
     EXPECT_EQ(ep(m_e2)->dest_ep_id, UCT_UD_EP_NULL_ID);
 
@@ -240,12 +240,12 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     m_e1->connect_to_iface(1, *m_e2);
     short_progress_loop();
 
-    EXPECT_EQ(ep(m_e1,0)->dest_ep_id, 1);
+    EXPECT_EQ(ep(m_e1,0)->dest_ep_id, 1U);
     EXPECT_EQ(ep(m_e1,0)->conn_id, 0);
     EXPECT_EQ(ep(m_e1,0)->tx.psn, 2);
     EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts), 1);
 
-    EXPECT_EQ(ep(m_e1,1)->dest_ep_id, 2);
+    EXPECT_EQ(ep(m_e1,1)->dest_ep_id, 2U);
     EXPECT_EQ(ep(m_e1,1)->conn_id, 1);
     EXPECT_EQ(ep(m_e1,1)->tx.psn, 2);
     EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts), 1);
@@ -256,7 +256,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop();
-    EXPECT_EQ(ep(m_e1)->dest_ep_id, 1);
+    EXPECT_EQ(ep(m_e1)->dest_ep_id, 1U);
     EXPECT_EQ(ep(m_e1)->conn_id, 0);
     EXPECT_EQ(ep(m_e1)->tx.psn, 2);
     EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts), 1);
@@ -307,7 +307,7 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     EXPECT_EQ(ep(m_e2)->ep_id, 0);
     EXPECT_EQ(ep(m_e2)->conn_id, 0);
     
-    EXPECT_EQ(ep(m_e1,1)->dest_ep_id, 1);
+    EXPECT_EQ(ep(m_e1,1)->dest_ep_id, 1U);
     EXPECT_EQ(ep(m_e1,1)->conn_id, 1);
     EXPECT_EQ(ep(m_e1,1)->ep_id, 1);
 
@@ -315,7 +315,7 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     EXPECT_EQ(ep(m_e2)->ep_id, 0);
     EXPECT_EQ(ep(m_e2)->conn_id, 0);
 
-    EXPECT_EQ(ep(m_e2,1)->dest_ep_id, 1);
+    EXPECT_EQ(ep(m_e2,1)->dest_ep_id, 1U);
     EXPECT_EQ(ep(m_e2,1)->ep_id, 1);
     EXPECT_EQ(ep(m_e2,1)->conn_id, 1);
     /* psns are not checked because it really depends on scheduling */
