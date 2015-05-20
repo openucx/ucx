@@ -79,16 +79,16 @@ UCS_TEST_P(test_ud, basic_tx) {
     short_progress_loop();
 
     /* N packets transmitted, N packets received */
-    EXPECT_EQ(ep(m_e1)->tx.psn, N+1);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), N);
+    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
+    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 
     /* no data transmitted back */
-    EXPECT_EQ(ep(m_e2)->tx.psn, 1);
+    EXPECT_EQ(1, ep(m_e2)->tx.psn);
 
     /* nothing was acked */
-    EXPECT_EQ(ucs_queue_length(&ep(m_e1)->tx.window), N);
-    EXPECT_EQ(ep(m_e1)->tx.acked_psn, 0);
-    EXPECT_EQ(ep(m_e2)->rx.acked_psn, 0);
+    EXPECT_EQ(N, ucs_queue_length(&ep(m_e1)->tx.window));
+    EXPECT_EQ(0, ep(m_e1)->tx.acked_psn);
+    EXPECT_EQ(0, ep(m_e2)->rx.acked_psn);
 }
 
 UCS_TEST_P(test_ud, duplex_tx) {
@@ -105,17 +105,17 @@ UCS_TEST_P(test_ud, duplex_tx) {
     }
 
     /* N packets transmitted, N packets received */
-    EXPECT_EQ(ep(m_e1)->tx.psn, N+1);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), N);
-    EXPECT_EQ(ep(m_e2)->tx.psn, N+1);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts), N);
+    EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
+    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(N+1, ep(m_e2)->tx.psn);
+    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
 
     /* everything but last packet from e2 is acked */
-    EXPECT_EQ(ep(m_e1)->tx.acked_psn, N);
-    EXPECT_EQ(ep(m_e2)->tx.acked_psn, N-1);
-    EXPECT_EQ(ep(m_e1)->rx.acked_psn, N-1);
-    EXPECT_EQ(ep(m_e2)->rx.acked_psn, N);
-    EXPECT_EQ(ucs_queue_length(&ep(m_e2)->tx.window), 1U);
+    EXPECT_EQ(N, ep(m_e1)->tx.acked_psn);
+    EXPECT_EQ(N-1, ep(m_e2)->tx.acked_psn);
+    EXPECT_EQ(N-1, ep(m_e1)->rx.acked_psn);
+    EXPECT_EQ(N, ep(m_e2)->rx.acked_psn);
+    EXPECT_EQ(1U, ucs_queue_length(&ep(m_e2)->tx.window));
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
 }
 
@@ -128,7 +128,7 @@ UCS_TEST_P(test_ud, tx_window1) {
     for (i = 0; i < N; i++) {
         EXPECT_UCS_OK(tx(m_e1));
     }
-    EXPECT_EQ(tx(m_e1), UCS_ERR_NO_RESOURCE);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
     short_progress_loop();
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(tx(m_e1));
@@ -156,12 +156,12 @@ UCS_TEST_P(test_ud, tx_window2) {
     for (i = 0; i < N; i++) {
         EXPECT_UCS_OK(tx(m_e1));
     }
-    EXPECT_EQ(tx(m_e1), UCS_ERR_NO_RESOURCE);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
     short_progress_loop();
-    EXPECT_EQ(tx(m_e1), UCS_ERR_NO_RESOURCE);
-    EXPECT_EQ(tx(m_e1), UCS_ERR_NO_RESOURCE);
-    EXPECT_EQ(tx(m_e1), UCS_ERR_NO_RESOURCE);
-    EXPECT_EQ(ucs_queue_length(&ep(m_e1)->tx.window), N);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
+    EXPECT_EQ(N, ucs_queue_length(&ep(m_e1)->tx.window));
 }
 
 static int ack_req_tx_cnt;
@@ -188,11 +188,11 @@ UCS_TEST_P(test_ud, ack_req_single) {
     ep(m_e2)->rx.rx_hook = ack_req_count_tx;
 
     EXPECT_UCS_OK(tx(m_e1));
-    EXPECT_EQ(ack_req_tx_cnt, 1);
-    EXPECT_EQ(tx_ack_psn, 1);
+    EXPECT_EQ(1, ack_req_tx_cnt);
+    EXPECT_EQ(1, tx_ack_psn);
     short_progress_loop();
-    EXPECT_EQ(ack_req_tx_cnt, 2);
-    EXPECT_EQ(tx_ack_psn, 1);
+    EXPECT_EQ(2, ack_req_tx_cnt);
+    EXPECT_EQ(1, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
 }
 
@@ -210,11 +210,11 @@ UCS_TEST_P(test_ud, ack_req_window) {
     for (i = 0; i < N/4; i++) {
         EXPECT_UCS_OK(tx(m_e1));
     }
-    EXPECT_EQ(ack_req_tx_cnt, 1);
-    EXPECT_EQ(tx_ack_psn, N/4);
+    EXPECT_EQ(1, ack_req_tx_cnt);
+    EXPECT_EQ(N/4, tx_ack_psn);
     short_progress_loop();
-    EXPECT_EQ(ack_req_tx_cnt, 2);
-    EXPECT_EQ(tx_ack_psn, N/4);
+    EXPECT_EQ(2, ack_req_tx_cnt);
+    EXPECT_EQ(N/4, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
 }
 #endif
@@ -223,14 +223,14 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop();
-    EXPECT_EQ(ep(m_e1)->dest_ep_id, 1U);
-    EXPECT_EQ(ep(m_e1)->conn_id, 0U);
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, (unsigned)UCT_UD_EP_NULL_ID);
+    EXPECT_EQ(1U, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1)->conn_id);
+    EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
 
-    EXPECT_EQ(ep(m_e1)->tx.psn, 2);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts), 1);
+    EXPECT_EQ(2, ep(m_e1)->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
     /* second active ep will not be used */
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), 0);
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
 
 UCS_TEST_P(test_ud, connect_iface_2to1) {
@@ -240,35 +240,35 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     m_e1->connect_to_iface(1, *m_e2);
     short_progress_loop();
 
-    EXPECT_EQ(ep(m_e1,0)->dest_ep_id, 1U);
-    EXPECT_EQ(ep(m_e1,0)->conn_id, 0U);
-    EXPECT_EQ(ep(m_e1,0)->tx.psn, 2);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts), 1);
+    EXPECT_EQ(1U, ep(m_e1,0)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1,0)->conn_id);
+    EXPECT_EQ(2, ep(m_e1,0)->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 
-    EXPECT_EQ(ep(m_e1,1)->dest_ep_id, 2U);
-    EXPECT_EQ(ep(m_e1,1)->conn_id, 1U);
-    EXPECT_EQ(ep(m_e1,1)->tx.psn, 2);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts), 1);
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, (unsigned)UCT_UD_EP_NULL_ID);
+    EXPECT_EQ(2U, ep(m_e1,1)->dest_ep_id);
+    EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
+    EXPECT_EQ(2, ep(m_e1,1)->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
+    EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
 }
 
 UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop();
-    EXPECT_EQ(ep(m_e1)->dest_ep_id, 1U);
-    EXPECT_EQ(ep(m_e1)->conn_id, 0U);
-    EXPECT_EQ(ep(m_e1)->tx.psn, 2);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts), 1);
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, (unsigned)UCT_UD_EP_NULL_ID);
+    EXPECT_EQ(1U, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1)->conn_id);
+    EXPECT_EQ(2, ep(m_e1)->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
+    EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop();
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->ep_id, 1);
-    EXPECT_EQ(ep(m_e2)->conn_id, 0U);
-    EXPECT_EQ(ep(m_e2)->tx.psn, 2);
+    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
+    EXPECT_EQ(1U, ep(m_e2)->ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->conn_id);
+    EXPECT_EQ(2, ep(m_e2)->tx.psn);
     EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), 1);
 }
 
@@ -278,13 +278,13 @@ UCS_TEST_P(test_ud, connect_iface_sim) {
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop();
 
-    EXPECT_EQ(ep(m_e1)->dest_ep_id, 0);
-    EXPECT_EQ(ep(m_e1)->conn_id, 0U);
-    EXPECT_EQ(ep(m_e1)->ep_id, 0);
+    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1)->conn_id);
+    EXPECT_EQ(0U, ep(m_e1)->ep_id);
 
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->conn_id, 0U);
+    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->conn_id);
     
     /* psns are not checked because it really depends on scheduling */
 }
@@ -299,25 +299,25 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     m_e2->connect_to_iface(1, *m_e1);
     short_progress_loop();
 
-    EXPECT_EQ(ep(m_e1)->dest_ep_id, 0);
-    EXPECT_EQ(ep(m_e1)->conn_id, 0U);
-    EXPECT_EQ(ep(m_e1)->ep_id, 0);
+    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1)->conn_id);
+    EXPECT_EQ(0U, ep(m_e1)->ep_id);
 
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->conn_id, 0U);
+    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->conn_id);
     
-    EXPECT_EQ(ep(m_e1,1)->dest_ep_id, 1U);
-    EXPECT_EQ(ep(m_e1,1)->conn_id, 1U);
-    EXPECT_EQ(ep(m_e1,1)->ep_id, 1);
+    EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
+    EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
+    EXPECT_EQ(1U, ep(m_e1,1)->ep_id);
 
-    EXPECT_EQ(ep(m_e2)->dest_ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->ep_id, 0);
-    EXPECT_EQ(ep(m_e2)->conn_id, 0U);
+    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->conn_id);
 
-    EXPECT_EQ(ep(m_e2,1)->dest_ep_id, 1U);
-    EXPECT_EQ(ep(m_e2,1)->ep_id, 1);
-    EXPECT_EQ(ep(m_e2,1)->conn_id, 1U);
+    EXPECT_EQ(1U, ep(m_e2,1)->dest_ep_id);
+    EXPECT_EQ(1U, ep(m_e2,1)->ep_id);
+    EXPECT_EQ(1U, ep(m_e2,1)->conn_id);
     /* psns are not checked because it really depends on scheduling */
 }
 
