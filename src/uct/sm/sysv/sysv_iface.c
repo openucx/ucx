@@ -6,44 +6,23 @@
 
 #include "sysv_iface.h"
 
-#include <uct/tl/context.h>
-
-
-static ucs_status_t uct_sysv_iface_flush(uct_iface_h tl_iface)
-{
-    return UCS_OK;
-}
-
-/* Forward declaration for the delete function */
-static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
-
-ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface, 
-                                        uct_iface_addr_t *iface_addr)
-{
-    uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
-
-    *(uct_sysv_iface_addr_t*)iface_addr = iface->addr;
-    return UCS_OK;
-}
-
 #define UCT_SYSV_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
 #define UCT_SYSV_MAX_BCOPY_LENGTH 40960 /* FIXME temp value for now */
 #define UCT_SYSV_MAX_ZCOPY_LENGTH 81920 /* FIXME temp value for now */
 
-ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+/* Forward declaration for the delete function */
+static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
+
+ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, 
+                                  uct_iface_attr_t *iface_attr)
 {
-    uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
+    ucs_status_t status;
 
-    memset(iface_attr, 0, sizeof(uct_iface_attr_t));
+    /* initialize the defaults from base sm */
+    status = uct_sm_iface_query(tl_iface, iface_attr);
+    if (UCS_OK != status) return status;
 
-    /* FIXME all of these values */
-    iface_attr->cap.put.max_short      = iface->config.max_put;
-    iface_attr->cap.put.max_bcopy      = iface->config.max_bcopy;
-    iface_attr->cap.put.max_zcopy      = iface->config.max_zcopy;
-    iface_attr->cap.get.max_bcopy      = iface->config.max_bcopy;
-    iface_attr->cap.get.max_zcopy      = iface->config.max_zcopy;
-    iface_attr->iface_addr_len         = sizeof(uct_sysv_iface_addr_t);
-    iface_attr->ep_addr_len            = sizeof(uct_sysv_ep_addr_t);
+    /* set TL specific flags */
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT       |
                                          UCT_IFACE_FLAG_PUT_BCOPY       |
                                          UCT_IFACE_FLAG_ATOMIC_ADD32    |
@@ -57,8 +36,6 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_PUT_ZCOPY       |
                                          UCT_IFACE_FLAG_GET_BCOPY       |
                                          UCT_IFACE_FLAG_GET_ZCOPY;
-
-    iface_attr->completion_priv_len    = 0; /* TBD */
     return UCS_OK;
 }
 
@@ -188,28 +165,31 @@ ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
 
 }
 
+/* point as much to sm_base as possible
+ * to override, create a uct_sysv_* function and update the table here
+ */
 uct_iface_ops_t uct_sysv_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t),
-    .iface_get_address   = uct_sysv_iface_get_address,
-    .iface_flush         = uct_sysv_iface_flush,
-    .ep_get_address      = uct_sysv_ep_get_address,
+    .ep_get_address      = uct_sm_ep_get_address,
     .ep_connect_to_iface = NULL,
-    .ep_connect_to_ep    = uct_sysv_ep_connect_to_ep,
     .iface_query         = uct_sysv_iface_query,
-    .ep_put_short        = uct_sysv_ep_put_short,
-    .ep_put_bcopy        = uct_sysv_ep_put_bcopy,
-    .ep_put_zcopy        = uct_sysv_ep_put_zcopy,
-    .ep_get_bcopy        = uct_sysv_ep_get_bcopy,
-    .ep_get_zcopy        = uct_sysv_ep_get_zcopy,
-    .ep_am_short         = uct_sysv_ep_am_short,
-    .ep_atomic_add64     = uct_sysv_ep_atomic_add64,
-    .ep_atomic_fadd64    = uct_sysv_ep_atomic_fadd64,
-    .ep_atomic_cswap64   = uct_sysv_ep_atomic_cswap64,
-    .ep_atomic_swap64    = uct_sysv_ep_atomic_swap64,
-    .ep_atomic_add32     = uct_sysv_ep_atomic_add32,
-    .ep_atomic_fadd32    = uct_sysv_ep_atomic_fadd32,
-    .ep_atomic_cswap32   = uct_sysv_ep_atomic_cswap32,
-    .ep_atomic_swap32    = uct_sysv_ep_atomic_swap32,
+    .iface_get_address   = uct_sm_iface_get_address,
+    .iface_flush         = uct_sm_iface_flush,
+    .ep_connect_to_ep    = uct_sm_ep_connect_to_ep,
+    .ep_put_short        = uct_sm_ep_put_short,
+    .ep_put_bcopy        = uct_sm_ep_put_bcopy,
+    .ep_put_zcopy        = uct_sm_ep_put_zcopy,
+    .ep_get_bcopy        = uct_sm_ep_get_bcopy,
+    .ep_get_zcopy        = uct_sm_ep_get_zcopy,
+    .ep_am_short         = uct_sm_ep_am_short,
+    .ep_atomic_add64     = uct_sm_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_sm_ep_atomic_fadd64,
+    .ep_atomic_cswap64   = uct_sm_ep_atomic_cswap64,
+    .ep_atomic_swap64    = uct_sm_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_sm_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_sm_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_sm_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_sm_ep_atomic_swap32,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
@@ -231,23 +211,16 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    int addr;
+    /* initialize with the base sm constructor */
+    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_sysv_iface_ops, worker,
+                              &uct_sysv_pd, tl_config, dev_name, 
+                              UCT_SYSV_TL_NAME);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_sysv_iface_ops, worker,
-                              &uct_sysv_pd, tl_config UCS_STATS_ARG(NULL));
-
-    if(strcmp(dev_name, UCT_SYSV_TL_NAME) != 0) {
-        ucs_error("No device was found: %s", dev_name);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    self->config.max_put     = UCT_SYSV_MAX_SHORT_LENGTH;
-    self->config.max_bcopy   = UCT_SYSV_MAX_BCOPY_LENGTH;
-    self->config.max_zcopy   = UCT_SYSV_MAX_ZCOPY_LENGTH;
-
-    addr = ucs_generate_uuid((intptr_t)self);
-
-    self->addr.nic_addr = addr;
+    /* can override default max size values 
+     * from base sm (self->super.config.*) here */
+    self->super.config.max_put     = UCT_SYSV_MAX_SHORT_LENGTH;
+    self->super.config.max_bcopy   = UCT_SYSV_MAX_BCOPY_LENGTH;
+    self->super.config.max_zcopy   = UCT_SYSV_MAX_ZCOPY_LENGTH;
 
     return UCS_OK;
 }
@@ -257,12 +230,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
     /* No op */
 }
 
-UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_base_iface_t);
+/* point to sm_base */
+UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_sm_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_worker_h,
                                  const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
 
 uct_tl_ops_t uct_sysv_tl_ops = {
-    .query_resources     = uct_sysv_query_resources,
+    .query_resources     = uct_sysv_query_resources, 
     .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_iface_t),
 };

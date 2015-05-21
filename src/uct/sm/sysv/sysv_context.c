@@ -4,16 +4,16 @@
  * $HEADER$
  */
 
-#include "sysv_iface.h"
 #include "sysv_context.h"
-#include <ucs/debug/memtrack.h>
-#include <ucs/type/class.h>
-#include <uct/tl/context.h>
 
 ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resources_p,
                                       unsigned *num_resources_p);
 
+/* FIXME we need to figure out how to build this table in a hierarchical fashion
+ * so that all shared memory transports can share the common parts with the base
+ * class
+ */
 ucs_config_field_t uct_sysv_iface_config_table[] = {
     {"", "", NULL,
     ucs_offsetof(uct_sysv_iface_config_t, super),
@@ -25,21 +25,14 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resource_p,
                                       unsigned *num_resources_p)
 {
-    uct_resource_desc_t *resource;
+    ucs_status_t status;
 
-    resource = ucs_calloc(1, sizeof(uct_resource_desc_t), "resource desc");
-    if (NULL == resource) {
-        ucs_error("Failed to allocate memory");
-        return UCS_ERR_NO_MEMORY;
-    }
+    uct_resource_desc_t *resource = NULL;
 
-    ucs_snprintf_zero(resource->tl_name,  
-                      sizeof(resource->tl_name), "%s", UCT_SYSV_TL_NAME);
-    ucs_snprintf_zero(resource->dev_name, 
-                      sizeof(resource->dev_name), "%s", UCT_SYSV_TL_NAME);
-    resource->latency    = 1; /* FIXME temp value */
-    resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
-    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
+    status = uct_sm_query_resources(&resource, UCT_SYSV_TL_NAME);
+    if (UCS_OK != status) return status;
+
+    /* can override resource->latency/bandwidth here if desired */
 
     *num_resources_p = 1;
     *resource_p     = resource;
@@ -63,11 +56,11 @@ ucs_status_t uct_sysv_init(uct_context_h context)
     ucs_debug("Initialized sysv component");
 
     return UCS_OK;
-
 }
 
 void uct_sysv_cleanup(uct_context_t *context)
 {
     /* no-op */
 }
+
 UCS_COMPONENT_DEFINE(uct_context_t, sysv, uct_sysv_init, uct_sysv_cleanup, 0)
