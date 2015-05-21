@@ -96,6 +96,7 @@ static void uct_ud_verbs_iface_progress_pending(uct_ud_verbs_iface_t *iface)
     uct_ud_neth_t neth;
     uct_ud_send_skb_t *skb;
 
+    UCS_V_INITIALIZED(skb);
     while (!ucs_queue_is_empty(&iface->super.tx.pending_ops)) {
         status = uct_ud_iface_get_next_pending(&iface->super, &ep, &neth, &skb);
         if (status == UCS_ERR_NO_RESOURCE) {
