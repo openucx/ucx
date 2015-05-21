@@ -7,10 +7,9 @@
 #include "sm_iface.h"
 #include "sm_ep.h"
 
-/* default values for all shared memory transports */
-#define UCT_SM_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
-#define UCT_SM_MAX_BCOPY_LENGTH 40960 /* FIXME temp value for now */
-#define UCT_SM_MAX_ZCOPY_LENGTH 81920 /* FIXME temp value for now */
+#define UCT_SM_MAX_SHORT_LENGTH (-1)
+#define UCT_SM_MAX_BCOPY_LENGTH (-1)
+#define UCT_SM_MAX_ZCOPY_LENGTH (-1)
 
 ucs_status_t uct_sm_iface_flush(uct_iface_h tl_iface)
 {
@@ -30,7 +29,6 @@ ucs_status_t uct_sm_iface_get_address(uct_iface_h tl_iface,
 ucs_status_t uct_sm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_sm_iface_t *iface = ucs_derived_of(tl_iface, uct_sm_iface_t);
-
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
@@ -41,20 +39,7 @@ ucs_status_t uct_sm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_at
     iface_attr->cap.get.max_zcopy      = iface->config.max_zcopy;
     iface_attr->iface_addr_len         = sizeof(uct_sm_iface_addr_t);
     iface_attr->ep_addr_len            = sizeof(uct_sm_ep_addr_t);
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT       |
-                                         UCT_IFACE_FLAG_PUT_BCOPY       |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD32    |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD64    |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD64   |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD32   |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP64   |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP32   |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP64  |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
-                                         UCT_IFACE_FLAG_PUT_ZCOPY       |
-                                         UCT_IFACE_FLAG_GET_BCOPY       |
-                                         UCT_IFACE_FLAG_GET_ZCOPY;
-
+    iface_attr->cap.flags              = 0; /* force actual TL to set its own */
     iface_attr->completion_priv_len    = 0; /* TBD */
 
     return UCS_OK;
@@ -64,8 +49,6 @@ UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
                     uct_pd_h pd, const uct_iface_config_t *tl_config, 
                     const char *dev_name, const char *tl_name)
 {
-    int addr;
-
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, worker, pd, 
                               tl_config UCS_STATS_ARG(NULL));
 
@@ -74,14 +57,14 @@ UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
         return UCS_ERR_NO_DEVICE;
     }
 
-    /* set default values for all derived shared memory transports */
-    self->config.max_put     = UCT_SM_MAX_SHORT_LENGTH;
-    self->config.max_bcopy   = UCT_SM_MAX_BCOPY_LENGTH;
-    self->config.max_zcopy   = UCT_SM_MAX_ZCOPY_LENGTH;
+    /* default values for all shared memory transports
+     * (force each TL to set for itself) */
+    self->config.max_put     = -1;
+    self->config.max_bcopy   = -1;
+    self->config.max_zcopy   = -1;
 
-    addr = ucs_generate_uuid((intptr_t)self);
-
-    self->addr.nic_addr = addr;
+    /* generate unique integer for use as the nic/ep addr */
+    self->addr.nic_addr = ucs_generate_uuid((intptr_t)self);
 
     return UCS_OK;
 }

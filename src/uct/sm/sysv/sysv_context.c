@@ -25,9 +25,12 @@ ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resource_p,
                                       unsigned *num_resources_p)
 {
+    ucs_status_t status;
+
     uct_resource_desc_t *resource = NULL;
 
-    uct_sm_query_resources(&resource, UCT_SYSV_TL_NAME);
+    status = uct_sm_query_resources(&resource, UCT_SYSV_TL_NAME);
+    if (UCS_OK != status) return status;
 
     /* can override resource->latency/bandwidth here if desired */
 

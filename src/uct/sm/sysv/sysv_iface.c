@@ -6,8 +6,38 @@
 
 #include "sysv_iface.h"
 
+#define UCT_SYSV_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
+#define UCT_SYSV_MAX_BCOPY_LENGTH 40960 /* FIXME temp value for now */
+#define UCT_SYSV_MAX_ZCOPY_LENGTH 81920 /* FIXME temp value for now */
+
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
+
+ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface, 
+                                  uct_iface_attr_t *iface_attr)
+{
+    ucs_status_t status;
+
+    /* initialize the defaults from base sm */
+    status = uct_sm_iface_query(tl_iface, iface_attr);
+    if (UCS_OK != status) return status;
+
+    /* set TL specific flags */
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT       |
+                                         UCT_IFACE_FLAG_PUT_BCOPY       |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD32    |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD64    |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD64   |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD32   |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP64   |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP32   |
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP64  |
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
+                                         UCT_IFACE_FLAG_PUT_ZCOPY       |
+                                         UCT_IFACE_FLAG_GET_BCOPY       |
+                                         UCT_IFACE_FLAG_GET_ZCOPY;
+    return UCS_OK;
+}
 
 static ucs_status_t uct_sysv_mem_alloc(uct_pd_h pd, size_t *length_p,
                                        void **address_p,
@@ -142,7 +172,7 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t),
     .ep_get_address      = uct_sm_ep_get_address,
     .ep_connect_to_iface = NULL,
-    .iface_query         = uct_sm_iface_query,
+    .iface_query         = uct_sysv_iface_query,
     .iface_get_address   = uct_sm_iface_get_address,
     .iface_flush         = uct_sm_iface_flush,
     .ep_connect_to_ep    = uct_sm_ep_connect_to_ep,
@@ -181,12 +211,16 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
+    /* initialize with the base sm constructor */
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_sysv_iface_ops, worker,
                               &uct_sysv_pd, tl_config, dev_name, 
                               UCT_SYSV_TL_NAME);
 
     /* can override default max size values 
      * from base sm (self->super.config.*) here */
+    self->super.config.max_put     = UCT_SYSV_MAX_SHORT_LENGTH;
+    self->super.config.max_bcopy   = UCT_SYSV_MAX_BCOPY_LENGTH;
+    self->super.config.max_zcopy   = UCT_SYSV_MAX_ZCOPY_LENGTH;
 
     return UCS_OK;
 }
