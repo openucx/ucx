@@ -1,0 +1,3 @@
+This is an example of the "batch" configuration files for ucx_perftest.
+The files are passed as an input parameter to the ucx_pertest benchmark:
+ucx_perftest --batch msg_pow2 --batch test_types --batch transports <...>
