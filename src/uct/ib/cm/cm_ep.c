@@ -43,15 +43,6 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
                                             struct ibv_sa_path_rec *path)
 {
     uct_cm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_cm_iface_t);
-    uint16_t pkey;
-    int ret;
-
-    ret = ibv_query_pkey(uct_ib_iface_device(&iface->super)->ibv_context,
-                         iface->super.port_num, 0 /*TODO config */, &pkey);
-    if (ret) {
-        ucs_error("ibv_query_pkey() failed: %m");
-        return UCS_ERR_INVALID_ADDR;
-    }
 
     path->dgid.global.subnet_prefix = ep->dest_addr.subnet_prefix;
     path->dgid.global.interface_id  = ep->dest_addr.guid;
@@ -64,7 +55,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     path->traffic_class             = 0;
     path->reversible                = htonl(1); /* IBCM currently only supports reversible paths */
     path->numb_path                 = 0;
-    path->pkey                      = ntohs(pkey);
+    path->pkey                      = ntohs(iface->super.pkey_value);
     path->sl                        = iface->super.sl;
     path->mtu_selector              = 2; /* EQ */
     path->mtu                       = uct_ib_iface_port_attr(&iface->super)->active_mtu;

@@ -93,7 +93,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
 
    {"PKEY_VALUE", "0x7fff",
-   "Which pkey value to use. Only the partition number (lower 15 bits) is used.",
+   "Which pkey value to use. Should be between 0 and 0x7fff.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
 
@@ -226,6 +226,128 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
     return 0;
 }
 
+static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
+                                           uct_ib_iface_config_t *config)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint16_t pkey_tbl_len = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    uint16_t pkey_index, port_pkey, pkey;
+
+    /* get the user's pkey value and find its index in the port's pkey table */
+    for (pkey_index = 0; pkey_index < pkey_tbl_len; ++pkey_index) {
+        /* get the pkey values from the port's pkeys table */
+        if (ibv_query_pkey(dev->ibv_context, iface->port_num, pkey_index, &port_pkey)) {
+            ucs_error("ibv_query_pkey(%s:%d, index=%d) failed: %m",
+                      uct_ib_device_name(dev), iface->port_num, pkey_index);
+        }
+
+        pkey = ntohs(port_pkey);
+        if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK)) {
+            ucs_debug("skipping send-only pkey[%d]=0x%x", pkey_index, pkey);
+            continue;
+        }
+
+        /* take only the lower 15 bits for the comparison */
+        if ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey_value) {
+            iface->pkey_index = pkey_index;
+            iface->pkey_value = pkey;
+            ucs_debug("using pkey[%d] 0x%x on %s:%d", iface->pkey_index,
+                      iface->pkey_value, uct_ib_device_name(dev), iface->port_num);
+            return UCS_OK;
+        }
+    }
+
+    ucs_error("The requested pkey: 0x%x, cannot be used. "
+              "It wasn't found or the configured pkey doesn't have full membership.",
+              config->pkey_value);
+    return UCS_ERR_INVALID_PARAM;
+}
+
+static ucs_status_t uct_ib_iface_init_gid(uct_ib_iface_t *iface,
+                                           uct_ib_iface_config_t *config)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    int ret;
+
+    ret = ibv_query_gid(dev->ibv_context, iface->port_num, config->gid_index,
+                        &iface->gid);
+    if (ret != 0) {
+        ucs_error("ibv_query_gid(index=%d) failed: %m", config->gid_index);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((iface->gid.global.interface_id == 0) && (iface->gid.global.subnet_prefix == 0)) {
+        ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
+                  uct_ib_device_name(dev), iface->port_num);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
+                                          uct_ib_iface_config_t *config)
+{
+    unsigned i, j, num_path_bits;
+    unsigned first, last;
+    uint8_t lmc;
+    int step;
+
+    if (config->lid_path_bits.count == 0) {
+        ucs_error("List of path bits must not be empty");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* count the number of lid_path_bits */
+    num_path_bits = 0;
+    for (i = 0; i < config->lid_path_bits.count; i++) {
+        num_path_bits += 1 + abs(config->lid_path_bits.ranges[i].first -
+                                 config->lid_path_bits.ranges[i].last);
+    }
+
+    iface->path_bits = ucs_malloc(num_path_bits * sizeof(*iface->path_bits),
+                                  "ib_path_bits");
+    if (iface->path_bits == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    lmc = uct_ib_iface_port_attr(iface)->lmc;
+
+    /* go over the list of values (ranges) for the lid_path_bits and set them */
+    iface->path_bits_count = 0;
+    for (i = 0; i < config->lid_path_bits.count; ++i) {
+
+        first = config->lid_path_bits.ranges[i].first;
+        last  = config->lid_path_bits.ranges[i].last;
+
+        /* range of values or one value */
+        if (first < last) {
+            step = 1;
+        } else {
+            step = -1;
+        }
+
+        /* fill the value/s */
+        for (j = first; j != (last + step); j += step) {
+            if (j >= UCS_BIT(lmc)) {
+                ucs_debug("Not using value %d for path_bits - must be < 2^lmc (lmc=%d)",
+                          j, lmc);
+                if (step == 1) {
+                    break;
+                } else {
+                    continue;
+                }
+            }
+
+            ucs_assert(iface->path_bits_count <= num_path_bits);
+            iface->path_bits[iface->path_bits_count] = j;
+            iface->path_bits_count++;
+        }
+    }
+
+    return UCS_OK;
+}
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -239,10 +361,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     uct_ib_context_t *ibctx = ucs_component_get(worker->context, ib, uct_ib_context_t);
     uct_ib_device_t *dev;
     ucs_status_t status;
-    uint8_t port_num, lmc;
-    uint16_t pkey, pkey_partition, cfg_partition_value, tbl_index;
-    unsigned i, j, first, last, range_values_count;
-    int ret, step, found_pkey;
+    uint8_t port_num;
 
     status = uct_ib_iface_find_port(ibctx, dev_name, &dev, &port_num);
     if (status != UCS_OK) {
@@ -262,95 +381,19 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
     self->config.seg_size          = config->super.max_bcopy;
 
-    /* get the user's pkey value and find its index in the port's pkey table */
-    cfg_partition_value = config->pkey_value & UCT_IB_PKEY_MASK;
-    self->pkey_index = 0;
-    found_pkey = 0;
-    for (tbl_index = 0; tbl_index < uct_ib_iface_port_attr(self)->pkey_tbl_len; tbl_index++) {
-        /* get the pkey values from the port's pkeys table */
-        if (ibv_query_pkey(dev->ibv_context, port_num, tbl_index, &pkey)) {
-            ucs_error("failed to get the pkey value from %s, port %d, table_index: %d: %m",
-                      dev_name, port_num, tbl_index);
-        }
-        /* take only the lower 15 bits for the comparison */
-        pkey = ntohs(pkey);
-        pkey_partition = pkey & UCT_IB_PKEY_MASK;
-        if (pkey_partition == cfg_partition_value) {
-            self->pkey_index = tbl_index;
-            found_pkey = 1;
-            ucs_debug("using pkey: 0x%x. partition value: 0x%x. on %s, port %d, table_index: %d",
-                      pkey, pkey_partition, dev_name, port_num, tbl_index);
-            break;
-        }
-    }
-
-    if ((!found_pkey) || (pkey == 0) || ((pkey & ~UCT_IB_PKEY_MASK) == 0)) {
-        ucs_error("The requested pkey: 0x%x, cannot be used. "
-                 "It wasn't found or the configured pkey doesn't have full membership.",
-                 config->pkey_value);
-        status = UCS_ERR_INVALID_PARAM;
+    status = uct_ib_iface_init_pkey(self, config);
+    if (status != UCS_OK) {
         goto err;
     }
 
-    ret = ibv_query_gid(dev->ibv_context, port_num, config->gid_index, &self->gid);
-    if (ret != 0) {
-        ucs_error("ibv_query_gid(index=%d) failed: %m", config->gid_index);
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-    if ((self->gid.global.interface_id == 0) && (self->gid.global.subnet_prefix == 0)) {
-        ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
-                  uct_ib_device_name(dev), port_num);
-        status = UCS_ERR_INVALID_ADDR;
+    status = uct_ib_iface_init_gid(self, config);
+    if (status != UCS_OK) {
         goto err;
     }
 
-    if (config->lid_path_bits.count == 0) {
-        ucs_error("List of path bits must not be empty");
-        status = UCS_ERR_INVALID_PARAM;
+    status = uct_ib_iface_init_lmc(self, config);
+    if (status != UCS_OK) {
         goto err;
-    }
-
-    /* count the number of lid_path_bits */
-    range_values_count = 0;
-    for (i = 0; i < config->lid_path_bits.count; i++) {
-        range_values_count += 1 + abs(config->lid_path_bits.ranges[i].first - config->lid_path_bits.ranges[i].last);
-    }
-
-    self->path_bits = ucs_malloc(range_values_count * sizeof(*self->path_bits), "ib_path_bits");
-    if (self->path_bits == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    lmc = uct_ib_iface_port_attr(self)->lmc;
-    self->path_bits_count = 0;
-    /* go over the list of values (ranges) for the lid_path_bits and set them */
-    for (i = 0; i < config->lid_path_bits.count; ++i) {
-
-        first = config->lid_path_bits.ranges[i].first;
-        last  = config->lid_path_bits.ranges[i].last;
-
-        /* range of values or one value */
-        if (first < last) {
-            step = 1;
-        } else {
-            step = -1;
-        }
-        /* fill the value/s */
-        for (j = first; j != (last + step); j += step) {
-            if (j >= UCS_BIT(lmc)) {
-                ucs_debug("Invalid value for path_bits: %d. must be < 2^lmc (lmc=%d)",
-                          j, lmc);
-                if (step == 1) {
-                    break;
-                } else {
-                    continue;
-                }
-            }
-            self->path_bits[self->path_bits_count] = j;
-            self->path_bits_count++;
-        }
     }
 
     /* TODO comp_channel */

@@ -87,8 +87,8 @@ public:
             if(ibv_query_pkey(ibctx, port_num, table_idx, &pkey)) {
                 UCS_TEST_ABORT("Failed to query pkey on port " << port_num << " on device: " << dev_name);
             }
-            pkey_partition = ntohs(pkey) & UCT_IB_PKEY_MASK;
-            if (pkey_partition == (ib_config->pkey_value & UCT_IB_PKEY_MASK)) {
+            pkey_partition = ntohs(pkey) & UCT_IB_PKEY_PARTITION_MASK;
+            if (pkey_partition == (ib_config->pkey_value & UCT_IB_PKEY_PARTITION_MASK)) {
                 found = 1;
                 break;
             }
@@ -126,7 +126,8 @@ public:
     }
 
     void short_progress_loop() {
-        ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(10.0);
+        ucs_time_t end_time = ucs_get_time() +
+                        ucs_time_from_msec(100.0) * ucs::test_time_multiplier();
         while (ucs_get_time() < end_time) {
             progress();
         }
@@ -158,18 +159,17 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY_VALUE=0x2")
     }
 
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
-
-    /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
-    uct_worker_progress(m_e1->worker());
+    recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer);
-    uct_worker_progress(m_e2->worker());
+
+    /* send the data */
+    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
 
     short_progress_loop();
 
-    EXPECT_EQ(sizeof(send_data), recv_buffer->length);
+    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
     EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
 
     free(recv_buffer);

@@ -71,9 +71,10 @@ typedef struct uct_ib_iface {
     uint8_t                 *path_bits;
     unsigned                path_bits_count;
     union ibv_gid           gid;
+    uint16_t                pkey_index;
+    uint16_t                pkey_value;
     uint8_t                 port_num;
     uint8_t                 sl;
-    uint16_t                pkey_index;
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
