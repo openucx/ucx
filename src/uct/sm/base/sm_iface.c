@@ -7,22 +7,30 @@
 #include "sm_iface.h"
 #include "sm_ep.h"
 
+#include <uct/api/addr.h>
+
+
 #define UCT_SM_MAX_SHORT_LENGTH (-1)
 #define UCT_SM_MAX_BCOPY_LENGTH (-1)
 #define UCT_SM_MAX_ZCOPY_LENGTH (-1)
 
-ucs_status_t uct_sm_iface_flush(uct_iface_h tl_iface)
+
+void uct_sm_iface_get_address(uct_sm_iface_t *iface,
+                              uct_sockaddr_process_t *iface_addr)
 {
-    return UCS_OK;
+    iface_addr->sp_family = UCT_AF_PROCESS;
+    iface_addr->node_guid = ucs_machine_guid();
 }
 
-ucs_status_t uct_sm_iface_get_address(uct_iface_h tl_iface, 
-                                      uct_iface_addr_t *iface_addr)
+int uct_sm_iface_is_reachable(uct_iface_t *tl_iface,
+                              const struct sockaddr *addr)
 {
-    /* fake uuid address */
-    uct_sm_iface_t *iface = ucs_derived_of(tl_iface, uct_sm_iface_t);
+    return (addr->sa_family == UCT_AF_PROCESS) &&
+           (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
+}
 
-    *(uct_sm_iface_addr_t*)iface_addr = iface->addr;
+ucs_status_t uct_sm_iface_flush(uct_iface_h tl_iface)
+{
     return UCS_OK;
 }
 
@@ -37,8 +45,8 @@ ucs_status_t uct_sm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_at
     iface_attr->cap.put.max_zcopy      = iface->config.max_zcopy;
     iface_attr->cap.get.max_bcopy      = iface->config.max_bcopy;
     iface_attr->cap.get.max_zcopy      = iface->config.max_zcopy;
-    iface_attr->iface_addr_len         = sizeof(uct_sm_iface_addr_t);
-    iface_attr->ep_addr_len            = sizeof(uct_sm_ep_addr_t);
+    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
+    iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = 0; /* force actual TL to set its own */
     iface_attr->completion_priv_len    = 0; /* TBD */
 
@@ -62,9 +70,6 @@ UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
     self->config.max_put     = -1;
     self->config.max_bcopy   = -1;
     self->config.max_zcopy   = -1;
-
-    /* generate unique integer for use as the nic/ep addr */
-    self->addr.nic_addr = ucs_generate_uuid((intptr_t)self);
 
     return UCS_OK;
 }

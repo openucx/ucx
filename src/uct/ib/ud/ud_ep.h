@@ -17,10 +17,6 @@
 
 #define UCT_UD_EP_NULL_ID (-1)
 
-typedef struct uct_ud_ep_addr {
-    uct_ep_addr_t     super;
-    uint32_t          ep_id;
-} uct_ud_ep_addr_t;
 
 #ifdef UCT_UD_EP_DEBUG_HOOKS
 /*
@@ -99,10 +95,10 @@ struct uct_ud_ep {
 };
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep, const uct_iface_addr_t *tl_iface_addr,
-                                     const uct_ep_addr_t *tl_ep_addr);
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
+
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, const struct sockaddr *addr);
 
 static inline void uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
 {

@@ -380,11 +380,11 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, i, group_index;
-    uct_iface_addr_t *iface_addr;
-    uct_ep_addr_t *ep_addr;
+    struct sockaddr *iface_addr;
+    struct sockaddr *ep_addr;
     uct_iface_attr_t iface_attr;
     uct_pd_attr_t pd_attr;
-    unsigned long address;
+    unsigned long va;
     void *rkey_buffer;
     ucs_status_t status;
     struct iovec vec[4];
@@ -409,10 +409,12 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    status = uct_iface_get_address(perf->uct.iface, iface_addr);
-    if (status != UCS_OK) {
-        ucs_error("Failed to uct_iface_get_address: %s", ucs_status_string(status));
-        goto err_free;
+    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        status = uct_iface_get_address(perf->uct.iface, iface_addr);
+        if (status != UCS_OK) {
+            ucs_error("Failed to uct_iface_get_address: %s", ucs_status_string(status));
+            goto err_free;
+        }
     }
 
     status = uct_pd_rkey_pack(perf->uct.iface->pd, perf->uct.recv_memh, rkey_buffer);
@@ -421,7 +423,6 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    address = (uintptr_t)perf->recv_buffer;
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
@@ -431,8 +432,12 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    for (i = 0; i < group_size; ++i) {
-        if (i != group_index) {
+    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        for (i = 0; i < group_size; ++i) {
+            if (i == group_index) {
+                continue;
+            }
+
             status = uct_ep_create(perf->uct.iface, &perf->uct.peers[i].ep);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_ep_create: %s", ucs_status_string(status));
@@ -446,8 +451,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
     }
 
-    vec[0].iov_base     = &address;
-    vec[0].iov_len      = sizeof(address);
+    va                  = (uintptr_t)perf->recv_buffer;
+    vec[0].iov_base     = &va;
+    vec[0].iov_len      = sizeof(va);
     vec[1].iov_base     = rkey_buffer;
     vec[1].iov_len      = pd_attr.rkey_packed_size;
     vec[2].iov_base     = iface_addr;
@@ -459,31 +465,39 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     rte_call(perf, exchange_vec, req);
 
     for (i = 0; i < group_size; ++i) {
-        if (i != group_index) {
-            vec[0].iov_base     = &address;
-            vec[0].iov_len      = sizeof(address);
-            vec[1].iov_base     = rkey_buffer;
-            vec[1].iov_len      = pd_attr.rkey_packed_size;
-            vec[2].iov_base     = iface_addr;
-            vec[2].iov_len      = iface_attr.iface_addr_len;
-            vec[3].iov_base     = ep_addr;
-            vec[3].iov_len      = iface_attr.ep_addr_len;
+        if (i == group_index) {
+            continue;
+        }
+        vec[0].iov_base     = &va;
+        vec[0].iov_len      = sizeof(va);
+        vec[1].iov_base     = rkey_buffer;
+        vec[1].iov_len      = pd_attr.rkey_packed_size;
+        vec[2].iov_base     = iface_addr;
+        vec[2].iov_len      = iface_attr.iface_addr_len;
+        vec[3].iov_base     = ep_addr;
+        vec[3].iov_len      = iface_attr.ep_addr_len;
 
-            rte_call(perf, recv_vec, i, vec , 4, req);
+        rte_call(perf, recv_vec, i, vec , 4, req);
 
-            perf->uct.peers[i].remote_addr = address;
-            status = uct_pd_rkey_unpack(perf->uct.iface->pd, rkey_buffer,
-                                        &perf->uct.peers[i].rkey);
-            if (status != UCS_OK) {
-                ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
-                return status;
-            }
+        perf->uct.peers[i].remote_addr = va;
+        status = uct_pd_rkey_unpack(perf->uct.iface->pd, rkey_buffer,
+                                    &perf->uct.peers[i].rkey);
+        if (status != UCS_OK) {
+            ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
+            return status;
+        }
 
-            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, iface_addr, ep_addr);
-            if (status != UCS_OK) {
-                ucs_error("Failed to uct_ep_connect_to_ep: %s", ucs_status_string(status));
-                goto err_destroy_eps;
-            }
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, ep_addr);
+        } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+            status = uct_ep_create_connected(perf->uct.iface, iface_addr,
+                                             &perf->uct.peers[i].ep);
+        } else {
+            status = UCS_ERR_UNSUPPORTED;
+        }
+        if (status != UCS_OK) {
+            ucs_error("Failed to connect endpoint: %s", ucs_status_string(status));
+            goto err_destroy_eps;
         }
     }
     uct_perf_iface_flush_b(perf);
@@ -581,45 +595,24 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
 
-    perf->ucp.peers = calloc(group_size, sizeof(*perf->uct.peers));
-    if (perf->ucp.peers == NULL) {
-        status = UCS_ERR_NO_MEMORY;
+    status = ucp_worker_get_address(perf->ucp.worker, &address, &address_length);
+    if (status != UCS_OK) {
         goto err;
     }
 
-    for (i = 0; i < group_size; ++i) {
-        if (i == group_index) {
-            continue;
-        }
+    vec[0].iov_base = address;
+    vec[0].iov_len  = address_length;
+    rte_call(perf, post_vec, vec, 1, &req);
 
-        status = ucp_ep_create(perf->ucp.worker, &perf->ucp.peers[i].ep);
-        if (status != UCS_OK) {
-            ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
-            goto err_destroy_eps;
-        }
-
-        address_length = ucp_ep_address_length(perf->ucp.peers[i].ep);
-        address = malloc(address_length);
-        if (address == NULL) {
-            goto err_destroy_eps;
-        }
-
-        status = ucp_ep_pack_address(perf->ucp.peers[i].ep, address);
-        if (status != UCS_OK) {
-            free(address);
-            goto err_destroy_eps;
-        }
-
-        /* TODO exchange buffer address and rkey */
-        vec[0].iov_base = address;
-        vec[0].iov_len  = address_length;
-        rte_call(perf, post_vec, vec, 1, &req);
-
-        free(address);
-   }
+    ucp_worker_release_address(perf->ucp.worker, address);
 
     ucs_assert(req != NULL);
     rte_call(perf, exchange_vec, req);
+
+    perf->ucp.peers = calloc(group_size, sizeof(*perf->uct.peers));
+    if (perf->ucp.peers == NULL) {
+        goto err;
+    }
 
     for (i = 0; i < group_size; ++i) {
         if (i == group_index) {
@@ -632,7 +625,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         vec[0].iov_len  = address_length;
         rte_call(perf, recv_vec, i, vec, 1, req);
 
-        status = ucp_ep_connect(perf->ucp.peers[i].ep, address);
+        status = ucp_ep_create(perf->ucp.worker, address, &perf->ucp.peers[i].ep);
         if (status != UCS_OK) {
             ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
             free(address);
@@ -688,10 +681,15 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     uct_iface_config_t *iface_config;
     ucs_status_t status;
 
-    status = uct_worker_create(params->uct.context, params->thread_mode,
-                               &perf->uct.worker);
+    status = ucs_async_context_init(&perf->uct.async, UCS_ASYNC_MODE_THREAD);
     if (status != UCS_OK) {
         goto out;
+    }
+
+    status = uct_worker_create(params->uct.context, &perf->uct.async,
+                               params->thread_mode, &perf->uct.worker);
+    if (status != UCS_OK) {
+        goto out_cleanup_async;
     }
 
     status = uct_iface_config_read(params->uct.context, params->uct.tl_name,
@@ -732,6 +730,8 @@ out_iface_close:
     uct_iface_close(perf->uct.iface);
 out_destroy_worker:
     uct_worker_destroy(perf->uct.worker);
+out_cleanup_async:
+    ucs_async_context_cleanup(&perf->uct.async);
 out:
     return status;
 }
@@ -742,6 +742,7 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
     uct_perf_test_free_mem(perf);
     uct_iface_close(perf->uct.iface);
     uct_worker_destroy(perf->uct.worker);
+    ucs_async_context_cleanup(&perf->uct.async);
 }
 
 static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)

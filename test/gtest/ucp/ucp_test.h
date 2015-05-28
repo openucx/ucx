@@ -29,13 +29,14 @@ protected:
 
         void connect(const entity& other);
 
+        void disconnect();
+
         ucp_ep_h ep() const;
 
         ucp_worker_h worker() const;
 
         ucp_context_h ucph() const;
 
-        void flush() const;
 
     protected:
         ucp_context_h m_ucph;

@@ -18,7 +18,7 @@ const char *ucs_status_string(ucs_status_t status)
     case UCS_ERR_NO_MESSAGE:
         return "No pending message";
     case UCS_ERR_NO_RESOURCE:
-        return "Operation cannot be completed without blocking";
+        return "No resources are available to initiate the operation";
     case UCS_ERR_IO_ERROR:
         return "Input/output error";
     case UCS_ERR_NO_MEMORY:

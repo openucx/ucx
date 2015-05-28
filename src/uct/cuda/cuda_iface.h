@@ -18,19 +18,13 @@
 
 struct uct_cuda_iface;
 
-typedef struct uct_cuda_iface_addr {
-    uct_iface_addr_t    super;
-    uint32_t            nic_addr;
-} uct_cuda_iface_addr_t;
-
 typedef struct uct_cuda_pd {
-    uct_pd_t      super;
+    uct_pd_t                super;
 } uct_cuda_pd_t;
 
 typedef struct uct_cuda_iface {
     uct_base_iface_t        super;
     uct_cuda_pd_t           pd;
-    uct_cuda_iface_addr_t   addr;
     struct {
         unsigned            max_put;
     } config;
@@ -38,7 +32,7 @@ typedef struct uct_cuda_iface {
 } uct_cuda_iface_t;
 
 typedef struct uct_cuda_iface_config {
-    uct_iface_config_t       super;
+    uct_iface_config_t      super;
 } uct_cuda_iface_config_t;
 
 typedef struct uct_cuda_key {

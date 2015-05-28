@@ -29,12 +29,6 @@ typedef enum uct_ib_mtu {
 } uct_ib_mtu_t;
 
 
-typedef struct uct_ib_iface_addr {
-    uct_iface_addr_t    super;
-    uint16_t            lid; /* TODO support RoCE/GRH */
-} uct_ib_iface_addr_t;
-
-
 typedef struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -74,13 +68,13 @@ typedef struct uct_ib_iface_config {
 
 typedef struct uct_ib_iface {
     uct_base_iface_t        super;
-    uct_ib_iface_addr_t     addr;
     uint8_t                 *path_bits;
     unsigned                path_bits_count;
-    uint16_t                gid_index;
+    union ibv_gid           gid;
+    uint16_t                pkey_index;
+    uint16_t                pkey_value;
     uint8_t                 port_num;
     uint8_t                 sl;
-    uint16_t                pkey_index;
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
@@ -108,29 +102,31 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_worker_h, const char*,
  *
  * <rx_headroom_offset>
  *                   |
- *
- *                   am_callback
  *                   |
- * +------+----------+-----------+---------+
- * | LKey |   ???    | Head Room | Payload |
- * +------+----------+--+--------+---------+
+ * uct_recv_desc_t   |
+ *               |   |
+ *               |   am_callback
+ *               |   |
+ * +------+------+---+-----------+---------+
+ * | LKey |  ??? | D | Head Room | Payload |
+ * +------+------+---+--+--------+---------+
  * | LKey |     TL data | TL hdr | Payload |
  * +------+-------------+--------+---------+
  *                      |
  *                      post_receive
  *
  * (2)
- *        am_callback
- *        |
- * +------+----------------------+---------+
- * | LKey |      Head Room       | Payload |
- * +------+---------+---+--------+---------+
+ *            am_callback
+ *            |
+ * +------+---+------------------+---------+
+ * | LKey | D |     Head Room    | Payload |
+ * +------+---+-----+---+--------+---------+
  * | LKey | TL data | ? | TL hdr | Payload |
  * +------+---------+---+--------+---------+
  *                      |
  *                      post_receive
- *
- *        <----- rx_headroom ---->
+ *        <dsc>
+ *            <--- rx_headroom -->
  * <------- rx_payload_offset --->
  * <--- rx_hdr_offset -->
  *
@@ -157,15 +153,26 @@ void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
-                       unsigned length, uct_ib_iface_recv_desc_t *desc)
+                       unsigned length, uct_ib_iface_recv_desc_t *ib_desc)
 {
+    void *desc = (char*)ib_desc + iface->config.rx_headroom_offset;
     ucs_status_t status;
-    status = uct_iface_invoke_am(&iface->super, am_id, data, length,
-                                 (char*)desc + iface->config.rx_headroom_offset);
+
+    status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
     if (status == UCS_OK) {
-        ucs_mpool_put(desc);
+        ucs_mpool_put(ib_desc);
+    } else {
+        uct_recv_desc_iface(desc) = &iface->super.super;
     }
 }
+
+ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr);
+
+ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
+                                             struct sockaddr *addr);
+
+int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr);
+
 
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {

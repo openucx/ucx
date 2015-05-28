@@ -103,6 +103,22 @@ static void print_resource_info(uct_worker_h worker,
         PRINT_ATOMIC_CAP(ATOMIC_CSWAP, iface_attr.cap.flags);
 
         buf[0] = '\0';
+        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                    UCT_IFACE_FLAG_CONNECT_TO_IFACE))
+        {
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+                strncat(buf, " to ep,", sizeof(buf) - 1);
+            }
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+                strncat(buf, " to iface,", sizeof(buf) - 1);
+            }
+            buf[strlen(buf) - 1] = '\0';
+        } else {
+            strncat(buf, " none", sizeof(buf) - 1);
+        }
+        printf("#           connection:%s\n", buf);
+
+        buf[0] = '\0';
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
@@ -161,7 +177,7 @@ static ucs_status_t print_transport_info(uct_context_h context,
     }
 
     /* coverity[alloc_arg] */
-    status = uct_worker_create(context, UCS_THREAD_MODE_MULTI, &worker);
+    status = uct_worker_create(context, NULL, UCS_THREAD_MODE_MULTI, &worker);
     if (status != UCS_OK) {
         goto out_release_config;
     }

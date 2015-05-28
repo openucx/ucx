@@ -260,8 +260,8 @@ protected:
         params.report_interval = 1.0;
         params.rte_group       = NULL;
         params.rte             = &test_rte::rte;
-        strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name) - 1);
-        strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name)  - 1);
+        strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
+        strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
         params.uct.data_layout = test.data_layout;
         params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
 
@@ -375,6 +375,11 @@ UCS_TEST_P(test_uct_perf, envelope) {
         UCS_TEST_SKIP;
     }
 
+    if (!strcmp(resource.tl_name, "cm")) {
+        /* TODO calibrate expected performance and iterations based on transport */
+        UCS_TEST_SKIP;
+    }
+
     std::vector<int> cpus = get_affinity();
     if (cpus.size() < 2) {
         UCS_TEST_MESSAGE << "Need at least 2 CPUs (got: " << cpus.size() << " )";
@@ -408,8 +413,9 @@ UCS_TEST_P(test_uct_perf, envelope) {
         ASSERT_UCS_OK(result.status);
 
         double value = *(double*)( ((char*)&result.result) + test->field_offset) * test->norm;
-        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %25s : %.3f %s",
-                 resource.tl_name, resource.dev_name, test->title, value, test->units);
+        snprintf(result_str, sizeof(result_str) - 1,
+                 UCT_RESOURCE_DESC_FMT " %25s : %.3f %s",
+                 UCT_RESOURCE_DESC_ARG(&resource), test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
             /* TODO take expected values from resource advertised capabilities */

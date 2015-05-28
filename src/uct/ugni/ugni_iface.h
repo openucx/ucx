@@ -19,10 +19,6 @@
 
 struct uct_ugni_iface;
 
-typedef struct uct_ugni_iface_addr {
-    uct_iface_addr_t    super;
-    uint32_t            nic_addr;
-} uct_ugni_iface_addr_t;
 
 typedef struct uct_ugni_iface {
     uct_base_iface_t        super;
@@ -33,7 +29,7 @@ typedef struct uct_ugni_iface {
     uint32_t                pe_address;                  /**< PE address for the NIC that this
                                                               function has attached to the
                                                               communication domain. */
-    uct_ugni_iface_addr_t   address;                     /**< PE address that is returned for the
+    uint32_t                nic_addr;                    /**< PE address that is returned for the
                                                               communication domain that this NIC
                                                               is attached to. */
     gni_cq_handle_t         local_cq;                    /**< Completion queue */

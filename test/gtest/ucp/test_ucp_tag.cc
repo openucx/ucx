@@ -32,6 +32,9 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp) {
 
     EXPECT_EQ((ucp_tag_t)0x111337, comp.sender_tag);
     EXPECT_EQ(send_data, recv_data);
+
+    sender.disconnect();
+    receiver.disconnect();
 }
 
 
@@ -59,4 +62,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_unexp) {
 
     EXPECT_EQ((ucp_tag_t)0x111337, comp.sender_tag);
     EXPECT_EQ(send_data, recv_data);
+
+    sender.disconnect();
+    receiver.disconnect();
 }

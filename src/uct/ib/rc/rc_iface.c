@@ -64,8 +64,8 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
-    iface_attr->iface_addr_len      = sizeof(uct_ib_iface_addr_t);
-    iface_attr->ep_addr_len         = sizeof(uct_rc_ep_addr_t);
+    iface_attr->iface_addr_len      = sizeof(uct_sockaddr_ib_subnet_t);
+    iface_attr->ep_addr_len         = sizeof(uct_sockaddr_ib_t);
     iface_attr->completion_priv_len = sizeof(uct_rc_completion_t) - sizeof(uct_completion_t);
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
                                       UCT_IFACE_FLAG_AM_BCOPY |
@@ -74,15 +74,9 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                                       UCT_IFACE_FLAG_PUT_BCOPY |
                                       UCT_IFACE_FLAG_PUT_ZCOPY |
                                       UCT_IFACE_FLAG_GET_BCOPY |
-                                      UCT_IFACE_FLAG_GET_ZCOPY;
-}
-
-ucs_status_t uct_rc_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-
-    *(uct_ib_iface_addr_t*)iface_addr = iface->super.addr;
-    return UCS_OK;
+                                      UCT_IFACE_FLAG_GET_ZCOPY |
+                                      UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                      UCT_IFACE_FLAG_AM_THREAD_SINGLE;
 }
 
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)

@@ -35,7 +35,10 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface,
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
                                          UCT_IFACE_FLAG_PUT_ZCOPY       |
                                          UCT_IFACE_FLAG_GET_BCOPY       |
-                                         UCT_IFACE_FLAG_GET_ZCOPY;
+                                         UCT_IFACE_FLAG_GET_ZCOPY       |
+                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+
+    iface_attr->completion_priv_len    = 0; /* TBD */
     return UCS_OK;
 }
 
@@ -165,17 +168,26 @@ ucs_status_t uct_sysv_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
 
 }
 
+static ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
+                                               struct sockaddr *addr)
+{
+    uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
+    uct_sockaddr_process_t *iface_addr = (uct_sockaddr_process_t*)addr;
+
+    uct_sm_iface_get_address(&iface->super, iface_addr);
+    iface_addr->cookie = 0; /* TODO AM fifo id */
+    return UCS_OK;
+}
+
 /* point as much to sm_base as possible
  * to override, create a uct_sysv_* function and update the table here
  */
 uct_iface_ops_t uct_sysv_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t),
-    .ep_get_address      = uct_sm_ep_get_address,
-    .ep_connect_to_iface = NULL,
     .iface_query         = uct_sysv_iface_query,
-    .iface_get_address   = uct_sm_iface_get_address,
+    .iface_get_address   = uct_sysv_iface_get_address,
+    .iface_is_reachable  = uct_sm_iface_is_reachable,
     .iface_flush         = uct_sm_iface_flush,
-    .ep_connect_to_ep    = uct_sm_ep_connect_to_ep,
     .ep_put_short        = uct_sm_ep_put_short,
     .ep_put_bcopy        = uct_sm_ep_put_bcopy,
     .ep_put_zcopy        = uct_sm_ep_put_zcopy,
@@ -190,7 +202,7 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .ep_atomic_fadd32    = uct_sm_ep_atomic_fadd32,
     .ep_atomic_cswap32   = uct_sm_ep_atomic_cswap32,
     .ep_atomic_swap32    = uct_sm_ep_atomic_swap32,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_ep_t),
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
 

@@ -27,12 +27,6 @@ enum {
     uct_rc_ep_atomic_completion_##_num_bits##_be##_is_be
 
 
-struct uct_rc_ep_addr {
-    uct_ep_addr_t     super;
-    uint32_t          qp_num;
-};
-
-
 struct uct_rc_ep {
     uct_base_ep_t       super;
     struct ibv_qp       *qp;
@@ -45,10 +39,9 @@ struct uct_rc_ep {
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 
-ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
+ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 
-ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_iface_addr_t *tl_iface_addr,
-                                     const uct_ep_addr_t *tl_ep_addr);
+ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr);
 
 void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
                               char *buffer, size_t max);

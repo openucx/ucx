@@ -24,12 +24,11 @@ ucp_test::entity::entity() {
     status = ucp_worker_create(m_ucph, UCS_THREAD_MODE_MULTI, &m_worker);
     ASSERT_UCS_OK(status);
 
-    status = ucp_ep_create(m_worker, &m_ep);
-    ASSERT_UCS_OK(status);
+    m_ep = NULL;
 }
 
 ucp_test::entity::~entity() {
-    ucp_ep_destroy(m_ep);
+    disconnect();
     ucp_worker_destroy(m_worker);
     ucp_cleanup(m_ucph);
 }
@@ -37,16 +36,15 @@ ucp_test::entity::~entity() {
 void ucp_test::entity::connect(const ucp_test::entity& other) {
     ucs_status_t status;
     ucp_address_t *address;
+    size_t address_length;
 
-    address = (ucp_address_t*)malloc(ucp_ep_address_length(other.m_ep));
-
-    status = ucp_ep_pack_address(other.m_ep, address);
+    status = ucp_worker_get_address(other.m_worker, &address, &address_length);
     ASSERT_UCS_OK(status);
 
-    status = ucp_ep_connect(m_ep, address);
+    status = ucp_ep_create(m_worker, address, &m_ep);
     ASSERT_UCS_OK(status);
 
-    free(address);
+    ucp_worker_release_address(other.m_worker, address);
 }
 
 ucp_ep_h ucp_test::entity::ep() const {
@@ -61,6 +59,9 @@ ucp_context_h ucp_test::entity::ucph() const {
     return m_ucph;
 }
 
-void ucp_test::entity::flush() const {
-
+void ucp_test::entity::disconnect() {
+    if (m_ep != NULL) {
+        ucp_ep_destroy(m_ep);
+        m_ep = NULL;
+    }
 }

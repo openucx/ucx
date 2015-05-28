@@ -143,6 +143,10 @@ ucs_status_t uct_query_resources(uct_context_h context,
 
         /* Append TL resources to the array. Set TL name. */
         for (i = 0; i < num_tl_resources; ++i) {
+            if (strlen(tl->name) == 0) {
+                ucs_error("empty transport name");
+                goto err_free;
+            }
             if (strlen(tl->name) > (UCT_TL_NAME_MAX - 1)) {
                 ucs_error("transport '%s' name too long, max: %d", tl->name,
                           UCT_TL_NAME_MAX - 1);
@@ -177,9 +181,11 @@ void uct_release_resource_list(uct_resource_desc_t *resources)
 
 
 static UCS_CLASS_INIT_FUNC(uct_worker_t, uct_context_h context,
+                           ucs_async_context_t *async,
                            ucs_thread_mode_t thread_mode)
 {
     self->context     = context;
+    self->async       = async;
     self->thread_mode = thread_mode;
     ucs_notifier_chain_init(&self->progress_chain);
     return UCS_OK;
@@ -197,7 +203,7 @@ void uct_worker_progress(uct_worker_h worker)
 
 UCS_CLASS_DEFINE(uct_worker_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
-                                uct_context_h, ucs_thread_mode_t)
+                                uct_context_h, ucs_async_context_t*, ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
 

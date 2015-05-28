@@ -24,4 +24,6 @@ libucp_la_SOURCES = \
     proto/ep.c \
     proto/rma.c \
     proto/tag.c \
-    proto/ucp.c
+    proto/ucp.c \
+    proto/wireup.c \
+	proto/worker.c
