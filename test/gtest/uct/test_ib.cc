@@ -141,7 +141,7 @@ protected:
     entity *m_e1, *m_e2;
 };
 
-UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY_VALUE=0x2")
+UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
 {
     uint64_t send_data   = 0xdeadbeef;
     uint64_t test_ib_hdr = 0xbeef;

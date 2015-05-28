@@ -92,7 +92,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "which will be the low portion of the LID, according to the LMC in the fabric.",
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
 
-   {"PKEY_VALUE", "0x7fff",
+  {"PKEY", "0x7fff",
    "Which pkey value to use. Should be between 0 and 0x7fff.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
@@ -232,6 +232,12 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint16_t pkey_tbl_len = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
     uint16_t pkey_index, port_pkey, pkey;
+
+    if (config->pkey_value > UCT_IB_PKEY_PARTITION_MASK) {
+        ucs_error("Requested pkey 0x%x is invalid, should be in the range 0..0x%x",
+                  config->pkey_value, UCT_IB_PKEY_PARTITION_MASK);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     /* get the user's pkey value and find its index in the port's pkey table */
     for (pkey_index = 0; pkey_index < pkey_tbl_len; ++pkey_index) {
