@@ -10,6 +10,12 @@
 
 #include <sys/socket.h>
 
+#ifdef __SOCKADDR_COMMON
+#  define UCT_SOCKADDR_COMMON              __SOCKADDR_COMMON
+#else
+#  define UCT_SOCKADDR_COMMON(sa_prefix)   sa_family_t sa_prefix##family
+#endif
+
 
 /*
  * Define additional address families for UCT addresses.
@@ -24,14 +30,14 @@ enum {
 
 
 typedef struct uct_sockaddr_process {
-    __SOCKADDR_COMMON (sp_);
+    UCT_SOCKADDR_COMMON (sp_);
     uint64_t   node_guid;
     uint64_t   cookie;
 } uct_sockaddr_process_t;
 
 
 typedef struct uct_sockaddr_ib {
-    __SOCKADDR_COMMON (sib_);
+    UCT_SOCKADDR_COMMON (sib_);
     uint16_t   lid;
     uint32_t   qp_num;
     uint64_t   subnet_prefix;
@@ -41,13 +47,13 @@ typedef struct uct_sockaddr_ib {
 
 
 typedef struct uct_sockaddr_ib_subnet {
-    __SOCKADDR_COMMON (sib_);
+    UCT_SOCKADDR_COMMON (sib_);
     uint64_t   subnet_prefix;
 } uct_sockaddr_ib_subnet_t;
 
 
 typedef struct uct_sockaddr_ugni {
-    __SOCKADDR_COMMON (sgni_);
+    UCT_SOCKADDR_COMMON (sgni_);
     uint32_t   nic_addr;
     uint32_t   domain_id;
 } uct_sockaddr_ugni_t;

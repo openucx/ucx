@@ -76,7 +76,7 @@ static void uct_cm_dump_path(struct ibv_sa_path_rec *path)
     inet_ntop(AF_INET6, &path->sgid, sgid_buf, sizeof(sgid_buf));
 
     ucs_trace_data("slid %d sgid %s dlid %d dgid %s",
-                   path->slid, sgid_buf, path->dlid, dgid_buf);
+                   ntohs(path->slid), sgid_buf, ntohs(path->dlid), dgid_buf);
     ucs_trace_data("traffic %d flow_label %d hop %d class %d revers. 0x%x "
                    "numb %d pkey 0x%x sl %d",
                    path->raw_traffic, path->flow_label, path->hop_limit,

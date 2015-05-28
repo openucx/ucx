@@ -170,6 +170,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
 void ucp_worker_progress(ucp_worker_h worker)
 {
     uct_worker_progress(worker->uct);
+    ucs_async_check_miss(&worker->async);
 }
 
 static ucs_status_t

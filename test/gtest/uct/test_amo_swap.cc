@@ -38,7 +38,7 @@ public:
          * the final value of the buffer.
          */
 
-        mapped_buffer recvbuf(sizeof(T), 1, 0, receiver());
+        mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
         /* Set ransom initial value */
         T value = rand64();

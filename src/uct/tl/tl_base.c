@@ -12,11 +12,6 @@
 #include <uct/api/uct.h>
 
 
-typedef struct {
-    uct_mem_h memh;
-} uct_iface_mp_chunk_hdr_t;
-
-
 #if ENABLE_STATS
 static ucs_stats_class_t uct_ep_stats_class = {
     .name = "uct_ep",
@@ -46,66 +41,6 @@ static ucs_stats_class_t uct_iface_stats_class = {
 };
 #endif
 
-
-ucs_status_t uct_iface_mp_chunk_alloc(void *mp_context, size_t *size, void **chunk_p
-                                      UCS_MEMTRACK_ARG)
-{
-    uct_base_iface_t *iface = mp_context;
-    uct_iface_mp_chunk_hdr_t *hdr;
-    ucs_status_t status;
-    uct_mem_h memh;
-    size_t length;
-    void *ptr;
-
-    length = sizeof(*hdr) + *size;
-    status = uct_pd_mem_alloc(iface->pd, UCT_ALLOC_METHOD_DEFAULT,
-                              &length, 1, &ptr, &memh, UCS_MEMTRACK_VAL_ALWAYS);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-     hdr         = ptr;
-    hdr->memh   = memh;
-    *size       = length - sizeof(*hdr);
-    *chunk_p    = hdr + 1;
-    return UCS_OK;
-}
-
-void uct_iface_mp_chunk_free(void *mp_context, void *chunk)
-{
-    uct_base_iface_t *iface = mp_context;
-    uct_iface_mp_chunk_hdr_t *hdr;
-
-    hdr = chunk - sizeof(*hdr);
-    uct_pd_mem_free(iface->pd, hdr, hdr->memh);
-}
-
-void uct_iface_mp_init_obj(void *mp_context, void *obj, void *chunk, void *arg)
-{
-    uct_iface_t *iface = mp_context;
-    uct_iface_mpool_init_obj_cb_t cb = arg;
-    uct_iface_mp_chunk_hdr_t *hdr;
-
-    hdr = chunk - sizeof(*hdr);
-    if (cb) {
-        cb(iface, obj, hdr->memh);
-    }
-}
-
-ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
-                                    size_t align_offset, size_t alignment,
-                                    uct_iface_mpool_config_t *config, unsigned grow,
-                                    uct_iface_mpool_init_obj_cb_t init_obj_cb,
-                                    const char *name, ucs_mpool_h *mp_p)
-{
-    unsigned elems_per_chunk;
-
-    elems_per_chunk = (config->bufs_grow != 0) ? config->bufs_grow : grow;
-    return ucs_mpool_create(name, elem_size, align_offset, alignment,
-                            elems_per_chunk, config->max_bufs, iface,
-                            uct_iface_mp_chunk_alloc, uct_iface_mp_chunk_free,
-                            uct_iface_mp_init_obj, init_obj_cb, mp_p);
-}
 
 static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
                                               size_t length, void *desc)
@@ -177,7 +112,10 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
+    uint64_t alloc_methods_bitmap;
+    uct_alloc_method_t method;
     ucs_status_t status;
+    unsigned i;
     uint8_t id;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
@@ -189,6 +127,21 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         uct_iface_set_stub_am_handler(self, id);
     }
 
+    /* Copy allocation methods configuration. In the process, remove duplicates. */
+    UCS_STATIC_ASSERT(sizeof(alloc_methods_bitmap) * 8 >= UCT_ALLOC_METHOD_LAST);
+    self->config.num_alloc_methods = 0;
+    alloc_methods_bitmap = 0;
+    for (i = 0; i < config->alloc_methods.count; ++i) {
+        method = config->alloc_methods.methods[i];
+        if (alloc_methods_bitmap & UCS_BIT(method)) {
+            continue;
+        }
+
+        ucs_assert(self->config.num_alloc_methods < UCT_ALLOC_METHOD_LAST);
+        self->config.alloc_methods[self->config.num_alloc_methods++] = method;
+        alloc_methods_bitmap |= UCS_BIT(method);
+    }
+
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
                                   stats_parent);
     if (status != UCS_OK) {
@@ -197,7 +150,6 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     return UCS_OK;
 }
-
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
 {
@@ -262,6 +214,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
 UCS_CLASS_DEFINE(uct_base_ep_t, uct_ep_t);
 
 
+UCS_CONFIG_DEFINE_ARRAY(alloc_methods, sizeof(uct_alloc_method_t),
+                        UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
+
 ucs_config_field_t uct_iface_config_table[] = {
   {"MAX_SHORT", "128",
    "Maximal size of short sends. The transport is allowed to support any size up\n"
@@ -272,6 +227,10 @@ ucs_config_field_t uct_iface_config_table[] = {
    "Maximal size of copy-out sends. The transport is allowed to support any size\n"
    "up to this limit, the actual size can be lower due to transport constraints.",
    ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"ALLOC", "huge,pd,mmap,heap",
+   "Priority of methods to allocate intermediate buffers for communication",
+   ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
 
   {NULL}
 };

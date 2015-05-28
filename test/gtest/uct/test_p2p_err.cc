@@ -99,8 +99,8 @@ ucs_status_t uct_p2p_err_test::last_error = UCS_OK;
 
 UCS_TEST_P(uct_p2p_err_test, local_access_error) {
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF);
-    mapped_buffer sendbuf(16, 1, 1, sender());
-    mapped_buffer recvbuf(16, 1, 2, receiver());
+    mapped_buffer sendbuf(16, 1, sender());
+    mapped_buffer recvbuf(16, 2, receiver());
 
     const size_t offset = 4 * 1024 * 1024;
     test_error_run(OP_PUT_ZCOPY, 0,
@@ -112,8 +112,8 @@ UCS_TEST_P(uct_p2p_err_test, local_access_error) {
 
 UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF);
-    mapped_buffer sendbuf(16, 1, 1, sender());
-    mapped_buffer recvbuf(16, 1, 2, receiver());
+    mapped_buffer sendbuf(16, 1, sender());
+    mapped_buffer recvbuf(16, 2, receiver());
 
     const size_t offset = 4 * 1024 * 1024;
     test_error_run(OP_PUT_ZCOPY, 0,
@@ -131,8 +131,8 @@ UCS_TEST_P(uct_p2p_err_test, invalid_bcopy_length) {
         UCS_TEST_SKIP_R("max_bcopy too large");
     }
 
-    mapped_buffer sendbuf(max_bcopy + 1, 1, 1, sender());
-    mapped_buffer recvbuf(max_bcopy + 1, 1, 2, receiver());
+    mapped_buffer sendbuf(max_bcopy + 1, 1, sender());
+    mapped_buffer recvbuf(max_bcopy + 1, 2, receiver());
 
     test_error_run(OP_PUT_BCOPY, 0, sendbuf.ptr(), sendbuf.length(),
                    UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey());
@@ -147,8 +147,8 @@ UCS_TEST_P(uct_p2p_err_test, invalid_short_length) {
         UCS_TEST_SKIP_R("max_short too large");
     }
 
-    mapped_buffer sendbuf(max_short + 1, 1, 1, sender());
-    mapped_buffer recvbuf(max_short + 1, 1, 2, receiver());
+    mapped_buffer sendbuf(max_short + 1, 1, sender());
+    mapped_buffer recvbuf(max_short + 1, 2, receiver());
 
     test_error_run(OP_PUT_SHORT, 0, sendbuf.ptr(), sendbuf.length(), UCT_INVALID_MEM_HANDLE,
                    recvbuf.addr(), recvbuf.rkey());
@@ -159,7 +159,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_short_length) {
 UCS_TEST_P(uct_p2p_err_test, invalid_am_id) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
-    mapped_buffer sendbuf(4, 1, 2, sender());
+    mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
                    UCT_INVALID_MEM_HANDLE, 0, UCT_INVALID_RKEY);

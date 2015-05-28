@@ -217,7 +217,7 @@ static void uct_ugni_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
 }
 
 ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                  uct_rkey_bundle_t *rkey_ob)
+                                  uct_rkey_t *rkey_p)
 {
     const uint64_t *ptr = rkey_buffer;
     gni_mem_handle_t *mem_hndl = NULL;
@@ -239,8 +239,7 @@ ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
 
     mem_hndl->qword1 = ptr[1];
     mem_hndl->qword2 = ptr[2];
-    rkey_ob->type = (void*)uct_ugni_rkey_release;
-    rkey_ob->rkey = (uintptr_t)mem_hndl;
+    *rkey_p = (uintptr_t)mem_hndl;
     return UCS_OK;
 
     /* need to add rkey release */

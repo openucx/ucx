@@ -17,6 +17,7 @@
 
 
 #define UCP_MAX_TLS             UINT8_MAX
+#define UCP_MAX_PDS             (sizeof(uint64_t) * 8)
 #define UCP_CONFIG_ENV_PREFIX   "UCX_"
 #define UCP_EP_HASH_SIZE        32767
 
@@ -65,8 +66,8 @@ typedef struct ucp_tl_resource_desc {
 typedef struct ucp_context {
     uct_pd_resource_desc_t  *pd_rscs;     /* Protection domain resources */
     uct_pd_h                *pds;         /* Protection domain handles */
+    uct_pd_attr_t           *pd_attrs;    /* Protection domain attributes */
     ucp_rsc_index_t         num_pds;      /* Number of protection domains */
-
 
     ucp_tl_resource_desc_t  *tl_rscs;     /* Array of communication resources */
     ucp_rsc_index_t         num_tls;      /* Number of resources in the array*/
@@ -76,6 +77,17 @@ typedef struct ucp_context {
         ucs_queue_head_t    expected;
         ucs_queue_head_t    unexpected;
     } tag;
+
+    struct {
+
+        /* Array of allocation methods, a mix of PD allocation methods and non-PD */
+        struct {
+            uct_alloc_method_t method;     /* Allocation method */
+            char               pdc_name[UCT_PD_COMPONENT_NAME_MAX]; /* PD name to use, if method is PD */
+        } *alloc_methods;
+        unsigned            num_alloc_methods;
+
+    } config;
 
 } ucp_context_t;
 
@@ -90,11 +102,14 @@ typedef struct ucp_ep {
         uct_ep_h        ep;            /* Current transport for operations */
         uct_ep_h        next_ep;       /* Next transport being wired up */
         ucp_rsc_index_t rsc_index;     /* Resource index the endpoint uses */
-        ucp_rsc_index_t dst_pd_index;  /* Destination rotection domain index */
+        ucp_rsc_index_t dst_pd_index;  /* Destination protection domain index */
+        uint64_t        reachable_pds; /* Bitmap of reachable remote PDs */
     } uct;
 
     struct {
         size_t          max_short_tag;
+        size_t          max_short_put;
+        size_t          max_bcopy_put;
     } config;
 
     uct_ep_h            wireup_ep;     /* Used to wireup the "real" endpoint */
@@ -139,10 +154,30 @@ typedef struct ucp_ep_wireup_op {
 
 /**
  * Remote memory key structure.
+ * Contains remote keys for UCT PDs.
+ * pd_map specifies which PDs from the current context are present in the array.
+ * The array itself contains only the PDs specified in pd_map, without gaps.
  */
 typedef struct ucp_rkey {
-    /* TODO */
+    uint64_t            pd_map;  /* Which *remote* PDs have valid memory handles */
+    uct_rkey_bundle_t   uct[0];  /* Remote key for every PD */
 } ucp_rkey_t;
+
+
+/**
+ * Memory handle.
+ * Contains general information, and a list of UCT handles.
+ * pd_map specifies which PDs from the current context are present in the array.
+ * The array itself contains only the PDs specified in pd_map, without gaps.
+ */
+typedef struct ucp_mem {
+    void                *address;
+    size_t              length;
+    uct_alloc_method_t  alloc_method;
+    uct_pd_h            alloc_pd;
+    uint64_t            pd_map; /* Which PDs have valid memory handles */
+    uct_mem_h           uct[0]; /* Valid memory handles, as popcount(pd_map) */
+} ucp_mem_t;
 
 
 /**

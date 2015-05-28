@@ -79,4 +79,19 @@ typedef enum {
 } ucs_config_print_flags_t;
 
 
+/**
+ * Structure type for array configuration. Should be used inside the configuration
+ * structure declaration.
+ */
+#define UCS_CONFIG_ARRAY_FIELD(_type, _array_name) \
+    struct { \
+        _type    *_array_name; \
+        unsigned count; \
+    }
+
+/* Specific structure for an array of strings */
+#define UCS_CONFIG_STRING_ARRAY_FIELD(_array_name) \
+    UCS_CONFIG_ARRAY_FIELD(char*, _array_name)
+
+
 #endif /* TYPES_H_ */

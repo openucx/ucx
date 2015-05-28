@@ -21,16 +21,39 @@ typedef struct uct_pd_component {
 
     ucs_status_t           (*pd_open)(const char *pd_name, uct_pd_h *pd_p);
 
-    const char             *name_prefix;
+    ucs_status_t           (*rkey_unpack)(const void *rkey_buffer,
+                                          uct_rkey_t *rkey_p, void **handle_p);
+
+    void                   (*rkey_release)(uct_rkey_t rkey, void *handle);
+
+    const char             name[UCT_PD_COMPONENT_NAME_MAX];
+    size_t                 rkey_buf_size;
     ucs_list_link_t        tl_list;
     ucs_list_link_t        list;
 } uct_pd_component_t;
 
-#define UCT_PD_COMPONENT_DEFINE(_pdc, _query, _open, _name_prefix) \
+
+/**
+ * Define a PD component.
+ *
+ * @param _pdc           PD component structure to initialize.
+ * @param _name          PD component name.
+ * @param _query         Function to query PD resources.
+ * @param _open          Function to open a PD.
+ * @param _rkey_buf_size Size of buffer needed for packed rkey.
+ * @param _rkey_unpack   Function to unpack a remote key buffer to handle.
+ * @param _rkey_release  Function to release a remote key handle.
+ */
+#define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, \
+                                _rkey_buf_size, _rkey_unpack, _rkey_release) \
+    \
     uct_pd_component_t _pdc = { \
         .query_resources = _query, \
         .pd_open         = _open, \
-        .name_prefix     = _name_prefix, \
+        .rkey_unpack     = _rkey_unpack, \
+        .rkey_release    = _rkey_release, \
+        .name            = _name, \
+        .rkey_buf_size   = _rkey_buf_size, \
         .tl_list         = { &_pdc.tl_list, &_pdc.tl_list } \
     }; \
     UCS_STATIC_INIT { \
@@ -56,12 +79,7 @@ struct uct_pd_ops {
 
     ucs_status_t (*mem_dereg)(uct_pd_h pd, uct_mem_h memh);
 
-    ucs_status_t (*rkey_pack)(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
-
-    ucs_status_t (*rkey_unpack)(uct_pd_h pd, const void *rkey_buffer,
-                                uct_rkey_bundle_t *rkey_ob);
-
-    void         (*rkey_release)(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob);
+    ucs_status_t (*mkey_pack)(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
 };
 
 
@@ -88,7 +106,6 @@ ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
 
 
 extern ucs_list_link_t uct_pd_components_list;
-extern const char *uct_alloc_method_names[];
 
 
 #endif

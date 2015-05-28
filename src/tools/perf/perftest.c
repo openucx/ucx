@@ -115,6 +115,9 @@ test_type_t tests[] = {
     {"tag_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "tag match bandwidth"},
 
+    {"ucp_put_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
+     "UCP put latency"},
+
     {NULL}
 };
 
@@ -788,6 +791,8 @@ void mpi_rte_post_vec(void *rte_group, struct iovec * iovec, size_t num, void **
             }
         }
     }
+
+    *req = (void*)(uintptr_t)1;
 }
 
 void mpi_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
@@ -948,7 +953,13 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ucs_trace_func("");
 
 #if HAVE_MPI
-    int rank;
+    int size, rank;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    if (size != 2) {
+        ucs_error("This test should run with exactly 2 processes (actual: %d)", size);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (rank == 0) {

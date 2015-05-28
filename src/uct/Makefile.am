@@ -28,6 +28,7 @@ noinst_HEADERS = \
 
 libuct_la_SOURCES = \
 	tl/context.c \
+	tl/memory.c \
 	tl/tl_base.c
 
 if HAVE_IB
