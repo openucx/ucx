@@ -319,11 +319,11 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "am bcopy bw", "MB/sec", 680.0, 10000.0,
+  { "am bcopy bw", "MB/sec", 620.0, 10000.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "am zcopy bw", "MB/sec", 680.0, 10000.0,
+  { "am zcopy bw", "MB/sec", 620.0, 10000.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
@@ -335,11 +335,11 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "put bcopy bw", "MB/sec", 680.0, 25000.0,
+  { "put bcopy bw", "MB/sec", 620.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "put zcopy bw", "MB/sec", 680.0, 25000.0,
+  { "put zcopy bw", "MB/sec", 620.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
