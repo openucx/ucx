@@ -700,7 +700,7 @@ static ucs_status_t uct_ib_pd_open(const char *pd_name, uct_pd_h *pd_p)
 {
     char tmp_pd_name[UCT_PD_NAME_MAX];
     struct ibv_device **device_list;
-    uct_ib_device_t *dev;
+    uct_ib_device_t *dev = NULL;
     ucs_status_t status;
     int i, num_devices;
 
