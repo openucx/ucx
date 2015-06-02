@@ -52,9 +52,10 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
-        void connect(unsigned index, const entity& other, unsigned other_index);
+        void create_ep(unsigned index);
+        void connect(unsigned index, entity& other, unsigned other_index);
 
-        void connect_to_iface(unsigned index, const entity& other) const;
+        void connect_to_iface(unsigned index, entity& other);
 
         void flush() const;
 

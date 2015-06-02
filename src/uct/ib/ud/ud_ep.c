@@ -72,20 +72,19 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
     uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
 
     uct_ib_iface_get_address(&iface->super.super.super, addr);
-    ib_addr->qp_num  = iface->qp->qp_num;
-    ib_addr->id      = ep->ep_id;
+    ib_addr->qp_num = iface->qp->qp_num;
+    ib_addr->id     = ep->ep_id;
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_connect_to_iface(uct_ep_h tl_ep,
-                                        const uct_iface_addr_t *tl_iface_addr)
+ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
+                                        const struct sockaddr *addr)
 {   
-    uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
-    uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
-    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
-    ep->dest_qpn = if_addr->qp_num;
+    uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
 
+    ep->dest_qpn = if_addr->qp_num;
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d slid=%d qpn=%d ep_id=%u ep=%p connected to IFACE dlid=%d qpn=%d", 
@@ -109,9 +108,8 @@ ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
-                                     const uct_iface_addr_t *tl_iface_addr,
-                                     const uct_ep_addr_t *tl_ep_addr)
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
+                                     const struct sockaddr *addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
@@ -179,11 +177,10 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
     status = iface_h->ops.ep_connect_to_ep(ep_h, 
-            (uct_iface_addr_t *)&ctl->conn_req.if_addr, 
-            (uct_ep_addr_t *)&ctl->conn_req.ep_addr);
+            (struct sockaddr *)&ctl->conn_req.ib_addr);
     ucs_assert_always(status == UCS_OK);
 
-    status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.if_addr, ep, ctl->conn_req.conn_id);
+    status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.ib_addr, ep, ctl->conn_req.conn_id);
     ucs_assert_always(status == UCS_OK);
     return ep;
 }
@@ -195,14 +192,14 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     /* connection request */
     ucs_trace_data("CREQ RX (qp=%x lid=%d ep_id=%d conn_id=%d)",
-                   ctl->conn_req.if_addr.qp_num,
-                   ctl->conn_req.if_addr.lid,
-                   ctl->conn_req.ep_addr.ep_id,
+                   ctl->conn_req.ib_addr.qp_num,
+                   ctl->conn_req.ib_addr.lid,
+                   ctl->conn_req.ib_addr.id,
                    ctl->conn_req.conn_id);
     
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREQ);
 
-    ep = uct_ud_iface_cep_lookup(iface, &ctl->conn_req.if_addr, ctl->conn_req.conn_id);
+    ep = uct_ud_iface_cep_lookup(iface, &ctl->conn_req.ib_addr, ctl->conn_req.conn_id);
     if (!ep) {
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
@@ -210,14 +207,14 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
             /* simultaniuos CREQ */
-            ep->dest_ep_id = ctl->conn_req.ep_addr.ep_id;
+            ep->dest_ep_id = ctl->conn_req.ib_addr.id;
             ep->rx.ooo_pkts.head_sn = neth->psn;
             ucs_debug("created ep=%p (conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
         }
     }
 
     ucs_assert_always(ctl->conn_req.conn_id == ep->conn_id);
-    ucs_assert_always(ctl->conn_req.ep_addr.ep_id == ep->dest_ep_id);
+    ucs_assert_always(ctl->conn_req.ib_addr.id == ep->dest_ep_id);
     /* creq must always have same psn */
     ucs_assert_always(ep->rx.ooo_pkts.head_sn == neth->psn);
     /* scedule connection reply op */
@@ -242,14 +239,14 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     uct_ud_neth_t *neth;
     uct_ud_ctl_hdr_t *creq;
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-    uct_ud_iface_addr_t iface_addr;
+    uct_sockaddr_ib_t iface_addr;
     ucs_status_t status;
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
     memset(&iface_addr, 0, sizeof(iface_addr)); /* make coverity happy */
-    status = uct_ud_iface_get_address(&iface->super.super.super, &iface_addr.super);
+    status = uct_ud_iface_get_address(&iface->super.super.super, (struct sockaddr *)&iface_addr);
     if (status != UCS_OK) {
         return NULL;
     }
@@ -268,15 +265,15 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq = (uct_ud_ctl_hdr_t *)(neth + 1);
 
     creq->type                    = UCT_UD_PACKET_CREQ;
-    creq->conn_req.if_addr.qp_num = iface_addr.qp_num;
-    creq->conn_req.if_addr.lid    = iface_addr.lid;
-    creq->conn_req.ep_addr.ep_id  = ep->ep_id;
+    creq->conn_req.ib_addr.qp_num = iface_addr.qp_num;
+    creq->conn_req.ib_addr.lid    = iface_addr.lid;
+    creq->conn_req.ib_addr.id     = ep->ep_id;
     creq->conn_req.conn_id        = ep->conn_id;
 
     ucs_trace_data("CREQ (qp=%x lid=%d ep_id=%d conn_id=%d)",
-                   creq->conn_req.if_addr.qp_num,
-                   creq->conn_req.if_addr.lid,
-                   creq->conn_req.ep_addr.ep_id,
+                   creq->conn_req.ib_addr.qp_num,
+                   creq->conn_req.ib_addr.lid,
+                   creq->conn_req.ib_addr.id,
                    creq->conn_req.conn_id);
 
     skb->len = sizeof(*neth) + sizeof(*creq);

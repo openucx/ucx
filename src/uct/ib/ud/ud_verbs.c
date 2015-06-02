@@ -287,35 +287,31 @@ static ucs_status_t uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-void uct_ud_ep_verbs_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
-{
-    uct_ud_verbs_ep_t *old_ep_v = ucs_derived_of(old_ep, uct_ud_verbs_ep_t);
-    uct_ud_verbs_ep_t *new_ep_v = ucs_derived_of(new_ep, uct_ud_verbs_ep_t);
-
-    uct_ud_ep_clone(old_ep, new_ep);
-    new_ep_v->ah = old_ep_v->ah;
-    /* make sure ah in old ep is not destroyed */
-    old_ep_v->ah = NULL;
-}
-
-ucs_status_t uct_ud_verbs_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_addr_t *tl_iface_addr)
+ucs_status_t uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const struct sockaddr *addr, uct_ep_h *new_ep_p)
 {
     uct_ud_ep_t *ready_ep;
-    uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
-    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_verbs_iface_t);
-    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
+    uct_ud_verbs_ep_t *ep;
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
+    uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
     uct_ud_send_skb_t *skb;
     struct ibv_ah *ah;
     ucs_status_t status;
 
+
     /* check if we can reuse half duplex ep */
     ready_ep = uct_ud_iface_cep_lookup(&iface->super, if_addr, UCT_UD_EP_CONN_ID_MAX);
     if (ready_ep) {
-        uct_ud_iface_cep_replace(&iface->super, if_addr, ready_ep, &ep->super, uct_ud_ep_verbs_clone);
+        *new_ep_p = &ready_ep->super.super;
         return UCS_OK;
     }
 
-    status = uct_ud_ep_connect_to_iface(tl_ep, tl_iface_addr);
+    status = iface_h->ops.ep_create(iface_h, new_ep_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+    ep = ucs_derived_of(*new_ep_p, uct_ud_verbs_ep_t);
+
+    status = uct_ud_ep_connect_to_iface(&ep->super, addr);
     if (status != UCS_OK) {
         return status;
     }
@@ -351,20 +347,20 @@ err2:
     ibv_destroy_ah(ep->ah);
     ep->ah = NULL;
 err1:
-    uct_ud_ep_disconnect_from_iface(tl_ep);
+    uct_ud_ep_disconnect_from_iface(*new_ep_p);
+    *new_ep_p = NULL;
     return status;
 }
 
 
 ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           const uct_iface_addr_t *tl_iface_addr,
-                                           const uct_ep_addr_t *tl_ep_addr)
+                                           const struct sockaddr *addr)
 {
     ucs_status_t status;
     struct ibv_ah *ah;
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_ud_iface_addr_t *if_addr = ucs_derived_of(tl_iface_addr, uct_ud_iface_addr_t);
+    uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
 
     status = uct_ud_ep_connect_to_ep(&ep->super, addr);
     if (status != UCS_OK) {
@@ -390,9 +386,9 @@ uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_release_am_desc=uct_ib_iface_release_am_desc,
     .ep_get_address      = uct_ud_ep_get_address,
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_connect_to_iface = uct_ud_verbs_ep_connect_to_iface,
+    .ep_create_connected = uct_ud_verbs_ep_create_connected,
     .ep_connect_to_ep    = uct_ud_verbs_ep_connect_to_ep, 
-    .iface_get_address   = uct_ib_iface_get_subnet_address,
+    .iface_get_address   = uct_ud_iface_get_address,
     .iface_is_reachable  = uct_ib_iface_is_reachable,
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .iface_query         = uct_ud_verbs_iface_query,

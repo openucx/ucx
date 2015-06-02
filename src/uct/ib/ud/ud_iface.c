@@ -57,7 +57,7 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
     }
 }
 
-static uct_ud_iface_peer_t *uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr)
+static uct_ud_iface_peer_t *uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr)
 {
     uct_ud_iface_peer_t *peer, key;
 
@@ -103,7 +103,7 @@ static uint32_t uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_
 }
 
 /* insert new ep that is connected to src_if_addr */
-ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id)
+ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *cep;
@@ -150,44 +150,24 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
   ucs_list_head_init(&ep->cep_list);
 }
 
-void uct_ud_iface_cep_replace(uct_ud_iface_t *iface,
-                              uct_ud_iface_addr_t *src_if_addr,
-                              uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep,
-                              uct_ud_ep_clone_func_t clone)
-{
-    uct_ep_t *ep_h = &old_ep->super.super;
-    uct_iface_t *iface_h = ep_h->iface;
-    uct_ud_iface_peer_t *peer;
-
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
-    ucs_assert_always(peer != NULL);
-    ucs_assert_always(old_ep != new_ep);
-    ucs_assert_always(old_ep->conn_id == peer->conn_id_last);
-
-    clone(old_ep, new_ep);
-
-    ucs_list_insert_after(&old_ep->cep_list, &new_ep->cep_list);
-    uct_ud_iface_cep_remove(old_ep);
-    peer->conn_id_last++;
-    
-    old_ep->ep_id   = UCT_UD_EP_NULL_ID;
-    ucs_trace("iface(%p) cep_replace:ep_destroy(%p) new_ep=%p", iface_h, old_ep, new_ep);
-    iface_h->ops.ep_destroy(ep_h);
-}
-
-uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uint32_t conn_id)
+uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_sockaddr_ib_t  *src_if_addr, uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
+    uct_ud_ep_t *ep;
 
     peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
     if (!peer) {
         return NULL;
     }
 
-    return uct_ud_iface_cep_lookup_ep(peer, conn_id);
+    ep = uct_ud_iface_cep_lookup_ep(peer, conn_id);
+    if (ep && conn_id == UCT_UD_EP_CONN_ID_MAX) {
+        peer->conn_id_last++;
+    }
+    return ep;
 }
 
-void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep)
+void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep)
 {
     uct_ud_iface_peer_t *peer;
 
@@ -406,23 +386,19 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = 0;
 
-    iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_subnet_t);
+    iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = sizeof(uct_sockaddr_ib_t);
     iface_attr->completion_priv_len   = 0;
 
 }
 
-ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
+ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *iface_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
-    uct_ud_iface_addr_t *addr = ucs_derived_of(iface_addr, uct_ud_iface_addr_t);
-    uct_ib_device_t *dev;
-    uint32_t lid;
+    uct_sockaddr_ib_t *addr = (uct_sockaddr_ib_t *)iface_addr;
 
+    uct_ib_iface_get_address(tl_iface, iface_addr);
     addr->qp_num = iface->qp->qp_num;
-    dev = uct_ib_iface_device(&iface->super);
-    lid = dev->port_attr[iface->super.port_num-dev->first_port].lid;
-    addr->lid = lid; 
     ucs_debug("qpnum=%d lid=%d", addr->qp_num, addr->lid);
 
     return UCS_OK;

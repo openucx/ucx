@@ -20,9 +20,6 @@ public:
         m_e1 = uct_test::create_entity(0);
         m_e2 = uct_test::create_entity(0);
 
-        m_e1->add_ep();
-        m_e2->add_ep();
-
         m_entities.push_back(m_e1);
         m_entities.push_back(m_e2);
     }
@@ -223,50 +220,44 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop();
-    EXPECT_EQ(1U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
-    EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
 
-    EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
-    /* second active ep will not be used */
-    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 }
 
 UCS_TEST_P(test_ud, connect_iface_2to1) {
     /* 2 to 1 connect */
     m_e1->connect_to_iface(0, *m_e2);
-    m_e1->add_ep();
     m_e1->connect_to_iface(1, *m_e2);
     short_progress_loop();
 
-    EXPECT_EQ(1U, ep(m_e1,0)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1,0)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1,0)->conn_id);
     EXPECT_EQ(2, ep(m_e1,0)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 
-    EXPECT_EQ(2U, ep(m_e1,1)->dest_ep_id);
+    EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
     EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
     EXPECT_EQ(2, ep(m_e1,1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
-    EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
 }
 
 UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop();
-    EXPECT_EQ(1U, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1)->conn_id);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
-    EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop();
     EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e2)->ep_id);
+    EXPECT_EQ(0U, ep(m_e2)->ep_id);
     EXPECT_EQ(0U, ep(m_e2)->conn_id);
     EXPECT_EQ(2, ep(m_e2)->tx.psn);
     EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), 1);
@@ -293,8 +284,6 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     /* simultanious connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     m_e2->connect_to_iface(0, *m_e1);
-    m_e1->add_ep();
-    m_e2->add_ep();
     m_e1->connect_to_iface(1, *m_e2);
     m_e2->connect_to_iface(1, *m_e1);
     short_progress_loop();

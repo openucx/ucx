@@ -20,13 +20,6 @@
 
 
 #define UCT_UD_MIN_INLINE   48
-struct uct_ud_iface_addr {
-    uct_iface_addr_t     super;
-    uint32_t             qp_num;
-    uint32_t             lid;
-    /* TODO: add mtu */
-};
-
 
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
@@ -36,7 +29,7 @@ typedef struct uct_ud_iface_config {
 
 struct uct_ud_iface_peer {
     uct_ud_iface_peer_t   *next;
-    uct_ud_iface_addr_t    dest_iface;
+    uct_sockaddr_ib_t      dest_iface;
     uint32_t               conn_id_last;
     ucs_list_link_t        ep_list; /* ep list ordered by connection id */
 };
@@ -83,8 +76,7 @@ struct uct_ud_ctl_hdr {
     uint8_t reserved[3];
     union {
         struct {
-            uct_ud_iface_addr_t if_addr;
-            uct_ud_ep_addr_t    ep_addr;
+            uct_sockaddr_ib_t   ib_addr;
             uint32_t            conn_id;
         } conn_req;
         struct {
@@ -99,7 +91,7 @@ extern ucs_config_field_t uct_ud_iface_config_table[];
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr);
 
-ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr);
+ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr);
 
 void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
@@ -119,9 +111,9 @@ static inline int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 /* 
 management of connecting endpoints (cep) 
 
-Such endpoint are created either by explicitely calling connect_to_iface()
+Such endpoint are created either by explicitely calling ep_create_connected()
 or implicitely as a result of UD connection protocol. Calling 
-connect_to_iface() may reuse already existing endpoint that was implicitely
+ep_create_connected() may reuse already existing endpoint that was implicitely
 created.
 
 UD connection protocol
@@ -135,10 +127,10 @@ Connection request. It includes source interface address, source ep address
 and connection id.
 
 Connection id is essentially a counter of endpoints that are created by
-connect_to_iface(). The counter is per destination interface. Purpose of
+ep_create_connected(). The counter is per destination interface. Purpose of
 conn_id is to ensure order between multiple CREQ packets and to handle
 simultanuous connection establishment. The case when both sides call
-connect_to_iface(). The rule is that connected endpoints must have
+ep_create_connected(). The rule is that connected endpoints must have
 same conn_id.
 
 2: CREP (dest_ep_id) 
@@ -159,7 +151,7 @@ Ack on connection reply. It may be send as part of the data packet.
 Implicit endpoints reuse
 
 Endpoints created upon receive of CREP request can be re-used when
-application calls connect_to_iface(). 
+application calls ep_create_connected(). 
 
 Data structure
 
@@ -183,7 +175,7 @@ Ids upto (not including) conn_last_id are already assigned to endpoints.
 Any endpoint with conn_id >= conn_last_id is created on receive of CREQ 
 There may be holes because CREQs are not received in order.
 
-Call to connect_to_iface() will try reuse endpoint with 
+Call to ep_create_connected() will try reuse endpoint with 
 conn_id = conn_last_id
 
 If there is no such endpoint new endpoint with id conn_last_id
@@ -194,31 +186,22 @@ In both cases conn_last_id = conn_last_id + 1
 */
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface);
 
-/* find ep that is connected to (src_if, src_ep) */
-uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uint32_t conn_id);
+/* find ep that is connected to (src_if, src_ep),
+ * if conn_id == UCT_UD_EP_CONN_ID_MAX then try to
+ * reuse ep with conn_id == conn_last_id
+ */
+uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uint32_t conn_id);
 
 /* remove ep */
 void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
 
 /*
- * replace already existing ep, new_ep must be setup by caller 
- * old ep connection id must be equal to conn_last_id
- */
-typedef void (*uct_ud_ep_clone_func_t)(uct_ud_ep_t *old_ep, 
-                                       uct_ud_ep_t *new_ep);
-
-void uct_ud_iface_cep_replace(uct_ud_iface_t *iface, 
-                              uct_ud_iface_addr_t *src_if_addr, 
-                              uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep,
-                              uct_ud_ep_clone_func_t f);
-
-/*
  * rollback last ordered insert (conn_id == UCT_UD_EP_CONN_ID_MAX).
  */
-void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep);
+void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep);
 
 /* insert new ep that is connected to src_if_addr */
-ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_ud_iface_addr_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id);
+ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id);
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 #endif

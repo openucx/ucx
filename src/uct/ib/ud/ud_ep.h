@@ -19,11 +19,6 @@
 #define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
 #define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX 
 
-struct uct_ud_ep_addr {
-    uct_ep_addr_t     super;
-    uint32_t          ep_id;
-};
-
 #ifdef UCT_UD_EP_DEBUG_HOOKS
 /*
    Hooks that allow packet header inspection and rewriting. UCT user can
@@ -109,7 +104,7 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, const struct sockaddr *addr);
 
-ucs_status_t uct_ud_ep_connect_to_iface(uct_ep_h tl_ep, const uct_iface_addr_t *tl_iface_addr);
+ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep, const struct sockaddr *addr);
 ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep);
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
