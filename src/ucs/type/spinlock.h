@@ -8,6 +8,7 @@
 #ifndef UCS_SPINLOCK_H
 #define UCS_SPINLOCK_H
 
+#include <config.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 
