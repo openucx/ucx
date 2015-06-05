@@ -19,7 +19,7 @@ echo Starting on host: $(hostname)
 
 echo "Autogen"
 ./autogen.sh
-make distclean||:
+make $make_opt distclean||:
 
 echo "Making a directory for test build"
 rm -rf build-test
@@ -41,6 +41,7 @@ echo "Running ucx_info"
 echo "Build without IB verbs"
 ../contrib/configure-release --without-verbs
 make $make_opt
+ucx_inst=${WORKSPACE}/install
 
 if [ -n "$JENKINS_RUN_TESTS" ]; then
     # Set CPU affinity to 2 cores, for performance tests
@@ -54,15 +55,33 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     echo "Build gtest"
     module load hpcx-gcc
-    make clean
-    ../contrib/configure-devel --with-mpi
-    make $make_opt
+    make $make_opt clean
+    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
+    make $make_opt install
+
+    opt_perftest_common="-b $ucx_inst/share/ucx/perftest/test_types -b $ucx_inst/share/ucx/perftest/msg_pow2"
+    for dev in $(ibstat -l); do
+        hca="${dev}:1"
+
+        if [[ $dev =~ .*mlx5.* ]]; then
+            opt_perftest="$opt_perftest_common -b $ucx_inst/share/ucx/perftest/transports"
+        else
+            opt_perftest="$opt_perftest_common -x rc"
+        fi
+
+        echo Running ucx_perf kit on $hca
+        mpirun -np 2 $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
+
+        # todo: add csv generation
+
+    done
+
     module unload hpcx-gcc
 
     echo "Running ucx_info"
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
 
-        echo "Running unit tests"
+    echo "Running unit tests"
     $AFFINITY $TIMEOUT make -C test/gtest test
 
     echo "Running valgrind tests"
