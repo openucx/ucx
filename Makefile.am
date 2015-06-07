@@ -14,11 +14,8 @@ ACLOCAL_AMFLAGS = -I config/m4
 noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 doxygen_doc_files = $(noinst_HEADERS)
 
-perftest_dir = $(pkgdatadir)/pertest
-doc_dir = $(pkgdatadir)/doc
-
-dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
-dist_doc__DATA = README
+docdir = $(pkgdatadir)/doc
+dist_doc_DATA = README
 
 SUBDIRS = \
 	src/ucs \
@@ -26,7 +23,8 @@ SUBDIRS = \
 	src/ucp \
 	src/tools/hook \
 	src/tools/info \
-	src/tools/perf
+	src/tools/perf \
+	test/examples
 
 if HAVE_GTEST
 SUBDIRS += test/gtest

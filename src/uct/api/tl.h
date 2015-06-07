@@ -15,7 +15,6 @@
 #include "uct_def.h"
 
 #include <ucs/type/callback.h>
-#include <ucs/type/class.h>
 #include <ucs/type/status.h>
 #include <stddef.h>
 
@@ -143,7 +142,6 @@ typedef struct uct_iface {
     uct_iface_ops_t          ops;
     uct_pd_h                 pd;
 } uct_iface_t;
-UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_pd_h);
 
 
 /**
@@ -152,7 +150,6 @@ UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_pd_h);
 typedef struct uct_ep {
     uct_iface_h              iface;
 } uct_ep_t;
-UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
 
 
 /**

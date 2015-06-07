@@ -24,8 +24,8 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/x86_64/bitops.h \
 	arch/x86_64/cpu.h \
 	arch/arch.h \
+	async/async_fwd.h \
 	async/async.h \
-	async/async_int.h \
 	async/pipe.h \
 	async/signal.h \
 	async/thread.h \
@@ -64,6 +64,9 @@ nobase_dist_libucs_la_HEADERS = \
 	type/spinlock.h \
 	type/status.h \
 	type/thread_mode.h
+
+noinst_HEADERS = \
+	async/async_int.h
 
 libucs_la_SOURCES = \
 	arch/ppc64/timebase.c \

@@ -184,6 +184,7 @@ AC_CONFIG_FILES([
                  src/tools/hook/Makefile
                  src/tools/info/Makefile
                  src/tools/perf/Makefile
+                 test/examples/Makefile
                  test/gtest/Makefile
                  ])
 

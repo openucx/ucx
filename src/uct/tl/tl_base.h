@@ -103,6 +103,13 @@ struct uct_tl_ops {
 
 
 /**
+ * Declare classes for structs defined in api/tl.h
+ */
+UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_pd_h);
+UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
+
+
+/**
  * Active message handle table entry
  */
 typedef struct uct_am_handler {

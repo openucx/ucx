@@ -10,6 +10,7 @@
 
 #include "thread.h"
 #include "signal.h"
+#include "async_fwd.h"
 
 #include <ucs/config/types.h>
 #include <ucs/datastruct/mpmc.h>
@@ -21,7 +22,6 @@
 /**
  * Async event context. Manages timer and fd notifications.
  */
-typedef struct ucs_async_context ucs_async_context_t;
 struct ucs_async_context {
     union {
         ucs_async_thread_context_t thread;
