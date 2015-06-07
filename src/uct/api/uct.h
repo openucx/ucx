@@ -106,7 +106,6 @@ typedef struct uct_tl_resource_desc {
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
 #define UCT_TL_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
 
-
 /**
  * @ingroup RESOURCE
  * @brief  List of capabilities supported by UCX API

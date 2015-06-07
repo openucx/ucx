@@ -218,4 +218,6 @@ static inline void uct_ib_iface_desc_received(uct_ib_iface_t *iface,
     }
 }
 
+struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid);
+
 #endif

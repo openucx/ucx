@@ -238,6 +238,17 @@ void uct_test::entity::connect_to_ep(uct_ep_h from, uct_ep_h to)
     free(addr);
 }
 
+void uct_test::entity::create_ep(unsigned index) {
+    uct_ep_h ep = NULL;
+    ucs_status_t status;
+
+    reserve_ep(index);
+
+    status = uct_ep_create(m_iface, &ep);
+    ASSERT_UCS_OK(status);
+    m_eps[index] = ep;
+}
+
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index) {
     struct sockaddr *addr = NULL;
     uct_ep_h ep = NULL;
@@ -272,6 +283,28 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
         status = uct_ep_create_connected(iface(), addr, &ep);
         ASSERT_UCS_OK(status);
     }
+
+    m_eps[index] = ep;
+    free(addr);
+}
+
+void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
+    ucs_status_t status;
+    struct sockaddr *addr = NULL;
+    uct_ep_h ep = NULL;
+
+    reserve_ep(index);
+    if (m_eps[index] != NULL) {
+        return; /* Already connected */
+    }
+
+    addr = (struct sockaddr*)malloc(iface_attr().iface_addr_len);
+
+    status = uct_iface_get_address(other.iface(), addr);
+    ASSERT_UCS_OK(status);
+
+    status = uct_ep_create_connected(iface(), addr, &ep);
+    ASSERT_UCS_OK(status);
 
     m_eps[index] = ep;
     free(addr);
