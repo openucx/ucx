@@ -96,21 +96,6 @@ typedef struct uct_resource_desc {
 #define UCT_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
 
 /**
- * Opaque type for interface address.
- */
-struct uct_iface_addr {
-    uint32_t dummy;
-};
-
-
-/**
- * Opaque type for endpoint address.
- */
-struct uct_ep_addr {
-    uint32_t dummy;
-};
-
-/**
  * @ingroup RESOURCE
  * @brief  List of capabilities supported by UCX API
  *
