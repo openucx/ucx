@@ -131,6 +131,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rc_hdr_t);
         PRINT_SIZE(uct_rc_iface_t);
         PRINT_SIZE(uct_rc_iface_config_t);
+        PRINT_SIZE(uct_rc_completion_t);
         PRINT_SIZE(uct_rc_iface_send_desc_t);
 
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs")) {

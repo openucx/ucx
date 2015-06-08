@@ -71,16 +71,15 @@ public:
         return UCS_OK;
     }
 
-    static void zcopy_completion_cb(uct_completion_t *comp, void *data)
+    static void zcopy_completion_cb(uct_completion_t *comp)
     {
         uct_perf_test_runner *self = ucs_container_of(comp, comp_t, uct)->self;
         --self->m_outstanding;
     }
 
-    static void fetch_completion_cb(uct_completion_t *comp, void *data)
+    static void fetch_completion_cb(uct_completion_t *comp)
     {
         uct_perf_test_runner *self = ucs_container_of(comp, comp_t, uct)->self;
-        *(psn_t*)self->m_perf.send_buffer = *(psn_t*)data;
         --self->m_outstanding;
     }
 
@@ -135,7 +134,7 @@ public:
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 comp->func = fetch_completion_cb;
-                return uct_ep_get_bcopy(ep, length, remote_addr, rkey, comp);
+                return uct_ep_get_bcopy(ep, buffer, length, remote_addr, rkey, comp);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 comp->func = zcopy_completion_cb;
                 return uct_ep_get_zcopy(ep, buffer, length, m_perf.uct.send_memh,
@@ -155,19 +154,21 @@ public:
             comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_fadd32(ep, sn - prev_sn, remote_addr, rkey,
-                                            comp);
+                                            (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
                 return uct_ep_atomic_fadd64(ep, sn - prev_sn, remote_addr, rkey,
-                                            comp);
+                                            (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_SWAP:
             comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey, comp);
+                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey,
+                                            (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey, comp);
+                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey,
+                                            (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -175,10 +176,10 @@ public:
             comp->func = fetch_completion_cb;
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_cswap32(ep, sn, prev_sn, remote_addr, rkey,
-                                             comp);
+                                             (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
                 return uct_ep_atomic_cswap64(ep, sn, prev_sn, remote_addr, rkey,
-                                             comp);
+                                             (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }

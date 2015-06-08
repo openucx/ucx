@@ -15,18 +15,18 @@ public:
                         completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
-        comp->atomic_size = sizeof(uint32_t);
+        comp->reply    = 0;
         return uct_ep_atomic_swap32(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    &comp->uct);
+                                    (uint32_t*)&comp->reply, &comp->uct);
     }
 
     ucs_status_t swap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
                         completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
-        comp->atomic_size = sizeof(uint64_t);
+        comp->reply    = 0;
         return uct_ep_atomic_swap64(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    &comp->uct);
+                                    (uint64_t*)&comp->reply, &comp->uct);
     }
 
     template <typename T>

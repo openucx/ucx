@@ -171,31 +171,35 @@ void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
     snprintf(buffer, max, " am_id %d", rch->am_id);
 }
 
-void uct_rc_ep_get_bcopy_completion(uct_completion_t *self, void *data)
+void uct_rc_ep_get_bcopy_completion(uct_completion_t *self)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(self, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(data, desc->super.length);
-    uct_invoke_completion(desc->comp, desc + 1);
+    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->length);
+    memcpy(desc->super.user_buffer, desc + 1, desc->length);
+    uct_invoke_completion(desc->comp);
     ucs_mpool_put(desc);
 }
 
 #define UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be) \
-         (uct_completion_t *self, void *data) \
+         (uct_completion_t *self) \
     { \
         uct_rc_iface_send_desc_t *desc = \
             ucs_derived_of(self, uct_rc_iface_send_desc_t); \
-        uint##_num_bits##_t *value = data; \
+        uint##_num_bits##_t *reply       = (void*)(desc + 1); \
+        uint##_num_bits##_t *user_buffer = desc->super.user_buffer; \
         \
-        VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
+        VALGRIND_MAKE_MEM_DEFINED(reply, sizeof(*reply)); \
         if (_is_be && (_num_bits == 32)) { \
-            *value = ntohl(*value); /* TODO swap in-place */ \
+            *user_buffer = ntohl(*reply);  \
         } else if (_is_be && (_num_bits == 64)) { \
-            *value = ntohll(*value); \
+            *user_buffer = ntohll(*reply); \
+        } else { \
+            *user_buffer = *reply; \
         } \
         \
-        uct_invoke_completion(desc->comp, value); \
+        uct_invoke_completion(desc->comp); \
         ucs_mpool_put(desc); \
     }
 

@@ -106,8 +106,7 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         sn = ep->tx.completion_count;
         ucs_queue_for_each_extract(comp, &ep->super.comp, queue,
                                    UCS_CIRCULAR_COMPARE16(comp->sn, <=, sn)) {
-            uct_invoke_completion(&comp->super,
-                                  ucs_derived_of(comp, uct_rc_iface_send_desc_t) + 1);
+            uct_invoke_completion(&comp->super);
         }
     }
 }

@@ -37,7 +37,6 @@ public:
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        m_completion->length = 0;
         return uct_ep_put_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
                                 recvbuf.addr(), recvbuf.rkey(),
@@ -47,16 +46,13 @@ public:
     ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        m_completion->dest   = sendbuf.ptr();
-        m_completion->length = sendbuf.length();
-        return uct_ep_get_bcopy(ep, sendbuf.length(), recvbuf.addr(),
+        return uct_ep_get_bcopy(ep, sendbuf.ptr(), sendbuf.length(), recvbuf.addr(),
                                 recvbuf.rkey(), &m_completion->uct);
     }
 
     ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        m_completion->length = 0;
         return uct_ep_get_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
                                 recvbuf.addr(), recvbuf.rkey(),
