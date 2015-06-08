@@ -351,13 +351,15 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_query         = uct_rc_mlx5_iface_query,
-    .iface_get_address   = uct_rc_iface_get_address,
     .iface_flush         = uct_rc_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
     .iface_release_am_desc= uct_ib_iface_release_am_desc,
+    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_get_address      = uct_rc_ep_get_address,
-    .ep_connect_to_iface = NULL,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
+    .iface_get_address   = uct_ib_iface_get_subnet_address,
+    .iface_is_reachable  = uct_ib_iface_is_reachable,
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_put_short        = uct_rc_mlx5_ep_put_short,
     .ep_put_bcopy        = uct_rc_mlx5_ep_put_bcopy,
     .ep_put_zcopy        = uct_rc_mlx5_ep_put_zcopy,
@@ -374,9 +376,7 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic_fadd32    = uct_rc_mlx5_ep_atomic_fadd32,
     .ep_atomic_swap32    = uct_rc_mlx5_ep_atomic_swap32,
     .ep_atomic_cswap32   = uct_rc_mlx5_ep_atomic_cswap32,
-    .ep_flush            = uct_rc_mlx5_ep_flush,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
+    .ep_flush            = uct_rc_mlx5_ep_flush
 };
 
 

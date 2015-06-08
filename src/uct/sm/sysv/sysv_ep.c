@@ -7,7 +7,8 @@
 
 #include "sysv_ep.h"
 
-static UCS_CLASS_INIT_FUNC(uct_sysv_ep_t, uct_iface_t *tl_iface)
+static UCS_CLASS_INIT_FUNC(uct_sysv_ep_t, uct_iface_t *tl_iface,
+                           const struct sockaddr *addr)
 {
     /* point to sm_base */
     uct_sm_iface_t *iface = ucs_derived_of(tl_iface, uct_sm_iface_t);
@@ -22,5 +23,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_ep_t)
 
 /* point to sm_base */
 UCS_CLASS_DEFINE(uct_sysv_ep_t, uct_sm_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_ep_t, uct_ep_t, uct_iface_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_ep_t, uct_ep_t, uct_iface_t*,
+                          const struct sockaddr *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_ep_t, uct_ep_t);

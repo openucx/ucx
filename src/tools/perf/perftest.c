@@ -1115,7 +1115,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 
     batch_file = fopen(ctx->batch_files[depth], "r");
     if (batch_file == NULL) {
-        ucs_error("Failed to open '%s': %m", optarg);
+        ucs_error("Failed to open batch file '%s': %m", ctx->batch_files[depth]);
         return UCS_ERR_IO_ERROR;
     }
 

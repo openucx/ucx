@@ -60,6 +60,7 @@ struct uct_context {
 typedef struct uct_worker uct_worker_t;
 struct uct_worker {
     uct_context_h          context;
+    ucs_async_context_t    *async;
     ucs_notifier_chain_t   progress_chain;
     ucs_thread_mode_t      thread_mode;
 };

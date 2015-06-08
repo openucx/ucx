@@ -50,16 +50,21 @@ protected:
 
         const uct_iface_attr& iface_attr() const;
 
-        void add_ep();
-
         uct_ep_h ep(unsigned index) const;
 
-        void connect(unsigned index, const entity& other, unsigned other_index) const;
+        void create_ep(unsigned index);
+        void connect(unsigned index, entity& other, unsigned other_index);
+
+        void connect_to_iface(unsigned index, entity& other);
 
         void flush() const;
 
     private:
         entity(const entity&);
+
+        void reserve_ep(unsigned index);
+
+        void connect_to_ep(uct_ep_h from, uct_ep_h to);
 
         uct_context_h         m_ucth;
         uct_worker_h          m_worker;
@@ -122,7 +127,8 @@ protected:
 #define UCT_TEST_IB_TLS \
     rc_mlx5, \
     rc, \
-    ud
+    ud, \
+    cm
 
 /**
  * Instantiate the parameterized test case for all transports.

@@ -42,6 +42,9 @@ typedef enum {
 } ucs_async_mode_t;
 
 
+extern const char *ucs_async_mode_names[];
+
+
 /**
  * Ternary logic value.
  */

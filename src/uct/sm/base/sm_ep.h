@@ -11,10 +11,6 @@
 #include <uct/tl/tl_log.h>
 #include "sm_iface.h"
 
-typedef struct uct_sm_ep_addr {
-    uct_ep_addr_t     super;
-    int               ep_id;
-} uct_sm_ep_addr_t;
 
 typedef struct uct_sm_ep {
     uct_base_ep_t      super;
@@ -25,10 +21,7 @@ UCS_CLASS_DECLARE(uct_sm_ep_t, uct_sm_iface_t *)
 UCS_CLASS_DECLARE_NEW_FUNC(uct_sm_ep_t, uct_sm_iface_t, uct_sm_iface_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_sm_ep_t, uct_ep_t);
 
-ucs_status_t uct_sm_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
-ucs_status_t uct_sm_ep_connect_to_ep(uct_ep_h tl_ep, 
-                                     const uct_iface_addr_t *tl_iface_addr, 
-                                     const uct_ep_addr_t *tl_ep_addr);
+
 ucs_status_t uct_sm_ep_put_short(uct_ep_h tl_ep, const void *buffer, 
                                  unsigned length, uint64_t remote_addr, 
                                  uct_rkey_t rkey);

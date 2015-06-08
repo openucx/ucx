@@ -197,15 +197,20 @@ static void uct_ib_dump_exp_send_wr(struct ibv_qp *qp, struct ibv_exp_send_wr *w
                                     char *buf, size_t max)
 {
     static uct_ib_opcode_t exp_opcodes[] = {
+#if HAVE_DECL_IBV_EXP_WR_NOP
         [IBV_EXP_WR_NOP]                  = { "NOP",        0},
+#endif
         [IBV_EXP_WR_RDMA_WRITE]           = { "RDMA_WRITE", UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_EXP_WR_RDMA_READ]            = { "RDMA_READ",  UCT_IB_OPCODE_FLAG_HAS_RADDR },
         [IBV_EXP_WR_SEND]                 = { "SEND",       0 },
         [IBV_EXP_WR_ATOMIC_CMP_AND_SWP]   = { "CS",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
         [IBV_EXP_WR_ATOMIC_FETCH_AND_ADD] = { "FA",         UCT_IB_OPCODE_FLAG_HAS_ATOMIC },
+#if HAVE_DECL_IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP
         [IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP]   = { "MASKED_CS", UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
+#endif
+#if HAVE_DECL_IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD
         [IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD] = { "MASKED_FA", UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
-
+#endif
    };
 
    char *s    = buf;
@@ -232,6 +237,7 @@ static void uct_ib_dump_exp_send_wr(struct ibv_qp *qp, struct ibv_exp_send_wr *w
    s += strlen(s);
 
    /* Extended atomics */
+#if HAVE_IB_EXT_ATOMICS
    if (op->flags & UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC) {
        uct_ib_log_dump_remote_addr(wr->ext_op.masked_atomics.remote_addr,
                              wr->ext_op.masked_atomics.rkey,
@@ -253,6 +259,7 @@ static void uct_ib_dump_exp_send_wr(struct ibv_qp *qp, struct ibv_exp_send_wr *w
        }
        s += strlen(s);
    }
+#endif
 
    uct_ib_log_dump_sg_list(wr->sg_list, wr->num_sge,
                            (wr->exp_send_flags & IBV_EXP_SEND_INLINE) ? -1 : 0,

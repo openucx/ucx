@@ -14,21 +14,24 @@
 #include <ucs/stats/stats.h>
 #include <ucs/type/status.h>
 
-#define UCT_IB_QPN_ORDER         24  /* How many bits can be an IB QP number */
-#define UCT_IB_LRH_LEN           8
-#define UCT_IB_GRH_LEN           40
-#define UCT_IB_BTH_LEN           12
-#define UCT_IB_DETH_LEN          8
-#define UCT_IB_RETH_LEN          16
-#define UCT_IB_ATOMIC_ETH_LEN    28
-#define UCT_IB_AETH_LEN          4
-#define UCT_IB_PAYLOAD_ALIGN     4
-#define UCT_IB_ICRC_LEN          4
-#define UCT_IB_VCRC_LEN          2
-#define UCT_IB_DELIM_LEN         2
-#define UCT_IB_FDR_PACKET_GAP    64
-#define UCT_IB_MAX_MESSAGE_SIZE  (2 << 30)
-#define UCT_IB_PKEY_MASK         0x7fff
+
+#define UCT_IB_QPN_ORDER            24  /* How many bits can be an IB QP number */
+#define UCT_IB_LRH_LEN              8   /* IB Local routing header */
+#define UCT_IB_GRH_LEN              40  /* IB GLobal routing header */
+#define UCT_IB_BTH_LEN              12  /* IB base transport header */
+#define UCT_IB_DETH_LEN             8   /* IB datagram header */
+#define UCT_IB_RETH_LEN             16  /* IB RDMA header */
+#define UCT_IB_ATOMIC_ETH_LEN       28  /* IB atomic header */
+#define UCT_IB_AETH_LEN             4   /* IB ack */
+#define UCT_IB_PAYLOAD_ALIGN        4   /* IB payload padding */
+#define UCT_IB_ICRC_LEN             4   /* IB invariant crc footer */
+#define UCT_IB_VCRC_LEN             2   /* IB variant crc footer */
+#define UCT_IB_DELIM_LEN            2   /* IB wire delimiter */
+#define UCT_IB_FDR_PACKET_GAP       64  /* Minimal FDR packet gap */
+#define UCT_IB_MAX_MESSAGE_SIZE     (2 << 30) /* Maximal IB message size */
+#define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
+#define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
+
 
 enum {
     UCT_IB_DEVICE_STAT_MEM_ALLOC,

@@ -60,7 +60,7 @@ public:
             m_backlog.pop_back();
             EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
-            uct_iface_release_am_desc(receiver().iface(), (void*)my_desc);
+            uct_iface_release_am_desc(my_desc);
         }
     }
 
@@ -144,15 +144,14 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
                     DIRECTION_SEND_TO_RECV);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
     set_keep_data(true);
-    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
-                    0ul,
-                    sender().iface_attr().cap.am.max_bcopy,
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                    sizeof(uint64_t),
+                    sender().iface_attr().cap.am.max_short,
                     DIRECTION_SEND_TO_RECV);
 }
-
 
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);

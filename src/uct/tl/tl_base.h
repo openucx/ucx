@@ -40,23 +40,51 @@ enum {
 };
 
 
+/*
+ * Statistics macors
+ */
 #define UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_##_op, 1); \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_BYTES_##_method, _size);
-
 #define UCT_TL_EP_STAT_OP_IF_SUCCESS(_status, _ep, _op, _method, _size) \
     if (_status >= 0) { \
         UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
     }
-
 #define UCT_TL_EP_STAT_ATOMIC(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_ATOMIC, 1);
-
 #define UCT_TL_EP_STAT_FLUSH(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1);
-
 #define UCT_TL_IFACE_STAT_FLUSH(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH, 1);
+
+
+/**
+ * In release mode - do nothing.
+ *
+ * In debug mode, if _condition is not true, return an error. This could be less
+ * optimal because of additional checks, and that compiler needs to generate code
+ * for error flow as well.
+ */
+#define UCT_CHECK_PARAM(_condition, _err_message, ...) \
+    if (ENABLE_PARAMS_CHECK && !(_condition)) { \
+        ucs_error(_err_message, ## __VA_ARGS__); \
+        return UCS_ERR_INVALID_PARAM; \
+    }
+
+
+/**
+ * In debug mode, if _condition is not true, generate 'Invalid length' error.
+ */
+#define UCT_CHECK_LENGTH(_condition, _name) \
+    UCT_CHECK_PARAM(_condition, "Invalid %s length", _name)
+
+
+/**
+ * In debug mode, check that active message ID is valid.
+ */
+#define UCT_CHECK_AM_ID(_am_id) \
+    UCT_CHECK_PARAM((_am_id) < UCT_AM_ID_MAX, \
+                    "Invalid active message id (valid range: 0..%d)", (int)UCT_AM_ID_MAX - 1)
 
 
 /**
@@ -208,7 +236,7 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
  * @param id       Active message ID.
  * @param data     Received data.
  * @param length   Length of received data.
- * @param desc     Receive descriptor.
+ * @param desc     Receive descriptor, as passed to user callback.
  */
 static inline ucs_status_t
 uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,

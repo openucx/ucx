@@ -260,8 +260,8 @@ protected:
         params.report_interval = 1.0;
         params.rte_group       = NULL;
         params.rte             = &test_rte::rte;
-        strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name) - 1);
-        strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name)  - 1);
+        strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
+        strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
         params.uct.data_layout = test.data_layout;
         params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
 
@@ -319,11 +319,11 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "am bcopy bw", "MB/sec", 680.0, 10000.0,
+  { "am bcopy bw", "MB/sec", 620.0, 10000.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "am zcopy bw", "MB/sec", 680.0, 10000.0,
+  { "am zcopy bw", "MB/sec", 620.0, 10000.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
@@ -335,11 +335,11 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "put bcopy bw", "MB/sec", 680.0, 25000.0,
+  { "put bcopy bw", "MB/sec", 620.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "put zcopy bw", "MB/sec", 680.0, 25000.0,
+  { "put zcopy bw", "MB/sec", 620.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
@@ -372,6 +372,11 @@ UCS_TEST_P(test_uct_perf, envelope) {
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {
+        UCS_TEST_SKIP;
+    }
+
+    if (!strcmp(resource.tl_name, "cm")) {
+        /* TODO calibrate expected performance and iterations based on transport */
         UCS_TEST_SKIP;
     }
 
@@ -408,8 +413,9 @@ UCS_TEST_P(test_uct_perf, envelope) {
         ASSERT_UCS_OK(result.status);
 
         double value = *(double*)( ((char*)&result.result) + test->field_offset) * test->norm;
-        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %25s : %.3f %s",
-                 resource.tl_name, resource.dev_name, test->title, value, test->units);
+        snprintf(result_str, sizeof(result_str) - 1,
+                 UCT_RESOURCE_DESC_FMT " %25s : %.3f %s",
+                 UCT_RESOURCE_DESC_ARG(&resource), test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
             /* TODO take expected values from resource advertised capabilities */

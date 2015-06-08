@@ -782,6 +782,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
     exp_max_pi = uct_rc_mlx5_calc_max_pi(iface, ep->tx.prev_sw_pi);
     if (ep->tx.max_pi == exp_max_pi) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);
+        ucs_debug("ep %p is flushed", ep);
         return UCS_OK;
     }
 

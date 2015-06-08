@@ -14,6 +14,12 @@ ACLOCAL_AMFLAGS = -I config/m4
 noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 doxygen_doc_files = $(noinst_HEADERS)
 
+perftest_dir = $(pkgdatadir)/pertest
+doc_dir = $(pkgdatadir)/doc
+
+dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
+dist_doc__DATA = README
+
 SUBDIRS = \
 	src/ucs \
 	src/uct \
@@ -34,6 +40,10 @@ EXTRA_DIST += config/m4/sysdep.m4
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
+EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
+EXTRA_DIST += contrib/ucx_perftest_config/README
+EXTRA_DIST += contrib/ucx_perftest_config/test_types
+EXTRA_DIST += contrib/ucx_perftest_config/transports
 
 include $(srcdir)/doc/doxygen/doxygen.am
 

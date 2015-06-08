@@ -14,7 +14,8 @@
 
 unsigned cuda_ep_global_counter = 0;
 
-static UCS_CLASS_INIT_FUNC(uct_cuda_ep_t, uct_iface_t *tl_iface)
+static UCS_CLASS_INIT_FUNC(uct_cuda_ep_t, uct_iface_t *tl_iface,
+                           const struct sockaddr *addr)
 {
     uct_cuda_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_iface_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
@@ -26,23 +27,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ep_t)
     /* No op */
 }
 UCS_CLASS_DEFINE(uct_cuda_ep_t, uct_base_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ep_t, uct_ep_t, uct_iface_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ep_t, uct_ep_t, uct_iface_t*,
+                          const struct sockaddr *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ep_t, uct_ep_t);
 
-ucs_status_t uct_cuda_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
-{
-    uct_cuda_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_iface_t);
-    ((uct_cuda_ep_addr_t*)ep_addr)->ep_id = iface->addr.nic_addr;
-    return UCS_OK;
-}
-
-ucs_status_t uct_cuda_ep_connect_to_ep(uct_ep_h tl_ep, 
-                                       const uct_iface_addr_t *tl_iface_addr, 
-                                       const uct_ep_addr_t *tl_ep_addr)
-{
-    /* No op */
-    return UCS_OK;
-}
 
 ucs_status_t uct_cuda_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                    unsigned length, uint64_t remote_addr,

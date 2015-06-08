@@ -85,7 +85,8 @@ gtest_SOURCES += \
     uct/test_ib.cc
 if HAVE_TL_UD
 gtest_SOURCES += \
-	uct/test_ud.cc
+	uct/test_ud.cc \
+	uct/test_ud_ds.cc
 endif
 endif
 

@@ -11,7 +11,8 @@ static inline void uct_ud_iface_queue_pending(uct_ud_iface_t *iface,
 
 
 static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, uct_ud_ep_t **r_ep,
-                                                         uct_ud_neth_t *neth)
+                                                         uct_ud_neth_t *neth,
+                                                         uct_ud_send_skb_t **skb)
 {
     uct_ud_ep_t *ep;
     ucs_queue_elem_t *elem;
@@ -23,10 +24,17 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
     /* TODO: notify ucp that it can push more data */
     elem = ucs_queue_pull_non_empty(&iface->tx.pending_ops);
     ep = ucs_container_of(elem, uct_ud_ep_t, tx.pending.queue);
-    if (ep->tx.pending.ops & UCT_UD_EP_OP_ACK) {
+    if (ucs_likely(ep->tx.pending.ops & UCT_UD_EP_OP_ACK)) {
         *r_ep = ep;
         uct_ud_neth_ctl_ack(ep, neth);
          --iface->tx.available;
+    } else if (ep->tx.pending.ops & UCT_UD_EP_OP_CREP) {
+        *skb = uct_ud_ep_prepare_crep(ep);
+        if (!*skb) {
+            uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_CREP);
+            return UCS_ERR_NO_RESOURCE;
+        }
+        *r_ep = ep;
     } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
         /* someone already cleared this */
         return UCS_INPROGRESS;
@@ -74,3 +82,11 @@ static inline void uct_ud_iface_complete_tx(uct_ud_iface_t *iface,
 }
 
 
+static inline void uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface,
+                                                uct_ud_ep_t *ep,
+                                                uct_ud_send_skb_t *skb)
+{
+    ep->tx.psn++;
+    --iface->tx.available;
+    ucs_queue_push(&ep->tx.window, &skb->queue);
+}

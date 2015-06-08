@@ -28,13 +28,11 @@ void uct_p2p_test::init() {
     /* Create 2 connected endpoints */
     entity *e1 = uct_test::create_entity(m_rx_headroom);
     entity *e2 = uct_test::create_entity(m_rx_headroom);
-    e1->add_ep();
-    e2->add_ep();
-    e1->connect(0, *e2, 0);
-    e2->connect(0, *e1, 0);
-
     m_entities.push_back(e1);
     m_entities.push_back(e2);
+
+    e1->connect(0, *e2, 0);
+    e2->connect(0, *e1, 0);
 
     /* Allocate completion handle and set the callback */
     m_completion = (completion*)malloc(sizeof(completion) +
@@ -51,7 +49,7 @@ void uct_p2p_test::cleanup() {
 }
 
 void uct_p2p_test::short_progress_loop() {
-    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0);
+    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0*ucs::test_time_multiplier());
     while (ucs_get_time() < end_time) {
         progress();
     }

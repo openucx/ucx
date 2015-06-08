@@ -14,6 +14,8 @@
 
 #include "uct_def.h"
 
+#include <ucs/type/callback.h>
+#include <ucs/type/class.h>
 #include <ucs/type/status.h>
 #include <stddef.h>
 
@@ -25,8 +27,6 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_query)(uct_iface_h iface,
                                 uct_iface_attr_t *iface_attr);
-    ucs_status_t (*iface_get_address)(uct_iface_h iface,
-                                      uct_iface_addr_t *iface_addr);
 
     ucs_status_t (*iface_flush)(uct_iface_h iface);
 
@@ -34,15 +34,22 @@ typedef struct uct_iface_ops {
 
     void         (*iface_release_am_desc)(uct_iface_h iface, void *desc);
 
+    /* Connection establishment */
+
     ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
+
+    ucs_status_t (*ep_create_connected)(uct_iface_h iface, const struct sockaddr *addr,
+                                        uct_ep_h* ep_p);
+
     void         (*ep_destroy)(uct_ep_h ep);
 
-    /* Connection management */
+    ucs_status_t (*ep_get_address)(uct_ep_h ep, struct sockaddr *addr);
 
-    ucs_status_t (*ep_get_address)(uct_ep_h ep, uct_ep_addr_t *ep_addr);
-    ucs_status_t (*ep_connect_to_iface)(uct_ep_h ep, const uct_iface_addr_t *iface_addr);
-    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, const uct_iface_addr_t *iface_addr,
-                                     const uct_ep_addr_t *ep_addr);
+    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, const struct sockaddr *addr);
+
+    ucs_status_t (*iface_get_address)(uct_iface_h iface, struct sockaddr *addr);
+
+    int          (*iface_is_reachable)(uct_iface_h iface, const struct sockaddr *addr);
 
     /* Put */
 
@@ -115,6 +122,8 @@ typedef struct uct_iface_ops {
 
     /* Synchronization */
 
+    ucs_status_t (*ep_req_notify)(uct_ep_h ep, uct_completion_t *comp);
+
     ucs_status_t (*ep_flush)(uct_ep_h ep);
 
 } uct_iface_ops_t;
@@ -135,6 +144,7 @@ typedef struct uct_iface {
     uct_iface_ops_t          ops;
     uct_pd_h                 pd;
 } uct_iface_t;
+UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_pd_h);
 
 
 /**
@@ -143,6 +153,20 @@ typedef struct uct_iface {
 typedef struct uct_ep {
     uct_iface_h              iface;
 } uct_ep_t;
+UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
+
+
+/**
+ * Receive descriptor
+ */
+typedef struct uct_am_recv_desc {
+    uct_iface_h              iface;
+} uct_am_recv_desc_t;
+
+
+#define uct_recv_desc_iface(_desc) \
+    ((((uct_am_recv_desc_t*)desc) - 1)->iface)
+
 
 
 #endif

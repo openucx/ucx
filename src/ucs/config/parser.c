@@ -25,6 +25,15 @@ typedef struct ucs_config_array_field {
 /* Process environment variables */
 extern char **environ;
 
+
+const char *ucs_async_mode_names[] = {
+    [UCS_ASYNC_MODE_SIGNAL] = "signal",
+    [UCS_ASYNC_MODE_THREAD] = "thread",
+    [UCS_ASYNC_MODE_POLL]   = "poll",
+    [UCS_ASYNC_MODE_LAST]   = NULL
+};
+
+
 /* Fwd */
 static ucs_status_t
 ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,

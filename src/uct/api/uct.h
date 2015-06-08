@@ -10,8 +10,10 @@
 #define UCT_H_
 
 #include <uct/api/uct_def.h>
+#include <uct/api/addr.h>
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
+#include <ucs/async/async.h>
 #include <ucs/config/types.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -88,23 +90,10 @@ typedef struct uct_resource_desc {
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
     cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
-    struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
-                                                reach each other have same address */
 } uct_resource_desc_t;
 
-
-/**
- * Opaque type for interface address.
- */
-struct uct_iface_addr {
-};
-
-
-/**
- * Opaque type for endpoint address.
- */
-struct uct_ep_addr {
-};
+#define UCT_RESOURCE_DESC_FMT              "%s/%s"
+#define UCT_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
 
 /**
  * @ingroup RESOURCE
@@ -145,6 +134,14 @@ enum {
     UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
     UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /**< Invalid AM id on remote */
     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**<  Remote memory access */
+
+    /* Connection establishment */
+    UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
+    UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(41), /**< Supports connecting to specific endpoint */
+
+    /* Thread safety */
+    UCT_IFACE_FLAG_AM_THREAD_SINGLE = UCS_BIT(44), /**< Active messages callback is invoked only from main thread */
+
 };
 
 
@@ -357,11 +354,15 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
  * Every worker can be progressed independently of others.
  *
  * @param [in]  context       Handle to context.
+ * @param [in]  async         Context for async event handlers.
+  *                            Can be NULL, which means that event handlers will
+ *                             not have particular context.
  * @param [in]  thread_mode   Thread access mode to the worker and resources
  *                             created on it.
  * @param [out] worker_p      Filled with a pointer to the worker object.
  */
-ucs_status_t uct_worker_create(uct_context_h context, ucs_thread_mode_t thread_mode,
+ucs_status_t uct_worker_create(uct_context_h context, ucs_async_context_t *async,
+                               ucs_thread_mode_t thread_mode,
                                uct_worker_h *worker_p);
 
 
@@ -492,7 +493,24 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr);
  * @param [out] iface_addr  Filled with interface address. The size of the buffer
  *                           provided must be at least @ref uct_iface_attr_t::iface_addr_len.
  */
-ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *iface_addr);
+ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr);
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Check if remote iface address is reachable.
+ *
+ * This function checks if a remote address can be reached from a local interface.
+ * If the function returns true, it does not necessarily mean a connection and/or
+ * data transfer would succeed, since the reachability check is a local operation
+ * it does not detect issues such as network mis-configuration or lack of connectivity.
+ *
+ * @param [in]  iface      Interface to check reachability from.
+ * @param [in]  addr       Address to check reachability to.
+ *
+ * @return Nonzero if reachable, 0 if not.
+ */
+int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr);
 
 
 /**
@@ -523,6 +541,24 @@ ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p);
 
 /**
  * @ingroup RESOURCE
+ * @brief Create an endpoint which is connected to remote interface.
+ *
+ * @param [in]  iface   Interface to create the endpoint on.
+ * @param [in]  addr    Remote interface address to connect to.
+ * @param [out] ep_p    Filled with handle to the new endpoint.
+ *
+ *
+ */
+static inline ucs_status_t uct_ep_create_connected(uct_iface_h iface,
+                                                   const struct sockaddr *addr,
+                                                   uct_ep_h* ep_p)
+{
+    return iface->ops.ep_create_connected(iface, addr, ep_p);
+}
+
+
+/**
+ * @ingroup RESOURCE
  * @brief Destroy an endpoint.
  *
  * @param [in] ep       Endpoint to destroy.
@@ -538,16 +574,7 @@ void uct_ep_destroy(uct_ep_h ep);
  * @param [out] ep_addr  Filled with endpoint address. The size of the buffer
  *                        provided must be at least @ref uct_iface_attr_t::ep_addr_len.
  */
-ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr);
-
-
-/**
- * @ingroup RESOURCE
- * @brief Connect endpoint to a remote interface.
- *
- * TODO
- */
-ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr);
+ucs_status_t uct_ep_get_address(uct_ep_h ep, struct sockaddr *addr);
 
 
 /**
@@ -558,8 +585,7 @@ ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_
  * @param [in] iface_addr   Remote interface address.
  * @param [in] ep_addr      Remote endpoint address.
  */
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_iface_addr_t *iface_addr,
-                                  const uct_ep_addr_t *ep_addr);
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const struct sockaddr *addr);
 
 
 /**
@@ -690,9 +716,12 @@ UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface)
  * @ingroup AM
  * @brief Release active message descriptor, which was passed to the active
  * message callback, and owned by the callee.
+ *
+ * @param [in]  desc         Descriptor to release.
  */
-UCT_INLINE_API void uct_iface_release_am_desc(uct_iface_h iface, void *desc)
+UCT_INLINE_API void uct_iface_release_am_desc(void *desc)
 {
+    uct_iface_h iface = uct_recv_desc_iface(desc);
     iface->ops.iface_release_am_desc(iface, desc);
 }
 
@@ -885,6 +914,25 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
                                                   uint32_t *result, uct_completion_t *comp)
 {
     return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, result, comp);
+}
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Request a notification when more send resources are available on this
+ *        endpoint.
+ *
+ *  This function can be used when send operations fail with ERR_NO_RESOURCE, and
+ * the user would like to know when send resources become available (opposed to
+ * repeatedly calling progress/send until it returns OK).
+ *
+ * @param ep    Endpoint to request notification on.
+ * @param comp  Completion handle, which would be invoked (once) when more
+ *              resources become available.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_req_notify(uct_ep_h ep, uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_req_notify(ep, comp);
 }
 
 

@@ -29,7 +29,6 @@ ucs_status_t uct_sm_query_resources(uct_resource_desc_t **resource_p, const char
                       sizeof(resource->dev_name), "%s", name);
     resource->latency    = latency;
     resource->bandwidth  = bandwidth;
-    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 
     return UCS_OK;
 }

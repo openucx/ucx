@@ -44,6 +44,14 @@ AC_ARG_WITH([dc],
             [with_dc=yes])
 
 
+#
+# CM (IB connection manager) Support
+#
+AC_ARG_WITH([cm],
+            [AC_HELP_STRING([--with-cm], [Compile with IB Connection Manager support])],
+            [],
+            [with_cm=yes])
+
 
 #
 # Check basic IB support: User wanted at least one IB transport, and we found
@@ -154,6 +162,13 @@ AS_IF([test "x$with_ib" == xyes],
            [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])
            transports="${transports},ud"])
 
+       AS_IF([test "x$with_cm" != xno],
+           [AC_CHECK_LIB([ibcm], [ib_cm_send_req], [], [with_cm=no])
+           ])
+       AS_IF([test "x$with_cm" != xno],
+           [AC_DEFINE([HAVE_TL_CM], 1, [Connection manager support])
+           transports="${transports},cm"])
+
        AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])
@@ -177,5 +192,6 @@ AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
+AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 

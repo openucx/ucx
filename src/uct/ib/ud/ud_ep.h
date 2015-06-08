@@ -9,18 +9,15 @@
 #define UCT_UD_EP_H
 
 #include "ud_def.h"
-#include "ud_iface.h"
 
 #include <uct/api/uct.h>
 #include <ucs/datastruct/frag_list.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/sglib.h>
 
-#define UCT_UD_EP_NULL_ID (-1)
-
-typedef struct uct_ud_ep_addr {
-    uct_ep_addr_t     super;
-    uint32_t          ep_id;
-} uct_ud_ep_addr_t;
+#define UCT_UD_EP_NULL_ID     ((1<<24)-1)
+#define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
+#define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX 
 
 #ifdef UCT_UD_EP_DEBUG_HOOKS
 /*
@@ -96,13 +93,24 @@ struct uct_ud_ep {
         UCS_STATS_NODE_DECLARE(stats);
         UCT_UD_EP_HOOK_DECLARE(rx_hook);
     } rx;
+    ucs_list_link_t          cep_list;
+    uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
 };
+
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep, const uct_iface_addr_t *tl_iface_addr,
-                                     const uct_ep_addr_t *tl_ep_addr);
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
+
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, const struct sockaddr *addr);
+
+ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep, const struct sockaddr *addr);
+ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep);
+
+uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
+uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep);
+
+void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
 static inline void uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
 {
@@ -152,6 +160,19 @@ static inline void uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     neth->packet_type |= uct_ud_ep_req_ack(ep) << UCT_UD_PACKET_ACK_REQ_SHIFT;
     ep->tx.pending.ops &= ~UCT_UD_EP_OP_ACK;
 }
+
+static inline int uct_ud_ep_compare(uct_ud_ep_t *a, uct_ud_ep_t *b)
+{
+    return a->conn_id - b->conn_id;
+}
+
+static inline int uct_ud_ep_hash(uct_ud_ep_t *ep)
+{
+    return ep->conn_id % UCT_UD_HASH_SIZE;
+}
+
+SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_ep_t, uct_ud_ep_compare, next)
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_ep_t, UCT_UD_HASH_SIZE, uct_ud_ep_hash)
 
 #endif 
 
