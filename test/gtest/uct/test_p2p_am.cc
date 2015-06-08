@@ -88,7 +88,6 @@ public:
         size_t max_hdr  = ucs_min(sender().iface_attr().cap.am.max_hdr,
                                   sendbuf.length());
         size_t hdr_size = rand() % (max_hdr + 1);
-        m_completion->length = 0;
         return uct_ep_am_zcopy(ep, AM_ID, sendbuf.ptr(), hdr_size,
                                (char*)sendbuf.ptr() + hdr_size, sendbuf.length() - hdr_size,
                                sendbuf.memh(), &m_completion->uct);

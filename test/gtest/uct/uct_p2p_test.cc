@@ -219,8 +219,7 @@ const uct_test::entity& uct_p2p_test::receiver() const {
     return ent(1);
 }
 
-void uct_p2p_test::completion_cb(uct_completion_t *self, void *data) {
+void uct_p2p_test::completion_cb(uct_completion_t *self) {
     completion *comp = ucs_container_of(self, completion, uct);
-    memcpy(comp->dest, data, comp->length);
     ++comp->self->m_completion_count;
 }

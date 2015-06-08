@@ -12,7 +12,7 @@
 #include <string.h>
 
 
-static void ucp_ep_progress_pending(uct_completion_t *self, void *data)
+static void ucp_ep_progress_pending(uct_completion_t *self)
 {
     ucp_ep_h ep = ucs_container_of(self, ucp_ep_t, notify_comp);
     ucp_worker_h worker = ep->worker;

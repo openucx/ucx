@@ -41,7 +41,7 @@ static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 
     while ((iface->inflight == 0) && !ucs_queue_is_empty(&iface->notify)) {
         cm_comp = ucs_queue_pull_elem_non_empty(&iface->notify, uct_cm_completion_t, queue);
-        uct_invoke_completion(&cm_comp->super, NULL);
+        uct_invoke_completion(&cm_comp->super);
     }
 }
 

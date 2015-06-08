@@ -14,13 +14,13 @@ public:
     static const uint64_t MISS = 0;
 
     template <typename T>
-    static void cswap_reply_cb(uct_completion_t *self, void *data) {
+    static void cswap_reply_cb(uct_completion_t *self) {
         completion *comp = ucs_container_of(self, completion, uct);
         worker* w = comp->w;
         T dataval;
 
         /* Compare after casting to T, since w->value is always 64 bit */
-        dataval = *(T*)data;
+        dataval = comp->reply;
         if (dataval == (T)w->value) {
             w->test->add_reply_safe(dataval); /* Swapped */
         } else {
@@ -38,9 +38,10 @@ public:
         }
         comp->uct.func = cswap_reply_cb<uint32_t>;
         comp->w        = &worker;
+        comp->reply    = 0;
         return uct_ep_atomic_cswap32(ep, worker.value, hash64(worker.value),
                                      recvbuf.addr(), recvbuf.rkey(),
-                                     &comp->uct);
+                                     (uint32_t*)&comp->reply, &comp->uct);
     }
 
     ucs_status_t cswap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
@@ -50,9 +51,10 @@ public:
         }
         comp->uct.func = cswap_reply_cb<uint64_t>;
         comp->w        = &worker;
+        comp->reply    = 0;
         return uct_ep_atomic_cswap64(ep, worker.value, hash64(worker.value),
                                      recvbuf.addr(), recvbuf.rkey(),
-                                     &comp->uct);
+                                     (uint64_t*)&comp->reply, &comp->uct);
     }
 
     template <typename T>

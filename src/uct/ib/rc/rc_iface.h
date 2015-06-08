@@ -89,20 +89,25 @@ UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_worker_h,
                   const char*, unsigned, unsigned, uct_rc_iface_config_t*)
 
 
+/**
+ * Completion structure, could be allocated by the user.
+ */
 struct uct_rc_completion {
-    uct_completion_t         super;
-    ucs_queue_elem_t         queue;
-    uint16_t                 sn;
-#if ! NVALGRIND
-    unsigned                 length;
-#endif
+    uct_completion_t         super;          /* API completion */
+    ucs_queue_elem_t         queue;          /* Used to hold this in a linked list */
+    void                     *user_buffer;   /* Optional: user buffer to copy the reply to */
+    uint16_t                 sn;             /* Sequence number, to determine completion */
 };
 
 
+/**
+ * Send buffer allocated in registered memory.
+ */
 struct uct_rc_iface_send_desc {
     uct_rc_completion_t      super;
-    uint32_t                 lkey;
     uct_completion_t         *comp;
+    unsigned                 length; /* TODO: take this from WC */
+    uint32_t                 lkey;
 };
 
 

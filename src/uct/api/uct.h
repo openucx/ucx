@@ -766,11 +766,11 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, const void *buffer, si
  * @ingroup RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, size_t length,
+UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, void *buffer, size_t length,
                                              uint64_t remote_addr, uct_rkey_t rkey,
                                              uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_get_bcopy(ep, length, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_get_bcopy(ep, buffer, length, remote_addr, rkey, comp);
 }
 
 
@@ -840,9 +840,9 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_add64(uct_ep_h ep, uint64_t add,
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd64(uct_ep_h ep, uint64_t add,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_completion_t *comp)
+                                                 uint64_t *result, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_atomic_fadd64(ep, add, remote_addr, rkey, result, comp);
 }
 
 
@@ -852,9 +852,9 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd64(uct_ep_h ep, uint64_t add,
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_swap64(uct_ep_h ep, uint64_t swap,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_completion_t *comp)
+                                                 uint64_t *result, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_atomic_swap64(ep, swap, remote_addr, rkey, result, comp);
 }
 
 
@@ -864,9 +864,9 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_swap64(uct_ep_h ep, uint64_t swap,
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap64(uct_ep_h ep, uint64_t compare, uint64_t swap,
                                                   uint64_t remote_addr, uct_rkey_t rkey,
-                                                  uct_completion_t *comp)
+                                                  uint64_t *result, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_atomic_cswap64(ep, compare, swap, remote_addr, rkey, result, comp);
 }
 
 
@@ -887,9 +887,9 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_add32(uct_ep_h ep, uint32_t add,
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd32(uct_ep_h ep, uint32_t add,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_completion_t *comp)
+                                                 uint32_t *result, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_atomic_fadd32(ep, add, remote_addr, rkey, result, comp);
 }
 
 
@@ -899,9 +899,9 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_fadd32(uct_ep_h ep, uint32_t add,
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_swap32(uct_ep_h ep, uint32_t swap,
                                                  uint64_t remote_addr, uct_rkey_t rkey,
-                                                 uct_completion_t *comp)
+                                                 uint32_t *result, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_atomic_swap32(ep, swap, remote_addr, rkey, result, comp);
 }
 
 
@@ -911,9 +911,9 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_swap32(uct_ep_h ep, uint32_t swap,
  */
 UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare, uint32_t swap,
                                                   uint64_t remote_addr, uct_rkey_t rkey,
-                                                  uct_completion_t *comp)
+                                                  uint32_t *result, uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, result, comp);
 }
 
 
