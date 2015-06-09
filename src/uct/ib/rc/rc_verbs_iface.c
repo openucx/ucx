@@ -263,11 +263,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
     dev_attr = &uct_ib_iface_device(&self->super.super)->dev_attr;
     if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) || IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr)) {
-        self->config.atomic32_completoin = uct_rc_ep_atomic_completion_32_be0;
-        self->config.atomic64_completoin = uct_rc_ep_atomic_completion_64_be0;
+        self->config.atomic32_completion = uct_rc_ep_atomic_completion_32_be0;
+        self->config.atomic64_completion = uct_rc_ep_atomic_completion_64_be0;
     } else if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr)) {
-        self->config.atomic32_completoin = uct_rc_ep_atomic_completion_32_be1;
-        self->config.atomic64_completoin = uct_rc_ep_atomic_completion_64_be1;
+        self->config.atomic32_completion = uct_rc_ep_atomic_completion_32_be1;
+        self->config.atomic64_completion = uct_rc_ep_atomic_completion_64_be1;
     }
 
     /* Create a dummy QP in order to find out max_inline */
