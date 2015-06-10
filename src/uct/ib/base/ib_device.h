@@ -11,6 +11,7 @@
 #include "ib_verbs.h"
 
 #include <uct/api/uct.h>
+#include <uct/tl/context.h>
 #include <ucs/stats/stats.h>
 #include <ucs/type/status.h>
 
@@ -40,6 +41,13 @@ enum {
     UCT_IB_DEVICE_STAT_LAST
 };
 
+enum {
+    UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
+    UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
+    UCT_IB_DEVICE_FLAG_DC       = UCS_BIT(3)    /* Device supports DC */
+};
+
+
 
 typedef struct uct_ib_device uct_ib_device_t;
 struct uct_ib_device {
@@ -56,18 +64,25 @@ struct uct_ib_device {
 };
 
 
-ucs_status_t uct_ib_device_create(uct_context_h context,
-                                  struct ibv_device *ibv_device,
-                                  uct_ib_device_t **dev_p);
-void uct_ib_device_destroy(uct_ib_device_t *dev);
+extern uct_pd_component_t uct_ib_pd;
 
 
-ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
-                                      unsigned flags);
-
-ucs_status_t uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
-                                             size_t tl_hdr_len, uint64_t tl_overhead_ns,
-                                             uct_resource_desc_t *resource);
+/*
+ * Helper function to list IB transport resources.
+ *
+ * @param dev              IB device.
+ * @param tl_name          Transport name.
+ * @param flags            Transport requirements from IB device (see UCT_IB_RESOURCE_FLAG_xx)
+ * @param tl_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
+ * @param tl_overhead_ns   How much overhead the transport adds to latency.
+ * @param resources_p      Filled with a pointer to an array of resources.
+ * @param num_resources_p  Filled with the number of resources.
+ */
+ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
+                                              const char *tl_name, unsigned flags,
+                                              size_t tl_hdr_len, uint64_t tl_overhead_ns,
+                                              uct_tl_resource_desc_t **resources_p,
+                                              unsigned *num_resources_p);
 
 const char *uct_ib_device_name(uct_ib_device_t *dev);
 

@@ -16,15 +16,22 @@ extern "C" {
 #include <vector>
 
 
+struct resource {
+    std::string pd_name;
+    cpu_set_t   local_cpus;
+    std::string tl_name;
+    std::string dev_name;
+};
+
 /**
  * UCT test, parameterized on a transport/device.
  */
-class uct_test : public testing::TestWithParam<uct_resource_desc_t>,
+class uct_test : public testing::TestWithParam<resource>,
                  public ucs::test_base {
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<uct_resource_desc_t> enum_resources(const std::string& tl_name);
+    static std::vector<resource> enum_resources(const std::string& tl_name);
 
     uct_test();
     virtual ~uct_test();
@@ -33,7 +40,8 @@ protected:
 
     class entity {
     public:
-        entity(const uct_resource_desc_t& resource, const uct_iface_config_t* iface_config, size_t rx_headroom);
+        entity(const resource& resource, uct_iface_config_t *iface_config,
+               size_t rx_headroom);
         ~entity();
 
         void mem_alloc(void **address_p, size_t *length_p, size_t alignement,
@@ -44,9 +52,11 @@ protected:
 
         void progress() const;
 
-        uct_iface_h iface() const;
+        uct_pd_h pd() const;
 
         uct_worker_h worker() const;
+
+        uct_iface_h iface() const;
 
         const uct_iface_attr& iface_attr() const;
 
@@ -66,7 +76,7 @@ protected:
 
         void connect_to_ep(uct_ep_h from, uct_ep_h to);
 
-        uct_context_h         m_ucth;
+        uct_pd_h              m_pd;
         uct_worker_h          m_worker;
         uct_iface_h           m_iface;
         std::vector<uct_ep_h> m_eps;
@@ -113,9 +123,9 @@ protected:
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
-    uct_context_h           m_dummy_ctx;
-    uct_worker_h            m_dummy_worker;
 };
+
+std::ostream& operator<<(std::ostream& os, const resource& resource);
 
 
 #define UCT_TEST_TLS \
@@ -150,6 +160,6 @@ protected:
 #define UCT_INSTANTIATE_IB_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_IB_TLS)
 
-std::ostream& operator<<(std::ostream& os, const uct_resource_desc_t& resource);
+std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 
 #endif

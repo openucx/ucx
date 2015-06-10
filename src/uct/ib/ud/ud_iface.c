@@ -280,16 +280,16 @@ err:
     return UCS_ERR_INVALID_PARAM;
 }
 
-UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
-                    const char *dev_name, unsigned rx_headroom, unsigned rx_priv_len,
-                    uct_ud_iface_config_t *config)
+UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
+                    unsigned rx_priv_len, uct_ud_iface_config_t *config)
 {
     ucs_status_t status;
 
     ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%u rx_priv_len=%u",
                    dev_name, self, ops, worker, rx_headroom, rx_priv_len);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, worker, dev_name, rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
                               UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
                               config->super.tx.queue_len, &config->super);

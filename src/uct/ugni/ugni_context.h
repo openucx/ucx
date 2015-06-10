@@ -24,7 +24,7 @@ typedef struct uct_ugni_context {
  * Helper function to list UGNI resources
  */
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-        uct_resource_desc_t **resources_p,
+        uct_tl_resource_desc_t **resources_p,
         unsigned *num_resources_p);
 
 uct_ugni_device_t * uct_ugni_device_by_name(uct_ugni_context_t * ugni_ctx,

@@ -88,7 +88,7 @@ typedef struct uct_ib_iface {
     } config;
 
 } uct_ib_iface_t;
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_worker_h, const char*,
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h, const char*,
                   unsigned, unsigned, unsigned, unsigned, uct_ib_iface_config_t*)
 
 
@@ -176,7 +176,7 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
 
 static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
 {
-    return ucs_derived_of(iface->super.super.pd, uct_ib_device_t);
+    return ucs_derived_of(iface->super.pd, uct_ib_device_t);
 }
 
 static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)

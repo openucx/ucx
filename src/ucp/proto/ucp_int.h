@@ -51,17 +51,30 @@ enum {
 
 
 /**
+ * UCP communication resource descriptor
+ */
+typedef struct ucp_tl_resource_desc {
+    uct_tl_resource_desc_t  tl_rsc;      /* UCT resource descriptor */
+    ucp_rsc_index_t         pd_index;    /* Protection domain index (within the context) */
+} ucp_tl_resource_desc_t;
+
+
+/**
  * UCP context
  */
 typedef struct ucp_context {
-    uct_context_h       uct;           /* UCT context */
-    uct_resource_desc_t *resources;    /* Array of resources */
-    ucp_rsc_index_t     num_resources; /* Number of resources in the array*/
+    uct_pd_resource_desc_t  *pd_rscs;     /* Protection domain resources */
+    uct_pd_h                *pds;         /* Protection domain handles */
+    ucp_rsc_index_t         num_pds;      /* Number of protection domains */
+
+
+    ucp_tl_resource_desc_t  *tl_rscs;     /* Array of communication resources */
+    ucp_rsc_index_t         num_tls;      /* Number of resources in the array*/
 
     struct {
-        ucs_mpool_h      rreq_mp;       /* Receive requests */
-        ucs_queue_head_t expected;
-        ucs_queue_head_t unexpected;
+        ucs_mpool_h         rreq_mp;       /* Receive requests */
+        ucs_queue_head_t    expected;
+        ucs_queue_head_t    unexpected;
     } tag;
 
 } ucp_context_t;
@@ -77,6 +90,7 @@ typedef struct ucp_ep {
         uct_ep_h        ep;            /* Current transport for operations */
         uct_ep_h        next_ep;       /* Next transport being wired up */
         ucp_rsc_index_t rsc_index;     /* Resource index the endpoint uses */
+        ucp_rsc_index_t dst_pd_index;  /* Destination rotection domain index */
     } uct;
 
     struct {
@@ -159,6 +173,7 @@ typedef struct ucp_recv_desc {
  */
 typedef struct ucp_wireup_msg {
     uint64_t            src_uuid;         /* Sender uuid */
+    ucp_rsc_index_t     src_pd_index;     /* Sender PD index */
     ucp_rsc_index_t     src_rsc_index;    /* Index of sender resource */
     ucp_rsc_index_t     dst_rsc_index;    /* Index of receiver resource */
     /* EP address follows */
@@ -168,7 +183,7 @@ typedef struct ucp_wireup_msg {
 /**
  * Calculates a score of specific wireup.
  */
-typedef double (*ucp_wireup_score_function_t)(uct_resource_desc_t *resource,
+typedef double (*ucp_wireup_score_function_t)(uct_tl_resource_desc_t *resource,
                                               uct_iface_h iface,
                                               uct_iface_attr_t *iface_attr);
 

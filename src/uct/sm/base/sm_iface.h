@@ -9,15 +9,9 @@
 
 #include <uct/tl/tl_base.h>
 
-struct uct_sm_iface;
-
-typedef struct uct_sm_pd {
-    uct_pd_t                super;
-} uct_sm_pd_t;
 
 typedef struct uct_sm_iface {
     uct_base_iface_t        super;
-    uct_sm_pd_t             pd;
     struct {
         unsigned            max_put;
         unsigned            max_bcopy;
@@ -25,13 +19,18 @@ typedef struct uct_sm_iface {
     } config;
 } uct_sm_iface_t;
 
+/* to make it visible to derived classes */
+UCS_CLASS_DECLARE(uct_sm_iface_t, uct_iface_ops_t *, uct_pd_h, uct_worker_h,
+                  const uct_iface_config_t *)
+
+
 typedef struct uct_sm_iface_config {
     uct_iface_config_t      super;
 } uct_sm_iface_config_t;
 
-/* to make it visible to derived classes */
-UCS_CLASS_DECLARE(uct_sm_iface_t, uct_iface_ops_t *, uct_worker_h, uct_pd_h, 
-                  const uct_iface_config_t *, const char *, const char *)
+
+extern ucs_config_field_t uct_sm_iface_config_table[];
+
 
 void uct_sm_iface_get_address(uct_sm_iface_t *iface,
                               uct_sockaddr_process_t *iface_addr);

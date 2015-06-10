@@ -37,6 +37,13 @@ typedef struct ucs_component {
     extern ucs_list_link_t _UCS_COMPONENT_LIST_NAME(_base_type)
 
 
+/*
+ * Define code which runs at global constructor phase
+ */
+#define UCS_STATIC_INIT \
+    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer)()
+
+
 /**
  * Define a list of components for specific base type.
  *

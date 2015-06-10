@@ -8,8 +8,9 @@
 #ifndef UCT_SM_EP_H
 #define UCT_SM_EP_H
 
-#include <uct/tl/tl_log.h>
 #include "sm_iface.h"
+
+#include <uct/tl/tl_log.h>
 
 
 typedef struct uct_sm_ep {

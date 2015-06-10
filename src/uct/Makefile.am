@@ -34,14 +34,12 @@ if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS)
 noinst_HEADERS += \
-	ib/base/ib_context.h \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \
 	ib/base/ib_log.h \
 	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \
-	ib/base/ib_context.c \
 	ib/base/ib_device.c \
 	ib/base/ib_iface.c \
 	ib/base/ib_log.c
@@ -125,34 +123,31 @@ endif
 
 if HAVE_CUDA
 noinst_HEADERS += \
-    cuda/cuda_context.h \
+    cuda/cuda_pd.h \
     cuda/cuda_iface.h \
     cuda/cuda_ep.h
 
 libuct_la_SOURCES += \
-    cuda/cuda_context.c \
+    cuda/cuda_pd.c \
     cuda/cuda_iface.c \
     cuda/cuda_ep.c
 endif
 
 # FIXME these should be done conditionally
 noinst_HEADERS += \
-    sm/base/sm_context.h \
     sm/base/sm_iface.h \
     sm/base/sm_ep.h
 
 libuct_la_SOURCES += \
-    sm/base/sm_context.c \
     sm/base/sm_iface.c \
     sm/base/sm_ep.c
 
 noinst_HEADERS += \
-    sm/sysv/sysv_context.h \
+    sm/sysv/sysv_ep.h \
     sm/sysv/sysv_iface.h \
-    sm/sysv/sysv_ep.h
+    sm/sysv/sysv_pd.h
 
 libuct_la_SOURCES += \
-    sm/sysv/sysv_context.c \
+    sm/sysv/sysv_ep.c \
     sm/sysv/sysv_iface.c \
-    sm/sysv/sysv_ep.c
-
+    sm/sysv/sysv_pd.c

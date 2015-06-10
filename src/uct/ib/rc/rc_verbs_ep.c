@@ -182,7 +182,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, uint64_t compare_add,
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
 
-    desc->super.super.func = iface->config.atomic64_completoin;
+    desc->super.super.func = iface->config.atomic64_completion;
     desc->comp             = comp;
 
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
@@ -249,10 +249,10 @@ uct_rc_verbs_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode,uint32_t length,
 
     switch (length) {
     case sizeof(uint32_t):
-        desc->super.super.func = iface->config.atomic32_completoin;
+        desc->super.super.func = iface->config.atomic32_completion;
         break;
     case sizeof(uint64_t):
-        desc->super.super.func = iface->config.atomic64_completoin;
+        desc->super.super.func = iface->config.atomic64_completion;
         break;
     }
 

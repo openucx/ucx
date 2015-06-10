@@ -67,9 +67,8 @@ struct uct_ud_iface {
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE]; 
 };
-
-UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_worker_h, const char *,
-                  unsigned, unsigned, uct_ud_iface_config_t*)
+UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h,
+                  const char *, unsigned, unsigned, uct_ud_iface_config_t*)
 
 struct uct_ud_ctl_hdr {
     uint8_t type;
