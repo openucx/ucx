@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <ucs/debug/log.h>
 
 
 #define PRINT_CAP(_name, _cap_flags, _max) \

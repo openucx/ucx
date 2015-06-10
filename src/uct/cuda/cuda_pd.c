@@ -7,6 +7,10 @@
 
 #include "cuda_pd.h"
 
+#include <string.h>
+#include <limits.h>
+#include <ucs/debug/log.h>
+#include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 
