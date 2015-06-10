@@ -351,6 +351,12 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     ASSERT_TRUE(present);
     EXPECT_EQ(&c, vc);
 
+    vc = ucs_ptr_array_replace(&pa, 2, &d);
+    EXPECT_EQ(&c, vc);
+
+    present = ucs_ptr_array_lookup(&pa, 2, vc);
+    EXPECT_EQ(&d, vc);
+
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5005, vc));
 

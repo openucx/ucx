@@ -43,40 +43,24 @@ static char *strduplower(const char *str)
     return s;
 }
 
-static void print_resource_info(uct_worker_h worker,
-                                uct_resource_desc_t *resource,
-                                uct_iface_config_t *iface_config)
+static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
+                             uct_tl_resource_desc_t *resource,
+                             uct_iface_config_t *iface_config)
 {
     uct_iface_attr_t iface_attr;
-    uct_pd_attr_t pd_attr;
     ucs_status_t status;
     uct_iface_h iface;
     char buf[200] = {0};
 
-    printf("#   %s\n", resource->dev_name);
+    printf("#   Device: %s\n", resource->dev_name);
     printf("#      speed:         %.2f MB/sec\n", resource->bandwidth / 1024.0 / 1024.0);
     printf("#      latency:       %.3f microsec\n", resource->latency * 1e-3);
 
-    status = uct_iface_open(worker, resource->tl_name, resource->dev_name,
+    status = uct_iface_open(pd, worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
     if (status != UCS_OK) {
         printf("#   < failed to open interface >\n");
         return;
-    }
-
-    printf("#\n");
-    status = uct_pd_query(iface->pd, &pd_attr);
-    if (status != UCS_OK) {
-        printf("#   < failed to query protection domain >\n");
-    } else {
-        printf("#      protection domain: %s\n", pd_attr.name);
-        if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
-            printf("#             allocate: <= %zu\n", pd_attr.cap.max_alloc);
-        }
-        if (pd_attr.cap.flags & UCT_PD_FLAG_REG) {
-            printf("#             register: <= %zu\n", pd_attr.cap.max_reg);
-        }
-        printf("#           remote key: %zu bytes\n", pd_attr.rkey_packed_size);
     }
 
     printf("#\n");
@@ -159,31 +143,31 @@ static void print_resource_info(uct_worker_h worker,
     printf("#\n");
 }
 
-static ucs_status_t print_transport_info(uct_context_h context,
-                                         const char *tl_name,
-                                         uct_resource_desc_t *resources,
-                                         unsigned num_resources,
-                                         int print_opts,
-                                         ucs_config_print_flags_t print_flags)
+static ucs_status_t print_tl_info(uct_pd_h pd, const char *tl_name,
+                                  uct_tl_resource_desc_t *resources,
+                                  unsigned num_resources,
+                                  int print_opts,
+                                  ucs_config_print_flags_t print_flags)
 {
     uct_iface_config_t *iface_config;
     uct_worker_h worker;
     ucs_status_t status;
     unsigned i;
 
-    status = uct_iface_config_read(context, tl_name, NULL, NULL, &iface_config);
+    status = uct_iface_config_read(tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
         goto out;
     }
 
     /* coverity[alloc_arg] */
-    status = uct_worker_create(context, NULL, UCS_THREAD_MODE_MULTI, &worker);
+    status = uct_worker_create(NULL, UCS_THREAD_MODE_MULTI, &worker);
     if (status != UCS_OK) {
         goto out_release_config;
     }
 
+
     printf("#\n");
-    printf("# Transport: %s\n", tl_name);
+    printf("#   Transport: %s\n", tl_name);
     printf("#\n");
 
     if (print_opts & PRINT_DEVICES) {
@@ -191,7 +175,8 @@ static ucs_status_t print_transport_info(uct_context_h context,
             printf("# (No supported devices found)\n");
         }
         for (i = 0; i < num_resources; ++i) {
-            print_resource_info(worker, &resources[i], iface_config);
+            ucs_assert(!strcmp(tl_name, resources[i].tl_name));
+            print_iface_info(worker, pd, &resources[i], iface_config);
         }
     }
 
@@ -205,82 +190,100 @@ out:
     return status;
 }
 
-ucs_status_t print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
-                            const char *req_tl_name)
+static void print_pd_info(const char *pd_name, int print_opts,
+                          ucs_config_print_flags_t print_flags,
+                          const char *req_tl_name)
 {
-    uct_resource_desc_t *resources, tmp;
+    uct_tl_resource_desc_t *resources, tmp;
     unsigned resource_index, j, num_resources, count;
-    uct_context_h context;
     ucs_status_t status;
     const char *tl_name;
+    uct_pd_attr_t pd_attr;
+    uct_pd_h pd;
 
-    status = uct_init(&context);
+    status = uct_pd_open(pd_name, &pd);
     if (status != UCS_OK) {
-        fprintf(stderr, "Failed to create context: %s\n", ucs_status_string(status));
+        printf("# < failed to open protection domain %s >\n", pd_name);
         goto out;
     }
 
-    status = uct_query_resources(context, &resources, &num_resources);
+    printf("#\n");
+    status = uct_pd_query(pd, &pd_attr);
     if (status != UCS_OK) {
-        fprintf(stderr, "Failed to query resources: %s\n", ucs_status_string(status));
-        goto out_uct_cleanup;
+        printf("# < failed to query protection domain >\n");
+        goto out_close_pd;
+    } else {
+        printf("# Protection domain: %s\n", pd_name);
+        if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
+            printf("#   allocate:         <= %zu\n", pd_attr.cap.max_alloc);
+        }
+        if (pd_attr.cap.flags & UCT_PD_FLAG_REG) {
+            printf("#   register:         <= %zu\n", pd_attr.cap.max_reg);
+        }
+        printf("#   remote key:       %zu bytes\n", pd_attr.rkey_packed_size);
     }
 
-    if (req_tl_name != NULL) {
-        count = 0;
-        for (j = 0; j < num_resources; ++j) {
-            if (!strcasecmp(req_tl_name, resources[j].tl_name)) {
-                if (j != count) {
-                    resources[count] = resources[j];
-                }
+    status = uct_pd_query_tl_resources(pd, &resources, &num_resources);
+    if (status != UCS_OK) {
+        printf("#   < failed to query protection domain resources >\n");
+        goto out_close_pd;
+    }
+
+    if (num_resources == 0) {
+        printf("#   < no supported devices found >\n");
+        goto out_free_list;
+    }
+
+    resource_index = 0;
+    while (resource_index < num_resources) {
+        /* Gather all resources for this transport */
+        tl_name = resources[resource_index].tl_name;
+        count = 1;
+        for (j = resource_index + 1; j < num_resources; ++j) {
+            if (!strcmp(tl_name, resources[j].tl_name)) {
+                tmp = resources[count + resource_index];
+                resources[count + resource_index] = resources[j];
+                resources[j] = tmp;
                 ++count;
             }
         }
 
-        status = print_transport_info(context, req_tl_name, resources, count,
-                                      print_opts, print_flags);
-        if (status != UCS_OK) {
-            fprintf(stderr, "Failed to query transport `%s': %s\n", req_tl_name,
-                    ucs_status_string(status));
-            goto out_free_list;
-        }
-    } else {
-        if (num_resources == 0) {
-            printf("# (No supported devices found)\n");
+        if ((req_tl_name != NULL) && strcmp(tl_name, req_tl_name)) {
+            continue;
         }
 
-        resource_index = 0;
-        while (resource_index < num_resources) {
-            /* Gather all resources for this transport */
-            tl_name = resources[resource_index].tl_name;
-            count = 1;
-            for (j = resource_index + 1; j < num_resources; ++j) {
-                if (!strcmp(tl_name, resources[j].tl_name)) {
-                    tmp = resources[count + resource_index];
-                    resources[count + resource_index] = resources[j];
-                    resources[j] = tmp;
-                    ++count;
-                }
-            }
-
-            status = print_transport_info(context, tl_name, &resources[resource_index],
-                                          count, print_opts, print_flags);
-            if (status != UCS_OK) {
-                fprintf(stderr, "Failed to get transport info (%s): %s\n", tl_name,
-                        ucs_status_string(status));
-                goto out_free_list;
-            }
-
-            resource_index += count;
-        }
+        print_tl_info(pd, tl_name, &resources[resource_index], count,
+                      print_opts, print_flags);
+        resource_index += count;
     }
 
-    status = UCS_OK;
 out_free_list:
-    uct_release_resource_list(resources);
-out_uct_cleanup:
-    uct_cleanup(context);
+    uct_release_tl_resource_list(resources);
+out_close_pd:
+    uct_pd_close(pd);
 out:
-    return status;
+    ;
+}
+
+void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
+                    const char *req_tl_name)
+{
+    uct_pd_resource_desc_t *resources;
+    unsigned i, num_resources;
+    ucs_status_t status;
+
+    status = uct_query_pd_resources(&resources, &num_resources);
+    if (status != UCS_OK) {
+        printf("#   < failed to query PD resources >\n");
+        goto out;
+    }
+
+    for (i = 0; i < num_resources; ++i) {
+        print_pd_info(resources[i].pd_name, print_opts, print_flags, req_tl_name);
+    }
+
+    uct_release_pd_resource_list(resources);
+out:
+    ;
 }
 

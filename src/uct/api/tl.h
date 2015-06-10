@@ -24,12 +24,13 @@
  */
 typedef struct uct_iface_ops {
 
+    void         (*iface_close)(uct_iface_h iface);
+
     ucs_status_t (*iface_query)(uct_iface_h iface,
                                 uct_iface_attr_t *iface_attr);
 
     ucs_status_t (*iface_flush)(uct_iface_h iface);
 
-    void         (*iface_close)(uct_iface_h iface);
 
     void         (*iface_release_am_desc)(uct_iface_h iface, void *desc);
 
@@ -128,19 +129,10 @@ typedef struct uct_iface_ops {
 
 
 /**
- * Protection domain
- */
-typedef struct uct_pd {
-    uct_pd_ops_t             *ops;
-} uct_pd_t;
-
-
-/**
  * Communication interface context
  */
 typedef struct uct_iface {
     uct_iface_ops_t          ops;
-    uct_pd_h                 pd;
 } uct_iface_t;
 
 

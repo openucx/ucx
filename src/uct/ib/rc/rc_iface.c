@@ -172,14 +172,14 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
-                    const char *dev_name, unsigned rx_headroom, unsigned rx_priv_len,
-                    uct_rc_iface_config_t *config)
+UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
+                    unsigned rx_priv_len, uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, worker, dev_name, rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
                               rx_priv_len, sizeof(uct_rc_hdr_t), config->tx.cq_len,
                               &config->super);
 

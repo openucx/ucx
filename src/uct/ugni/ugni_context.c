@@ -15,7 +15,7 @@
 #include "ugni_context.h"
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-                                      uct_resource_desc_t **resources_p,
+                                      uct_tl_resource_desc_t **resources_p,
                                       unsigned *num_resources_p);
 
 ucs_config_field_t uct_ugni_iface_config_table[] = {
@@ -73,11 +73,11 @@ static ucs_status_t get_ptag(uint8_t *ptag)
 }
 
 ucs_status_t uct_ugni_query_resources(uct_context_h context,
-                                      uct_resource_desc_t **resources_p,
+                                      uct_tl_resource_desc_t **resources_p,
                                       unsigned *num_resources_p)
 {
     uct_ugni_context_t *ugni_ctx = ucs_component_get(context, ugni, uct_ugni_context_t);
-    uct_resource_desc_t *resources;
+    uct_tl_resource_desc_t *resources;
     unsigned dev_index;
 
     if (ugni_ctx->num_devices == 0) {
@@ -85,7 +85,7 @@ ucs_status_t uct_ugni_query_resources(uct_context_h context,
     }
 
     /* Allocate resources array */
-    resources = ucs_calloc(ugni_ctx->num_devices, sizeof(uct_resource_desc_t),
+    resources = ucs_calloc(ugni_ctx->num_devices, sizeof(uct_tl_resource_desc_t),
                            "resource desc");
     if (NULL == resources) {
         ucs_error("Failed to allocate memory");

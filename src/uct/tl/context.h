@@ -15,10 +15,35 @@
 #include <ucs/config/parser.h>
 
 
+typedef struct uct_pd_component {
+    ucs_status_t           (*query_resources)(uct_pd_resource_desc_t **resources_p,
+                                              unsigned *num_resources_p);
+
+    ucs_status_t           (*pd_open)(const char *pd_name, uct_pd_h *pd_p);
+
+    const char             *name_prefix;
+    ucs_list_link_t        tl_list;
+    ucs_list_link_t        list;
+} uct_pd_component_t;
+
+#define UCT_PD_COMPONENT_DEFINE(_pdc, _query, _open, _name_prefix) \
+    uct_pd_component_t _pdc = { \
+        .query_resources = _query, \
+        .pd_open         = _open, \
+        .name_prefix     = _name_prefix, \
+        .tl_list         = { &_pdc.tl_list, &_pdc.tl_list } \
+    }; \
+    UCS_STATIC_INIT { \
+        ucs_list_add_tail(&uct_pd_components_list, &_pdc.list); \
+    }
+
+
 /**
- * Transport memory operations
+ * Protection domain operations
  */
 struct uct_pd_ops {
+    void         (*close)(uct_pd_h pd);
+
     ucs_status_t (*query)(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
     ucs_status_t (*mem_alloc)(uct_pd_h pd, size_t *length_p, void **address_p,
@@ -37,55 +62,33 @@ struct uct_pd_ops {
                                 uct_rkey_bundle_t *rkey_ob);
 
     void         (*rkey_release)(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob);
-
 };
 
 
-typedef struct uct_context_tl_info {
-    uct_tl_ops_t           *ops;
-    const char             *name;
-    ucs_config_field_t     *iface_config_table;
-    size_t                 iface_config_size;
-    const char             *config_prefix;
-} uct_context_tl_info_t;
-
-
-typedef struct uct_context uct_context_t;
-struct uct_context {
-    unsigned               num_tls;
-    uct_context_tl_info_t  *tls;
+/**
+ * Protection domain
+ */
+struct uct_pd {
+    uct_pd_ops_t           *ops;
+    uct_pd_component_t     *component;
 };
 
 
 typedef struct uct_worker uct_worker_t;
 struct uct_worker {
-    uct_context_h          context;
     ucs_async_context_t    *async;
     ucs_notifier_chain_t   progress_chain;
     ucs_thread_mode_t      thread_mode;
 };
 
 
-#define uct_component_get(_context, _name) \
-    ucs_component_get(_context, _name, uct_context_t) \
+ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
+                                    uct_pd_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p);
 
 
-extern ucs_config_field_t uct_iface_config_table[];
+extern ucs_list_link_t uct_pd_components_list;
 extern const char *uct_alloc_method_names[];
 
-
-/**
- * Add a transport to the list of existing transports on this context.
- *
- * @param context        UCT context to add the transport to.
- * @param tl_name        Transport name.
- * @param config_table   Defines transport configuration options.
- * @param config_size    Transport configuration struct size.
- * @param tl_ops         Pointer to transport operations. Must be valid as long
- *                       as  context is still alive.
- */
-ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
-                             ucs_config_field_t *config_table, size_t config_size,
-                             const char *config_prefix, uct_tl_ops_t *tl_ops);
 
 #endif

@@ -58,7 +58,7 @@ ucs_status_t uct_iface_mp_chunk_alloc(void *mp_context, size_t *size, void **chu
     void *ptr;
 
     length = sizeof(*hdr) + *size;
-    status = uct_pd_mem_alloc(iface->super.pd, UCT_ALLOC_METHOD_DEFAULT,
+    status = uct_pd_mem_alloc(iface->pd, UCT_ALLOC_METHOD_DEFAULT,
                               &length, 1, &ptr, &memh, UCS_MEMTRACK_VAL_ALWAYS);
     if (status != UCS_OK) {
         return status;
@@ -77,7 +77,7 @@ void uct_iface_mp_chunk_free(void *mp_context, void *chunk)
     uct_iface_mp_chunk_hdr_t *hdr;
 
     hdr = chunk - sizeof(*hdr);
-    uct_pd_mem_free(iface->super.pd, hdr, hdr->memh);
+    uct_pd_mem_free(iface->pd, hdr, hdr->memh);
 }
 
 void uct_iface_mp_init_obj(void *mp_context, void *obj, void *chunk, void *arg)
@@ -160,10 +160,9 @@ void uct_iface_close(uct_iface_h iface)
     iface->ops.iface_close(iface);
 }
 
-UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops, uct_pd_h pd)
+UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
     self->ops = *ops;
-    self->pd  = pd;
     return UCS_OK;
 }
 
@@ -174,15 +173,16 @@ UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
-                    uct_pd_h pd, const uct_iface_config_t *config
+UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+                    uct_worker_h worker, const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     ucs_status_t status;
     uint8_t id;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops, pd);
+    UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
+    self->pd     = pd;
     self->worker = worker;
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {

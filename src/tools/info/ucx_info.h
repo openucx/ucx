@@ -20,8 +20,8 @@ enum {
 };
 
 
-ucs_status_t print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
-                            const char *req_tl_name);
+void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
+                    const char *req_tl_name);
 
 void print_version();
 

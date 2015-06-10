@@ -18,6 +18,7 @@
 #define UCT_CONFIG_ENV_PREFIX "UCT_"
 
 UCS_COMPONENT_LIST_DEFINE(uct_context_t);
+UCS_LIST_HEAD(uct_pd_components_list);
 
 /**
  * Keeps information about allocated configuration structure, to be used when
@@ -54,137 +55,163 @@ const char *uct_alloc_method_names[] = {
 };
 
 
-ucs_status_t uct_init(uct_context_h *context_p)
+ucs_status_t uct_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p)
 {
-    ucs_status_t status;
-    uct_context_t *context;
-
-    context = ucs_malloc(ucs_components_total_size(uct_context_t), "uct context");
-    if (context == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    context->num_tls  = 0;
-    context->tls      = NULL;
-
-    status = ucs_components_init_all(uct_context_t, context);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
-
-    *context_p = context;
-    return UCS_OK;
-
-err_free:
-    ucs_free(context);
-err:
-    return status;
-}
-
-void uct_cleanup(uct_context_h context)
-{
-    ucs_free(context->tls);
-    ucs_components_cleanup_all(uct_context_t, context);
-    ucs_free(context);
-}
-
-ucs_status_t uct_register_tl(uct_context_h context, const char *tl_name,
-                             ucs_config_field_t *config_table, size_t config_size,
-                             const char *config_prefix, uct_tl_ops_t *tl_ops)
-{
-    uct_context_tl_info_t *tls;
-
-    tls = ucs_realloc(context->tls, (context->num_tls + 1) * sizeof(*tls), "tls");
-    if (tls == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    context->tls = tls;
-    context->tls[context->num_tls].ops                = tl_ops;
-    context->tls[context->num_tls].name               = tl_name;
-    context->tls[context->num_tls].iface_config_table = config_table;
-    context->tls[context->num_tls].iface_config_size  = config_size;
-    context->tls[context->num_tls].config_prefix      = config_prefix;
-    ++context->num_tls;
-    return UCS_OK;
-}
-
-ucs_status_t uct_query_resources(uct_context_h context,
-                                 uct_resource_desc_t **resources_p,
-                                 unsigned *num_resources_p)
-{
-    uct_resource_desc_t *resources, *tl_resources, *p;
-    unsigned num_resources, num_tl_resources, i;
-    uct_context_tl_info_t *tl;
+    uct_pd_resource_desc_t *resources, *pd_resources, *tmp;
+    unsigned i, num_resources, num_pd_resources;
+    uct_pd_component_t *pdc;
     ucs_status_t status;
 
-    resources = NULL;
+    resources     = NULL;
     num_resources = 0;
-    for (tl = context->tls; tl < context->tls + context->num_tls; ++tl) {
 
-        /* Get TL resources */
-        status = tl->ops->query_resources(context,&tl_resources,
-                                          &num_tl_resources);
+    ucs_list_for_each(pdc, &uct_pd_components_list, list) {
+        status = pdc->query_resources(&pd_resources, &num_pd_resources);
         if (status != UCS_OK) {
-            continue; /* Skip transport */
+            ucs_debug("Failed to query %s* resources: %s", pdc->name_prefix,
+                      ucs_status_string(status));
+            continue;
         }
 
-        /* tl's query_resources should return error if there are no resources */
-        ucs_assert(num_tl_resources > 0);
-
-        /* Enlarge the array */
-        p = ucs_realloc(resources, (num_resources + num_tl_resources) * sizeof(*resources),
-                        "resources");
-        if (p == NULL) {
-            goto err_free;
-        }
-        resources = p;
-
-        /* Append TL resources to the array. Set TL name. */
-        for (i = 0; i < num_tl_resources; ++i) {
-            if (strlen(tl->name) == 0) {
-                ucs_error("empty transport name");
-                goto err_free;
-            }
-            if (strlen(tl->name) > (UCT_TL_NAME_MAX - 1)) {
-                ucs_error("transport '%s' name too long, max: %d", tl->name,
-                          UCT_TL_NAME_MAX - 1);
-                goto err_free;
-            }
-
-            resources[num_resources] = tl_resources[i];
-            ucs_snprintf_zero(resources[num_resources].tl_name,
-                              sizeof(resources[num_resources].tl_name),
-                              "%s", tl->name);
-            ++num_resources;
+        tmp = ucs_realloc(resources,
+                          sizeof(*resources) * (num_resources + num_pd_resources),
+                          "pd_resources");
+        if (tmp == NULL) {
+            ucs_free(pd_resources);
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
         }
 
-        /* Release array returned from TL */
-        ucs_free(tl_resources);
+        for (i = 0; i < num_pd_resources; ++i) {
+            ucs_assert_always(!strncmp(pdc->name_prefix, pd_resources[i].pd_name,
+                                       strlen(pdc->name_prefix)));
+        }
+        resources = tmp;
+        memcpy(resources + num_resources, pd_resources,
+               sizeof(*pd_resources) * num_pd_resources);
+        num_resources += num_pd_resources;
+        ucs_free(pd_resources);
     }
 
-    ucs_assert(num_resources != 0 || resources == NULL);
     *resources_p     = resources;
     *num_resources_p = num_resources;
     return UCS_OK;
 
-err_free:
+err:
     ucs_free(resources);
-    return UCS_ERR_NO_MEMORY;
+    return status;
 }
 
-void uct_release_resource_list(uct_resource_desc_t *resources)
+void uct_release_pd_resource_list(uct_pd_resource_desc_t *resources)
+{
+    ucs_free(resources);
+}
+
+ucs_status_t uct_pd_open(const char *pd_name, uct_pd_h *pd_p)
+{
+    uct_pd_component_t *pdc;
+    ucs_status_t status;
+    uct_pd_h pd;
+
+    ucs_list_for_each(pdc, &uct_pd_components_list, list) {
+        if (!strncmp(pd_name, pdc->name_prefix, strlen(pdc->name_prefix))) {
+            status = pdc->pd_open(pd_name, &pd);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            ucs_assert_always(pd->component == pdc);
+            *pd_p = pd;
+            return UCS_OK;
+        }
+    }
+
+    ucs_error("PD '%s' does not exist", pd_name);
+    return UCS_ERR_NO_DEVICE;
+}
+
+void uct_pd_close(uct_pd_h pd)
+{
+    pd->ops->close(pd);
+}
+
+ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
+                                       uct_tl_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
+{
+    uct_tl_resource_desc_t *resources, *tl_resources, *tmp;
+    unsigned i, num_resources, num_tl_resources;
+    uct_pd_component_t *pdc = pd->component;
+    uct_tl_component_t *tlc;
+    ucs_status_t status;
+
+    resources     = NULL;
+    num_resources = 0;
+
+    ucs_list_for_each(tlc, &pdc->tl_list, list) {
+        status = tlc->query_resources(pd, &tl_resources, &num_tl_resources);
+        if (status != UCS_OK) {
+            ucs_debug("Failed to query %s resources: %s", tlc->name,
+                      ucs_status_string(status));
+            continue;
+        }
+
+        tmp = ucs_realloc(resources,
+                          sizeof(*resources) * (num_resources + num_tl_resources),
+                          "pd_resources");
+        if (tmp == NULL) {
+            ucs_free(tl_resources);
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+
+        for (i = 0; i < num_tl_resources; ++i) {
+            ucs_assert_always(!strcmp(tlc->name, tl_resources[i].tl_name));
+        }
+        resources = tmp;
+        memcpy(resources + num_resources, tl_resources,
+               sizeof(*tl_resources) * num_tl_resources);
+        num_resources += num_tl_resources;
+        ucs_free(tl_resources);
+    }
+
+    *resources_p     = resources;
+    *num_resources_p = num_resources;
+    return UCS_OK;
+
+err:
+    ucs_free(resources);
+    return status;
+}
+
+void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources)
 {
     ucs_free(resources);
 }
 
 
-static UCS_CLASS_INIT_FUNC(uct_worker_t, uct_context_h context,
-                           ucs_async_context_t *async,
+ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
+                                    uct_pd_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p)
+{
+    uct_pd_resource_desc_t *resource;
+
+    resource = ucs_malloc(sizeof(*resource), "pd resource");
+    if (resource == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_snprintf_zero(resource->pd_name, UCT_PD_NAME_MAX, "%s", pdc->name_prefix);
+
+    *resources_p     = resource;
+    *num_resources_p = 1;
+    return UCS_OK;
+}
+
+static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
                            ucs_thread_mode_t thread_mode)
 {
-    self->context     = context;
     self->async       = async;
     self->thread_mode = thread_mode;
     ucs_notifier_chain_init(&self->progress_chain);
@@ -203,54 +230,70 @@ void uct_worker_progress(uct_worker_h worker)
 
 UCS_CLASS_DEFINE(uct_worker_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
-                                uct_context_h, ucs_async_context_t*, ucs_thread_mode_t)
+                                ucs_async_context_t*, ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
 
-static uct_context_tl_info_t *uct_find_tl(uct_context_h context, const char *tl_name)
+static uct_tl_component_t *uct_find_tl_on_pd(uct_pd_component_t *pdc,
+                                             const char *tl_name)
 {
-    uct_context_tl_info_t *tl;
+    uct_tl_component_t *tlc;
 
-    for (tl = context->tls; tl < context->tls + context->num_tls; ++tl) {
-        if (!strcmp(tl_name, tl->name)) {
-            return tl;
+    ucs_list_for_each(tlc, &pdc->tl_list, list) {
+        if (!strcmp(tl_name, tlc->name)) {
+            return tlc;
         }
     }
     return NULL;
 }
 
-ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
-                                   const char *env_prefix, const char *filename,
+static uct_tl_component_t *uct_find_tl(const char *tl_name)
+{
+    uct_pd_component_t *pdc;
+    uct_tl_component_t *tlc;
+
+    ucs_list_for_each(pdc, &uct_pd_components_list, list) {
+        tlc = uct_find_tl_on_pd(pdc, tl_name);
+        if (tlc != NULL) {
+            return tlc;
+        }
+    }
+    return NULL;
+}
+
+ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
+                                   const char *filename,
                                    uct_iface_config_t **config_p)
 {
     uct_config_bundle_t *bundle;
-    uct_context_tl_info_t *tl;
+    uct_tl_component_t *tlc;
     ucs_status_t status;
 
-    tl = uct_find_tl(context, tl_name);
-    if (tl == NULL) {
-        ucs_error("transport '%s' does not exist", tl_name);
-        status = UCS_ERR_NO_ELEM; /* Non-existing transport */
+    tlc = uct_find_tl(tl_name);
+    if (tlc == NULL) {
+        ucs_error("Transport '%s' does not exist", tl_name);
+        status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
         goto err;
     }
 
-    bundle = ucs_calloc(1, sizeof(*bundle) + tl->iface_config_size, "uct_iface_config");
+    bundle = ucs_calloc(1, sizeof(*bundle) + tlc->iface_config_size,
+                        "uct_iface_config");
     if (bundle == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
     /* TODO use env_prefix */
-    status = ucs_config_parser_fill_opts(bundle->data, tl->iface_config_table,
-                                         UCT_CONFIG_ENV_PREFIX, tl->config_prefix,
+    status = ucs_config_parser_fill_opts(bundle->data, tlc->iface_config_table,
+                                         UCT_CONFIG_ENV_PREFIX, tlc->cfg_prefix,
                                          0);
 
     if (status != UCS_OK) {
         goto err_free_opts;
     }
 
-    bundle->table        = tl->iface_config_table;
-    bundle->table_prefix = tl->config_prefix;
+    bundle->table        = tlc->iface_config_table;
+    bundle->table_prefix = tlc->cfg_prefix;
     *config_p = (uct_iface_config_t*)bundle->data; /* coverity[leaked_storage] */
     return UCS_OK;
 
@@ -263,7 +306,8 @@ err:
 
 void uct_iface_config_release(uct_iface_config_t *config)
 {
-    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
+    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t,
+                                                   data);
 
     ucs_config_parser_release_opts(config, bundle->table);
     ucs_free(bundle);
@@ -285,18 +329,19 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
     return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
 }
 
-ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
+ucs_status_t uct_iface_open(uct_pd_h pd, uct_worker_h worker, const char *tl_name,
                             const char *dev_name, size_t rx_headroom,
                             const uct_iface_config_t *config, uct_iface_h *iface_p)
 {
-    uct_context_tl_info_t *tl = uct_find_tl(worker->context, tl_name);
+    uct_tl_component_t *tlc;
 
-    if (tl == NULL) {
+    tlc = uct_find_tl_on_pd(pd->component, tl_name);
+    if (tlc == NULL) {
         /* Non-existing transport */
         return UCS_ERR_NO_DEVICE;
     }
 
-    return tl->ops->iface_open(worker, dev_name, rx_headroom, config, iface_p);
+    return tlc->iface_open(pd, worker, dev_name, rx_headroom, config, iface_p);
 }
 
 ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
@@ -374,7 +419,7 @@ static ucs_status_t uct_pd_mem_alloc_method(uct_pd_h pd, uct_pd_attr_t *pd_attr,
 
     if (method == UCT_ALLOC_METHOD_PD) {
         if (!(pd_attr->cap.flags & UCT_PD_FLAG_ALLOC)) {
-            ucs_debug("pd %s does not support allocation", pd_attr->name);
+            ucs_debug("pd does not support allocation");
             return UCS_ERR_UNSUPPORTED;
         }
 
@@ -382,13 +427,13 @@ static ucs_status_t uct_pd_mem_alloc_method(uct_pd_h pd, uct_pd_attr_t *pd_attr,
         status = pd->ops->mem_alloc(pd, &alloc_length, &block, memh_p
                                     UCS_MEMTRACK_VAL);
         if (status != UCS_OK) {
-            ucs_debug("failed to allocate memory using pd %s", pd_attr->name);
+            ucs_debug("failed to allocate memory using pd");
             return status;
         }
 
     } else {
         if (!(pd_attr->cap.flags & UCT_PD_FLAG_REG)) {
-            ucs_debug("pd %s does not support registration", pd_attr->name);
+            ucs_debug("pd does not support registration");
             return UCS_ERR_UNSUPPORTED;
         }
 

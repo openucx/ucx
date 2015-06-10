@@ -148,15 +148,13 @@ typedef struct ucx_perf_params {
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
 
     struct {
-        uct_context_h          context;
         char                   dev_name[UCT_DEVICE_NAME_MAX]; /* Device name to use */
-        char                   tl_name[UCT_TL_NAME_MAX];  /* Transport to use */
+        char                   tl_name[UCT_TL_NAME_MAX];      /* Transport to use */
         uct_perf_data_layout_t data_layout; /* Data layout to use */
         unsigned               fc_window;   /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
     } uct;
 
     struct {
-        ucp_context_h          context;
         unsigned               nonblocking_mode; /* TBD */
     } ucp;
 

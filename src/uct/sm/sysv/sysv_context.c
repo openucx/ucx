@@ -4,22 +4,6 @@
  * $HEADER$
  */
 
-#include "sysv_context.h"
-
-ucs_status_t uct_sysv_query_resources(uct_context_h context,
-                                      uct_resource_desc_t **resources_p,
-                                      unsigned *num_resources_p);
-
-/* FIXME we need to figure out how to build this table in a hierarchical fashion
- * so that all shared memory transports can share the common parts with the base
- * class
- */
-ucs_config_field_t uct_sysv_iface_config_table[] = {
-    {"", "", NULL,
-    ucs_offsetof(uct_sysv_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-    {NULL}
-};
 
 ucs_status_t uct_sysv_query_resources(uct_context_h context,
                                       uct_resource_desc_t **resource_p,
