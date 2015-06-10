@@ -14,6 +14,7 @@ else
 fi
 
 make_opt="-j$(($(nproc) - 1))"
+ucx_inst=${WORKSPACE}/install
 
 echo Starting on host: $(hostname)
 
@@ -41,7 +42,6 @@ echo "Running ucx_info"
 echo "Build without IB verbs"
 ../contrib/configure-release --without-verbs
 make $make_opt
-ucx_inst=${WORKSPACE}/install
 
 if [ -n "$JENKINS_RUN_TESTS" ]; then
     # Set CPU affinity to 2 cores, for performance tests
@@ -56,15 +56,20 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     echo "Build gtest"
     module load hpcx-gcc
     make $make_opt clean
-    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
+
+    # todo: check in -devel mode as well
+    ../contrib/configure-release --with-mpi --prefix=$ucx_inst
     make $make_opt install
 
-    opt_perftest_common="-b $ucx_inst/share/ucx/perftest/test_types -b $ucx_inst/share/ucx/perftest/msg_pow2"
+    ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+
+    opt_perftest_common="-b $ucx_inst_ptest/test_types -b $ucx_inst_ptest/msg_pow2"
+
     for dev in $(ibstat -l); do
         hca="${dev}:1"
 
         if [[ $dev =~ .*mlx5.* ]]; then
-            opt_perftest="$opt_perftest_common -b $ucx_inst/share/ucx/perftest/transports"
+            opt_perftest="$opt_perftest_common -b $ucx_inst_ptest/transports"
         else
             opt_perftest="$opt_perftest_common -x rc"
         fi
