@@ -35,5 +35,5 @@ ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, uct_ugni_
 void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 
 void uct_device_get_resource(uct_ugni_device_t *dev,
-                             uct_resource_desc_t *resource);
+                             uct_tl_resource_desc_t *resource);
 #endif

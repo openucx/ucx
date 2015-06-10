@@ -32,7 +32,7 @@ UCS_TEST_P(test_pd, alloc) {
         size = orig_size = rand() % 65536;
         alloc_method      = (uct_alloc_method_t)(rand() % (UCT_ALLOC_METHOD_LAST + 1));
 
-        status = uct_pd_mem_alloc(e().iface()->pd, alloc_method, &size, alignment,
+        status = uct_pd_mem_alloc(e().pd(), alloc_method, &size, alignment,
                                   &address, &memh, "test");
         if ((status != UCS_OK) && (alloc_method != UCT_ALLOC_METHOD_DEFAULT)) {
             /* Ignore allocation failure for specific method */
@@ -45,7 +45,7 @@ UCS_TEST_P(test_pd, alloc) {
         EXPECT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
 
         memset(address, 0xBB, size);
-        uct_pd_mem_free(e().iface()->pd, address, memh);
+        uct_pd_mem_free(e().pd(), address, memh);
     }
 }
 

@@ -50,6 +50,7 @@ struct ucx_perf_context {
     union {
         struct {
             ucs_async_context_t  async;
+            uct_pd_h             pd;
             uct_worker_h         worker;
             uct_iface_h          iface;
             uct_peer_t           *peers;
@@ -58,6 +59,7 @@ struct ucx_perf_context {
         } uct;
 
         struct {
+            ucp_context_h        context;
             ucp_worker_h         worker;
             ucp_peer_t           *peers;
         } ucp;

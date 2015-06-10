@@ -19,7 +19,7 @@
 #include <ucp/proto/ucp_int.h>
 
 #if HAVE_IB
-#  include <uct/ib/base/ib_context.h>
+#  include <uct/ib/base/ib_device.h>
 #  include <uct/ib/base/ib_iface.h>
 #endif
 
@@ -88,8 +88,6 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_am_handler_t);
         PRINT_SIZE(uct_base_iface_t);
         PRINT_SIZE(uct_completion_t);
-        PRINT_SIZE(uct_context_t);
-        PRINT_SIZE(uct_context_tl_info_t);
         PRINT_SIZE(uct_ep_t);
         PRINT_SIZE(uct_mem_h);
         PRINT_SIZE(uct_rkey_t);
@@ -102,9 +100,8 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_alloc_methods_t);
         PRINT_SIZE(uct_pd_attr_t);
         PRINT_SIZE(uct_pd_ops_t);
-        PRINT_SIZE(uct_resource_desc_t);
+        PRINT_SIZE(uct_tl_resource_desc_t);
         PRINT_SIZE(uct_rkey_bundle_t);
-        PRINT_SIZE(uct_tl_ops_t);
         PRINT_SIZE(uct_sockaddr_ib_t);
         PRINT_SIZE(uct_sockaddr_ib_subnet_t);
         PRINT_SIZE(uct_sockaddr_process_t);
@@ -112,7 +109,6 @@ void print_type_info(const char * tl_name)
 
 #if HAVE_IB
         printf("\nIB:\n");
-        PRINT_SIZE(uct_ib_context_t);
         PRINT_SIZE(uct_ib_device_t);
         PRINT_SIZE(uct_ib_iface_t);
         PRINT_SIZE(uct_ib_iface_config_t);

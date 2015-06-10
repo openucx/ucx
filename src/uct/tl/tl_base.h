@@ -88,21 +88,6 @@ enum {
 
 
 /**
- * Transport operations
- */
-struct uct_tl_ops {
-
-    ucs_status_t (*query_resources)(uct_context_h context,
-                                    uct_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
-
-    ucs_status_t (*iface_open)(uct_worker_h worker, const char *dev_name,
-                               size_t rx_headroom, const uct_iface_config_t *config,
-                               uct_iface_h *iface_p);
-};
-
-
-/**
  * Active message handle table entry
  */
 typedef struct uct_am_handler {
@@ -117,11 +102,12 @@ typedef struct uct_am_handler {
  */
 typedef struct uct_base_iface {
     uct_iface_t       super;
+    uct_pd_h          pd;                    /* PD this interface is using */
     uct_worker_h      worker;                /* Worker this interface is on */
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
 } uct_base_iface_t;
-UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_worker_h, uct_pd_h,
+UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_pd_h, uct_worker_h,
                   const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
 
 
@@ -133,6 +119,41 @@ typedef struct uct_base_ep {
     UCS_STATS_NODE_DECLARE(stats);
 } uct_base_ep_t;
 UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
+
+
+/**
+ * Transport component.
+ */
+typedef struct uct_tl_component {
+    ucs_status_t           (*query_resources)(uct_pd_h pd,
+                                              uct_tl_resource_desc_t **resources_p,
+                                              unsigned *num_resources_p);
+
+    ucs_status_t           (*iface_open)(uct_pd_h pd, uct_worker_h worker,
+                                         const char *dev_name, size_t rx_headroom,
+                                         const uct_iface_config_t *config,
+                                         uct_iface_h *iface_p);
+
+    char                   name[UCT_TL_NAME_MAX];/**< Transport name */
+    const char             *cfg_prefix;         /**< Prefix for configuration environment vars */
+    ucs_config_field_t     *iface_config_table; /**< Defines transport configuration options */
+    size_t                 iface_config_size;   /**< Transport configuration structure size */
+    ucs_list_link_t        list;
+} uct_tl_component_t;
+
+#define UCT_TL_COMPONENT_DEFINE(_pdc, _tlc, _query, _iface_struct, _name, \
+                                _cfg_prefix, _cfg_table, _cfg_struct) \
+    \
+    static uct_tl_component_t _tlc = { \
+        .query_resources     = _query, \
+        .iface_open          = UCS_CLASS_NEW_FUNC_NAME(_iface_struct), \
+        .name                = _name, \
+        .cfg_prefix          = _cfg_prefix, \
+        .iface_config_table  = _cfg_table, \
+        .iface_config_size   = sizeof(_cfg_struct) \
+    }; \
+    UCS_STATIC_INIT { ucs_list_add_tail(&(_pdc)->tl_list, &_tlc.list); }
+
 
 
 /**
@@ -208,6 +229,9 @@ typedef struct uct_iface_mpool_config {
  */
 typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
                 uct_mem_h memh);
+
+
+extern ucs_config_field_t uct_iface_config_table[];
 
 
 /**

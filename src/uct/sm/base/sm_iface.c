@@ -10,10 +10,12 @@
 #include <uct/api/addr.h>
 
 
-#define UCT_SM_MAX_SHORT_LENGTH (-1)
-#define UCT_SM_MAX_BCOPY_LENGTH (-1)
-#define UCT_SM_MAX_ZCOPY_LENGTH (-1)
-
+ucs_config_field_t uct_sm_iface_config_table[] = {
+    {"", "", NULL,
+    ucs_offsetof(uct_sm_iface_config_t, super),
+    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+    {NULL}
+};
 
 void uct_sm_iface_get_address(uct_sm_iface_t *iface,
                               uct_sockaddr_process_t *iface_addr)
@@ -53,17 +55,11 @@ ucs_status_t uct_sm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_at
     return UCS_OK;
 }
 
-UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_worker_h worker, 
-                    uct_pd_h pd, const uct_iface_config_t *tl_config, 
-                    const char *dev_name, const char *tl_name)
+UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+                    uct_worker_h worker, const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, worker, pd, 
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, pd, worker,
                               tl_config UCS_STATS_ARG(NULL));
-
-    if(strcmp(dev_name, tl_name) != 0) {
-        ucs_error("No device was found: %s", dev_name);
-        return UCS_ERR_NO_DEVICE;
-    }
 
     /* default values for all shared memory transports
      * (force each TL to set for itself) */

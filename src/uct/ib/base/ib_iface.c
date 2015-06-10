@@ -6,7 +6,6 @@
 */
 
 #include "ib_iface.h"
-#include "ib_context.h"
 
 #include <uct/tl/context.h>
 #include <ucs/type/component.h>
@@ -100,45 +99,40 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {NULL}
 };
 
-static ucs_status_t uct_ib_iface_find_port(uct_ib_context_t *ibctx,
-                                           const char *dev_name,
-                                           uct_ib_device_t **p_dev,
+static ucs_status_t uct_ib_iface_find_port(uct_ib_device_t *dev,
+                                           const char *resource_dev_name,
                                            uint8_t *p_port_num)
 {
-    uct_ib_device_t *dev;
     const char *ibdev_name;
     unsigned port_num;
-    unsigned dev_index;
     size_t devname_len;
     char *p;
 
-    p = strrchr(dev_name, ':');
+    p = strrchr(resource_dev_name, ':');
     if (p == NULL) {
-        return UCS_ERR_INVALID_PARAM; /* Wrong dev_name format */
+        goto err; /* Wrong device name format */
     }
-    devname_len = p - dev_name;
+    devname_len = p - resource_dev_name;
 
-    for (dev_index = 0; dev_index < ibctx->num_devices; ++dev_index) {
-        dev = ibctx->devices[dev_index];
-        ibdev_name = uct_ib_device_name(dev);
-        if ((strlen(ibdev_name) == devname_len) &&
-            !strncmp(ibdev_name, dev_name, devname_len))
-        {
-            port_num = strtod(p + 1, &p);
-            if (*p != '\0') {
-                return UCS_ERR_INVALID_PARAM; /* Failed to parse port number */
-            }
-            if ((port_num < dev->first_port) || (port_num >= dev->first_port + dev->num_ports)) {
-                return UCS_ERR_NO_DEVICE; /* Port number out of range */
-            }
-
-            *p_dev      = dev;
-            *p_port_num = port_num;
-            return UCS_OK;
-        }
+    ibdev_name = uct_ib_device_name(dev);
+    if ((strlen(ibdev_name) != devname_len) ||
+        strncmp(ibdev_name, resource_dev_name, devname_len))
+    {
+        goto err; /* Device name is wrong */
     }
 
-    /* Device not found */
+    port_num = strtod(p + 1, &p);
+    if (*p != '\0') {
+        goto err; /* Failed to parse port number */
+    }
+    if ((port_num < dev->first_port) || (port_num >= dev->first_port + dev->num_ports)) {
+        goto err; /* Port number out of range */
+    }
+
+    *p_port_num = port_num;
+    return UCS_OK;
+
+err:
     return UCS_ERR_NO_DEVICE;
 }
 
@@ -359,24 +353,23 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
  * @param rx_hdr_len    Length of transport network header.
  */
-UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_worker_h worker,
-                    const char *dev_name, unsigned rx_headroom, unsigned rx_priv_len,
-                    unsigned rx_hdr_len, unsigned tx_cq_len,
+UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
+                    unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
                     uct_ib_iface_config_t *config)
 {
-    uct_ib_context_t *ibctx = ucs_component_get(worker->context, ib, uct_ib_context_t);
-    uct_ib_device_t *dev;
+    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
     ucs_status_t status;
     uint8_t port_num;
 
-    status = uct_ib_iface_find_port(ibctx, dev_name, &dev, &port_num);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, pd, worker,
+                              &config->super UCS_STATS_ARG(dev->stats));
+
+    status = uct_ib_iface_find_port(dev, dev_name, &port_num);
     if (status != UCS_OK) {
         ucs_error("Failed to find port %s: %s", dev_name, ucs_status_string(status));
         goto err;
     }
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, worker, &dev->super,
-                              &config->super UCS_STATS_ARG(dev->stats));
 
     self->port_num                 = port_num;
     self->sl                       = config->sl;
@@ -491,3 +484,16 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
     return count;
 }
 
+struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    memset(&ah_attr, 0, sizeof(ah_attr));
+    ah_attr.port_num = iface->port_num;
+    ah_attr.sl = iface->sl; 
+    ah_attr.is_global = 0;
+    ah_attr.dlid = dlid;
+
+    return ibv_create_ah(dev->pd, &ah_attr);
+}

@@ -5,17 +5,22 @@
  * $HEADER$
  */
 
-#include "ucs/type/class.h"
-#include "uct/tl/context.h"
-
 #include "cuda_iface.h"
+#include "cuda_pd.h"
 #include "cuda_ep.h"
-#include "cuda_context.h"
 
-static ucs_status_t uct_cuda_iface_flush(uct_iface_h tl_iface)
-{
-    return UCS_OK;
-}
+#include <ucs/type/class.h>
+
+
+static ucs_config_field_t uct_cuda_iface_config_table[] = {
+
+    {"", "", NULL,
+     ucs_offsetof(uct_cuda_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {NULL}
+};
+
 
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t)(uct_iface_t*);
@@ -36,8 +41,6 @@ static int uct_cuda_iface_is_reachable(uct_iface_h iface,
 {
     return 0;
 }
-
-#define UCT_CUDA_MAX_SHORT_LENGTH 2048 /* FIXME temp value for now */
 
 static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
                                          uct_iface_attr_t *iface_attr)
@@ -65,43 +68,10 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
-{
-  ucs_snprintf_zero(pd_attr->name, sizeof(pd_attr->name), "%s",
-                    "cuda");
-  pd_attr->rkey_packed_size  = 0; /* TBD */
-  pd_attr->cap.flags         = UCT_PD_FLAG_REG;
-  pd_attr->cap.max_alloc     = 0;
-  pd_attr->cap.max_reg       = ULONG_MAX;
-
-  /* TODO make it configurable */
-  pd_attr->alloc_methods.count = 1;
-  pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_HEAP;
-
-  return UCS_OK;
-}
-
-static ucs_status_t uct_cuda_rkey_pack(uct_pd_h pd, uct_mem_h memh,
-                                      void *rkey_buffer)
-{
-    return UCS_OK;
-}
-
-static void uct_cuda_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
-{
-  return;
-}
-
-static ucs_status_t uct_cuda_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                  uct_rkey_bundle_t *rkey_ob)
-{
-    return UCS_OK;
-}
-
-uct_iface_ops_t uct_cuda_iface_ops = {
+static uct_iface_ops_t uct_cuda_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t),
     .iface_get_address   = uct_cuda_iface_get_address,
-    .iface_flush         = uct_cuda_iface_flush,
+    .iface_flush         = (void*)ucs_empty_function_return_success,
     .iface_query         = uct_cuda_iface_query,
     .iface_is_reachable  = uct_cuda_iface_is_reachable,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ep_t),
@@ -110,58 +80,17 @@ uct_iface_ops_t uct_cuda_iface_ops = {
     .ep_am_short         = uct_cuda_ep_am_short,
 };
 
-static ucs_status_t uct_cuda_mem_reg(uct_pd_h pd, void *address, size_t length,
-                                     uct_mem_h *memh_p)
-{
-    ucs_status_t rc;
-    uct_mem_h * mem_hndl = NULL;
-    mem_hndl = ucs_malloc(sizeof(void *), "cuda handle for test passing");
-    if (NULL == mem_hndl) {
-      ucs_error("Failed to allocate memory for gni_mem_handle_t");
-      rc = UCS_ERR_NO_MEMORY;
-      goto mem_err;
-    }
-    *memh_p = mem_hndl;
-    return UCS_OK;
- mem_err:
-    return rc;
-}
-
-static ucs_status_t uct_cuda_mem_dereg(uct_pd_h pd, uct_mem_h memh)
-{
-    ucs_free(memh);
-    return UCS_OK;
-}
-
-uct_pd_ops_t uct_cuda_pd_ops = {
-    .query        = uct_cuda_pd_query,
-    .rkey_pack    = uct_cuda_rkey_pack,
-    .rkey_unpack  = uct_cuda_rkey_unpack,
-    .rkey_release = uct_cuda_rkey_release,
-    .mem_reg      = uct_cuda_mem_reg,
-    .mem_dereg    = uct_cuda_mem_dereg
-};
-
-static uct_pd_t uct_cuda_pd = {
-    .ops = &uct_cuda_pd_ops
-};
-
-static UCS_CLASS_INIT_FUNC(uct_cuda_iface_t , uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_iface_ops, worker,
-                              &uct_cuda_pd, tl_config UCS_STATS_ARG(NULL));
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_iface_ops, pd, worker,
+                              tl_config UCS_STATS_ARG(NULL));
 
-    if(strcmp(dev_name, UCT_CUDA_TL_NAME) != 0) {
+    if (strcmp(dev_name, UCT_CUDA_DEV_NAME) != 0) {
         ucs_error("No device was found: %s", dev_name);
         return UCS_ERR_NO_DEVICE;
     }
-
-    self->pd.super.ops = &uct_cuda_pd_ops;
-    self->super.super.pd   = &self->pd.super;
-
-    self->config.max_put   = UCT_CUDA_MAX_SHORT_LENGTH;
 
     return UCS_OK;
 }
@@ -172,11 +101,39 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_cuda_iface_t, uct_base_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, const uct_iface_config_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_iface_t, uct_iface_t, uct_pd_h, uct_worker_h,
+                          const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_iface_t, uct_iface_t);
 
-uct_tl_ops_t uct_cuda_tl_ops = {
-    .query_resources     = uct_cuda_query_resources,
-    .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_iface_t),
-};
+
+static ucs_status_t uct_cuda_query_tl_resources(uct_pd_h pd,
+                                                uct_tl_resource_desc_t **resource_p,
+                                                unsigned *num_resources_p)
+{
+    uct_tl_resource_desc_t *resource;
+
+    resource = ucs_calloc(1, sizeof(uct_tl_resource_desc_t), "resource desc");
+    if (NULL == resource) {
+      ucs_error("Failed to allocate memory");
+      return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
+                      UCT_CUDA_TL_NAME);
+    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
+                      UCT_CUDA_DEV_NAME);
+    resource->latency    = 1; /* FIXME temp value */
+    resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
+
+    *num_resources_p = 1;
+    *resource_p      = resource;
+    return UCS_OK;
+}
+
+UCT_TL_COMPONENT_DEFINE(&uct_cuda_pd, uct_cuda_tl,
+                        uct_cuda_query_tl_resources,
+                        uct_cuda_iface_t,
+                        UCT_CUDA_TL_NAME,
+                        "CUDA_",
+                        uct_cuda_iface_config_table,
+                        uct_cuda_iface_config_t);

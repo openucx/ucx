@@ -101,6 +101,7 @@ void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
     for (i = 0; i < ptr_array->size; ++i) {
         if (!ucs_ptr_array_is_free(ptr_array, i)) {
             ++inuse;
+            ucs_trace("ptr_array(%p) idx %d is not free during cleanup", ptr_array, i);
         }
     }
 
@@ -194,3 +195,12 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned index,
     ptr_array->freelist = index;
 }
 
+void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned index, void *new_val)
+{
+    void *old_elem;
+
+    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, index));
+    old_elem = (void *)ptr_array->start[index];
+    ptr_array->start[index] = (uintptr_t)new_val;
+    return old_elem;
+}

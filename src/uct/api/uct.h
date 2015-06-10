@@ -73,9 +73,21 @@
  * @}
  */
 
+
 /**
  * @ingroup RESOURCE
- * @brief Communication resource descriptor
+ * @brief Protection domain resource descriptor.
+ *
+ * This structure describes a protection domain resource.
+ */
+typedef struct uct_pd_resource_desc {
+    char                     pd_name[UCT_PD_NAME_MAX]; /**< Protection domain name */
+} uct_pd_resource_desc_t;
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Communication resource descriptor.
  *
  * Resource descriptor is an object representing the network resource.
  * Resource descriptor could represent a stand-alone communication resource
@@ -84,17 +96,15 @@
  * virtual communication resources that are defined over a single physical
  * network interface.
  */
-typedef struct uct_resource_desc {
+typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
-    cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
-} uct_resource_desc_t;
+} uct_tl_resource_desc_t;
 
-#define UCT_RESOURCE_DESC_FMT              "%s/%s"
-#define UCT_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
-
+#define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
+#define UCT_TL_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
 
 /**
  * @ingroup RESOURCE
@@ -117,7 +127,7 @@ enum {
     /* GET capabilities */
     UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8), /**< Short get */
     UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9), /**< Buffered get */
-    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10) /**< Zero-copy get */,
+    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10), /**< Zero-copy get */
 
     /* Atomic operations capabilities */
     UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16), /**< 32bit atomic add */
@@ -219,8 +229,6 @@ typedef struct uct_alloc_methods {
  * @brief  Protection domain attributes.
  */
 struct uct_pd_attr {
-    char                     name[UCT_PD_NAME_MAX]; /**< Protection domain name */
-
     struct {
         size_t               max_alloc;     /**< Maximal allocation size */
         size_t               max_reg;       /**< Maximal registration size */
@@ -229,6 +237,7 @@ struct uct_pd_attr {
 
     uct_alloc_methods_t      alloc_methods; /**< Allocation methods priority */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
+    cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
 };
 
 
@@ -261,89 +270,86 @@ struct uct_completion {
 
 
 /**
- * @ingroup CONTEXT
- * @brief   UCT global context initialization
- *
- * This routine creates and initializes a UCT @ref uct_context "global context".
- *
- * @warning The function must be called before any other UCT function call in
- * the application.
- *
- * This routine discovers the available network interfaces, and initializes the
- * network resources required for discovering the device.  This routine is
- * responsible for inializing all information required for a particular
- * communication scope, for example, MPI instance, OpenSHMEM instance.
- *
- * @note @li Higher level protocols can add additional communication isolation,
- * as MPI does with it's communicator object. A single communication context
- * may be used to support multiple MPI communicators.  @li The context can be
- * used to isolate the communication that corresponds to different protocols.
- * For example, if MPI and OpenSHMEM are using UCCS to isolate the MPI
- * communication from the OpenSHMEM communication, users should use different
- * communication context for each of the protocol.
- *
- * @param [out] context_p   Filled with context handle.
- *
- * @return Error code.
- */
-ucs_status_t uct_init(uct_context_h *context_p);
-
-
-/**
- * @ingroup CONTEXT
- * @brief   UCT global context finalization
- *
- * This routine finalizes and releases the resources associated with a UCT
- * global context.
- *
- * @warning Users cannot call any communication routines using the finalized
- * UCT context.
- *
- * The finalization process releases and shuts down all resources associated
- * with the @ref uct_context "context".  After calling this routine, calling
- * any UCT routine without calling initialization routine is invalid.
- *
- * @param [in] context   Handle to context.
- *
- * @return void.
- */
-void uct_cleanup(uct_context_h context);
-
-
-/**
  * @ingroup RESOURCE
- * @brief Query for transport resources.
+ * @brief Query for memory resources.
  *
- * This routine queries the @ref uct_context "global context" for communication
- * that are available for the context.
- * As an input, users provide the @ref uct_context "global context" ,
- * and as an output the routine returns an array of the resource @ref
- * uct_resource_desc_t "descriptors".
+ * Obtain the list of protection domain resources available on the current system.
  *
- * @param [in]  context         Handle to context.
  * @param [out] resources_p     Filled with a pointer to an array of resource
  *                              descriptors.
  * @param [out] num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
  */
-ucs_status_t uct_query_resources(uct_context_h context,
-                                 uct_resource_desc_t **resources_p,
-                                 unsigned *num_resources_p);
+ucs_status_t uct_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p);
+
+/**
+ * @ingroup RESOURCE
+ * @brief Release the list of resources returned from @ref uct_query_pd_resources.
+ *
+ * This routine releases the memory associated with the list of resources
+ * allocated by @ref uct_query_pd_resources.
+ *
+ * @param [in] resources  Array of resource descriptors to release.
+ */
+void uct_release_pd_resource_list(uct_pd_resource_desc_t *resources);
 
 
 /**
  * @ingroup RESOURCE
- * @brief Release the list of resources returned from @ref uct_query_resources.
+ * @brief Open a protection domain.
+ *
+ * Open a specific protection domain. All communications and memory operations
+ * are performed in the context of a specific protection domain. Therefore it
+ * must be created before communication resources.
+ *
+ * @param [in]  pd_name         Protection domain name, as returned from @ref
+ *                              uct_query_pd_resources.
+ * @param [out] pd_p            Filled with a handle to the protection domain.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_pd_open(const char *pd_name, uct_pd_h *pd_p);
+
+/**
+ * @ingroup RESOURCE
+ * @brief Close a protection domain.
+ *
+ * @param [in]  pd               Protection domain to close.
+ */
+void uct_pd_close(uct_pd_h pd);
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Query for transport resources.
+ *
+ * This routine queries the @ref uct_pd_t "protection domain" for communication
+ * resources that are available for it.
+ *
+ * @param [in]  pd              Handle to protection domain.
+ * @param [out] resources_p     Filled with a pointer to an array of resource
+ *                              descriptors.
+ * @param [out] num_resources_p Filled with the number of resources in the array.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
+                                       uct_tl_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p);
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Release the list of resources returned from @ref uct_pd_query_tl_resources.
  *
  * This routine releases the memory associated with the list of resources
- * allocated by @ref uct_query_resources.
+ * allocated by @ref uct_query_tl_resources.
  *
  * @param [in] resources  Array of resource descriptors to release.
- *
- * @return void.
  */
-void uct_release_resource_list(uct_resource_desc_t *resources);
+void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources);
 
 
 /**
@@ -354,7 +360,6 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
  * created in an application, for example to be used by multiple threads.
  * Every worker can be progressed independently of others.
  *
- * @param [in]  context       Handle to context.
  * @param [in]  async         Context for async event handlers.
   *                            Can be NULL, which means that event handlers will
  *                             not have particular context.
@@ -362,7 +367,7 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
  *                             created on it.
  * @param [out] worker_p      Filled with a pointer to the worker object.
  */
-ucs_status_t uct_worker_create(uct_context_h context, ucs_async_context_t *async,
+ucs_status_t uct_worker_create(ucs_async_context_t *async,
                                ucs_thread_mode_t thread_mode,
                                uct_worker_h *worker_p);
 
@@ -395,7 +400,6 @@ void uct_worker_progress(uct_worker_h worker);
  * @ingroup RESOURCE
  * @brief Read transport-specific interface configuration.
  *
- * @param [in]  context       Handle to context.
  * @param [in]  tl_name       Transport name.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
@@ -406,8 +410,8 @@ void uct_worker_progress(uct_worker_h worker);
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
-                                   const char *env_prefix, const char *filename,
+ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
+                                   const char *filename,
                                    uct_iface_config_t **config_p);
 
 
@@ -451,6 +455,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @ingroup RESOURCE
  * @brief Open a communication interface.
  *
+ * @param [in]  pd            Protection domain to create the interface on.
  * @param [in]  worker        Handle to worker which will be used to progress
  *                             communications on this interface.
  * @param [in]  tl_name       Transport name.
@@ -463,9 +468,10 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
-                            const char *dev_name, size_t rx_headroom,
-                            const uct_iface_config_t *config, uct_iface_h *iface_p);
+ucs_status_t uct_iface_open(uct_pd_h pd, uct_worker_h worker,
+                            const char *tl_name, const char *dev_name,
+                            size_t rx_headroom, const uct_iface_config_t *config,
+                            uct_iface_h *iface_p);
 
 
 /**

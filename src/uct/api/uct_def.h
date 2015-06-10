@@ -14,7 +14,7 @@
 
 
 #define UCT_TL_NAME_MAX          8
-#define UCT_PD_NAME_MAX          32
+#define UCT_PD_NAME_MAX          16
 #define UCT_DEVICE_NAME_MAX      32
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
@@ -23,20 +23,19 @@
 #define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
-typedef struct uct_context       *uct_context_h;
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef void *                   uct_mem_h;
 typedef uintptr_t                uct_rkey_t;
 typedef struct uct_pd            *uct_pd_h;
-typedef struct uct_tl_ops        uct_tl_ops_t;
 typedef struct uct_pd_ops        uct_pd_ops_t;
 typedef void                     *uct_rkey_ctx_h;
 typedef struct uct_iface_attr    uct_iface_attr_t;
 typedef struct uct_pd_attr       uct_pd_attr_t;
 typedef struct uct_completion    uct_completion_t;
 typedef struct uct_worker        *uct_worker_h;
+typedef struct uct_pd            uct_pd_t;
 
 
 /**
