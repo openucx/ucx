@@ -11,6 +11,9 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 
+#define UCS_MAX_LOG_HANDLERS    32
+
+
 const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL]        = "FATAL",
     [UCS_LOG_LEVEL_ERROR]        = "ERROR",
@@ -26,7 +29,8 @@ const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_LAST]         = NULL
 };
 
-static ucs_log_func_t ucs_log_handler  = ucs_log_default_handler;
+static unsigned ucs_log_num_handlers   = 0;
+static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
 static int ucs_log_initialized         = 0;
 static char ucs_log_hostname[256]      = {0};
 static int  ucs_log_pid                = 0;
@@ -70,50 +74,6 @@ unlock_and_return_i:
     return i;
 }
 
-void ucs_log_early_init()
-{
-    ucs_log_initialized      = 0;
-    ucs_log_hostname[0]      = 0;
-    ucs_log_pid              = getpid();
-    ucs_log_file             = NULL;
-    ucs_log_file_close       = 0;
-    threads_count            = 0;
-    pthread_spin_init(&threads_lock, 0);
-}
-
-void ucs_log_init()
-{
-    const char *next_token;
-
-    if (ucs_log_initialized) {
-        return;
-    }
-
-    ucs_log_initialized = 1; /* Set this to 1 immediately to avoid infinite recursion */
-
-    strcpy(ucs_log_hostname, ucs_get_host_name());
-
-    ucs_log_file       = stdout;
-    ucs_log_file_close = 0;
-
-    if (strlen(ucs_global_opts.log_file) != 0) {
-         ucs_open_output_stream(ucs_global_opts.log_file, &ucs_log_file,
-                                &ucs_log_file_close, &next_token);
-    }
-
-    ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
-              ucs_debug_get_lib_base_addr());
-}
-
-void ucs_log_cleanup()
-{
-    ucs_log_flush();
-    if (ucs_log_file_close) {
-        fclose(ucs_log_file);
-    }
-    ucs_log_file = NULL;
-}
-
 void ucs_log_flush()
 {
     if (ucs_log_file != NULL) {
@@ -122,9 +82,10 @@ void ucs_log_flush()
     }
 }
 
-void ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                             ucs_log_level_t level, const char *prefix,
-                             const char *message, va_list ap)
+ucs_log_func_rc_t
+ucs_log_default_handler(const char *file, unsigned line, const char *function,
+                        ucs_log_level_t level, const char *prefix,
+                        const char *message, va_list ap)
 {
     size_t buffer_size = ucs_global_opts.log_buffer_size;
     const char *short_file;
@@ -134,7 +95,7 @@ void ucs_log_default_handler(const char *file, unsigned line, const char *functi
     char *valg_buf;
 
     if (!ucs_log_enabled(level)) {
-        return;
+        return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
     buf = alloca(buffer_size + 1);
@@ -172,21 +133,40 @@ void ucs_log_default_handler(const char *file, unsigned line, const char *functi
         ucs_log_flush();
     }
 
+    return UCS_LOG_FUNC_RC_CONTINUE;
+
 }
 
-void ucs_log_set_handler(ucs_log_func_t handler)
+void ucs_log_push_handler(ucs_log_func_t handler)
 {
-    ucs_log_handler = handler;
+    if (ucs_log_num_handlers < UCS_MAX_LOG_HANDLERS) {
+        ucs_log_handlers[ucs_log_num_handlers++] = handler;
+    }
+}
+
+void ucs_log_pop_handler()
+{
+    if (ucs_log_num_handlers > 0) {
+        --ucs_log_num_handlers;
+    }
 }
 
 void __ucs_log(const char *file, unsigned line, const char *function,
                ucs_log_level_t level, const char *message, ...)
 {
+    ucs_log_func_rc_t rc;
+    unsigned index;
     va_list ap;
 
-    va_start(ap, message);
-    ucs_log_handler(file, line, function, level, "", message, ap);
-    va_end(ap);
+    /* Call handlers in reverse order */
+    rc    = UCS_LOG_FUNC_RC_CONTINUE;
+    index = ucs_log_num_handlers;
+    while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
+        --index;
+        va_start(ap, message);
+        rc = ucs_log_handlers[index](file, line, function, level, "", message, ap);
+        va_end(ap);
+    }
 }
 
 void ucs_log_fatal_error(const char *fmt, ...)
@@ -329,4 +309,49 @@ void ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max)
         ++i;
     }
     *p = 0;
+}
+
+void ucs_log_early_init()
+{
+    ucs_log_initialized      = 0;
+    ucs_log_hostname[0]      = 0;
+    ucs_log_pid              = getpid();
+    ucs_log_file             = NULL;
+    ucs_log_file_close       = 0;
+    threads_count            = 0;
+    pthread_spin_init(&threads_lock, 0);
+}
+
+void ucs_log_init()
+{
+    const char *next_token;
+
+    if (ucs_log_initialized) {
+        return;
+    }
+
+    ucs_log_initialized = 1; /* Set this to 1 immediately to avoid infinite recursion */
+
+    strcpy(ucs_log_hostname, ucs_get_host_name());
+    ucs_log_file       = stdout;
+    ucs_log_file_close = 0;
+
+    ucs_log_push_handler(ucs_log_default_handler);
+
+    if (strlen(ucs_global_opts.log_file) != 0) {
+         ucs_open_output_stream(ucs_global_opts.log_file, &ucs_log_file,
+                                &ucs_log_file_close, &next_token);
+    }
+
+    ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
+              ucs_debug_get_lib_base_addr());
+}
+
+void ucs_log_cleanup()
+{
+    ucs_log_flush();
+    if (ucs_log_file_close) {
+        fclose(ucs_log_file);
+    }
+    ucs_log_file = NULL;
 }

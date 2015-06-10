@@ -8,6 +8,7 @@
 #ifndef UCS_TEST_HELPERS_H
 #define UCS_TEST_HELPERS_H
 
+#include <ucs/sys/preprocessor.h>
 #include <gtest/gtest.h>
 #include <errno.h>
 #include <iostream>
@@ -238,6 +239,23 @@ public:
                                          "Actual time: " << ucs_time_to_sec(_elapsed) << " seconds", 0) \
                          : 0, \
               _start_time = 0)
+
+
+/**
+ * Scoped exit for C++. Usage:
+ *
+ * UCS_TEST_SCOPE_EXIT() { <code> } UCS_TEST_SCOPE_EXIT_END
+ */
+#define _UCS_TEST_SCOPE_EXIT(_classname) \
+    class _classname { \
+    public: \
+        _classname() {} \
+        ~_classname()
+#define UCS_TEST_SCOPE_EXIT() \
+    _UCS_TEST_SCOPE_EXIT(UCS_PP_APPEND_UNIQUE_ID(onexit))
+
+#define UCS_TEST_SCOPE_EXIT_END \
+    } UCS_PP_APPEND_UNIQUE_ID(onexit_var);
 
 
 #endif
