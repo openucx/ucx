@@ -63,8 +63,8 @@ protected:
         uct_ep_h ep(unsigned index) const;
 
         void create_ep(unsigned index);
+        void destroy_ep(unsigned index);
         void connect(unsigned index, entity& other, unsigned other_index);
-
         void connect_to_iface(unsigned index, entity& other);
 
         void flush() const;

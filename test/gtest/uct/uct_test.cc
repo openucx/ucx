@@ -244,9 +244,22 @@ void uct_test::entity::create_ep(unsigned index) {
 
     reserve_ep(index);
 
+    if (m_eps[index] != NULL) {
+        UCS_TEST_ABORT("ep[" << index << "] already exists");
+    }
+
     status = uct_ep_create(m_iface, &ep);
     ASSERT_UCS_OK(status);
     m_eps[index] = ep;
+}
+
+void uct_test::entity::destroy_ep(unsigned index) {
+    if (m_eps[index] == NULL) {
+        UCS_TEST_ABORT("ep[" << index << "] does not exist");
+    }
+
+    uct_ep_destroy(m_eps[index]);
+    m_eps[index] = NULL;
 }
 
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index) {
