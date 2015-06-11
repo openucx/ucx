@@ -18,6 +18,7 @@ extern "C" {
 
 /* Testing resource */
 struct resource {
+    virtual ~resource() {};
     virtual std::string name() const;
     std::string pd_name;
     cpu_set_t   local_cpus;

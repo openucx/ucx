@@ -58,8 +58,11 @@ uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
 void uct_p2p_test::init() {
     uct_test::init();
 
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
+
     /* Create 2 connected endpoints */
-    if (dynamic_cast<const p2p_resource*>(GetParam())->loopback) {
+    if (r->loopback) {
         entity *e = uct_test::create_entity(m_rx_headroom);
         m_entities.push_back(e);
         e->connect(0, *e, 0);
