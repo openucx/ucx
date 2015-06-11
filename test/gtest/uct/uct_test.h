@@ -42,7 +42,6 @@ protected:
     public:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                size_t rx_headroom);
-        ~entity();
 
         void mem_alloc(void **address_p, size_t *length_p, size_t alignement,
                        uct_mem_h *memh_p, uct_rkey_bundle *rkey_bundle) const;
@@ -70,17 +69,19 @@ protected:
         void flush() const;
 
     private:
+        typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
+
         entity(const entity&);
 
         void reserve_ep(unsigned index);
 
         void connect_to_ep(uct_ep_h from, uct_ep_h to);
 
-        uct_pd_h              m_pd;
-        uct_worker_h          m_worker;
-        uct_iface_h           m_iface;
-        std::vector<uct_ep_h> m_eps;
-        uct_iface_attr_t      m_iface_attr;
+        ucs::handle<uct_pd_h>      m_pd;
+        ucs::handle<uct_worker_h>  m_worker;
+        ucs::handle<uct_iface_h>   m_iface;
+        eps_vec_t                  m_eps;
+        uct_iface_attr_t           m_iface_attr;
     };
 
     class mapped_buffer {
