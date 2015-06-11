@@ -93,16 +93,18 @@ static O& operator<<(O& os, const size& sz)
     return os;
 }
 
-void uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
-                               ucs_log_level_t level, const char *prefix, const char *message,
-                               va_list ap)
+ucs_log_func_rc_t
+uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
+                          ucs_log_level_t level, const char *prefix, const char *message,
+                          va_list ap)
 {
     if (level == UCS_LOG_LEVEL_TRACE_DATA) {
         ++log_data_count;
     }
-    if (level <= orig_log_level) {
-        ucs_log_default_handler(file, line, function, level, prefix, message, ap);
-    }
+
+    /* Continue to next log handler if original log level would have allowed it */
+    return (level <= orig_log_level) ? UCS_LOG_FUNC_RC_CONTINUE
+                                     : UCS_LOG_FUNC_RC_STOP;
 }
 
 template <typename O>
@@ -118,16 +120,18 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
      * prints log messages for the transfers.
      */
     int count_before = log_data_count;
-    ucs_log_set_handler(log_handler);
+    ucs_log_push_handler(log_handler);
     orig_log_level = ucs_global_opts.log_level;
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
     bool expect_log = ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA);
 
-    test_xfer(send, length, direction);
+    UCS_TEST_SCOPE_EXIT() {
+        /* Restore logging */
+        ucs_global_opts.log_level = orig_log_level;
+        ucs_log_pop_handler();
+    } UCS_TEST_SCOPE_EXIT_END
 
-    /* Restore logging */
-    ucs_global_opts.log_level = orig_log_level;
-    ucs_log_set_handler(ucs_log_default_handler);
+    test_xfer(send, length, direction);
 
     if (expect_log) {
         EXPECT_GE(log_data_count - count_before, 1);

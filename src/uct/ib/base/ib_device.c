@@ -78,6 +78,7 @@ static void uct_ib_pd_close(uct_pd_h pd)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
 
+    ucs_debug("closing ib device %s", uct_ib_device_name(dev));
     ucs_async_unset_event_handler(dev->ibv_context->async_fd);
     UCS_STATS_NODE_FREE(dev->stats);
     ibv_dealloc_pd(dev->pd);
@@ -635,7 +636,8 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
         }
 
         ucs_snprintf_zero(rsc->tl_name, UCT_TL_NAME_MAX, "%s", tl_name);
-        ucs_debug("found usable port %s:%d", uct_ib_device_name(dev), port_num);
+        ucs_debug("found usable port for tl %s %s:%d", tl_name,
+                  uct_ib_device_name(dev), port_num);
         ++num_resources;
     }
 

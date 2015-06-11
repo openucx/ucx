@@ -124,36 +124,20 @@ void uct_test::progress() const {
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          size_t rx_headroom) {
-    ucs_status_t status;
+    UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
+                           uct_worker_create, NULL, UCS_THREAD_MODE_MULTI /* TODO */);
 
-    status = uct_worker_create(NULL, UCS_THREAD_MODE_MULTI /* TODO */, &m_worker);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(uct_pd_h, m_pd, uct_pd_close,
+                           uct_pd_open, resource.pd_name.c_str());
 
-    status = uct_pd_open(resource.pd_name.c_str(), &m_pd);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
+                           uct_iface_open, m_pd, m_worker, resource.tl_name.c_str(),
+                           resource.dev_name.c_str(), rx_headroom, iface_config);
 
-    status = uct_iface_open(m_pd, m_worker, resource.tl_name.c_str(),
-                            resource.dev_name.c_str(), rx_headroom, iface_config,
-                            &m_iface);
-    ASSERT_UCS_OK(status);
-
-    status = uct_iface_query(m_iface, &m_iface_attr);
+    ucs_status_t status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
 }
 
-uct_test::entity::~entity() {
-    for (std::vector<uct_ep_h>::iterator iter = m_eps.begin();
-                    iter != m_eps.end(); ++iter)
-    {
-        if (*iter != NULL) {
-            uct_ep_destroy(*iter);
-            *iter = NULL;
-        }
-    }
-    uct_iface_close(m_iface);
-    uct_pd_close(m_pd);
-    uct_worker_destroy(m_worker);
-}
 
 void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
                                  size_t alignement, uct_mem_h *memh_p,
@@ -214,7 +198,7 @@ uct_ep_h uct_test::entity::ep(unsigned index) const {
 
 void uct_test::entity::reserve_ep(unsigned index) {
     if (index >= m_eps.size()) {
-        m_eps.resize(index + 1, NULL);
+        m_eps.resize(index + 1);
     }
 }
 
@@ -244,9 +228,21 @@ void uct_test::entity::create_ep(unsigned index) {
 
     reserve_ep(index);
 
+    if (m_eps[index]) {
+        UCS_TEST_ABORT("ep[" << index << "] already exists");
+    }
+
     status = uct_ep_create(m_iface, &ep);
     ASSERT_UCS_OK(status);
-    m_eps[index] = ep;
+    m_eps[index].reset(ep, uct_ep_destroy);
+}
+
+void uct_test::entity::destroy_ep(unsigned index) {
+    if (!m_eps[index]) {
+        UCS_TEST_ABORT("ep[" << index << "] does not exist");
+    }
+
+    m_eps[index].reset();
 }
 
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index) {
@@ -256,7 +252,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     ucs_status_t status;
 
     reserve_ep(index);
-    if (m_eps[index] != NULL) {
+    if (m_eps[index]) {
         return; /* Already connected */
     }
 
@@ -265,7 +261,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
         other.reserve_ep(other_index);
         status = uct_ep_create(other.m_iface, &remote_ep);
         ASSERT_UCS_OK(status);
-        other.m_eps[other_index] = remote_ep;
+        other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
 
         ucs_status_t status = uct_ep_create(m_iface, &ep);
         ASSERT_UCS_OK(status);
@@ -284,7 +280,9 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
         ASSERT_UCS_OK(status);
     }
 
-    m_eps[index] = ep;
+    if (ep != NULL) {
+        m_eps[index].reset(ep, uct_ep_destroy);
+    }
     free(addr);
 }
 
@@ -294,7 +292,7 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     uct_ep_h ep = NULL;
 
     reserve_ep(index);
-    if (m_eps[index] != NULL) {
+    if (m_eps[index]) {
         return; /* Already connected */
     }
 
@@ -306,7 +304,7 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     status = uct_ep_create_connected(iface(), addr, &ep);
     ASSERT_UCS_OK(status);
 
-    m_eps[index] = ep;
+    m_eps[index].reset(ep, uct_ep_destroy);
     free(addr);
 }
 
