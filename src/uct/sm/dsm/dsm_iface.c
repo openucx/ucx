@@ -1,44 +1,45 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * $COPYRIGHT$
  * $HEADER$
  */
 
-#include "sm_iface.h"
-#include "sm_ep.h"
+#include "dsm_iface.h"
+#include "dsm_ep.h"
 
 #include <uct/api/addr.h>
 
 
-ucs_config_field_t uct_sm_iface_config_table[] = {
+ucs_config_field_t uct_dsm_iface_config_table[] = {
     {"", "", NULL,
-    ucs_offsetof(uct_sm_iface_config_t, super),
+    ucs_offsetof(uct_dsm_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
     {NULL}
 };
 
-void uct_sm_iface_get_address(uct_sm_iface_t *iface,
+void uct_dsm_iface_get_address(uct_dsm_iface_t *iface,
                               uct_sockaddr_process_t *iface_addr)
 {
     iface_addr->sp_family = UCT_AF_PROCESS;
     iface_addr->node_guid = ucs_machine_guid();
 }
 
-int uct_sm_iface_is_reachable(uct_iface_t *tl_iface,
+int uct_dsm_iface_is_reachable(uct_iface_t *tl_iface,
                               const struct sockaddr *addr)
 {
     return (addr->sa_family == UCT_AF_PROCESS) &&
            (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
 }
 
-ucs_status_t uct_sm_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_dsm_iface_flush(uct_iface_h tl_iface)
 {
     return UCS_OK;
 }
 
-ucs_status_t uct_sm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
+ucs_status_t uct_dsm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
-    uct_sm_iface_t *iface = ucs_derived_of(tl_iface, uct_sm_iface_t);
+    uct_dsm_iface_t *iface = ucs_derived_of(tl_iface, uct_dsm_iface_t);
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
@@ -55,7 +56,7 @@ ucs_status_t uct_sm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_at
     return UCS_OK;
 }
 
-UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_dsm_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const uct_iface_config_t *tl_config)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, pd, worker,
@@ -70,9 +71,9 @@ UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     return UCS_OK;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(uct_sm_iface_t)
+static UCS_CLASS_CLEANUP_FUNC(uct_dsm_iface_t)
 {
     /* No op */
 }
 
-UCS_CLASS_DEFINE(uct_sm_iface_t, uct_base_iface_t);
+UCS_CLASS_DEFINE(uct_dsm_iface_t, uct_base_iface_t);

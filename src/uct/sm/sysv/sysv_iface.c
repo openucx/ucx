@@ -12,7 +12,7 @@
 static ucs_config_field_t uct_sysv_iface_config_table[] = {
     {"", "", NULL,
     ucs_offsetof(uct_sysv_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
+    UCS_CONFIG_TYPE_TABLE(uct_dsm_iface_config_table)},
     {NULL}
 };
 
@@ -27,8 +27,8 @@ ucs_status_t uct_sysv_iface_query(uct_iface_h tl_iface,
 {
     ucs_status_t status;
 
-    /* initialize the defaults from base sm */
-    status = uct_sm_iface_query(tl_iface, iface_attr);
+    /* initialize the defaults from dsm */
+    status = uct_dsm_iface_query(tl_iface, iface_attr);
     if (UCS_OK != status) return status;
 
     /* set TL specific flags */
@@ -57,7 +57,7 @@ static ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
     uct_sysv_iface_t *iface = ucs_derived_of(tl_iface, uct_sysv_iface_t);
     uct_sockaddr_process_t *iface_addr = (uct_sockaddr_process_t*)addr;
 
-    uct_sm_iface_get_address(&iface->super, iface_addr);
+    uct_dsm_iface_get_address(&iface->super, iface_addr);
     iface_addr->cookie = 0; /* TODO AM fifo id */
     return UCS_OK;
 }
@@ -65,29 +65,29 @@ static ucs_status_t uct_sysv_iface_get_address(uct_iface_h tl_iface,
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t)(uct_iface_t*);
 
-/* point as much to sm_base as possible
+/* point as much to dsm as possible
  * to override, create a uct_sysv_* function and update the table here
  */
 uct_iface_ops_t uct_sysv_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_iface_t),
     .iface_query         = uct_sysv_iface_query,
     .iface_get_address   = uct_sysv_iface_get_address,
-    .iface_is_reachable  = uct_sm_iface_is_reachable,
-    .iface_flush         = uct_sm_iface_flush,
-    .ep_put_short        = uct_sm_ep_put_short,
-    .ep_put_bcopy        = uct_sm_ep_put_bcopy,
-    .ep_put_zcopy        = uct_sm_ep_put_zcopy,
-    .ep_get_bcopy        = uct_sm_ep_get_bcopy,
-    .ep_get_zcopy        = uct_sm_ep_get_zcopy,
-    .ep_am_short         = uct_sm_ep_am_short,
-    .ep_atomic_add64     = uct_sm_ep_atomic_add64,
-    .ep_atomic_fadd64    = uct_sm_ep_atomic_fadd64,
-    .ep_atomic_cswap64   = uct_sm_ep_atomic_cswap64,
-    .ep_atomic_swap64    = uct_sm_ep_atomic_swap64,
-    .ep_atomic_add32     = uct_sm_ep_atomic_add32,
-    .ep_atomic_fadd32    = uct_sm_ep_atomic_fadd32,
-    .ep_atomic_cswap32   = uct_sm_ep_atomic_cswap32,
-    .ep_atomic_swap32    = uct_sm_ep_atomic_swap32,
+    .iface_is_reachable  = uct_dsm_iface_is_reachable,
+    .iface_flush         = uct_dsm_iface_flush,
+    .ep_put_short        = uct_dsm_ep_put_short,
+    .ep_put_bcopy        = uct_dsm_ep_put_bcopy,
+    .ep_put_zcopy        = uct_dsm_ep_put_zcopy,
+    .ep_get_bcopy        = uct_dsm_ep_get_bcopy,
+    .ep_get_zcopy        = uct_dsm_ep_get_zcopy,
+    .ep_am_short         = uct_dsm_ep_am_short,
+    .ep_atomic_add64     = uct_dsm_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_dsm_ep_atomic_fadd64,
+    .ep_atomic_cswap64   = uct_dsm_ep_atomic_cswap64,
+    .ep_atomic_swap64    = uct_dsm_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_dsm_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_dsm_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_dsm_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_dsm_ep_atomic_swap32,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };
@@ -96,12 +96,12 @@ static UCS_CLASS_INIT_FUNC(uct_sysv_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    /* initialize with the base sm constructor */
-    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_sysv_iface_ops, pd, worker,
+    /* initialize with the dsm constructor */
+    UCS_CLASS_CALL_SUPER_INIT(uct_dsm_iface_t, &uct_sysv_iface_ops, pd, worker,
                               tl_config);
 
     /* can override default max size values 
-     * from base sm (self->super.config.*) here */
+     * from dsm (self->super.config.*) here */
     self->super.config.max_put     = UCT_SYSV_MAX_SHORT_LENGTH;
     self->super.config.max_bcopy   = UCT_SYSV_MAX_BCOPY_LENGTH;
     self->super.config.max_zcopy   = UCT_SYSV_MAX_ZCOPY_LENGTH;
@@ -113,8 +113,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sysv_iface_t)
 {
 }
 
-/* point to sm_base */
-UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_sm_iface_t);
+/* point to dsm */
+UCS_CLASS_DEFINE(uct_sysv_iface_t, uct_dsm_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_sysv_iface_t, uct_iface_t, uct_pd_h, uct_worker_h,
                                  const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sysv_iface_t, uct_iface_t);
