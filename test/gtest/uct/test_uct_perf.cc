@@ -368,7 +368,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
         UCS_TEST_SKIP;
     }
 
-    if (GetParam().tl_name == "cm") {
+    if (GetParam()->tl_name == "cm") {
         /* TODO calibrate expected performance and iterations based on transport */
         UCS_TEST_SKIP;
     }
@@ -384,7 +384,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
     check_perf = true;
     if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
         for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
-            if (!CPU_ISSET(*iter, &GetParam().local_cpus)) {
+            if (!CPU_ISSET(*iter, &GetParam()->local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
                 check_perf = false;
                 break;
@@ -396,8 +396,8 @@ UCS_TEST_P(test_uct_perf, envelope) {
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
         char result_str[200] = {0};
         test_result result = run_multi_threaded(*test,
-                                                GetParam().tl_name,
-                                                GetParam().dev_name,
+                                                GetParam()->tl_name,
+                                                GetParam()->dev_name,
                                                 cpus);
         if (result.status == UCS_ERR_UNSUPPORTED) {
             continue;
@@ -408,7 +408,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
         double value = *(double*)( ((char*)&result.result) + test->field_offset) * test->norm;
         snprintf(result_str, sizeof(result_str) - 1,
                  "%s %25s : %.3f %s",
-                 GetParam().dev_name.c_str(), test->title, value, test->units);
+                 GetParam()->dev_name.c_str(), test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
             /* TODO take expected values from resource advertised capabilities */

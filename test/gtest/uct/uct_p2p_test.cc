@@ -15,6 +15,39 @@ int             uct_p2p_test::log_data_count = 0;
 ucs_log_level_t uct_p2p_test::orig_log_level;
 
 
+std::string uct_p2p_test::p2p_resource::name() const {
+    std::stringstream ss;
+    ss << resource::name();
+    if (loopback) {
+        ss << "/loopback";
+    }
+    return ss.str();
+}
+
+std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_name)
+{
+    static std::vector<p2p_resource> all_resources;
+
+    if (all_resources.empty()) {
+        std::vector<const resource*> r = uct_test::enum_resources("");
+        for (std::vector<const resource*>::iterator iter = r.begin(); iter != r.end(); ++iter) {
+            p2p_resource res;
+            res.pd_name    = (*iter)->pd_name;
+            res.local_cpus = (*iter)->local_cpus;
+            res.tl_name    = (*iter)->tl_name;
+            res.dev_name   = (*iter)->dev_name;
+
+            res.loopback = false;
+            all_resources.push_back(res);
+
+            res.loopback = true;
+            all_resources.push_back(res);
+        }
+    }
+
+    return filter_resources(all_resources, tl_name);
+}
+
 uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
     m_rx_headroom(rx_headroom),
     m_completion(NULL),
@@ -25,14 +58,23 @@ uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
 void uct_p2p_test::init() {
     uct_test::init();
 
-    /* Create 2 connected endpoints */
-    entity *e1 = uct_test::create_entity(m_rx_headroom);
-    entity *e2 = uct_test::create_entity(m_rx_headroom);
-    m_entities.push_back(e1);
-    m_entities.push_back(e2);
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
 
-    e1->connect(0, *e2, 0);
-    e2->connect(0, *e1, 0);
+    /* Create 2 connected endpoints */
+    if (r->loopback) {
+        entity *e = uct_test::create_entity(m_rx_headroom);
+        m_entities.push_back(e);
+        e->connect(0, *e, 0);
+    } else {
+        entity *e1 = uct_test::create_entity(m_rx_headroom);
+        entity *e2 = uct_test::create_entity(m_rx_headroom);
+        m_entities.push_back(e1);
+        m_entities.push_back(e2);
+
+        e1->connect(0, *e2, 0);
+        e2->connect(0, *e1, 0);
+    }
 
     /* Allocate completion handle and set the callback */
     m_completion = (completion*)malloc(sizeof(completion) +
@@ -212,7 +254,7 @@ void uct_p2p_test::wait_for_remote() {
 }
 
 const uct_test::entity& uct_p2p_test::sender() const {
-    return ent(0);
+    return **m_entities.begin();
 }
 
 uct_ep_h uct_p2p_test::sender_ep() const {
@@ -220,7 +262,7 @@ uct_ep_h uct_p2p_test::sender_ep() const {
 }
 
 const uct_test::entity& uct_p2p_test::receiver() const {
-    return ent(1);
+    return **(m_entities.end() - 1);
 }
 
 void uct_p2p_test::completion_cb(uct_completion_t *self, void *data) {

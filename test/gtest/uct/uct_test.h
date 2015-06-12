@@ -16,22 +16,27 @@ extern "C" {
 #include <vector>
 
 
+/* Testing resource */
 struct resource {
+    virtual ~resource() {};
+    virtual std::string name() const;
     std::string pd_name;
     cpu_set_t   local_cpus;
     std::string tl_name;
     std::string dev_name;
 };
 
+
 /**
  * UCT test, parameterized on a transport/device.
  */
-class uct_test : public testing::TestWithParam<resource>,
+class uct_test : public testing::TestWithParam<const resource*>,
                  public ucs::test_base {
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<resource> enum_resources(const std::string& tl_name);
+    static std::vector<const resource*> enum_resources(const std::string& tl_name,
+                                                       bool loopback = false);
 
     uct_test();
     virtual ~uct_test();
@@ -112,6 +117,21 @@ protected:
         uct_rkey_bundle_t       m_rkey;
     };
 
+    template <typename T>
+    static std::vector<const resource*> filter_resources(const std::vector<T>& resources,
+                                                         const std::string& tl_name)
+    {
+        std::vector<const resource*> result;
+        for (typename std::vector<T>::const_iterator iter = resources.begin();
+                        iter != resources.end(); ++iter)
+        {
+            if (tl_name.empty() || (iter->tl_name == tl_name)) {
+                result.push_back(&*iter);
+            }
+        }
+        return result;
+    }
+
 
     virtual void init();
     virtual void cleanup();
@@ -124,9 +144,10 @@ protected:
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
+
 };
 
-std::ostream& operator<<(std::ostream& os, const resource& resource);
+std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 
 #define UCT_TEST_TLS \
@@ -150,7 +171,7 @@ std::ostream& operator<<(std::ostream& os, const resource& resource);
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
     INSTANTIATE_TEST_CASE_P(_tl_name, _test_case, \
-                            testing::ValuesIn(uct_test::enum_resources(UCS_PP_QUOTE(_tl_name))));
+                            testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));
 
 
 /**

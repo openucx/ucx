@@ -9,7 +9,8 @@
 
 #include <string>
 
-class uct_p2p_am_test : public uct_p2p_test {
+class uct_p2p_am_test : public uct_p2p_test
+{
 public:
     static const uint8_t AM_ID = 11;
     static const uint64_t SEED1 = 0xa1a1a1a1a1a1a1a1ul;
