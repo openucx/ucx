@@ -5,12 +5,18 @@
  * $HEADER$
  */
 
+#include <pmi.h>
 #include "ucs/type/class.h"
 #include "uct/tl/context.h"
 
 #include "ugni_iface.h"
 #include "ugni_ep.h"
 
+/* Forward declaration */
+static void UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t)(uct_iface_t*);
+static ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
+                                                uct_tl_resource_desc_t **resource_p,
+                                                unsigned *num_resources_p);
 unsigned ugni_domain_global_counter = 0;
 
 static void uct_ugni_progress(void *arg)
@@ -64,10 +70,6 @@ static ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
     return UCS_ERR_NO_RESOURCE;
 }
 
-/* Forward declaration for the delete function */
-static void UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t)(uct_iface_t*);
-
-
 static ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
                                                struct sockaddr *addr)
 {
@@ -118,134 +120,6 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
     return UCS_OK;
 }
 
-#define UCT_UGNI_RKEY_MAGIC  0xdeadbeefLL
-
-static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
-{
-    uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
-
-    ucs_snprintf_zero(pd_attr->name, sizeof(pd_attr->name), "%s",
-                      iface->dev->fname);
-    pd_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
-    pd_attr->cap.flags         = UCT_PD_FLAG_REG;
-    pd_attr->cap.max_alloc     = 0;
-    pd_attr->cap.max_reg       = ULONG_MAX;
-    memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
-
-    /* TODO make it configurable */
-    pd_attr->alloc_methods.count = 3;
-    pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_HUGE;
-    pd_attr->alloc_methods.methods[1] = UCT_ALLOC_METHOD_MMAP;
-    pd_attr->alloc_methods.methods[2] = UCT_ALLOC_METHOD_HEAP;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ugni_mem_reg(uct_pd_h pd, void *address, size_t length,
-                                     uct_mem_h *memh_p)
-{
-    ucs_status_t rc;
-    gni_return_t ugni_rc;
-    uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
-    gni_mem_handle_t * mem_hndl = NULL;
-
-    if (0 == length) {
-        ucs_error("Unexpected length %zu", length);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    mem_hndl = ucs_malloc(sizeof(gni_mem_handle_t), "gni_mem_handle_t");
-    if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for gni_mem_handle_t");
-        rc = UCS_ERR_NO_MEMORY;
-        goto mem_err;
-    }
-
-    ugni_rc = GNI_MemRegister(iface->nic_handle, (uint64_t)address,
-                              length, NULL,
-                              GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
-                              -1, mem_hndl);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_MemRegister failed (addr %p, size %zu), Error status: %s %d",
-                 address, length, gni_err_str[ugni_rc], ugni_rc);
-        rc = UCS_ERR_IO_ERROR;
-        goto mem_err;
-    }
-
-    ucs_debug("Memory registration address %p, len %lu, keys [%"PRIx64" %"PRIx64"]",
-              address, length, mem_hndl->qword1, mem_hndl->qword2);
-    *memh_p = mem_hndl;
-    return UCS_OK;
-
-mem_err:
-    free(mem_hndl);
-    return rc;
-}
-
-static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_mem_h memh)
-{
-    uct_ugni_iface_t *iface = ucs_container_of(pd, uct_ugni_iface_t, pd);
-    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
-    gni_return_t ugni_rc;
-    ucs_status_t rc = UCS_OK;
-
-    ugni_rc = GNI_MemDeregister(iface->nic_handle, mem_hndl);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_MemDeregister failed, Error status: %s %d",
-                 gni_err_str[ugni_rc], ugni_rc);
-        rc = UCS_ERR_IO_ERROR;
-    }
-    ucs_free(mem_hndl);
-    return rc;
-}
-
-static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
-                                       void *rkey_buffer)
-{
-    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
-    uint64_t *ptr = rkey_buffer;
-
-    ptr[0] = UCT_UGNI_RKEY_MAGIC;
-    ptr[1] = mem_hndl->qword1;
-    ptr[2] = mem_hndl->qword2;
-    ucs_debug("Packed [ %"PRIx64" %"PRIx64" %"PRIx64"]", ptr[0], ptr[1], ptr[2]);
-    return UCS_OK;
-}
-
-static void uct_ugni_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
-{
-    ucs_free((void *)rkey_ob->rkey);
-}
-
-ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                  uct_rkey_bundle_t *rkey_ob)
-{
-    const uint64_t *ptr = rkey_buffer;
-    gni_mem_handle_t *mem_hndl = NULL;
-    uint64_t magic = 0;
-
-    ucs_debug("Unpacking [ %"PRIx64" %"PRIx64" %"PRIx64"]", ptr[0], ptr[1], ptr[2]);
-    magic = ptr[0];
-    if (magic != UCT_UGNI_RKEY_MAGIC) {
-        ucs_error("Failed to identify key. Expected %llx but received %"PRIx64"",
-                  UCT_UGNI_RKEY_MAGIC, magic);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    mem_hndl = ucs_malloc(sizeof(gni_mem_handle_t), "gni_mem_handle_t");
-    if (NULL == mem_hndl) {
-        ucs_error("Failed to allocate memory for gni_mem_handle_t");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    mem_hndl->qword1 = ptr[1];
-    mem_hndl->qword2 = ptr[2];
-    rkey_ob->type = (void*)uct_ugni_rkey_release;
-    rkey_ob->rkey = (uintptr_t)mem_hndl;
-    return UCS_OK;
-
-    /* need to add rkey release */
-}
-
 uct_iface_ops_t uct_ugni_iface_ops = {
     .iface_query         = uct_ugni_iface_query,
     .iface_flush         = uct_ugni_iface_flush,
@@ -265,15 +139,6 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
 };
 
-uct_pd_ops_t uct_ugni_pd_ops = {
-    .query        = uct_ugni_pd_query,
-    .mem_reg      = uct_ugni_mem_reg,
-    .mem_dereg    = uct_ugni_mem_dereg,
-    .rkey_pack    = uct_ugni_rkey_pack,
-    .rkey_unpack  = uct_ugni_rkey_unpack,
-    .rkey_release = uct_ugni_rkey_release
-};
-
 static void uct_ugni_base_desc_init(void *mp_context, void *obj, void *chunk, void *arg)
 {
     uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
@@ -290,27 +155,26 @@ static void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h 
     base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
 }
   
-static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
     uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
-    uct_ugni_context_t *ugni_ctx = ucs_component_get(worker->context,
-                                                     ugni, uct_ugni_context_t);
     uct_ugni_device_t *dev;
     ucs_status_t rc;
 
-    dev = uct_ugni_device_by_name(ugni_ctx, dev_name);
+    pthread_mutex_lock(&uct_ugni_global_lock);
+
+    dev = uct_ugni_device_by_name(dev_name);
     if (NULL == dev) {
         ucs_error("No device was found: %s", dev_name);
         rc = UCS_ERR_NO_DEVICE;
-        goto error;
+        goto exit;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ugni_iface_ops, worker,
-                              &self->pd, &config->super UCS_STATS_ARG(NULL));
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ugni_iface_ops, pd, worker,
+                              &config->super UCS_STATS_ARG(NULL));
 
-    self->pd.ops   = &uct_ugni_pd_ops;
     self->dev      = dev;
     self->nic_addr = dev->address;
 
@@ -330,7 +194,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                           NULL , &self->free_desc);
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
-        goto error;
+        goto exit;
     }
 
     rc = ucs_mpool_create("UGNI-GET-DESC-ONLY", sizeof(uct_ugni_get_desc_t),
@@ -344,8 +208,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                           uct_ugni_base_desc_init,      /* init func */
                           NULL , &self->free_desc_get);
     if (UCS_OK != rc) {
-      ucs_error("Mpool creation failed");
-      goto error;
+        ucs_error("Mpool creation failed");
+        goto exit;
     }
 
     rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
@@ -398,11 +262,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
 
     self->activated = false;
     self->outstanding = 0;
-    /* TBD: atomic increment */
-    ++ugni_ctx->num_ifaces;
-    rc = ugni_activate_iface(self, ugni_ctx);
+    rc = ugni_activate_iface(self);
     if (UCS_OK == rc) {
-        return rc;
+        goto exit;
     }
 
     ucs_error("Failed to activate interface");
@@ -413,7 +275,8 @@ clean_buffer:
     ucs_mpool_destroy(self->free_desc_buffer);
 clean_desc:
     ucs_mpool_destroy(self->free_desc);
-error:
+exit:
+    pthread_mutex_unlock(&uct_ugni_global_lock);
     return rc;
 }
 
@@ -436,7 +299,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
     ucs_mpool_destroy(self->free_desc);
 
     /* TBD: Clean endpoints first (unbind and destroy) ?*/
-    ucs_atomic_add32(&ugni_domain_global_counter, -1);
     ugni_rc = GNI_CqDestroy(self->local_cq);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
@@ -451,57 +313,211 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_worker_h,
-                                 const char*, size_t, const uct_iface_config_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
+                          uct_pd_h, uct_worker_h,
+                          const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
 
-uct_tl_ops_t uct_ugni_tl_ops = {
-    .query_resources     = uct_ugni_query_resources,
-    .iface_open          = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_iface_t),
-};
+UCT_TL_COMPONENT_DEFINE(&uct_ugni_pd_component,
+                        uct_ugni_tl_component,
+                        uct_ugni_query_tl_resources,
+                        uct_ugni_iface_t,
+                        UCT_UGNI_TL_NAME,
+                        "UGNI_",
+                        uct_ugni_iface_config_table,
+                        uct_ugni_iface_config_t);
 
-#define UCT_UGNI_LOCAL_CQ (8192)
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface, uct_ugni_context_t
-                                 *ugni_ctx)
+static ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
+                                                uct_tl_resource_desc_t **resource_p,
+                                                unsigned *num_resources_p)
 {
-    int modes,
-        rc,
-        d_id;
-    gni_return_t ugni_rc;
+    uct_tl_resource_desc_t *resources;
+    int num_devices = job_info.num_devices;
+    uct_ugni_device_t *devs = job_info.devices;
+    int i;
+    ucs_status_t rc = UCS_OK;
 
-    if(iface->activated) {
+    assert(!strncmp(pd->component->name_prefix, 
+                    uct_ugni_pd_component.name_prefix,
+                    UCT_PD_NAME_MAX));
+
+    pthread_mutex_lock(&uct_ugni_global_lock);
+
+    resources = ucs_calloc(job_info.num_devices, sizeof(uct_tl_resource_desc_t),
+                          "resource desc");
+    if (NULL == resources) {
+      ucs_error("Failed to allocate memory");
+      num_devices = 0;
+      resources = NULL;
+      rc = UCS_ERR_NO_MEMORY;
+      goto error;
+    }
+
+    for (i = 0; i < job_info.num_devices; i++) {
+        uct_device_get_resource(&devs[i], &resources[i]);
+    }
+
+error:
+    *num_resources_p = num_devices;
+    *resource_p      = resources;
+    pthread_mutex_unlock(&uct_ugni_global_lock);
+
+    return rc;
+}
+
+static ucs_status_t get_cookie(uint32_t *cookie)
+{
+    char           *cookie_str;
+    char           *cookie_token;
+
+    cookie_str = getenv("PMI_GNI_COOKIE");
+    if (NULL == cookie_str) {
+        ucs_error("getenv PMI_GNI_COOKIE failed");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    cookie_token = strtok(cookie_str, ":");
+    if (NULL == cookie_token) {
+        ucs_error("Failed to read PMI_GNI_COOKIE token");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *cookie = (uint32_t) atoi(cookie_token);
+    return UCS_OK;
+}
+
+static ucs_status_t get_ptag(uint8_t *ptag)
+{
+    char           *ptag_str;
+    char           *ptag_token;
+
+    ptag_str = getenv("PMI_GNI_PTAG");
+    if (NULL == ptag_str) {
+        ucs_error("getenv PMI_GNI_PTAG failed");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ptag_token = strtok(ptag_str, ":");
+    if (NULL == ptag_token) {
+        ucs_error("Failed to read PMI_GNI_PTAG token");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *ptag = (uint8_t) atoi(ptag_token);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ugni_fetch_pmi()
+{
+    int spawned = 0,
+        rc;
+
+    if(job_info.initialized) {
         return UCS_OK;
     }
-    /* Make sure that context is activated */
-    rc = ugni_activate_domain(ugni_ctx);
+
+    /* Fetch information from Cray's PMI */
+    rc = PMI_Init(&spawned);
+    if (PMI_SUCCESS != rc) {
+        ucs_error("PMI_Init failed, Error status: %d", rc);
+        return UCS_ERR_IO_ERROR;
+    }
+    ucs_debug("PMI spawned %d", spawned);
+
+    rc = PMI_Get_size(&job_info.pmi_num_of_ranks);
+    if (PMI_SUCCESS != rc) {
+        ucs_error("PMI_Get_size failed, Error status: %d", rc);
+        return UCS_ERR_IO_ERROR;
+    }
+    ucs_debug("PMI size %d", job_info.pmi_num_of_ranks);
+
+    rc = PMI_Get_rank(&job_info.pmi_rank_id);
+    if (PMI_SUCCESS != rc) {
+        ucs_error("PMI_Get_rank failed, Error status: %d", rc);
+        return UCS_ERR_IO_ERROR;
+    }
+    ucs_debug("PMI rank %d", job_info.pmi_rank_id);
+
+    rc = get_ptag(&job_info.ptag);
+    if (UCS_OK != rc) {
+        ucs_error("get_ptag failed, Error status: %d", rc);
+        return rc;
+    }
+    ucs_debug("PMI ptag %d", job_info.ptag);
+
+    rc = get_cookie(&job_info.cookie);
+    if (UCS_OK != rc) {
+        ucs_error("get_cookie failed, Error status: %d", rc);
+        return rc;
+    }
+    ucs_debug("PMI cookie %d", job_info.cookie);
+
+    /* Context and domain is activated */
+    job_info.initialized = true;
+    ucs_debug("UGNI job info was activated");
+    return UCS_OK;
+}
+
+ucs_status_t uct_ugni_init_nic(int device_index,
+                               int *domain_id,
+                               gni_cdm_handle_t *cdm_handle,
+                               gni_nic_handle_t *nic_handle,
+                               uint32_t *address)
+{
+    int modes;
+    ucs_status_t rc;
+    gni_return_t ugni_rc = GNI_RC_SUCCESS;
+
+    rc = uct_ugni_fetch_pmi();
     if (UCS_OK != rc) {
         ucs_error("Failed to activate context, Error status: %d", rc);
         return rc;
     }
 
-    d_id = ucs_atomic_fadd32(&ugni_domain_global_counter, 1);
-
-    iface->domain_id = ugni_ctx->pmi_rank_id + ugni_ctx->pmi_num_of_ranks *
-                       d_id;
+    *domain_id = job_info.pmi_rank_id + job_info.pmi_num_of_ranks * ugni_domain_global_counter;
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
-            GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
-    ucs_debug("Creating new domain with id %d (%d + %d * %d)",
-              iface->domain_id, ugni_ctx->pmi_rank_id,
-              ugni_ctx->pmi_num_of_ranks, d_id);
-    ugni_rc = GNI_CdmCreate(iface->domain_id, ugni_ctx->ptag, ugni_ctx->cookie,
-                            modes, &iface->cdm_handle);
+        GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
+    ucs_debug("Creating new PD domain with id %d (%d + %d * %d)",
+              *domain_id, job_info.pmi_rank_id,
+              job_info.pmi_num_of_ranks, ugni_domain_global_counter);
+    ugni_rc = GNI_CdmCreate(*domain_id, job_info.ptag, job_info.cookie,
+                            modes, cdm_handle);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmCreate failed, Error status: %s %d",
                   gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
     }
 
-    ugni_rc = GNI_CdmAttach(iface->cdm_handle, iface->dev->device_id,
-                            &iface->pe_address, &iface->nic_handle);
+    /* For now we use the first device for allocation of the domain */
+    ugni_rc = GNI_CdmAttach(*cdm_handle, job_info.devices[device_index].device_id,
+                            address, nic_handle);
     if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_error("GNI_CdmAttach failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
+        ucs_error("GNI_CdmAttach failed (domain id %d, %d), Error status: %s %d",
+                  *domain_id, ugni_domain_global_counter, gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_NO_DEVICE;
+    }
+
+    ++ugni_domain_global_counter;
+    return UCS_OK;
+}
+
+#define UCT_UGNI_LOCAL_CQ (8192)
+
+ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface)
+{
+    int rc;
+    gni_return_t ugni_rc;
+
+    if(iface->activated) {
+        return UCS_OK;
+    }
+
+    rc = uct_ugni_init_nic(0, &iface->domain_id,
+                           &iface->cdm_handle, &iface->nic_handle,
+                           &iface->pe_address);
+    if (UCS_OK != rc) {
+        ucs_error("Failed to UGNI NIC, Error status: %d", rc);
+        return rc;
     }
 
     ugni_rc = GNI_CqCreate(iface->nic_handle, UCT_UGNI_LOCAL_CQ, 0,

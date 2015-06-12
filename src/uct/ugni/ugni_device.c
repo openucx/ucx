@@ -17,7 +17,7 @@
 void uct_device_get_resource(uct_ugni_device_t *dev,
         uct_tl_resource_desc_t *resource)
 {
-    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", TL_NAME);
+    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", UCT_UGNI_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));
@@ -70,12 +70,13 @@ static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, uct_ugni_device_t *dev_p)
+ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *dev_p)
 {
     ucs_status_t rc;
     gni_return_t ugni_rc;
 
     dev_p->device_id = (uint32_t)dev_id;
+    dev_p->device_index = index;
 
     rc = get_nic_address(dev_p);
     if (rc != UCS_OK) {
@@ -104,8 +105,8 @@ ucs_status_t uct_ugni_device_create(uct_context_h context, int dev_id, uct_ugni_
                           "UNKNOWN");
     }
 
-    ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->fname), "%s:%u",
-                      dev_p->type_name, dev_p->address);
+    ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->fname), "%s:%d",
+                      dev_p->type_name, dev_p->device_index);
 
     dev_p->attached = false;
     return UCS_OK;
