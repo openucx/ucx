@@ -6,8 +6,6 @@
 # $HEADER$
 #
 
-MPICC = /opt/ompi/bin/mpicc
-
 examplesdir = $(pkgdatadir)/examples
 dist_examples_DATA = \
 	uct_hello_world.c \
@@ -15,6 +13,11 @@ dist_examples_DATA = \
 
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
-	$(MPICC) -o uct_hello_world $(examplesdir)/uct_hello_world.c -luct -lucs -I$(includedir) -L$(libdir)
+
+	$(CC) -o uct_hello_world $(examplesdir)/uct_hello_world.c -luct -lucs -I$(includedir) -L$(libdir)
+
+if HAVE_MPI
 	$(MPICC) -o active_message $(examplesdir)/active_message.c -luct -lucs -I$(includedir) -L$(libdir)
+endif
+
 	$(RM) *.o uct_hello_world active_message 
