@@ -40,10 +40,7 @@ void test_base::set_config(const std::string& config_str)
 
 void test_base::modify_config(const std::string& name, const std::string& value)
 {
-    ucs_status_t status = ucs_config_parser_set_value(&ucs_global_opts,
-                                                      ucs_global_opts_table,
-                                                      name.c_str(),
-                                                      value.c_str());
+    ucs_status_t status = ucs_global_opts_set_value(name.c_str(), value.c_str());
     if (status != UCS_OK) {
         GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
                         << value ;
@@ -53,13 +50,12 @@ void test_base::modify_config(const std::string& name, const std::string& value)
 void test_base::push_config()
 {
     m_config_stack.push_back(ucs_global_opts_t());
-    ucs_config_parser_clone_opts(&ucs_global_opts, &m_config_stack.back(),
-                                 ucs_global_opts_table);
+    ucs_global_opts_clone(&m_config_stack.back());
 }
 
 void test_base::pop_config()
 {
-    ucs_config_parser_release_opts(&ucs_global_opts, ucs_global_opts_table);
+    ucs_global_opts_release();
     ucs_global_opts = m_config_stack.back();
 }
 

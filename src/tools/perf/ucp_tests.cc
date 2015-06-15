@@ -41,23 +41,35 @@ public:
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    send(ucp_ep_h ep, void *buffer, unsigned length)
+    send(ucp_ep_h ep, void *buffer, unsigned length, uint8_t sn,
+         uint64_t remote_addr, ucp_rkey_h rkey)
     {
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
             return ucp_tag_send(ep, buffer, length, TAG);
+        case UCX_PERF_CMD_PUT:
+            *(uint8_t*)buffer = sn;
+            return ucp_rma_put(ep, buffer, length, remote_addr, rkey);
         default:
             return UCS_ERR_INVALID_PARAM;
         }
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    recv(ucp_worker_h worker, void *buffer, unsigned length)
+    recv(ucp_worker_h worker, void *buffer, unsigned length, uint8_t sn)
     {
         ucp_tag_recv_completion_t comp;
+        volatile uint8_t *ptr;
+
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
             return ucp_tag_recv(worker, buffer, length, TAG, 0, &comp);
+        case UCX_PERF_CMD_PUT:
+            ptr = (volatile uint8_t*)buffer;
+            while (*ptr != sn) {
+                progress_responder();
+            }
+            return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -69,6 +81,9 @@ public:
         ucp_worker_h worker;
         ucp_ep_h ep;
         void *send_buffer, *recv_buffer;
+        uint64_t remote_addr;
+        uint8_t sn;
+        ucp_rkey_h rkey;
         size_t length;
 
         ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
@@ -84,18 +99,23 @@ public:
         length      = m_perf.params.message_size;
         worker      = m_perf.ucp.worker;
         ep          = m_perf.ucp.peers[1 - my_index].ep;
+        remote_addr = m_perf.ucp.peers[1 - my_index].remote_addr;
+        rkey        = m_perf.ucp.peers[1 - my_index].rkey;
+        sn          = 0;
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, length);
-                recv(worker, recv_buffer, length);
+                send(ep, send_buffer, length, sn, remote_addr, rkey);
+                recv(worker, recv_buffer, length, sn);
                 ucx_perf_update(&m_perf, 1, length);
+                ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, length);
-                send(ep, send_buffer, length);
+                recv(worker, recv_buffer, length, sn);
+                send(ep, send_buffer, length, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
+                ++sn;
             }
         }
         return UCS_OK;
@@ -107,7 +127,10 @@ public:
         ucp_worker_h worker;
         ucp_ep_h ep;
         void *send_buffer, *recv_buffer;
+        uint64_t remote_addr;
+        ucp_rkey_h rkey;
         size_t length;
+        uint8_t sn;
 
         ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
 
@@ -122,16 +145,21 @@ public:
         length      = m_perf.params.message_size;
         worker      = m_perf.ucp.worker;
         ep          = m_perf.ucp.peers[1 - my_index].ep;
+        remote_addr = m_perf.ucp.peers[1 - my_index].remote_addr;
+        rkey        = m_perf.ucp.peers[1 - my_index].rkey;
+        sn          = 0;
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, length);
+                recv(worker, recv_buffer, length, sn);
                 ucx_perf_update(&m_perf, 1, length);
+                ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, length);
+                send(ep, send_buffer, length, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
+                ++sn;
             }
         }
         return UCS_OK;
@@ -174,7 +202,9 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
         (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI)
+        (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
 
     ucs_error("Invalid test case");

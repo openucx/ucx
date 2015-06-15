@@ -33,6 +33,7 @@ const char *ucs_async_mode_names[] = {
     [UCS_ASYNC_MODE_LAST]   = NULL
 };
 
+UCS_CONFIG_DEFINE_ARRAY(string, sizeof(char*), UCS_CONFIG_TYPE_STRING);
 
 /* Fwd */
 static ucs_status_t
@@ -1004,7 +1005,7 @@ static void __print_stream_cb(int num, const char *line, void *arg)
 }
 
 static void
-ucs_config_parser_print_field(FILE *stream, void *opts, const char *env_prefix,
+ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_prefix,
                               const char *prefix, const char *name,
                               const ucs_config_field_t *field,
                               unsigned long flags, const char *docstr, ...)
@@ -1042,7 +1043,7 @@ ucs_config_parser_print_field(FILE *stream, void *opts, const char *env_prefix,
 }
 
 static void
-ucs_config_parser_print_opts_recurs(FILE *stream, void *opts,
+ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                     const ucs_config_field_t *fields,
                                     unsigned flags, const char *env_prefix,
                                     const char *table_prefix)
@@ -1088,7 +1089,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, void *opts,
 
 }
 
-void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
+void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *env_prefix,
                                   const char *table_prefix, ucs_config_print_flags_t flags)
 {

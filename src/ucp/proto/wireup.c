@@ -137,6 +137,8 @@ static void ucp_ep_remote_connected(ucp_ep_h ep)
     ucs_debug("connected 0x%"PRIx64"->0x%"PRIx64, worker->uuid, ep->dest_uuid);
 
     ep->config.max_short_tag = iface_attr->cap.am.max_short - sizeof(uint64_t);
+    ep->config.max_short_put = iface_attr->cap.put.max_short;
+    ep->config.max_bcopy_put = iface_attr->cap.put.max_bcopy;
 
     /* Synchronize with other threads */
     ucs_memory_cpu_store_fence();
@@ -213,7 +215,8 @@ static ucs_status_t ucp_ep_send_wireup_am(ucp_ep_h ep, uct_ep_h uct_ep,
     status = uct_ep_am_bcopy(uct_ep, am_id, (uct_pack_callback_t)memcpy,
                              msg, msg_len);
     if (status != UCS_OK) {
-        ucs_debug("failed to send conn msg: %s", ucs_status_string(status));
+        ucs_debug("failed to send conn msg: %s%s", ucs_status_string(status),
+                  (status == UCS_ERR_NO_RESOURCE) ? ", will retry" : "");
         goto err_free;
     }
 
@@ -457,7 +460,9 @@ static ucs_status_t ucp_pick_best_wireup(ucp_worker_h worker, ucp_address_t *add
                                          ucp_rsc_index_t *src_rsc_index_p,
                                          ucp_rsc_index_t *dst_rsc_index_p,
                                          ucp_rsc_index_t *dst_pd_index_p,
-                                         struct sockaddr **addr_p, const char *title)
+                                         struct sockaddr **addr_p,
+                                         uint64_t *reachable_pds,
+                                         const char *title)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t src_rsc_index, dst_rsc_index;
@@ -475,6 +480,7 @@ static ucs_status_t ucp_pick_best_wireup(ucp_worker_h worker, ucp_address_t *add
     *src_rsc_index_p = -1;
     *dst_rsc_index_p = -1;
     *dst_pd_index_p  = -1;
+    *reachable_pds   = 0;
 
     /*
      * Find the best combination of local resource and reachable remote address.
@@ -494,6 +500,8 @@ static ucs_status_t ucp_pick_best_wireup(ucp_worker_h worker, ucp_address_t *add
             {
                 continue;
             }
+
+            *reachable_pds |= UCS_BIT(pd_index);
 
             score = score_func(resource, iface, iface_attr);
             ucs_trace("%s " UCT_TL_RESOURCE_DESC_FMT " score %.2f",
@@ -572,6 +580,7 @@ ucs_status_t ucp_ep_wireup_start(ucp_ep_h ep, ucp_address_t *address)
     status = ucp_pick_best_wireup(worker, address, ucp_am_short_score_func,
                                   &ep->uct.rsc_index, &dst_rsc_index,
                                   &ep->uct.dst_pd_index, &am_short_addr,
+                                  &ep->uct.reachable_pds,
                                   "short_am");
     if (status != UCS_OK) {
         ucs_error("No transport for short active message");
@@ -602,7 +611,9 @@ ucs_status_t ucp_ep_wireup_start(ucp_ep_h ep, ucp_address_t *address)
      */
     status = ucp_pick_best_wireup(worker, address, ucp_wireup_score_func,
                                   &wireup_rsc_index, &wireup_dst_rsc_index,
-                                  &wireup_dst_pd_index, &wireup_addr, "wireup");
+                                  &wireup_dst_pd_index, &wireup_addr,
+                                  &ep->uct.reachable_pds,
+                                  "wireup");
     if (status != UCS_OK) {
         goto err;
     }
@@ -667,7 +678,6 @@ void ucp_ep_wireup_stop(ucp_ep_h ep)
     if (ep->uct.next_ep != NULL) {
         while (uct_ep_flush(ep->uct.next_ep) != UCS_OK) {
             ucp_worker_progress(ep->worker);
-            ucs_async_check_miss(&ep->worker->async);
         }
         uct_ep_destroy(ep->uct.next_ep);
     }
@@ -675,7 +685,6 @@ void ucp_ep_wireup_stop(ucp_ep_h ep)
     if (ep->wireup_ep != NULL) {
         while (uct_ep_flush(ep->wireup_ep) != UCS_OK) {
             ucp_worker_progress(ep->worker);
-            ucs_async_check_miss(&ep->worker->async);
         }
         uct_ep_destroy(ep->wireup_ep);
     }

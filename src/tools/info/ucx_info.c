@@ -9,6 +9,8 @@
 
 #include <getopt.h>
 
+
+
 static void usage() {
     printf("Usage: ucx_info [options]\n");
     printf("Options are:\n");
@@ -90,7 +92,13 @@ int main(int argc, char **argv)
         print_type_info(tl_name);
     }
 
-    if ((print_opts & PRINT_DEVICES) || (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
+    if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
+        ucs_global_opts_print(stdout, "global configuration", print_flags);
+        print_ucp_config(print_flags);
+        print_uct_config(print_flags, tl_name);
+    }
+
+    if (print_opts & PRINT_DEVICES) {
         print_uct_info(print_opts, print_flags, tl_name);
     }
     return 0;

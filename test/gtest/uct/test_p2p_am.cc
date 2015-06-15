@@ -103,8 +103,8 @@ public:
         status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
         ASSERT_UCS_OK(status);
 
-        mapped_buffer sendbuf(length, 1, SEED1, sender());
-        mapped_buffer recvbuf(0, 0, 0, sender()); /* dummy */
+        mapped_buffer sendbuf(length, SEED1, sender());
+        mapped_buffer recvbuf(0, 0, sender()); /* dummy */
 
         blocking_send(send, sender_ep(), sendbuf, recvbuf, m_completion_count);
         sendbuf.pattern_fill(SEED2);
