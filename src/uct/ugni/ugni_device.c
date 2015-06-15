@@ -15,14 +15,12 @@
 
 
 void uct_device_get_resource(uct_ugni_device_t *dev,
-        uct_resource_desc_t *resource)
+        uct_tl_resource_desc_t *resource)
 {
     ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
-    resource->local_cpus = dev->cpu_mask;
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));
-    memset(&resource->subnet_addr, 0, sizeof(resource->subnet_addr));
 }
 
 static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)

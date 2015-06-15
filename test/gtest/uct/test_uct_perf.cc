@@ -225,14 +225,9 @@ protected:
         thread_arg *a = (thread_arg*)arg;
         test_result *result;
 
-        ucs_status_t status = uct_init(&a->params.uct.context);
-        ASSERT_UCS_OK(status);
         set_affinity(a->cpu);
-
         result = new test_result();
         result->status = ucx_perf_run(&a->params, &result->result);
-
-        uct_cleanup(a->params.uct.context);
         return result;
     }
 
@@ -260,8 +255,8 @@ protected:
         params.report_interval = 1.0;
         params.rte_group       = NULL;
         params.rte             = &test_rte::rte;
-        strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name) - 1);
-        strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name)  - 1);
+        strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
+        strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
         params.uct.data_layout = test.data_layout;
         params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
 
@@ -315,15 +310,15 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_AM,  UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_PINGPONG,
     8, 1, 100000l, ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6 },
 
-  { "am rate", "Mpps", 1.3, 80.0,
+  { "am rate", "Mpps", 1.1, 80.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "am bcopy bw", "MB/sec", 700.0, 10000.0,
+  { "am bcopy bw", "MB/sec", 620.0, 10000.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "am zcopy bw", "MB/sec", 700.0, 10000.0,
+  { "am zcopy bw", "MB/sec", 620.0, 10000.0,
     UCX_PERF_CMD_AM, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
@@ -335,11 +330,11 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_SHORT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     8, 1, 2000000l, ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6 },
 
-  { "put bcopy bw", "MB/sec", 700.0, 25000.0,
+  { "put bcopy bw", "MB/sec", 620.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_BCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 1, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
-  { "put zcopy bw", "MB/sec", 700.0, 25000.0,
+  { "put zcopy bw", "MB/sec", 620.0, 25000.0,
     UCX_PERF_CMD_PUT, UCT_PERF_DATA_LAYOUT_ZCOPY, UCX_PERF_TEST_TYPE_STREAM_UNI,
     2048, 32, 100000l, ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), pow(1024.0, -2) },
 
@@ -367,11 +362,14 @@ test_uct_perf::test_spec test_uct_perf::tests[] =
 };
 
 UCS_TEST_P(test_uct_perf, envelope) {
-    uct_resource_desc_t resource = GetParam();
-    entity tl(resource, m_iface_config, 0);
     bool check_perf;
 
     if (ucs::test_time_multiplier() > 1) {
+        UCS_TEST_SKIP;
+    }
+
+    if (GetParam()->tl_name == "cm") {
+        /* TODO calibrate expected performance and iterations based on transport */
         UCS_TEST_SKIP;
     }
 
@@ -386,7 +384,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
     check_perf = true;
     if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
         for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
-            if (!CPU_ISSET(*iter, &resource.local_cpus)) {
+            if (!CPU_ISSET(*iter, &GetParam()->local_cpus)) {
                 UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
                 check_perf = false;
                 break;
@@ -398,8 +396,8 @@ UCS_TEST_P(test_uct_perf, envelope) {
     for (test_uct_perf::test_spec *test = tests; test->title != NULL; ++test) {
         char result_str[200] = {0};
         test_result result = run_multi_threaded(*test,
-                                                resource.tl_name,
-                                                resource.dev_name,
+                                                GetParam()->tl_name,
+                                                GetParam()->dev_name,
                                                 cpus);
         if (result.status == UCS_ERR_UNSUPPORTED) {
             continue;
@@ -408,8 +406,9 @@ UCS_TEST_P(test_uct_perf, envelope) {
         ASSERT_UCS_OK(result.status);
 
         double value = *(double*)( ((char*)&result.result) + test->field_offset) * test->norm;
-        snprintf(result_str, sizeof(result_str) - 1, "%s/%s %25s : %.3f %s",
-                 resource.tl_name, resource.dev_name, test->title, value, test->units);
+        snprintf(result_str, sizeof(result_str) - 1,
+                 "%s %25s : %.3f %s",
+                 GetParam()->dev_name.c_str(), test->title, value, test->units);
         UCS_TEST_MESSAGE << result_str;
         if (check_perf) {
             /* TODO take expected values from resource advertised capabilities */

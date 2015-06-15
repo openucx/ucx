@@ -9,7 +9,8 @@
 
 #include <string>
 
-class uct_p2p_am_test : public uct_p2p_test {
+class uct_p2p_am_test : public uct_p2p_test
+{
 public:
     static const uint8_t AM_ID = 11;
     static const uint64_t SEED1 = 0xa1a1a1a1a1a1a1a1ul;
@@ -60,7 +61,7 @@ public:
             m_backlog.pop_back();
             EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
-            uct_iface_release_am_desc(receiver().iface(), (void*)my_desc);
+            uct_iface_release_am_desc(my_desc);
         }
     }
 
@@ -102,8 +103,8 @@ public:
         status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
         ASSERT_UCS_OK(status);
 
-        mapped_buffer sendbuf(length, 1, SEED1, sender());
-        mapped_buffer recvbuf(0, 0, 0, sender()); /* dummy */
+        mapped_buffer sendbuf(length, SEED1, sender());
+        mapped_buffer recvbuf(0, 0, sender()); /* dummy */
 
         blocking_send(send, sender_ep(), sendbuf, recvbuf, m_completion_count);
         sendbuf.pattern_fill(SEED2);
@@ -145,15 +146,14 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
                     DIRECTION_SEND_TO_RECV);
 }
 
-UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
     set_keep_data(true);
-    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
-                    0ul,
-                    sender().iface_attr().cap.am.max_bcopy,
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                    sizeof(uint64_t),
+                    sender().iface_attr().cap.am.max_short,
                     DIRECTION_SEND_TO_RECV);
 }
-
 
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);

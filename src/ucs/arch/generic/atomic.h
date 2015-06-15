@@ -26,8 +26,11 @@
 #define UCS_DEFINE_ATOMIC_SWAP(wordsize, suffix) \
     static inline uint##wordsize##_t ucs_atomic_swap##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                uint##wordsize##_t value) { \
-        ucs_fatal("unimplemented"); \
-        return 0; \
+        uint##wordsize##_t old; \
+        do { \
+           old = *ptr; \
+        }while(old != __sync_val_compare_and_swap(ptr, old, value)); \
+        return old; \
     }
 
 #define UCS_DEFINE_ATOMIC_CSWAP(wordsize, suffix) \

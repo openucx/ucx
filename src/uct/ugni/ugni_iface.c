@@ -47,7 +47,10 @@ static void uct_ugni_progress(void *arg)
     }
     --iface->outstanding;
     --desc->ep->outstanding;
-    ucs_mpool_put(desc);
+
+    if(ucs_likely(desc->not_ready_to_free == 0)){
+        ucs_mpool_put(desc);
+    }
     return;
 }
 
@@ -64,12 +67,28 @@ static ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t)(uct_iface_t*);
 
-ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
+
+static ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
+                                               struct sockaddr *addr)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
+    uct_sockaddr_ugni_t *iface_addr = (uct_sockaddr_ugni_t*)addr;
 
-    *(uct_ugni_iface_addr_t*)iface_addr = iface->address;
+    iface_addr->sgni_family = UCT_AF_UGNI;
+    iface_addr->nic_addr    = iface->nic_addr;
+    iface_addr->domain_id   = iface->domain_id;
     return UCS_OK;
+}
+
+static int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
+{
+    const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
+
+    if (iface_addr->sgni_family != UCT_AF_UGNI) {
+        return 0;
+    }
+
+    return 1;
 }
 
 ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -82,8 +101,8 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
     iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
-    iface_attr->iface_addr_len         = sizeof(uct_ugni_iface_addr_t);
-    iface_attr->ep_addr_len            = sizeof(uct_ugni_ep_addr_t);
+    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
+    iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT |
                                          UCT_IFACE_FLAG_PUT_BCOPY |
                                          UCT_IFACE_FLAG_PUT_ZCOPY |
@@ -91,7 +110,8 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_ATOMIC_FADD64  |
                                          UCT_IFACE_FLAG_ATOMIC_ADD64   |
                                          UCT_IFACE_FLAG_GET_BCOPY      |
-                                         UCT_IFACE_FLAG_GET_ZCOPY;
+                                         UCT_IFACE_FLAG_GET_ZCOPY      |
+                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     iface_attr->completion_priv_len    = 0; /* TBD */
 
@@ -110,6 +130,7 @@ static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     pd_attr->cap.flags         = UCT_PD_FLAG_REG;
     pd_attr->cap.max_alloc     = 0;
     pd_attr->cap.max_reg       = ULONG_MAX;
+    memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
 
     /* TODO make it configurable */
     pd_attr->alloc_methods.count = 3;
@@ -196,7 +217,7 @@ static void uct_ugni_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
 }
 
 ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                  uct_rkey_bundle_t *rkey_ob)
+                                  uct_rkey_t *rkey_p)
 {
     const uint64_t *ptr = rkey_buffer;
     gni_mem_handle_t *mem_hndl = NULL;
@@ -218,21 +239,20 @@ ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
 
     mem_hndl->qword1 = ptr[1];
     mem_hndl->qword2 = ptr[2];
-    rkey_ob->type = (void*)uct_ugni_rkey_release;
-    rkey_ob->rkey = (uintptr_t)mem_hndl;
+    *rkey_p = (uintptr_t)mem_hndl;
     return UCS_OK;
 
     /* need to add rkey release */
 }
 
 uct_iface_ops_t uct_ugni_iface_ops = {
+    .iface_query         = uct_ugni_iface_query,
+    .iface_flush         = uct_ugni_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_iface_t),
     .iface_get_address   = uct_ugni_iface_get_address,
-    .iface_flush         = uct_ugni_iface_flush,
-    .ep_get_address      = uct_ugni_ep_get_address,
-    .ep_connect_to_iface = NULL,
-    .ep_connect_to_ep    = uct_ugni_ep_connect_to_ep,
-    .iface_query         = uct_ugni_iface_query,
+    .iface_is_reachable  = uct_ugni_iface_is_reachable,
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
     .ep_put_short        = uct_ugni_ep_put_short,
     .ep_put_bcopy        = uct_ugni_ep_put_bcopy,
     .ep_put_zcopy        = uct_ugni_ep_put_zcopy,
@@ -242,8 +262,6 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
 };
 
 uct_pd_ops_t uct_ugni_pd_ops = {
@@ -291,9 +309,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ugni_iface_ops, worker,
                               &self->pd, &config->super UCS_STATS_ARG(NULL));
 
-    self->pd.ops           = &uct_ugni_pd_ops;
-    self->dev              = dev;
-    self->address.nic_addr = dev->address;
+    self->pd.ops   = &uct_ugni_pd_ops;
+    self->dev      = dev;
+    self->nic_addr = dev->address;
 
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;
@@ -312,6 +330,21 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
         goto error;
+    }
+
+    rc = ucs_mpool_create("UGNI-GET-DESC-ONLY", sizeof(uct_ugni_get_desc_t),
+                          0,                            /* alignment offset */
+                          UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                          128 ,                         /* grow */
+                          config->mpool.max_bufs,       /* max buffers */
+                          &self->super.super,           /* iface */
+                          ucs_mpool_hugetlb_malloc,     /* allocation hooks */
+                          ucs_mpool_hugetlb_free,       /* free hook */
+                          uct_ugni_base_desc_init,      /* init func */
+                          NULL , &self->free_desc_get);
+    if (UCS_OK != rc) {
+      ucs_error("Mpool creation failed");
+      goto error;
     }
 
     rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
@@ -354,7 +387,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_worker_h worker,
                                 128 ,                         /* grow */
                                 uct_ugni_base_desc_key_init,  /* memory/key init */
                                 "UGNI-DESC-GET",              /* name */
-                                &self->free_desc_fget);       /* mpool */
+                                &self->free_desc_get_buffer); /* mpool */
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
         goto clean_famo;
@@ -395,7 +428,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
         return;
     }
 
-    ucs_mpool_destroy(self->free_desc_fget);
+    ucs_mpool_destroy(self->free_desc_get_buffer);
+    ucs_mpool_destroy(self->free_desc_get);
     ucs_mpool_destroy(self->free_desc_famo);
     ucs_mpool_destroy(self->free_desc_buffer);
     ucs_mpool_destroy(self->free_desc);

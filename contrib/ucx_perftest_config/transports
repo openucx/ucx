@@ -1,0 +1,2 @@
+regular_verbs -x rc
+accel_verbs   -x rc_mlx5

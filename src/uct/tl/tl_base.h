@@ -40,38 +40,51 @@ enum {
 };
 
 
+/*
+ * Statistics macors
+ */
 #define UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_##_op, 1); \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_BYTES_##_method, _size);
-
 #define UCT_TL_EP_STAT_OP_IF_SUCCESS(_status, _ep, _op, _method, _size) \
     if (_status >= 0) { \
         UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
     }
-
 #define UCT_TL_EP_STAT_ATOMIC(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_ATOMIC, 1);
-
 #define UCT_TL_EP_STAT_FLUSH(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1);
-
 #define UCT_TL_IFACE_STAT_FLUSH(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH, 1);
 
 
 /**
- * Transport operations
+ * In release mode - do nothing.
+ *
+ * In debug mode, if _condition is not true, return an error. This could be less
+ * optimal because of additional checks, and that compiler needs to generate code
+ * for error flow as well.
  */
-struct uct_tl_ops {
+#define UCT_CHECK_PARAM(_condition, _err_message, ...) \
+    if (ENABLE_PARAMS_CHECK && !(_condition)) { \
+        ucs_error(_err_message, ## __VA_ARGS__); \
+        return UCS_ERR_INVALID_PARAM; \
+    }
 
-    ucs_status_t (*query_resources)(uct_context_h context,
-                                    uct_resource_desc_t **resources_p,
-                                    unsigned *num_resources_p);
 
-    ucs_status_t (*iface_open)(uct_worker_h worker, const char *dev_name,
-                               size_t rx_headroom, const uct_iface_config_t *config,
-                               uct_iface_h *iface_p);
-};
+/**
+ * In debug mode, if _condition is not true, generate 'Invalid length' error.
+ */
+#define UCT_CHECK_LENGTH(_condition, _name) \
+    UCT_CHECK_PARAM(_condition, "Invalid %s length", _name)
+
+
+/**
+ * In debug mode, check that active message ID is valid.
+ */
+#define UCT_CHECK_AM_ID(_am_id) \
+    UCT_CHECK_PARAM((_am_id) < UCT_AM_ID_MAX, \
+                    "Invalid active message id (valid range: 0..%d)", (int)UCT_AM_ID_MAX - 1)
 
 
 /**
@@ -89,11 +102,18 @@ typedef struct uct_am_handler {
  */
 typedef struct uct_base_iface {
     uct_iface_t       super;
+    uct_pd_h          pd;                    /* PD this interface is using */
     uct_worker_h      worker;                /* Worker this interface is on */
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
+
+    struct {
+        unsigned            num_alloc_methods;
+        uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
+    } config;
+
 } uct_base_iface_t;
-UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_worker_h, uct_pd_h,
+UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_pd_h, uct_worker_h,
                   const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
 
 
@@ -108,12 +128,53 @@ UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
 
 
 /**
+ * Transport component.
+ */
+typedef struct uct_tl_component {
+    ucs_status_t           (*query_resources)(uct_pd_h pd,
+                                              uct_tl_resource_desc_t **resources_p,
+                                              unsigned *num_resources_p);
+
+    ucs_status_t           (*iface_open)(uct_pd_h pd, uct_worker_h worker,
+                                         const char *dev_name, size_t rx_headroom,
+                                         const uct_iface_config_t *config,
+                                         uct_iface_h *iface_p);
+
+    char                   name[UCT_TL_NAME_MAX];/**< Transport name */
+    const char             *cfg_prefix;         /**< Prefix for configuration environment vars */
+    ucs_config_field_t     *iface_config_table; /**< Defines transport configuration options */
+    size_t                 iface_config_size;   /**< Transport configuration structure size */
+    ucs_list_link_t        list;
+} uct_tl_component_t;
+
+#define UCT_TL_COMPONENT_DEFINE(_pdc, _tlc, _query, _iface_struct, _name, \
+                                _cfg_prefix, _cfg_table, _cfg_struct) \
+    \
+    static uct_tl_component_t _tlc = { \
+        .query_resources     = _query, \
+        .iface_open          = UCS_CLASS_NEW_FUNC_NAME(_iface_struct), \
+        .name                = _name, \
+        .cfg_prefix          = _cfg_prefix, \
+        .iface_config_table  = _cfg_table, \
+        .iface_config_size   = sizeof(_cfg_struct) \
+    }; \
+    UCS_STATIC_INIT { ucs_list_add_tail(&(_pdc)->tl_list, &_tlc.list); }
+
+
+
+/**
  * "Base" structure which defines interface configuration options.
  * Specific transport extend this structure.
  */
 struct uct_iface_config {
     size_t            max_short;
     size_t            max_bcopy;
+
+    struct {
+        uct_alloc_method_t  *methods;
+        unsigned            count;
+    } alloc_methods;
+    UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, signals) lid_path_bits;
 };
 
 
@@ -182,6 +243,9 @@ typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
                 uct_mem_h memh);
 
 
+extern ucs_config_field_t uct_iface_config_table[];
+
+
 /**
  * Create a memory pool for buffers used by TL interface.
  *
@@ -208,7 +272,7 @@ ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
  * @param id       Active message ID.
  * @param data     Received data.
  * @param length   Length of received data.
- * @param desc     Receive descriptor.
+ * @param desc     Receive descriptor, as passed to user callback.
  */
 static inline ucs_status_t
 uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,

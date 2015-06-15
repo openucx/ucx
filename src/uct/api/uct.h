@@ -10,8 +10,10 @@
 #define UCT_H_
 
 #include <uct/api/uct_def.h>
+#include <uct/api/addr.h>
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
+#include <ucs/async/async.h>
 #include <ucs/config/types.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -71,9 +73,21 @@
  * @}
  */
 
+
 /**
  * @ingroup RESOURCE
- * @brief Communication resource descriptor
+ * @brief Protection domain resource descriptor.
+ *
+ * This structure describes a protection domain resource.
+ */
+typedef struct uct_pd_resource_desc {
+    char                     pd_name[UCT_PD_NAME_MAX]; /**< Protection domain name */
+} uct_pd_resource_desc_t;
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Communication resource descriptor.
  *
  * Resource descriptor is an object representing the network resource.
  * Resource descriptor could represent a stand-alone communication resource
@@ -82,29 +96,15 @@
  * virtual communication resources that are defined over a single physical
  * network interface.
  */
-typedef struct uct_resource_desc {
+typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
-    cpu_set_t                local_cpus;   /**< Mask of CPUs near the resource */
-    struct sockaddr_storage  subnet_addr;  /**< Subnet address. Devices which can
-                                                reach each other have same address */
-} uct_resource_desc_t;
+} uct_tl_resource_desc_t;
 
-
-/**
- * Opaque type for interface address.
- */
-struct uct_iface_addr {
-};
-
-
-/**
- * Opaque type for endpoint address.
- */
-struct uct_ep_addr {
-};
+#define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
+#define UCT_TL_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
 
 /**
  * @ingroup RESOURCE
@@ -127,7 +127,7 @@ enum {
     /* GET capabilities */
     UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8), /**< Short get */
     UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9), /**< Buffered get */
-    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10) /**< Zero-copy get */,
+    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10), /**< Zero-copy get */
 
     /* Atomic operations capabilities */
     UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16), /**< 32bit atomic add */
@@ -145,6 +145,14 @@ enum {
     UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
     UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /**< Invalid AM id on remote */
     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**<  Remote memory access */
+
+    /* Connection establishment */
+    UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
+    UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(41), /**< Supports connecting to specific endpoint */
+
+    /* Thread safety */
+    UCT_IFACE_FLAG_AM_THREAD_SINGLE = UCS_BIT(44), /**< Active messages callback is invoked only from main thread */
+
 };
 
 
@@ -207,31 +215,35 @@ enum {
 
 /**
  * @ingroup PD
- * @brief  List of allocation methods, in order of priority (high to low).
- */
-typedef struct uct_alloc_methods {
-    uint8_t                  count;  /**< Number of allocation methods in the array */
-    uint8_t                  methods[UCT_ALLOC_METHOD_LAST];
-                                     /**< Array of allocation methods */
-} uct_alloc_methods_t;
-
-
-/**
- * @ingroup PD
  * @brief  Protection domain attributes.
  */
 struct uct_pd_attr {
-    char                     name[UCT_PD_NAME_MAX]; /**< Protection domain name */
-
     struct {
         size_t               max_alloc;     /**< Maximal allocation size */
         size_t               max_reg;       /**< Maximal registration size */
         uint64_t             flags;         /**< UCT_PD_FLAG_xx */
     } cap;
 
-    uct_alloc_methods_t      alloc_methods; /**< Allocation methods priority */
+    char                     component_name[UCT_PD_COMPONENT_NAME_MAX]; /**< PD component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
+    cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
 };
+
+
+/**
+ * @ingroup PD
+ * @brief Describes a memory allocated by UCT.
+ *
+ * This structure describes a memory block allocated by UCT layer. The block
+ * could be allocated with one of several methods by @ref uct_mem_alloc().
+ */
+typedef struct uct_allocated_memory {
+    void                     *address; /**< Address of allocated memory */
+    size_t                   length;   /**< Real size of allocated memory */
+    uct_alloc_method_t       method;   /**< Method used to allocate the memory */
+    uct_pd_h                 pd;       /**< if method==PD: PD used to allocate the memory */
+    uct_mem_h                memh;     /**< if method==PD: PD memory handle */
+} uct_allocated_memory_t;
 
 
 /**
@@ -239,8 +251,9 @@ struct uct_pd_attr {
  * @brief Remote key with its type
  */
 typedef struct uct_rkey_bundle {
-    uct_rkey_t               rkey;   /**< Remote key descriptor, passed to RMA functions */
-    void                     *type;  /**< Remote key type */
+    uct_rkey_t               rkey;    /**< Remote key descriptor, passed to RMA functions */
+    void                     *handle; /**< Handle, used internally for releasing the key */
+    void                     *type;   /**< Remote key type */
 } uct_rkey_bundle_t;
 
 
@@ -262,90 +275,90 @@ struct uct_completion {
 };
 
 
-/**
- * @ingroup CONTEXT
- * @brief   UCT global context initialization
- *
- * This routine creates and initializes a UCT @ref uct_context "global context".
- *
- * @warning The function must be called before any other UCT function call in
- * the application.
- *
- * This routine discovers the available network interfaces, and initializes the
- * network resources required for discovering the device.  This routine is
- * responsible for inializing all information required for a particular
- * communication scope, for example, MPI instance, OpenSHMEM instance.
- *
- * @note @li Higher level protocols can add additional communication isolation,
- * as MPI does with it's communicator object. A single communication context
- * may be used to support multiple MPI communicators.  @li The context can be
- * used to isolate the communication that corresponds to different protocols.
- * For example, if MPI and OpenSHMEM are using UCCS to isolate the MPI
- * communication from the OpenSHMEM communication, users should use different
- * communication context for each of the protocol.
- *
- * @param [out] context_p   Filled with context handle.
- *
- * @return Error code.
- */
-ucs_status_t uct_init(uct_context_h *context_p);
-
-
-/**
- * @ingroup CONTEXT
- * @brief   UCT global context finalization
- *
- * This routine finalizes and releases the resources associated with a UCT
- * global context.
- *
- * @warning Users cannot call any communication routines using the finalized
- * UCT context.
- *
- * The finalization process releases and shuts down all resources associated
- * with the @ref uct_context "context".  After calling this routine, calling
- * any UCT routine without calling initialization routine is invalid.
- *
- * @param [in] context   Handle to context.
- *
- * @return void.
- */
-void uct_cleanup(uct_context_h context);
+extern const char *uct_alloc_method_names[];
 
 
 /**
  * @ingroup RESOURCE
- * @brief Query for transport resources.
+ * @brief Query for memory resources.
  *
- * This routine queries the @ref uct_context "global context" for communication
- * that are available for the context.
- * As an input, users provide the @ref uct_context "global context" ,
- * and as an output the routine returns an array of the resource @ref
- * uct_resource_desc_t "descriptors".
+ * Obtain the list of protection domain resources available on the current system.
  *
- * @param [in]  context         Handle to context.
  * @param [out] resources_p     Filled with a pointer to an array of resource
  *                              descriptors.
  * @param [out] num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
  */
-ucs_status_t uct_query_resources(uct_context_h context,
-                                 uct_resource_desc_t **resources_p,
-                                 unsigned *num_resources_p);
+ucs_status_t uct_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+                                    unsigned *num_resources_p);
+
+/**
+ * @ingroup RESOURCE
+ * @brief Release the list of resources returned from @ref uct_query_pd_resources.
+ *
+ * This routine releases the memory associated with the list of resources
+ * allocated by @ref uct_query_pd_resources.
+ *
+ * @param [in] resources  Array of resource descriptors to release.
+ */
+void uct_release_pd_resource_list(uct_pd_resource_desc_t *resources);
 
 
 /**
  * @ingroup RESOURCE
- * @brief Release the list of resources returned from @ref uct_query_resources.
+ * @brief Open a protection domain.
+ *
+ * Open a specific protection domain. All communications and memory operations
+ * are performed in the context of a specific protection domain. Therefore it
+ * must be created before communication resources.
+ *
+ * @param [in]  pd_name         Protection domain name, as returned from @ref
+ *                              uct_query_pd_resources.
+ * @param [out] pd_p            Filled with a handle to the protection domain.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_pd_open(const char *pd_name, uct_pd_h *pd_p);
+
+/**
+ * @ingroup RESOURCE
+ * @brief Close a protection domain.
+ *
+ * @param [in]  pd               Protection domain to close.
+ */
+void uct_pd_close(uct_pd_h pd);
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Query for transport resources.
+ *
+ * This routine queries the @ref uct_pd_t "protection domain" for communication
+ * resources that are available for it.
+ *
+ * @param [in]  pd              Handle to protection domain.
+ * @param [out] resources_p     Filled with a pointer to an array of resource
+ *                              descriptors.
+ * @param [out] num_resources_p Filled with the number of resources in the array.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
+                                       uct_tl_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p);
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Release the list of resources returned from @ref uct_pd_query_tl_resources.
  *
  * This routine releases the memory associated with the list of resources
- * allocated by @ref uct_query_resources.
+ * allocated by @ref uct_query_tl_resources.
  *
  * @param [in] resources  Array of resource descriptors to release.
- *
- * @return void.
  */
-void uct_release_resource_list(uct_resource_desc_t *resources);
+void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources);
 
 
 /**
@@ -356,12 +369,15 @@ void uct_release_resource_list(uct_resource_desc_t *resources);
  * created in an application, for example to be used by multiple threads.
  * Every worker can be progressed independently of others.
  *
- * @param [in]  context       Handle to context.
+ * @param [in]  async         Context for async event handlers.
+  *                            Can be NULL, which means that event handlers will
+ *                             not have particular context.
  * @param [in]  thread_mode   Thread access mode to the worker and resources
  *                             created on it.
  * @param [out] worker_p      Filled with a pointer to the worker object.
  */
-ucs_status_t uct_worker_create(uct_context_h context, ucs_thread_mode_t thread_mode,
+ucs_status_t uct_worker_create(ucs_async_context_t *async,
+                               ucs_thread_mode_t thread_mode,
                                uct_worker_h *worker_p);
 
 
@@ -393,7 +409,6 @@ void uct_worker_progress(uct_worker_h worker);
  * @ingroup RESOURCE
  * @brief Read transport-specific interface configuration.
  *
- * @param [in]  context       Handle to context.
  * @param [in]  tl_name       Transport name.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
@@ -404,8 +419,8 @@ void uct_worker_progress(uct_worker_h worker);
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_config_read(uct_context_h context, const char *tl_name,
-                                   const char *env_prefix, const char *filename,
+ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
+                                   const char *filename,
                                    uct_iface_config_t **config_p);
 
 
@@ -449,6 +464,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @ingroup RESOURCE
  * @brief Open a communication interface.
  *
+ * @param [in]  pd            Protection domain to create the interface on.
  * @param [in]  worker        Handle to worker which will be used to progress
  *                             communications on this interface.
  * @param [in]  tl_name       Transport name.
@@ -461,9 +477,10 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_open(uct_worker_h worker, const char *tl_name,
-                            const char *dev_name, size_t rx_headroom,
-                            const uct_iface_config_t *config, uct_iface_h *iface_p);
+ucs_status_t uct_iface_open(uct_pd_h pd, uct_worker_h worker,
+                            const char *tl_name, const char *dev_name,
+                            size_t rx_headroom, const uct_iface_config_t *config,
+                            uct_iface_h *iface_p);
 
 
 /**
@@ -492,7 +509,33 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr);
  * @param [out] iface_addr  Filled with interface address. The size of the buffer
  *                           provided must be at least @ref uct_iface_attr_t::iface_addr_len.
  */
-ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *iface_addr);
+ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr);
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Check if remote iface address is reachable.
+ *
+ * This function checks if a remote address can be reached from a local interface.
+ * If the function returns true, it does not necessarily mean a connection and/or
+ * data transfer would succeed, since the reachability check is a local operation
+ * it does not detect issues such as network mis-configuration or lack of connectivity.
+ *
+ * @param [in]  iface      Interface to check reachability from.
+ * @param [in]  addr       Address to check reachability to.
+ *
+ * @return Nonzero if reachable, 0 if not.
+ */
+int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr);
+
+
+/**
+ * @ingroup RESOURCE
+ */
+ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length,
+                                 const char *name, uct_allocated_memory_t *mem);
+
+void uct_iface_mem_free(const uct_allocated_memory_t *mem);
 
 
 /**
@@ -523,6 +566,24 @@ ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p);
 
 /**
  * @ingroup RESOURCE
+ * @brief Create an endpoint which is connected to remote interface.
+ *
+ * @param [in]  iface   Interface to create the endpoint on.
+ * @param [in]  addr    Remote interface address to connect to.
+ * @param [out] ep_p    Filled with handle to the new endpoint.
+ *
+ *
+ */
+static inline ucs_status_t uct_ep_create_connected(uct_iface_h iface,
+                                                   const struct sockaddr *addr,
+                                                   uct_ep_h* ep_p)
+{
+    return iface->ops.ep_create_connected(iface, addr, ep_p);
+}
+
+
+/**
+ * @ingroup RESOURCE
  * @brief Destroy an endpoint.
  *
  * @param [in] ep       Endpoint to destroy.
@@ -538,16 +599,7 @@ void uct_ep_destroy(uct_ep_h ep);
  * @param [out] ep_addr  Filled with endpoint address. The size of the buffer
  *                        provided must be at least @ref uct_iface_attr_t::ep_addr_len.
  */
-ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *ep_addr);
-
-
-/**
- * @ingroup RESOURCE
- * @brief Connect endpoint to a remote interface.
- *
- * TODO
- */
-ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr);
+ucs_status_t uct_ep_get_address(uct_ep_h ep, struct sockaddr *addr);
 
 
 /**
@@ -558,13 +610,12 @@ ucs_status_t uct_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_
  * @param [in] iface_addr   Remote interface address.
  * @param [in] ep_addr      Remote endpoint address.
  */
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_iface_addr_t *iface_addr,
-                                  const uct_ep_addr_t *ep_addr);
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const struct sockaddr *addr);
 
 
 /**
  * @ingroup PD
- * @brief Query for protection domain attributes..
+ * @brief Query for protection domain attributes. *
  *
  * @param [in]  pd       Protection domain to query.
  * @param [out] pd_attr  Filled with protection domain attributes.
@@ -574,11 +625,42 @@ ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
 /**
  * @ingroup PD
+ * @brief Allocate memory for zero-copy sends and remote access.
+ *
+ *  Allocate memory on the protection domain. In order to use this function, PD
+ * must support @ref UCT_PD_FLAG_ALLOC flag.
+ *
+ * @param [in]     pd          Protection domain to allocate memory on.
+ * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
+ *                              return, filled with the actual size that was allocated,
+ *                              which may be larger than the one requested. Must be >0.
+ * @param [in]     name        Name of the allocated region, used to track memory
+ *                              usage for debugging and profiling.
+ * @param [out]    memh_p      Filled with handle for allocated region.
+ */
+ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+                              const char *name, uct_mem_h *memh_p);
+
+/**
+ * @ingroup PD
+ * @brief Release memory allocated by @ref uct_pd_mem_alloc.
+ *
+ * @param [in]     pd          Protection domain memory was allocateed on.
+ * @param [in]     memh        Memory handle, as returned from @ref uct_pd_mem_alloc.
+ */
+ucs_status_t uct_pd_mem_free(uct_pd_h pd, uct_mem_h memh);
+
+
+/**
+ * @ingroup PD
  * @brief Register memory for zero-copy sends and remote access.
+ *
+ *  Register memory on the protection domain. In order to use this function, PD
+ * must support @ref UCT_PD_FLAG_REG flag.
  *
  * @param [in]     pd        Protection domain to register memory on.
  * @param [out]    address   Memory to register.
- * @param [in,out] length    Size of memory to register. Must be >0.
+ * @param [in]     length    Size of memory to register. Must be >0.
  * @param [out]    memh_p    Filled with handle for allocated region.
  */
 ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
@@ -587,7 +669,7 @@ ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
 
 /**
  * @ingroup PD
- * @brief Undo the operation of uct_pd_mem_reg().
+ * @brief Undo the operation of @ref uct_pd_mem_reg().
  *
  * @param [in]  pd          Protection domain which was used to register the memory.
  * @paran [in]  memh        Local access key to memory region.
@@ -597,43 +679,43 @@ ucs_status_t uct_pd_mem_dereg(uct_pd_h pd, uct_mem_h memh);
 
 /**
  * @ingroup PD
- * @brief Allocate memory for zero-copy sends and remote access.
+ * @brief Allocate memory for zero-copy communications and remote access.
  *
- * Allocate registered memory. The memory would either be allocated with the
- * protection domain, or allocated using other method and then registered with
- * the protection domain.
+ * Allocate potentially registered memory. Every one of the provided allocation
+ * methods will be used, in turn, to perform the allocation, until one succeeds.
+ *  Whenever the PD method is encountered, every one of the provided PDs will be
+ * used, in turn, to allocate the memory, until one succeeds, or they are
+ * exhausted. In this case the next allocation method from the initial list will
+ * be attempted.
  *
- * TODO allow passing multiple protection domains.
- *
- * @param [in]     pd          Protection domain to allocate memory on.
- * @param [in]     method      Memory allocation method. Can be UCT_ALLOC_METHOD_DEFAULT.
- * @param [in,out] length_p    Points to a value which specifies how many bytes to
- *                              allocate. Filled with the actual allocated size,
- *                              which is larger than or equal to the requested size.
-                                Must be >0.
- * @param [in]     alignment   Allocation alignment, must be power-of-2.
- * @param [out]    address_p   Filled with a pointer to allocated memory.
- * @param [out]    memh_p      Filled with a handle for allocated memory, which can
- *                              be used for zero-copy communications.
- * @param [in]     alloc_name  Name of the allocation. Used for memory statistics.
+ * @param [in]     min_length  Minimal size to allocate. The actual size may be
+ *                             larger, for example because of alignment restrictions.
+ * @param [in]     methods     Array of memory allocation methods to attempt.
+ * @param [in]     num_method  Length of 'methods' array.
+ * @param [in]     pds         Array of protection domains to attempt to allocate
+ *                             the memory with, for PD allocation method.
+ * @param [in]     num_pds     Length of 'pds' array. May be empty, in such case
+ *                             'pds' may be NULL, and PD allocation method will
+ *                             be skipped.
+ * @param [in]     name        Name of the allocation. Used for memory statistics.
+ * @param [out]    mem         In case of success, filled with information about
+ *                              the allocated memory. @ref uct_allocated_memory_t.
  */
-ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, uct_alloc_method_t method,
-                              size_t *length_p, size_t alignment, void **address_p,
-                              uct_mem_h *memh_p, const char *alloc_name);
+ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
+                           unsigned num_methods, uct_pd_h *pds, unsigned num_pds,
+                           const char *name, uct_allocated_memory_t *mem);
 
 
 /**
  * @ingroup PD
  * @brief Release allocated memory.
  *
- * Release the memory allocated by @ref uct_pd_mem_alloc. pd should be the same
- * as passed to @ref uct_pd_mem_alloc, and address should be one returned from it.
+ * Release the memory allocated by @ref uct_mem_alloc.
  *
- * @param [in]  pd          Protection domain which was used to allocate the memory.
- * @param [in]  address     Address of allocated memory.
- * @paran [in]  memh        Local access key to memory region.
+ * @param [in]  mem         Description of allocated memory, as returned from
+ *                          @ref uct_mem_alloc.
  */
-ucs_status_t uct_pd_mem_free(uct_pd_h pd, void *address, uct_mem_h memh);
+ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 
 
 /**
@@ -647,7 +729,7 @@ ucs_status_t uct_pd_mem_free(uct_pd_h pd, void *address, uct_mem_h memh);
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
+ucs_status_t uct_pd_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
 
 
 /**
@@ -655,14 +737,12 @@ ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
  *
  * @brief Unpack a remote key.
  *
- * @param [in]  pd           Handle to protection domain.
  * @param [in]  rkey_buffer  Packed remote key buffer.
  * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                uct_rkey_bundle_t *rkey_ob);
+ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob);
 
 
 /**
@@ -670,10 +750,9 @@ ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
  *
  * @brief Release a remote key.
  *
- * @param [in]  pd           Handle to protection domain.
  * @param [in]  rkey_ob      Remote key to release.
  */
-void uct_pd_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob);
+void uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
 
 
 /**
@@ -690,9 +769,12 @@ UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface)
  * @ingroup AM
  * @brief Release active message descriptor, which was passed to the active
  * message callback, and owned by the callee.
+ *
+ * @param [in]  desc         Descriptor to release.
  */
-UCT_INLINE_API void uct_iface_release_am_desc(uct_iface_h iface, void *desc)
+UCT_INLINE_API void uct_iface_release_am_desc(void *desc)
 {
+    uct_iface_h iface = uct_recv_desc_iface(desc);
     iface->ops.iface_release_am_desc(iface, desc);
 }
 
@@ -885,6 +967,25 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
                                                   uct_completion_t *comp)
 {
     return ep->iface->ops.ep_atomic_cswap32(ep, compare, swap, remote_addr, rkey, comp);
+}
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Request a notification when more send resources are available on this
+ *        endpoint.
+ *
+ *  This function can be used when send operations fail with ERR_NO_RESOURCE, and
+ * the user would like to know when send resources become available (opposed to
+ * repeatedly calling progress/send until it returns OK).
+ *
+ * @param ep    Endpoint to request notification on.
+ * @param comp  Completion handle, which would be invoked (once) when more
+ *              resources become available.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_req_notify(uct_ep_h ep, uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_req_notify(ep, comp);
 }
 
 

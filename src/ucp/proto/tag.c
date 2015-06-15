@@ -12,11 +12,6 @@
 #include <string.h>
 
 
-enum {
-    UCP_AM_ID_EAGER_ONLY  = 1,
-};
-
-
 static UCS_F_ALWAYS_INLINE int ucp_tag_is_match(ucp_tag_t tag, ucp_tag_t exp_tag,
                                                 ucp_tag_t tag_mask)
 {
@@ -79,14 +74,18 @@ static ucs_status_t ucp_tag_eager_am_handler(void *arg, void *data, size_t lengt
 ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length,
                           ucp_tag_t tag)
 {
+    ucp_worker_h worker = ep->worker;
     ucs_status_t status;
 
+retry:
     if (ucs_likely(length < ep->config.max_short_tag)) {
-        do {
-            UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
-            status = uct_ep_am_short(ep->uct, UCP_AM_ID_EAGER_ONLY, tag, buffer, length);
-            uct_worker_progress(ep->worker->uct);
-        } while (status == UCS_ERR_NO_RESOURCE);
+        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
+        status = uct_ep_am_short(ep->uct.ep, UCP_AM_ID_EAGER_ONLY, tag,
+                                 buffer, length);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            ucp_worker_progress(worker);
+            goto retry;
+        }
         return status;
     }
 
@@ -115,9 +114,8 @@ ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer,
                                      (void*)(rdesc + 1) + sizeof(ucp_tag_t),
                                      rdesc->length - sizeof(ucp_tag_t),
                                      comp);
-            /* TODO do we need to remember iface? */
-            uct_iface_release_am_desc(worker->ifaces[0], rdesc);
-            return status;
+            uct_iface_release_am_desc(rdesc);
+            goto out;
          }
          iter = ucs_queue_iter_next(iter);
     }
@@ -135,8 +133,11 @@ ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer,
         /* coverity[loop_condition] */
     } while (rreq.status == UCS_INPROGRESS);
 
-    *comp = rreq.comp;
-    return rreq.status;
+    *comp  = rreq.comp;
+    status = rreq.status;
+
+out:
+    return status;
 }
 
 ucs_status_t ucp_tag_init(ucp_context_h context)
@@ -159,8 +160,15 @@ void ucp_tag_cleanup(ucp_context_h context)
     ucs_mpool_destroy(context->tag.rreq_mp);
 }
 
-ucs_status_t ucp_tag_set_am_handlers(ucp_context_h context, uct_iface_h iface)
+ucs_status_t ucp_tag_set_am_handlers(ucp_worker_h worker, uct_iface_h iface)
 {
-    return uct_iface_set_am_handler(iface, UCP_AM_ID_EAGER_ONLY,
-                                    ucp_tag_eager_am_handler, context);
+    ucs_status_t status;
+
+    status = uct_iface_set_am_handler(iface, UCP_AM_ID_EAGER_ONLY,
+                                      ucp_tag_eager_am_handler, worker->context);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCS_OK;
 }

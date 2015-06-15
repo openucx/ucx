@@ -4,6 +4,7 @@
  * $COPYRIGHT$
  * $HEADER$
  */
+
 #ifndef UD_VERBS_H
 #define UD_VERBS_H
 
@@ -12,6 +13,7 @@
 #include "ud_iface.h"
 #include "ud_ep.h"
 #include "ud_def.h"
+
 
 typedef struct {
     uct_ud_ep_t          super;
@@ -26,6 +28,9 @@ typedef struct {
         struct ibv_send_wr  ctl_wr;
     } tx;
 } uct_ud_verbs_iface_t;
+
+
+ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr);
 
 
 #endif

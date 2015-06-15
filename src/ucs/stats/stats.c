@@ -11,6 +11,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucs/config/global_opts.h>
+#include <ucs/config/parser.h>
 #include <ucs/type/status.h>
 
 #include <sys/ioctl.h>

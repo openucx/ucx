@@ -10,43 +10,29 @@
 
 
 ucp_test::entity::entity() {
-    ucs_status_t status;
-    ucp_config_t *config;
+    ucs::handle<ucp_config_t*> config;
 
-    status = ucp_config_read(NULL, NULL, &config);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                           ucp_config_read, NULL, NULL);
 
-    status = ucp_init(config, 0, &m_ucph);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init, config, 0);
 
-    ucp_config_release(config);
-
-    status = ucp_worker_create(m_ucph, UCS_THREAD_MODE_MULTI, &m_worker);
-    ASSERT_UCS_OK(status);
-
-    status = ucp_ep_create(m_worker, &m_ep);
-    ASSERT_UCS_OK(status);
-}
-
-ucp_test::entity::~entity() {
-    ucp_ep_destroy(m_ep);
-    ucp_worker_destroy(m_worker);
-    ucp_cleanup(m_ucph);
+    UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_worker, ucp_worker_destroy,
+                           ucp_worker_create, m_ucph, UCS_THREAD_MODE_MULTI);
 }
 
 void ucp_test::entity::connect(const ucp_test::entity& other) {
     ucs_status_t status;
     ucp_address_t *address;
+    size_t address_length;
 
-    address = (ucp_address_t*)malloc(ucp_ep_address_length(other.m_ep));
-
-    status = ucp_ep_pack_address(other.m_ep, address);
+    status = ucp_worker_get_address(other.m_worker, &address, &address_length);
     ASSERT_UCS_OK(status);
 
-    status = ucp_ep_connect(m_ep, address);
-    ASSERT_UCS_OK(status);
+    UCS_TEST_CREATE_HANDLE(ucp_ep_h, m_ep, ucp_ep_destroy,
+                           ucp_ep_create, m_worker, address);
 
-    free(address);
+    ucp_worker_release_address(other.m_worker, address);
 }
 
 ucp_ep_h ucp_test::entity::ep() const {
@@ -61,6 +47,6 @@ ucp_context_h ucp_test::entity::ucph() const {
     return m_ucph;
 }
 
-void ucp_test::entity::flush() const {
-
+void ucp_test::entity::disconnect() {
+    m_ep.reset();
 }

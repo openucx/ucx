@@ -15,6 +15,39 @@ int             uct_p2p_test::log_data_count = 0;
 ucs_log_level_t uct_p2p_test::orig_log_level;
 
 
+std::string uct_p2p_test::p2p_resource::name() const {
+    std::stringstream ss;
+    ss << resource::name();
+    if (loopback) {
+        ss << "/loopback";
+    }
+    return ss.str();
+}
+
+std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_name)
+{
+    static std::vector<p2p_resource> all_resources;
+
+    if (all_resources.empty()) {
+        std::vector<const resource*> r = uct_test::enum_resources("");
+        for (std::vector<const resource*>::iterator iter = r.begin(); iter != r.end(); ++iter) {
+            p2p_resource res;
+            res.pd_name    = (*iter)->pd_name;
+            res.local_cpus = (*iter)->local_cpus;
+            res.tl_name    = (*iter)->tl_name;
+            res.dev_name   = (*iter)->dev_name;
+
+            res.loopback = false;
+            all_resources.push_back(res);
+
+            res.loopback = true;
+            all_resources.push_back(res);
+        }
+    }
+
+    return filter_resources(all_resources, tl_name);
+}
+
 uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
     m_rx_headroom(rx_headroom),
     m_completion(NULL),
@@ -25,16 +58,23 @@ uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
 void uct_p2p_test::init() {
     uct_test::init();
 
-    /* Create 2 connected endpoints */
-    entity *e1 = uct_test::create_entity(m_rx_headroom);
-    entity *e2 = uct_test::create_entity(m_rx_headroom);
-    e1->add_ep();
-    e2->add_ep();
-    e1->connect(0, *e2, 0);
-    e2->connect(0, *e1, 0);
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
 
-    m_entities.push_back(e1);
-    m_entities.push_back(e2);
+    /* Create 2 connected endpoints */
+    if (r->loopback) {
+        entity *e = uct_test::create_entity(m_rx_headroom);
+        m_entities.push_back(e);
+        e->connect(0, *e, 0);
+    } else {
+        entity *e1 = uct_test::create_entity(m_rx_headroom);
+        entity *e2 = uct_test::create_entity(m_rx_headroom);
+        m_entities.push_back(e1);
+        m_entities.push_back(e2);
+
+        e1->connect(0, *e2, 0);
+        e2->connect(0, *e1, 0);
+    }
 
     /* Allocate completion handle and set the callback */
     m_completion = (completion*)malloc(sizeof(completion) +
@@ -51,7 +91,7 @@ void uct_p2p_test::cleanup() {
 }
 
 void uct_p2p_test::short_progress_loop() {
-    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0);
+    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0*ucs::test_time_multiplier());
     while (ucs_get_time() < end_time) {
         progress();
     }
@@ -95,16 +135,18 @@ static O& operator<<(O& os, const size& sz)
     return os;
 }
 
-void uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
-                               ucs_log_level_t level, const char *prefix, const char *message,
-                               va_list ap)
+ucs_log_func_rc_t
+uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
+                          ucs_log_level_t level, const char *prefix, const char *message,
+                          va_list ap)
 {
     if (level == UCS_LOG_LEVEL_TRACE_DATA) {
         ++log_data_count;
     }
-    if (level <= orig_log_level) {
-        ucs_log_default_handler(file, line, function, level, prefix, message, ap);
-    }
+
+    /* Continue to next log handler if original log level would have allowed it */
+    return (level <= orig_log_level) ? UCS_LOG_FUNC_RC_CONTINUE
+                                     : UCS_LOG_FUNC_RC_STOP;
 }
 
 template <typename O>
@@ -120,16 +162,18 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
      * prints log messages for the transfers.
      */
     int count_before = log_data_count;
-    ucs_log_set_handler(log_handler);
+    ucs_log_push_handler(log_handler);
     orig_log_level = ucs_global_opts.log_level;
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
     bool expect_log = ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA);
 
-    test_xfer(send, length, direction);
+    UCS_TEST_SCOPE_EXIT() {
+        /* Restore logging */
+        ucs_global_opts.log_level = orig_log_level;
+        ucs_log_pop_handler();
+    } UCS_TEST_SCOPE_EXIT_END
 
-    /* Restore logging */
-    ucs_global_opts.log_level = orig_log_level;
-    ucs_log_set_handler(ucs_log_default_handler);
+    test_xfer(send, length, direction);
 
     if (expect_log) {
         EXPECT_GE(log_data_count - count_before, 1);
@@ -210,7 +254,7 @@ void uct_p2p_test::wait_for_remote() {
 }
 
 const uct_test::entity& uct_p2p_test::sender() const {
-    return ent(0);
+    return **m_entities.begin();
 }
 
 uct_ep_h uct_p2p_test::sender_ep() const {
@@ -218,7 +262,7 @@ uct_ep_h uct_p2p_test::sender_ep() const {
 }
 
 const uct_test::entity& uct_p2p_test::receiver() const {
-    return ent(1);
+    return **(m_entities.end() - 1);
 }
 
 void uct_p2p_test::completion_cb(uct_completion_t *self, void *data) {

@@ -166,7 +166,7 @@ err_close_pipe:
 err_timerq_cleanup:
     ucs_timerq_cleanup(&ucs_async_thread_global_context.timerq);
 err:
-pthread_mutex_unlock(&ucs_async_thread_global_context.lock);
+    pthread_mutex_unlock(&ucs_async_thread_global_context.lock);
     return status;
 }
 

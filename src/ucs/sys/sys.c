@@ -437,10 +437,6 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     void *ptr;
     int ret;
 
-    if (RUNNING_ON_VALGRIND) {
-        flags &= ~SHM_HUGETLB;
-    }
-
     alloc_size = ucs_memtrack_adjust_alloc_size(*size);
 
     if (flags & SHM_HUGETLB){
@@ -511,7 +507,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     return UCS_OK;
 }
 
-void ucs_sysv_free(void *address)
+ucs_status_t ucs_sysv_free(void *address)
 {
     int ret;
 
@@ -519,7 +515,10 @@ void ucs_sysv_free(void *address)
     ret = shmdt(address);
     if (ret) {
         ucs_warn("Unable to detach shared memory segment at %p: %m", address);
+        return UCS_ERR_INVALID_PARAM;
     }
+
+    return UCS_OK;
 }
 
 unsigned ucs_get_mem_prot(void *address, size_t length)

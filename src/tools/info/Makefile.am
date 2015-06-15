@@ -22,6 +22,7 @@ build_config.h: $(top_builddir)/config.h Makefile
 
 ucx_info_SOURCES  = \
 	build_info.c \
+	cfg_info.c \
 	sys_info.c \
 	tl_info.c \
 	type_info.c \
@@ -33,4 +34,5 @@ noinst_HEADERS = \
 
 ucx_info_LDADD    = \
     $(abs_top_builddir)/src/uct/libuct.la \
+    $(abs_top_builddir)/src/ucp/libucp.la \
     $(abs_top_builddir)/src/ucs/libucs.la

@@ -52,16 +52,17 @@ gtest_SOURCES = \
 	uct/test_amo_cswap.cc \
 	uct/test_amo_fadd.cc \
 	uct/test_amo_swap.cc \
+	uct/test_mem.cc \
 	uct/test_p2p_am.cc \
 	uct/test_p2p_err.cc \
 	uct/test_p2p_rma.cc \
 	uct/test_pd.cc \
-	uct/test_uct_context.cc \
 	uct/test_uct_perf.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
 	ucp/ucp_test.cc \
 	ucp/test_ucp_basic.cc \
+	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_tag.cc \
 	ucs/test_async.cc \
 	ucs/test_class.cc \
@@ -80,10 +81,13 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
 
-if HAVE_IB 
+if HAVE_IB
+gtest_SOURCES += \
+    uct/test_ib.cc
 if HAVE_TL_UD
 gtest_SOURCES += \
-	uct/test_ud.cc
+	uct/test_ud.cc \
+	uct/test_ud_ds.cc
 endif
 endif
 
@@ -135,7 +139,7 @@ test: ucx gtest
 #
 test_gdb: ucx gtest
 	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
-	env UCS_HANDLE_ERRORS=none \
+	$(LAUNCHER) env UCS_HANDLE_ERRORS=none \
 		UCS_GDB_PATH="" \
 		gdb -x .gdbcommands --args $(GDB_ARGS) \
 			$(abs_builddir)/gtest $(GTEST_ARGS)
@@ -144,5 +148,5 @@ test_gdb: ucx gtest
 # Run unit tests with valgrind
 #
 test_valgrind: ucx gtest
-	env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
+	$(LAUNCHER) env LD_LIBRARY_PATH="$(VALGRIND_LIBPATH):${LD_LIBRARY_PATH}" \
 	valgrind $(VALGRIND_ARGS) $(abs_builddir)/gtest $(GTEST_ARGS)

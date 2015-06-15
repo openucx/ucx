@@ -20,17 +20,12 @@
  *  This structure defines the configuration for UCP context.
  */
 struct ucp_config {
-    struct {
-        char             **names;     /**< Array of device names to use */
-        unsigned         count;       /**< Number of devices in the array */
-    } devices;
+    UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices; /**< Array of device names to use */
+    UCS_CONFIG_STRING_ARRAY_FIELD(names)   tls;     /**< Array of device names to use */
 
-    int                  device_policy_force; /**< Whether to force using all devices */
+    int                                    force_all_devices; /**< Whether to force using all devices */
 
-    struct {
-       char              **names;     /**< Array of transport names to use */
-       unsigned          count;       /**< Number of transports in the array */
-   } tls;
+    UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;   /**< Array of allocation methods */
 };
 
 
@@ -86,6 +81,10 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
 void ucp_config_release(ucp_config_t *config);
 
 
+void ucp_config_print(const ucp_config_t *config, FILE *stream,
+                      const char *title, ucs_config_print_flags_t print_flags);
+
+
 /**
  * @ingroup CONTEXT
  * @brief Initialize global ucp context.
@@ -138,6 +137,33 @@ void ucp_worker_destroy(ucp_worker_h worker);
 
 /**
  * @ingroup CONTEXT
+ * @brief Get the address of worker object.
+ *
+ *  Returns the address of a worker object. This address should be passed to any
+ * remote entity wishing to connect to this worker.
+ *  The address buffer is allocated by this function, and should be released by
+ * calling @ref ucp_worker_release_address().
+ *
+ * @param [in]  worker            Worker object whose address to return.
+ * @param [out] address_p         Filled with a pointer to worker address.
+ * @param [out] address_length_p  Filled with the size of the address.
+ */
+ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
+                                    size_t *address_length_p);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Release an address of worker object.
+ *
+ * @param [in] address            Address to release, returned from
+ *                                @ref ucp_worker_get_address()
+ */
+void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
+
+
+/**
+ * @ingroup CONTEXT
  * @brief Progress all communications on a specific worker.
  *
  *  This function progresses all communications and returns handles to completed
@@ -162,11 +188,14 @@ void ucp_worker_progress(ucp_worker_h worker);
  * process is not completed, communications will be dealyed.
  *
  * @param [in]  worker      Handle to the worker on which the endpoint is created.
+ * @param [in]  address     Destination address, originally obtained from @ref
+ *                            ucp_worker_get_address().
  * @param [out] ep_p        Filled with a handle to the opened endpoint.
  *
  * @return Error code.
  */
-ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_ep_h *ep_p);
+ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
+                           ucp_ep_h *ep_p);
 
 
 /**
@@ -176,47 +205,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_ep_h *ep_p);
  * @param [in]  ep   Handle to the remote endpoint.
  */
 void ucp_ep_destroy(ucp_ep_h ep);
-
-
-/**
- * TODO ep->worker
- * @ingroup CONTEXT
- * @brief Get worker address length.
- *
- * @param [in]  worker         Worker to get address from.
- *
- * @return Worker address length.
- */
-size_t ucp_ep_address_length(ucp_ep_h ep);
-
-
-/**
- * TODO ep->worker
- * @ingroup CONTEXT
- * @brief Serialize worker address.
- *
- * Routine returns serialized address that can be used to connect
- * to the worker.
- * It is caller responsibility to allocate buffer that have enough room
- * to hold address and to free the buffer. Buffer size is obtained from
- * @ref ucp_worker_address_length().
- *
- * @param [in]  worker         Worker to get address from.
- * @param [out] address        Filled with the worker address.
- *
- * @return Error code.
- */
-ucs_status_t ucp_ep_pack_address(ucp_ep_h ep, ucp_address_t *address);
-
-
-/*
- * @ingroup CONTEXT
- * @brief Connect to remote endpoint.
- *
- * @param [in]  dest_addr   Destination address, originally obtained from @ref
- *                          ucp_ep_pack_address().
- */
-ucs_status_t ucp_ep_connect(ucp_ep_h ep, ucp_address_t *dest_addr);
 
 
 /**
@@ -246,39 +234,52 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
 
 /**
  * @ingroup CONTEXT
- * @brief Serialize memory region remote access key
+ * @brief Serialize memory region remote access key.
  *
+ * @param [in]  context       UCP context.
  * @param [in]  memh          memory region handle.
- * @param [out] rkey_buffer   contains serialized rkey. Caller is responsible to free() it.
+ * @param [out] rkey_buffer   contains serialized rkey. Caller is responsible to
+ *                            release it using ucp_rkey_buffer_release().
  * @param [out] size          length of serialized rkey. 
  */
-ucs_status_t ucp_rkey_pack(ucp_mem_h memh, void **rkey_buffer_p, size_t *size_p);
+ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
+                           void **rkey_buffer_p, size_t *size_p);
 
 
 /**
  * @ingroup CONTEXT
- * @brief Create rkey from serialized data
+ * @brief Release packed remote key buffer, returned from @ref ucp_rkey_pack().
  *
- * @param [in]  context       UCP context
- * @param [in]  rkey_buffer   serialized rkey
- * @param [out] rkey          filled with rkey
+ * @param [in]  rkey_buffer   Buffer to release.
  */
-ucs_status_t ucp_rkey_unpack(ucp_context_h context, void *rkey_buffer,
-                             ucp_rkey_h *rkey_p);
+void ucp_rkey_buffer_release(void *rkey_buffer);
 
 
 /**
  * @ingroup CONTEXT
- * @brief Destroy remote key.
+ * @brief Create remote access key from serialized data.
  *
- * param [in] rkey
+ * @param [in]  ep            Endpoint to access using the remote key.
+ * @param [in]  rkey_buffer   Serialized rkey.
+ * @param [out] rkey          Filled with rkey handle.
  */
-ucs_status_t ucp_rkey_destroy(ucp_rkey_h rk_rkey_destrey);
+ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey_p);
 
 
 /**
  * @ingroup CONTEXT
- * @brief If possible translate remote address into local address which can be used for direct memory access
+ * @brief Destroy remote key returned from @ref ucp_rkey_unpack().
+ *
+ * @param [in]  ep           Endpoint which has created the remote key.
+ * @param [in]  rkey         Romote key to destroy.
+ */
+void ucp_rkey_destroy(ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief If possible translate remote address into local address which can be
+ *        used for direct memory access
  * 
  * @param [in]  ep              endpoint address
  * @param [in]  remote_addr     address to translate
@@ -359,9 +360,9 @@ ucs_status_t ucp_rma_get(ucp_ep_h ep, void *buffer, size_t length,
  * All operations started before fence will be completed before those
  * issued after.
  *
- * @param [in] context  UCP context
+ * @param [in] worker        UCP worker.
  */
-ucs_status_t ucp_rma_fence(ucp_context_h context);
+ucs_status_t ucp_rma_fence(ucp_worker_h worker);
 
 
 /**
@@ -372,9 +373,9 @@ ucs_status_t ucp_rma_fence(ucp_context_h context);
  * All operations that were started before ucp_quiet will be completed on
  * remote when ucp_quiet returns
  *
- * @param [in] context  UCP context
+ * @param [in] worker        UCP worker.
  */
-ucs_status_t ucp_rma_flush(ucp_context_h context);
+ucs_status_t ucp_rma_flush(ucp_worker_h worker);
 
 
 #endif

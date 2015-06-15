@@ -271,6 +271,9 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
     if (status != UCS_OK) {
         goto err_remove_handler;
     }
+
+    ucs_debug("listening to async event fd %d events 0x%x mode %s", event_fd,
+              events, ucs_async_mode_names[mode]);
     return UCS_OK;
 
 err_remove_handler:
@@ -291,6 +294,7 @@ ucs_status_t ucs_async_unset_event_handler(int event_fd)
         return status;
     }
 
+    ucs_debug("removing async event fd %d", event_fd);
     return ucs_async_method_call(mode, remove_event_fd, async, event_fd);
 }
 

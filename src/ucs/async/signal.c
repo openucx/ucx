@@ -89,6 +89,7 @@ ucs_async_signal_set_fd_owner(pid_t dest_tid, int fd)
     owner.type = F_OWNER_TID;
     owner.pid  = dest_tid;
 
+    ucs_trace_async("fcntl(F_SETOWN, fd=%d, tid=%d)", fd, dest_tid);
     if (0 > fcntl(fd, F_SETOWN_EX, &owner)) {
         ucs_error("fcntl F_SETOWN_EX failed: %m");
         return UCS_ERR_IO_ERROR;
@@ -310,6 +311,8 @@ static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
     }
 
     /* Send signal when fd is ready */
+    ucs_trace_async("fcntl(F_STSIG, fd=%d, sig=%s)", event_fd,
+                    ucs_signal_names[ucs_global_opts.async_signo]);
     if (0 > fcntl(event_fd, F_SETSIG, ucs_global_opts.async_signo)) {
         ucs_error("fcntl F_SETSIG failed: %m");
         status = UCS_ERR_IO_ERROR;
@@ -324,6 +327,7 @@ static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
     }
 
     /* Allow async events on the file descriptor */
+    ucs_trace_async("fcntl(O_ASYNC, fd=%d)", event_fd);
     status = ucs_sys_fcntl_modfl(event_fd, O_ASYNC, 0);
     if (status != UCS_OK) {
         ucs_error("fcntl F_SETFL failed: %m");

@@ -42,6 +42,9 @@ typedef enum {
 } ucs_async_mode_t;
 
 
+extern const char *ucs_async_mode_names[];
+
+
 /**
  * Ternary logic value.
  */
@@ -74,6 +77,21 @@ typedef enum {
     UCS_CONFIG_PRINT_DOC           = UCS_BIT(2),
     UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(3),
 } ucs_config_print_flags_t;
+
+
+/**
+ * Structure type for array configuration. Should be used inside the configuration
+ * structure declaration.
+ */
+#define UCS_CONFIG_ARRAY_FIELD(_type, _array_name) \
+    struct { \
+        _type    *_array_name; \
+        unsigned count; \
+    }
+
+/* Specific structure for an array of strings */
+#define UCS_CONFIG_STRING_ARRAY_FIELD(_array_name) \
+    UCS_CONFIG_ARRAY_FIELD(char*, _array_name)
 
 
 #endif /* TYPES_H_ */

@@ -15,6 +15,7 @@ libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
 
 nobase_dist_libuct_la_HEADERS = \
+	api/addr.h \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
@@ -27,20 +28,19 @@ noinst_HEADERS = \
 
 libuct_la_SOURCES = \
 	tl/context.c \
+	tl/memory.c \
 	tl/tl_base.c
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS)
 noinst_HEADERS += \
-	ib/base/ib_context.h \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \
 	ib/base/ib_log.h \
 	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \
-	ib/base/ib_context.c \
 	ib/base/ib_device.c \
 	ib/base/ib_iface.c \
 	ib/base/ib_log.c
@@ -58,24 +58,24 @@ endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \
-	ib/rc/rc_def.h \
-	ib/rc/rc_ep.h \
-	ib/rc/rc_iface.h \
-	ib/rc/rc_verbs.h
+	ib/rc/base/rc_def.h \
+	ib/rc/base/rc_ep.h \
+	ib/rc/base/rc_iface.h \
+	ib/rc/verbs/rc_verbs.h
 
 libuct_la_SOURCES += \
-	ib/rc/rc_ep.c \
-	ib/rc/rc_iface.c \
-	ib/rc/rc_verbs_ep.c \
-	ib/rc/rc_verbs_iface.c
+	ib/rc/base/rc_ep.c \
+	ib/rc/base/rc_iface.c \
+	ib/rc/verbs/rc_verbs_ep.c \
+	ib/rc/verbs/rc_verbs_iface.c
 
 if HAVE_MLX5_HW
 noinst_HEADERS += \
-	ib/rc/rc_mlx5.h
+	ib/rc/accel/rc_mlx5.h
 
 libuct_la_SOURCES += \
-	ib/rc/rc_mlx5_ep.c \
-	ib/rc/rc_mlx5_iface.c
+	ib/rc/accel/rc_mlx5_ep.c \
+	ib/rc/accel/rc_mlx5_iface.c
 endif
 endif
 
@@ -92,6 +92,16 @@ noinst_HEADERS += \
 	ib/ud/ud_verbs.h \
 	ib/ud/ud_inl.h 
 endif
+
+if HAVE_TL_CM
+libuct_la_SOURCES += \
+	ib/cm/cm_iface.c \
+	ib/cm/cm_ep.c
+
+noinst_HEADERS += \
+	ib/cm/cm.h
+endif
+
 endif
 
 if HAVE_CRAY_UGNI 
@@ -114,23 +124,31 @@ endif
 
 if HAVE_CUDA
 noinst_HEADERS += \
-    cuda/cuda_context.h \
+    cuda/cuda_pd.h \
     cuda/cuda_iface.h \
     cuda/cuda_ep.h
 
 libuct_la_SOURCES += \
-    cuda/cuda_context.c \
+    cuda/cuda_pd.c \
     cuda/cuda_iface.c \
     cuda/cuda_ep.c
 endif
 
 # FIXME these should be done conditionally
 noinst_HEADERS += \
-    sysv/sysv_context.h \
-    sysv/sysv_iface.h \
-    sysv/sysv_ep.h
+    sm/base/sm_iface.h \
+    sm/base/sm_ep.h
 
 libuct_la_SOURCES += \
-    sysv/sysv_context.c \
-    sysv/sysv_iface.c \
-    sysv/sysv_ep.c
+    sm/base/sm_iface.c \
+    sm/base/sm_ep.c
+
+noinst_HEADERS += \
+    sm/sysv/sysv_ep.h \
+    sm/sysv/sysv_iface.h \
+    sm/sysv/sysv_pd.h
+
+libuct_la_SOURCES += \
+    sm/sysv/sysv_ep.c \
+    sm/sysv/sysv_iface.c \
+    sm/sysv/sysv_pd.c

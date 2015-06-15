@@ -44,6 +44,11 @@ protected:
 
     typedef std::vector<ucs_global_opts_t> config_stack_t;
 
+    static ucs_log_func_rc_t
+    log_handler(const char *file, unsigned line, const char *function,
+                ucs_log_level_t level, const char *prefix, const char *message,
+                va_list ap);
+
     void SetUpProxy();
     void TearDownProxy();
     void TestBodyProxy();
@@ -56,6 +61,9 @@ protected:
     config_stack_t       m_config_stack;
     state_t              m_state;
     int                  m_num_valgrind_errors_before;
+    unsigned             m_num_warnings_before;
+
+    static unsigned m_total_warnings;
 
 private:
     void skipped(const test_skip_exception& e);
