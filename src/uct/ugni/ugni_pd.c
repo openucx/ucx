@@ -16,16 +16,36 @@
 static ucs_status_t uct_ugni_query_pd_resources(uct_pd_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p);
 static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p);
+static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer, 
+                                         uct_rkey_t *rkey_p, void **handle_p);
+static void uct_ugni_rkey_release(uct_rkey_t rkey, void *handle);
 
 UCT_PD_COMPONENT_DEFINE(uct_ugni_pd_component,
+                        UCT_UGNI_TL_NAME,
                         uct_ugni_query_pd_resources,
                         uct_ugni_pd_open,
-                        UCT_UGNI_TL_NAME)
+                        (3 * sizeof(uint64_t)),
+                        uct_ugni_rkey_unpack,
+                        uct_ugni_rkey_release)
+
+UCS_CONFIG_DEFINE_ARRAY(ugni_alloc_methods, sizeof(uct_alloc_method_t),
+                        UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
 
 ucs_config_field_t uct_ugni_iface_config_table[] = {
-    {"", "", NULL,
-    ucs_offsetof(uct_ugni_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+    {"MAX_SHORT", "2048",
+     "Maximal size of short sends. The transport is allowed to support any size up\n"
+     "to this limit, the actual size can be lower due to transport constraints.",
+     ucs_offsetof(uct_iface_config_t, max_short), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"MAX_BCOPY", "2048",
+     "Maximal size of copy-out sends. The transport is allowed to support any size\n"
+     "up to this limit, the actual size can be lower due to transport constraints.",
+     ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"ALLOC", "huge,mmap,heap",
+     "Priority of methods to allocate intermediate buffers for communication",
+     ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(ugni_alloc_methods)},
+
     UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, 0, "fma",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
@@ -61,12 +81,6 @@ static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     pd_attr->cap.max_alloc     = 0;
     pd_attr->cap.max_reg       = ULONG_MAX;
     memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
-
-    /* TODO make it configurable */
-    pd_attr->alloc_methods.count = 3;
-    pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_HUGE;
-    pd_attr->alloc_methods.methods[1] = UCT_ALLOC_METHOD_MMAP;
-    pd_attr->alloc_methods.methods[2] = UCT_ALLOC_METHOD_HEAP;
     return UCS_OK;
 }
 
@@ -148,13 +162,14 @@ static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static void uct_ugni_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
+static void uct_ugni_rkey_release(uct_rkey_t rkey, void *handle)
 {
-    ucs_free((void *)rkey_ob->rkey);
+    ucs_assert(NULL == handle);
+    ucs_free((void *)rkey);
 }
 
-static ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                         uct_rkey_bundle_t *rkey_ob)
+static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer, 
+                                         uct_rkey_t *rkey_p, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;
     gni_mem_handle_t *mem_hndl = NULL;
@@ -176,11 +191,9 @@ static ucs_status_t uct_ugni_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
 
     mem_hndl->qword1 = ptr[1];
     mem_hndl->qword2 = ptr[2];
-    rkey_ob->type = (void*)uct_ugni_rkey_release;
-    rkey_ob->rkey = (uintptr_t)mem_hndl;
+    *rkey_p = (uintptr_t)mem_hndl;
+    *handle_p = NULL;
     return UCS_OK;
-
-    /* need to add rkey release */
 }
 
 static int init_device_list(uct_ugni_job_info_t *inf)
@@ -291,11 +304,9 @@ static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p)
         .query        = uct_ugni_pd_query,
         .mem_alloc    = (void*)ucs_empty_function,
         .mem_free     = (void*)ucs_empty_function,
-        .rkey_pack    = uct_ugni_rkey_pack,
-        .rkey_unpack  = uct_ugni_rkey_unpack,
-        .rkey_release = uct_ugni_rkey_release,
         .mem_reg      = uct_ugni_mem_reg,
-        .mem_dereg    = uct_ugni_mem_dereg
+        .mem_dereg    = uct_ugni_mem_dereg,
+        .mkey_pack     = uct_ugni_rkey_pack
     };
 
     static uct_ugni_pd_t pd = {

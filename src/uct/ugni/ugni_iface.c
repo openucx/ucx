@@ -337,8 +337,8 @@ static ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
     int i;
     ucs_status_t rc = UCS_OK;
 
-    assert(!strncmp(pd->component->name_prefix, 
-                    uct_ugni_pd_component.name_prefix,
+    assert(!strncmp(pd->component->name, 
+                    UCT_UGNI_TL_NAME,
                     UCT_PD_NAME_MAX));
 
     pthread_mutex_lock(&uct_ugni_global_lock);
