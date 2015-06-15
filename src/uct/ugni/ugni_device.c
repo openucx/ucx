@@ -14,7 +14,7 @@
 #include <ucs/sys/sys.h>
 
 
-void uct_device_get_resource(uct_ugni_device_t *dev,
+void uct_ugni_device_get_resource(uct_ugni_device_t *dev,
         uct_tl_resource_desc_t *resource)
 {
     ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", UCT_UGNI_TL_NAME);

@@ -321,27 +321,22 @@ static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p)
         rc = init_device_list(&job_info);
         if (UCS_OK != rc) {
             ucs_error("Failed to init device list, Error status: %d", rc);
+            goto error;
         }
         rc = uct_ugni_init_nic(0, &domain_id,
                                &pd.cdm_handle, &pd.nic_handle,
                                &pd.address);
         if (UCS_OK != rc) {
             ucs_error("Failed to UGNI NIC, Error status: %d", rc);
+            goto error;
         }
     }
 
     pd.ref_count++;
+
+error:
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return rc;
-}
-
-void uct_ugni_cleanup()
-{
-    int i;
-    for (i = 0; i < job_info.num_devices; ++i) {
-        uct_ugni_device_destroy(&job_info.devices[i]);
-    }
-    ucs_free(job_info.devices);
 }
 
 uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name)
@@ -356,8 +351,8 @@ uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name)
 
     for (dev_index = 0; dev_index < job_info.num_devices; ++dev_index) {
         dev = &job_info.devices[dev_index];
-        if (strlen(dev_name) == strlen(dev->fname) &&
-                0 == strncmp(dev_name, dev->fname, strlen(dev->fname))) {
+        if ((strlen(dev_name) == strlen(dev->fname)) &&
+            (0 == strncmp(dev_name, dev->fname, strlen(dev->fname)))) {
             ucs_info("Device found: %s", dev_name);
             return dev;
         }

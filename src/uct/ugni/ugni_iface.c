@@ -209,7 +209,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
                           NULL , &self->free_desc_get);
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
-        goto exit;
+        goto clean_desc;
     }
 
     rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
@@ -226,7 +226,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
                           NULL , &self->free_desc_buffer);
     if (UCS_OK != rc) {
         ucs_error("Mpool creation failed");
-        goto clean_desc;
+        goto clean_desc_get;
     }
 
     rc = uct_iface_mpool_create(&self->super.super, 
@@ -269,10 +269,13 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
 
     ucs_error("Failed to activate interface");
 
+    ucs_mpool_destroy(self->free_desc_get_buffer);
 clean_famo:
     ucs_mpool_destroy(self->free_desc_famo);
 clean_buffer:
     ucs_mpool_destroy(self->free_desc_buffer);
+clean_desc_get:
+    ucs_mpool_destroy(self->free_desc_get);
 clean_desc:
     ucs_mpool_destroy(self->free_desc);
 exit:
@@ -354,7 +357,7 @@ static ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
     }
 
     for (i = 0; i < job_info.num_devices; i++) {
-        uct_device_get_resource(&devs[i], &resources[i]);
+        uct_ugni_device_get_resource(&devs[i], &resources[i]);
     }
 
 error:
