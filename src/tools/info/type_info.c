@@ -24,11 +24,11 @@
 #endif
 
 #if HAVE_TL_RC
-#  include <uct/ib/rc/rc_iface.h>
-#  include <uct/ib/rc/rc_ep.h>
-#  include <uct/ib/rc/rc_verbs.h>
+#  include <uct/ib/rc/base/rc_iface.h>
+#  include <uct/ib/rc/base/rc_ep.h>
+#  include <uct/ib/rc/verbs/rc_verbs.h>
 #  if HAVE_MLX5_HW
-#    include <uct/ib/rc/rc_mlx5.h>
+#    include <uct/ib/rc/accel/rc_mlx5.h>
 #  endif
 #endif
 
