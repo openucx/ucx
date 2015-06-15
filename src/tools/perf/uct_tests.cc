@@ -229,7 +229,7 @@ public:
                 return;
             } else if (status == UCS_INPROGRESS) {
                 ++m_outstanding;
-                ucs_assert(m_outstanding <= m_max_outstanding);
+                ucs_assert((comp == NULL) || (m_outstanding <= m_max_outstanding));
                 return;
             } else if (status == UCS_ERR_NO_RESOURCE) {
                 continue;

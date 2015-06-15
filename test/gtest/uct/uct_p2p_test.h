@@ -17,6 +17,8 @@ class uct_p2p_test : public uct_test {
 public:
     uct_p2p_test(size_t rx_headroom);
 
+    static std::vector<const resource*> enum_resources(const std::string& tl_name);
+
     virtual void init();
     virtual void cleanup();
 
@@ -38,6 +40,11 @@ protected:
         void             *dest;
         size_t           length;
         uct_completion_t uct;
+    };
+
+    struct p2p_resource : public resource {
+        virtual std::string name() const;
+        bool loopback;
     };
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction);
@@ -65,9 +72,10 @@ private:
 
     static void completion_cb(uct_completion_t *self, void *data);
 
-    static void log_handler(const char *file, unsigned line, const char *function,
-                            ucs_log_level_t level, const char *prefix, const char *message,
-                            va_list ap);
+    static ucs_log_func_rc_t
+    log_handler(const char *file, unsigned line, const char *function,
+                ucs_log_level_t level, const char *prefix, const char *message,
+                va_list ap);
 
 };
 

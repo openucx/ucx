@@ -14,7 +14,11 @@ extern "C" {
 
 namespace ucs {
 
-test_base::test_base() : m_state(NEW), m_num_valgrind_errors_before(0) {
+unsigned test_base::m_total_warnings = 0;
+
+test_base::test_base() : m_state(NEW),
+                m_num_valgrind_errors_before(0),
+                m_num_warnings_before(0) {
 }
 
 test_base::~test_base() {
@@ -59,9 +63,23 @@ void test_base::pop_config()
     ucs_global_opts = m_config_stack.back();
 }
 
+ucs_log_func_rc_t
+test_base::log_handler(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level, const char *prefix, const char *message,
+                       va_list ap)
+{
+    if (level == UCS_LOG_LEVEL_WARN) {
+        ++m_total_warnings;
+    }
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
 void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
+    m_num_warnings_before        = m_total_warnings;
+
+    ucs_log_push_handler(log_handler);
 
     try {
         init();
@@ -79,9 +97,16 @@ void test_base::TearDownProxy() {
                        m_state == ABORTED,
                        "state=%d", m_state);
     cleanup();
+
+    ucs_log_pop_handler();
+
     int num_valgrind_errors = VALGRIND_COUNT_ERRORS - m_num_valgrind_errors_before;
     if (num_valgrind_errors > 0) {
         ADD_FAILURE() << "Got " << num_valgrind_errors << " valgrind errors during the test";
+    }
+    int num_warnings = m_total_warnings - m_num_warnings_before;
+    if (num_warnings > 0) {
+        ADD_FAILURE() << "Got " << num_warnings << " warnings during the test";
     }
 }
 

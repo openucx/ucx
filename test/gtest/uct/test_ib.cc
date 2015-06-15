@@ -108,7 +108,7 @@ public:
         unsigned port_num;
         ucs_status_t ret;
 
-        dev_name = strdup(GetParam().dev_name.c_str()); /* device name and port number */
+        dev_name = strdup(GetParam()->dev_name.c_str()); /* device name and port number */
         /* split dev_name */
         p = strchr(dev_name, ':');
         EXPECT_TRUE(p != NULL);

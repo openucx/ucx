@@ -22,24 +22,29 @@ public:
     uct_p2p_err_test() : uct_p2p_test(0) {
     }
 
-    static void log_handler(const char *file, unsigned line, const char *function,
-                            ucs_log_level_t level, const char *prefix, const char *message,
-                            va_list ap)
+    static ucs_log_func_rc_t
+    log_handler(const char *file, unsigned line, const char *function,
+                ucs_log_level_t level, const char *prefix, const char *message,
+                va_list ap)
     {
         char buf[200] = {0};
-        if (level <= UCS_LOG_LEVEL_WARN) {
-            va_list ap_copy;
-            va_copy(ap_copy, ap); /* Create a copy of arglist, to use it 2nd time */
 
-            ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG, prefix, message, ap);
-            vsnprintf(buf, sizeof(buf), message, ap_copy);
-            va_end(ap_copy);
-
-            UCS_TEST_MESSAGE << "   < " << buf << " >";
-            ++error_count;
-        } else {
-            ucs_log_default_handler(file, line, function, level, prefix, message, ap);
+        if (level > UCS_LOG_LEVEL_WARN) {
+            /* debug messages are ignored */
+            return UCS_LOG_FUNC_RC_CONTINUE;
         }
+
+        va_list ap_copy;
+        va_copy(ap_copy, ap); /* Create a copy of arglist, to use it 2nd time */
+
+        ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
+                                prefix, message, ap);
+        vsnprintf(buf, sizeof(buf), message, ap_copy);
+        va_end(ap_copy);
+
+        UCS_TEST_MESSAGE << "   < " << buf << " >";
+        ++error_count;
+        return UCS_LOG_FUNC_RC_STOP;
     }
 
     void test_error_run(enum operation op, uint8_t am_id,
@@ -48,7 +53,9 @@ public:
     {
         error_count = 0;
 
-        ucs_log_set_handler(log_handler);
+        ucs_log_push_handler(log_handler);
+        UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
+
         ucs_status_t status = UCS_OK;
         do {
             switch (op) {
@@ -78,7 +85,6 @@ public:
             ucs::safe_usleep(1e4);
         }
 
-        ucs_log_set_handler(ucs_log_default_handler);
         EXPECT_GT(error_count, 0u);
     }
 
