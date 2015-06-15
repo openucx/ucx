@@ -37,7 +37,7 @@ public:
          * and the final value of atomic variable is the sum of all.
          */
 
-        mapped_buffer recvbuf(sizeof(T), 1, 0, receiver());
+        mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
         T value = rand64();
         T add   = rand64();

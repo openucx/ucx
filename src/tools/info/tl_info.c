@@ -44,13 +44,18 @@ static char *strduplower(const char *str)
 }
 
 static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
-                             uct_tl_resource_desc_t *resource,
-                             uct_iface_config_t *iface_config)
+                             uct_tl_resource_desc_t *resource)
 {
+    uct_iface_config_t *iface_config;
     uct_iface_attr_t iface_attr;
     ucs_status_t status;
     uct_iface_h iface;
     char buf[200] = {0};
+
+    status = uct_iface_config_read(resource->tl_name, NULL, NULL, &iface_config);
+    if (status != UCS_OK) {
+        return;
+    }
 
     printf("#   Device: %s\n", resource->dev_name);
     printf("#      speed:         %.2f MB/sec\n", resource->bandwidth / 1024.0 / 1024.0);
@@ -58,6 +63,8 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
 
     status = uct_iface_open(pd, worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
+    uct_iface_config_release(iface_config);
+
     if (status != UCS_OK) {
         printf("#   < failed to open interface >\n");
         return;
@@ -149,43 +156,29 @@ static ucs_status_t print_tl_info(uct_pd_h pd, const char *tl_name,
                                   int print_opts,
                                   ucs_config_print_flags_t print_flags)
 {
-    uct_iface_config_t *iface_config;
     uct_worker_h worker;
     ucs_status_t status;
     unsigned i;
 
-    status = uct_iface_config_read(tl_name, NULL, NULL, &iface_config);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     /* coverity[alloc_arg] */
     status = uct_worker_create(NULL, UCS_THREAD_MODE_MULTI, &worker);
     if (status != UCS_OK) {
-        goto out_release_config;
+        goto out;
     }
-
 
     printf("#\n");
     printf("#   Transport: %s\n", tl_name);
     printf("#\n");
 
-    if (print_opts & PRINT_DEVICES) {
-        if (num_resources == 0) {
-            printf("# (No supported devices found)\n");
-        }
-        for (i = 0; i < num_resources; ++i) {
-            ucs_assert(!strcmp(tl_name, resources[i].tl_name));
-            print_iface_info(worker, pd, &resources[i], iface_config);
-        }
+    if (num_resources == 0) {
+        printf("# (No supported devices found)\n");
+    }
+    for (i = 0; i < num_resources; ++i) {
+        ucs_assert(!strcmp(tl_name, resources[i].tl_name));
+        print_iface_info(worker, pd, &resources[i]);
     }
 
-    uct_iface_config_print(iface_config, stdout, "UCT interface configuration",
-                           print_flags);
-
     uct_worker_destroy(worker);
-out_release_config:
-    uct_iface_config_release(iface_config);
 out:
     return status;
 }
@@ -207,13 +200,34 @@ static void print_pd_info(const char *pd_name, int print_opts,
         goto out;
     }
 
-    printf("#\n");
+    status = uct_pd_query_tl_resources(pd, &resources, &num_resources);
+    if (status != UCS_OK) {
+        printf("#   < failed to query protection domain resources >\n");
+        goto out_close_pd;
+    }
+
+    if (req_tl_name != NULL) {
+        resource_index = 0;
+        while (resource_index < num_resources) {
+            if (!strcmp(resources[resource_index].tl_name, req_tl_name)) {
+                break;
+            }
+            ++resource_index;
+        }
+        if (resource_index == num_resources) {
+            /* no selected transport on the PD */
+            goto out_free_list;
+        }
+    }
+
     status = uct_pd_query(pd, &pd_attr);
     if (status != UCS_OK) {
         printf("# < failed to query protection domain >\n");
-        goto out_close_pd;
+        goto out_free_list;
     } else {
+        printf("#\n");
         printf("# Protection domain: %s\n", pd_name);
+        printf("#   component:        %s\n", pd_attr.component_name);
         if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
             printf("#   allocate:         <= %zu\n", pd_attr.cap.max_alloc);
         }
@@ -221,12 +235,6 @@ static void print_pd_info(const char *pd_name, int print_opts,
             printf("#   register:         <= %zu\n", pd_attr.cap.max_reg);
         }
         printf("#   remote key:       %zu bytes\n", pd_attr.rkey_packed_size);
-    }
-
-    status = uct_pd_query_tl_resources(pd, &resources, &num_resources);
-    if (status != UCS_OK) {
-        printf("#   < failed to query protection domain resources >\n");
-        goto out_close_pd;
     }
 
     if (num_resources == 0) {
@@ -248,12 +256,11 @@ static void print_pd_info(const char *pd_name, int print_opts,
             }
         }
 
-        if ((req_tl_name != NULL) && strcmp(tl_name, req_tl_name)) {
-            continue;
+        if ((req_tl_name == NULL) || !strcmp(tl_name, req_tl_name)) {
+            print_tl_info(pd, tl_name, &resources[resource_index], count,
+                          print_opts, print_flags);
         }
 
-        print_tl_info(pd, tl_name, &resources[resource_index], count,
-                      print_opts, print_flags);
         resource_index += count;
     }
 
