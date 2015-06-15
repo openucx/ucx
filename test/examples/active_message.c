@@ -166,6 +166,8 @@ out1:
 
 int main(int argc, char **argv)
 {
+	/* MPI is initially used to swap the endpoint and interface addresses so each
+	 * process has knowledge of the others. */
 	MPI_Status mpi_status;
 	int partner;
 	int size;
