@@ -32,19 +32,9 @@ UCS_CONFIG_DEFINE_ARRAY(ugni_alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
 
 ucs_config_field_t uct_ugni_iface_config_table[] = {
-    {"MAX_SHORT", "2048",
-     "Maximal size of short sends. The transport is allowed to support any size up\n"
-     "to this limit, the actual size can be lower due to transport constraints.",
-     ucs_offsetof(uct_iface_config_t, max_short), UCS_CONFIG_TYPE_MEMUNITS},
-
-    {"MAX_BCOPY", "2048",
-     "Maximal size of copy-out sends. The transport is allowed to support any size\n"
-     "up to this limit, the actual size can be lower due to transport constraints.",
-     ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
-
-    {"ALLOC", "huge,mmap,heap",
-     "Priority of methods to allocate intermediate buffers for communication",
-     ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(ugni_alloc_methods)},
+    /* This tuning controls the allocation priorities for bouncing buffers */
+    { "", "MAX_SHORT=2048;MAX_BCOPY=2048;ALLOC=huge,mmap,heap", NULL,
+    ucs_offsetof(uct_ugni_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, 0, "fma",
                                   ucs_offsetof(uct_ugni_iface_config_t, mpool),
