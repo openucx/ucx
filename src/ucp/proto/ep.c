@@ -60,6 +60,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
 
     ep->worker               = worker;
     ep->config.max_short_tag = SIZE_MAX;
+    ep->config.max_short_put = SIZE_MAX;
+    ep->config.max_bcopy_put = SIZE_MAX;
     ep->notify_comp.func     = ucp_ep_progress_pending;
     ep->state                = 0;
     ucs_queue_head_init(&ep->pending_q);

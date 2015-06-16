@@ -74,6 +74,12 @@
 #define ucs_trace_poll(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, "%s("_message")", __FUNCTION__, ## __VA_ARGS__)
 
 
+typedef enum {
+    UCS_LOG_FUNC_RC_STOP,
+    UCS_LOG_FUNC_RC_CONTINUE
+} ucs_log_func_rc_t;
+
+
 /**
  * Function for printing log messages.
  *
@@ -83,10 +89,14 @@
  * @param prefix   Log message prefix.
  * @param message  Log message - format string
  * @param ap       Log message format parameters.
+ *
+ * @return UCS_LOG_FUNC_RC_CONTINUE - continue to next log handler
+ *         UCS_LOG_FUNC_RC_STOP     - don't continue
  */
-typedef void (*ucs_log_func_t)(const char *file, unsigned line, const char *function,
-                               ucs_log_level_t level, const char *prefix,
-                               const char *message, va_list ap);
+typedef ucs_log_func_rc_t (*ucs_log_func_t)(const char *file, unsigned line,
+                                            const char *function, ucs_log_level_t level,
+                                            const char *prefix, const char *message,
+                                            va_list ap);
 
 
 extern const char *ucs_log_level_names[];
@@ -111,9 +121,10 @@ void __ucs_log(const char *file, unsigned line, const char *function,
                ucs_log_level_t level, const char *message, ...)
     UCS_F_PRINTF(5, 6);
 
-void ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                             ucs_log_level_t level, const char *prefix, const char *message,
-                             va_list ap);
+ucs_log_func_rc_t
+ucs_log_default_handler(const char *file, unsigned line, const char *function,
+                        ucs_log_level_t level, const char *prefix, const char *message,
+                        va_list ap);
 
 void __ucs_abort(const char *file, unsigned line, const char *function,
                  const char *message, ...)
@@ -125,7 +136,8 @@ const char *ucs_log_bitmap_to_str(unsigned n, uint8_t *bitmap, size_t length);
 
 void ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max);
 
-void ucs_log_set_handler(ucs_log_func_t handler);
+void ucs_log_push_handler(ucs_log_func_t handler);
+void ucs_log_pop_handler();
 
 #endif
 

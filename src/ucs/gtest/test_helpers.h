@@ -8,6 +8,7 @@
 #ifndef UCS_TEST_HELPERS_H
 #define UCS_TEST_HELPERS_H
 
+#include <ucs/sys/preprocessor.h>
 #include <gtest/gtest.h>
 #include <errno.h>
 #include <iostream>
@@ -165,6 +166,93 @@ private:
     vec_type m_vec;
 };
 
+
+/**
+ * Safely wraps C handles
+ */
+template <typename T>
+class handle {
+public:
+    typedef T handle_type;
+    typedef void (*dtor_t)(T handle);
+
+    handle() : m_initialized(false), m_value(NULL), m_dtor(NULL) {
+    }
+
+    handle(const T& value, dtor_t dtor) : m_initialized(true), m_value(value), m_dtor(dtor) {
+        ucs_assert(value != NULL);
+    }
+
+    handle(const handle& other) : m_initialized(false), m_value(NULL), m_dtor(NULL) {
+        *this = other;
+    }
+
+    ~handle() {
+        reset();
+    }
+
+    void reset() {
+        if (m_initialized) {
+            release();
+        }
+    }
+
+    void reset(const T& value, dtor_t dtor) {
+        reset();
+        if (value == NULL) {
+            throw std::invalid_argument("value cannot be NULL");
+        }
+        m_value = value;
+        m_dtor  = dtor;
+        m_initialized = true;
+    }
+
+    const handle& operator=(const handle& other) {
+        reset();
+        if (other.m_initialized) {
+            reset(other.m_value, other.m_dtor);
+            other.revoke();
+        }
+        return *this;
+    }
+
+    operator T() const {
+        return m_value;
+    }
+
+    operator bool() const {
+        return m_initialized;
+    }
+
+    T get() const {
+        return m_value;
+    }
+
+private:
+
+    void revoke() const {
+        m_initialized = false;
+    }
+
+    void release() {
+        m_dtor(m_value);
+        m_initialized = false;
+    }
+
+    mutable bool   m_initialized;
+    T              m_value;
+    dtor_t         m_dtor;
+};
+
+#define UCS_TEST_CREATE_HANDLE(_t, _handle, _dtor, _ctor, ...) \
+    { \
+        _t h; \
+        ucs_status_t status = _ctor(__VA_ARGS__, &h); \
+        ASSERT_UCS_OK(status); \
+        _handle.reset(h, _dtor); \
+    }
+
+
 namespace detail {
 
 class message_stream {
@@ -238,6 +326,23 @@ public:
                                          "Actual time: " << ucs_time_to_sec(_elapsed) << " seconds", 0) \
                          : 0, \
               _start_time = 0)
+
+
+/**
+ * Scoped exit for C++. Usage:
+ *
+ * UCS_TEST_SCOPE_EXIT() { <code> } UCS_TEST_SCOPE_EXIT_END
+ */
+#define _UCS_TEST_SCOPE_EXIT(_classname, ...) \
+    class _classname { \
+    public: \
+        _classname() {} \
+        ~_classname()
+#define UCS_TEST_SCOPE_EXIT(...) \
+    _UCS_TEST_SCOPE_EXIT(UCS_PP_APPEND_UNIQUE_ID(onexit), ## __VA_ARGS__)
+
+#define UCS_TEST_SCOPE_EXIT_END \
+    } UCS_PP_APPEND_UNIQUE_ID(onexit_var);
 
 
 #endif

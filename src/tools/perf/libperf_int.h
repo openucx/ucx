@@ -13,6 +13,7 @@
 BEGIN_C_DECLS
 
 #include <ucs/time/time.h>
+#include <ucs/async/async.h>
 
 
 #define TIMING_QUEUE_SIZE    2048
@@ -54,14 +55,16 @@ struct ucx_perf_context {
             uct_worker_h         worker;
             uct_iface_h          iface;
             uct_peer_t           *peers;
-            uct_mem_h            send_memh;
-            uct_mem_h            recv_memh;
+            uct_allocated_memory_t send_mem;
+            uct_allocated_memory_t recv_mem;
         } uct;
 
         struct {
             ucp_context_h        context;
             ucp_worker_h         worker;
             ucp_peer_t           *peers;
+            ucp_mem_h            send_memh;
+            ucp_mem_h            recv_memh;
         } ucp;
     };
 };
@@ -76,6 +79,8 @@ struct uct_peer {
 
 struct ucp_peer {
     ucp_ep_h                     ep;
+    unsigned long                remote_addr;
+    ucp_rkey_h                   rkey;
 };
 
 

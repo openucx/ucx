@@ -16,22 +16,27 @@ extern "C" {
 #include <vector>
 
 
+/* Testing resource */
 struct resource {
+    virtual ~resource() {};
+    virtual std::string name() const;
     std::string pd_name;
     cpu_set_t   local_cpus;
     std::string tl_name;
     std::string dev_name;
 };
 
+
 /**
  * UCT test, parameterized on a transport/device.
  */
-class uct_test : public testing::TestWithParam<resource>,
+class uct_test : public testing::TestWithParam<const resource*>,
                  public ucs::test_base {
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<resource> enum_resources(const std::string& tl_name);
+    static std::vector<const resource*> enum_resources(const std::string& tl_name,
+                                                       bool loopback = false);
 
     uct_test();
     virtual ~uct_test();
@@ -42,12 +47,11 @@ protected:
     public:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                size_t rx_headroom);
-        ~entity();
 
-        void mem_alloc(void **address_p, size_t *length_p, size_t alignement,
-                       uct_mem_h *memh_p, uct_rkey_bundle *rkey_bundle) const;
+        void mem_alloc(size_t length, uct_allocated_memory_t *mem,
+                       uct_rkey_bundle *rkey_bundle) const;
 
-        void mem_free(void *address, uct_mem_h memh,
+        void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey) const;
 
         void progress() const;
@@ -63,30 +67,32 @@ protected:
         uct_ep_h ep(unsigned index) const;
 
         void create_ep(unsigned index);
+        void destroy_ep(unsigned index);
         void connect(unsigned index, entity& other, unsigned other_index);
-
         void connect_to_iface(unsigned index, entity& other);
 
         void flush() const;
 
     private:
+        typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
+
         entity(const entity&);
 
         void reserve_ep(unsigned index);
 
         void connect_to_ep(uct_ep_h from, uct_ep_h to);
 
-        uct_pd_h              m_pd;
-        uct_worker_h          m_worker;
-        uct_iface_h           m_iface;
-        std::vector<uct_ep_h> m_eps;
-        uct_iface_attr_t      m_iface_attr;
+        ucs::handle<uct_pd_h>      m_pd;
+        ucs::handle<uct_worker_h>  m_worker;
+        ucs::handle<uct_iface_h>   m_iface;
+        eps_vec_t                  m_eps;
+        uct_iface_attr_t           m_iface_attr;
     };
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, size_t alignment, uint64_t seed, 
-                      const entity& entity, size_t offset = 0);
+        mapped_buffer(size_t size, uint64_t seed, const entity& entity,
+                      size_t offset = 0);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -105,11 +111,25 @@ protected:
         const uct_test::entity& m_entity;
 
         void                    *m_buf;
-        void                    *m_buf_real;
         void                    *m_end;
-        uct_mem_h               m_memh;
         uct_rkey_bundle_t       m_rkey;
+        uct_allocated_memory_t  m_mem;
     };
+
+    template <typename T>
+    static std::vector<const resource*> filter_resources(const std::vector<T>& resources,
+                                                         const std::string& tl_name)
+    {
+        std::vector<const resource*> result;
+        for (typename std::vector<T>::const_iterator iter = resources.begin();
+                        iter != resources.end(); ++iter)
+        {
+            if (tl_name.empty() || (iter->tl_name == tl_name)) {
+                result.push_back(&*iter);
+            }
+        }
+        return result;
+    }
 
 
     virtual void init();
@@ -123,9 +143,10 @@ protected:
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
+
 };
 
-std::ostream& operator<<(std::ostream& os, const resource& resource);
+std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 
 #define UCT_TEST_TLS \
@@ -149,7 +170,7 @@ std::ostream& operator<<(std::ostream& os, const resource& resource);
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
     INSTANTIATE_TEST_CASE_P(_tl_name, _test_case, \
-                            testing::ValuesIn(uct_test::enum_resources(UCS_PP_QUOTE(_tl_name))));
+                            testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));
 
 
 /**

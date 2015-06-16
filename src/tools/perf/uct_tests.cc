@@ -146,7 +146,7 @@ public:
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID,
                                        buffer, header_size,
                                        (char*)buffer + header_size, length - header_size,
-                                       m_perf.uct.send_memh, comp);
+                                       m_perf.uct.send_mem.memh, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -161,7 +161,7 @@ public:
                 return uct_ep_put_bcopy(ep, (uct_pack_callback_t)memcpy, buffer,
                                         length, remote_addr, rkey);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return uct_ep_put_zcopy(ep, buffer, length, m_perf.uct.send_memh,
+                return uct_ep_put_zcopy(ep, buffer, length, m_perf.uct.send_mem.memh,
                                         remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
@@ -171,7 +171,7 @@ public:
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 return uct_ep_get_bcopy(ep, length, remote_addr, rkey, comp);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return uct_ep_get_zcopy(ep, buffer, length, m_perf.uct.send_memh,
+                return uct_ep_get_zcopy(ep, buffer, length, m_perf.uct.send_mem.memh,
                                         remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
@@ -229,7 +229,7 @@ public:
                 return;
             } else if (status == UCS_INPROGRESS) {
                 ++m_outstanding;
-                ucs_assert(m_outstanding <= m_max_outstanding);
+                ucs_assert((comp == NULL) || (m_outstanding <= m_max_outstanding));
                 return;
             } else if (status == UCS_ERR_NO_RESOURCE) {
                 continue;

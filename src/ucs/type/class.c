@@ -7,6 +7,8 @@
 
 #include "class.h"
 
+#include <ucs/debug/log.h>
+#include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 
 
@@ -27,7 +29,7 @@ ucs_class_t _UCS_CLASS_DECL_NAME(void) = {
     (ucs_class_cleanup_func_t)_UCS_CLASS_CLEANUP_NAME(void)
 };
 
-void _ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit)
+void ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit)
 {
     ucs_class_t *c;
     int depth, skip;
@@ -49,4 +51,14 @@ void _ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit)
         c->cleanup(obj);
         c = c->superclass;
     }
+}
+
+void *ucs_class_malloc(ucs_class_t *cls)
+{
+    return ucs_malloc(cls->size, cls->name);
+}
+
+void ucs_class_free(void *obj)
+{
+    ucs_free(obj);
 }

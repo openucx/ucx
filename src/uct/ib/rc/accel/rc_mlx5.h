@@ -8,9 +8,8 @@
 #ifndef UCT_RC_MLX5_H
 #define UCT_RC_MLX5_H
 
-#include "rc_iface.h"
-#include "rc_ep.h"
-
+#include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>

@@ -61,11 +61,11 @@ void test_ud_ds::test_cep_insert(entity *e, uct_sockaddr_ib_t *adr, unsigned bas
     uct_ud_ep_t *my_ep;
 
     for (i = 0; i < N; i++) {
-        e->create_ep(i);
-        EXPECT_EQ(i+base, ep(e, i)->ep_id);
-        EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(e, i)->dest_ep_id);
-        EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(e), adr, ep(e, i), UCT_UD_EP_CONN_ID_MAX));
-        EXPECT_EQ(i, ep(e, i)->conn_id);
+        e->create_ep(i + base);
+        EXPECT_EQ(i+base, ep(e, i + base)->ep_id);
+        EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(e, i + base)->dest_ep_id);
+        EXPECT_UCS_OK(uct_ud_iface_cep_insert(iface(e), adr, ep(e, i + base), UCT_UD_EP_CONN_ID_MAX));
+        EXPECT_EQ(i, ep(e, i + base)->conn_id);
     }
     /* lookup non existing ep */
     my_ep = uct_ud_iface_cep_lookup(iface(e), adr, 3333);
@@ -73,8 +73,8 @@ void test_ud_ds::test_cep_insert(entity *e, uct_sockaddr_ib_t *adr, unsigned bas
     for (i = 0; i < N; i++) {
         my_ep = uct_ud_iface_cep_lookup(iface(e), adr, i);
         EXPECT_TRUE(my_ep != NULL);
-        EXPECT_EQ(i+base, ep(e, i)->ep_id);
-        EXPECT_EQ(i, ep(e, i)->conn_id);
+        EXPECT_EQ(i+base, ep(e, i + base)->ep_id);
+        EXPECT_EQ(i, ep(e, i + base)->conn_id);
     }
 }
 

@@ -139,8 +139,13 @@ void ucs_config_release_nop(void *ptr, const void *arg);
 void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 
+/* Forward declaration of array. Should be in header file. */
+#define UCS_CONFIG_DECLARE_ARRAY(_name) \
+    extern ucs_config_array_t ucs_config_array_##_name;
+
+/* Definition of array of specific type. Should be in source file. */
 #define UCS_CONFIG_DEFINE_ARRAY(_name, _elem_size, ...) \
-    ucs_config_array_t ucs_array_##_name = {_elem_size, __VA_ARGS__};
+    ucs_config_array_t ucs_config_array_##_name = {_elem_size, __VA_ARGS__};
 
 #define UCS_CONFIG_TYPE_STRING     {ucs_config_sscanf_string,    ucs_config_sprintf_string, \
                                     ucs_config_clone_string,     ucs_config_release_string, \
@@ -200,7 +205,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_TYPE_ARRAY(a)   {ucs_config_sscanf_array,     ucs_config_sprintf_array, \
                                     ucs_config_clone_array,      ucs_config_release_array, \
-                                    ucs_config_help_array,       &ucs_array_##a}
+                                    ucs_config_help_array,       &ucs_config_array_##a}
 
 #define UCS_CONFIG_TYPE_TABLE(t)   {ucs_config_sscanf_table,     NULL, \
                                     ucs_config_clone_table,      ucs_config_release_table, \
@@ -209,6 +214,14 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_RANGE_SPEC {ucs_config_sscanf_range_spec,ucs_config_sprintf_range_spec, \
                                     ucs_config_clone_range_spec, ucs_config_release_nop, \
                                     ucs_config_help_generic,     "numbers range: <number>-<number>"}
+
+/*
+ * Helpers for using an array of strings.
+ */
+#define UCS_CONFIG_TYPE_STRING_ARRAY \
+    UCS_CONFIG_TYPE_ARRAY(string)
+
+UCS_CONFIG_DECLARE_ARRAY(string);
 
 /**
  * Set default values for options.
@@ -264,7 +277,7 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param flags          Flags which control the output.
  */
-void ucs_config_parser_print_opts(FILE *stream, const char *title, void *opts,
+void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *env_prefix,
                                   const char *table_prefix, ucs_config_print_flags_t flags);
 

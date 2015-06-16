@@ -18,8 +18,7 @@
 #include <sched.h>
 
 
-#define UCT_IB_PD_PREFIX         "ib/"
-#define UCT_IB_RKEY_MAGIC        0x69626962  /* ibib *(const uint32_t*)"ibib" */
+#define UCT_IB_PD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
@@ -78,6 +77,7 @@ static void uct_ib_pd_close(uct_pd_h pd)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
 
+    ucs_debug("closing ib device %s", uct_ib_device_name(dev));
     ucs_async_unset_event_handler(dev->ibv_context->async_fd);
     UCS_STATS_NODE_FREE(dev->stats);
     ibv_dealloc_pd(dev->pd);
@@ -89,23 +89,10 @@ static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
 
-    pd_attr->rkey_packed_size  = sizeof(uint32_t) * 2;
-    pd_attr->cap.max_alloc     = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.max_reg       = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.flags         = UCT_PD_FLAG_REG;
-    pd_attr->local_cpus        = dev->local_cpus;
-
-    /* TODO make it configurable */
-    pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_HUGE;
-    pd_attr->alloc_methods.count = 1;
-
-    if (IBV_EXP_HAVE_CONTIG_PAGES(&dev->dev_attr)) {
-        pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
-        pd_attr->alloc_methods.methods[pd_attr->alloc_methods.count++] = UCT_ALLOC_METHOD_PD;
-    }
-
-    pd_attr->alloc_methods.methods[pd_attr->alloc_methods.count++] = UCT_ALLOC_METHOD_MMAP;
-    pd_attr->alloc_methods.methods[pd_attr->alloc_methods.count++] = UCT_ALLOC_METHOD_HEAP;
+    pd_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
+    pd_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
+    pd_attr->cap.flags     = UCT_PD_FLAG_REG;
+    pd_attr->local_cpus    = dev->local_cpus;
     return UCS_OK;
 }
 
@@ -184,30 +171,23 @@ static ucs_status_t uct_ib_mem_dereg(uct_pd_h pd, uct_mem_h memh)
     return uct_ib_dereg_mr(mr);
 }
 
-static ucs_status_t uct_ib_rkey_pack(uct_pd_h pd, uct_mem_h memh,
+static ucs_status_t uct_ib_mkey_pack(uct_pd_h pd, uct_mem_h memh,
                                      void *rkey_buffer)
 {
     struct ibv_mr *mr = memh;
-    uint32_t *ptr = rkey_buffer;
-
-    *(ptr++) = UCT_IB_RKEY_MAGIC;
-    *(ptr++) = mr->rkey;
+    *(uint32_t*)rkey_buffer = mr->rkey;
+    ucs_trace("packed rkey: 0x%x", mr->rkey);
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                       uct_rkey_bundle_t *rkey_ob)
+static ucs_status_t uct_ib_rkey_unpack(const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                       void **handle_p)
 {
-    const uint32_t *ptr = rkey_buffer;
-    uint32_t magic;
+    uint32_t ib_rkey = *(const uint32_t*)rkey_buffer;
 
-    magic = *(ptr++);
-    if (magic != UCT_IB_RKEY_MAGIC) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    rkey_ob->rkey = *(ptr++);
-    rkey_ob->type = NULL; /* Unused */
+    *rkey_p   = ib_rkey;
+    *handle_p = NULL;
+    ucs_trace("unpacked rkey: 0x%x", ib_rkey);
     return UCS_OK;
 }
 
@@ -218,9 +198,7 @@ uct_pd_ops_t uct_ib_pd_ops = {
     .mem_free     = uct_ib_mem_free,
     .mem_reg      = uct_ib_mem_reg,
     .mem_dereg    = uct_ib_mem_dereg,
-    .rkey_pack    = uct_ib_rkey_pack,
-    .rkey_unpack  = uct_ib_rkey_unpack,
-    .rkey_release = (void*)ucs_empty_function,
+    .mkey_pack    = uct_ib_mkey_pack,
 };
 
 static void uct_ib_async_event_handler(void *arg)
@@ -635,7 +613,8 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
         }
 
         ucs_snprintf_zero(rsc->tl_name, UCT_TL_NAME_MAX, "%s", tl_name);
-        ucs_debug("found usable port %s:%d", uct_ib_device_name(dev), port_num);
+        ucs_debug("found usable port for tl %s %s:%d", tl_name,
+                  uct_ib_device_name(dev), port_num);
         ++num_resources;
     }
 
@@ -657,7 +636,7 @@ err:
 
 static void uct_ib_make_pd_name(char pd_name[UCT_PD_NAME_MAX], struct ibv_device *device)
 {
-    snprintf(pd_name, UCT_PD_NAME_MAX, "%s%s", UCT_IB_PD_PREFIX, device->dev_name);
+    snprintf(pd_name, UCT_PD_NAME_MAX, "%s/%s", UCT_IB_PD_PREFIX, device->dev_name);
 }
 
 static ucs_status_t uct_ib_query_pd_resources(uct_pd_resource_desc_t **resources_p,
@@ -732,5 +711,7 @@ out:
     return status;
 }
 
-UCT_PD_COMPONENT_DEFINE(uct_ib_pd, uct_ib_query_pd_resources, uct_ib_pd_open,
-                        UCT_IB_PD_PREFIX)
+UCT_PD_COMPONENT_DEFINE(uct_ib_pd, UCT_IB_PD_PREFIX,
+                        uct_ib_query_pd_resources, uct_ib_pd_open,
+                        sizeof(uint32_t), uct_ib_rkey_unpack,
+                        (void*)ucs_empty_function /* release */)

@@ -65,7 +65,7 @@ public:
          * getting a reply.
          */
 
-        mapped_buffer recvbuf(sizeof(T), 1, 0, receiver());
+        mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
         /* Set ransom initial value */
         T initial_value = rand64();

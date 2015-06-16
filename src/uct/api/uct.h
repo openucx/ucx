@@ -13,7 +13,7 @@
 #include <uct/api/addr.h>
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
-#include <ucs/async/async.h>
+#include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -215,17 +215,6 @@ enum {
 
 /**
  * @ingroup PD
- * @brief  List of allocation methods, in order of priority (high to low).
- */
-typedef struct uct_alloc_methods {
-    uint8_t                  count;  /**< Number of allocation methods in the array */
-    uint8_t                  methods[UCT_ALLOC_METHOD_LAST];
-                                     /**< Array of allocation methods */
-} uct_alloc_methods_t;
-
-
-/**
- * @ingroup PD
  * @brief  Protection domain attributes.
  */
 struct uct_pd_attr {
@@ -235,7 +224,7 @@ struct uct_pd_attr {
         uint64_t             flags;         /**< UCT_PD_FLAG_xx */
     } cap;
 
-    uct_alloc_methods_t      alloc_methods; /**< Allocation methods priority */
+    char                     component_name[UCT_PD_COMPONENT_NAME_MAX]; /**< PD component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
     cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
 };
@@ -243,11 +232,28 @@ struct uct_pd_attr {
 
 /**
  * @ingroup PD
+ * @brief Describes a memory allocated by UCT.
+ *
+ * This structure describes a memory block allocated by UCT layer. The block
+ * could be allocated with one of several methods by @ref uct_mem_alloc().
+ */
+typedef struct uct_allocated_memory {
+    void                     *address; /**< Address of allocated memory */
+    size_t                   length;   /**< Real size of allocated memory */
+    uct_alloc_method_t       method;   /**< Method used to allocate the memory */
+    uct_pd_h                 pd;       /**< if method==PD: PD used to allocate the memory */
+    uct_mem_h                memh;     /**< if method==PD: PD memory handle */
+} uct_allocated_memory_t;
+
+
+/**
+ * @ingroup PD
  * @brief Remote key with its type
  */
 typedef struct uct_rkey_bundle {
-    uct_rkey_t               rkey;   /**< Remote key descriptor, passed to RMA functions */
-    void                     *type;  /**< Remote key type */
+    uct_rkey_t               rkey;    /**< Remote key descriptor, passed to RMA functions */
+    void                     *handle; /**< Handle, used internally for releasing the key */
+    void                     *type;   /**< Remote key type */
 } uct_rkey_bundle_t;
 
 
@@ -267,6 +273,9 @@ struct uct_completion {
                                             returned in completion_priv_len
                                             by @ref uct_iface_query() */
 };
+
+
+extern const char *uct_alloc_method_names[];
 
 
 /**
@@ -521,6 +530,15 @@ int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr);
 
 
 /**
+ * @ingroup RESOURCE
+ */
+ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length,
+                                 const char *name, uct_allocated_memory_t *mem);
+
+void uct_iface_mem_free(const uct_allocated_memory_t *mem);
+
+
+/**
  * @ingroup AM
  * @brief Set active message handler for the interface.
  *
@@ -597,7 +615,7 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const struct sockaddr *addr);
 
 /**
  * @ingroup PD
- * @brief Query for protection domain attributes..
+ * @brief Query for protection domain attributes. *
  *
  * @param [in]  pd       Protection domain to query.
  * @param [out] pd_attr  Filled with protection domain attributes.
@@ -607,11 +625,42 @@ ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
 /**
  * @ingroup PD
+ * @brief Allocate memory for zero-copy sends and remote access.
+ *
+ *  Allocate memory on the protection domain. In order to use this function, PD
+ * must support @ref UCT_PD_FLAG_ALLOC flag.
+ *
+ * @param [in]     pd          Protection domain to allocate memory on.
+ * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
+ *                              return, filled with the actual size that was allocated,
+ *                              which may be larger than the one requested. Must be >0.
+ * @param [in]     name        Name of the allocated region, used to track memory
+ *                              usage for debugging and profiling.
+ * @param [out]    memh_p      Filled with handle for allocated region.
+ */
+ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+                              const char *name, uct_mem_h *memh_p);
+
+/**
+ * @ingroup PD
+ * @brief Release memory allocated by @ref uct_pd_mem_alloc.
+ *
+ * @param [in]     pd          Protection domain memory was allocateed on.
+ * @param [in]     memh        Memory handle, as returned from @ref uct_pd_mem_alloc.
+ */
+ucs_status_t uct_pd_mem_free(uct_pd_h pd, uct_mem_h memh);
+
+
+/**
+ * @ingroup PD
  * @brief Register memory for zero-copy sends and remote access.
+ *
+ *  Register memory on the protection domain. In order to use this function, PD
+ * must support @ref UCT_PD_FLAG_REG flag.
  *
  * @param [in]     pd        Protection domain to register memory on.
  * @param [out]    address   Memory to register.
- * @param [in,out] length    Size of memory to register. Must be >0.
+ * @param [in]     length    Size of memory to register. Must be >0.
  * @param [out]    memh_p    Filled with handle for allocated region.
  */
 ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
@@ -620,7 +669,7 @@ ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
 
 /**
  * @ingroup PD
- * @brief Undo the operation of uct_pd_mem_reg().
+ * @brief Undo the operation of @ref uct_pd_mem_reg().
  *
  * @param [in]  pd          Protection domain which was used to register the memory.
  * @paran [in]  memh        Local access key to memory region.
@@ -630,43 +679,43 @@ ucs_status_t uct_pd_mem_dereg(uct_pd_h pd, uct_mem_h memh);
 
 /**
  * @ingroup PD
- * @brief Allocate memory for zero-copy sends and remote access.
+ * @brief Allocate memory for zero-copy communications and remote access.
  *
- * Allocate registered memory. The memory would either be allocated with the
- * protection domain, or allocated using other method and then registered with
- * the protection domain.
+ * Allocate potentially registered memory. Every one of the provided allocation
+ * methods will be used, in turn, to perform the allocation, until one succeeds.
+ *  Whenever the PD method is encountered, every one of the provided PDs will be
+ * used, in turn, to allocate the memory, until one succeeds, or they are
+ * exhausted. In this case the next allocation method from the initial list will
+ * be attempted.
  *
- * TODO allow passing multiple protection domains.
- *
- * @param [in]     pd          Protection domain to allocate memory on.
- * @param [in]     method      Memory allocation method. Can be UCT_ALLOC_METHOD_DEFAULT.
- * @param [in,out] length_p    Points to a value which specifies how many bytes to
- *                              allocate. Filled with the actual allocated size,
- *                              which is larger than or equal to the requested size.
-                                Must be >0.
- * @param [in]     alignment   Allocation alignment, must be power-of-2.
- * @param [out]    address_p   Filled with a pointer to allocated memory.
- * @param [out]    memh_p      Filled with a handle for allocated memory, which can
- *                              be used for zero-copy communications.
- * @param [in]     alloc_name  Name of the allocation. Used for memory statistics.
+ * @param [in]     min_length  Minimal size to allocate. The actual size may be
+ *                             larger, for example because of alignment restrictions.
+ * @param [in]     methods     Array of memory allocation methods to attempt.
+ * @param [in]     num_method  Length of 'methods' array.
+ * @param [in]     pds         Array of protection domains to attempt to allocate
+ *                             the memory with, for PD allocation method.
+ * @param [in]     num_pds     Length of 'pds' array. May be empty, in such case
+ *                             'pds' may be NULL, and PD allocation method will
+ *                             be skipped.
+ * @param [in]     name        Name of the allocation. Used for memory statistics.
+ * @param [out]    mem         In case of success, filled with information about
+ *                              the allocated memory. @ref uct_allocated_memory_t.
  */
-ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, uct_alloc_method_t method,
-                              size_t *length_p, size_t alignment, void **address_p,
-                              uct_mem_h *memh_p, const char *alloc_name);
+ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
+                           unsigned num_methods, uct_pd_h *pds, unsigned num_pds,
+                           const char *name, uct_allocated_memory_t *mem);
 
 
 /**
  * @ingroup PD
  * @brief Release allocated memory.
  *
- * Release the memory allocated by @ref uct_pd_mem_alloc. pd should be the same
- * as passed to @ref uct_pd_mem_alloc, and address should be one returned from it.
+ * Release the memory allocated by @ref uct_mem_alloc.
  *
- * @param [in]  pd          Protection domain which was used to allocate the memory.
- * @param [in]  address     Address of allocated memory.
- * @paran [in]  memh        Local access key to memory region.
+ * @param [in]  mem         Description of allocated memory, as returned from
+ *                          @ref uct_mem_alloc.
  */
-ucs_status_t uct_pd_mem_free(uct_pd_h pd, void *address, uct_mem_h memh);
+ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 
 
 /**
@@ -680,7 +729,7 @@ ucs_status_t uct_pd_mem_free(uct_pd_h pd, void *address, uct_mem_h memh);
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
+ucs_status_t uct_pd_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
 
 
 /**
@@ -688,14 +737,12 @@ ucs_status_t uct_pd_rkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
  *
  * @brief Unpack a remote key.
  *
- * @param [in]  pd           Handle to protection domain.
  * @param [in]  rkey_buffer  Packed remote key buffer.
  * @param [out] rkey_ob      Filled with the unpacked remote key and its type.
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                uct_rkey_bundle_t *rkey_ob);
+ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob);
 
 
 /**
@@ -703,10 +750,9 @@ ucs_status_t uct_pd_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
  *
  * @brief Release a remote key.
  *
- * @param [in]  pd           Handle to protection domain.
  * @param [in]  rkey_ob      Remote key to release.
  */
-void uct_pd_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob);
+void uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
 
 
 /**
