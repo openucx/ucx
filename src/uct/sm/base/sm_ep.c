@@ -199,8 +199,9 @@ ucs_status_t uct_sm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
     return UCS_OK;
 }
 
-ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h tl_ep, void *buffer, size_t length, 
-                                 uint64_t remote_addr, uct_rkey_t rkey, 
+ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                 void *arg, size_t length,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp)
 {
     uct_sm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_sm_iface_t); 
@@ -214,7 +215,7 @@ ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h tl_ep, void *buffer, size_t length,
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
-    memcpy(buffer, (void *)(rkey + remote_addr), length);
+    pack_cb(arg, (void *)(rkey + remote_addr), length);
 
     ucs_trace_data("Posting GET BCOPY of size %zd to %p",
                     length,

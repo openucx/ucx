@@ -819,11 +819,12 @@ UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, const void *buffer, si
  * @ingroup RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, void *buffer, size_t length,
+UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                             void *arg, size_t length,
                                              uint64_t remote_addr, uct_rkey_t rkey,
                                              uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_get_bcopy(ep, buffer, length, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_get_bcopy(ep, arg, pack_cb, length, remote_addr, rkey, comp);
 }
 
 

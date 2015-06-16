@@ -67,8 +67,9 @@ typedef struct uct_iface_ops {
 
     /* Get */
 
-    ucs_status_t (*ep_get_bcopy)(uct_ep_h ep, void *buffer, size_t length, 
-                                 uint64_t remote_addr, uct_rkey_t rkey, 
+    ucs_status_t (*ep_get_bcopy)(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                 void *arg, size_t length,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
 
     ucs_status_t (*ep_get_zcopy)(uct_ep_h ep, void *buffer, size_t length,

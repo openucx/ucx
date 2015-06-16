@@ -481,9 +481,10 @@ static inline void uct_ugni_format_unaligned_rdma(uct_ugni_get_desc_t *rdma, gni
                        align_len, ep, cq, comp);
 }
 
-ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep, void *buffer,
-                                   size_t length, uint64_t remote_addr,
-                                   uct_rkey_t rkey, uct_completion_t *comp)
+ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                   void *arg, size_t length,
+                                   uint64_t remote_addr, uct_rkey_t rkey,
+                                   uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
