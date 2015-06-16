@@ -52,6 +52,7 @@ gtest_SOURCES = \
 	uct/test_amo_cswap.cc \
 	uct/test_amo_fadd.cc \
 	uct/test_amo_swap.cc \
+	uct/test_mem.cc \
 	uct/test_p2p_am.cc \
 	uct/test_p2p_err.cc \
 	uct/test_p2p_rma.cc \
@@ -61,6 +62,7 @@ gtest_SOURCES = \
 	uct/uct_test.cc \
 	ucp/ucp_test.cc \
 	ucp/test_ucp_basic.cc \
+	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_tag.cc \
 	ucs/test_async.cc \
 	ucs/test_class.cc \

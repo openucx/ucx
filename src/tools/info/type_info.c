@@ -24,11 +24,11 @@
 #endif
 
 #if HAVE_TL_RC
-#  include <uct/ib/rc/rc_iface.h>
-#  include <uct/ib/rc/rc_ep.h>
-#  include <uct/ib/rc/rc_verbs.h>
+#  include <uct/ib/rc/base/rc_iface.h>
+#  include <uct/ib/rc/base/rc_ep.h>
+#  include <uct/ib/rc/verbs/rc_verbs.h>
 #  if HAVE_MLX5_HW
-#    include <uct/ib/rc/rc_mlx5.h>
+#    include <uct/ib/rc/accel/rc_mlx5.h>
 #  endif
 #endif
 
@@ -97,7 +97,6 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_iface_mpool_config_t);
         PRINT_SIZE(uct_iface_ops_t);
         PRINT_SIZE(uct_pd_t);
-        PRINT_SIZE(uct_alloc_methods_t);
         PRINT_SIZE(uct_pd_attr_t);
         PRINT_SIZE(uct_pd_ops_t);
         PRINT_SIZE(uct_tl_resource_desc_t);

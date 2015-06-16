@@ -17,33 +17,29 @@
 
 static ucs_status_t uct_cuda_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    pd_attr->rkey_packed_size  = 0; /* TBD */
     pd_attr->cap.flags         = UCT_PD_FLAG_REG;
     pd_attr->cap.max_alloc     = 0;
     pd_attr->cap.max_reg       = ULONG_MAX;
     memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
-
-    /* TODO make it configurable */
-    pd_attr->alloc_methods.count = 1;
-    pd_attr->alloc_methods.methods[0] = UCT_ALLOC_METHOD_HEAP;
-
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_rkey_pack(uct_pd_h pd, uct_mem_h memh,
+static ucs_status_t uct_cuda_mkey_pack(uct_pd_h pd, uct_mem_h memh,
                                       void *rkey_buffer)
 {
     return UCS_OK;
 }
 
-static void uct_cuda_rkey_release(uct_pd_h pd, const uct_rkey_bundle_t *rkey_ob)
+static ucs_status_t uct_cuda_rkey_unpack(const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                         void **handle_p)
 {
+    *rkey_p   = 0xdeadbeef;
+    *handle_p = NULL;
+    return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_rkey_unpack(uct_pd_h pd, const void *rkey_buffer,
-                                         uct_rkey_bundle_t *rkey_ob)
+static void uct_cuda_rkey_release(uct_rkey_t rkey, void *handle)
 {
-    return UCS_OK;
 }
 
 static ucs_status_t uct_cuda_mem_reg(uct_pd_h pd, void *address, size_t length,
@@ -69,7 +65,6 @@ static ucs_status_t uct_cuda_mem_dereg(uct_pd_h pd, uct_mem_h memh)
     return UCS_OK;
 }
 
-
 static ucs_status_t uct_cuda_query_pd_resources(uct_pd_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p)
 {
@@ -81,9 +76,7 @@ static ucs_status_t uct_cuda_pd_open(const char *pd_name, uct_pd_h *pd_p)
     static uct_pd_ops_t pd_ops = {
         .close        = (void*)ucs_empty_function,
         .query        = uct_cuda_pd_query,
-        .rkey_pack    = uct_cuda_rkey_pack,
-        .rkey_unpack  = uct_cuda_rkey_unpack,
-        .rkey_release = uct_cuda_rkey_release,
+        .mkey_pack    = uct_cuda_mkey_pack,
         .mem_reg      = uct_cuda_mem_reg,
         .mem_dereg    = uct_cuda_mem_dereg
     };
@@ -96,6 +89,7 @@ static ucs_status_t uct_cuda_pd_open(const char *pd_name, uct_pd_h *pd_p)
     return UCS_OK;
 }
 
-UCT_PD_COMPONENT_DEFINE(uct_cuda_pd, uct_cuda_query_pd_resources, uct_cuda_pd_open,
-                        UCT_CUDA_PD_NAME);
+UCT_PD_COMPONENT_DEFINE(uct_cuda_pd, UCT_CUDA_PD_NAME,
+                        uct_cuda_query_pd_resources, uct_cuda_pd_open,
+                        0, uct_cuda_rkey_unpack, uct_cuda_rkey_release);
 

@@ -48,10 +48,10 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                size_t rx_headroom);
 
-        void mem_alloc(void **address_p, size_t *length_p, size_t alignement,
-                       uct_mem_h *memh_p, uct_rkey_bundle *rkey_bundle) const;
+        void mem_alloc(size_t length, uct_allocated_memory_t *mem,
+                       uct_rkey_bundle *rkey_bundle) const;
 
-        void mem_free(void *address, uct_mem_h memh,
+        void mem_free(const uct_allocated_memory_t *mem,
                       const uct_rkey_bundle_t& rkey) const;
 
         void progress() const;
@@ -91,8 +91,8 @@ protected:
 
     class mapped_buffer {
     public:
-        mapped_buffer(size_t size, size_t alignment, uint64_t seed, 
-                      const entity& entity, size_t offset = 0);
+        mapped_buffer(size_t size, uint64_t seed, const entity& entity,
+                      size_t offset = 0);
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -111,10 +111,9 @@ protected:
         const uct_test::entity& m_entity;
 
         void                    *m_buf;
-        void                    *m_buf_real;
         void                    *m_end;
-        uct_mem_h               m_memh;
         uct_rkey_bundle_t       m_rkey;
+        uct_allocated_memory_t  m_mem;
     };
 
     template <typename T>

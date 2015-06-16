@@ -9,9 +9,11 @@
 #define UCS_CONFIG_H_
 
 #include "types.h"
-#include "parser.h"
 
+#include <ucs/type/status.h>
 #include <stddef.h>
+#include <stdio.h>
+
 
 
 /**
@@ -35,10 +37,7 @@ typedef struct {
     ucs_handle_error_t       handle_errors;
 
     /* Error signals */
-    struct {
-        int                  *signals;
-        unsigned             count;
-    } error_signals;
+    UCS_CONFIG_ARRAY_FIELD(int, signals) error_signals;
 
     /* If not NULL, attach gdb to the process in case of error */
     char                     *gdb_command;
@@ -80,8 +79,12 @@ typedef struct {
 
 
 extern ucs_global_opts_t ucs_global_opts;
-extern ucs_config_field_t ucs_global_opts_table[];
 
 void ucs_global_opts_init();
+ucs_status_t ucs_global_opts_set_value(const char *name, const char *value);
+ucs_status_t ucs_global_opts_clone(void *dst);
+void ucs_global_opts_release();
+void ucs_global_opts_print(FILE *stream, const char *title,
+                           ucs_config_print_flags_t print_flags);
 
 #endif

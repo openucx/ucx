@@ -28,7 +28,7 @@ public:
          * time. We expect the final result to be the sum of all these values.
          */
 
-        mapped_buffer recvbuf(sizeof(T), 1, 0, receiver());
+        mapped_buffer recvbuf(sizeof(T), 0, receiver());
 
         T value = rand64();
         *(T*)recvbuf.ptr() = value;

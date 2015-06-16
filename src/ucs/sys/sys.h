@@ -229,7 +229,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shim
  *
  * @param address   Memory to release (retuned from ucs_hugetlb_alloc).
  */
-void ucs_sysv_free(void *address);
+ucs_status_t ucs_sysv_free(void *address);
 
 
 /**

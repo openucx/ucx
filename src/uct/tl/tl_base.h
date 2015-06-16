@@ -113,6 +113,12 @@ typedef struct uct_base_iface {
     uct_worker_h      worker;                /* Worker this interface is on */
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
+
+    struct {
+        unsigned            num_alloc_methods;
+        uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
+    } config;
+
 } uct_base_iface_t;
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_pd_h, uct_worker_h,
                   const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
@@ -170,6 +176,12 @@ typedef struct uct_tl_component {
 struct uct_iface_config {
     size_t            max_short;
     size_t            max_bcopy;
+
+    struct {
+        uct_alloc_method_t  *methods;
+        unsigned            count;
+    } alloc_methods;
+    UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, signals) lid_path_bits;
 };
 
 

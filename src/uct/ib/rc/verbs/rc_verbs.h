@@ -8,9 +8,8 @@
 #ifndef UCT_RC_VERBS_H
 #define UCT_RC_VERBS_H
 
-#include "rc_iface.h"
-#include "rc_ep.h"
-
+#include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
 
 

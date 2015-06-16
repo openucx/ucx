@@ -55,10 +55,7 @@ typedef struct uct_ib_iface_config {
     unsigned                sl;
 
     /* Ranges of path bits */
-    struct {
-        ucs_range_spec_t     *ranges;
-        unsigned             count;
-    } lid_path_bits;
+    UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
     /* IB PKEY to use */
     unsigned                pkey_value;

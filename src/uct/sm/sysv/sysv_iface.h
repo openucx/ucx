@@ -32,7 +32,6 @@ typedef struct uct_sysv_lkey {
 
 
 typedef struct uct_sysv_rkey {
-    long long int           magic;
     int                     shmid;
     uintptr_t               owner_ptr;
 } uct_sysv_rkey_t;

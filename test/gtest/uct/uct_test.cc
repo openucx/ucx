@@ -139,8 +139,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 }
 
 
-void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
-                                 size_t alignement, uct_mem_h *memh_p,
+void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                  uct_rkey_bundle *rkey_bundle) const {
     ucs_status_t status;
     void *rkey_buffer;
@@ -149,27 +148,24 @@ void uct_test::entity::mem_alloc(void **address_p, size_t *length_p,
     status = uct_pd_query(m_pd, &pd_attr);
     ASSERT_UCS_OK(status);
 
-    status = uct_pd_mem_alloc(m_pd, UCT_ALLOC_METHOD_DEFAULT, length_p,
-                              alignement, address_p, memh_p, "test");
+    status = uct_iface_mem_alloc(m_iface, length, "test", mem);
     ASSERT_UCS_OK(status);
 
     rkey_buffer = malloc(pd_attr.rkey_packed_size);
 
-    status = uct_pd_rkey_pack(m_pd, *memh_p, rkey_buffer);
+    status = uct_pd_mkey_pack(m_pd, mem->memh, rkey_buffer);
     ASSERT_UCS_OK(status);
 
-    status = uct_pd_rkey_unpack(m_pd, rkey_buffer, rkey_bundle);
+    status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
     ASSERT_UCS_OK(status);
 
     free(rkey_buffer);
 }
 
-void uct_test::entity::mem_free(void *address, uct_mem_h memh,
+void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
                                 const uct_rkey_bundle_t& rkey) const {
-    ucs_status_t status;
-    uct_pd_rkey_release(m_pd, &rkey);
-    status = uct_pd_mem_free(m_pd, address, memh);
-    ASSERT_UCS_OK(status);
+    uct_rkey_release(&rkey);
+    uct_iface_mem_free(mem);
 }
 
 void uct_test::entity::progress() const {
@@ -325,29 +321,33 @@ std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resourc
     return os << resource.tl_name << "/" << resource.dev_name;
 }
 
-uct_test::mapped_buffer::mapped_buffer(size_t size, size_t alignment, uint64_t seed, 
+uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
                                        const entity& entity, size_t offset) :
     m_entity(entity)
 {
     if (size > 0)  {
         size_t alloc_size = size + offset;
-        m_entity.mem_alloc(&m_buf_real, &alloc_size, alignment, &m_memh, &m_rkey);
-        m_buf = (char*)m_buf_real + offset;
-        m_end = (char*)m_buf + size;
+        m_entity.mem_alloc(alloc_size, &m_mem, &m_rkey);
+        m_buf = (char*)m_mem.address + offset;
+        m_end = (char*)m_buf         + size;
         pattern_fill(seed);
     } else {
-        m_buf       = NULL;
-        m_buf_real  = NULL;
-        m_end       = NULL;
-        m_memh      = UCT_INVALID_MEM_HANDLE;
-        m_rkey.rkey = UCT_INVALID_RKEY;
-        m_rkey.type = NULL;
+        m_mem.method  = UCT_ALLOC_METHOD_LAST;
+        m_mem.address = NULL;
+        m_mem.pd      = NULL;
+        m_mem.memh    = UCT_INVALID_MEM_HANDLE;
+        m_mem.length  = 0;
+        m_buf         = NULL;
+        m_end         = NULL;
+        m_rkey.rkey   = UCT_INVALID_RKEY;
+        m_rkey.handle = NULL;
+        m_rkey.type   = NULL;
     }
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
-    if (m_memh != UCT_INVALID_MEM_HANDLE) {
-        m_entity.mem_free(m_buf_real, m_memh, m_rkey);
+    if (m_mem.method != UCT_ALLOC_METHOD_LAST) {
+        m_entity.mem_free(&m_mem, m_rkey);
     }
 }
 
@@ -414,7 +414,7 @@ uint64_t uct_test::mapped_buffer::pat(uint64_t prev) {
 }
 
 uct_mem_h uct_test::mapped_buffer::memh() const {
-    return m_memh;
+    return m_mem.memh;
 }
 
 uct_rkey_t uct_test::mapped_buffer::rkey() const {

@@ -10,7 +10,7 @@
 
 
 static ucs_config_field_t uct_sysv_iface_config_table[] = {
-    {"", "", NULL,
+    {"SM_", "ALLOC=pd", NULL,
     ucs_offsetof(uct_sysv_iface_config_t, super),
     UCS_CONFIG_TYPE_TABLE(uct_sm_iface_config_table)},
     {NULL}

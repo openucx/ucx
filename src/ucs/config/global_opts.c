@@ -7,8 +7,12 @@
 
 #include "global_opts.h"
 
+#include <ucs/config/parser.h>
 #include <ucs/debug/log.h>
 #include <sys/signal.h>
+
+
+#define UCS_GLOBAL_OPTS_ENV_PREFIX   "UCS_"
 
 
 ucs_global_opts_t ucs_global_opts = {
@@ -52,7 +56,7 @@ static UCS_CONFIG_DEFINE_ARRAY(signo,
                                sizeof(int),
                                UCS_CONFIG_TYPE_SIGNO);
 
-ucs_config_field_t ucs_global_opts_table[] = {
+static ucs_config_field_t ucs_global_opts_table[] = {
  {"LOG_LEVEL", "warn",
   "UCS logging level. Messages with a level higher or equal to the selected "
   "will be printed.\n"
@@ -150,8 +154,33 @@ void ucs_global_opts_init()
     ucs_status_t status;
 
     status = ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table,
-                                         "UCS_", NULL, 1);
+                                         UCS_GLOBAL_OPTS_ENV_PREFIX, NULL, 1);
     if (status != UCS_OK) {
         ucs_fatal("failed to parse global configuration - aborting");
     }
+}
+
+ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
+{
+    return ucs_config_parser_set_value(&ucs_global_opts, ucs_global_opts_table,
+                                       name, value);
+}
+
+ucs_status_t ucs_global_opts_clone(void *dst)
+{
+    return ucs_config_parser_clone_opts(&ucs_global_opts, dst, ucs_global_opts_table);
+}
+
+void ucs_global_opts_release()
+{
+    return ucs_config_parser_release_opts(&ucs_global_opts, ucs_global_opts_table);
+}
+
+void ucs_global_opts_print(FILE *stream, const char *title,
+                           ucs_config_print_flags_t print_flags)
+{
+    ucs_config_parser_print_opts(stream, title,
+                                 &ucs_global_opts, ucs_global_opts_table,
+                                 UCS_GLOBAL_OPTS_ENV_PREFIX, NULL,
+                                 print_flags);
 }

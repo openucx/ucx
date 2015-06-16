@@ -28,6 +28,7 @@ noinst_HEADERS = \
 
 libuct_la_SOURCES = \
 	tl/context.c \
+	tl/memory.c \
 	tl/tl_base.c
 
 if HAVE_IB
@@ -57,24 +58,24 @@ endif
 
 if HAVE_TL_RC
 noinst_HEADERS += \
-	ib/rc/rc_def.h \
-	ib/rc/rc_ep.h \
-	ib/rc/rc_iface.h \
-	ib/rc/rc_verbs.h
+	ib/rc/base/rc_def.h \
+	ib/rc/base/rc_ep.h \
+	ib/rc/base/rc_iface.h \
+	ib/rc/verbs/rc_verbs.h
 
 libuct_la_SOURCES += \
-	ib/rc/rc_ep.c \
-	ib/rc/rc_iface.c \
-	ib/rc/rc_verbs_ep.c \
-	ib/rc/rc_verbs_iface.c
+	ib/rc/base/rc_ep.c \
+	ib/rc/base/rc_iface.c \
+	ib/rc/verbs/rc_verbs_ep.c \
+	ib/rc/verbs/rc_verbs_iface.c
 
 if HAVE_MLX5_HW
 noinst_HEADERS += \
-	ib/rc/rc_mlx5.h
+	ib/rc/accel/rc_mlx5.h
 
 libuct_la_SOURCES += \
-	ib/rc/rc_mlx5_ep.c \
-	ib/rc/rc_mlx5_iface.c
+	ib/rc/accel/rc_mlx5_ep.c \
+	ib/rc/accel/rc_mlx5_iface.c
 endif
 endif
 
