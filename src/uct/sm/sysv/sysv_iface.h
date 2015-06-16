@@ -8,7 +8,7 @@
 #ifndef UCT_SYSV_IFACE_H
 #define UCT_SYSV_IFACE_H
 
-#include <uct/sm/base/sm_iface.h>
+#include <uct/sm/dsm/dsm_iface.h>
 #include "sysv_ep.h"
 
 
@@ -16,12 +16,12 @@
 
 
 typedef struct uct_sysv_iface {
-    uct_sm_iface_t          super; 
+    uct_dsm_iface_t          super;
 } uct_sysv_iface_t;
 
 
 typedef struct uct_sysv_iface_config {
-    uct_sm_iface_config_t      super; 
+    uct_dsm_iface_config_t      super;
 } uct_sysv_iface_config_t;
 
 
