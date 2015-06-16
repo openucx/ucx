@@ -39,10 +39,9 @@ UCS_TEST_P(test_pd, alloc) {
         if (size == 0) {
             EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
             continue;
-        } else {
-            ASSERT_UCS_OK(status);
         }
 
+        ASSERT_UCS_OK(status);
         EXPECT_GE(size, orig_size);
         EXPECT_TRUE(address != NULL);
         EXPECT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
@@ -73,6 +72,11 @@ UCS_TEST_P(test_pd, reg) {
         memset(address, 0xBB, size);
 
         status = uct_pd_mem_reg(pd(), address, size, &memh);
+        if (size == 0) {
+            EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+            continue;
+        }
+
         ASSERT_UCS_OK(status);
         ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
         EXPECT_EQ('\xBB', *((char*)address + size - 1));
