@@ -63,7 +63,10 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     ucx_inst_ptest=$ucx_inst/share/ucx/perftest
 
-    opt_perftest_common="-b $ucx_inst_ptest/test_types -b $ucx_inst_ptest/msg_pow2"
+    # hack for perftest, no way to override params used in batch
+    # todo: fix in perftest
+    sed -s 's,-n [0-9]*,-n 5,g' $ucx_inst_ptest/msg_pow2 > $ucx_inst_ptest/msg_pow2_short
+    opt_perftest_common="-b $ucx_inst_ptest/test_types -b $ucx_inst_ptest/msg_pow2_short -w 1"
 
     for dev in $(ibstat -l); do
         hca="${dev}:1"
