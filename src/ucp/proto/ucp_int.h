@@ -187,16 +187,18 @@ typedef struct ucp_mem {
  * UCP worker (thread context).
  */
 typedef struct ucp_worker {
-    ucs_async_context_t async;
-    ucp_context_h       context;
-    uint64_t            uuid;
-    uct_worker_h        uct;           /* UCT worker */
-    ucs_queue_head_t    completed;     /* Queue of completed requests */
-    size_t              uct_comp_priv; /* Max. length of UCT completion private area */
+    ucs_async_context_t       async;
+    ucp_context_h             context;
+    uint64_t                  uuid;
+    uct_worker_h              uct;           /* UCT worker */
+    ucs_queue_head_t          completed;     /* Queue of completed requests */
+    size_t                    uct_comp_priv; /* Max. length of UCT completion private area */
 
-    ucp_ep_t            **ep_hash;
-    uct_iface_attr_t    *iface_attrs;  /* Array of interface attributes */
-    uct_iface_h         ifaces[0];     /* Array of interfaces, one for each resource */
+    ucp_ep_t                **ep_hash;
+    uct_iface_attr_t         *iface_attrs;  /* Array of interface attributes */
+    ucp_user_progress_func_t  user_cb;
+    void                     *user_cb_arg;
+    uct_iface_h               ifaces[0];     /* Array of interfaces, one for each resource */
 } ucp_worker_t;
 
 
