@@ -33,7 +33,7 @@ make $make_opt
 make $make_opt distcheck
 
 echo "Build docs"
-make docs
+make $make_opt docs
 
 echo "Running ucx_info"
 ./src/tools/info/ucx_info -v -f
@@ -58,15 +58,20 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     make $make_opt clean
 
     # todo: check in -devel mode as well
-    ../contrib/configure-release --with-mpi --prefix=$ucx_inst
+    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
     make $make_opt install
 
     ucx_inst_ptest=$ucx_inst/share/ucx/perftest
 
     # hack for perftest, no way to override params used in batch
     # todo: fix in perftest
-    sed -s 's,-n [0-9]*,-n 5,g' $ucx_inst_ptest/msg_pow2 > $ucx_inst_ptest/msg_pow2_short
-    opt_perftest_common="-b $ucx_inst_ptest/test_types -b $ucx_inst_ptest/msg_pow2_short -w 1"
+
+
+    sed -s 's,-n [0-9]*,-n 5,g' $ucx_inst_ptest/msg_pow2 | grep -v "^#" | sort -R | tail -10 > $ucx_inst_ptest/msg_pow2_short
+
+    grep -v "^#" $ucx_inst_ptest/test_types | sort -R | tail -10 > $ucx_inst_ptest/test_types_short
+
+    opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
 
     for dev in $(ibstat -l); do
         hca="${dev}:1"
