@@ -1,0 +1,105 @@
+%global rel @RPM_RELEASE@
+%global version @VERSION@
+%global pkgname @PACKAGE@
+%global prefix @prefix@
+%global __check_files %{nil}
+%global _prefix %{prefix}
+%global _libdir %{prefix}/lib
+%global  debug_package %{nil}
+%bcond_with valgrind
+%global _binary_filedigest_algorithm 1
+%global _source_filedigest_algorithm 1
+
+%global lt_release @LT_RELEASE@
+%global lt_version @LT_CURRENT@.@LT_REVISION@.@LT_AGE@
+
+
+Name: %{pkgname}
+Summary: Unified Communication X
+Version: %{version}
+Release: %{rel}
+
+License: Proprietary
+Group: Applications
+Source: %{pkgname}-%{version}.tar.gz
+Requires: libibverbs
+%if 0%{?suse_version} < 1100
+BuildRequires: gcc-c++ libstdc++-devel libibverbs-devel binutils
+%else
+BuildRequires: gcc-c++ libstdc++-devel libibverbs-devel binutils-devel
+%endif
+%if %{with valgrind}
+BuildRequires: valgrind-devel
+%endif
+
+BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+URL: http://openucx.org
+Prefix: %{prefix}
+Provides: ucx
+Packager: openucx
+Vendor: openucx
+
+
+%description
+UCX is a communication library implementing high-performance messaging.
+
+%prep
+rm -rf $RPM_BUILD_ROOT
+
+%setup -q
+
+%build
+./contrib/configure-release
+make %{?_smp_mflags}
+
+%install
+
+rm -rf "$RPM_BUILD_ROOT"
+
+# Strip out some dependencies
+cat > find-requires.sh <<'EOF'
+exec %{__find_requires} "$@" | egrep -v '^perl'
+EOF
+chmod +x find-requires.sh
+%global _use_internal_dependency_generator 0
+%global __find_requires %{_builddir}/%{buildsubdir}/find-requires.sh
+
+make DESTDIR="$RPM_BUILD_ROOT" install
+mkdir -p $RPM_BUILD_ROOT/etc/ld.so.conf.d/
+echo %{_libdir} > $RPM_BUILD_ROOT/etc/ld.so.conf.d/ucx.conf
+mkdir -p $RPM_BUILD_ROOT/usr/lib64/pkgconfig
+cp ucx.pc $RPM_BUILD_ROOT/usr/lib64/pkgconfig
+
+%clean
+# We may be in the directory that we're about to remove, so cd out of
+# there before we remove it
+cd /tmp
+
+# Remove installed driver after rpm build finished
+chmod -R o+w $RPM_BUILD_DIR/%{name}-%{version}
+rm -rf $RPM_BUILD_DIR/%{name}-%{version}
+
+test "x$RPM_BUILD_ROOT" != "x" && rm -rf $RPM_BUILD_ROOT
+
+
+%files
+%defattr(-, root, root)
+%{prefix}
+/etc/ld.so.conf.d/ucx.conf
+/usr/lib64/pkgconfig/ucx.pc
+
+# Your application file list goes here
+# %{prefix}/lib/lib*.so*
+#%doc COPYRIGHT ChangeLog README AUTHORS NEWS
+#%doc doc/*
+
+# If you install a library
+%post
+/sbin/ldconfig || exit 1
+exit 0
+
+# If you install a library
+%postun
+/sbin/ldconfig
+exit 0
+

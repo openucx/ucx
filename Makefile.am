@@ -38,6 +38,7 @@ EXTRA_DIST += config/m4/sysdep.m4
 EXTRA_DIST += contrib/configure-devel
 EXTRA_DIST += contrib/configure-release
 EXTRA_DIST += contrib/configure-prof
+EXTRA_DIST += contrib/buildrpm.sh
 EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
 EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types
