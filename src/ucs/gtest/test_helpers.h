@@ -199,7 +199,9 @@ public:
 
     void reset(const T& value, dtor_t dtor) {
         reset();
-        ucs_assert(value != NULL);
+        if (value == NULL) {
+            throw std::invalid_argument("value cannot be NULL");
+        }
         m_value = value;
         m_dtor  = dtor;
         m_initialized = true;

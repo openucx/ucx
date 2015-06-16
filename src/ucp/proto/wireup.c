@@ -64,17 +64,16 @@ UCS_CLASS_INIT_FUNC(ucp_dummy_ep_t, ucp_ep_h ucp_ep) {
     self->iface.ops.ep_atomic_swap32  = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_atomic_cswap32 = (void*)ucp_dummy_ep_send_func;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &self->iface);
-
-    self->ep       = ucp_ep;
-    self->refcount = 1;
+    self->super.iface = &self->iface;
+    self->ep          = ucp_ep;
+    self->refcount    = 1;
     return UCS_OK;
 }
 
 UCS_CLASS_CLEANUP_FUNC(ucp_dummy_ep_t) {
 }
 
-UCS_CLASS_DEFINE(ucp_dummy_ep_t, uct_ep_t);
+UCS_CLASS_DEFINE(ucp_dummy_ep_t, void);
 
 /*
  * UCP address is a serialization of multiple interface addresses.

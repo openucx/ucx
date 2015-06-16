@@ -12,6 +12,13 @@ else
 ucx_perftest_CC = $(CC)
 endif
 	
+perftestdir = $(pkgdatadir)/perftest
+dist_perftest_DATA = \
+	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \
+	$(top_srcdir)/contrib/ucx_perftest_config/README \
+	$(top_srcdir)/contrib/ucx_perftest_config/test_types \
+	$(top_srcdir)/contrib/ucx_perftest_config/transports
+
 bin_PROGRAMS          = ucx_perftest
 noinst_LTLIBRARIES    = libucxperf.la
 AM_CPPFLAGS           = \

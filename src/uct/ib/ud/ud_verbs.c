@@ -81,7 +81,7 @@ static void uct_ud_verbs_iface_progress_pending(uct_ud_verbs_iface_t *iface)
     uct_ud_ep_t *ep;
     ucs_status_t status;
     uct_ud_neth_t neth;
-    uct_ud_send_skb_t *skb;
+    uct_ud_send_skb_t *skb = NULL;
 
     UCS_V_INITIALIZED(skb);
     while (!ucs_queue_is_empty(&iface->super.tx.pending_ops)) {
