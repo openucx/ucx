@@ -396,6 +396,7 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
 {
     ucs_status_t status;
     uct_rkey_t uct_rkey;
+    size_t bcopy_length;
 
     /* Check that the remote PD index exists in the remote key.
      */
@@ -408,18 +409,38 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
 
     uct_rkey = ucp_lookup_uct_rkey(ep, rkey);
 
-    if (length <= ep->config.max_short_put) {
-        status = uct_ep_put_short(ep->uct.ep, buffer, length, remote_addr,
-                                  uct_rkey);
-        while (status == UCS_ERR_NO_RESOURCE) {
-            ucp_worker_progress(ep->worker);
+    /* Loop until all message has been sent.
+     * We re-check the configuration on every iteration, because it can be
+     * changed by transport switch.
+     */
+    for (;;) {
+        if (length <= ep->config.max_short_put) {
             status = uct_ep_put_short(ep->uct.ep, buffer, length, remote_addr,
                                       uct_rkey);
+            if (status != UCS_ERR_NO_RESOURCE) {
+                break;
+            }
+        } else {
+            bcopy_length = ucs_min(length, ep->config.max_bcopy_put);
+            status = uct_ep_put_bcopy(ep->uct.ep, (uct_pack_callback_t)memcpy,
+                                      (void*)buffer, bcopy_length, remote_addr,
+                                      uct_rkey);
+            if (status == UCS_OK) {
+                length      -= bcopy_length;
+                if (length == 0) {
+                    break;
+                }
+
+                buffer      += bcopy_length;
+                remote_addr += bcopy_length;
+            } else if (status != UCS_ERR_NO_RESOURCE) {
+                break;
+            }
         }
-        return status;
+        ucp_worker_progress(ep->worker);
     }
 
-    return UCS_ERR_UNSUPPORTED;
+    return status;
 }
 
 ucs_status_t ucp_rma_get(ucp_ep_h ep, void *buffer, size_t length,

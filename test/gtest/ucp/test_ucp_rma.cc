@@ -93,7 +93,7 @@ UCS_TEST_F(test_ucp_rma, mem_reg) {
 }
 
 UCS_TEST_F(test_ucp_rma, put) {
-    static const size_t memheap_size = 4096;
+    static const size_t memheap_size = 512 * 1024;
     ucs_status_t status;
     entity pes[2];
 
@@ -116,15 +116,23 @@ UCS_TEST_F(test_ucp_rma, put) {
     status = ucp_ep_rkey_unpack(pes[0].ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
 
-    uint64_t send_data = 0x12345678abcdefull;
-    status = ucp_rma_put(pes[0].ep(), &send_data, sizeof(send_data),
-                         (uintptr_t)memheap, rkey);
-    ASSERT_UCS_OK(status);
+    for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
 
-    status = ucp_rma_flush(pes[0].worker());
-    ASSERT_UCS_OK(status);
+        std::string send_data;
+        send_data.resize(rand() % memheap_size);
+        ucs::fill_random(send_data.begin(), send_data.end());
 
-    EXPECT_EQ(send_data, *(uint64_t*)memheap);
+        size_t offset = rand() % (memheap_size - send_data.length());
+
+        status = ucp_rma_put(pes[0].ep(), &send_data[0], send_data.length(),
+                             (uintptr_t)memheap + offset, rkey);
+        ASSERT_UCS_OK(status);
+
+        status = ucp_rma_flush(pes[0].worker());
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(send_data, std::string((char*)memheap + offset, send_data.length()));
+    }
 
     ucp_rkey_destroy(rkey);
 

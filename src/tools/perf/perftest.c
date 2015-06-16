@@ -118,6 +118,9 @@ test_type_t tests[] = {
     {"ucp_put_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
      "UCP put latency"},
 
+    {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP put bandwidth"},
+
     {NULL}
 };
 
