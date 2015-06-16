@@ -7,6 +7,8 @@
 
 #include "ucx_info.h"
 
+#include <string.h>
+
 
 void print_ucp_config(ucs_config_print_flags_t print_flags)
 {
