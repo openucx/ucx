@@ -1,0 +1,5 @@
+ucx (@MAJOR_VERSION@.@MINOR_VERSION@.@MICRO_VERSION@) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Mellanox Ltd. <support@mellanox.com>  Wed, 11 Sep 2013 15:24:22 +0300

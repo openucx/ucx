@@ -1,0 +1,7 @@
+#!/bin/sh
+
+PCF=/usr/lib/pkgconfig/ucx.pc
+
+if [  -f  $PCF ];then
+    rm -f $PCF
+fi

@@ -31,6 +31,14 @@ echo "Build release"
 make $make_opt
 make $make_opt distcheck
 
+if [ -x /usr/bin/dpkg-buildpackage ]; then
+    echo "Build on debian"
+    dpkg-buildpackage -us -uc
+else
+    echo "Build rpms"
+    ../contrib/buildrpm.sh -s -b
+fi
+
 echo "Build docs"
 make docs
 
@@ -95,17 +103,5 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     module unload tools/cov
 fi
 
-#rpm_topdir=$WORKSPACE/rpm-dist
-#(make distcheck && rm -rf $rpm_topdir && mkdir -p $rpm_topdir && cd $rpm_topdir && mkdir -p BUILD RPMS SOURCES SPECS SRPMS)
-#
-#if [ -x /usr/bin/dpkg-buildpackage ]; then
-#    echo "Build on debian"
-#    dpkg-buildpackage -us -uc
-#else
-#    echo "Build rpms"
-#    rpmbuild -bs --define '_sourcedir .' --define "_topdir $rpm_topdir" --nodeps mxm.spec
-#    fn=$(find $rpm_topdir -name "*.src.rpm" -print0)
-#    rpmbuild --define "_topdir $rpm_topdir" --rebuild $fn
-#fi
 
 exit $rc
