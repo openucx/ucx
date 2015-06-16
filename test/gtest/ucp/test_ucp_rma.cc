@@ -112,6 +112,12 @@ UCS_TEST_F(test_ucp_rma, put) {
     pes[0].connect(pes[1]);
     pes[1].connect(pes[0]);
 
+    for (int i = 0; i < 5; i++) {
+        usleep(100);
+        ucp_worker_progress(pes[1].worker());
+        ucp_worker_progress(pes[0].worker());
+    }
+
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(pes[0].ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
