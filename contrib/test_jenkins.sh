@@ -90,7 +90,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         fi
 
         echo Running ucx_perf kit on $hca
-        mpirun -np 2 $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
+        mpirun -np 2 $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
 
         # todo: add csv generation
 
