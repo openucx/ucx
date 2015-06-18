@@ -75,8 +75,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # todo: fix in perftest
 
 
-    sed -s 's,-n [0-9]*,-n 5,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-
+    sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
     cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
 
     opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
