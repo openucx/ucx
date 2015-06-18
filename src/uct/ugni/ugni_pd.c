@@ -50,7 +50,13 @@ pthread_mutex_t uct_ugni_global_lock = PTHREAD_MUTEX_INITIALIZER;
 static ucs_status_t uct_ugni_query_pd_resources(uct_pd_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p)
 {
-    return uct_single_pd_resource(&uct_ugni_pd_component, resources_p, num_resources_p);
+    if (getenv("PMI_GNI_PTAG") != NULL) {
+        return uct_single_pd_resource(&uct_ugni_pd_component, resources_p, num_resources_p);
+    } else {
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        return UCS_OK;
+    }
 }
 
 uct_ugni_job_info_t job_info = {

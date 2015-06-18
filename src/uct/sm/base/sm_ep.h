@@ -59,7 +59,7 @@ ucs_status_t uct_sm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
                                       uint32_t swap, uint64_t remote_addr, 
                                       uct_rkey_t rkey, uint32_t *result,
                                       uct_completion_t *comp);
-ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
                                  void *arg, size_t length,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);

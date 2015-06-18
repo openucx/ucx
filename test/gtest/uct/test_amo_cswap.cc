@@ -32,27 +32,29 @@ public:
     }
 
     ucs_status_t cswap32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                         completion *comp) {
+                         uint64_t *result, completion *comp) {
         if (worker.count > 0) {
             return UCS_ERR_NO_RESOURCE; /* Don't proceed until got a reply */
         }
         comp->uct.func = cswap_reply_cb<uint32_t>;
         comp->w        = &worker;
+        // TODO will not work if completes immediately
         return uct_ep_atomic_cswap32(ep, worker.value, hash64(worker.value),
                                      recvbuf.addr(), recvbuf.rkey(),
-                                     &comp->uct);
+                                     (uint32_t*)result, &comp->uct);
     }
 
     ucs_status_t cswap64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                         completion *comp) {
+                         uint64_t *result, completion *comp) {
         if (worker.count > 0) {
             return UCS_ERR_NO_RESOURCE; /* Don't proceed until got a reply */
         }
         comp->uct.func = cswap_reply_cb<uint64_t>;
         comp->w        = &worker;
+        // TODO will not work if completes immediately
         return uct_ep_atomic_cswap64(ep, worker.value, hash64(worker.value),
                                      recvbuf.addr(), recvbuf.rkey(),
-                                     &comp->uct);
+                                     result, &comp->uct);
     }
 
     template <typename T>

@@ -49,7 +49,8 @@ public:
     {
         m_completion->dest   = sendbuf.ptr();
         m_completion->length = sendbuf.length();
-        return uct_ep_get_bcopy(ep, sendbuf.length(), recvbuf.addr(),
+        return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy, sendbuf.ptr(),
+                                sendbuf.length(), recvbuf.addr(),
                                 recvbuf.rkey(), &m_completion->uct);
     }
 

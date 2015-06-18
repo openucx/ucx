@@ -80,10 +80,20 @@ typedef void (*uct_completion_callback_t)(uct_completion_t *self, void *data);
  * @param [in]  length   How much data to produce (size of "dest")
  *
  * @note The arguments for this callback are in the same order as libc's memcpy().
- *
- * TODO return How much data was actually produced.
  */
 typedef void (*uct_pack_callback_t)(void *dest, void *arg, size_t length);
+
+
+/**
+ * Callback for consuming data.
+ *
+ * @param [in]  arg      Custom user-argument.
+ * @param [in]  data     Memory buffer to unpack the data from.
+ * @param [in]  length   How much data to consume (size of "data")
+ *
+ * @note The arguments for this callback are in the same order as libc's memcpy().
+ */
+typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length);
 
 
 #endif

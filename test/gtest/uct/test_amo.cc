@@ -171,14 +171,24 @@ void* uct_amo_test::worker::run(void *arg) {
 void uct_amo_test::worker::run() {
     for (unsigned i = 0; i < uct_amo_test::count(); ++i) {
         ucs_status_t status;
+        completion *comp;
+        uint64_t result;
+
+        result         = 0;
+        comp           = get_completion(i);
+        comp->uct.func = NULL;
         status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
-                        get_completion(i));
+                                 &result, comp);
         while (status == UCS_ERR_NO_RESOURCE) {
             m_entity.progress();
             status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
-                            get_completion(i));
+                                     &result, comp);
         }
-        if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
+        if (status == UCS_OK) {
+            if (comp->uct.func != NULL) {
+                comp->uct.func(&comp->uct, &result);
+            }
+        } else if (status != UCS_INPROGRESS) {
             UCS_TEST_ABORT(ucs_status_string(status));
         }
         ++count;
