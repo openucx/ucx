@@ -65,11 +65,18 @@ public:
         case UCX_PERF_CMD_TAG:
             return ucp_tag_recv(worker, buffer, length, TAG, 0, &comp);
         case UCX_PERF_CMD_PUT:
-            ptr = (volatile uint8_t*)buffer;
-            while (*ptr != sn) {
-                progress_responder();
+            switch (TYPE) {
+            case UCX_PERF_TEST_TYPE_PINGPONG:
+                ptr = (volatile uint8_t*)buffer;
+                while (*ptr != sn) {
+                    progress_responder();
+                }
+                return UCS_OK;
+            case UCX_PERF_TEST_TYPE_STREAM_UNI:
+                return UCS_OK;
+            default:
+                return UCS_ERR_INVALID_PARAM;
             }
-            return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -151,13 +158,13 @@ public:
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, length, sn);
+                send(ep, send_buffer, length, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, length, sn, remote_addr, rkey);
+                recv(worker, recv_buffer, length, sn);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }

@@ -270,7 +270,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    UCT_CHECK_LENGTH(length <= iface->config.max_inline, "put_short");
+    UCT_CHECK_LENGTH(length, iface->config.max_inline, "put_short");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     iface->inl_rwrite_wr.wr.rdma.remote_addr = remote_addr;
     iface->inl_rwrite_wr.wr.rdma.rkey        = rkey;
@@ -293,7 +293,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
-    UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "put_bcopy");
+    UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "put_bcopy");
     UCT_RC_VERBS_ZERO_LENGTH_POST(length);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
@@ -333,7 +333,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
-    UCT_CHECK_LENGTH(length <= iface->super.super.config.seg_size, "get_bcopy");
+    UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "get_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
 
@@ -374,7 +374,7 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_am_short_hdr_t am;
 
     UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(sizeof(am) + length <= iface->config.max_inline, "am_short");
+    UCT_CHECK_LENGTH(sizeof(am) + length, iface->config.max_inline, "am_short");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
 
     am.rc_hdr.am_id             = id;
@@ -443,7 +443,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     int send_flags;
 
     UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(header_length + length <= iface->super.super.config.seg_size,
+    UCT_CHECK_LENGTH(header_length + length, iface->super.super.config.seg_size,
                      "send");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);

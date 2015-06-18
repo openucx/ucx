@@ -34,7 +34,7 @@ ucs_status_t uct_sm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
         return UCS_OK;
     }
     /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length <= iface->config.max_put, "put_short");
+    UCT_CHECK_LENGTH(length, iface->config.max_put, "put_short");
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
@@ -58,7 +58,7 @@ ucs_status_t uct_sm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     }
 
     /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length <= iface->config.max_bcopy, "put_bcopy");
+    UCT_CHECK_LENGTH(length, iface->config.max_bcopy, "put_bcopy");
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
@@ -83,7 +83,7 @@ ucs_status_t uct_sm_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer,
     }
 
     /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length <= iface->config.max_zcopy, "put_zcopy");
+    UCT_CHECK_LENGTH(length, iface->config.max_zcopy, "put_zcopy");
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
@@ -211,7 +211,7 @@ ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb
     }
 
     /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length <= iface->config.max_bcopy, "get_bcopy");
+    UCT_CHECK_LENGTH(length, iface->config.max_bcopy, "get_bcopy");
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
@@ -235,7 +235,7 @@ ucs_status_t uct_sm_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
     }
 
     /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length <= iface->config.max_zcopy, "get_zcopy");
+    UCT_CHECK_LENGTH(length, iface->config.max_zcopy, "get_zcopy");
 
     /* FIXME add debug/assertion to check remote_addr within attached region */
 
