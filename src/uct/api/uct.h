@@ -13,7 +13,7 @@
 #include <uct/api/addr.h>
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
-#include <ucs/async/async.h>
+#include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>

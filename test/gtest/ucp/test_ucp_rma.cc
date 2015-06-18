@@ -48,6 +48,11 @@ UCS_TEST_F(test_ucp_rma, mem_alloc) {
         ucp_mem_h memh;
         void *ptr = NULL;
         status = ucp_mem_map(e.ucph(), &ptr, size, 0, &memh);
+        if (size == 0) {
+            EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+            continue;
+        }
+
         ASSERT_UCS_OK(status);
 
         test_mapped_memory(e, memh, ptr, size);
@@ -71,6 +76,11 @@ UCS_TEST_F(test_ucp_rma, mem_reg) {
 
         ucp_mem_h memh;
         status = ucp_mem_map(e.ucph(), &ptr, size, 0, &memh);
+        if (size == 0) {
+            EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+            continue;
+        }
+
         ASSERT_UCS_OK(status);
 
         test_mapped_memory(e, memh, ptr, size);

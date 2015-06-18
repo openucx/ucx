@@ -39,7 +39,8 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([config/m4])
 
-AC_PREFIX_DEFAULT([/usr])
+define([ucx_prefix], [/opt/ucx])
+AC_PREFIX_DEFAULT([ucx_prefix])
 
 RPM_RELEASE=1
 BUILD_TS=ts
@@ -177,6 +178,12 @@ AC_MSG_NOTICE([Supported transports: $transports])
 #
 AC_CONFIG_FILES([
 				 Makefile
+                 ucx.spec
+                 ucx.pc
+                 debian/rules
+                 debian/control
+                 debian/changelog
+                 debian/ucx.postinst
                  src/ucs/Makefile
                  src/uct/Makefile
                  src/uct/api/version.h
@@ -184,6 +191,7 @@ AC_CONFIG_FILES([
                  src/tools/hook/Makefile
                  src/tools/info/Makefile
                  src/tools/perf/Makefile
+                 test/examples/Makefile
                  test/gtest/Makefile
                  ])
 

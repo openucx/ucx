@@ -43,3 +43,11 @@ ucx*tar.gz
 src/tools/info/build_config.h
 src/tools/info/ucx_info
 src/tools/perf/ucx_perftest
+rpm-dist
+cov_build*
+debian/changelog
+debian/control
+debian/rules
+debian/ucx.postinst
+ucx.spec
+ucx.pc

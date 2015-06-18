@@ -9,7 +9,7 @@
 #define UCT_UGNI_IFACE_H
 
 #include <uct/tl/tl_base.h>
-#include "ugni_context.h"
+#include "ugni_pd.h"
 #include "ugni_device.h"
 #include "ugni_ep.h"
 
@@ -86,14 +86,18 @@ typedef struct uct_ugni_get_desc {
     size_t tail;                    /**< Tail parameter to specify how many bytes at the end of a fma/rdma are garbage*/
 } uct_ugni_get_desc_t;
 
+ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface);
+
+ucs_status_t uct_ugni_init_nic(int device_index,
+                               int *domain_id,
+                               gni_cdm_handle_t *cdm_handle,
+                               gni_nic_handle_t *nic_handle,
+                               uint32_t *address);
+
+extern ucs_config_field_t uct_ugni_iface_config_table[];
+
 static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
 {
     return iface->dev;
 }
-
-extern ucs_config_field_t uct_ugni_iface_config_table[];
-extern uct_tl_ops_t uct_ugni_tl_ops;
-
-ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface, uct_ugni_context_t
-                                 *ugni_ctx);
 #endif

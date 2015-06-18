@@ -11,8 +11,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/status.h>
-#include <ucs/debug/memtrack.h>
-#include <ucs/debug/log.h>
 
 
 typedef struct ucs_class     ucs_class_t;
@@ -96,8 +94,8 @@ struct ucs_class {
         status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
                                              ## __VA_ARGS__); \
         if (status != UCS_OK) { \
-            _ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
-                                          (_obj), init_count); \
+            ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
+                                         (_obj), init_count); \
         } \
         \
         (status); \
@@ -113,7 +111,7 @@ struct ucs_class {
 #define UCS_CLASS_CLEANUP(_type, _obj) \
     { \
         extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
-        _ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), _obj, -1); \
+        ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), _obj, -1); \
     }
 
 
@@ -135,13 +133,13 @@ struct ucs_class {
         ucs_status_t status; \
         void *obj; \
         \
-        obj = ucs_malloc(cls->size, cls->name); \
+        obj = ucs_class_malloc(cls); \
         if (obj != NULL) { \
             status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
             if (status == UCS_OK) { \
                 *(_obj) = (typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
-                ucs_free(obj); /* Initialization failure */ \
+                ucs_class_free(obj); /* Initialization failure */ \
             } \
         } else { \
             status = UCS_ERR_NO_MEMORY; /* Allocation failure */ \
@@ -160,7 +158,7 @@ struct ucs_class {
 #define UCS_CLASS_DELETE(_type, _obj) \
     { \
         UCS_CLASS_CLEANUP(_type, _obj); \
-        ucs_free(_obj); \
+        ucs_class_free(_obj); \
     }
 
 
@@ -278,7 +276,14 @@ struct ucs_class {
  * @param obj    Instance pointer.
  * @param limit  How many destructors to call (0: none, -1: all, 1: only ucs_object_t's).
  */
-void _ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit);
+void ucs_class_call_cleanup_chain(ucs_class_t *cls, void *obj, int limit);
+
+
+/*
+ * Helpers: Allocate/release objects.
+ */
+void *ucs_class_malloc(ucs_class_t *cls);
+void ucs_class_free(void *obj);
 
 
 /**
