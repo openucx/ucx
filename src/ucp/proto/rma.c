@@ -417,7 +417,7 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
         if (length <= ep->config.max_short_put) {
             status = uct_ep_put_short(ep->uct.ep, buffer, length, remote_addr,
                                       uct_rkey);
-            if (status != UCS_ERR_NO_RESOURCE) {
+            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 break;
             }
         } else {
@@ -425,7 +425,7 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
             status = uct_ep_put_bcopy(ep->uct.ep, (uct_pack_callback_t)memcpy,
                                       (void*)buffer, bcopy_length, remote_addr,
                                       uct_rkey);
-            if (status == UCS_OK) {
+            if (ucs_likely(status == UCS_OK)) {
                 length      -= bcopy_length;
                 if (length == 0) {
                     break;
