@@ -157,7 +157,7 @@ uct_rc_mlx5_inline_copy(void *dest, const void *src, unsigned length, uct_rc_mlx
     void *qend = ep->tx.qend;
     ptrdiff_t n;
 
-    if (dest + length <= qend) {
+    if (dest + length < qend) {
         memcpy(dest, src, length);
         return 0;
     } else {
@@ -296,10 +296,12 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
         UCT_CHECK_LENGTH(length + sizeof(*rch) + am_hdr_len,
-                         iface->super.super.config.seg_size, "send");
+                         iface->super.super.config.seg_size, "am_zcopy payload");
 
         inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len,
                                              UCT_IB_MLX5_WQE_SEG_SIZE);
+        UCT_CHECK_LENGTH(sizeof(*ctrl) + inl_seg_size + sizeof(*dptr),
+                         UCT_RC_MLX5_MAX_BB * MLX5_SEND_WQE_BB, "am_zcopy header");
 
         /* Inline segment with AM ID and header */
         inl              = (void*)(ctrl + 1);
@@ -314,8 +316,10 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
             wqe_size     = sizeof(*ctrl) + inl_seg_size;
         } else {
             wqe_size     = sizeof(*ctrl) + inl_seg_size + sizeof(*dptr);
-            uct_rc_mlx5_ep_set_dptr_seg((void*)(ctrl + 1) + inl_seg_size + wraparound,
-                                        buffer, length, *lkey_p);
+            dptr         = (void*)(ctrl + 1) + inl_seg_size + wraparound;
+            ucs_assert((void*)dptr       >= ep->tx.qstart);
+            ucs_assert((void*)(dptr + 1) <= ep->tx.qend);
+            uct_rc_mlx5_ep_set_dptr_seg(dptr, buffer, length, *lkey_p);
         }
         break;
 

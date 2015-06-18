@@ -16,10 +16,16 @@ public:
         OP_PUT_SHORT,
         OP_PUT_BCOPY,
         OP_PUT_ZCOPY,
-        OP_AM_SHORT
+        OP_AM_SHORT,
+        OP_AM_ZCOPY
     };
 
     uct_p2p_err_test() : uct_p2p_test(0) {
+        errors.clear();
+    }
+
+    ~uct_p2p_err_test() {
+        errors.clear();
     }
 
     static ucs_log_func_rc_t
@@ -43,15 +49,16 @@ public:
         va_end(ap_copy);
 
         UCS_TEST_MESSAGE << "   < " << buf << " >";
-        ++error_count;
+        errors.push_back(buf);
         return UCS_LOG_FUNC_RC_STOP;
     }
 
     void test_error_run(enum operation op, uint8_t am_id,
                         void *buffer, size_t length, uct_mem_h memh,
-                        uint64_t remote_addr, uct_rkey_t rkey)
+                        uint64_t remote_addr, uct_rkey_t rkey,
+                        const std::string& error_pattern)
     {
-        error_count = 0;
+        errors.clear();
 
         ucs_log_push_handler(log_handler);
         UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
@@ -74,6 +81,10 @@ public:
             case OP_AM_SHORT:
                 status = uct_ep_am_short(sender_ep(), am_id, 0, buffer, length);
                 break;
+            case OP_AM_ZCOPY:
+                status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,
+                                         buffer, 1, memh, NULL);
+                break;
             }
         } while (status == UCS_ERR_NO_RESOURCE);
 
@@ -85,15 +96,32 @@ public:
             ucs::safe_usleep(1e4);
         }
 
-        EXPECT_GT(error_count, 0u);
+        /* Count how many error messages match/don't match the given pattern */
+        size_t num_matched   = 0;
+        size_t num_unmatched = 0;
+        for (std::vector<std::string>::iterator iter = errors.begin();
+                        iter != errors.end(); ++iter) {
+            if (iter->find(error_pattern) != iter->npos) {
+                ++num_matched;
+            } else {
+                ++num_unmatched;
+            }
+        }
+
+        EXPECT_GT(num_matched, 0ul) <<
+                        "No error which contains the string '" << error_pattern <<
+                        "' has occurred during the test";
+        EXPECT_EQ(0ul, num_unmatched) <<
+                        "Unexpected error(s) occurred during the test";
+        errors.clear();
     }
 
-    static unsigned error_count;
+    static std::vector<std::string> errors;
     static ucs_status_t last_error;
 
 };
 
-unsigned uct_p2p_err_test::error_count = 0;
+std::vector<std::string> uct_p2p_err_test::errors;
 ucs_status_t uct_p2p_err_test::last_error = UCS_OK;
 
 
@@ -105,26 +133,45 @@ UCS_TEST_P(uct_p2p_err_test, local_access_error) {
     const size_t offset = 4 * 1024 * 1024;
     test_error_run(OP_PUT_ZCOPY, 0,
                    (char*)sendbuf.ptr() + offset, sendbuf.length() + offset,
-                   sendbuf.memh(), recvbuf.addr(), recvbuf.rkey());
+                   sendbuf.memh(), recvbuf.addr(), recvbuf.rkey(),
+                   "");
 
     recvbuf.pattern_check(2);
 }
 
 UCS_TEST_P(uct_p2p_err_test, remote_access_error) {
-    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF);
+    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM);
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 
     const size_t offset = 4 * 1024 * 1024;
     test_error_run(OP_PUT_ZCOPY, 0,
                    (char*)sendbuf.ptr() + offset, sendbuf.length() + offset,
-                   sendbuf.memh(), recvbuf.addr() + 4, recvbuf.rkey());
+                   sendbuf.memh(), recvbuf.addr() + 4, recvbuf.rkey(),
+                   "");
 
     recvbuf.pattern_check(2);
 }
 
 #if ENABLE_PARAMS_CHECK
-UCS_TEST_P(uct_p2p_err_test, invalid_bcopy_length) {
+UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
+    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+    size_t max_short = sender().iface_attr().cap.put.max_short;
+    if (max_short > (2 * 1024 * 1024)) {
+        UCS_TEST_SKIP_R("max_short too large");
+    }
+
+    mapped_buffer sendbuf(max_short + 1, 1, sender());
+    mapped_buffer recvbuf(max_short + 1, 2, receiver());
+
+    test_error_run(OP_PUT_SHORT, 0, sendbuf.ptr(), sendbuf.length(),
+                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   "length");
+
+    recvbuf.pattern_check(2);
+}
+
+UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
     check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
     size_t max_bcopy = sender().iface_attr().cap.put.max_bcopy;
     if (max_bcopy > (2 * 1024 * 1024)) {
@@ -135,23 +182,46 @@ UCS_TEST_P(uct_p2p_err_test, invalid_bcopy_length) {
     mapped_buffer recvbuf(max_bcopy + 1, 2, receiver());
 
     test_error_run(OP_PUT_BCOPY, 0, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey());
+                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   "length");
 
     recvbuf.pattern_check(2);
 }
 
-UCS_TEST_P(uct_p2p_err_test, invalid_short_length) {
-    check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-    size_t max_short = sender().iface_attr().cap.put.max_short;
+UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    size_t max_short = sender().iface_attr().cap.am.max_short;
     if (max_short > (2 * 1024 * 1024)) {
         UCS_TEST_SKIP_R("max_short too large");
     }
 
-    mapped_buffer sendbuf(max_short + 1, 1, sender());
-    mapped_buffer recvbuf(max_short + 1, 2, receiver());
+    mapped_buffer sendbuf(max_short + 1 - sizeof(uint64_t), 1, sender());
+    mapped_buffer recvbuf(max_short + 1,                    2, receiver());
 
-    test_error_run(OP_PUT_SHORT, 0, sendbuf.ptr(), sendbuf.length(), UCT_INVALID_MEM_HANDLE,
-                   recvbuf.addr(), recvbuf.rkey());
+    test_error_run(OP_AM_SHORT, 0, sendbuf.ptr(), sendbuf.length(),
+                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   "length");
+
+    recvbuf.pattern_check(2);
+}
+
+UCS_TEST_P(uct_p2p_err_test, invalid_am_zcopy_hdr_length) {
+    check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
+    size_t max_hdr = sender().iface_attr().cap.am.max_hdr;
+    if (max_hdr > (2 * 1024 * 1024)) {
+        UCS_TEST_SKIP_R("max_hdr too large");
+    }
+    if (max_hdr + 2 > sender().iface_attr().cap.am.max_bcopy) {
+        UCS_TEST_SKIP_R("max_hdr + 2 exceeds maximal bcopy size");
+    }
+
+    /* Send header of (max_hdr+1) and payload length 1 */
+    mapped_buffer sendbuf(max_hdr + 1, 1, sender());
+    mapped_buffer recvbuf(max_hdr + 2, 2, receiver());
+
+    test_error_run(OP_AM_ZCOPY, 0, sendbuf.ptr(), sendbuf.length(),
+                   sendbuf.memh(), recvbuf.addr(), recvbuf.rkey(),
+                   "length");
 
     recvbuf.pattern_check(2);
 }
@@ -162,7 +232,8 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_id) {
     mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, 0, UCT_INVALID_RKEY);
+                   UCT_INVALID_MEM_HANDLE, 0, UCT_INVALID_RKEY,
+                   "am id");
 }
 #endif
 

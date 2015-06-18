@@ -108,8 +108,8 @@ static ucs_status_t uct_cm_ep_send(uct_cm_ep_t *ep, uct_cm_iov_t *iov, int iovcn
         length += iov[i].length;
     }
     if (length > IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE) {
-        ucs_error("Data too large for SIDR (got: %zu, max: %zu)",
-                  length, (size_t)IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE);
+        UCT_CHECK_LENGTH(length, (size_t)IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
+                         "SIDR request");
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }

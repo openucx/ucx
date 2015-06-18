@@ -443,8 +443,10 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     int send_flags;
 
     UCT_CHECK_AM_ID(id);
+    UCT_CHECK_LENGTH(sizeof(*rch) + header_length, iface->config.short_desc_size,
+                     "am_zcopy header");
     UCT_CHECK_LENGTH(header_length + length, iface->super.super.config.seg_size,
-                     "send");
+                     "am_zcopy payload");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
 
