@@ -32,6 +32,14 @@ echo "Build release"
 make $make_opt
 make $make_opt distcheck
 
+if [ -x /usr/bin/dpkg-buildpackage ]; then
+    echo "Build on debian"
+    dpkg-buildpackage -us -uc
+else
+    echo "Build rpms"
+    ../contrib/buildrpm.sh -s -b
+fi
+
 echo "Build docs"
 make $make_opt docs
 
@@ -58,7 +66,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     make $make_opt clean
 
     # todo: check in -devel mode as well
-    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
+    ../contrib/configure-release --with-mpi --prefix=$ucx_inst
     make $make_opt install
 
     ucx_inst_ptest=$ucx_inst/share/ucx/perftest
@@ -67,9 +75,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # todo: fix in perftest
 
 
-    sed -s 's,-n [0-9]*,-n 5,g' $ucx_inst_ptest/msg_pow2 | grep -v "^#" | sort -R | tail -10 > $ucx_inst_ptest/msg_pow2_short
+    sed -s 's,-n [0-9]*,-n 5,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
 
-    grep -v "^#" $ucx_inst_ptest/test_types | sort -R | tail -10 > $ucx_inst_ptest/test_types_short
+    cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
 
     opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
 
@@ -89,7 +97,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     done
 
+    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
+    make $make_opt all
+
     module unload hpcx-gcc
+
 
     echo "Running ucx_info"
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
@@ -127,17 +139,5 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     module unload tools/cov
 fi
 
-#rpm_topdir=$WORKSPACE/rpm-dist
-#(make distcheck && rm -rf $rpm_topdir && mkdir -p $rpm_topdir && cd $rpm_topdir && mkdir -p BUILD RPMS SOURCES SPECS SRPMS)
-#
-#if [ -x /usr/bin/dpkg-buildpackage ]; then
-#    echo "Build on debian"
-#    dpkg-buildpackage -us -uc
-#else
-#    echo "Build rpms"
-#    rpmbuild -bs --define '_sourcedir .' --define "_topdir $rpm_topdir" --nodeps mxm.spec
-#    fn=$(find $rpm_topdir -name "*.src.rpm" -print0)
-#    rpmbuild --define "_topdir $rpm_topdir" --rebuild $fn
-#fi
 
 exit $rc
