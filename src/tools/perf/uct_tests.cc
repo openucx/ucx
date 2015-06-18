@@ -169,7 +169,8 @@ public:
         case UCX_PERF_CMD_GET:
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_BCOPY:
-                return uct_ep_get_bcopy(ep, length, remote_addr, rkey, comp);
+                return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy,
+                                        buffer, length, remote_addr, rkey, comp);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 return uct_ep_get_zcopy(ep, buffer, length, m_perf.uct.send_mem.memh,
                                         remote_addr, rkey, comp);
@@ -187,28 +188,30 @@ public:
         case UCX_PERF_CMD_FADD:
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_fadd32(ep, sn - prev_sn, remote_addr, rkey,
-                                            comp);
+                                            (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
                 return uct_ep_atomic_fadd64(ep, sn - prev_sn, remote_addr, rkey,
-                                            comp);
+                                            (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_SWAP:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey, comp);
+                return uct_ep_atomic_swap32(ep, sn, remote_addr, rkey,
+                                            (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey, comp);
+                return uct_ep_atomic_swap64(ep, sn, remote_addr, rkey,
+                                            (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_CSWAP:
             if (length == sizeof(uint32_t)) {
                 return uct_ep_atomic_cswap32(ep, sn, prev_sn, remote_addr, rkey,
-                                             comp);
+                                             (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
                 return uct_ep_atomic_cswap64(ep, sn, prev_sn, remote_addr, rkey,
-                                             comp);
+                                             (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -326,7 +329,6 @@ public:
         recv_sn  = direction_to_responder ? (psn_t*)m_perf.recv_buffer :
                                             (psn_t*)m_perf.send_buffer;
         *recv_sn = 0;
-        send_sn  = 1;
         my_index = rte_call(&m_perf, group_index);
 
         rte_call(&m_perf, barrier);
@@ -341,9 +343,12 @@ public:
         fc_window   = m_perf.params.uct.fc_window;
 
         completion_index  = 0;
-        *(psn_t*)buffer = send_sn;
 
         if (my_index == 0) {
+            /* send_sn is the next SN to send */
+            send_sn         = 1;
+            *(psn_t*)buffer = send_sn;
+
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 if (flow_control) {
                     /* Wait until getting ACK from responder */
@@ -395,6 +400,7 @@ public:
                 /* Since we're doing flow control, we can count exactly how
                  * many packets were received.
                  */
+                send_sn = (psn_t)-1; /* Last SN we have sent (as acknowledgment) */
                 ucs_assert(direction_to_responder);
                 UCX_PERF_TEST_FOREACH(&m_perf) {
                     sn = *recv_sn;

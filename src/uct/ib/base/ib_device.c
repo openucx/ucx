@@ -92,6 +92,11 @@ static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     pd_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
     pd_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
     pd_attr->cap.flags     = UCT_PD_FLAG_REG;
+
+    if (IBV_EXP_HAVE_CONTIG_PAGES(&dev->dev_attr)) {
+        pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
+    }
+
     pd_attr->local_cpus    = dev->local_cpus;
     return UCS_OK;
 }

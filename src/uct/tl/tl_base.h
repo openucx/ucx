@@ -75,8 +75,10 @@ enum {
 /**
  * In debug mode, if _condition is not true, generate 'Invalid length' error.
  */
-#define UCT_CHECK_LENGTH(_condition, _name) \
-    UCT_CHECK_PARAM(_condition, "Invalid %s length", _name)
+#define UCT_CHECK_LENGTH(_length, _max_length, _name) \
+    UCT_CHECK_PARAM((_length) <= (_max_length), \
+                    "Invalid %s length (expected: %zu <= %zu)", \
+                    _name, (size_t)(_length), (size_t)(_max_length))
 
 
 /**
