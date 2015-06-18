@@ -18,7 +18,7 @@ public:
     struct completion;
     typedef ucs_status_t (uct_amo_test::* send_func_t)(uct_ep_h ep, worker& worker,
                                                        const mapped_buffer& recvbuf,
-                                                       completion *comp);
+                                                       uint64_t *result, completion *comp);
 
     static inline unsigned num_senders() {
         return (RUNNING_ON_VALGRIND) ? 2 : 4;

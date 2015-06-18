@@ -12,12 +12,12 @@ class uct_amo_add_test : public uct_amo_test {
 public:
 
     ucs_status_t add32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       completion *comp) {
+                       uint64_t *result, completion *comp) {
         return uct_ep_atomic_add32(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
     }
 
     ucs_status_t add64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                       completion *comp) {
+                       uint64_t *result, completion *comp) {
         return uct_ep_atomic_add64(ep, worker.value, recvbuf.addr(), recvbuf.rkey());
     }
 

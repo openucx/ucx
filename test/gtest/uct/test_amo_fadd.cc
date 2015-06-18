@@ -12,21 +12,21 @@ class uct_amo_fadd_test : public uct_amo_test {
 public:
 
     ucs_status_t fadd32(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                        completion *comp) {
+                        uint64_t *result, completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
         comp->atomic_size = sizeof(uint32_t);
         return uct_ep_atomic_fadd32(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    &comp->uct);
+                                    (uint32_t*)result, &comp->uct);
     }
 
     ucs_status_t fadd64(uct_ep_h ep, worker& worker, const mapped_buffer& recvbuf,
-                        completion *comp) {
+                        uint64_t *result, completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
         comp->atomic_size = sizeof(uint64_t);
         return uct_ep_atomic_fadd64(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
-                                    &comp->uct);
+                                    result, &comp->uct);
     }
 
     template <typename T>
