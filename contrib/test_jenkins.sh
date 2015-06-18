@@ -14,12 +14,13 @@ else
 fi
 
 make_opt="-j$(($(nproc) - 1))"
+ucx_inst=${WORKSPACE}/install
 
 echo Starting on host: $(hostname)
 
 echo "Autogen"
 ./autogen.sh
-make distclean||:
+make $make_opt distclean||:
 
 echo "Making a directory for test build"
 rm -rf build-test
@@ -40,7 +41,7 @@ else
 fi
 
 echo "Build docs"
-make docs
+make $make_opt docs
 
 echo "Running ucx_info"
 ./src/tools/info/ucx_info -v -f
@@ -62,15 +63,49 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     echo "Build gtest"
     module load hpcx-gcc
-    make clean
-    ../contrib/configure-devel --with-mpi
-    make $make_opt
+    make $make_opt clean
+
+    # todo: check in -devel mode as well
+    ../contrib/configure-release --with-mpi --prefix=$ucx_inst
+    make $make_opt install
+
+    ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+
+    # hack for perftest, no way to override params used in batch
+    # todo: fix in perftest
+
+
+    sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
+    cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
+
+    opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
+
+    for dev in $(ibstat -l); do
+        hca="${dev}:1"
+
+        if [[ $dev =~ .*mlx5.* ]]; then
+            opt_perftest="$opt_perftest_common -b $ucx_inst_ptest/transports"
+        else
+            opt_perftest="$opt_perftest_common -x rc"
+        fi
+
+        echo Running ucx_perf kit on $hca
+        mpirun -np 2 $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
+
+        # todo: add csv generation
+
+    done
+
+    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
+    make $make_opt all
+
     module unload hpcx-gcc
+
 
     echo "Running ucx_info"
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
 
-        echo "Running unit tests"
+    echo "Running unit tests"
     $AFFINITY $TIMEOUT make -C test/gtest test
 
     echo "Running valgrind tests"
