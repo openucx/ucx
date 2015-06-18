@@ -329,7 +329,6 @@ public:
         recv_sn  = direction_to_responder ? (psn_t*)m_perf.recv_buffer :
                                             (psn_t*)m_perf.send_buffer;
         *recv_sn = 0;
-        send_sn  = 1;
         my_index = rte_call(&m_perf, group_index);
 
         rte_call(&m_perf, barrier);
@@ -344,9 +343,12 @@ public:
         fc_window   = m_perf.params.uct.fc_window;
 
         completion_index  = 0;
-        *(psn_t*)buffer = send_sn;
 
         if (my_index == 0) {
+            /* send_sn is the next SN to send */
+            send_sn         = 1;
+            *(psn_t*)buffer = send_sn;
+
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 if (flow_control) {
                     /* Wait until getting ACK from responder */
@@ -398,6 +400,7 @@ public:
                 /* Since we're doing flow control, we can count exactly how
                  * many packets were received.
                  */
+                send_sn = (psn_t)-1; /* Last SN we have sent (as acknowledgment) */
                 ucs_assert(direction_to_responder);
                 UCX_PERF_TEST_FOREACH(&m_perf) {
                     sn = *recv_sn;
