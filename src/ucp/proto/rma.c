@@ -346,12 +346,16 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
 
             ucs_assert(rkey_index < pd_count);
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
-            if (status == UCS_OK) {
-                ucs_trace("rkey[%d] for remote pd %d is 0x%lx", rkey_index,
-                          remote_pd_index, rkey->uct[rkey_index].rkey);
-                rkey->pd_map |= UCS_BIT(remote_pd_index);
-                ++rkey_index;
+            if (status != UCS_OK) {
+                ucs_error("Failed to unpack remote key from remote pd[%d]: %s",
+                          remote_pd_index, ucs_status_string(status));
+                goto err_destroy;
             }
+
+            ucs_trace("rkey[%d] for remote pd %d is 0x%lx", rkey_index,
+                      remote_pd_index, rkey->uct[rkey_index].rkey);
+            rkey->pd_map |= UCS_BIT(remote_pd_index);
+            ++rkey_index;
         }
 
         ++remote_pd_index;
@@ -362,6 +366,8 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     *rkey_p = rkey;
     return UCS_OK;
 
+err_destroy:
+    ucp_rkey_destroy(rkey);
 err:
     return status;
 }
@@ -377,7 +383,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     ucs_free(rkey);
 }
 
-static uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
+static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
 {
     unsigned rkey_index;
 
