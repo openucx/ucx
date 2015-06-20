@@ -48,7 +48,7 @@ public:
         case UCX_PERF_CMD_TAG:
             return ucp_tag_send(ep, buffer, length, TAG);
         case UCX_PERF_CMD_PUT:
-            *(uint8_t*)buffer = sn;
+            *((uint8_t*)buffer + length - 1) = sn;
             return ucp_rma_put(ep, buffer, length, remote_addr, rkey);
         default:
             return UCS_ERR_INVALID_PARAM;
@@ -67,7 +67,7 @@ public:
         case UCX_PERF_CMD_PUT:
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
-                ptr = (volatile uint8_t*)buffer;
+                ptr = (volatile uint8_t*)buffer + length - 1;
                 while (*ptr != sn) {
                     progress_responder();
                 }
