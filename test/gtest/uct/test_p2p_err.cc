@@ -233,7 +233,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_id) {
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
                    UCT_INVALID_MEM_HANDLE, 0, UCT_INVALID_RKEY,
-                   "am id");
+                   "active message id");
 }
 #endif
 
