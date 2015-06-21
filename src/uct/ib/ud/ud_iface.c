@@ -238,7 +238,7 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
     }
 
     self->config.max_inline = qp_init_attr.cap.max_inline_data;
-    ucs_assert_always(qp_attr.cap.max_inline_data >= UCT_UD_MIN_INLINE);
+    ucs_assert_always(qp_init_attr.cap.max_inline_data >= UCT_UD_MIN_INLINE);
 
     memset(&qp_attr, 0, sizeof(qp_attr));
     /* Modify QP to INIT state */
