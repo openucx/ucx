@@ -8,6 +8,21 @@
 #include "ucp_int.h"
 
 
+
+#define UCP_RMA_RKEY_LOOKUP(_ep, _rkey) \
+    ({ \
+        if (ENABLE_PARAMS_CHECK && \
+            !((_rkey)->pd_map & UCS_BIT((_ep)->uct.dst_pd_index))) \
+        { \
+            ucs_error("Remote key does not support current transport " \
+                       "(remote pd index: %d rkey map: 0x%"PRIx64")", \
+                       (_ep)->uct.dst_pd_index, (_rkey)->pd_map); \
+            return UCS_ERR_UNREACHABLE; \
+        } \
+        \
+        ucp_lookup_uct_rkey(_ep, _rkey); \
+    })
+
 /**
  * Unregister memory from all protection domains.
  * Save in *alloc_pd_memh_p the memory handle of the allocating PD, if such exists.
@@ -407,16 +422,7 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
     uct_rkey_t uct_rkey;
     size_t frag_length;
 
-    /* Check that the remote PD index exists in the remote key.
-     */
-    if (ENABLE_PARAMS_CHECK && !(rkey->pd_map & UCS_BIT(ep->uct.dst_pd_index))) {
-        ucs_error("Remote key does not support current transport "
-                   "(remote pd index: %d rkey map: 0x%"PRIx64")",
-                   ep->uct.dst_pd_index, rkey->pd_map);
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    uct_rkey = ucp_lookup_uct_rkey(ep, rkey);
+    uct_rkey = UCP_RMA_RKEY_LOOKUP(ep, rkey);
 
     /* Loop until all message has been sent.
      * We re-check the configuration on every iteration, because it can be
