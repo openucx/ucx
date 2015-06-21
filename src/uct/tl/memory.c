@@ -140,7 +140,8 @@ allocated_without_pd:
     mem->memh    = UCT_INVALID_MEM_HANDLE;
 allocated:
     ucs_debug("allocated %zu bytes at %p using %s", alloc_length, address,
-              uct_alloc_method_names[*method]);
+              (mem->pd == NULL) ? uct_alloc_method_names[*method]
+                                : mem->pd->component->name);
     mem->address = address;
     mem->length  = alloc_length;
     mem->method  = *method;

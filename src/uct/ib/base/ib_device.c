@@ -533,7 +533,7 @@ uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
         encoding          = 64.0/66.0;
         break;
     case 32: /* EDR */
-        resource->latency = 500;
+        resource->latency = 600;
         signal_rate       = 25.0;
         encoding          = 64.0/66.0;
         break;
@@ -641,7 +641,7 @@ err:
 
 static void uct_ib_make_pd_name(char pd_name[UCT_PD_NAME_MAX], struct ibv_device *device)
 {
-    snprintf(pd_name, UCT_PD_NAME_MAX, "%s/%s", UCT_IB_PD_PREFIX, device->dev_name);
+    snprintf(pd_name, UCT_PD_NAME_MAX, "%s/%s", UCT_IB_PD_PREFIX, device->name);
 }
 
 static ucs_status_t uct_ib_query_pd_resources(uct_pd_resource_desc_t **resources_p,

@@ -217,6 +217,25 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 }
 
+static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
+{
+    if (params->message_size < 1) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Message size too small, need to be at least 1");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->max_outstanding < 1) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("max_outstanding, need to be at least 1");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
 {
     while (uct_iface_flush(perf->uct.iface) == UCS_ERR_NO_RESOURCE) {
@@ -308,6 +327,11 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    status = ucx_perf_test_check_params(params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     if ((attr.cap.flags & required_flags) == 0) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Device does not support required operation");
@@ -318,20 +342,6 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     if (params->message_size > max_size) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too big");
-        }
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (params->message_size < 1) {
-        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("Message size too small, need to be at least 1");
-        }
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (params->max_outstanding < 1) {
-        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("max_outstanding, need to be at least 1");
         }
         return UCS_ERR_INVALID_PARAM;
     }
@@ -554,7 +564,25 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
 static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params)
 {
-    /* TODO */
+    ucs_status_t status;
+
+    switch (params->command) {
+    case UCX_PERF_CMD_PUT:
+        break;
+    case UCX_PERF_CMD_TAG:
+        break;
+    default:
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Invalid test command");
+        }
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucx_perf_test_check_params(params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return UCS_OK;
 }
 
@@ -569,6 +597,7 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
         goto err;
     }
 
+    perf->recv_buffer = NULL;
     status = ucp_mem_map(perf->ucp.context, &perf->recv_buffer, params->message_size, 0,
                          &perf->ucp.recv_memh);
     if (status != UCS_OK) {
@@ -873,6 +902,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 
     status = ucp_perf_test_alloc_mem(perf, params);
     if (status != UCS_OK) {
+        ucs_warn("ucp test failed to alocate memory");
         goto err_destroy_worker;
     }
 

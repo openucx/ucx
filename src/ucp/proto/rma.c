@@ -145,6 +145,8 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
     goto out;
 
 allocated:
+    ucs_debug("allocated memory at %p with method %s, now registering it",
+             mem.address, uct_alloc_method_names[mem.method]);
     memh->address      = mem.address;
     memh->length       = mem.length;
     memh->alloc_method = mem.method;
@@ -186,6 +188,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
 
         *address_p = memh->address;
     } else {
+        ucs_debug("registering user memory at %p length %zu", *address_p, length);
         memh->address      = *address_p;
         memh->length       = length;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
@@ -402,7 +405,7 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
 {
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t bcopy_length;
+    size_t frag_length;
 
     /* Check that the remote PD index exists in the remote key.
      */
@@ -427,18 +430,24 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
                 break;
             }
         } else {
-            bcopy_length = ucs_min(length, ep->config.max_bcopy_put);
-            status = uct_ep_put_bcopy(ep->uct.ep, (uct_pack_callback_t)memcpy,
-                                      (void*)buffer, bcopy_length, remote_addr,
-                                      uct_rkey);
+            if (length <= ep->worker->context->config.bcopy_thresh) {
+                frag_length = ucs_min(length, ep->config.max_short_put);
+                status = uct_ep_put_short(ep->uct.ep, buffer, frag_length, remote_addr,
+                                          uct_rkey);
+            } else {
+                frag_length = ucs_min(length, ep->config.max_bcopy_put);
+                status = uct_ep_put_bcopy(ep->uct.ep, (uct_pack_callback_t)memcpy,
+                                          (void*)buffer, frag_length, remote_addr,
+                                          uct_rkey);
+            }
             if (ucs_likely(status == UCS_OK)) {
-                length      -= bcopy_length;
+                length      -= frag_length;
                 if (length == 0) {
                     break;
                 }
 
-                buffer      += bcopy_length;
-                remote_addr += bcopy_length;
+                buffer      += frag_length;
+                remote_addr += frag_length;
             } else if (status != UCS_ERR_NO_RESOURCE) {
                 break;
             }

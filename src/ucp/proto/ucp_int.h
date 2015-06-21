@@ -87,6 +87,9 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned            num_alloc_methods;
 
+        /* Threshold for switching from short to bcopy protocol */
+        size_t              bcopy_thresh;
+
     } config;
 
 } ucp_context_t;
