@@ -35,7 +35,7 @@ typedef struct uct_cm_iface {
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
     volatile uint32_t      inflight;    /* Atomic: number of inflight sends */
-    ucs_queue_head_t       notify;
+    ucs_callback_t         *notify_cb;
 
     struct {
         int                timeout_ms;
@@ -51,15 +51,6 @@ typedef struct uct_cm_ep {
     uct_base_ep_t          super;
     uct_sockaddr_ib_t      dest_addr;
 } uct_cm_ep_t;
-
-
-/**
- * Completion, used for notifications.
- */
-typedef struct uct_cm_completion {
-    uct_completion_t       super;
-    ucs_queue_elem_t       queue;
-} uct_cm_completion_t;
 
 
 /**
@@ -85,7 +76,7 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                 uct_pack_callback_t pack_cb, void *arg,
                                 size_t length);
 
-ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, uct_completion_t *comp);
+ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, ucs_callback_t *cb);
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
 

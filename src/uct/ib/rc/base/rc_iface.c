@@ -66,7 +66,6 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
     memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
     iface_attr->iface_addr_len      = sizeof(uct_sockaddr_ib_subnet_t);
     iface_attr->ep_addr_len         = sizeof(uct_sockaddr_ib_t);
-    iface_attr->completion_priv_len = sizeof(uct_rc_completion_t) - sizeof(uct_completion_t);
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
                                       UCT_IFACE_FLAG_AM_BCOPY |
                                       UCT_IFACE_FLAG_AM_ZCOPY |
@@ -184,12 +183,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                               &config->super);
 
     self->tx.cq_available           = config->tx.cq_len - 1; /* Reserve one for error */
+    self->tx.next_op                = 0;
     self->rx.available              = config->super.rx.queue_len;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
     self->config.tx_moderation      = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
                                               ucs_roundup_pow2(config->super.tx.queue_len / 4));
+    self->config.tx_ops_mask        = ucs_roundup_pow2(config->tx.cq_len) - 1;
     self->config.rx_max_batch       = ucs_min(config->super.rx.max_batch, config->super.rx.queue_len / 4);
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
@@ -223,6 +224,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err_destroy_rx_mp;
     }
 
+    /* Allocate tx operations */
+    self->tx.ops = ucs_calloc(self->config.tx_ops_mask + 1, sizeof(*self->tx.ops),
+                              "rc_tx_ops");
+    if (self->tx.ops == NULL) {
+        goto err_destroy_tx_mp;
+    }
+
     /* Create SRQ */
     srq_init_attr.attr.max_sge   = 1;
     srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
@@ -233,7 +241,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     if (self->rx.srq == NULL) {
         ucs_error("failed to create SRQ: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err_destory_tx_mp;
+        goto err_free_tx_ops;
     }
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
@@ -246,7 +254,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
 err_destroy_srq:
     ibv_destroy_srq(self->rx.srq);
-err_destory_tx_mp:
+err_free_tx_ops:
+    ucs_free(self->tx.ops);
+err_destroy_tx_mp:
     ucs_mpool_destroy(self->tx.mp);
 err_destroy_rx_mp:
     ucs_mpool_destroy(self->rx.mp);
@@ -272,6 +282,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
         ucs_warn("failed to destroy SRQ: %m");
     }
 
+    ucs_free(self->tx.ops);
     ucs_mpool_destroy(self->tx.mp);
     ucs_mpool_destroy_unchecked(self->rx.mp); /* Cannot flush SRQ */
 }

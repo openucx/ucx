@@ -58,8 +58,8 @@ protected:
     const entity& receiver() const;
 
     const size_t m_rx_headroom;
-    completion *m_completion;
-    unsigned m_completion_count;
+    completion   m_completion;
+    unsigned     m_completion_count;
 
 private:
 
@@ -70,7 +70,7 @@ private:
     void test_xfer_print(O& os, send_func_t send, size_t length,
                          direction_t direction);
 
-    static void completion_cb(uct_completion_t *self, void *data);
+    static void completion_cb(uct_completion_t *self);
 
     static ucs_log_func_rc_t
     log_handler(const char *file, unsigned line, const char *function,

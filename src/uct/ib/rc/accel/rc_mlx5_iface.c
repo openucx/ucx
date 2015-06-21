@@ -89,7 +89,7 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
 
 static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 {
-    uct_rc_completion_t *comp;
+    uct_rc_iface_send_op_t *op;
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
@@ -116,14 +116,9 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ++iface->super.tx.cq_available;
 
     /* Process completions */
-    ucs_queue_for_each_extract(comp, &ep->super.comp, queue,
-                               UCS_CIRCULAR_COMPARE16(comp->sn, <=, hw_ci)) {
-        if (0 /*cqe->op_own & MLX5_INLINE_SCATTER_32 */ && (comp->sn == hw_ci)) {
-            uct_invoke_completion(&comp->super, cqe);
-        } else {
-            uct_invoke_completion(&comp->super,
-                                  ucs_derived_of(comp, uct_rc_iface_send_desc_t) + 1);
-        }
+    ucs_queue_for_each_extract(op, &ep->super.outstanding, queue,
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, hw_ci)) {
+        op->handler(op);
     }
 }
 

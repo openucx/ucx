@@ -382,16 +382,17 @@ ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
 
 /* Align to the next 4 bytes */
 
-static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, void *data)
-{
-    uct_ugni_get_desc_t *fma = (uct_ugni_get_desc_t *)
-                               ((char *)data - sizeof(uct_ugni_base_desc_t));
-    if (ucs_likely(NULL != fma->orig_comp_cb)) {
-        /* Call the orignal callback and skip padding */
-        uct_invoke_completion(fma->orig_comp_cb, (char *)(fma + 1) +
-                              fma->padding);
-    }
-}
+//        FIXME
+//static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, void *data)
+//{
+//    uct_ugni_get_desc_t *fma = (uct_ugni_get_desc_t *)
+//                               ((char *)data - sizeof(uct_ugni_base_desc_t));
+//    if (ucs_likely(NULL != fma->orig_comp_cb)) {
+//        /* Call the orignal callback and skip padding */
+//        uct_invoke_completion(fma->orig_comp_cb, (char *)(fma + 1) +
+//                              fma->padding);
+//    }
+//}
 
 #define UGNI_GET_ALIGN (4)
 
@@ -497,8 +498,9 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
 
-    uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, remote_addr, rkey,
-                            length, ep, comp, uct_ugni_unalign_fma_get_cb);
+//    FIXME
+//    uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, remote_addr, rkey,
+//                            length, ep, comp, uct_ugni_unalign_fma_get_cb);
 
     ucs_trace_data("Posting GET BCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
                    "%p, with [%"PRIx64" %"PRIx64"]",
@@ -510,73 +512,76 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
-static void assemble_composed_unaligned(uct_ugni_get_desc_t *fma_head){
-  char *buffer = fma_head->user_buffer;
-  uct_ugni_get_desc_t *rdma = fma_head->head;
+//      FIXME
+//static void assemble_composed_unaligned(uct_ugni_get_desc_t *fma_head){
+//  char *buffer = fma_head->user_buffer;
+//  uct_ugni_get_desc_t *rdma = fma_head->head;
+//
+//  if(fma_head->head == NULL){
+//    memcpy(buffer, (char *)(fma_head + 1) + fma_head->padding,
+//           fma_head->super.desc.length - fma_head->padding - fma_head->tail);
+//  } else {
+//    memmove(buffer, buffer + rdma->padding, rdma->super.desc.length);
+//    memcpy(buffer + rdma->super.desc.length - rdma->padding,
+//           (char *)(fma_head + 1) + rdma->tail,
+//           fma_head->super.desc.length - (fma_head->tail + rdma->tail));
+//  }
+//}
 
-  if(fma_head->head == NULL){
-    memcpy(buffer, (char *)(fma_head + 1) + fma_head->padding, 
-           fma_head->super.desc.length - fma_head->padding - fma_head->tail);
-  } else {
-    memmove(buffer, buffer + rdma->padding, rdma->super.desc.length);
-    memcpy(buffer + rdma->super.desc.length - rdma->padding, 
-           (char *)(fma_head + 1) + rdma->tail, 
-           fma_head->super.desc.length - (fma_head->tail + rdma->tail));
-  }
-}
+//      FIXME
+//static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self, void *data)
+//{
+//  uct_ugni_get_desc_t *rdma = (uct_ugni_get_desc_t *)
+//                              ((char *)data - sizeof(uct_ugni_base_desc_t));
+//  uct_ugni_get_desc_t *head_fma = rdma->head;
+//
+//  head_fma->network_completed_bytes += rdma->super.desc.length;
+//
+//  ucs_assert(head_fma->network_completed_bytes <= rdma->expected_bytes);
+//
+//  /* Check if messages is completed */
+//  if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
+//    assemble_composed_unaligned(head_fma);
+//    if (ucs_likely(NULL != head_fma->orig_comp_cb)) {
+//      /* Call the orignal callback and skip padding */
+//      uct_invoke_completion(head_fma->orig_comp_cb, head_fma->user_buffer);
+//      head_fma->super.not_ready_to_free = 0;
+//      ucs_mpool_put(head_fma);
+//    } else {
+//      rdma->super.not_ready_to_free = 1;
+//    }
+//  }
+//}
 
-static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self, void *data)
-{
-  uct_ugni_get_desc_t *rdma = (uct_ugni_get_desc_t *)
-                              ((char *)data - sizeof(uct_ugni_base_desc_t));
-  uct_ugni_get_desc_t *head_fma = rdma->head;
-
-  head_fma->network_completed_bytes += rdma->super.desc.length;
-
-  ucs_assert(head_fma->network_completed_bytes <= rdma->expected_bytes);
-
-  /* Check if messages is completed */
-  if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
-    assemble_composed_unaligned(head_fma);
-    if (ucs_likely(NULL != head_fma->orig_comp_cb)) {
-      /* Call the orignal callback and skip padding */
-      uct_invoke_completion(head_fma->orig_comp_cb, head_fma->user_buffer);
-      head_fma->super.not_ready_to_free = 0;
-      ucs_mpool_put(head_fma);
-    } else {
-      rdma->super.not_ready_to_free = 1;
-    }
-  }
-}
-
-static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self, void *data)
-{
-  uct_ugni_get_desc_t *fma = (uct_ugni_get_desc_t *)
-                             ((char *)data - sizeof(uct_ugni_base_desc_t));
-  uct_ugni_get_desc_t *head_fma = fma;
-
-  ucs_assert(head_fma->network_completed_bytes == 0 &&
-             head_fma->expected_bytes != 0);
-
-  head_fma->network_completed_bytes += head_fma->super.desc.length;
-
-  ucs_assert(head_fma->network_completed_bytes <= head_fma->expected_bytes);
-
-  /* Check if messages is completed */
-  if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
-    assemble_composed_unaligned(head_fma);
-    if (ucs_likely(NULL != head_fma->orig_comp_cb)) {
-      /* Call the orignal callback and skip padding */
-      uct_invoke_completion(head_fma->orig_comp_cb, head_fma->user_buffer);
-      if(head_fma->head != NULL) {
-        head_fma->head->super.not_ready_to_free = 0;
-        ucs_mpool_put(head_fma->head);
-      }
-    } else {
-      head_fma->super.not_ready_to_free = 1;
-    }
-  }
-}
+//      FIXME
+//static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self, void *data)
+//{
+//  uct_ugni_get_desc_t *fma = (uct_ugni_get_desc_t *)
+//                             ((char *)data - sizeof(uct_ugni_base_desc_t));
+//  uct_ugni_get_desc_t *head_fma = fma;
+//
+//  ucs_assert(head_fma->network_completed_bytes == 0 &&
+//             head_fma->expected_bytes != 0);
+//
+//  head_fma->network_completed_bytes += head_fma->super.desc.length;
+//
+//  ucs_assert(head_fma->network_completed_bytes <= head_fma->expected_bytes);
+//
+//  /* Check if messages is completed */
+//  if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
+//    assemble_composed_unaligned(head_fma);
+//    if (ucs_likely(NULL != head_fma->orig_comp_cb)) {
+//      /* Call the orignal callback and skip padding */
+//      uct_invoke_completion(head_fma->orig_comp_cb, head_fma->user_buffer);
+//      if(head_fma->head != NULL) {
+//        head_fma->head->super.not_ready_to_free = 0;
+//        ucs_mpool_put(head_fma->head);
+//      }
+//    } else {
+//      head_fma->super.not_ready_to_free = 1;
+//    }
+//  }
+//}
 
 static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buffer, size_t length,
                                                       uct_mem_h memh, uint64_t remote_addr,
@@ -606,14 +611,16 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
   fma_remote_start = rdma_remote_start + rdma_length;
   aligned_fma_remote_start = ucs_align_up_pow2(fma_remote_start, UGNI_GET_ALIGN);
 
-  uct_ugni_format_get_fma_cb(fma, GNI_POST_FMA_GET, aligned_fma_remote_start, rkey,
-                             fma_length, ep, comp, uct_ugni_unalign_fma_composed_cb);
+//  FIXME
+//  uct_ugni_format_get_fma_cb(fma, GNI_POST_FMA_GET, aligned_fma_remote_start, rkey,
+//                             fma_length, ep, comp, uct_ugni_unalign_fma_composed_cb);
 
   fma->tail = aligned_fma_remote_start - fma_remote_start;
 
-  uct_ugni_format_unaligned_rdma(rdma, GNI_POST_RDMA_GET, buffer, rdma_remote_start, memh, rkey,
-                                 rdma_length+fma->tail, ep, iface->local_cq, comp,
-                                 uct_ugni_unalign_rdma_composed_cb);
+// FIXME
+//  uct_ugni_format_unaligned_rdma(rdma, GNI_POST_RDMA_GET, buffer, rdma_remote_start, memh, rkey,
+//                                 rdma_length+fma->tail, ep, iface->local_cq, comp,
+//                                 uct_ugni_unalign_rdma_composed_cb);
 
   fma->head = rdma;
   rdma->head = fma;
@@ -661,8 +668,9 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_only(uct_ep_h tl_ep, void *buff
   UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                            fma, return UCS_ERR_NO_RESOURCE);
 
-  uct_ugni_format_get_fma_cb(fma, GNI_POST_FMA_GET, remote_addr, rkey,
-                             fma_length, ep, comp, uct_ugni_unalign_fma_composed_cb);
+//  FIXME
+//  uct_ugni_format_get_fma_cb(fma, GNI_POST_FMA_GET, remote_addr, rkey,
+//                             fma_length, ep, comp, uct_ugni_unalign_fma_composed_cb);
 
   fma->head = NULL;
   fma->expected_bytes = fma_length;

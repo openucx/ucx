@@ -143,7 +143,7 @@ static void ucs_stats_read_counters(ucs_stats_counter_t *counters,
     unsigned i;
 
     counter_desc_size = ((num_counters + counters_per_byte - 1) / counters_per_byte);
-    counter_desc = alloca(counter_desc_size);
+    counter_desc = ucs_alloca(counter_desc_size);
     FREAD(counter_desc, counter_desc_size, stream);
 
     for (i = 0; i < num_counters; ++i) {
@@ -182,8 +182,8 @@ static void ucs_stats_write_counters(ucs_stats_counter_t *counters,
 
     UCS_STATIC_ASSERT((8 % UCS_STATS_BITS_PER_COUNTER) == 0);
     counter_desc_size = ((num_counters + counters_per_byte - 1) / counters_per_byte);
-    counter_desc = alloca(counter_desc_size);
-    counter_data = alloca(num_counters * sizeof(ucs_stats_counter_t));
+    counter_desc = ucs_alloca(counter_desc_size);
+    counter_data = ucs_alloca(num_counters * sizeof(ucs_stats_counter_t));
 
     memset(counter_desc, 0, counter_desc_size);
     pos = counter_data;

@@ -63,8 +63,6 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
     iface_attr->cap.am.max_bcopy       = 0;
     iface_attr->cap.am.max_zcopy       = 0;
     iface_attr->cap.am.max_hdr         = 0;
-
-    iface_attr->completion_priv_len    = 0; /* TBD */
     return UCS_OK;
 }
 

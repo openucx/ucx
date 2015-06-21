@@ -49,7 +49,7 @@ static void uct_ugni_progress(void *arg)
     ucs_trace_async("Completion received on %p", desc);
 
     if (NULL != desc->comp_cb) {
-        uct_invoke_completion(desc->comp_cb, desc + 1);
+        uct_invoke_completion(desc->comp_cb /*, desc + 1 */);
     }
     --iface->outstanding;
     --desc->ep->outstanding;
@@ -114,9 +114,6 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_GET_BCOPY      |
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-
-    iface_attr->completion_priv_len    = 0; /* TBD */
-
     return UCS_OK;
 }
 

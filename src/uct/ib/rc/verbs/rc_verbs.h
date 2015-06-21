@@ -50,8 +50,8 @@ typedef struct uct_rc_verbs_iface {
 
     struct {
         size_t               short_desc_size;
-        uct_completion_callback_t  atomic32_completion;
-        uct_completion_callback_t  atomic64_completion;
+        uct_rc_send_handler_t  atomic32_handler;
+        uct_rc_send_handler_t  atomic64_handler;
         size_t               max_inline;
     } config;
 } uct_rc_verbs_iface_t;

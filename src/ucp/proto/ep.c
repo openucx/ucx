@@ -12,9 +12,9 @@
 #include <string.h>
 
 
-static void ucp_ep_progress_pending(uct_completion_t *self, void *data)
+static void ucp_ep_progress_pending(ucs_callback_t *self)
 {
-    ucp_ep_h ep = ucs_container_of(self, ucp_ep_t, notify_comp);
+    ucp_ep_h ep = ucs_container_of(self, ucp_ep_t, notify);
     ucp_worker_h worker = ep->worker;
     ucp_ep_pending_op_t *op;
     ucs_status_t status;
@@ -32,7 +32,7 @@ static void ucp_ep_progress_pending(uct_completion_t *self, void *data)
             /* We could not progress the operation. Request another notification
              * from the transport, and keep the endpoint in pending state.
              */
-            uct_ep_req_notify(uct_ep, &ep->notify_comp);
+            uct_ep_req_notify(uct_ep, &ep->notify);
             goto out;
         }
 
@@ -52,7 +52,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
     ucs_status_t status;
     ucp_ep_h ep;
 
-    ep = ucs_calloc(1, sizeof(*ep) + worker->uct_comp_priv, "ucp ep");
+    ep = ucs_calloc(1, sizeof(*ep), "ucp ep");
     if (ep == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -62,7 +62,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
     ep->config.max_short_tag = SIZE_MAX;
     ep->config.max_short_put = SIZE_MAX;
     ep->config.max_bcopy_put = SIZE_MAX;
-    ep->notify_comp.func     = ucp_ep_progress_pending;
+    ep->config.max_bcopy_get = SIZE_MAX;
+    ep->notify.func          = ucp_ep_progress_pending;
     ep->state                = 0;
     ucs_queue_head_init(&ep->pending_q);
 

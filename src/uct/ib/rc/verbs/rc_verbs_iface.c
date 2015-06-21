@@ -35,7 +35,7 @@ uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
     unsigned count;
     int ret;
 
-    wrs  = alloca(sizeof *wrs  * max);
+    wrs  = ucs_alloca(sizeof *wrs  * max);
 
     count = uct_ib_iface_prepare_rx_wrs(&iface->super.super,
                                         iface->super.rx.mp, wrs, max);
@@ -75,7 +75,7 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     struct ibv_wc wc[UCT_IB_MAX_WC];
     uct_rc_verbs_ep_t *ep;
-    uct_rc_completion_t *comp;
+    uct_rc_iface_send_op_t *op;
     unsigned count;
     uint16_t sn;
     int i, ret;
@@ -104,10 +104,9 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ++iface->super.tx.cq_available;
 
         sn = ep->tx.completion_count;
-        ucs_queue_for_each_extract(comp, &ep->super.comp, queue,
-                                   UCS_CIRCULAR_COMPARE16(comp->sn, <=, sn)) {
-            uct_invoke_completion(&comp->super,
-                                  ucs_derived_of(comp, uct_rc_iface_send_desc_t) + 1);
+        ucs_queue_for_each_extract(op, &ep->super.outstanding, queue,
+                                   UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
+            op->handler(op);
         }
     }
 }
@@ -263,11 +262,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
     dev_attr = &uct_ib_iface_device(&self->super.super)->dev_attr;
     if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) || IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr)) {
-        self->config.atomic32_completion = uct_rc_ep_atomic_completion_32_be0;
-        self->config.atomic64_completion = uct_rc_ep_atomic_completion_64_be0;
+        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be0;
+        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be0;
     } else if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr)) {
-        self->config.atomic32_completion = uct_rc_ep_atomic_completion_32_be1;
-        self->config.atomic64_completion = uct_rc_ep_atomic_completion_64_be1;
+        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be1;
+        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be1;
     }
 
     /* Create a dummy QP in order to find out max_inline */

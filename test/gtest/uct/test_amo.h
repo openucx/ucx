@@ -40,7 +40,7 @@ public:
     static uint64_t rand64();
     static uint64_t hash64(uint64_t value);
 
-    static void atomic_reply_cb(uct_completion_t *self, void *data);
+    static void atomic_reply_cb(uct_completion_t *self);
 
     void run_workers(send_func_t send, const mapped_buffer& recvbuf,
                      std::vector<uint64_t> initial_values, bool advance);
@@ -50,7 +50,7 @@ public:
             uct_amo_test *self;
             worker       *w;
         };
-        size_t           atomic_size;
+        uint64_t         result;
         uct_completion_t uct;
     };
 
@@ -77,8 +77,7 @@ public:
         const mapped_buffer& m_recvbuf;
         const entity&        m_entity;
         pthread_t            m_thread;
-        void                 *m_completions;
-        size_t               m_completion_size;
+        std::vector<completion> m_completions;
     };
 
 

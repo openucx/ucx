@@ -113,6 +113,7 @@ typedef struct ucp_ep {
         size_t          max_short_tag;
         size_t          max_short_put;
         size_t          max_bcopy_put;
+        size_t          max_bcopy_get;
     } config;
 
     uct_ep_h            wireup_ep;     /* Used to wireup the "real" endpoint */
@@ -121,7 +122,7 @@ typedef struct ucp_ep {
 
     volatile uint32_t   state;         /* Endpoint state */
     ucs_queue_head_t    pending_q;     /* Queue of pending operations - protected by the async worker lock */
-    uct_completion_t    notify_comp;   /* Completion token for progressing pending queue */
+    ucs_callback_t      notify;        /* Completion token for progressing pending queue */
 
 } ucp_ep_t;
 
@@ -192,7 +193,6 @@ typedef struct ucp_worker {
     uint64_t            uuid;
     uct_worker_h        uct;           /* UCT worker */
     ucs_queue_head_t    completed;     /* Queue of completed requests */
-    size_t              uct_comp_priv; /* Max. length of UCT completion private area */
 
     ucp_ep_t            **ep_hash;
     uct_iface_attr_t    *iface_attrs;  /* Array of interface attributes */
@@ -253,7 +253,7 @@ static inline void ucp_ep_add_pending_op(ucp_ep_h ep, uct_ep_h uct_ep,
     UCS_ASYNC_BLOCK(&ep->worker->async);
     ucs_queue_push(&ep->pending_q, &op->queue);
     if (!(ep->state & UCP_EP_STATE_PENDING)) {
-        uct_ep_req_notify(uct_ep, &ep->notify_comp);
+        uct_ep_req_notify(uct_ep, &ep->notify);
         ep->state |= UCP_EP_STATE_PENDING;
     }
     UCS_ASYNC_UNBLOCK(&ep->worker->async);

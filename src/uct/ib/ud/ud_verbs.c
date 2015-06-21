@@ -393,7 +393,7 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
     unsigned count;
     int ret;
 
-    wrs  = alloca(sizeof *wrs  * max);
+    wrs  = ucs_alloca(sizeof *wrs  * max);
 
     count = uct_ib_iface_prepare_rx_wrs(&iface->super.super,
                                         iface->super.rx.mp, wrs, max);
@@ -429,7 +429,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, config);
 
-    uct_ud_verbs_iface_post_recv_always(self, self->super.rx.available);
+    uct_ud_verbs_iface_post_recv(self);
     
     memset(&self->tx.wr, 0, sizeof(self->tx.wr));
     self->tx.wr.opcode            = IBV_WR_SEND;

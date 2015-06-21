@@ -22,37 +22,22 @@ public:
 
     uct_perf_test_runner(ucx_perf_context_t &perf) :
         m_perf(perf),
-        m_outstanding(0),
         m_max_outstanding(m_perf.params.max_outstanding)
 
     {
         ucs_assert_always(m_max_outstanding > 0);
 
-        uct_iface_attr_t attr;
-        ucs_status_t status = uct_iface_query(m_perf.uct.iface, &attr);
-        ucs_assert_always(status == UCS_OK);
+        m_completion.count = 1;
+        m_completion.func  = NULL;
 
-        m_completion_size = sizeof (comp_t) + attr.completion_priv_len;
-        void *completions_buffer = malloc(m_completion_size * m_max_outstanding);
-        ucs_assert_always(completions_buffer != NULL);
-
-        m_completions = (comp_t**)calloc(m_max_outstanding, sizeof(comp_t*));
-        ucs_assert_always(m_completions != NULL);
-        for (unsigned i = 0; i < m_max_outstanding; ++i) {
-            m_completions[i] = (comp_t*)((char*)completions_buffer + i * m_completion_size);
-            m_completions[i]->self     = this;
-            m_completions[i]->uct.func = completion_func();
-        }
-
-        status = uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, am_hander,
-                                          m_perf.recv_buffer);
+        ucs_status_t status;
+        status = uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID,
+                                          am_hander, m_perf.recv_buffer);
         ucs_assert_always(status == UCS_OK);
     }
 
     ~uct_perf_test_runner() {
         uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
-        free(m_completions[0]);
-        free(m_completions);
     }
 
     void UCS_F_ALWAYS_INLINE progress_responder() {
@@ -70,55 +55,6 @@ public:
         ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
         *(psn_t*)arg = *(psn_t*)data;
         return UCS_OK;
-    }
-
-    static void zcopy_completion_cb(uct_completion_t *comp, void *data)
-    {
-        uct_perf_test_runner *self = ucs_container_of(comp, comp_t, uct)->self;
-        --self->m_outstanding;
-    }
-
-    static void fetch_completion_cb(uct_completion_t *comp, void *data)
-    {
-        uct_perf_test_runner *self = ucs_container_of(comp, comp_t, uct)->self;
-        *(psn_t*)self->m_perf.send_buffer = *(psn_t*)data;
-        --self->m_outstanding;
-    }
-
-    static uct_completion_callback_t completion_func() {
-        switch (CMD) {
-        case UCX_PERF_CMD_AM:
-            switch (DATA) {
-            case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return zcopy_completion_cb;
-            default:
-                return NULL;
-            }
-        case UCX_PERF_CMD_PUT:
-            switch (DATA) {
-            case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return zcopy_completion_cb;
-            default:
-                return NULL;
-            }
-        case UCX_PERF_CMD_GET:
-            switch (DATA) {
-            case UCT_PERF_DATA_LAYOUT_BCOPY:
-                return fetch_completion_cb;
-            case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return zcopy_completion_cb;
-            default:
-                return NULL;
-            }
-        case UCX_PERF_CMD_ADD:
-            return NULL;
-        case UCX_PERF_CMD_FADD:
-        case UCX_PERF_CMD_SWAP:
-        case UCX_PERF_CMD_CSWAP:
-            return fetch_completion_cb;
-        default:
-            return NULL;
-        }
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
@@ -227,14 +163,16 @@ public:
         ucs_status_t status;
         for (;;) {
             status = send(ep, sn, prev_sn, buffer, length, remote_addr, rkey, comp);
-            progress_requestor();
             if (ucs_likely(status == UCS_OK)) {
+                progress_requestor();
                 return;
             } else if (status == UCS_INPROGRESS) {
-                ++m_outstanding;
-                ucs_assert((comp == NULL) || (m_outstanding <= m_max_outstanding));
+                ++m_completion.count;
+                progress_requestor();
+                ucs_assert((comp == NULL) || (outstanding() <= m_max_outstanding));
                 return;
             } else if (status == UCS_ERR_NO_RESOURCE) {
+                progress_requestor();
                 continue;
             } else {
                 ucs_error("Failed to send: %s", ucs_status_string(status));
@@ -318,7 +256,7 @@ public:
         psn_t sn, send_sn;
         uct_rkey_t rkey;
         void *buffer;
-        unsigned completion_index, fc_window;
+        unsigned fc_window;
         unsigned my_index;
         unsigned length;
         uct_ep_h ep;
@@ -342,8 +280,6 @@ public:
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         fc_window   = m_perf.params.uct.fc_window;
 
-        completion_index  = 0;
-
         if (my_index == 0) {
             /* send_sn is the next SN to send */
             send_sn         = 1;
@@ -361,14 +297,13 @@ public:
                 if (send_window) {
                     /* Wait until we have enough sends completed, then take
                      * the next completion handle in the window. */
-                    while (m_outstanding >= m_max_outstanding) {
+                    while (outstanding() >= m_max_outstanding) {
                         progress_requestor();
                     }
                 }
 
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
-                       rkey, &completion(completion_index)->uct);
-                ++completion_index;
+                       rkey, &m_completion);
 
                 ucx_perf_update(&m_perf, 1, length);
                 if (flow_control) {
@@ -379,12 +314,12 @@ public:
             if (!flow_control) {
                 /* Send "sentinel" value */
                 if (direction_to_responder) {
-                    while (m_outstanding >= m_max_outstanding) {
+                    while (outstanding() >= m_max_outstanding) {
                         progress_requestor();
                     }
                     *(psn_t*)buffer = 2;
                     send_b(ep, 2, 1, buffer, length, remote_addr, rkey,
-                           &completion(completion_index)->uct);
+                           &m_completion);
                 } else {
                     *(psn_t*)m_perf.recv_buffer = 2;
                 }
@@ -408,8 +343,7 @@ public:
                     if (UCS_CIRCULAR_COMPARE8(sn, >, (psn_t)(send_sn + (fc_window / 2)))) {
                         /* Send ACK every half-window */
                         send_b(ep, sn, send_sn, buffer, length, remote_addr,
-                               rkey, &completion(completion_index)->uct);
-                        ++completion_index;
+                               rkey, &m_completion);
                         send_sn = sn;
                     }
 
@@ -421,7 +355,7 @@ public:
                 /* Send ACK for last packet */
                 if (UCS_CIRCULAR_COMPARE8(*recv_sn, >, send_sn)) {
                     send_b(ep, *recv_sn, send_sn, buffer, length, remote_addr,
-                           rkey, &completion(completion_index)->uct);
+                           rkey, &m_completion);
                 }
             } else {
                 /* Wait for "sentinel" value */
@@ -431,7 +365,7 @@ public:
                     if (!direction_to_responder) {
                         if (ucs_get_time() > poll_time + ucs_time_from_msec(1.0)) {
                             send_b(ep, 0, 0, buffer, length, remote_addr, rkey,
-                                   &completion(completion_index)->uct);
+                                   &m_completion);
                             poll_time = ucs_get_time();
                         }
                     }
@@ -440,7 +374,7 @@ public:
         }
 
         uct_perf_iface_flush_b(&m_perf);
-        ucs_assert(m_outstanding == 0);
+        ucs_assert(outstanding() == 0);
         if (my_index == 0) {
             ucx_perf_update(&m_perf, 0, 0);
         }
@@ -489,20 +423,13 @@ public:
     }
 
 private:
-    typedef struct {
-        uct_perf_test_runner *self;
-        uct_completion_t     uct;
-    } comp_t;
-
-    comp_t *completion(unsigned index) {
-        return m_completions[index % m_max_outstanding];
+    inline unsigned outstanding() {
+        return m_completion.count - 1;
     }
 
     ucx_perf_context_t &m_perf;
-    unsigned           m_outstanding;
     const unsigned     m_max_outstanding;
-    size_t             m_completion_size;
-    comp_t             **m_completions;
+    uct_completion_t   m_completion;
 };
 
 
