@@ -37,6 +37,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all PD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"BCOPY_THRESH", "1024",
+   "Threshold for switching from short to bcopy protocol",
+   ucs_offsetof(ucp_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
   {NULL}
 };
 
@@ -352,6 +356,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     unsigned i, num_alloc_methods, method;
     const char *method_name;
     ucs_status_t status;
+
+    context->config.bcopy_thresh = config->bcopy_thresh;
 
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {

@@ -26,6 +26,8 @@ struct ucp_config {
     int                                    force_all_devices; /**< Whether to force using all devices */
 
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;   /**< Array of allocation methods */
+
+    size_t                                 bcopy_thresh;  /**< Threshold for switching to bcopy protocol */
 };
 
 
