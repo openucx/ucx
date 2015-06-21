@@ -62,6 +62,7 @@ struct uct_ud_iface {
     } tx;
     struct {
         unsigned             tx_qp_len;
+        unsigned             max_inline;
         unsigned             rx_max_batch;
     } config;
     ucs_ptr_array_t       eps;

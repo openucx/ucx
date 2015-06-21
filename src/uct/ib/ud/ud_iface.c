@@ -237,6 +237,9 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
         goto err;
     }
 
+    self->config.max_inline = qp_init_attr.cap.max_inline_data;
+    ucs_assert_always(qp_init_attr.cap.max_inline_data >= UCT_UD_MIN_INLINE);
+
     memset(&qp_attr, 0, sizeof(qp_attr));
     /* Modify QP to INIT state */
     qp_attr.qp_state   = IBV_QPS_INIT;
@@ -358,18 +361,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    struct ibv_qp_init_attr qp_init_attr;
-    struct ibv_qp_attr qp_attr;
     int mtu = 4096; /* TODO: mtu from port header */
-    int ret;
-
-    /* Get QP properties */
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-    memset(&qp_attr, 0, sizeof(qp_attr));
-    ret = ibv_query_qp(iface->qp, &qp_attr, IBV_QP_CAP, &qp_init_attr);
-    if (ret != 0) {
-        ucs_fatal("ibv_query_qp() failed: %m");
-    }
 
     memset(iface_attr, 0, sizeof(*iface_attr));
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
@@ -377,12 +369,11 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                         UCT_IFACE_FLAG_AM_THREAD_SINGLE;
                                     /* | UCT_IFACE_FLAG_PUT_SHORT; */
 
-    ucs_assert(qp_attr.cap.max_inline_data > UCT_UD_MIN_INLINE);
-    iface_attr->cap.am.max_short      = qp_attr.cap.max_inline_data - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = 0;
 
-    iface_attr->cap.put.max_short     = qp_attr.cap.max_inline_data - sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
+    iface_attr->cap.put.max_short     = iface->config.max_inline - sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = 0;
 

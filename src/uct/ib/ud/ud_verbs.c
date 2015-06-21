@@ -131,7 +131,9 @@ static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_
     uct_ud_neth_t *neth;
 
     UCT_CHECK_AM_ID(id);
-    /* TODO: UCT_CHECK_LENGTH(sizeof(am_hdr) + length <= iface->super.config.max_inline, "am_short"); */
+    UCT_CHECK_LENGTH(sizeof(*neth) + sizeof(hdr) + length,
+                     iface->super.config.max_inline, "am_short");
+
     skb = uct_ud_iface_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         return UCS_ERR_NO_RESOURCE;
