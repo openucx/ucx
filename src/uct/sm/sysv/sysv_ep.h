@@ -8,10 +8,10 @@
 #ifndef UCT_SYSV_EP_H
 #define UCT_SYSV_EP_H
 
-#include <uct/sm/base/sm_ep.h>
+#include <uct/sm/mm/mm_ep.h>
 
 typedef struct uct_sysv_ep {
-    uct_sm_ep_t      super; /* point to sm_bae */
+    uct_mm_ep_t      super; /* point to mm */
     struct uct_sysv_ep *next;
 } uct_sysv_ep_t;
 
