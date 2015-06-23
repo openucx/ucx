@@ -24,8 +24,9 @@ typedef struct {
     uct_ud_iface_t          super;
     struct {
         struct ibv_sge      sge[UCT_UD_MAX_SGE];
-        struct ibv_send_wr  wr;
-        struct ibv_send_wr  ctl_wr;
+        struct ibv_send_wr  wr_inl;
+        struct ibv_send_wr  wr_bcp;
+        struct ibv_send_wr  wr_ctl;
     } tx;
 } uct_ud_verbs_iface_t;
 

@@ -1,3 +1,4 @@
+#include "ud_log.h"
 
 static inline void uct_ud_iface_queue_pending(uct_ud_iface_t *iface,
                                               uct_ud_ep_t *ep, int op)
@@ -24,17 +25,17 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
     /* TODO: notify ucp that it can push more data */
     elem = ucs_queue_pull_non_empty(&iface->tx.pending_ops);
     ep = ucs_container_of(elem, uct_ud_ep_t, tx.pending.queue);
-    if (ucs_likely(ep->tx.pending.ops & UCT_UD_EP_OP_ACK)) {
-        *r_ep = ep;
-        uct_ud_neth_ctl_ack(ep, neth);
-         --iface->tx.available;
-    } else if (ep->tx.pending.ops & UCT_UD_EP_OP_CREP) {
+    if (ep->tx.pending.ops & UCT_UD_EP_OP_CREP) {
         *skb = uct_ud_ep_prepare_crep(ep);
         if (!*skb) {
             uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_CREP);
             return UCS_ERR_NO_RESOURCE;
         }
         *r_ep = ep;
+    } else if (ucs_likely(ep->tx.pending.ops & UCT_UD_EP_OP_ACK)) {
+        *r_ep = ep;
+        uct_ud_neth_ctl_ack(ep, neth);
+         --iface->tx.available;
     } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
         /* someone already cleared this */
         return UCS_INPROGRESS;
@@ -44,6 +45,15 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
     }
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
     return UCS_OK;
+}
+
+/* TODO: relay on window check instead */
+static inline int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
+{
+    if (ucs_unlikely(ep->dest_ep_id == UCT_UD_EP_NULL_ID)) {
+        return 0;
+    }
+    return 1;
 }
 
 static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
@@ -69,24 +79,31 @@ static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
     return skb;
 }
 
-static inline void uct_ud_iface_complete_tx(uct_ud_iface_t *iface,
-                                           uct_ud_ep_t *ep,
-                                           uct_ud_send_skb_t *skb,
-                                           void *data, const void *buffer, unsigned length)
+static inline void __uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface,
+                                                  uct_ud_ep_t *ep,
+                                                  uct_ud_send_skb_t *skb,
+                                                  void *data, const void *buffer, unsigned length)
 {
     ep->tx.psn++;
     --iface->tx.available;
-    skb->len = length;
+    skb->len += length;
     memcpy(data, buffer, length);
     ucs_queue_push(&ep->tx.window, &skb->queue);
 }
 
+#define uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length) \
+    __uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length); \
+    uct_ud_ep_log_tx(ep, skb);
 
-static inline void uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface,
-                                                uct_ud_ep_t *ep,
-                                                uct_ud_send_skb_t *skb)
+static inline void __uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface,
+                                                  uct_ud_ep_t *ep,
+                                                  uct_ud_send_skb_t *skb)
 {
     ep->tx.psn++;
     --iface->tx.available;
     ucs_queue_push(&ep->tx.window, &skb->queue);
 }
+
+#define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
+    __uct_ud_iface_complete_tx_skb(iface, ep, skb); \
+    uct_ud_ep_log_tx(ep, skb);
