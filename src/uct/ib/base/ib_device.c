@@ -423,7 +423,9 @@ static ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_
 
     if (flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
         /* TODO list all devices with their flags */
-        if (dev->dev_attr.vendor_id != 0x02c9 || dev->dev_attr.vendor_part_id != 4113) {
+        if (dev->dev_attr.vendor_id != 0x02c9 ||
+            (dev->dev_attr.vendor_part_id != 4113 && dev->dev_attr.vendor_part_id != 4115))
+        {
             ucs_trace("%s:%d does not support mlx5 PRM", uct_ib_device_name(dev), port_num);
             return UCS_ERR_UNSUPPORTED;
         }
