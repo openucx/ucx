@@ -47,22 +47,22 @@ static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
 
         ctl_hdr = (uct_ud_ctl_hdr_t *)(neth+1);
         switch(ctl_hdr->type) {
-            case UCT_UD_PACKET_CREQ:
-                n = snprintf(p, max, "CREQ: qp=%x lid=%d epid=%d cid=%d ",
-                             ctl_hdr->conn_req.ib_addr.qp_num,
-                             ctl_hdr->conn_req.ib_addr.lid,
-                             ctl_hdr->conn_req.ib_addr.id,
-                             ctl_hdr->conn_req.conn_id);
-                p += n; max -= n; ret += n;
-                break;
-            case UCT_UD_PACKET_CREP:
-                n = snprintf(p, max, "CREP: src_ep_id=%d ", ctl_hdr->conn_rep.src_ep_id);
-                p += n; max -= n; ret += n;
-                break;
-            default:
-                n = snprintf(p, max, "WTF_CTL");
-                p += n; max -= n; ret += n;
-                break;
+        case UCT_UD_PACKET_CREQ:
+            n = snprintf(p, max, "CREQ: qp=%x lid=%d epid=%d cid=%d ",
+                         ctl_hdr->conn_req.ib_addr.qp_num,
+                         ctl_hdr->conn_req.ib_addr.lid,
+                         ctl_hdr->conn_req.ib_addr.id,
+                         ctl_hdr->conn_req.conn_id);
+            p += n; max -= n; ret += n;
+            break;
+        case UCT_UD_PACKET_CREP:
+            n = snprintf(p, max, "CREP: src_ep_id=%d ", ctl_hdr->conn_rep.src_ep_id);
+            p += n; max -= n; ret += n;
+            break;
+        default:
+            n = snprintf(p, max, "WTF_CTL");
+            p += n; max -= n; ret += n;
+            break;
         }
     } else if (pkt_len != sizeof(neth)) {
         n = snprintf(p, max, "WTF UKNOWN DATA");
@@ -76,7 +76,7 @@ static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
     return ret;
 }
 
-int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
+static int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
 {
     int n;
 
@@ -89,7 +89,7 @@ int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
     return n;
 } 
 
-void __uct_ud_log_packet(const char *file, int line, const char *function,
+void uct_ud_log_packet(const char *file, int line, const char *function,
                          char *tag,
                          uct_ud_iface_t *iface, 
                          uct_ud_ep_t *ep, 

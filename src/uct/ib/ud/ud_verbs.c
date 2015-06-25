@@ -157,10 +157,12 @@ static inline ucs_status_t uct_ud_verbs_am_common(uct_ud_verbs_iface_t *iface,
     if (!uct_ud_ep_is_connected(&ep->super)) {
         return UCS_ERR_NO_RESOURCE;
     }
+
     skb = uct_ud_iface_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         return UCS_ERR_NO_RESOURCE;
     }
+    VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
 
     neth = skb->neth;
     uct_ud_neth_init_data(&ep->super, neth);

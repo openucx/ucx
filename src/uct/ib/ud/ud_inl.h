@@ -79,10 +79,10 @@ static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
     return skb;
 }
 
-static inline void __uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface,
-                                                  uct_ud_ep_t *ep,
-                                                  uct_ud_send_skb_t *skb,
-                                                  void *data, const void *buffer, unsigned length)
+static inline void uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface,
+                                                      uct_ud_ep_t *ep,
+                                                      uct_ud_send_skb_t *skb,
+                                                      void *data, const void *buffer, unsigned length)
 {
     ep->tx.psn++;
     --iface->tx.available;
@@ -92,12 +92,12 @@ static inline void __uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface,
 }
 
 #define uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length) \
-    __uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length); \
+    uct_ud_iface_complete_tx_inl_nolog(iface, ep, skb, data, buffer, length); \
     uct_ud_ep_log_tx(ep, skb);
 
-static inline void __uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface,
-                                                  uct_ud_ep_t *ep,
-                                                  uct_ud_send_skb_t *skb)
+static inline void uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface,
+                                                      uct_ud_ep_t *ep,
+                                                      uct_ud_send_skb_t *skb)
 {
     ep->tx.psn++;
     --iface->tx.available;
@@ -105,5 +105,5 @@ static inline void __uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface,
 }
 
 #define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
-    __uct_ud_iface_complete_tx_skb(iface, ep, skb); \
+    uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); \
     uct_ud_ep_log_tx(ep, skb);

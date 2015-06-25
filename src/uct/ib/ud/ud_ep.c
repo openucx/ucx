@@ -298,7 +298,7 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
 
     skb->len = sizeof(*neth) + sizeof(*crep);
     UCT_UD_EP_HOOK_CALL_TX(ep, skb->neth);
-    __uct_ud_iface_complete_tx_skb(iface, ep, skb); /* no logging */
+    uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); 
     /* uct_ud_ep_notify(ep); TODO: allow to send data on CREQ RX */ 
     return skb;
 }
@@ -370,9 +370,9 @@ ucs_status_t uct_ud_ep_req_notify(uct_ep_h ep_h, uct_completion_t *comp)
 {
     uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
-    if (ep->comp.comp) {
-        ucs_warn("ep (%p) already has completion cb(%p)", ep, ep->comp.comp);
-    }
+    UCT_CHECK_PARAM(ep->comp.comp == NULL,
+                    "ep (%p) already has completion cb(%p)", ep, ep->comp.comp);
+
     ep->comp.comp = comp;
     return UCS_OK;
 }
