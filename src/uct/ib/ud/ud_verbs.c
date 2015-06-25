@@ -429,7 +429,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, config);
 
-    uct_ud_verbs_iface_post_recv(self);
+    while (self->super.rx.available >= self->super.config.rx_max_batch) {
+        uct_ud_verbs_iface_post_recv(self);
+    }
     
     memset(&self->tx.wr, 0, sizeof(self->tx.wr));
     self->tx.wr.opcode            = IBV_WR_SEND;
