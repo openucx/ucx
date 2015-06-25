@@ -52,6 +52,9 @@ uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
     m_rx_headroom(rx_headroom),
     m_completion_count(0)
 {
+    m_completion.self      = this;
+    m_completion.uct.func  = completion_cb;
+    m_completion.uct.count = 0;
 }
 
 void uct_p2p_test::init() {
@@ -76,10 +79,6 @@ void uct_p2p_test::init() {
     }
 
     /* Allocate completion handle and set the callback */
-    m_completion.self      = this;
-    m_completion.uct.func  = completion_cb;
-    m_completion.uct.count = 0;
-
     m_completion_count = 0;
 }
 
@@ -242,6 +241,7 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
         while (m_completion_count <= prev_comp_count) {
             progress();
         }
+        EXPECT_EQ(0, m_completion.uct.count);
     } else {
         UCS_TEST_ABORT(ucs_status_string(status));
     }

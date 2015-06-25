@@ -528,6 +528,7 @@ retry:
         ucp_worker_progress(ep->worker);
     }
 
+    /* coverity[loop_condition] */
     while (comp.count > 1) {
         ucp_worker_progress(ep->worker);
     };

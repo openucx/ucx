@@ -37,8 +37,6 @@ protected:
 
     struct completion {
         uct_p2p_test     *self;
-        void             *dest;
-        size_t           length;
         uct_completion_t uct;
     };
 
