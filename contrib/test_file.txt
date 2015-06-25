@@ -1,7 +1,3 @@
 This is just a test file for jenkins (ornl) pull request testing.
 
-here is another change
-
-testing on 15 June 2015
-
-and yet more testing maybe a final
+new testing on 25 June
