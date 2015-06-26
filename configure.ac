@@ -96,6 +96,7 @@ m4_include([config/m4/mpi.m4])
 m4_include([config/m4/rte.m4])
 m4_include([config/m4/ax_prog_doxygen.m4])
 m4_include([config/m4/cuda.m4])
+m4_include([config/m4/graphviz.m4])
 
 #
 # Compile code with frame pointer. Optimizations usually omit the frame pointer,
