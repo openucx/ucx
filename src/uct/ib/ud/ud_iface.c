@@ -365,7 +365,9 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     memset(iface_attr, 0, sizeof(*iface_attr));
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
+                                        UCT_IFACE_FLAG_AM_BCOPY | 
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                        UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                         UCT_IFACE_FLAG_AM_THREAD_SINGLE;
                                     /* | UCT_IFACE_FLAG_PUT_SHORT; */
 
@@ -407,7 +409,6 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
         return UCS_ERR_WOULD_BLOCK;
     }
 #endif
-    usleep(100);
     return UCS_OK;
 }
 
