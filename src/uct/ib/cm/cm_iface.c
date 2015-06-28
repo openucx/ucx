@@ -38,7 +38,7 @@ static uct_iface_ops_t uct_cm_iface_ops;
 static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 {
     if ((iface->inflight == 0) && (iface->notify_cb != NULL)) {
-        iface->notify_cb->func(iface->notify_cb);
+        ucs_invoke_callback(iface->notify_cb);
         iface->notify_cb = NULL;
     }
 }

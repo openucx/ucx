@@ -19,4 +19,11 @@ struct ucs_callback {
     ucs_callback_func_t func;
 };
 
+
+static inline void ucs_invoke_callback(ucs_callback_t *cb)
+{
+    cb->func(cb);
+}
+
+
 #endif

@@ -384,7 +384,7 @@ void uct_ud_ep_notify(uct_ud_ep_t *ep)
     }
 
     ucs_trace_data("ep(%p) ready to send!!!", ep);
-    ep->comp.cb->func(ep->comp.cb);
+    ucs_invoke_callback(ep->comp.cb);
     ep->comp.cb = NULL;
 }
 
