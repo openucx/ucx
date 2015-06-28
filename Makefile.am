@@ -51,11 +51,25 @@ include $(srcdir)/doc/doxygen/doxygen.am
 
 .PHONY: docs docs-clean
 
-docs: doc/doxygen/doxygen-doc/ucx.tag
+DOCLIST = doc/doxygen/doxygen-doc/ucx.tag
+
+FORMAT = pdf
+DOT_CLEANFILES =
+
+if HAVE_DOT
+DOCLIST += doc/uml/uct.$(FORMAT)
+DOT_CLEANFILES += doc/uml/uct.$(FORMAT)
+endif
+
+docs: $(DOCLIST)
 
 docs-clean:
 	$(RM) $(DX_CLEANFILES)
+	$(RM) $(DOT_CLEANFILES)
 
 doc/doxygen/doxygen-doc/ucx.tag: $(doxygen_doc_files) doxygen-doc
 
-MOSTLYCLEANFILES = $(DX_CLEANFILES)
+doc/uml/uct.$(FORMAT):
+	dot -T $(FORMAT) -o $(abs_top_builddir)/doc/uml/uct.pdf $(abs_top_srcdir)/doc/uml/uct.dot
+
+MOSTLYCLEANFILES = $(DX_CLEANFILES) $(DOT_CLEANFILES)

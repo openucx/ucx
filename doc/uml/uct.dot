@@ -1,0 +1,43 @@
+digraph G {
+    fontname = "Bitstream Vera Sans"
+        fontsize = 8
+
+        node [
+        fontname = "Bitstream Vera Sans"
+        fontsize = 8
+        shape = "record"
+        ]
+
+        edge [
+        fontname = "Bitstream Vera Sans"
+        fontsize = 8
+        ]
+
+        uct_iface [
+        label = "{UCT Iface||+ Open() : void\l}"
+        ]
+
+        uct_worker [
+        label = "{UCT Worker||+ Open() : void\l}"
+        ]
+
+        uct_pd [
+        label = "{UCT PD||+ Open() : void\l}"
+        ]
+
+        uct_endpoint [
+        label = "{UCT Endpoint||+ Open() : void\l}"
+        ]
+
+        edge [
+        arrowhead = "none"
+
+        taillabel= "1"
+        headlabel = "0..*"
+        ]
+
+
+        uct_pd -> uct_iface
+        uct_worker -> uct_iface 
+        uct_iface -> uct_endpoint
+}

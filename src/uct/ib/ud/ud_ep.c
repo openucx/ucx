@@ -159,7 +159,7 @@ static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
 {
     uct_ud_put_hdr_t *put_hdr;
 
-    put_hdr = (uct_ud_put_hdr_t *)neth+1;
+    put_hdr = (uct_ud_put_hdr_t *)(neth+1);
 
     memcpy((void *)put_hdr->rva, put_hdr+1, 
             byte_len - sizeof(*neth) - sizeof(*put_hdr));
@@ -190,13 +190,6 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     uct_ud_ep_t *ep;
     uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t *)(neth + 1);
 
-    /* connection request */
-    ucs_trace_data("CREQ RX (qp=%x lid=%d ep_id=%d conn_id=%d)",
-                   ctl->conn_req.ib_addr.qp_num,
-                   ctl->conn_req.ib_addr.lid,
-                   ctl->conn_req.ib_addr.id,
-                   ctl->conn_req.conn_id);
-    
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREQ);
 
     ep = uct_ud_iface_cep_lookup(iface, &ctl->conn_req.ib_addr, ctl->conn_req.conn_id);
@@ -209,7 +202,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
             /* simultaniuos CREQ */
             ep->dest_ep_id = ctl->conn_req.ib_addr.id;
             ep->rx.ooo_pkts.head_sn = neth->psn;
-            ucs_debug("created ep=%p (conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+            ucs_debug("created ep=%p (iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, iface, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
         }
     }
 
@@ -230,7 +223,7 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID || 
                       ep->dest_ep_id == ctl->conn_rep.src_ep_id);
     ep->dest_ep_id = ctl->conn_rep.src_ep_id;
-    ucs_trace_data("CREP RX: ep=%p (conn_id=%d ep_id=%d, dest_ep_id=%d)", ep, ep->conn_id, ep->ep_id, ep->dest_ep_id);
+    uct_ud_ep_notify(ep);
 }
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
@@ -270,12 +263,6 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq->conn_req.ib_addr.id     = ep->ep_id;
     creq->conn_req.conn_id        = ep->conn_id;
 
-    ucs_trace_data("CREQ (qp=%x lid=%d ep_id=%d conn_id=%d)",
-                   creq->conn_req.ib_addr.qp_num,
-                   creq->conn_req.ib_addr.lid,
-                   creq->conn_req.ib_addr.id,
-                   creq->conn_req.conn_id);
-
     skb->len = sizeof(*neth) + sizeof(*creq);
     /* TODO: add to the list of ceps */
     UCT_UD_EP_HOOK_CALL_TX(ep, skb->neth);
@@ -309,10 +296,10 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     crep->type               = UCT_UD_PACKET_CREP;
     crep->conn_rep.src_ep_id = ep->ep_id;
 
-    ucs_trace_data("CREP ep=%p (ep_id=%d, dest_ep_id=%d) packet_type=0x%0x", ep, ep->ep_id, ep->dest_ep_id, neth->packet_type);
     skb->len = sizeof(*neth) + sizeof(*crep);
     UCT_UD_EP_HOOK_CALL_TX(ep, skb->neth);
-    uct_ud_iface_complete_tx_skb(iface, ep, skb);
+    uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); 
+    /* uct_ud_ep_notify(ep); TODO: allow to send data on CREQ RX */ 
     return skb;
 }
 
@@ -327,23 +314,21 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     am_id   = uct_ud_neth_get_am_id(neth);
     is_am   = neth->packet_type & UCT_UD_PACKET_FLAG_AM;
 
-    ucs_trace_data("src_ep= dest_ep=%x psn=%d ack_psn=%d am_id=%d is_am=%d len=%d packet_type=%08x",
-                   dest_id, (int)neth->psn, (int)neth->ack_psn, (int)am_id, (int)is_am, byte_len, neth->packet_type);
     if (ucs_unlikely(dest_id == UCT_UD_EP_NULL_ID)) {
         /* must be connection request packet */
+        uct_ud_iface_log_rx(iface, NULL, neth, byte_len);
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     }
     else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
                      ep->ep_id != dest_id)) {
+        uct_ud_iface_log_rx(iface, ep, neth, byte_len);
         /* TODO: in the future just drop the packet */
         ucs_fatal("Faied to find ep(%d)", dest_id);
         goto out;
     } 
-    ucs_trace_data("ep: %p (conn_id=%d ep_id=%d dest_ep_id=%d rx_psn=%u)",
-                   ep, ep->conn_id, ep->ep_id, ep->dest_ep_id,
-                   ep->rx.ooo_pkts.head_sn);
 
+    uct_ud_iface_log_rx(iface, ep, neth, byte_len);
     ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);
     UCT_UD_EP_HOOK_CALL_RX(ep, neth);
     
@@ -353,14 +338,12 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_ACK);
     }
 
-    if (byte_len == sizeof(*neth)) {
+    if (!is_am && byte_len == sizeof(*neth)) {
         goto out;
     }
 
     ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->ooo_elem, neth->psn);
     if (ucs_unlikely(ooo_type != UCS_FRAG_LIST_INSERT_FAST)) {
-        ucs_warn("src_ep= dest_ep=%u rx_psn=%hu psn=%hu ack_psn=%hu am_id=%d is_am=%d len=%d",
-                 dest_id, ep->rx.ooo_pkts.head_sn, neth->psn, neth->ack_psn, (int)am_id, (int)is_am, byte_len);
         ucs_fatal("Out of order is not implemented: got %d", ooo_type);
         goto out;
     }
@@ -381,4 +364,32 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
 
 out:
     ucs_mpool_put(skb);
+}
+
+ucs_status_t uct_ud_ep_req_notify(uct_ep_h ep_h, ucs_callback_t *cb)
+{
+    uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
+
+    UCT_CHECK_PARAM(ep->comp.cb == NULL,
+                    "ep (%p) already has completion cb (%p)", ep, ep->comp.cb);
+
+    ep->comp.cb = cb;
+    return UCS_OK;
+}
+
+void uct_ud_ep_notify(uct_ud_ep_t *ep)
+{
+    if (ep->comp.cb == NULL) {
+        return;
+    }
+
+    ucs_trace_data("ep(%p) ready to send!!!", ep);
+    ep->comp.cb->func(ep->comp.cb);
+    ep->comp.cb = NULL;
+}
+
+ucs_status_t uct_ud_ep_flush(uct_ep_h ep)
+{
+    ucs_debug("UD EP(%p) FLUSH NOT IMPLEMENTED YET", ep);
+    return UCS_OK;
 }

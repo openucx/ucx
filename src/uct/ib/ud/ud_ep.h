@@ -95,10 +95,18 @@ struct uct_ud_ep {
     } rx;
     ucs_list_link_t          cep_list;
     uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
+    struct {
+        ucs_callback_t       *cb;
+        ucs_list_link_t      comp_list;
+    } comp;
 };
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
+ucs_status_t uct_ud_ep_req_notify(uct_ep_h ep_h, ucs_callback_t *cb);
+void uct_ud_ep_notify(uct_ud_ep_t *ep);
+
+ucs_status_t uct_ud_ep_flush(uct_ep_h ep);
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 

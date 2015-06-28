@@ -56,6 +56,20 @@ typedef struct ucp_recv_request {
     uint64_t                   tag_mask;
 } ucp_recv_request_t;
 
+typedef void (*ucp_user_progress_func_t)(ucp_worker_h worker, void *arg);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Register user worker progress callback. The callback is called 
+ * from @ref ucp_worker_progress()
+ *
+ * @param [in]  worker  worker object
+ *
+ * @param [in]  func    callback function
+ *
+ * @param [in]  arg     user specified argument that is passed to callback function
+ */
+void ucp_progress_register(ucp_worker_h worker, ucp_user_progress_func_t func, void *arg);
 
 /**
  * @ingroup CONTEXT
@@ -135,7 +149,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
  * @param [in]  worker        Worker object to destroy.
  */
 void ucp_worker_destroy(ucp_worker_h worker);
-
 
 /**
  * @ingroup CONTEXT
