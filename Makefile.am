@@ -46,6 +46,7 @@ EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
 EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
+EXTRA_DIST += doc/uml/uct.dot
 
 include $(srcdir)/doc/doxygen/doxygen.am
 
@@ -70,6 +71,7 @@ docs-clean:
 doc/doxygen/doxygen-doc/ucx.tag: $(doxygen_doc_files) doxygen-doc
 
 doc/uml/uct.$(FORMAT):
+	mkdir -p $(abs_top_builddir)/doc/uml
 	dot -T $(FORMAT) -o $(abs_top_builddir)/doc/uml/uct.pdf $(abs_top_srcdir)/doc/uml/uct.dot
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) $(DOT_CLEANFILES)
