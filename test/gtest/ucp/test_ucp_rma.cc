@@ -137,6 +137,9 @@ UCS_TEST_F(test_ucp_rma, put) {
 
     ucp_rkey_destroy(rkey);
 
+    status = ucp_rma_flush(pe1->worker());
+    ASSERT_UCS_OK(status);
+
     pe0->disconnect();
     pe1->disconnect();
 
@@ -191,6 +194,9 @@ UCS_TEST_F(test_ucp_rma, get) {
     }
 
     ucp_rkey_destroy(rkey);
+
+    status = ucp_rma_flush(pe1->worker());
+    ASSERT_UCS_OK(status);
 
     pe0->disconnect();
     pe1->disconnect();

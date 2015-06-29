@@ -675,6 +675,8 @@ void ucp_ep_wireup_stop(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
 
+    ucs_trace_func("ep=%p", ep);
+
     if (ep->uct.next_ep != NULL) {
         while (uct_ep_flush(ep->uct.next_ep) != UCS_OK) {
             ucp_worker_progress(ep->worker);
