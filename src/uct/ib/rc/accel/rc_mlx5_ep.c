@@ -151,20 +151,18 @@ uct_rc_mlx5_iface_tx_moderation(uct_rc_mlx5_ep_t* ep, uct_rc_mlx5_iface_t* iface
  *
  * @return If there was a wrap-around, return -qp_size. Otherwise, return 0.
  */
-static UCS_F_ALWAYS_INLINE ptrdiff_t
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_inline_copy(void *dest, const void *src, unsigned length, uct_rc_mlx5_ep_t *ep)
 {
     void *qend = ep->tx.qend;
     ptrdiff_t n;
 
-    if (dest + length < qend) {
+    if (dest + length <= qend) {
         memcpy(dest, src, length);
-        return 0;
     } else {
         n = qend - dest;
         memcpy(dest, src, n);
         memcpy(ep->tx.qstart, src + n, length - n);
-        return ep->tx.qstart - qend;
     }
 }
 
@@ -280,7 +278,6 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     uct_rc_mlx5_iface_t *iface;
     uct_rc_hdr_t        *rch;
     unsigned            wqe_size, inl_seg_size;
-    ptrdiff_t           wraparound;
     uint8_t             opmod;
 
     iface = ucs_derived_of(ep->super.super.super.iface, uct_rc_mlx5_iface_t);
@@ -309,14 +306,18 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
         rch              = (void*)(inl + 1);
         rch->am_id       = am_id;
 
-        wraparound = uct_rc_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, ep);
+        uct_rc_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, ep);
 
         /* Data segment with payload */
         if (length == 0) {
             wqe_size     = sizeof(*ctrl) + inl_seg_size;
         } else {
             wqe_size     = sizeof(*ctrl) + inl_seg_size + sizeof(*dptr);
-            dptr         = (void*)(ctrl + 1) + inl_seg_size + wraparound;
+            dptr         = (void*)(ctrl + 1) + inl_seg_size;
+            if (ucs_unlikely((void*)dptr >= ep->tx.qend)) {
+                dptr = (void*)dptr - (ep->tx.qend - ep->tx.qstart);
+            }
+
             ucs_assert((void*)dptr       >= ep->tx.qstart);
             ucs_assert((void*)(dptr + 1) <= ep->tx.qend);
             uct_rc_mlx5_ep_set_dptr_seg(dptr, buffer, length, *lkey_p);
