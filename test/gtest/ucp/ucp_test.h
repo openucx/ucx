@@ -21,12 +21,11 @@ class ucp_test : public ucs::test_base, public ::testing::Test {
 public:
     UCS_TEST_BASE_IMPL;
 
-protected:
     class entity {
     public:
-        entity();
+        entity(const ucp_test& test);
 
-        void connect(const entity& other);
+        void connect(const entity* other);
 
         void disconnect();
 
@@ -36,12 +35,24 @@ protected:
 
         ucp_context_h ucph() const;
 
-
     protected:
+        static void progress_cb(void *arg);
+        void progress();
+
         ucs::handle<ucp_context_h> m_ucph;
         ucs::handle<ucp_worker_h>  m_worker;
         ucs::handle<ucp_ep_h>      m_ep;
+
+        const ucp_test             &m_test;
+        volatile uint32_t          m_inprogress;
     };
+
+    const ucs::ptr_vector<entity>& entities() const;
+
+protected:
+    entity* create_entity();
+
+    ucs::ptr_vector<entity> m_entities;
 };
 
 

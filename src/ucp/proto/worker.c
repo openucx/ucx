@@ -164,17 +164,19 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker);
 }
 
-void ucp_progress_register(ucp_worker_h worker, ucp_user_progress_func_t func, void *arg)
+void ucp_worker_progress_register(ucp_worker_h worker,
+                                  ucp_user_progress_func_t func, void *arg)
 {
-    worker->user_cb = func;
+    worker->user_cb     = func;
     worker->user_cb_arg = arg;
 }
 
 void ucp_worker_progress(ucp_worker_h worker)
 {
     uct_worker_progress(worker->uct);
-    if (worker->user_cb) {
-        worker->user_cb(worker, worker->user_cb_arg);
+    if (worker->user_cb != NULL) {
+        /* TODO add to UCT callback chain */
+        worker->user_cb(worker->user_cb_arg);
     }
     ucs_async_check_miss(&worker->async);
 }
