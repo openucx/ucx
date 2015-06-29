@@ -36,6 +36,7 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
         *r_ep = ep;
         uct_ud_neth_ctl_ack(ep, neth);
          --iface->tx.available;
+         *skb = NULL;
     } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
         /* someone already cleared this */
         return UCS_INPROGRESS;
