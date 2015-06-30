@@ -17,4 +17,4 @@ Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Architecture: any
 Description: Unified Communication X
-* UCX is a communication library implementing high-performance messaging.
+ UCX is a communication library implementing high-performance messaging.
