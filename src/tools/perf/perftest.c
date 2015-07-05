@@ -741,6 +741,7 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
     } else {
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
+
     ctx->sock_rte_group.self      = NULL;
     ctx->sock_rte_group.self_size = 0;
     ctx->params.rte_group         = &ctx->sock_rte_group;
@@ -968,7 +969,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     }
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    if (rank == 0) {
+    if (rank == 1) {
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
@@ -1138,7 +1139,7 @@ int main(int argc, char **argv)
     status = (rte) ? setup_mpi_rte(&ctx) : setup_sock_rte(&ctx);
     if (status != UCS_OK) {
         ret = -1;
-        goto out_cleanup_rte;
+        goto out;
     }
 
     /* Run the test */

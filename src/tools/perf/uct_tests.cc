@@ -280,7 +280,7 @@ public:
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         fc_window   = m_perf.params.uct.fc_window;
 
-        if (my_index == 0) {
+        if (my_index == 1) {
             /* send_sn is the next SN to send */
             send_sn         = 1;
             *(psn_t*)buffer = send_sn;
@@ -330,7 +330,7 @@ public:
                     progress_responder();
                 }
             }
-        } else if (my_index == 1) {
+        } else if (my_index == 0) {
             if (flow_control) {
                 /* Since we're doing flow control, we can count exactly how
                  * many packets were received.
@@ -375,7 +375,7 @@ public:
 
         uct_perf_iface_flush_b(&m_perf);
         ucs_assert(outstanding() == 0);
-        if (my_index == 0) {
+        if (my_index == 1) {
             ucx_perf_update(&m_perf, 0, 0);
         }
 
