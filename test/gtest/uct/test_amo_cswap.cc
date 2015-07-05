@@ -14,13 +14,12 @@ public:
     static const uint64_t MISS = 0;
 
     template <typename T>
-    static void cswap_reply_cb(uct_completion_t *self, void *data) {
+    static void cswap_reply_cb(uct_completion_t *self) {
         completion *comp = ucs_container_of(self, completion, uct);
         worker* w = comp->w;
-        T dataval;
+        T dataval = comp->result;
 
         /* Compare after casting to T, since w->value is always 64 bit */
-        dataval = *(T*)data;
         if (dataval == (T)w->value) {
             w->test->add_reply_safe(dataval); /* Swapped */
         } else {

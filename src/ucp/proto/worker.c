@@ -66,9 +66,6 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out_close_iface;
     }
 
-    worker->uct_comp_priv = ucs_max(worker->uct_comp_priv,
-                                    worker->iface_attrs[rsc_index].completion_priv_len);
-
     ucs_debug("created interface[%d] using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               rsc_index, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), worker);
 
@@ -100,7 +97,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     worker->user_cb_arg   = 0;
     worker->context       = context;
     worker->uuid          = ucs_generate_uuid((uintptr_t)worker);
-    worker->uct_comp_priv = 0;
     ucs_queue_head_init(&worker->completed);
 
     worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_EP_HASH_SIZE,
@@ -168,17 +164,19 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker);
 }
 
-void ucp_progress_register(ucp_worker_h worker, ucp_user_progress_func_t func, void *arg)
+void ucp_worker_progress_register(ucp_worker_h worker,
+                                  ucp_user_progress_func_t func, void *arg)
 {
-    worker->user_cb = func;
+    worker->user_cb     = func;
     worker->user_cb_arg = arg;
 }
 
 void ucp_worker_progress(ucp_worker_h worker)
 {
     uct_worker_progress(worker->uct);
-    if (worker->user_cb) {
-        worker->user_cb(worker, worker->user_cb_arg);
+    if (worker->user_cb != NULL) {
+        /* TODO add to UCT callback chain */
+        worker->user_cb(worker->user_cb_arg);
     }
     ucs_async_check_miss(&worker->async);
 }

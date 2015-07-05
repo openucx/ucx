@@ -153,6 +153,11 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
         goto err;
     }
 
+    if (num_resources == 0) {
+        ucs_debug("No tl resources found for pd %s", context->pd_rscs[pd_index].pd_name);
+        goto out_free_resources;
+    }
+
     tmp = ucs_realloc(context->tl_rscs,
                       sizeof(*context->tl_rscs) * (context->num_tls + num_resources),
                       "ucp resources");
@@ -186,6 +191,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
         goto err_free_resources;
     }
 
+out_free_resources:
     uct_release_tl_resource_list(tl_resources);
     return UCS_OK;
 
@@ -251,6 +257,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         status = UCS_ERR_NO_DEVICE;
         goto err_release_pd_resources;
     }
+
     if (num_pd_resources >= UCP_MAX_PDS) {
         ucs_error("Only up to %ld PDs are supported", UCP_MAX_PDS);
         status = UCS_ERR_EXCEEDS_LIMIT;

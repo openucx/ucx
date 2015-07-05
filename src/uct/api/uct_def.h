@@ -65,11 +65,8 @@ typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
  *
  * @param [in]  self     Pointer to relevant completion structure, which was
  *                       initially passed to the operation.
- * @param [in]  data     Points to the reply data, if the particular send
- *                       operation has it. The length of the data is defined by
- *                       the send operation.
  */
-typedef void (*uct_completion_callback_t)(uct_completion_t *self, void *data);
+typedef void (*uct_completion_callback_t)(uct_completion_t *self);
 
 
 /**

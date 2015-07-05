@@ -10,5 +10,5 @@ class test_ucp_basic : public ucp_test {
 };
 
 UCS_TEST_F(test_ucp_basic, entity) {
-    entity dummy;
+    create_entity();
 }

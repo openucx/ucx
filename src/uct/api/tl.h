@@ -123,7 +123,7 @@ typedef struct uct_iface_ops {
 
     /* Synchronization */
 
-    ucs_status_t (*ep_req_notify)(uct_ep_h ep, uct_completion_t *comp);
+    ucs_status_t (*ep_req_notify)(uct_ep_h ep, ucs_callback_t *cb);
 
     ucs_status_t (*ep_flush)(uct_ep_h ep);
 

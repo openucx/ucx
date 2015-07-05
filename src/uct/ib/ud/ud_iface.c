@@ -381,8 +381,6 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = sizeof(uct_sockaddr_ib_t);
-    iface_attr->completion_priv_len   = 0;
-
 }
 
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *iface_addr)

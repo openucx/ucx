@@ -37,11 +37,9 @@ static uct_iface_ops_t uct_cm_iface_ops;
 
 static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 {
-    uct_cm_completion_t *cm_comp;
-
-    while ((iface->inflight == 0) && !ucs_queue_is_empty(&iface->notify)) {
-        cm_comp = ucs_queue_pull_elem_non_empty(&iface->notify, uct_cm_completion_t, queue);
-        uct_invoke_completion(&cm_comp->super, NULL);
+    if ((iface->inflight == 0) && (iface->notify_cb != NULL)) {
+        ucs_invoke_callback(iface->notify_cb);
+        iface->notify_cb = NULL;
     }
 }
 
@@ -188,7 +186,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
     self->service_id         = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
                                             (~IB_CM_ASSIGN_SERVICE_ID_MASK));
     self->inflight           = 0;
-    ucs_queue_head_init(&self->notify);
+    self->notify_cb          = NULL;
     self->config.timeout_ms  = (int)(config->timeout * 1e3 + 0.5);
     self->config.retry_count = ucs_min(config->retry_count, UINT8_MAX);
 
@@ -279,8 +277,6 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-    iface_attr->completion_priv_len   = sizeof(uct_cm_completion_t) -
-                                            sizeof(uct_completion_t);
     return UCS_OK;
 }
 

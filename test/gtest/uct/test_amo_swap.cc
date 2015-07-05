@@ -15,7 +15,6 @@ public:
                         uint64_t *result, completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
-        comp->atomic_size = sizeof(uint32_t);
         return uct_ep_atomic_swap32(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
                                     (uint32_t*)result, &comp->uct);
     }
@@ -24,7 +23,6 @@ public:
                         uint64_t *result, completion *comp) {
         comp->self     = this;
         comp->uct.func = atomic_reply_cb;
-        comp->atomic_size = sizeof(uint64_t);
         return uct_ep_atomic_swap64(ep, worker.value, recvbuf.addr(), recvbuf.rkey(),
                                     result, &comp->uct);
     }

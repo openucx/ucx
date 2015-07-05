@@ -49,12 +49,12 @@ static void uct_ugni_progress(void *arg)
     ucs_trace_async("Completion received on %p", desc);
 
     if (NULL != desc->comp_cb) {
-        uct_invoke_completion(desc->comp_cb, desc + 1);
+        uct_invoke_completion(desc->comp_cb);
     }
     --iface->outstanding;
     --desc->ep->outstanding;
 
-    if(ucs_likely(desc->not_ready_to_free == 0)){
+    if (ucs_likely(desc->not_ready_to_free == 0)) {
         ucs_mpool_put(desc);
     }
     return;
@@ -114,9 +114,6 @@ ucs_status_t uct_ugni_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_
                                          UCT_IFACE_FLAG_GET_BCOPY      |
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-
-    iface_attr->completion_priv_len    = 0; /* TBD */
-
     return UCS_OK;
 }
 
@@ -197,7 +194,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto exit;
     }
 
-    rc = ucs_mpool_create("UGNI-GET-DESC-ONLY", sizeof(uct_ugni_get_desc_t),
+    rc = ucs_mpool_create("UGNI-GET-DESC-ONLY", sizeof(uct_ugni_fetch_desc_t),
                           0,                            /* alignment offset */
                           UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                           128 ,                         /* grow */
@@ -230,8 +227,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
     }
 
     rc = uct_iface_mpool_create(&self->super.super, 
-                                sizeof(uct_ugni_base_desc_t) + 8,
-                                sizeof(uct_ugni_base_desc_t), /* alignment offset */
+                                sizeof(uct_ugni_fetch_desc_t) + 8,
+                                sizeof(uct_ugni_fetch_desc_t),  /* alignment offset */
                                 UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                                 &config->mpool,               /* mpool config */ 
                                 128 ,                         /* grow */
@@ -244,9 +241,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
     }
 
     rc = uct_iface_mpool_create(&self->super.super, 
-                                sizeof(uct_ugni_get_desc_t) +
+                                sizeof(uct_ugni_fetch_desc_t) +
                                 self->config.fma_seg_size,
-                                sizeof(uct_ugni_get_desc_t), /* alignment offset */
+                                sizeof(uct_ugni_fetch_desc_t), /* alignment offset */
                                 UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
                                 &config->mpool,               /* mpool config */ 
                                 128 ,                         /* grow */

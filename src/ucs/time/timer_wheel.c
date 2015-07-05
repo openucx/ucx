@@ -86,7 +86,7 @@ void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
         while (!ucs_list_is_empty(&t->wheel[t->current])) {
             timer = ucs_list_extract_head(&t->wheel[t->current], ucs_wtimer_t, list);
             timer->is_active = 0;
-            timer->cb.func(&timer->cb);
+            ucs_invoke_callback(&timer->cb);
         }
     }
 }

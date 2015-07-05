@@ -51,7 +51,6 @@ ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_at
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = 0; /* force actual TL to set its own */
-    iface_attr->completion_priv_len    = 0; /* TBD */
 
     return UCS_OK;
 }

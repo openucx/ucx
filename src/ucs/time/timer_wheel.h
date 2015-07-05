@@ -18,9 +18,9 @@
  * UCS high resolution timer.
  */
 typedef struct ucs_wtimer {
-    ucs_callback_t cb;               /* User callback */
-    ucs_list_link_t    list;             /* Link in the list of timers */
-    int            is_active;
+    ucs_callback_t  cb;               /* User callback */
+    ucs_list_link_t list;             /* Link in the list of timers */
+    int             is_active;
 } ucs_wtimer_t;
 
 

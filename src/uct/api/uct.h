@@ -199,7 +199,6 @@ struct uct_iface_attr {
 
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
-    size_t                   completion_priv_len;  /**< Size of private data in @ref uct_completion_t */
 };
 
 
@@ -261,17 +260,21 @@ typedef struct uct_rkey_bundle {
  * @ingroup RESOURCE
  * @brief Completion handle.
  *
- * This structure should be allocated by the user, while reserving at least @ref
- * uct_iface_attr_t::completion_priv_len bytes for the 'priv' field. If the send
- * operation returns UCT_INPROGRESS, this structure will be owned by the transport
- * until the send completes. This completion is signaled by calling the callback
- * function specified in the 'func' field of this structure.
+ * This structure should be allocated by the user and can be passed to communication
+ * primitives. User has to initializes both fields of the structure.
+ *  If the operation returns UCS_INPROGRESS, this structure will be in use by the
+ * transport until the operation completes. When the operation completes, "count"
+ * field is decremented by 1, and whenever it reaches 0 - the callback is called.
+ *
+ * Notes:
+ *  - The same structure can be passed multiple times to communication functions
+ *    without the need to wait for completion.
+ *  - If the number of operations is smaller than the initial value of the counter,
+ *    the callback will not be called at all, so it may be left undefined.
  */
 struct uct_completion {
     uct_completion_callback_t func;    /**< User callback function */
-    char                      priv[0]; /**< Actual size of this field is
-                                            returned in completion_priv_len
-                                            by @ref uct_iface_query() */
+    int                       count;   /**< Completion counter */
 };
 
 
@@ -982,12 +985,12 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
  * repeatedly calling progress/send until it returns OK).
  *
  * @param ep    Endpoint to request notification on.
- * @param comp  Completion handle, which would be invoked (once) when more
+ * @param cb    Completion callback, which would be invoked (once) when more
  *              resources become available.
  */
-UCT_INLINE_API ucs_status_t uct_ep_req_notify(uct_ep_h ep, uct_completion_t *comp)
+UCT_INLINE_API ucs_status_t uct_ep_req_notify(uct_ep_h ep, ucs_callback_t *cb)
 {
-    return ep->iface->ops.ep_req_notify(ep, comp);
+    return ep->iface->ops.ep_req_notify(ep, cb);
 }
 
 

@@ -50,6 +50,8 @@ public:
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
             return ucp_rma_put(ep, buffer, length, remote_addr, rkey);
+        case UCX_PERF_CMD_GET:
+            return ucp_rma_get(ep, buffer, length, remote_addr, rkey);
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -77,6 +79,8 @@ public:
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
+        case UCX_PERF_CMD_GET:
+            return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -211,7 +215,8 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
         (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG),
         (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI)
+        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
 
     ucs_error("Invalid test case");

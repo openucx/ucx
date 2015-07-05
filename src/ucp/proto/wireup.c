@@ -138,6 +138,7 @@ static void ucp_ep_remote_connected(ucp_ep_h ep)
     ep->config.max_short_tag = iface_attr->cap.am.max_short - sizeof(uint64_t);
     ep->config.max_short_put = iface_attr->cap.put.max_short;
     ep->config.max_bcopy_put = iface_attr->cap.put.max_bcopy;
+    ep->config.max_bcopy_get = iface_attr->cap.get.max_bcopy;
 
     /* Synchronize with other threads */
     ucs_memory_cpu_store_fence();
@@ -673,6 +674,8 @@ err:
 void ucp_ep_wireup_stop(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
+
+    ucs_trace_func("ep=%p", ep);
 
     if (ep->uct.next_ep != NULL) {
         while (uct_ep_flush(ep->uct.next_ep) != UCS_OK) {

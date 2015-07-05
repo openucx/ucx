@@ -167,5 +167,16 @@
         } \
     }
 
+#define UCS_ALLOCA_MAX_SIZE  1200
+
+/**
+ * alloca which makes sure the size is small enough.
+ */
+#define ucs_alloca(_size) \
+    ({ \
+        ucs_assertv((_size) <= UCS_ALLOCA_MAX_SIZE, "alloca(%zu)", (size_t)(_size)); \
+        alloca(_size); \
+    })
+
 
 #endif

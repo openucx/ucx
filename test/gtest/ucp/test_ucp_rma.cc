@@ -12,7 +12,7 @@ extern "C" {
 
 class test_ucp_rma : public ucp_test {
 protected:
-    void test_mapped_memory(entity &e, ucp_mem_h memh,
+    void test_mapped_memory(entity *e, ucp_mem_h memh,
                             void *ptr, size_t size)
     {
         EXPECT_EQ(ptr, memh->address);
@@ -23,11 +23,11 @@ protected:
         void *rkey_buffer;
         ucs_status_t status;
 
-        status = ucp_rkey_pack(e.ucph(), memh, &rkey_buffer, &rkey_size);
+        status = ucp_rkey_pack(e->ucph(), memh, &rkey_buffer, &rkey_size);
         ASSERT_UCS_OK(status);
 
         ucp_rkey_h rkey;
-        status = ucp_ep_rkey_unpack(e.ep(), rkey_buffer, &rkey);
+        status = ucp_ep_rkey_unpack(e->ep(), rkey_buffer, &rkey);
         ASSERT_UCS_OK(status);
 
         ucp_rkey_buffer_release(rkey_buffer);
@@ -38,16 +38,16 @@ protected:
 UCS_TEST_F(test_ucp_rma, mem_alloc) {
 
     ucs_status_t status;
-    entity e;
+    entity *e = create_entity();
 
-    e.connect(e);
+    e->connect(e);
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = rand() % (1024 * 1024);
 
         ucp_mem_h memh;
         void *ptr = NULL;
-        status = ucp_mem_map(e.ucph(), &ptr, size, 0, &memh);
+        status = ucp_mem_map(e->ucph(), &ptr, size, 0, &memh);
         if (size == 0) {
             EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
             continue;
@@ -57,7 +57,7 @@ UCS_TEST_F(test_ucp_rma, mem_alloc) {
 
         test_mapped_memory(e, memh, ptr, size);
 
-        status = ucp_mem_unmap(e.ucph(), memh);
+        status = ucp_mem_unmap(e->ucph(), memh);
         ASSERT_UCS_OK(status);
     }
 }
@@ -65,9 +65,9 @@ UCS_TEST_F(test_ucp_rma, mem_alloc) {
 UCS_TEST_F(test_ucp_rma, mem_reg) {
 
     ucs_status_t status;
-    entity e;
+    entity *e = create_entity();
 
-    e.connect(e);
+    e->connect(e);
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         size_t size = rand() % (1024 * 1024);
@@ -75,7 +75,7 @@ UCS_TEST_F(test_ucp_rma, mem_reg) {
         void *ptr = malloc(size);
 
         ucp_mem_h memh;
-        status = ucp_mem_map(e.ucph(), &ptr, size, 0, &memh);
+        status = ucp_mem_map(e->ucph(), &ptr, size, 0, &memh);
         if (size == 0) {
             EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
             continue;
@@ -85,7 +85,7 @@ UCS_TEST_F(test_ucp_rma, mem_reg) {
 
         test_mapped_memory(e, memh, ptr, size);
 
-        status = ucp_mem_unmap(e.ucph(), memh);
+        status = ucp_mem_unmap(e->ucph(), memh);
         ASSERT_UCS_OK(status);
 
         free(ptr);
@@ -95,31 +95,26 @@ UCS_TEST_F(test_ucp_rma, mem_reg) {
 UCS_TEST_F(test_ucp_rma, put) {
     static const size_t memheap_size = 512 * 1024;
     ucs_status_t status;
-    entity pes[2];
+    entity *pe0 = create_entity();
+    entity *pe1 = create_entity();
 
     ucp_mem_h memh;
     void *memheap = NULL;
-    status = ucp_mem_map(pes[1].ucph(), &memheap, memheap_size, 0, &memh);
+    status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
     ASSERT_UCS_OK(status);
 
     memset(memheap, 0, memheap_size);
 
     void *rkey_buffer;
     size_t rkey_buffer_size;
-    status = ucp_rkey_pack(pes[1].ucph(), memh, &rkey_buffer, &rkey_buffer_size);
+    status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
 
-    pes[0].connect(pes[1]);
-    pes[1].connect(pes[0]);
-
-    for (int i = 0; i < 5; i++) {
-        usleep(100);
-        ucp_worker_progress(pes[1].worker());
-        ucp_worker_progress(pes[0].worker());
-    }
+    pe0->connect(pe1);
+    pe1->connect(pe0);
 
     ucp_rkey_h rkey;
-    status = ucp_ep_rkey_unpack(pes[0].ep(), rkey_buffer, &rkey);
+    status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
 
     for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
@@ -130,11 +125,11 @@ UCS_TEST_F(test_ucp_rma, put) {
 
         size_t offset = rand() % (memheap_size - send_data.length());
 
-        status = ucp_rma_put(pes[0].ep(), &send_data[0], send_data.length(),
+        status = ucp_rma_put(pe0->ep(), &send_data[0], send_data.length(),
                              (uintptr_t)memheap + offset, rkey);
         ASSERT_UCS_OK(status);
 
-        status = ucp_rma_flush(pes[0].worker());
+        status = ucp_rma_flush(pe0->worker());
         ASSERT_UCS_OK(status);
 
         EXPECT_EQ(send_data, std::string((char*)memheap + offset, send_data.length()));
@@ -142,10 +137,71 @@ UCS_TEST_F(test_ucp_rma, put) {
 
     ucp_rkey_destroy(rkey);
 
-    pes[0].disconnect();
-    pes[1].disconnect();
+    status = ucp_rma_flush(pe1->worker());
+    ASSERT_UCS_OK(status);
+
+    pe0->disconnect();
+    pe1->disconnect();
 
     ucp_rkey_buffer_release(rkey_buffer);
-    status = ucp_mem_unmap(pes[1].ucph(), memh);
+    status = ucp_mem_unmap(pe1->ucph(), memh);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_F(test_ucp_rma, get) {
+    static const size_t memheap_size = 512 * 1024;
+    ucs_status_t status;
+    entity *pe0 = create_entity();
+    entity *pe1 = create_entity();
+
+    ucp_mem_h memh;
+    void *memheap = NULL;
+    status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
+    ASSERT_UCS_OK(status);
+
+    memset(memheap, 0, memheap_size);
+
+    void *rkey_buffer;
+    size_t rkey_buffer_size;
+    status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
+    ASSERT_UCS_OK(status);
+
+    pe0->connect(pe1);
+    pe1->connect(pe0);
+
+    ucp_rkey_h rkey;
+    status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
+    ASSERT_UCS_OK(status);
+
+    ucs::fill_random((char*)memheap, (char*)memheap + memheap_size);
+
+    for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
+
+        std::string send_data;
+        send_data.resize(rand() % memheap_size + 1);
+
+        size_t offset = rand() % (memheap_size - send_data.length());
+
+        status = ucp_rma_get(pe0->ep(), &send_data[0], send_data.length(),
+                             (uintptr_t)memheap + offset, rkey);
+        ASSERT_UCS_OK(status);
+
+        status = ucp_rma_flush(pe0->worker());
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(std::string((char*)memheap + offset, send_data.length()),
+                  send_data);
+    }
+
+    ucp_rkey_destroy(rkey);
+
+    status = ucp_rma_flush(pe1->worker());
+    ASSERT_UCS_OK(status);
+
+    pe0->disconnect();
+    pe1->disconnect();
+
+    ucp_rkey_buffer_release(rkey_buffer);
+    status = ucp_mem_unmap(pe1->ucph(), memh);
     ASSERT_UCS_OK(status);
 }

@@ -121,6 +121,9 @@ test_type_t tests[] = {
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
      "UCP put bandwidth"},
 
+    {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "get latency / bandwidth / message rate"},
+
     {NULL}
 };
 

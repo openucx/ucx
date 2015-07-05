@@ -42,15 +42,9 @@ uint64_t uct_amo_test::hash64(uint64_t value) {
     return value * 171711717;
 }
 
-void uct_amo_test::atomic_reply_cb(uct_completion_t *self, void *data) {
+void uct_amo_test::atomic_reply_cb(uct_completion_t *self) {
     completion *comp = ucs_container_of(self, completion, uct);
-    if (comp->atomic_size == 4) {
-        comp->self->add_reply_safe(*(uint32_t*)data);
-    } else if (comp->atomic_size == 8) {
-        comp->self->add_reply_safe(*(uint64_t*)data);
-    } else {
-        ucs_fatal("Invalid atomic size");
-    }
+    comp->self->add_reply_safe(comp->result);
 }
 
 void uct_amo_test::add_reply_safe(uint64_t data) {
@@ -147,19 +141,17 @@ uct_amo_test::worker::worker(uct_amo_test* test, send_func_t send,
     m_send(send), m_advance(advance), m_recvbuf(recvbuf), m_entity(entity)
 
 {
-    m_completion_size = sizeof(completion) + entity.iface_attr().completion_priv_len;
-    m_completions = (completion*)malloc(m_completion_size * uct_amo_test::count());
+    m_completions.resize(uct_amo_test::count());
     pthread_create(&m_thread, NULL, run, reinterpret_cast<void*>(this));
 }
 
 uct_amo_test::worker::~worker() {
     ucs_assert(!running);
-    free(m_completions);
 }
 
 uct_amo_test::completion *uct_amo_test::worker::get_completion(unsigned index)
 {
-    return (completion*)((char*)m_completions + m_completion_size * index);
+    return &m_completions[index];
 }
 
 void* uct_amo_test::worker::run(void *arg) {
@@ -172,23 +164,24 @@ void uct_amo_test::worker::run() {
     for (unsigned i = 0; i < uct_amo_test::count(); ++i) {
         ucs_status_t status;
         completion *comp;
-        uint64_t result;
 
-        result         = 0;
         comp           = get_completion(i);
+        comp->result   = 0;
         comp->uct.func = NULL;
         status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
-                                 &result, comp);
+                                 &comp->result, comp);
         while (status == UCS_ERR_NO_RESOURCE) {
             m_entity.progress();
             status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
-                                     &result, comp);
+                                     &comp->result, comp);
         }
         if (status == UCS_OK) {
             if (comp->uct.func != NULL) {
-                comp->uct.func(&comp->uct, &result);
+                comp->uct.func(&comp->uct);
             }
-        } else if (status != UCS_INPROGRESS) {
+        } else if (status == UCS_INPROGRESS) {
+            comp->uct.count = 1;
+        } else {
             UCS_TEST_ABORT(ucs_status_string(status));
         }
         ++count;

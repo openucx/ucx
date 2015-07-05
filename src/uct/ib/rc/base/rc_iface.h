@@ -56,7 +56,9 @@ struct uct_rc_iface {
 
     struct {
         ucs_mpool_h          mp;
+        uct_rc_iface_send_op_t     *ops;
         unsigned             cq_available;
+        unsigned             next_op;
     } tx;
 
     struct {
@@ -70,6 +72,7 @@ struct uct_rc_iface {
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
         unsigned             tx_moderation;
+        unsigned             tx_ops_mask;
         unsigned             rx_max_batch;
         unsigned             rx_inline;
         uint8_t              min_rnr_timer;
@@ -89,20 +92,26 @@ UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char*, unsigned, unsigned, uct_rc_iface_config_t*)
 
 
-struct uct_rc_completion {
-    uct_completion_t         super;
-    ucs_queue_elem_t         queue;
-    uint16_t                 sn;
-#if ! NVALGRIND
-    unsigned                 length;
-#endif
+typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op /*, void *inline_data */);
+
+
+struct uct_rc_iface_send_op {
+    ucs_queue_elem_t              queue;
+    uct_rc_send_handler_t         handler;
+    uint16_t                      sn;
+    unsigned                      length;
+    union {
+        void                      *result;
+        void                      *unpack_arg;
+    };
+    uct_completion_t              *user_comp;
 };
 
 
 struct uct_rc_iface_send_desc {
-    uct_rc_completion_t      super;
-    uint32_t                 lkey;
-    uct_completion_t         *comp;
+    uct_rc_iface_send_op_t        super;
+    uct_unpack_callback_t         unpack_cb;
+    uint32_t                      lkey;
 };
 
 
@@ -162,5 +171,12 @@ uct_rc_iface_invoke_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr, unsigned length
     uct_ib_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
                            length - sizeof(*hdr), desc);
 }
+
+static UCS_F_ALWAYS_INLINE uct_rc_iface_send_op_t*
+uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
+{
+    return &iface->tx.ops[(iface->tx.next_op++) & iface->config.tx_ops_mask];
+}
+
 
 #endif

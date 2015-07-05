@@ -8,6 +8,30 @@
 #include "ucp_int.h"
 
 
+
+#define UCP_RMA_CHECK_PARAMS(_buffer, _length) \
+    if ((_length) == 0) { \
+        return UCS_OK; \
+    } \
+    if (ENABLE_PARAMS_CHECK && ((_buffer) == NULL)) { \
+        return UCS_ERR_INVALID_PARAM; \
+    }
+
+
+#define UCP_RMA_RKEY_LOOKUP(_ep, _rkey) \
+    ({ \
+        if (ENABLE_PARAMS_CHECK && \
+            !((_rkey)->pd_map & UCS_BIT((_ep)->uct.dst_pd_index))) \
+        { \
+            ucs_error("Remote key does not support current transport " \
+                       "(remote pd index: %d rkey map: 0x%"PRIx64")", \
+                       (_ep)->uct.dst_pd_index, (_rkey)->pd_map); \
+            return UCS_ERR_UNREACHABLE; \
+        } \
+        \
+        ucp_lookup_uct_rkey(_ep, _rkey); \
+    })
+
 /**
  * Unregister memory from all protection domains.
  * Save in *alloc_pd_memh_p the memory handle of the allocating PD, if such exists.
@@ -407,16 +431,14 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
     uct_rkey_t uct_rkey;
     size_t frag_length;
 
-    /* Check that the remote PD index exists in the remote key.
-     */
-    if (ENABLE_PARAMS_CHECK && !(rkey->pd_map & UCS_BIT(ep->uct.dst_pd_index))) {
-        ucs_error("Remote key does not support current transport "
-                   "(remote pd index: %d rkey map: 0x%"PRIx64")",
-                   ep->uct.dst_pd_index, rkey->pd_map);
-        return UCS_ERR_UNREACHABLE;
+    if (length == 0) {
+        return UCS_OK;
+    }
+    if (ENABLE_PARAMS_CHECK && (buffer == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    uct_rkey = ucp_lookup_uct_rkey(ep, rkey);
+    uct_rkey = UCP_RMA_RKEY_LOOKUP(ep, rkey);
 
     /* Loop until all message has been sent.
      * We re-check the configuration on every iteration, because it can be
@@ -461,7 +483,56 @@ ucs_status_t ucp_rma_put(ucp_ep_h ep, const void *buffer, size_t length,
 ucs_status_t ucp_rma_get(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {
-    return UCS_ERR_UNSUPPORTED;
+    uct_completion_t comp;
+    ucs_status_t status;
+    uct_rkey_t uct_rkey;
+    size_t frag_length;
+
+    if (length == 0) {
+        return UCS_OK;
+    }
+
+    uct_rkey = UCP_RMA_RKEY_LOOKUP(ep, rkey);
+
+    comp.count = 1;
+
+    for (;;) {
+
+        /* Push out all fragments, and request completion only for the last
+         * fragment.
+         */
+        frag_length = ucs_min(ep->config.max_bcopy_get, length);
+        status = uct_ep_get_bcopy(ep->uct.ep, (uct_unpack_callback_t)memcpy,
+                                  (void*)buffer, frag_length, remote_addr,
+                                  uct_rkey, &comp);
+        if (ucs_likely(status == UCS_OK)) {
+            goto posted;
+        } else if (status == UCS_INPROGRESS) {
+            ++comp.count;
+            goto posted;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            goto retry;
+        } else {
+            return status;
+        }
+
+posted:
+        length      -= frag_length;
+        if (length == 0) {
+            break;
+        }
+
+        buffer      += frag_length;
+        remote_addr += frag_length;
+retry:
+        ucp_worker_progress(ep->worker);
+    }
+
+    /* coverity[loop_condition] */
+    while (comp.count > 1) {
+        ucp_worker_progress(ep->worker);
+    };
+    return UCS_OK;
 }
 
 ucs_status_t ucp_rma_fence(ucp_worker_h worker)

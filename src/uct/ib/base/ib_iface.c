@@ -65,7 +65,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Length of receive queue in the QPs.",
    ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
 
-  {"RX_MAX_BATCH", "64",
+  {"RX_MAX_BATCH", "16",
    "How many post-receives to perform in one batch.",
    ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
 

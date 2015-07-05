@@ -47,7 +47,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     self->unsignaled = 0;
     self->sl         = iface->config.sl;          /* TODO multi-rail */
     self->path_bits  = iface->super.path_bits[0]; /* TODO multi-rail */
-    ucs_queue_head_init(&self->comp);
+    ucs_queue_head_init(&self->outstanding);
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
@@ -172,35 +172,44 @@ void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
     snprintf(buffer, max, " am_id %d", rch->am_id);
 }
 
-void uct_rc_ep_get_bcopy_completion(uct_completion_t *self, void *data)
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
 {
-    uct_rc_iface_send_desc_t *desc = ucs_derived_of(self, uct_rc_iface_send_desc_t);
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(data, desc->super.length);
-    uct_invoke_completion(desc->comp, desc + 1);
+    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
+    desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
+    uct_invoke_completion(desc->super.user_comp);
     ucs_mpool_put(desc);
 }
 
-#define UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(_num_bits, _is_be) \
-    void UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC_NAME(_num_bits, _is_be) \
-         (uct_completion_t *self, void *data) \
+void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
+{
+    uct_invoke_completion(op->user_comp);
+}
+
+#define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
+    void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
+            (uct_rc_iface_send_op_t *op) \
     { \
         uct_rc_iface_send_desc_t *desc = \
-            ucs_derived_of(self, uct_rc_iface_send_desc_t); \
-        uint##_num_bits##_t *value = data; \
+            ucs_derived_of(op, uct_rc_iface_send_desc_t); \
+        uint##_num_bits##_t *value = (void*)(desc + 1); \
+        uint##_num_bits##_t *dest = desc->super.result; \
         \
         VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
         if (_is_be && (_num_bits == 32)) { \
-            *value = ntohl(*value); /* TODO swap in-place */ \
+            *dest = ntohl(*value); /* TODO swap in-place */ \
         } else if (_is_be && (_num_bits == 64)) { \
-            *value = ntohll(*value); \
+            *dest = ntohll(*value); \
+        } else { \
+            *dest = *value; \
         } \
         \
-        uct_invoke_completion(desc->comp, value); \
+        uct_invoke_completion(desc->super.user_comp); \
         ucs_mpool_put(desc); \
-    }
+  }
 
-UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(32, 0);
-UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(32, 1);
-UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(64, 0);
-UCT_RC_DEFINE_ATOMIC_COMPLETION_FUNC(64, 1);
+UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 0);
+UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 1);
+UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(64, 0);
+UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(64, 1);

@@ -98,7 +98,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    buf = alloca(buffer_size + 1);
+    buf = ucs_alloca(buffer_size + 1);
     buf[buffer_size] = 0;
 
     strncpy(buf, prefix, buffer_size);
@@ -111,7 +111,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     short_file = (short_file == NULL) ? file : short_file + 1;
 
     if (RUNNING_ON_VALGRIND) {
-        valg_buf = alloca(buffer_size + 1);
+        valg_buf = ucs_alloca(buffer_size + 1);
         snprintf(valg_buf, buffer_size,
                  "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv.tv_sec, tv.tv_usec,
                  short_file, line, "UCX", ucs_log_level_names[level], buf);
@@ -177,7 +177,7 @@ void ucs_log_fatal_error(const char *fmt, ...)
     va_list ap;
     int ret;
 
-    buffer = alloca(buffer_size + 1);
+    buffer = ucs_alloca(buffer_size + 1);
     p = buffer;
 
     /* Print hostname:pid */
@@ -210,7 +210,7 @@ void __ucs_abort(const char *file, unsigned line, const char *function,
     char *buffer;
     va_list ap;
 
-    buffer = alloca(buffer_size + 1);
+    buffer = ucs_alloca(buffer_size + 1);
     va_start(ap, message);
     vsnprintf(buffer, buffer_size, message, ap);
     va_end(ap);

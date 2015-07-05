@@ -37,31 +37,27 @@ public:
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        m_completion->length = 0;
         return uct_ep_put_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
                                 recvbuf.addr(), recvbuf.rkey(),
-                                &m_completion->uct);
+                                &m_completion.uct);
     }
 
     ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        m_completion->dest   = sendbuf.ptr();
-        m_completion->length = sendbuf.length();
         return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy, sendbuf.ptr(),
                                 sendbuf.length(), recvbuf.addr(),
-                                recvbuf.rkey(), &m_completion->uct);
+                                recvbuf.rkey(), &m_completion.uct);
     }
 
     ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        m_completion->length = 0;
         return uct_ep_get_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
                                 recvbuf.addr(), recvbuf.rkey(),
-                                &m_completion->uct);
+                                &m_completion.uct);
     }
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {

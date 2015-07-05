@@ -366,25 +366,26 @@ out:
     ucs_mpool_put(skb);
 }
 
-ucs_status_t uct_ud_ep_req_notify(uct_ep_h ep_h, uct_completion_t *comp)
+ucs_status_t uct_ud_ep_req_notify(uct_ep_h ep_h, ucs_callback_t *cb)
 {
     uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
-    UCT_CHECK_PARAM(ep->comp.comp == NULL,
-                    "ep (%p) already has completion cb(%p)", ep, ep->comp.comp);
+    UCT_CHECK_PARAM(ep->comp.cb == NULL,
+                    "ep (%p) already has completion cb (%p)", ep, ep->comp.cb);
 
-    ep->comp.comp = comp;
+    ep->comp.cb = cb;
     return UCS_OK;
 }
 
 void uct_ud_ep_notify(uct_ud_ep_t *ep)
 {
-    if (!ep->comp.comp) {
+    if (ep->comp.cb == NULL) {
         return;
     }
+
     ucs_trace_data("ep(%p) ready to send!!!", ep);
-    ep->comp.comp->func(ep->comp.comp, NULL);
-    ep->comp.comp = 0;
+    ucs_invoke_callback(ep->comp.cb);
+    ep->comp.cb = NULL;
 }
 
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep)

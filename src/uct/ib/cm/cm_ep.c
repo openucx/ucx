@@ -232,12 +232,12 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     return status;
 }
 
-ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, uct_completion_t *comp)
+ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, ucs_callback_t *cb)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
-    uct_cm_completion_t *cm_comp = ucs_derived_of(comp, uct_cm_completion_t);
 
-    ucs_queue_push(&iface->notify, &cm_comp->queue);
+    ucs_assert(iface->notify_cb == NULL);
+    iface->notify_cb = cb;
     return UCS_OK;
 }
 
