@@ -34,6 +34,7 @@ struct uct_rc_ep {
     unsigned            unsignaled;
     uint8_t             sl;
     uint8_t             path_bits;
+    ucs_list_link_t     list;
     UCS_STATS_NODE_DECLARE(stats);
 };
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);

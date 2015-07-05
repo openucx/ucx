@@ -92,6 +92,7 @@ void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
     memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
+    ucs_list_add_head(&iface->ep_list, &ep->list);
 }
 
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
@@ -103,37 +104,24 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
                       [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb != NULL);
     *memb = NULL;
+    ucs_list_del(&ep->list);
 }
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    uct_rc_ep_t **memb, *ep;
     ucs_status_t status;
-    unsigned i, j;
     unsigned count;
+    uct_rc_ep_t *ep;
 
-    /* TODO this iteration is too much.. */
     count = 0;
-    for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {
-        memb = iface->eps[i];
-        if (memb == NULL) {
-            continue;
-        }
-
-        for (j = 0; j < UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER); ++j) {
-            ep = memb[j];
-            if (ep == NULL) {
-                continue;
-            }
-
+    ucs_list_for_each(ep, &iface->ep_list, list) {
             status = uct_ep_flush(&ep->super.super);
             if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
                 ++count;
             } else if (status != UCS_OK) {
                 return status;
             }
-        }
     }
 
     if (count != 0) {
@@ -203,6 +191,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
+    ucs_list_head_init(&self->ep_list);
 
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_create(&self->super, &config->super,
