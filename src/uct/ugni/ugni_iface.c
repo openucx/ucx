@@ -151,7 +151,7 @@ static void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h 
     /* set local keys */
     base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
 }
-  
+
 static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
@@ -209,7 +209,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto clean_desc;
     }
 
-    rc = ucs_mpool_create("UGNI-DESC-BUFFER", 
+    rc = ucs_mpool_create("UGNI-DESC-BUFFER",
                           sizeof(uct_ugni_base_desc_t) +
                           self->config.fma_seg_size,
                           sizeof(uct_ugni_base_desc_t), /* alignment offset */
@@ -226,11 +226,11 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto clean_desc_get;
     }
 
-    rc = uct_iface_mpool_create(&self->super.super, 
+    rc = uct_iface_mpool_create(&self->super.super,
                                 sizeof(uct_ugni_fetch_desc_t) + 8,
                                 sizeof(uct_ugni_fetch_desc_t),  /* alignment offset */
                                 UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                                &config->mpool,               /* mpool config */ 
+                                &config->mpool,               /* mpool config */
                                 128 ,                         /* grow */
                                 uct_ugni_base_desc_key_init,  /* memory/key init */
                                 "UGNI-DESC-FAMO",             /* name */
@@ -240,12 +240,12 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto clean_buffer;
     }
 
-    rc = uct_iface_mpool_create(&self->super.super, 
+    rc = uct_iface_mpool_create(&self->super.super,
                                 sizeof(uct_ugni_fetch_desc_t) +
                                 self->config.fma_seg_size,
                                 sizeof(uct_ugni_fetch_desc_t), /* alignment offset */
                                 UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                                &config->mpool,               /* mpool config */ 
+                                &config->mpool,               /* mpool config */
                                 128 ,                         /* grow */
                                 uct_ugni_base_desc_key_init,  /* memory/key init */
                                 "UGNI-DESC-GET",              /* name */
@@ -337,7 +337,7 @@ static ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
     int i;
     ucs_status_t rc = UCS_OK;
 
-    assert(!strncmp(pd->component->name, 
+    assert(!strncmp(pd->component->name,
                     UCT_UGNI_TL_NAME,
                     UCT_PD_NAME_MAX));
 
