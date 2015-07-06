@@ -116,12 +116,12 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
 
     count = 0;
     ucs_list_for_each(ep, &iface->ep_list, list) {
-            status = uct_ep_flush(&ep->super.super);
-            if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
-                ++count;
-            } else if (status != UCS_OK) {
-                return status;
-            }
+        status = uct_ep_flush(&ep->super.super);
+        if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
+            ++count;
+        } else if (status != UCS_OK) {
+            return status;
+        }
     }
 
     if (count != 0) {
