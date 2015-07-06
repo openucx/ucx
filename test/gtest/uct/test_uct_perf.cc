@@ -293,7 +293,7 @@ protected:
 
         test_result *result0 = reinterpret_cast<test_result*>(ptr0),
                     *result1 = reinterpret_cast<test_result*>(ptr1);
-        test_result result = *result0;
+        test_result result = *result1;
         delete result0;
         delete result1;
         return result;
