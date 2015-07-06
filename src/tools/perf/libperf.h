@@ -1,7 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) The University of Tennessee and The University 
+*               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -131,6 +132,7 @@ typedef struct ucx_perf_params {
     ucx_perf_cmd_t         command;         /* Command to perform */
     ucx_perf_test_type_t   test_type;       /* Test communication type */
     ucs_thread_mode_t      thread_mode;     /* Thread mode for communication objects */
+    unsigned               thread_count;    /* Number of threads in the test program */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
