@@ -89,9 +89,14 @@ public:
         size_t max_hdr  = ucs_min(sender().iface_attr().cap.am.max_hdr,
                                   sendbuf.length());
         size_t hdr_size = rand() % (max_hdr + 1);
-        return uct_ep_am_zcopy(ep, AM_ID, sendbuf.ptr(), hdr_size,
-                               (char*)sendbuf.ptr() + hdr_size, sendbuf.length() - hdr_size,
-                               sendbuf.memh(), &m_completion.uct);
+        return uct_ep_am_zcopy(ep,
+                               AM_ID,
+                               sendbuf.ptr(),
+                               hdr_size,
+                               (char*)sendbuf.ptr() + hdr_size,
+                               sendbuf.length()     - hdr_size,
+                               sendbuf.memh(),
+                               comp());
     }
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
@@ -105,7 +110,7 @@ public:
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(0, 0, sender()); /* dummy */
 
-        blocking_send(send, sender_ep(), sendbuf, recvbuf, m_completion_count);
+        blocking_send(send, sender_ep(), sendbuf, recvbuf);
         sendbuf.pattern_fill(SEED2);
 
         while (m_am_count == 0) {
