@@ -615,11 +615,12 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "get_bcopy");
-    UCT_CHECK_PARAM(comp != NULL, "completion must be non-NULL");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
 
-    desc->super.handler     = uct_rc_ep_get_bcopy_handler;
+    desc->super.handler     = (comp == NULL) ?
+                                uct_rc_ep_get_bcopy_handler_no_completion :
+                                uct_rc_ep_get_bcopy_handler;
     desc->super.unpack_arg  = arg;
     desc->super.user_comp   = comp;
     desc->super.length      = length;

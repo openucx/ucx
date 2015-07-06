@@ -48,6 +48,8 @@ void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op);
 
+void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op);
+
 void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op);

@@ -338,13 +338,14 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     struct ibv_sge sge;
 
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "get_bcopy");
-    UCT_CHECK_PARAM(comp != NULL, "completion must be non-NULL");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
 
     ucs_assert(length <= iface->super.super.config.seg_size);
 
-    desc->super.handler     = uct_rc_ep_get_bcopy_handler;
+    desc->super.handler     = (comp == NULL) ?
+                                uct_rc_ep_get_bcopy_handler_no_completion :
+                                uct_rc_ep_get_bcopy_handler;
     desc->super.unpack_arg  = arg;
     desc->super.user_comp   = comp;
     desc->super.length      = length;

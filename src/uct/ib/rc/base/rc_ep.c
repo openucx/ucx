@@ -182,6 +182,15 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
     ucs_mpool_put(desc);
 }
 
+void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+
+    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
+    desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
+    ucs_mpool_put(desc);
+}
+
 void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
 {
     uct_invoke_completion(op->user_comp);
