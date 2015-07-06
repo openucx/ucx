@@ -376,6 +376,141 @@ ucs_status_t ucp_rma_get(ucp_ep_h ep, void *buffer, size_t length,
 
 /**
  * @ingroup CONTEXT
+ * @brief Atomic 32-bit add.
+ *
+ * Atomically add a value to a remote 32-bit integer variable.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  add          Value to add.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ */
+ucs_status_t ucp_rma_add32(ucp_ep_h ep, uint32_t add,
+                           uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 64-bit add.
+ *
+ * Atomically add a value to a remote 64-bit integer variable.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  add          Value to add.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ */
+ucs_status_t ucp_rma_add64(ucp_ep_h ep, uint64_t add,
+                           uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 32-bit fetch-and-add.
+ *
+ * Atomically add a value to a remote 32-bit integer variable, and put the
+ * previous variable value in "result". This function is blocking.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  add          Value to add.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ * @param [out] result       Filled with the previous value of the variable.
+ */
+ucs_status_t ucp_rma_fadd32(ucp_ep_h ep, uint32_t add, uint64_t remote_addr,
+                            ucp_rkey_h rkey, uint32_t *result);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 64-bit fetch-and-add.
+ *
+ * Atomically add a value to a remote 64-bit integer variable, and put the
+ * previous variable value in "result". This function is blocking.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  add          Value to add.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ * @param [out] result       Filled with the previous value of the variable.
+ */
+ucs_status_t ucp_rma_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
+                            ucp_rkey_h rkey, uint64_t *result);
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 32-bit swap.
+ *
+ * Atomically assign a new value to a remote 32-bit variable, and put the
+ * previous variable value in "result". This function is blocking.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  swap         Value to swap the remote variable to.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ * @param [out] result       Filled with the previous value of the variable.
+ */
+ucs_status_t ucp_rma_swap32(ucp_ep_h ep, uint32_t swap, uint64_t remote_addr,
+                            ucp_rkey_h rkey, uint32_t *result);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 64-bit swap.
+ *
+ * Atomically assign a new value to a remote 64-bit variable, and put the
+ * previous variable value in "result". This function is blocking.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  swap         Value to swap the remote variable to.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ * @param [out] result       Filled with the previous value of the variable.
+ */
+ucs_status_t ucp_rma_swap64(ucp_ep_h ep, uint64_t swap, uint64_t remote_addr,
+                            ucp_rkey_h rkey, uint64_t *result);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 32-bit compare-and-swap.
+ *
+ * Atomically compare a remote 32-bit variable to "compare", if it equals - assign
+ * a new value to it, and in any case return previous variable value in "result".
+ * This function is blocking.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  compare      Value to compare to.
+ * @param [in]  swap         Value to swap the remote variable to.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ * @param [out] result       Filled with the previous value of the variable.
+ */
+ucs_status_t ucp_rma_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
+                             uint64_t remote_addr, ucp_rkey_h rkey, uint32_t *result);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Atomic 64-bit compare-and-swap.
+ *
+ * Atomically compare a remote 64-bit variable to "compare", if it equals - assign
+ * a new value to it, and in any case return previous variable value in "result".
+ * This function is blocking.
+ *
+ * @param [in]  ep           Remote endpoint.
+ * @param [in]  compare      Value to compare to.
+ * @param [in]  swap         Value to swap the remote variable to.
+ * @param [in]  remote_addr  Remote address of the atomic variable.
+ * @param [in]  rkey         Remote memory key.
+ * @param [out] result       Filled with the previous value of the variable.
+ */
+ucs_status_t ucp_rma_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
+                             uint64_t remote_addr, ucp_rkey_h rkey, uint64_t *result);
+
+
+/**
+ * @ingroup CONTEXT
  *
  * @brief Force ordering between operations
  *
