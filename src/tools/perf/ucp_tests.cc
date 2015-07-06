@@ -162,13 +162,13 @@ public:
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, length, sn, remote_addr, rkey);
+                recv(worker, recv_buffer, length, sn);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, length, sn);
+                send(ep, send_buffer, length, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
