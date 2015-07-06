@@ -16,7 +16,7 @@
 static ucs_status_t uct_ugni_query_pd_resources(uct_pd_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p);
 static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p);
-static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer, 
+static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer,
                                          uct_rkey_t *rkey_p, void **handle_p);
 static void uct_ugni_rkey_release(uct_rkey_t rkey, void *handle);
 
@@ -164,7 +164,7 @@ static void uct_ugni_rkey_release(uct_rkey_t rkey, void *handle)
     ucs_free((void *)rkey);
 }
 
-static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer, 
+static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;

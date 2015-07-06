@@ -105,7 +105,7 @@ static inline void uct_ugni_format_fma(uct_ugni_base_desc_t *fma, gni_post_type_
 }
 
 static inline void uct_ugni_format_fma_amo(uct_ugni_fetch_desc_t *amo, gni_post_type_t type,
-                                           gni_fma_cmd_type_t amo_op, 
+                                           gni_fma_cmd_type_t amo_op,
                                            uint64_t first_operand, uint64_t second_operand,
                                            void *buffer, uint64_t remote_addr,
                                            uct_rkey_t rkey, unsigned length, uct_ugni_ep_t *ep,
@@ -119,7 +119,7 @@ static inline void uct_ugni_format_fma_amo(uct_ugni_fetch_desc_t *amo, gni_post_
         amo->tmp.count = 1;
     }
 
-    uct_ugni_format_fma(&amo->super, GNI_POST_AMO, buffer, remote_addr, 
+    uct_ugni_format_fma(&amo->super, GNI_POST_AMO, buffer, remote_addr,
                         rkey, length, ep, comp, NULL);
 
     amo->super.desc.amo_cmd = amo_op;
@@ -218,9 +218,9 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length, iface->config.fma_seg_size, "put_short");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, 
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc,
                              fma, return UCS_ERR_NO_RESOURCE);
-    uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, buffer, 
+    uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, buffer,
                         remote_addr, rkey, length, ep, NULL, NULL);
     ucs_trace_data("Posting PUT Short, GNI_PostFma of size %"PRIx64" from %p to "
                    "%p, with [%"PRIx64" %"PRIx64"]",
@@ -238,7 +238,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 {
     /* Since custom pack function is used
      * we have to allocate separate memory to pack
-     * the info and pass it to FMA 
+     * the info and pass it to FMA
      * something like:
      * pack_cb(desc + 1, arg, length); */
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
@@ -430,7 +430,7 @@ static inline void uct_ugni_format_get_fma(uct_ugni_fetch_desc_t *fma,
     void *buffer;
     uct_completion_t *comp;
     unsigned align_length;
-    
+
     fma->tmp.func = cb;
     fma->tmp.count = 1;
     fma->padding = ucs_padding_pow2(remote_addr, UGNI_GET_ALIGN);
@@ -499,10 +499,10 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
 
-    uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET, 
+    uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET,
                             remote_addr, rkey, length,
-                            ep, comp, 
-                            uct_ugni_unalign_fma_get_cb, 
+                            ep, comp,
+                            uct_ugni_unalign_fma_get_cb,
                             unpack_cb, arg);
 
     ucs_trace_data("Posting GET BCOPY, GNI_PostFma of size %"PRIx64" (%lu) from %p to "
@@ -549,7 +549,7 @@ static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
             uct_invoke_completion(head_fma->orig_comp_cb);
             head_fma->super.not_ready_to_free = 0;
             ucs_mpool_put(head_fma);
-        }     
+        }
     } else {
         rdma->super.not_ready_to_free = 1;
     }
@@ -605,7 +605,7 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
     UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get, 
+    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get,
                              rdma, return UCS_ERR_NO_RESOURCE);
 
     rdma_remote_start = remote_addr;
