@@ -409,12 +409,13 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_rc_hdr_t *rch;
 
     UCT_CHECK_AM_ID(id);
+    UCT_CHECK_LENGTH(sizeof(*rch) + length, iface->super.super.config.seg_size,
+                     "am_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 
-    ucs_assert(sizeof(*rch) + length <= iface->super.super.config.seg_size);
     rch = (void*)(desc + 1);
     rch->am_id = id;
     pack_cb(rch + 1, arg, length);
