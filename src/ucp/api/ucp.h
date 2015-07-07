@@ -379,6 +379,7 @@ ucs_status_t ucp_rma_get(ucp_ep_h ep, void *buffer, size_t length,
  * @brief Atomic 32-bit add.
  *
  * Atomically add a value to a remote 32-bit integer variable.
+ * Remote address must be aligned to 32 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  add          Value to add.
@@ -394,6 +395,7 @@ ucs_status_t ucp_rma_add32(ucp_ep_h ep, uint32_t add,
  * @brief Atomic 64-bit add.
  *
  * Atomically add a value to a remote 64-bit integer variable.
+ * Remote address must be aligned to 64 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  add          Value to add.
@@ -410,6 +412,7 @@ ucs_status_t ucp_rma_add64(ucp_ep_h ep, uint64_t add,
  *
  * Atomically add a value to a remote 32-bit integer variable, and put the
  * previous variable value in "result". This function is blocking.
+ * Remote address must be aligned to 32 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  add          Value to add.
@@ -427,6 +430,7 @@ ucs_status_t ucp_rma_fadd32(ucp_ep_h ep, uint32_t add, uint64_t remote_addr,
  *
  * Atomically add a value to a remote 64-bit integer variable, and put the
  * previous variable value in "result". This function is blocking.
+ * Remote address must be aligned to 64 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  add          Value to add.
@@ -443,6 +447,7 @@ ucs_status_t ucp_rma_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
  *
  * Atomically assign a new value to a remote 32-bit variable, and put the
  * previous variable value in "result". This function is blocking.
+ * Remote address must be aligned to 32 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  swap         Value to swap the remote variable to.
@@ -460,6 +465,7 @@ ucs_status_t ucp_rma_swap32(ucp_ep_h ep, uint32_t swap, uint64_t remote_addr,
  *
  * Atomically assign a new value to a remote 64-bit variable, and put the
  * previous variable value in "result". This function is blocking.
+ * Remote address must be aligned to 64 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  swap         Value to swap the remote variable to.
@@ -478,6 +484,7 @@ ucs_status_t ucp_rma_swap64(ucp_ep_h ep, uint64_t swap, uint64_t remote_addr,
  * Atomically compare a remote 32-bit variable to "compare", if it equals - assign
  * a new value to it, and in any case return previous variable value in "result".
  * This function is blocking.
+ * Remote address must be aligned to 32 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  compare      Value to compare to.
@@ -497,6 +504,7 @@ ucs_status_t ucp_rma_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
  * Atomically compare a remote 64-bit variable to "compare", if it equals - assign
  * a new value to it, and in any case return previous variable value in "result".
  * This function is blocking.
+ * Remote address must be aligned to 64 bit.
  *
  * @param [in]  ep           Remote endpoint.
  * @param [in]  compare      Value to compare to.
