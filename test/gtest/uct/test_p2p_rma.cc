@@ -39,8 +39,7 @@ public:
     {
         return uct_ep_put_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
-                                recvbuf.addr(), recvbuf.rkey(),
-                                &m_completion.uct);
+                                recvbuf.addr(), recvbuf.rkey(), comp());
     }
 
     ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
@@ -48,7 +47,7 @@ public:
     {
         return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy, sendbuf.ptr(),
                                 sendbuf.length(), recvbuf.addr(),
-                                recvbuf.rkey(), &m_completion.uct);
+                                recvbuf.rkey(), comp());
     }
 
     ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
@@ -56,15 +55,14 @@ public:
     {
         return uct_ep_get_zcopy(ep,
                                 sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
-                                recvbuf.addr(), recvbuf.rkey(),
-                                &m_completion.uct);
+                                recvbuf.addr(), recvbuf.rkey(), comp());
     }
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
         mapped_buffer sendbuf(length, SEED1, sender(), 1);
         mapped_buffer recvbuf(length, SEED2, receiver(), 3);
 
-        blocking_send(send, sender_ep(), sendbuf, recvbuf, m_completion_count);
+        blocking_send(send, sender_ep(), sendbuf, recvbuf);
         if (direction == DIRECTION_SEND_TO_RECV) {
             sendbuf.pattern_fill(SEED3);
             wait_for_remote();

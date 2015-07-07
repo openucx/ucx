@@ -52,6 +52,7 @@ uct_p2p_test::uct_p2p_test(size_t rx_headroom) :
     m_rx_headroom(rx_headroom),
     m_completion_count(0)
 {
+    m_null_completion      = false;
     m_completion.self      = this;
     m_completion.uct.func  = completion_cb;
     m_completion.uct.count = 0;
@@ -189,6 +190,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
 
     ucs::detail::message_stream ms("INFO");
 
+    m_null_completion = false;
+
     /* Run with min and max values */
     test_xfer_print(ms, send, min_length, direction);
     test_xfer_print(ms, send, max_length, direction);
@@ -222,14 +225,21 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
         test_xfer(send, length, direction);
     }
 
+    /* Run a test with implicit non-blocking mode */
+    m_null_completion = true;
+    ms << "nocomp ";
+    test_xfer_print(ms, send, (long)sqrt((min_length + 1.0) * max_length),
+                    direction);
+
     sender().flush();
 }
 
 void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
                                  const mapped_buffer &sendbuf,
-                                 const mapped_buffer &recvbuf,
-                                 unsigned prev_comp_count)
+                                 const mapped_buffer &recvbuf)
 {
+    unsigned prev_comp_count = m_completion_count;
+
     ucs_status_t status;
     do {
         status = (this->*send)(ep, sendbuf, recvbuf);
@@ -237,11 +247,17 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
     if (status == UCS_OK) {
         return;
     } else if (status == UCS_INPROGRESS) {
-        ++m_completion.uct.count;
-        while (m_completion_count <= prev_comp_count) {
-            progress();
+        if (comp() == NULL) {
+            /* implicit non-blocking mode */
+            sender().flush();
+        } else {
+            /* explicit non-blocking mode */
+            ++m_completion.uct.count;
+            while (m_completion_count <= prev_comp_count) {
+                progress();
+            }
+            EXPECT_EQ(0, m_completion.uct.count);
         }
-        EXPECT_EQ(0, m_completion.uct.count);
     } else {
         UCS_TEST_ABORT(ucs_status_string(status));
     }
@@ -261,6 +277,14 @@ uct_ep_h uct_p2p_test::sender_ep() const {
 
 const uct_test::entity& uct_p2p_test::receiver() const {
     return **(m_entities.end() - 1);
+}
+
+uct_completion_t *uct_p2p_test::comp() {
+    if (m_null_completion) {
+        return NULL;
+    } else {
+        return &m_completion.uct;
+    }
 }
 
 void uct_p2p_test::completion_cb(uct_completion_t *self) {

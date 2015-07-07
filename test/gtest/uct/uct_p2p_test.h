@@ -49,21 +49,14 @@ protected:
     void test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t max_length,
                          direction_t direction);
     void blocking_send(send_func_t send, uct_ep_h ep, const mapped_buffer &sendbuf,
-                       const mapped_buffer &recvbuf, unsigned prev_comp_count);
+                       const mapped_buffer &recvbuf);
     void wait_for_remote();
     const entity& sender() const;
     uct_ep_h sender_ep() const;
     const entity& receiver() const;
-
-    const size_t m_rx_headroom;
-    completion   m_completion;
-    unsigned     m_completion_count;
+    uct_completion_t *comp();
 
 private:
-
-    static int             log_data_count;
-    static ucs_log_level_t orig_log_level;
-
     template <typename O>
     void test_xfer_print(O& os, send_func_t send, size_t length,
                          direction_t direction);
@@ -75,6 +68,13 @@ private:
                 ucs_log_level_t level, const char *prefix, const char *message,
                 va_list ap);
 
+    static int             log_data_count;
+    static ucs_log_level_t orig_log_level;
+
+    const size_t m_rx_headroom;
+    bool         m_null_completion;
+    completion   m_completion;
+    unsigned     m_completion_count;
 };
 
 
