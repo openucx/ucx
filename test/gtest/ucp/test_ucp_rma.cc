@@ -101,10 +101,10 @@ public:
 
         if (sizeof(T) == sizeof(uint32_t)) {
             status = ucp_rma_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                    (uint32_t*)&result);
+                                    (uint32_t*)(void*)&result);
         } else if (sizeof(T) == sizeof(uint64_t)) {
             status = ucp_rma_fadd64(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                    (uint64_t*)&result);
+                                    (uint64_t*)(void*)&result);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
@@ -128,10 +128,10 @@ public:
 
         if (sizeof(T) == sizeof(uint32_t)) {
             status = ucp_rma_swap32(e->ep(), swap, (uintptr_t)memheap_addr, rkey,
-                                    (uint32_t*)&result);
+                                    (uint32_t*)(void*)&result);
         } else if (sizeof(T) == sizeof(uint64_t)) {
             status = ucp_rma_swap64(e->ep(), swap, (uintptr_t)memheap_addr, rkey,
-                                    (uint64_t*)&result);
+                                    (uint64_t*)(void*)&result);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
@@ -161,11 +161,11 @@ public:
         if (sizeof(T) == sizeof(uint32_t)) {
             status = ucp_rma_cswap32(e->ep(), compare, swap,
                                      (uintptr_t)memheap_addr, rkey,
-                                     (uint32_t*)&result);
+                                     (uint32_t*)(void*)&result);
         } else if (sizeof(T) == sizeof(uint64_t)) {
             status = ucp_rma_cswap64(e->ep(), compare, swap,
                                      (uintptr_t)memheap_addr, rkey,
-                                     (uint64_t*)&result);
+                                     (uint64_t*)(void*)&result);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
