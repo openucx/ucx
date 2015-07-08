@@ -17,6 +17,7 @@ public:
         OP_PUT_BCOPY,
         OP_PUT_ZCOPY,
         OP_AM_SHORT,
+        OP_AM_BCOPY,
         OP_AM_ZCOPY
     };
 
@@ -80,6 +81,10 @@ public:
                 break;
             case OP_AM_SHORT:
                 status = uct_ep_am_short(sender_ep(), am_id, 0, buffer, length);
+                break;
+            case OP_AM_BCOPY:
+                status = uct_ep_am_bcopy(sender_ep(), am_id,
+                                         (uct_pack_callback_t)memcpy, buffer, length);
                 break;
             case OP_AM_ZCOPY:
                 status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,
@@ -199,6 +204,23 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
     mapped_buffer recvbuf(max_short + 1,                    2, receiver());
 
     test_error_run(OP_AM_SHORT, 0, sendbuf.ptr(), sendbuf.length(),
+                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   "length");
+
+    recvbuf.pattern_check(2);
+}
+
+UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    size_t max_bcopy = sender().iface_attr().cap.am.max_bcopy;
+    if (max_bcopy > (2 * 1024 * 1024)) {
+        UCS_TEST_SKIP_R("max_bcopy too large");
+    }
+
+    mapped_buffer sendbuf(max_bcopy + 1, 1, sender());
+    mapped_buffer recvbuf(max_bcopy + 1, 2, receiver());
+
+    test_error_run(OP_AM_BCOPY, 0, sendbuf.ptr(), sendbuf.length(),
                    UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
                    "length");
 

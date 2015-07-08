@@ -214,6 +214,8 @@ static ucs_status_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     char *data;
     ucs_status_t status;
 
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + length, 4096 /* TODO */, "am_bcopy");
+
     status = uct_ud_verbs_am_common(iface, ep, id, &skb);
     if (status != UCS_OK) {
         return status;
