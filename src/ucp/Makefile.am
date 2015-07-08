@@ -21,9 +21,11 @@ noinst_HEADERS = \
 	proto/ucp_int.h
 
 libucp_la_SOURCES = \
-    proto/ep.c \
-    proto/rma.c \
-    proto/tag.c \
-    proto/ucp.c \
-    proto/wireup.c \
-	proto/worker.c
+	proto/ucp_atomic.c \
+	proto/ucp_context.c \
+    proto/ucp_ep.c \
+    proto/ucp_mm.c \
+    proto/ucp_rma.c \
+    proto/ucp_tag.c \
+    proto/ucp_wireup.c \
+	proto/ucp_worker.c

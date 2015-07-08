@@ -432,8 +432,8 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-ucs_status_t ucp_init(const ucp_config_t *config, size_t request_headroom,
-                      ucp_context_h *context_p)
+ucs_status_t ucp_init(unsigned features, size_t request_headroom,
+                      const ucp_config_t *config, ucp_context_h *context_p)
 {
     ucp_context_t *context;
     ucs_status_t status;

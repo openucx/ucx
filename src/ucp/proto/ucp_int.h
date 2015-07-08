@@ -249,6 +249,21 @@ SGLIB_DEFINE_LIST_PROTOTYPES(ucp_ep_t, ucp_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_EP_HASH_SIZE, ucp_ep_hash);
 
 
+#define UCP_RMA_RKEY_LOOKUP(_ep, _rkey) \
+    ({ \
+        if (ENABLE_PARAMS_CHECK && \
+            !((_rkey)->pd_map & UCS_BIT((_ep)->uct.dst_pd_index))) \
+        { \
+            ucs_error("Remote key does not support current transport " \
+                       "(remote pd index: %d rkey map: 0x%"PRIx64")", \
+                       (_ep)->uct.dst_pd_index, (_rkey)->pd_map); \
+            return UCS_ERR_UNREACHABLE; \
+        } \
+        \
+        ucp_lookup_uct_rkey(_ep, _rkey); \
+    })
+
+
 static inline void ucp_ep_add_pending_op(ucp_ep_h ep, uct_ep_h uct_ep,
                                          ucp_ep_pending_op_t *op)
 {
@@ -268,6 +283,21 @@ static inline ucp_ep_h ucp_worker_find_ep(ucp_worker_h worker, uint64_t dest_uui
     search.dest_uuid = dest_uuid;
     return sglib_hashed_ucp_ep_t_find_member(worker->ep_hash, &search);
 }
+
+static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    unsigned rkey_index;
+
+    /*
+     * Calculate the rkey index inside the compact array. This is actually the
+     * number of PDs in the map with index less-than ours. So mask pd_map to get
+     * only the less-than indices, and then count them using popcount operation.
+     * TODO save the mask in ep->uct, to avoid the shift operation.
+     */
+    rkey_index = ucs_count_one_bits(rkey->pd_map & UCS_MASK(ep->uct.dst_pd_index));
+    return rkey->uct[rkey_index].rkey;
+}
+
 
 
 #endif

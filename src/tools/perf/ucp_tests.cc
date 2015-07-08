@@ -49,9 +49,9 @@ public:
             return ucp_tag_send(ep, buffer, length, TAG);
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
-            return ucp_rma_put(ep, buffer, length, remote_addr, rkey);
+            return ucp_put(ep, buffer, length, remote_addr, rkey);
         case UCX_PERF_CMD_GET:
-            return ucp_rma_get(ep, buffer, length, remote_addr, rkey);
+            return ucp_get(ep, buffer, length, remote_addr, rkey);
         default:
             return UCS_ERR_INVALID_PARAM;
         }

@@ -25,7 +25,7 @@ ucp_test::entity::entity(const ucp_test& test) : m_test(test), m_inprogress(0) {
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
 
-    UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init, config, 0);
+    UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init, 0, 0, config);
 
     UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_worker, ucp_worker_destroy,
                            ucp_worker_create, m_ucph, UCS_THREAD_MODE_MULTI);

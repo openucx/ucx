@@ -32,8 +32,8 @@ public:
         ucs_status_t status;
         std::string send_data(max_size, 0);
         ucs::fill_random(send_data.begin(), send_data.end());
-        status = ucp_rma_put(e->ep(), &send_data[0], send_data.length(),
-                             (uintptr_t)memheap_addr, rkey);
+        status = ucp_put(e->ep(), &send_data[0], send_data.length(),
+                         (uintptr_t)memheap_addr, rkey);
         expected_data = send_data;
         std::fill(send_data.begin(), send_data.end(), 0);
         ASSERT_UCS_OK(status);
@@ -47,8 +47,8 @@ public:
 
         ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + max_size);
         reply_buffer.resize(max_size);
-        status = ucp_rma_get(e->ep(), &reply_buffer[0], reply_buffer.length(),
-                             (uintptr_t)memheap_addr, rkey);
+        status = ucp_get(e->ep(), &reply_buffer[0], reply_buffer.length(),
+                         (uintptr_t)memheap_addr, rkey);
         expected_data.clear();
         ASSERT_UCS_OK(status);
 
@@ -67,9 +67,9 @@ public:
         add  = (T)rand() * (T)rand();
 
         if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_rma_add32(e->ep(), add, (uintptr_t)memheap_addr, rkey);
+            status = ucp_atomic_add32(e->ep(), add, (uintptr_t)memheap_addr, rkey);
         } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_rma_add64(e->ep(), add, (uintptr_t)memheap_addr, rkey);
+            status = ucp_atomic_add64(e->ep(), add, (uintptr_t)memheap_addr, rkey);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
@@ -84,7 +84,7 @@ public:
     {
         /* Test that unaligned addresses generate error */
         ucs_status_t status;
-        status = ucp_rma_add64(e->ep(), 0, (uintptr_t)memheap_addr + 1, rkey);
+        status = ucp_atomic_add64(e->ep(), 0, (uintptr_t)memheap_addr + 1, rkey);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
         expected_data.clear();
     }
@@ -100,11 +100,11 @@ public:
         add  = (T)rand() * (T)rand();
 
         if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_rma_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                    (uint32_t*)(void*)&result);
+            status = ucp_atomic_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
+                                       (uint32_t*)(void*)&result);
         } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_rma_fadd64(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                    (uint64_t*)(void*)&result);
+            status = ucp_atomic_fadd64(e->ep(), add, (uintptr_t)memheap_addr, rkey,
+                                       (uint64_t*)(void*)&result);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
@@ -127,11 +127,11 @@ public:
         swap = (T)rand() * (T)rand();
 
         if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_rma_swap32(e->ep(), swap, (uintptr_t)memheap_addr, rkey,
-                                    (uint32_t*)(void*)&result);
+            status = ucp_atomic_swap32(e->ep(), swap, (uintptr_t)memheap_addr,
+                                       rkey, (uint32_t*)(void*)&result);
         } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_rma_swap64(e->ep(), swap, (uintptr_t)memheap_addr, rkey,
-                                    (uint64_t*)(void*)&result);
+            status = ucp_atomic_swap64(e->ep(), swap, (uintptr_t)memheap_addr,
+                                       rkey, (uint64_t*)(void*)&result);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
@@ -159,13 +159,13 @@ public:
         swap = (T)rand() * (T)rand();
 
         if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_rma_cswap32(e->ep(), compare, swap,
-                                     (uintptr_t)memheap_addr, rkey,
-                                     (uint32_t*)(void*)&result);
+            status = ucp_atomic_cswap32(e->ep(), compare, swap,
+                                        (uintptr_t)memheap_addr, rkey,
+                                        (uint32_t*)(void*)&result);
         } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_rma_cswap64(e->ep(), compare, swap,
-                                     (uintptr_t)memheap_addr, rkey,
-                                     (uint64_t*)(void*)&result);
+            status = ucp_atomic_cswap64(e->ep(), compare, swap,
+                                        (uintptr_t)memheap_addr, rkey,
+                                        (uint64_t*)(void*)&result);
         } else {
             status = UCS_ERR_UNSUPPORTED;
         }
@@ -243,7 +243,7 @@ protected:
             (this->*send)(pe0, size, (void*)((uintptr_t)memheap + offset),
                           rkey, expected_data);
 
-            status = ucp_rma_flush(pe0->worker());
+            status = ucp_flush(pe0->worker());
             ASSERT_UCS_OK(status);
 
             EXPECT_EQ(expected_data,
@@ -252,7 +252,7 @@ protected:
 
         ucp_rkey_destroy(rkey);
 
-        status = ucp_rma_flush(pe1->worker());
+        status = ucp_flush(pe1->worker());
         ASSERT_UCS_OK(status);
 
         pe0->disconnect();

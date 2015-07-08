@@ -890,7 +890,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err;
     }
 
-    status = ucp_init(config, 0, &perf->ucp.context);
+    status = ucp_init(0, 0, config, &perf->ucp.context);
     ucp_config_release(config);
     if (status != UCS_OK) {
         goto err;
