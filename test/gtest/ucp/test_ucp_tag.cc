@@ -33,6 +33,10 @@ protected:
         ucp_test::cleanup();
     }
 
+    virtual unsigned features() const {
+        return UCP_FEATURE_TAG;
+    }
+
 public:
     int    count;
     entity *sender, *receiver;

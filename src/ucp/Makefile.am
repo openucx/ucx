@@ -14,8 +14,8 @@ libucp_la_LIBADD   = ../ucs/libucs.la ../uct/libuct.la
 libucp_ladir       = $(includedir)/ucp
 
 nobase_dist_libucp_la_HEADERS = \
-    api/ucp_def.h \
-    api/ucp.h
+	api/ucp_def.h \
+	api/ucp.h
 
 noinst_HEADERS = \
 	proto/ucp_int.h
@@ -23,9 +23,9 @@ noinst_HEADERS = \
 libucp_la_SOURCES = \
 	proto/ucp_atomic.c \
 	proto/ucp_context.c \
-    proto/ucp_ep.c \
-    proto/ucp_mm.c \
-    proto/ucp_rma.c \
-    proto/ucp_tag.c \
-    proto/ucp_wireup.c \
+	proto/ucp_ep.c \
+	proto/ucp_mm.c \
+	proto/ucp_rma.c \
+	proto/ucp_tag.c \
+	proto/ucp_wireup.c \
 	proto/ucp_worker.c

@@ -60,10 +60,14 @@ gtest_SOURCES = \
 	uct/test_uct_perf.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
-	ucp/ucp_test.cc \
-	ucp/test_ucp_basic.cc \
+	\
+	ucp/test_ucp_atomic.cc \
+	ucp/test_ucp_memheap.cc \
+	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_tag.cc \
+	ucp/ucp_test.cc \
+	\
 	ucs/test_async.cc \
 	ucs/test_class.cc \
 	ucs/test_component.cc \
@@ -95,6 +99,8 @@ noinst_HEADERS = \
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
+	\
+	ucp/test_ucp_memheap.h \
 	ucp/ucp_test.h
 
 .PHONY: test test gdb valgrind fix_rpath ucx

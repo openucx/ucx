@@ -562,16 +562,18 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     free(perf->uct.peers);
 }
 
-static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params)
+static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
+                                               unsigned *features)
 {
     ucs_status_t status;
 
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
-        break;
     case UCX_PERF_CMD_GET:
+        *features = UCP_FEATURE_RMA;
         break;
     case UCX_PERF_CMD_TAG:
+        *features = UCP_FEATURE_TAG;
         break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -879,8 +881,9 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 {
     ucp_config_t *config;
     ucs_status_t status;
+    unsigned features;
 
-    status = ucp_perf_test_check_params(params);
+    status = ucp_perf_test_check_params(params, &features);
     if (status != UCS_OK) {
         goto err;
     }

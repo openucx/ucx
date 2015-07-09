@@ -86,6 +86,7 @@ uct_iface_ops_t uct_sysv_iface_ops = {
     .ep_atomic_fadd32    = uct_mm_ep_atomic_fadd32,
     .ep_atomic_cswap32   = uct_mm_ep_atomic_cswap32,
     .ep_atomic_swap32    = uct_mm_ep_atomic_swap32,
+    .ep_flush            = (void*)ucs_empty_function_return_success,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_sysv_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_sysv_ep_t),
 };

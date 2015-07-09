@@ -144,6 +144,10 @@ ucs_status_t ucp_tag_init(ucp_context_h context)
 {
     ucs_status_t status;
 
+    if (!(context->config.features & UCP_FEATURE_TAG)) {
+        return UCS_OK;
+    }
+
     status = ucs_mpool_create("ucp_recv_req",  sizeof(ucp_recv_request_t),
                               0, UCS_SYS_CACHE_LINE_SIZE,
                               10000, -1,
@@ -157,12 +161,20 @@ ucs_status_t ucp_tag_init(ucp_context_h context)
 
 void ucp_tag_cleanup(ucp_context_h context)
 {
+    if (!(context->config.features & UCP_FEATURE_TAG)) {
+        return;
+    }
+
     ucs_mpool_destroy(context->tag.rreq_mp);
 }
 
 ucs_status_t ucp_tag_set_am_handlers(ucp_worker_h worker, uct_iface_h iface)
 {
     ucs_status_t status;
+
+    if (!(worker->context->config.features & UCP_FEATURE_TAG)) {
+        return UCS_OK;
+    }
 
     status = uct_iface_set_am_handler(iface, UCP_AM_ID_EAGER_ONLY,
                                       ucp_tag_eager_am_handler, worker->context);

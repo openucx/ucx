@@ -73,17 +73,23 @@ typedef struct ucp_context {
     ucp_rsc_index_t         num_tls;      /* Number of resources in the array*/
 
     struct {
-        ucs_mpool_h         rreq_mp;       /* Receive requests */
+        ucs_mpool_h         rreq_mp;      /* Receive requests */
         ucs_queue_head_t    expected;
         ucs_queue_head_t    unexpected;
     } tag;
 
     struct {
 
+        /* Bitmap of features supported by the context */
+        unsigned            features;
+
         /* Array of allocation methods, a mix of PD allocation methods and non-PD */
         struct {
-            uct_alloc_method_t method;     /* Allocation method */
-            char               pdc_name[UCT_PD_COMPONENT_NAME_MAX]; /* PD name to use, if method is PD */
+            /* Allocation method */
+            uct_alloc_method_t method;
+
+            /* PD name to use, if method is PD */
+            char               pdc_name[UCT_PD_COMPONENT_NAME_MAX];
         } *alloc_methods;
         unsigned            num_alloc_methods;
 
@@ -223,7 +229,8 @@ typedef struct ucp_wireup_msg {
 /**
  * Calculates a score of specific wireup.
  */
-typedef double (*ucp_wireup_score_function_t)(uct_tl_resource_desc_t *resource,
+typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
+                                              uct_tl_resource_desc_t *resource,
                                               uct_iface_h iface,
                                               uct_iface_attr_t *iface_attr);
 

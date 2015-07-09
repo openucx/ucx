@@ -18,9 +18,9 @@
  * @brief UCP features
  */
 enum {
-    UCP_FEATURE_TAG = UCS_BIT(1),
-    UCP_FEATURE_RMA = UCS_BIT(2),
-    UCP_FEATURE_AMO = UCS_BIT(3)
+    UCP_FEATURE_TAG = UCS_BIT(1),  /* Request tag matching support */
+    UCP_FEATURE_RMA = UCS_BIT(2),  /* Request remote memory access support */
+    UCP_FEATURE_AMO = UCS_BIT(3)   /* Request atomic operations support */
 };
 
 
