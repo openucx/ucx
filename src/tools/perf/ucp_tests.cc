@@ -129,6 +129,9 @@ public:
                 ++sn;
             }
         }
+
+        ucp_flush(m_perf.ucp.worker);
+        rte_call(&m_perf, barrier);
         return UCS_OK;
     }
 
@@ -173,6 +176,9 @@ public:
                 ++sn;
             }
         }
+
+        ucp_flush(m_perf.ucp.worker);
+        rte_call(&m_perf, barrier);
         return UCS_OK;
     }
 
