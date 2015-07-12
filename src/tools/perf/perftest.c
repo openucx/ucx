@@ -122,7 +122,19 @@ test_type_t tests[] = {
      "UCP put bandwidth"},
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "get latency / bandwidth / message rate"},
+     "UCP get latency / bandwidth / message rate"},
+
+    {"ucp_add", UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic add bandwidth / message rate"},
+
+    {"ucp_fadd", UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic fetch-and-add latency / bandwidth / message rate"},
+
+    {"ucp_swap", UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic swap latency / bandwidth / message rate"},
+
+    {"ucp_cswap", UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "UCP atomic compare-and-swap latency / bandwidth / message rate"},
 
     {NULL}
 };
@@ -298,7 +310,7 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("  Test options:\n");
     printf("     -t <test>      Test to run.\n");
     for (test = tests; test->name; ++test) {
-        printf("                   %10s : %s.\n", test->name, test->desc);
+        printf("                   %11s : %s.\n", test->name, test->desc);
     }
     printf("\n");
     printf("     -D <layout>    Data layout.\n");

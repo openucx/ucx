@@ -47,6 +47,8 @@ gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
 
 gtest_SOURCES = \
+	base/test_perf.cc \
+	\
 	uct/test_amo.cc \
 	uct/test_amo_add.cc \
 	uct/test_amo_cswap.cc \
@@ -64,6 +66,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_memheap.cc \
 	ucp/test_ucp_mmap.cc \
+	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_tag.cc \
 	ucp/ucp_test.cc \
@@ -96,6 +99,8 @@ endif
 endif
 
 noinst_HEADERS = \
+	base/test_perf.h \
+	\
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
