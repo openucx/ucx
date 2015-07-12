@@ -25,13 +25,17 @@ static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface, const struct sock
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
-    self->dest_addr = *(const uct_sockaddr_ib_t*)addr;
+    self->dest_addr  = *(const uct_sockaddr_ib_t*)addr;
+    self->notify.cb = NULL;
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cm_ep_t)
 {
     ucs_trace_func("");
+    if (self->notify.cb != NULL) {
+        ucs_list_del(&self->notify.list);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_cm_ep_t, uct_base_ep_t);
@@ -235,9 +239,11 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, ucs_callback_t *cb)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
+    uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
 
-    ucs_assert(iface->notify_cb == NULL);
-    iface->notify_cb = cb;
+    ucs_assert_always(ep->notify.cb == NULL);
+    ep->notify.cb = cb;
+    ucs_list_add_tail(&iface->notify_list, &ep->notify.list);
     return UCS_OK;
 }
 

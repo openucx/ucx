@@ -37,9 +37,14 @@ static uct_iface_ops_t uct_cm_iface_ops;
 
 static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 {
-    if ((iface->inflight == 0) && (iface->notify_cb != NULL)) {
-        ucs_invoke_callback(iface->notify_cb);
-        iface->notify_cb = NULL;
+    ucs_callback_t *cb;
+    uct_cm_ep_t *ep;
+
+    while ((iface->inflight == 0) && !ucs_list_is_empty(&iface->notify_list)) {
+        ep = ucs_list_extract_head(&iface->notify_list, uct_cm_ep_t, notify.list);
+        cb = ep->notify.cb;
+        ep->notify.cb = NULL;
+        ucs_invoke_callback(cb);
     }
 }
 
@@ -186,9 +191,9 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
     self->service_id         = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
                                             (~IB_CM_ASSIGN_SERVICE_ID_MASK));
     self->inflight           = 0;
-    self->notify_cb          = NULL;
     self->config.timeout_ms  = (int)(config->timeout * 1e3 + 0.5);
     self->config.retry_count = ucs_min(config->retry_count, UINT8_MAX);
+    ucs_list_head_init(&self->notify_list);
 
     self->cmdev = ib_cm_open_device(uct_ib_iface_device(&self->super)->ibv_context);
     if (self->cmdev == NULL) {

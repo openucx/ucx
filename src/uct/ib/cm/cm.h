@@ -35,7 +35,7 @@ typedef struct uct_cm_iface {
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
     volatile uint32_t      inflight;    /* Atomic: number of inflight sends */
-    ucs_callback_t         *notify_cb;
+    ucs_list_link_t        notify_list;
 
     struct {
         int                timeout_ms;
@@ -50,6 +50,10 @@ typedef struct uct_cm_iface {
 typedef struct uct_cm_ep {
     uct_base_ep_t          super;
     uct_sockaddr_ib_t      dest_addr;
+    struct {
+        ucs_callback_t     *cb;
+        ucs_list_link_t    list;
+    } notify;
 } uct_cm_ep_t;
 
 
