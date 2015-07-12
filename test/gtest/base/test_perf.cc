@@ -185,7 +185,7 @@ void* test_perf::thread_func(void *arg)
     return result;
 }
 
-test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
+test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,
                                                      const std::string &tl_name,
                                                      const std::string &dev_name,
                                                      const std::vector<int> &cpus)
@@ -198,7 +198,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
     params.test_type       = test.test_type;
     params.thread_mode     = UCS_THREAD_MODE_SINGLE;
     params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
-    params.flags           = 0;
+    params.flags           = flags;
     params.message_size    = test.msglen;
     params.am_hdr_size     = 8;
     params.alignment       = ucs_get_page_size();
@@ -253,7 +253,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test,
     return result;
 }
 
-void test_perf::run_test(const test_spec& test, double min, double max,
+void test_perf::run_test(const test_spec& test, unsigned flags, double min, double max,
                          const std::string &tl_name, const std::string &dev_name)
 {
     if (ucs::test_time_multiplier() > 1) {
@@ -268,7 +268,7 @@ void test_perf::run_test(const test_spec& test, double min, double max,
     cpus.resize(2);
 
     char result_str[200] = {0};
-    test_result result = run_multi_threaded(test, tl_name, dev_name, cpus);
+    test_result result = run_multi_threaded(test, flags, tl_name, dev_name, cpus);
     if ((result.status == UCS_ERR_UNSUPPORTED) ||
         (result.status == UCS_ERR_UNREACHABLE))
     {

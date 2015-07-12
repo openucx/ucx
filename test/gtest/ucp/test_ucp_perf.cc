@@ -29,7 +29,7 @@ test_perf::test_spec test_ucp_perf::tests[] =
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCT_PERF_DATA_LAYOUT_LAST, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 5.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
 
   { "put rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
@@ -39,37 +39,37 @@ test_perf::test_spec test_ucp_perf::tests[] =
   { "put bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_LAST, 2048, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 25000.0 },
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0 },
 
   { "get latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_LAST, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 10.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
 
   { "get bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_LAST, 16384, 1, 10000l,
-    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 25000.0 },
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0 },
 
   { "atomic add rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-    UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 2000000l,
+    UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 1000000l,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.5, 100.0 },
 
   { "atomic fadd latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 10.5 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
 
   { "atomic swap latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 10.5 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
 
   { "atomic cswap latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 10.5 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
 
   { NULL }
 };
@@ -78,6 +78,6 @@ test_perf::test_spec test_ucp_perf::tests[] =
 UCS_TEST_F(test_ucp_perf, envelope) {
     /* Run all tests */
     for (test_spec *test = tests; test->title != NULL; ++test) {
-        run_test(*test, test->min, test->max, "", "");
+        run_test(*test, UCX_PERF_TEST_FLAG_ONE_SIDED, test->min, test->max, "", "");
     }
 }

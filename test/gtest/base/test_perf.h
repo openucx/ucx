@@ -34,7 +34,7 @@ protected:
 
     static std::vector<int> get_affinity();
 
-    void run_test(const test_spec& test, double min, double max,
+    void run_test(const test_spec& test, unsigned flags, double min, double max,
                   const std::string &tl_name, const std::string &dev_name);
 
 private:
@@ -101,7 +101,7 @@ private:
 
     static void* thread_func(void *arg);
 
-    test_result run_multi_threaded(const test_spec &test,
+    test_result run_multi_threaded(const test_spec &test, unsigned flags,
                                    const std::string &tl_name,
                                    const std::string &dev_name,
                                    const std::vector<int> &cpus);

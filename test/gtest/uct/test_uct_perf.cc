@@ -121,7 +121,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
             min = 0;
             max = INT_MAX;
         }
-        run_test(*test, min, max, GetParam()->tl_name, GetParam()->dev_name);
+        run_test(*test, 0, min, max, GetParam()->tl_name, GetParam()->dev_name);
     }
 }
 

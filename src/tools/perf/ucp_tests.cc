@@ -141,6 +141,8 @@ public:
 
         ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
 
+        *((volatile uint8_t*)m_perf.recv_buffer + m_perf.params.message_size - 1) = -1;
+
         rte_call(&m_perf, barrier);
 
         my_index = rte_call(&m_perf, group_index);
