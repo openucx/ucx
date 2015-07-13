@@ -10,7 +10,10 @@
 #include <ucp/api/ucp_def.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
-#include <ucs/datastruct/queue.h> /* TODO remove, needed for req priv */
+#include <ucs/datastruct/queue_types.h>
+#include <ucs/config/types.h>
+#include <ucs/sys/math.h>
+#include <stdio.h>
 
 
 /**

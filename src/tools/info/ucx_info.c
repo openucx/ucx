@@ -7,6 +7,7 @@
 
 #include "ucx_info.h"
 
+#include <ucs/config/parser.c>
 #include <getopt.h>
 
 

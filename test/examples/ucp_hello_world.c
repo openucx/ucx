@@ -6,7 +6,7 @@
 */
 
 #define HAVE_CONFIG_H
-#include <ucp/api/ucp.h>
+#include <uct/api/uct.h>
 #include <stdio.h>
 
 int main(int argc, char **argv)

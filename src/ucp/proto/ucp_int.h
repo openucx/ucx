@@ -261,7 +261,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_EP_HASH_SIZE, ucp_ep_hash
         if (ENABLE_PARAMS_CHECK && \
             !((_rkey)->pd_map & UCS_BIT((_ep)->uct.dst_pd_index))) \
         { \
-            ucs_error("Remote key does not support current transport " \
+            ucs_fatal("Remote key does not support current transport " \
                        "(remote pd index: %d rkey map: 0x%"PRIx64")", \
                        (_ep)->uct.dst_pd_index, (_rkey)->pd_map); \
             return UCS_ERR_UNREACHABLE; \
