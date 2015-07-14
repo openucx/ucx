@@ -70,7 +70,6 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             }
 
             uct_release_tl_resource_list(tl_resources);
-
             uct_pd_close(pd);
         }
 
@@ -164,7 +163,11 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
 
 void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
                                 const uct_rkey_bundle_t& rkey) const {
-    uct_rkey_release(&rkey);
+    ucs_status_t status;
+
+    status = uct_rkey_release(&rkey);
+    ASSERT_UCS_OK(status);
+
     uct_iface_mem_free(mem);
 }
 

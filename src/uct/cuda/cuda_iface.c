@@ -128,10 +128,11 @@ static ucs_status_t uct_cuda_query_tl_resources(uct_pd_h pd,
     return UCS_OK;
 }
 
-UCT_TL_COMPONENT_DEFINE(&uct_cuda_pd, uct_cuda_tl,
+UCT_TL_COMPONENT_DEFINE(uct_cuda_tl,
                         uct_cuda_query_tl_resources,
                         uct_cuda_iface_t,
                         UCT_CUDA_TL_NAME,
                         "CUDA_",
                         uct_cuda_iface_config_table,
                         uct_cuda_iface_config_t);
+UCT_PD_REGISTER_TL(&uct_cuda_pd, &uct_cuda_tl);

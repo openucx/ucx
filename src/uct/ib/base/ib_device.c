@@ -185,7 +185,8 @@ static ucs_status_t uct_ib_mkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(const void *rkey_buffer, uct_rkey_t *rkey_p,
+static ucs_status_t uct_ib_rkey_unpack(uct_pd_component_t *pdc,
+                                       const void *rkey_buffer, uct_rkey_t *rkey_p,
                                        void **handle_p)
 {
     uint32_t ib_rkey = *(const uint32_t*)rkey_buffer;
@@ -720,6 +721,6 @@ out:
 }
 
 UCT_PD_COMPONENT_DEFINE(uct_ib_pd, UCT_IB_PD_PREFIX,
-                        uct_ib_query_pd_resources, uct_ib_pd_open,
+                        uct_ib_query_pd_resources, uct_ib_pd_open, NULL,
                         sizeof(uint32_t), uct_ib_rkey_unpack,
-                        (void*)ucs_empty_function /* release */)
+                        (void*)ucs_empty_function_return_success /* release */)

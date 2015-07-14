@@ -46,7 +46,7 @@ protected:
     };
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction);
-    void test_xfer_multi(send_func_t send, ssize_t min_length, ssize_t max_length,
+    void test_xfer_multi(send_func_t send, size_t min_length, size_t max_length,
                          direction_t direction);
     void blocking_send(send_func_t send, uct_ep_h ep, const mapped_buffer &sendbuf,
                        const mapped_buffer &recvbuf);

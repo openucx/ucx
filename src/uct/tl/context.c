@@ -119,13 +119,16 @@ ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
     uct_tl_resource_desc_t *resources, *tl_resources, *tmp;
     unsigned i, num_resources, num_tl_resources;
     uct_pd_component_t *pdc = pd->component;
+    uct_pd_registered_tl_t *tlr;
     uct_tl_component_t *tlc;
     ucs_status_t status;
 
     resources     = NULL;
     num_resources = 0;
 
-    ucs_list_for_each(tlc, &pdc->tl_list, list) {
+    ucs_list_for_each(tlr, &pdc->tl_list, list) {
+        tlc = tlr->tl;
+
         status = tlc->query_resources(pd, &tl_resources, &num_tl_resources);
         if (status != UCS_OK) {
             ucs_debug("Failed to query %s resources: %s", tlc->name,
@@ -212,11 +215,11 @@ UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_
 static uct_tl_component_t *uct_find_tl_on_pd(uct_pd_component_t *pdc,
                                              const char *tl_name)
 {
-    uct_tl_component_t *tlc;
+    uct_pd_registered_tl_t *tlr;
 
-    ucs_list_for_each(tlc, &pdc->tl_list, list) {
-        if (!strcmp(tl_name, tlc->name)) {
-            return tlc;
+    ucs_list_for_each(tlr, &pdc->tl_list, list) {
+        if (!strcmp(tl_name, tlr->tl->name)) {
+            return tlr->tl;
         }
     }
     return NULL;
@@ -333,7 +336,7 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
 
     ucs_list_for_each(pdc, &uct_pd_components_list, list) {
         if (!strncmp(rkey_buffer, pdc->name, UCT_PD_COMPONENT_NAME_MAX)) {
-            status = pdc->rkey_unpack(rkey_buffer + UCT_PD_COMPONENT_NAME_MAX,
+            status = pdc->rkey_unpack(pdc, rkey_buffer + UCT_PD_COMPONENT_NAME_MAX,
                                       &rkey_ob->rkey, &rkey_ob->handle);
             if (status == UCS_OK) {
                 rkey_ob->type = pdc;
@@ -348,10 +351,10 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
     return UCS_ERR_UNSUPPORTED;
 }
 
-void uct_rkey_release(const uct_rkey_bundle_t *rkey_ob)
+ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob)
 {
     uct_pd_component_t *pdc = rkey_ob->type;
-    pdc->rkey_release(rkey_ob->rkey, rkey_ob->handle);
+    return pdc->rkey_release(pdc, rkey_ob->rkey, rkey_ob->handle);
 }
 
 ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)

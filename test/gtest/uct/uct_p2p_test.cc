@@ -177,11 +177,15 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     }
 }
 
-void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
-                                   ssize_t max_length, direction_t direction) {
+void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
+                                   size_t max_length, direction_t direction) {
 
+    /* Trim at 4GB */
+    max_length = ucs_min(max_length, 4ull * 1124 * 1024 * 1024);
+
+    /* For large size, slow down if needed */
     if (max_length > 1 * 1024 * 1024) {
-        max_length /= ucs::test_time_multiplier();
+        max_length = max_length / ucs::test_time_multiplier();
     }
 
     if (max_length <= min_length) {
@@ -220,8 +224,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, ssize_t min_length,
 
     for (int i = 0; i < repeat_count; ++i) {
         double exp = (rand() * (log_max - log_min)) / RAND_MAX + log_min;
-        ssize_t length = (ssize_t)pow(2.0, exp);
-        ucs_assert(length > min_length && length < max_length);
+        size_t length = (ssize_t)pow(2.0, exp);
+        ucs_assert(length >= min_length && length <= max_length);
         test_xfer(send, length, direction);
     }
 

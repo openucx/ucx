@@ -392,10 +392,11 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_pd_h pd,
                                             resources_p, num_resources_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(&uct_ib_pd, uct_rc_mlx5_tl,
+UCT_TL_COMPONENT_DEFINE(uct_rc_mlx5_tl,
                         uct_rc_mlx5_query_resources,
                         uct_rc_mlx5_iface_t,
                         "rc_mlx5",
                         "RC_MLX5_",
                         uct_rc_mlx5_iface_config_table,
                         uct_rc_mlx5_iface_config_t);
+UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_rc_mlx5_tl);
