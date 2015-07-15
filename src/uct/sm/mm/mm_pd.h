@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * $COPYRIGHT$
 * $HEADER$
@@ -68,7 +69,7 @@ typedef struct uct_mm_mapper_ops {
         }; \
         static uct_pd_t pd = { \
             .ops          = &pd_ops, \
-            .component    = &uct_sysv_pd \
+            .component    = &_var \
         }; \
         \
         *pd_p = &pd; \
