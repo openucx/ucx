@@ -324,10 +324,11 @@ static ucs_status_t uct_cm_query_resources(uct_pd_h pd,
                                             resources_p, num_resources_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(&uct_ib_pd, uct_cm_tl,
+UCT_TL_COMPONENT_DEFINE(uct_cm_tl,
                         uct_cm_query_resources,
                         uct_cm_iface_t,
                         "cm",
                         "CM_",
                         uct_cm_iface_config_table,
                         uct_cm_iface_config_t);
+UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_cm_tl);

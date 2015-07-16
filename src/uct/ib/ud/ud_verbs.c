@@ -579,10 +579,11 @@ static ucs_status_t uct_ud_verbs_query_resources(uct_pd_h pd,
                                             resources_p, num_resources_p);
 }
 
-UCT_TL_COMPONENT_DEFINE(&uct_ib_pd, uct_ud_verbs_tl,
+UCT_TL_COMPONENT_DEFINE(uct_ud_verbs_tl,
                         uct_ud_verbs_query_resources,
                         uct_ud_verbs_iface_t,
                         "ud",
                         "UD_VERBS_",
                         uct_ud_iface_config_table,
                         uct_ud_iface_config_t);
+UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_ud_verbs_tl);

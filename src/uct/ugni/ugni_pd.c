@@ -16,17 +16,6 @@
 static ucs_status_t uct_ugni_query_pd_resources(uct_pd_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p);
 static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p);
-static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer,
-                                         uct_rkey_t *rkey_p, void **handle_p);
-static void uct_ugni_rkey_release(uct_rkey_t rkey, void *handle);
-
-UCT_PD_COMPONENT_DEFINE(uct_ugni_pd_component,
-                        UCT_UGNI_TL_NAME,
-                        uct_ugni_query_pd_resources,
-                        uct_ugni_pd_open,
-                        (3 * sizeof(uint64_t)),
-                        uct_ugni_rkey_unpack,
-                        uct_ugni_rkey_release)
 
 UCS_CONFIG_DEFINE_ARRAY(ugni_alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
@@ -158,13 +147,15 @@ static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static void uct_ugni_rkey_release(uct_rkey_t rkey, void *handle)
+static ucs_status_t uct_ugni_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey,
+                                          void *handle)
 {
     ucs_assert(NULL == handle);
     ucs_free((void *)rkey);
+    return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_rkey_unpack(const void *rkey_buffer,
+static ucs_status_t uct_ugni_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;
@@ -358,3 +349,12 @@ uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name)
     ucs_error("Cannot find: %s", dev_name);
     return NULL;
 }
+
+UCT_PD_COMPONENT_DEFINE(uct_ugni_pd_component,
+                        UCT_UGNI_TL_NAME,
+                        uct_ugni_query_pd_resources,
+                        uct_ugni_pd_open,
+                        NULL,
+                        (3 * sizeof(uint64_t)),
+                        uct_ugni_rkey_unpack,
+                        uct_ugni_rkey_release)

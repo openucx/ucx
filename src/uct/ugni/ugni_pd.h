@@ -9,6 +9,9 @@
 
 #include "ugni_device.h"
 
+#include <uct/tl/context.h>
+
+
 #define UCT_UGNI_MAX_DEVICES (2)
 
 /**

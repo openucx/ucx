@@ -8,9 +8,8 @@
 #ifndef TL_BASE_H_
 #define TL_BASE_H_
 
-
 #include <uct/api/uct.h>
-#include <uct/tl/context.h>
+#include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
@@ -153,22 +152,23 @@ typedef struct uct_tl_component {
     const char             *cfg_prefix;         /**< Prefix for configuration environment vars */
     ucs_config_field_t     *iface_config_table; /**< Defines transport configuration options */
     size_t                 iface_config_size;   /**< Transport configuration structure size */
-    ucs_list_link_t        list;
 } uct_tl_component_t;
 
-#define UCT_TL_COMPONENT_DEFINE(_pdc, _tlc, _query, _iface_struct, _name, \
+
+/**
+ * Define a transport component.
+ */
+#define UCT_TL_COMPONENT_DEFINE(_tlc, _query, _iface_struct, _name, \
                                 _cfg_prefix, _cfg_table, _cfg_struct) \
     \
-    static uct_tl_component_t _tlc = { \
+    uct_tl_component_t _tlc = { \
         .query_resources     = _query, \
         .iface_open          = UCS_CLASS_NEW_FUNC_NAME(_iface_struct), \
         .name                = _name, \
         .cfg_prefix          = _cfg_prefix, \
         .iface_config_table  = _cfg_table, \
         .iface_config_size   = sizeof(_cfg_struct) \
-    }; \
-    UCS_STATIC_INIT { ucs_list_add_tail(&(_pdc)->tl_list, &_tlc.list); }
-
+    };
 
 
 /**

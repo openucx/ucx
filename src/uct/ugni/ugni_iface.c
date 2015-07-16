@@ -318,14 +318,14 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
                           const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_iface_t, uct_iface_t);
 
-UCT_TL_COMPONENT_DEFINE(&uct_ugni_pd_component,
-                        uct_ugni_tl_component,
+UCT_TL_COMPONENT_DEFINE(uct_ugni_tl_component,
                         uct_ugni_query_tl_resources,
                         uct_ugni_iface_t,
                         UCT_UGNI_TL_NAME,
                         "UGNI_",
                         uct_ugni_iface_config_table,
                         uct_ugni_iface_config_t);
+UCT_PD_REGISTER_TL(&uct_ugni_pd_component, &uct_ugni_tl_component);
 
 static ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
                                                 uct_tl_resource_desc_t **resource_p,

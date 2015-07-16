@@ -139,18 +139,11 @@ endif
 # FIXME these should be done conditionally
 noinst_HEADERS += \
     sm/mm/mm_iface.h \
-    sm/mm/mm_ep.h
+    sm/mm/mm_ep.h \
+    sm/mm/mm_pd.h
 
 libuct_la_SOURCES += \
     sm/mm/mm_iface.c \
-    sm/mm/mm_ep.c
-
-noinst_HEADERS += \
-    sm/sysv/sysv_ep.h \
-    sm/sysv/sysv_iface.h \
-    sm/sysv/sysv_pd.h
-
-libuct_la_SOURCES += \
-    sm/sysv/sysv_ep.c \
-    sm/sysv/sysv_iface.c \
-    sm/sysv/sysv_pd.c
+    sm/mm/mm_ep.c \
+    sm/mm/mm_pd.c \
+    sm/mm/mm_sysv.c

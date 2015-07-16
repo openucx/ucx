@@ -755,7 +755,7 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
  *
  * @param [in]  rkey_ob      Remote key to release.
  */
-void uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
+ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
 
 
 /**
