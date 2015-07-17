@@ -14,7 +14,8 @@
 
 
 typedef struct uct_cma_ep {
-    uct_base_ep_t      super;
+    uct_base_ep_t super;
+    pid_t         remote_pid;
 } uct_cma_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, uct_iface_t*,

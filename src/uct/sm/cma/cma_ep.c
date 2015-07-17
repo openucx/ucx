@@ -16,6 +16,7 @@ static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, uct_iface_t *tl_iface,
 {
     uct_cma_iface_t *iface = ucs_derived_of(tl_iface, uct_cma_iface_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    self->remote_pid = (pid_t)(((uct_sockaddr_process_t*)addr)->cookie);
     return UCS_OK;
 }
 
@@ -39,12 +40,13 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t len
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     size_t delivered;
+    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
     struct iovec local_iov  = {.iov_base = (void *)buffer,
                                .iov_len = length};
     struct iovec remote_iov = {.iov_base = (void *)remote_addr,
                                .iov_len = length};
 
-    delivered = process_vm_writev((pid_t)rkey, &local_iov, 1, &remote_iov, 1, 0);
+    delivered = process_vm_writev(ep->remote_pid, &local_iov, 1, &remote_iov, 1, 0);
     if (ucs_unlikely(delivered != length)) {
         ucs_error("process_vm_writev delivered %zu instead of %zu",
                 delivered, length);
@@ -60,11 +62,12 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     size_t delivered;
+    uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
     struct iovec local_iov  = {.iov_base = (void *)buffer,
                                .iov_len = length};
     struct iovec remote_iov = {.iov_base = (void *)remote_addr,
                                .iov_len = length};
-    delivered = process_vm_readv((pid_t)rkey, &local_iov, 1, &remote_iov, 1, 0);
+    delivered = process_vm_readv(ep->remote_pid, &local_iov, 1, &remote_iov, 1, 0);
     if (ucs_unlikely(delivered != length)) {
         ucs_error("process_vm_read delivered %zu instead of %zu",
                 delivered, length);
