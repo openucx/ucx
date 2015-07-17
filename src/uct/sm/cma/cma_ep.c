@@ -39,7 +39,7 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t len
                                    uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
-    size_t delivered;
+    ssize_t delivered;
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
     struct iovec local_iov  = {.iov_base = (void *)buffer,
                                .iov_len = length};
@@ -61,7 +61,7 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                    uct_mem_h memh, uint64_t remote_addr,        
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
-    size_t delivered;
+    ssize_t delivered;
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
     struct iovec local_iov  = {.iov_base = (void *)buffer,
                                .iov_len = length};

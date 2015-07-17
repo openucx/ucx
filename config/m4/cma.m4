@@ -11,13 +11,14 @@ AC_ARG_ENABLE([cma],
                               [enable_cma=yes])
 
 AS_IF([test "x$enable_cma" != xno],
-      [AC_CHECK_FUNC(process_vm_readv,
-                    [cma_happy="yes"],
-                    [cma_happy="no"])
-       AS_IF([test "x$cma_happy" == xyes],
+      [AC_CHECK_HEADERS([sys/uio.h],
+            [AC_CHECK_FUNC(process_vm_readv,
+                           [cma_happy="yes"],
+                           [cma_happy="no"])
+             AS_IF([test "x$cma_happy" == xyes],
              [AC_DEFINE([HAVE_CMA], 1, [CMA support])
-             transports="${transports},cma"
-             ], [])],
-      [])
+             transports="${transports},cma"],
+             [])], [])]
+[])
 
 AM_CONDITIONAL([HAVE_CMA], [test "x$cma_happy" != xno])

@@ -18,7 +18,7 @@
 #include <unistd.h>
 
 /*
- * Define a memory-mapper component for MM.
+ * Define a CMA component
  *
  * @param _var     Variable for PD component.
  * @param _name    String which is the component name.
