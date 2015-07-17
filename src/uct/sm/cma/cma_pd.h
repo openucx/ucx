@@ -38,8 +38,8 @@
         static uct_pd_ops_t pd_ops = { \
             .close        = (void*)ucs_empty_function, \
             .query        = uct_cma_pd_query, \
-            .mem_alloc    = (void*)ucs_empty_function, \
-            .mem_free     = (void*)ucs_empty_function, \
+            .mem_alloc    = (void*)ucs_empty_function_return_success, \
+            .mem_free     = (void*)ucs_empty_function_return_success, \
             .mkey_pack    = uct_cma_mkey_pack, \
             .mem_reg      = uct_cma_mem_reg, \
             .mem_dereg    = uct_cma_mem_dereg, \
