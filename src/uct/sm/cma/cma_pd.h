@@ -40,9 +40,9 @@
             .query        = uct_cma_pd_query, \
             .mem_alloc    = (void*)ucs_empty_function_return_success, \
             .mem_free     = (void*)ucs_empty_function_return_success, \
-            .mkey_pack    = uct_cma_mkey_pack, \
-            .mem_reg      = uct_cma_mem_reg, \
-            .mem_dereg    = uct_cma_mem_dereg, \
+            .mkey_pack    = (void*)ucs_empty_function_return_success, \
+            .mem_reg      = (void*)ucs_empty_function_return_success, \
+            .mem_dereg    = (void*)ucs_empty_function_return_success  \
         }; \
         static uct_pd_t pd = { \
             .ops          = &pd_ops, \
@@ -55,37 +55,9 @@
     \
     UCT_PD_COMPONENT_DEFINE(_var, _name, \
                             _var##_query_pd_resources, _var##_pd_open, _ops, \
-                            sizeof(uct_cma_packed_rkey_t), uct_cma_rkey_unpack, \
-                            uct_cma_rkey_release)
-
-
-/**
- * Local memory segment structure.
- */
-typedef struct uct_cma_seg {
-    pid_t      cma_id;         /* Shared memory ID */
-} uct_cma_seg_t;
-
-
-/**
- * Packed remote key
- */
-typedef struct uct_cma_packed_rkey {
-    pid_t     cma_id;       /* PID */
-} uct_cma_packed_rkey_t;
+                            0, ucs_empty_function_return_success, \
+                            ucs_empty_function_return_success)
 
 ucs_status_t uct_cma_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
-
-ucs_status_t uct_cma_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
-
-ucs_status_t uct_cma_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer,
-                                uct_rkey_t *rkey_p, void **handle_p);
-
-ucs_status_t uct_cma_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey, void *handle);
-
-ucs_status_t uct_cma_mem_reg(uct_pd_h pd, void *address, size_t length,
-                                     uct_mem_h *memh_p);
-
-ucs_status_t uct_cma_mem_dereg(uct_pd_h pd, uct_mem_h memh);
 
 #endif
