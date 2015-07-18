@@ -17,9 +17,9 @@ typedef struct uct_mm_ep {
     uct_base_ep_t      super;
     struct uct_mm_ep *next;
 } uct_mm_ep_t;
-UCS_CLASS_DECLARE(uct_mm_ep_t, uct_mm_iface_t *)
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_mm_iface_t, uct_mm_iface_t*);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
+                           const struct sockaddr *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 
@@ -29,10 +29,6 @@ ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
                                  void *arg, size_t length, 
                                  uint64_t remote_addr, uct_rkey_t rkey);
-ucs_status_t uct_mm_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer,
-                                 size_t length, uct_mem_h memh, 
-                                 uint64_t remote_addr, uct_rkey_t rkey, 
-                                 uct_completion_t *comp);
 ucs_status_t uct_mm_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
@@ -63,7 +59,5 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
                                  void *arg, size_t length,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
-ucs_status_t uct_mm_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                 uct_mem_h memh, uint64_t remote_addr,
-                                 uct_rkey_t rkey, uct_completion_t *comp);
+
 #endif

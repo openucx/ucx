@@ -8,9 +8,11 @@
 #include "mm_ep.h"
 
 
-UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_mm_iface_t *mm_iface)
+static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
+                           const struct sockaddr *addr)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &mm_iface->super)
+    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
     return UCS_OK;
 }
 
@@ -20,30 +22,26 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_mm_iface_t, uct_mm_iface_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
+                          const struct sockaddr *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
+
+
+#define uct_mm_trace_data(_remote_addr, _rkey, _fmt, ...) \
+     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
+                    (_rkey))
 
 ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
                                  uct_rkey_t rkey)
 {
-    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
-
-    if (0 == length) {
-        ucs_trace_data("Zero length request: skip it");
-        return UCS_OK;
+    if (ucs_likely(length != 0)) {
+        memcpy((void *)(rkey + remote_addr), buffer, length);
+        uct_mm_trace_data(remote_addr, rkey, "PUT_SHORT [buffer %p size %u]",
+                          buffer, length);
+    } else {
+        ucs_trace_data("PUT_SHORT [zero-length]");
     }
-    /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length, iface->config.max_put, "put_short");
-
-    /* FIXME add debug/assertion to check remote_addr within attached region */
-
-    memcpy((void *)(rkey + remote_addr), buffer, length);
-
-    ucs_trace_data("Posting PUT Short, memcpy of size %u to %p",
-                    length,
-                    (void *)(remote_addr));
-
     return UCS_OK;
 }
 
@@ -51,51 +49,14 @@ ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                                  void *arg, size_t length, 
                                  uint64_t remote_addr, uct_rkey_t rkey)
 {
-    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
-    if (0 == length) {
-        ucs_trace_data("Zero length request: skip it");
-        return UCS_OK;
+    if (ucs_likely(length != 0)) {
+        pack_cb((void *)(rkey + remote_addr), arg, length);
+        uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
+    } else {
+        ucs_trace_data("PUT_BCOPY [zero-length]");
     }
-
-    /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length, iface->config.max_bcopy, "put_bcopy");
-
-    /* FIXME add debug/assertion to check remote_addr within attached region */
-
-    pack_cb((void *)(rkey + remote_addr), arg, length);
-
-    ucs_trace_data("Posting PUT BCOPY of size %zd to %p",
-                    length,
-                    (void *)(remote_addr));
-
     return UCS_OK;
 }
-
-ucs_status_t uct_mm_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer,
-                                 size_t length, uct_mem_h memh, 
-                                 uint64_t remote_addr, uct_rkey_t rkey, 
-                                 uct_completion_t *comp)
-{
-    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
-    if (0 == length) {
-        ucs_trace_data("Zero length request: skip it");
-        return UCS_OK;
-    }
-
-    /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length, iface->config.max_zcopy, "put_zcopy");
-
-    /* FIXME add debug/assertion to check remote_addr within attached region */
-
-    memcpy((void *)(rkey + remote_addr), buffer, length);
-
-    ucs_trace_data("Posting PUT ZCOPY of size %zd to %p",
-                    length,
-                    (void *)(remote_addr));
-
-    return UCS_OK;
-}
-
 
 ucs_status_t uct_mm_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length)
@@ -108,9 +69,7 @@ ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 {
     uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
     ucs_atomic_add64(ptr, add);
-    ucs_trace_data("Posting atomic_add64, value %"PRIx64" to %p",
-                    add,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey, "ATOMIC_ADD64 [add %"PRIu64"]", add);
     return UCS_OK;
 }
 
@@ -120,9 +79,9 @@ ucs_status_t uct_mm_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
 {
     uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
     *result = ucs_atomic_fadd64(ptr, add);
-    ucs_trace_data("Posting atomic_fadd64, value %"PRIx64" to %p",
-                    add,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey,
+                      "ATOMIC_FADD64 [add %"PRIu64" result %"PRIu64"]",
+                      add, *result);
     return UCS_OK;
 }
 
@@ -132,9 +91,9 @@ ucs_status_t uct_mm_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
 {
     uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
     *result = ucs_atomic_swap64(ptr, swap);
-    ucs_trace_data("Posting atomic_swap64, value %"PRIx64" to %p",
-                    swap,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey,
+                      "ATOMIC_SWAP64 [swap %"PRIu64" result %"PRIu64"]",
+                      swap, *result);
     return UCS_OK;
 }
 
@@ -145,9 +104,9 @@ ucs_status_t uct_mm_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
 {
     uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
     *result = ucs_atomic_cswap64(ptr, compare, swap);
-    ucs_trace_data("Posting atomic_cswap64, value %"PRIx64" to %p",
-                    swap,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey,
+                      "ATOMIC_CSWAP64 [compare %"PRIu64" swap %"PRIu64" result %"PRIu64"]",
+                      compare, swap, *result);
     return UCS_OK;
 }
 
@@ -156,9 +115,7 @@ ucs_status_t uct_mm_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
 {
     uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
     ucs_atomic_add32(ptr, add);
-    ucs_trace_data("Posting atomic_add32, value %"PRIx32" to %p",
-                    add,
-                    (void *)remote_addr);
+    uct_mm_trace_data(remote_addr, rkey, "ATOMIC_ADD32 [add %"PRIu32"]", add);
     return UCS_OK;
 }
 
@@ -168,9 +125,9 @@ ucs_status_t uct_mm_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
 {
     uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
     *result = ucs_atomic_fadd32(ptr, add);
-    ucs_trace_data("Posting atomic_fadd32, value %"PRIx32" to %p",
-                    add,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey,
+                      "ATOMIC_FADD32 [add %"PRIu32" result %"PRIu32"]",
+                      add, *result);
     return UCS_OK;
 }
 
@@ -180,9 +137,9 @@ ucs_status_t uct_mm_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
 {
     uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
     *result = ucs_atomic_swap32(ptr, swap);
-    ucs_trace_data("Posting atomic_swap32, value %"PRIx32" to %p",
-                    swap,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey,
+                      "ATOMIC_SWAP32 [swap %"PRIu32" result %"PRIu32"]",
+                      swap, *result);
     return UCS_OK;
 }
 
@@ -193,9 +150,9 @@ ucs_status_t uct_mm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
 {
     uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
     *result = ucs_atomic_cswap32(ptr, compare, swap);
-    ucs_trace_data("Posting atomic_cswap32, value %"PRIx32" to %p",
-                    swap,
-                    (void *)(remote_addr));
+    uct_mm_trace_data(remote_addr, rkey,
+                      "ATOMIC_CSWAP32 [compare %"PRIu32" swap %"PRIu32" result %"PRIu32"]",
+                      compare, swap, *result);
     return UCS_OK;
 }
 
@@ -204,46 +161,11 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp)
 {
-    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
-    if (0 == length) {
-        ucs_trace_data("Zero length request: skip it");
-        return UCS_OK;
+    if (ucs_likely(0 != length)) {
+        unpack_cb(arg, (void *)(rkey + remote_addr), length);
+        uct_mm_trace_data(remote_addr, rkey, "GET_BCOPY [length %zu]", length);
+    } else {
+        ucs_trace_data("GET_BCOPY [zero-length]");
     }
-
-    /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length, iface->config.max_bcopy, "get_bcopy");
-
-    /* FIXME add debug/assertion to check remote_addr within attached region */
-
-    unpack_cb(arg, (void *)(rkey + remote_addr), length);
-
-    ucs_trace_data("Posting GET BCOPY of size %zd to %p",
-                    length,
-                    (void *)(remote_addr));
-
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                 uct_mem_h memh, uint64_t remote_addr,
-                                 uct_rkey_t rkey, uct_completion_t *comp)
-{
-    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
-    if (0 == length) {
-        ucs_trace_data("Zero length request: skip it");
-        return UCS_OK;
-    }
-
-    /* FIXME make this user-configurable */
-    UCT_CHECK_LENGTH(length, iface->config.max_zcopy, "get_zcopy");
-
-    /* FIXME add debug/assertion to check remote_addr within attached region */
-
-    memcpy(buffer, (void *)(rkey + remote_addr), length);
-
-    ucs_trace_data("Posting GET ZCOPY of size %zd to %p",
-                    length,
-                    (void *)(remote_addr));
-
     return UCS_OK;
 }

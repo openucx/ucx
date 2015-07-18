@@ -8,10 +8,12 @@
 #ifndef UCT_UGNI_IFACE_H
 #define UCT_UGNI_IFACE_H
 
-#include <uct/tl/tl_base.h>
 #include "ugni_pd.h"
 #include "ugni_device.h"
 #include "ugni_ep.h"
+
+#include <uct/tl/tl_base.h>
+
 
 #define UCT_UGNI_HASH_SIZE   (256)
 #define UCT_UGNI_MAX_FMA     (2048)
@@ -23,7 +25,6 @@ struct uct_ugni_iface;
 typedef struct uct_ugni_iface {
     uct_base_iface_t        super;
     uct_ugni_device_t       *dev;
-    uct_pd_t                pd;
     gni_cdm_handle_t        cdm_handle;                  /**< Ugni communication domain */
     gni_nic_handle_t        nic_handle;                  /**< Ugni NIC handle */
     uint32_t                pe_address;                  /**< PE address for the NIC that this

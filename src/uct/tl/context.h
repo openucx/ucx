@@ -8,6 +8,8 @@
 #ifndef UCT_CONTEXT_H
 #define UCT_CONTEXT_H
 
+#include "tl_base.h"
+
 #include <uct/api/uct.h>
 #include <ucs/datastruct/notifier.h>
 #include <ucs/debug/memtrack.h>
@@ -15,22 +17,34 @@
 #include <ucs/config/parser.h>
 
 
-typedef struct uct_pd_component {
+typedef struct uct_pd_component uct_pd_component_t;
+struct uct_pd_component {
     ucs_status_t           (*query_resources)(uct_pd_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
     ucs_status_t           (*pd_open)(const char *pd_name, uct_pd_h *pd_p);
 
-    ucs_status_t           (*rkey_unpack)(const void *rkey_buffer,
+    ucs_status_t           (*rkey_unpack)(uct_pd_component_t *pdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
 
-    void                   (*rkey_release)(uct_rkey_t rkey, void *handle);
+    ucs_status_t           (*rkey_release)(uct_pd_component_t *pdc, uct_rkey_t rkey,
+                                           void *handle);
 
     const char             name[UCT_PD_COMPONENT_NAME_MAX];
+    void                   *priv;
     size_t                 rkey_buf_size;
-    ucs_list_link_t        tl_list;
+    ucs_list_link_t        tl_list;  /* List of uct_pd_registered_tl_t */
     ucs_list_link_t        list;
-} uct_pd_component_t;
+};
+
+
+/**
+ * PD->Transport
+ */
+typedef struct uct_pd_registered_tl {
+    ucs_list_link_t        list;
+    uct_tl_component_t     *tl;
+} uct_pd_registered_tl_t;
 
 
 /**
@@ -40,16 +54,18 @@ typedef struct uct_pd_component {
  * @param _name          PD component name.
  * @param _query         Function to query PD resources.
  * @param _open          Function to open a PD.
+ * @param _priv          Custom private data.
  * @param _rkey_buf_size Size of buffer needed for packed rkey.
  * @param _rkey_unpack   Function to unpack a remote key buffer to handle.
  * @param _rkey_release  Function to release a remote key handle.
  */
-#define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, \
+#define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, _priv, \
                                 _rkey_buf_size, _rkey_unpack, _rkey_release) \
     \
     uct_pd_component_t _pdc = { \
         .query_resources = _query, \
         .pd_open         = _open, \
+        .priv            = _priv, \
         .rkey_unpack     = _rkey_unpack, \
         .rkey_release    = _rkey_release, \
         .name            = _name, \
@@ -58,6 +74,21 @@ typedef struct uct_pd_component {
     }; \
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&uct_pd_components_list, &_pdc.list); \
+    }
+
+
+/**
+ * Add a transport component to a pd component
+ * (same transport component can be added to multiple pd components).
+ *
+ * @param _pdc           Pointer to PD component to add the TL component to.
+ * @param _tlc           Pointer to TL component.
+ */
+#define UCT_PD_REGISTER_TL(_pdc, _tlc) \
+    UCS_STATIC_INIT { \
+        static uct_pd_registered_tl_t reg; \
+        reg.tl = (_tlc); \
+        ucs_list_add_tail(&(_pdc)->tl_list, &reg.list); \
     }
 
 
