@@ -12,8 +12,7 @@
 #include <uct/api/addr.h>
 #include <uct/tl/context.h>
 
-UCT_CMA_COMPONENT_DEFINE(uct_cma_pd, "cma", NULL)
-UCT_PD_REGISTER_TL(&uct_cma_pd, &uct_cma_tl);
+UCT_PD_REGISTER_TL(&uct_cma_pd_component, &uct_cma_tl);
 
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"", "ALLOC=huge,mmap,heap", NULL,
