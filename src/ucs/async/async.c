@@ -78,12 +78,15 @@ static ucs_status_t ucs_async_dispatch_handler_cb(ucs_async_handler_t *handler,
 
     mode  = handler->mode;
     async = handler->async;
-    if ((async == NULL) || !from_async) {
+    if (async == NULL) {
         ucs_trace_async("calling async handler %d", handler->id);
         handler->cb(handler->arg);
-        if (!from_async) {
-            ucs_atomic_add32(&handler->miss_count, -1);
-        }
+    } else if (!from_async) {
+        ucs_trace_async("calling missed async handler %d", handler->id);
+        ucs_async_method_call(mode, block);
+        handler->missed = 0;
+        handler->cb(handler->arg);
+        ucs_async_method_call(mode, unblock);
     } else if (ucs_async_method_call(mode, context_try_block, async, from_async)) {
         ucs_trace_async("calling async handler %d", handler->id);
         handler->cb(handler->arg);
@@ -91,7 +94,7 @@ static ucs_status_t ucs_async_dispatch_handler_cb(ucs_async_handler_t *handler,
     } else /* async != NULL */ {
         ucs_assert(from_async);
         ucs_trace_async("missed %d", handler->id);
-        if (ucs_atomic_fadd32(&handler->miss_count, +1) == 0) {
+        if (ucs_atomic_cswap32(&handler->missed, 0, 1) == 0) {
             status = ucs_mpmc_queue_push(&async->missed, handler->id);
             if (status != UCS_OK) {
                 ucs_fatal("Failed to push to in async event queue: %s",
@@ -193,12 +196,12 @@ static ucs_status_t ucs_async_add_handler(ucs_async_mode_t mode, int id,
         goto err;
     }
 
-    handler->id         = id;
-    handler->mode       = mode;
-    handler->cb         = cb;
-    handler->arg        = arg;
-    handler->async      = async;
-    handler->miss_count = 0;
+    handler->id     = id;
+    handler->mode   = mode;
+    handler->cb     = cb;
+    handler->arg    = arg;
+    handler->async  = async;
+    handler->missed = 0;
     ucs_async_method_call(mode, block);
     status = ucs_hashed_ucs_async_handler_t_add(&ucs_async_global_context.handlers,
                                                 handler);

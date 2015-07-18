@@ -433,6 +433,39 @@ UCS_TEST_P(test_async, ctx_event_block) {
     EXPECT_EQ(1, le.count());
 }
 
+UCS_TEST_P(test_async, ctx_event_block_two_miss) {
+    local_event le(GetParam());
+
+    /* Step 1: While async is blocked, generate two events */
+
+    le.block();
+    le.push_event();
+    suspend_and_poll(&le);
+
+    le.push_event();
+    suspend_and_poll(&le);
+    EXPECT_EQ(0, le.count());
+    le.unblock();
+
+    /* Step 2: When checking missed events, should get at least one event */
+
+    le.check_miss();
+    EXPECT_GT(le.count(), 0);
+    unsigned prev_count = le.count();
+
+    /* Step 2: Block the async again and generate an event */
+
+    le.block();
+    le.push_event();
+    suspend_and_poll(&le);
+    le.unblock();
+
+    /* Step 2: Check missed events - another event should be found */
+
+    le.check_miss();
+    EXPECT_GT(le.count(), prev_count);
+}
+
 UCS_TEST_P(test_async, ctx_timer_block) {
     local_timer lt(GetParam());
 
