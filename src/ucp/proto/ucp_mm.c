@@ -345,8 +345,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         ucs_assert(pd_map & 1);
 
         /* Unpack only reachable rkeys */
-        if (ep->uct.reachable_pds & UCS_BIT(remote_pd_index)) {
-
+        if (ep->dst_pd_index == remote_pd_index) {
             ucs_assert(rkey_index < pd_count);
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
             if (status != UCS_OK) {

@@ -263,6 +263,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
         ucs_free(self->eps[i]);
     }
 
+    if (!ucs_list_is_empty(&self->ep_list)) {
+        ucs_warn("some eps were not destroyed");
+    }
+
     UCS_STATS_NODE_FREE(self->stats);
 
     /* TODO flush RX buffers */

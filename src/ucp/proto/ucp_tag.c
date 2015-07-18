@@ -80,7 +80,7 @@ ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length,
 retry:
     if (ucs_likely(length < ep->config.max_short_tag)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
-        status = uct_ep_am_short(ep->uct.ep, UCP_AM_ID_EAGER_ONLY, tag,
+        status = uct_ep_am_short(ep->uct_ep, UCP_AM_ID_EAGER_ONLY, tag,
                                  buffer, length);
         if (status == UCS_ERR_NO_RESOURCE) {
             ucp_worker_progress(worker);

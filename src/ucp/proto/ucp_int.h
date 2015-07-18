@@ -29,9 +29,7 @@ typedef uint8_t                 ucp_rsc_index_t;
  */
 enum {
     UCP_AM_ID_EAGER_ONLY,
-    UCP_AM_ID_CONN_REQ,
-    UCP_AM_ID_CONN_REP,
-    UCP_AM_ID_CONN_ACK,
+    UCP_AM_ID_WIREUP,
     UCP_AM_ID_LAST
 };
 
@@ -40,14 +38,29 @@ enum {
  * Endpoint wire-up state
  */
 enum {
-    UCP_EP_STATE_LOCAL_CONNECTED  = UCS_BIT(0), /* Local endpoint connected to remote */
-    UCP_EP_STATE_REMOTE_CONNECTED = UCS_BIT(1), /* Remove also connected to local */
-    UCP_EP_STATE_CONN_REP_SENT    = UCS_BIT(2), /* CONN_REP message has been sent */
-    UCP_EP_STATE_CONN_ACK_SENT    = UCS_BIT(3), /* CONN_ACK message has been sent */
+    UCP_EP_STATE_READY_TO_SEND            = UCS_BIT(0), /* uct_ep is ready to go */
+    UCP_EP_STATE_AUX_EP                   = UCS_BIT(1), /* aux_ep was created */
+    UCP_EP_STATE_NEXT_EP                  = UCS_BIT(2), /* next_ep was created */
+    UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED  = UCS_BIT(3), /* next_ep connected to remote */
+    UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED = UCS_BIT(4), /* remote also connected to our next_ep */
+    UCP_EP_STATE_WIREUP_REPLY_SENT        = UCS_BIT(5), /* wireup reply message has been sent */
+    UCP_EP_STATE_WIREUP_ACK_SENT          = UCS_BIT(6), /* wireup ack message has been sent */
 
-    UCP_EP_STATE_PENDING          = UCS_BIT(16) /* Resource-available notification
-                                                   has been requested from one of
-                                                   the UCT endpoints */
+    UCP_EP_STATE_PENDING            = UCS_BIT(16) /* Resource-available notification
+                                                     has been requested from one of
+                                                     the UCT endpoints */
+};
+
+
+/**
+ * Flags in the wireup message
+ */
+enum {
+    UCP_WIREUP_FLAG_REQUSET     = UCS_BIT(0),
+    UCP_WIREUP_FLAG_REPLY       = UCS_BIT(1),
+    UCP_WIREUP_FLAG_ACK         = UCS_BIT(2),
+    UCP_WIREUP_FLAG_ADDR        = UCS_BIT(3),
+    UCP_WIREUP_FLAG_AUX_ADDR    = UCS_BIT(4)
 };
 
 
@@ -106,29 +119,29 @@ typedef struct ucp_context {
  */
 typedef struct ucp_ep {
     ucp_worker_h        worker;        /* Worker this endpoint belongs to */
+    uct_ep_h            uct_ep;        /* Current transport for operations */
 
     struct {
-        uct_ep_h        ep;            /* Current transport for operations */
-        uct_ep_h        next_ep;       /* Next transport being wired up */
-        ucp_rsc_index_t rsc_index;     /* Resource index the endpoint uses */
-        ucp_rsc_index_t dst_pd_index;  /* Destination protection domain index */
-        uint64_t        reachable_pds; /* Bitmap of reachable remote PDs */
-    } uct;
-
-    struct {
-        size_t          max_short_tag;
-        size_t          max_short_put;
+        size_t          max_short_tag; /* TODO should be unsigned */
+        size_t          max_short_put; /* TODO should be unsigned */
         size_t          max_bcopy_put;
         size_t          max_bcopy_get;
     } config;
 
-    uct_ep_h            wireup_ep;     /* Used to wireup the "real" endpoint */
     uint64_t            dest_uuid;     /* Destination worker uuid */
     ucp_ep_h            next;          /* Next in hash table linked list */
 
+    ucp_rsc_index_t     rsc_index;     /* Resource index the endpoint uses */
+    ucp_rsc_index_t     dst_pd_index;  /* Destination protection domain index */
     volatile uint32_t   state;         /* Endpoint state */
+
     ucs_queue_head_t    pending_q;     /* Queue of pending operations - protected by the async worker lock */
     ucs_callback_t      notify;        /* Completion token for progressing pending queue */
+
+    struct {
+        uct_ep_h        aux_ep;        /* Used to wireup the "real" endpoint */
+        uct_ep_h        next_ep;       /* Next transport being wired up */
+    } wireup;
 
 } ucp_ep_t;
 
@@ -157,8 +170,9 @@ struct ucp_ep_pending_op {
  */
 typedef struct ucp_ep_wireup_op {
     ucp_ep_pending_op_t super;
-    uint8_t             am_id;
-    ucp_rsc_index_t     dest_rsc_index;
+    uint32_t            flags;
+    ucp_rsc_index_t     dst_rsc_index;
+    ucp_rsc_index_t     dst_aux_rsc_index;
 } ucp_ep_wireup_op_t;
 
 
@@ -198,8 +212,6 @@ typedef struct ucp_worker {
     ucp_context_h             context;
     uint64_t                  uuid;
     uct_worker_h              uct;           /* UCT worker */
-    ucs_queue_head_t          completed;     /* Queue of completed requests */
-
     ucp_ep_t                  **ep_hash;
     uct_iface_attr_t          *iface_attrs;  /* Array of interface attributes */
     ucp_user_progress_func_t  user_cb;
@@ -222,8 +234,11 @@ typedef struct ucp_wireup_msg {
     ucp_rsc_index_t     src_pd_index;     /* Sender PD index */
     ucp_rsc_index_t     src_rsc_index;    /* Index of sender resource */
     ucp_rsc_index_t     dst_rsc_index;    /* Index of receiver resource */
-    /* EP address follows */
-} ucp_wireup_msg_t;
+    ucp_rsc_index_t     dst_aux_index; /* Index of receiver wireup resource */
+    uint16_t            flags;            /* Wireup flags */
+    uint8_t             addr_len;         /* Length of first address */
+    /* addresses follow */
+} UCS_S_PACKED ucp_wireup_msg_t;
 
 
 /**
@@ -242,9 +257,18 @@ void ucp_tag_cleanup(ucp_context_h context);
 
 ucs_status_t ucp_tag_set_am_handlers(ucp_worker_h worker, uct_iface_h iface);
 
-ucs_status_t ucp_ep_wireup_start(ucp_ep_h ep, ucp_address_t *address);
 
-void ucp_ep_wireup_stop(ucp_ep_h ep);
+
+ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
+                        const char *message, ucp_ep_h *ep_p);
+
+void ucp_ep_ready_to_send(ucp_ep_h ep);
+
+void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
+
+ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address);
+
+void ucp_wireup_stop(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_set_am_handlers(ucp_worker_h worker, uct_iface_h iface);
 
@@ -259,11 +283,11 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_EP_HASH_SIZE, ucp_ep_hash
 #define UCP_RMA_RKEY_LOOKUP(_ep, _rkey) \
     ({ \
         if (ENABLE_PARAMS_CHECK && \
-            !((_rkey)->pd_map & UCS_BIT((_ep)->uct.dst_pd_index))) \
+            !((_rkey)->pd_map & UCS_BIT((_ep)->dst_pd_index))) \
         { \
             ucs_fatal("Remote key does not support current transport " \
                        "(remote pd index: %d rkey map: 0x%"PRIx64")", \
-                       (_ep)->uct.dst_pd_index, (_rkey)->pd_map); \
+                       (_ep)->dst_pd_index, (_rkey)->pd_map); \
             return UCS_ERR_UNREACHABLE; \
         } \
         \
@@ -281,6 +305,11 @@ static inline void ucp_ep_add_pending_op(ucp_ep_h ep, uct_ep_h uct_ep,
         ep->state |= UCP_EP_STATE_PENDING;
     }
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
+}
+
+static inline uint64_t ucp_address_uuid(ucp_address_t *address)
+{
+    return *(uint64_t*)address;
 }
 
 static inline ucp_ep_h ucp_worker_find_ep(ucp_worker_h worker, uint64_t dest_uuid)
@@ -301,10 +330,9 @@ static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
      * only the less-than indices, and then count them using popcount operation.
      * TODO save the mask in ep->uct, to avoid the shift operation.
      */
-    rkey_index = ucs_count_one_bits(rkey->pd_map & UCS_MASK(ep->uct.dst_pd_index));
+    rkey_index = ucs_count_one_bits(rkey->pd_map & UCS_MASK(ep->dst_pd_index));
     return rkey->uct[rkey_index].rkey;
 }
-
 
 
 #endif

@@ -63,6 +63,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rc_iface_t);
     int ret;
 
+    ucs_debug("destroy rc ep %p", self);
+
     uct_rc_iface_remove_ep(iface, self);
 
     UCS_STATS_NODE_FREE(self->stats);
