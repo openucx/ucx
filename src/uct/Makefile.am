@@ -147,3 +147,16 @@ libuct_la_SOURCES += \
     sm/mm/mm_ep.c \
     sm/mm/mm_pd.c \
     sm/mm/mm_sysv.c
+
+# Cross Memory Attached
+if HAVE_CMA
+noinst_HEADERS += \
+	sm/cma/cma_iface.h \
+	sm/cma/cma_ep.h \
+	sm/cma/cma_pd.h
+
+libuct_la_SOURCES += \
+	sm/cma/cma_iface.c \
+	sm/cma/cma_ep.c \
+	sm/cma/cma_pd.c
+endif
