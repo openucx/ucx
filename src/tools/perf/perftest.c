@@ -6,7 +6,6 @@
 * $HEADER$
 */
 
-#define _GNU_SOURCE /* For CPUSET_SIZE */
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"

@@ -5,7 +5,10 @@
 * $HEADER$
 */
 
-#define _GNU_SOURCE /* for F_SETOWN_EX */
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "signal.h"
 #include "async_int.h"
 
