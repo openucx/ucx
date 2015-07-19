@@ -5,7 +5,10 @@
 * $HEADER$
 */
 
-#define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/debug/log.h>

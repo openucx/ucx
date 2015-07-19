@@ -5,7 +5,10 @@
  * $HEADER$
  */
 
-#define _GNU_SOURCE /* for CPU_ZERO/CPU_SET in sched.h */
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ugni_device.h"
 
 #include <uct/tl/context.h>

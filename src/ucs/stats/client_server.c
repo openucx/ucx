@@ -5,7 +5,9 @@
 * $HEADER$
 */
 
-#define _GNU_SOURCE /* For fmemopen */
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "libstats.h"
 
