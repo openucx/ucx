@@ -451,7 +451,7 @@ UCS_TEST_P(test_async, ctx_event_block_two_miss) {
 
     le.check_miss();
     EXPECT_GT(le.count(), 0);
-    unsigned prev_count = le.count();
+    int prev_count = le.count();
 
     /* Step 2: Block the async again and generate an event */
 
