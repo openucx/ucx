@@ -297,7 +297,8 @@ static void uct_ugni_amo_unpack64(uct_completion_t *self)
 
     /* Call the orignal callback and skip padding */
     *(uint64_t *)fma->user_buffer = *(uint64_t *)(fma + 1);
-    uct_invoke_completion(fma->orig_comp_cb);
+    if (ucs_likely(NULL != fma->orig_comp_cb))
+        uct_invoke_completion(fma->orig_comp_cb);
 }
 
 ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
@@ -412,7 +413,9 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
     /* Call the orignal callback and skip padding */
     fma->super.unpack_cb(fma->user_buffer, (char *)(fma + 1) + fma->padding,
                          fma->super.desc.length - fma->padding);
-    uct_invoke_completion(fma->orig_comp_cb);
+
+    if (ucs_likely(NULL != fma->orig_comp_cb))
+        uct_invoke_completion(fma->orig_comp_cb);
 }
 
 #define UGNI_GET_ALIGN (4)
@@ -547,9 +550,9 @@ static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
         if (ucs_likely(NULL != head_fma->orig_comp_cb)) {
             /* Call the orignal callback and skip padding */
             uct_invoke_completion(head_fma->orig_comp_cb);
-            head_fma->super.not_ready_to_free = 0;
-            ucs_mpool_put(head_fma);
         }
+        head_fma->super.not_ready_to_free = 0;
+        ucs_mpool_put(head_fma);
     } else {
         rdma->super.not_ready_to_free = 1;
     }
@@ -573,7 +576,8 @@ static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self)
     if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
         assemble_composed_unaligned(head_fma);
         /* Call the orignal callback and skip padding */
-        uct_invoke_completion(head_fma->orig_comp_cb);
+        if (ucs_likely(NULL != head_fma->orig_comp_cb))
+            uct_invoke_completion(head_fma->orig_comp_cb);
         if(head_fma->head != NULL) {
             head_fma->head->super.not_ready_to_free = 0;
             ucs_mpool_put(head_fma->head);
