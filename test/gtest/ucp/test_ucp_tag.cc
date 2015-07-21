@@ -21,16 +21,20 @@ protected:
     virtual void cleanup() {
         ucs_status_t status;
 
-        status = ucp_rma_flush(sender->worker());
+        status = ucp_flush(sender->worker());
         ASSERT_UCS_OK(status);
 
-        status = ucp_rma_flush(receiver->worker());
+        status = ucp_flush(receiver->worker());
         ASSERT_UCS_OK(status);
 
         sender->disconnect();
         receiver->disconnect();
 
         ucp_test::cleanup();
+    }
+
+    virtual uint64_t features() const {
+        return UCP_FEATURE_TAG;
     }
 
 public:

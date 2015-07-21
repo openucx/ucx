@@ -51,6 +51,7 @@ public:
 
 protected:
     entity* create_entity();
+    virtual uint64_t features() const = 0;
 
     ucs::ptr_vector<entity> m_entities;
 };

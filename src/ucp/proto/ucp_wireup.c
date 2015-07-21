@@ -429,7 +429,8 @@ out:
     return UCS_OK;
 }
 
-static double ucp_wireup_score_func(uct_tl_resource_desc_t *resource,
+static double ucp_wireup_score_func(ucp_worker_h worker,
+                                    uct_tl_resource_desc_t *resource,
                                     uct_iface_h iface,
                                     uct_iface_attr_t *iface_attr)
 {
@@ -443,12 +444,39 @@ static double ucp_wireup_score_func(uct_tl_resource_desc_t *resource,
            (1e3 * ucs_max(iface_attr->cap.am.max_bcopy, iface_attr->cap.am.max_short));
 }
 
-static double ucp_am_short_score_func(uct_tl_resource_desc_t *resource,
-                                      uct_iface_h iface, uct_iface_attr_t *iface_attr)
+static double ucp_runtime_score_func(ucp_worker_h worker,
+                                     uct_tl_resource_desc_t *resource,
+                                     uct_iface_h iface,
+                                     uct_iface_attr_t *iface_attr)
 {
-    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) ||
-        !(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_THREAD_SINGLE))
-    {
+    ucp_context_t *context = worker->context;
+    uint64_t flags;
+
+    flags = 0;
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        flags |= UCT_IFACE_FLAG_AM_BCOPY;
+    }
+
+    if (context->config.features & UCP_FEATURE_TAG) {
+        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_THREAD_SINGLE;
+    }
+
+    if (context->config.features & UCP_FEATURE_RMA) {
+        /* TODO remove this requirement once we have RMA emulation */
+        flags |= UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_PUT_BCOPY |
+                 UCT_IFACE_FLAG_GET_BCOPY;
+    }
+
+    if (context->config.features & UCP_FEATURE_AMO) {
+        /* TODO remove this requirement once we have SW atomics */
+        flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 | UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                 UCT_IFACE_FLAG_ATOMIC_FADD32 | UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                 UCT_IFACE_FLAG_ATOMIC_SWAP32 | UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                 UCT_IFACE_FLAG_ATOMIC_CSWAP32 | UCT_IFACE_FLAG_ATOMIC_CSWAP64;
+    }
+
+    if (!ucs_test_all_flags(iface_attr->cap.flags, flags)) {
         return 0.0;
     }
 
@@ -503,7 +531,7 @@ static ucs_status_t ucp_pick_best_wireup(ucp_worker_h worker, ucp_address_t *add
 
             *reachable_pds |= UCS_BIT(pd_index);
 
-            score = score_func(resource, iface, iface_attr);
+            score = score_func(worker, resource, iface, iface_attr);
             ucs_trace("%s " UCT_TL_RESOURCE_DESC_FMT " score %.2f",
                       title, UCT_TL_RESOURCE_DESC_ARG(resource), score);
             if (score > best_score) {
@@ -523,7 +551,7 @@ static ucs_status_t ucp_pick_best_wireup(ucp_worker_h worker, ucp_address_t *add
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_debug("%s: " UCT_TL_RESOURCE_DESC_FMT " to %d pd %d", title,
+    ucs_debug("selected for %s: " UCT_TL_RESOURCE_DESC_FMT " to %d pd %d", title,
               UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[*src_rsc_index_p].tl_rsc),
               *dst_rsc_index_p, *dst_pd_index_p);
     *addr_p = best_addr;
@@ -572,18 +600,22 @@ ucs_status_t ucp_ep_wireup_start(ucp_ep_h ep, ucp_address_t *address)
     ep->dest_uuid = ucp_address_uuid(address);
     sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
 
+    ep->wireup_ep         = NULL;
+    ep->uct.next_ep       = NULL;
+    ep->uct.reachable_pds = 0;
+
     ucs_debug("connecting 0x%"PRIx64"->0x%"PRIx64, worker->uuid, ep->dest_uuid);
 
     /*
      * Select best transport for active messages
      */
-    status = ucp_pick_best_wireup(worker, address, ucp_am_short_score_func,
+    status = ucp_pick_best_wireup(worker, address, ucp_runtime_score_func,
                                   &ep->uct.rsc_index, &dst_rsc_index,
                                   &ep->uct.dst_pd_index, &am_short_addr,
                                   &ep->uct.reachable_pds,
-                                  "short_am");
+                                  "runtime");
     if (status != UCS_OK) {
-        ucs_error("No transport for short active message");
+        ucs_debug("No suitable transport found");
         goto err;
     }
 
@@ -594,7 +626,7 @@ ucs_status_t ucp_ep_wireup_start(ucp_ep_h ep, ucp_address_t *address)
      * If the selected transport can be connected directly, do it.
      */
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-        status = uct_ep_create_connected(iface, am_short_addr, &ep->uct.next_ep);
+        status = uct_ep_create_connected(iface, am_short_addr, &ep->uct.ep);
         if (status != UCS_OK) {
             ucs_debug("failed to create ep");
             goto err;

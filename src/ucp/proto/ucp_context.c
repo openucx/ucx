@@ -357,12 +357,18 @@ err:
     return status;
 }
 
-static ucs_status_t ucp_fill_config(ucp_context_h context,
+static ucs_status_t ucp_fill_config(ucp_context_h context, uint64_t features,
                                     const ucp_config_t *config)
 {
     unsigned i, num_alloc_methods, method;
     const char *method_name;
     ucs_status_t status;
+
+    if (0 == features) {
+        ucs_error("empty features set passed to ucp context create");
+        return UCS_ERR_INVALID_PARAM;
+    }
+    context->config.features = features;
 
     context->config.bcopy_thresh = config->bcopy_thresh;
 
@@ -432,26 +438,26 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-ucs_status_t ucp_init(const ucp_config_t *config, size_t request_headroom,
-                      ucp_context_h *context_p)
+ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
+                      const ucp_config_t *config, ucp_context_h *context_p)
 {
     ucp_context_t *context;
     ucs_status_t status;
 
     /* allocate a ucp context */
-    context = ucs_malloc(sizeof(*context), "ucp context");
+    context = ucs_calloc(1, sizeof(*context), "ucp context");
     if (context == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
-    /* fill resources we should use */
-    status = ucp_fill_resources(context, config);
+    status = ucp_fill_config(context, features, config);
     if (status != UCS_OK) {
         goto err_free_ctx;
     }
 
-    status = ucp_fill_config(context, config);
+    /* fill resources we should use */
+    status = ucp_fill_resources(context, config);
     if (status != UCS_OK) {
         goto err_free_resources;
     }
@@ -465,10 +471,10 @@ ucs_status_t ucp_init(const ucp_config_t *config, size_t request_headroom,
     *context_p = context;
     return UCS_OK;
 
-err_free_config:
-    ucp_free_config(context);
 err_free_resources:
     ucp_free_resources(context);
+err_free_config:
+    ucp_free_config(context);
 err_free_ctx:
     ucs_free(context);
 err:
@@ -478,7 +484,7 @@ err:
 void ucp_cleanup(ucp_context_h context)
 {
     ucp_tag_cleanup(context);
-    ucp_free_config(context);
     ucp_free_resources(context);
+    ucp_free_config(context);
     ucs_free(context);
 }

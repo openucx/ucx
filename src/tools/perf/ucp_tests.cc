@@ -49,9 +49,41 @@ public:
             return ucp_tag_send(ep, buffer, length, TAG);
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
-            return ucp_rma_put(ep, buffer, length, remote_addr, rkey);
+            return ucp_put(ep, buffer, length, remote_addr, rkey);
         case UCX_PERF_CMD_GET:
-            return ucp_rma_get(ep, buffer, length, remote_addr, rkey);
+            return ucp_get(ep, buffer, length, remote_addr, rkey);
+        case UCX_PERF_CMD_ADD:
+            if (length == sizeof(uint32_t)) {
+                return ucp_atomic_add32(ep, 1, remote_addr, rkey);
+            } else if (length == sizeof(uint64_t)) {
+                return ucp_atomic_add64(ep, 1, remote_addr, rkey);
+            } else {
+                return UCS_ERR_INVALID_PARAM;
+            }
+        case UCX_PERF_CMD_FADD:
+            if (length == sizeof(uint32_t)) {
+                return ucp_atomic_fadd32(ep, 0, remote_addr, rkey, (uint32_t*)buffer);
+            } else if (length == sizeof(uint64_t)) {
+                return ucp_atomic_fadd64(ep, 0, remote_addr, rkey, (uint64_t*)buffer);
+            } else {
+                return UCS_ERR_INVALID_PARAM;
+            }
+        case UCX_PERF_CMD_SWAP:
+            if (length == sizeof(uint32_t)) {
+                return ucp_atomic_swap32(ep, 0, remote_addr, rkey, (uint32_t*)buffer);
+            } else if (length == sizeof(uint64_t)) {
+                return ucp_atomic_swap64(ep, 0, remote_addr, rkey, (uint64_t*)buffer);
+            } else {
+                return UCS_ERR_INVALID_PARAM;
+            }
+        case UCX_PERF_CMD_CSWAP:
+            if (length == sizeof(uint32_t)) {
+                return ucp_atomic_cswap32(ep, 0, 0, remote_addr, rkey, (uint32_t*)buffer);
+            } else if (length == sizeof(uint64_t)) {
+                return ucp_atomic_cswap64(ep, 0, 0, remote_addr, rkey, (uint64_t*)buffer);
+            } else {
+                return UCS_ERR_INVALID_PARAM;
+            }
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -80,7 +112,17 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_GET:
-            return UCS_OK;
+        case UCX_PERF_CMD_ADD:
+        case UCX_PERF_CMD_FADD:
+        case UCX_PERF_CMD_SWAP:
+        case UCX_PERF_CMD_CSWAP:
+            switch (TYPE) {
+            case UCX_PERF_TEST_TYPE_STREAM_UNI:
+                progress_responder();
+                return UCS_OK;
+            default:
+                return UCS_ERR_INVALID_PARAM;
+            }
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -98,6 +140,8 @@ public:
         size_t length;
 
         ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
+
+        *((volatile uint8_t*)m_perf.recv_buffer + m_perf.params.message_size - 1) = -1;
 
         rte_call(&m_perf, barrier);
 
@@ -129,6 +173,9 @@ public:
                 ++sn;
             }
         }
+
+        ucp_flush(m_perf.ucp.worker);
+        rte_call(&m_perf, barrier);
         return UCS_OK;
     }
 
@@ -173,6 +220,9 @@ public:
                 ++sn;
             }
         }
+
+        ucp_flush(m_perf.ucp.worker);
+        rte_call(&m_perf, barrier);
         return UCS_OK;
     }
 
@@ -212,11 +262,15 @@ private:
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
-        (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG),
-        (UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI),
-        (UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI)
+        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_FADD,  UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
 
     ucs_error("Invalid test case");

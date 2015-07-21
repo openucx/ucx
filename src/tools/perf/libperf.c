@@ -562,16 +562,33 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     free(perf->uct.peers);
 }
 
-static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params)
+static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
+                                               uint64_t *features)
 {
     ucs_status_t status;
 
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
-        break;
     case UCX_PERF_CMD_GET:
+        *features = UCP_FEATURE_RMA;
+        break;
+    case UCX_PERF_CMD_ADD:
+    case UCX_PERF_CMD_FADD:
+    case UCX_PERF_CMD_SWAP:
+    case UCX_PERF_CMD_CSWAP:
+        if ((params->message_size != sizeof(uint32_t)) &&
+            (params->message_size != sizeof(uint64_t)))
+        {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("Atomic size should be either 32 or 64 bit");
+            }
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        *features = UCP_FEATURE_AMO;
         break;
     case UCX_PERF_CMD_TAG:
+        *features = UCP_FEATURE_TAG;
         break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -674,7 +691,6 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     ucp_rkey_buffer_release(rkey_buffer);
     ucp_worker_release_address(perf->ucp.worker, address);
 
-    ucs_assert(req != NULL);
     rte_call(perf, exchange_vec, req);
 
     perf->ucp.peers = calloc(group_size, sizeof(*perf->uct.peers));
@@ -701,7 +717,9 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
         status = ucp_ep_create(perf->ucp.worker, address, &perf->ucp.peers[i].ep);
         if (status != UCS_OK) {
-            ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
+            }
             free(rkey_buffer);
             free(address);
             goto err_destroy_eps;
@@ -712,7 +730,9 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         status = ucp_ep_rkey_unpack(perf->ucp.peers[i].ep, rkey_buffer,
                                     &perf->ucp.peers[i].rkey);
         if (status != UCS_OK) {
-            ucs_error("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
+            }
             free(rkey_buffer);
             goto err_destroy_eps;
         }
@@ -721,8 +741,6 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     }
 
     rte_call(perf, barrier);
-
-
     return UCS_OK;
 
 err_destroy_eps:
@@ -879,8 +897,9 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 {
     ucp_config_t *config;
     ucs_status_t status;
+    uint64_t features;
 
-    status = ucp_perf_test_check_params(params);
+    status = ucp_perf_test_check_params(params, &features);
     if (status != UCS_OK) {
         goto err;
     }
@@ -890,7 +909,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err;
     }
 
-    status = ucp_init(config, 0, &perf->ucp.context);
+    status = ucp_init(features, 0, config, &perf->ucp.context);
     ucp_config_release(config);
     if (status != UCS_OK) {
         goto err;
@@ -910,7 +929,9 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 
     status = ucp_perf_test_setup_endpoints(perf);
     if (status != UCS_OK) {
-        ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
+        }
         goto err_free_mem;
     }
 
