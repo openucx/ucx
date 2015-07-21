@@ -282,7 +282,11 @@ public:
 
         if (my_index == 1) {
             /* send_sn is the next SN to send */
-            send_sn         = 1;
+            if (flow_control) {
+                send_sn     = 1;
+            } else{
+                send_sn     = 0; /* Remote buffer will remain 0 throughout the test */
+            }
             *(psn_t*)buffer = send_sn;
 
             UCX_PERF_TEST_FOREACH(&m_perf) {
@@ -302,13 +306,16 @@ public:
                     }
                 }
 
-                send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
-                       rkey, &m_completion);
+                if (flow_control) {
+                    send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
+                           rkey, &m_completion);
+                    ++send_sn;
+                } else {
+                    send_b(ep, send_sn, send_sn, buffer, length, remote_addr,
+                           rkey, &m_completion);
+                }
 
                 ucx_perf_update(&m_perf, 1, length);
-                if (flow_control) {
-                    ++send_sn;
-                }
             }
 
             if (!flow_control) {
@@ -318,7 +325,7 @@ public:
                         progress_requestor();
                     }
                     *(psn_t*)buffer = 2;
-                    send_b(ep, 2, 1, buffer, length, remote_addr, rkey,
+                    send_b(ep, 2, send_sn, buffer, length, remote_addr, rkey,
                            &m_completion);
                 } else {
                     *(psn_t*)m_perf.recv_buffer = 2;
