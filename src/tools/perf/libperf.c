@@ -563,7 +563,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 }
 
 static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
-                                               unsigned *features)
+                                               uint64_t *features)
 {
     ucs_status_t status;
 
@@ -897,7 +897,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 {
     ucp_config_t *config;
     ucs_status_t status;
-    unsigned features;
+    uint64_t features;
 
     status = ucp_perf_test_check_params(params, &features);
     if (status != UCS_OK) {

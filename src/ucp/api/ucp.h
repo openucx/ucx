@@ -127,7 +127,7 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
  *
  * @return Error code.
  */
-ucs_status_t ucp_init(unsigned features, size_t request_headroom,
+ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
                       const ucp_config_t *config, ucp_context_h *context_p);
 
 

@@ -357,7 +357,7 @@ err:
     return status;
 }
 
-static ucs_status_t ucp_fill_config(ucp_context_h context, unsigned features,
+static ucs_status_t ucp_fill_config(ucp_context_h context, uint64_t features,
                                     const ucp_config_t *config)
 {
     unsigned i, num_alloc_methods, method;
@@ -438,7 +438,7 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-ucs_status_t ucp_init(unsigned features, size_t request_headroom,
+ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
                       const ucp_config_t *config, ucp_context_h *context_p)
 {
     ucp_context_t *context;

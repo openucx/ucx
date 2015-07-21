@@ -33,7 +33,7 @@ protected:
         ucp_test::cleanup();
     }
 
-    virtual unsigned features() const {
+    virtual uint64_t features() const {
         return UCP_FEATURE_TAG;
     }
 

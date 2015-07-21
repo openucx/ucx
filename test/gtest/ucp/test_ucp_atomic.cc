@@ -142,7 +142,7 @@ public:
         test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T));
     }
 
-    virtual unsigned features() const {
+    virtual uint64_t features() const {
         return UCP_FEATURE_AMO;
     }
 };

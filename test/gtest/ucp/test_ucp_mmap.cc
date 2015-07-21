@@ -15,7 +15,7 @@ class test_ucp_mmap : public test_ucp_memheap {
 protected:
     void test_mapped_memory(entity *e, ucp_mem_h memh, void *ptr, size_t size);
 
-    virtual unsigned features() const {
+    virtual uint64_t features() const {
         return UCP_FEATURE_RMA;
     }
 };

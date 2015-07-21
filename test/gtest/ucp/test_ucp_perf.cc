@@ -15,7 +15,7 @@
 
 class test_ucp_perf : public ucp_test, public test_perf {
 protected:
-    virtual unsigned features() const {
+    virtual uint64_t features() const {
         return 0; /* Unused */
     }
 

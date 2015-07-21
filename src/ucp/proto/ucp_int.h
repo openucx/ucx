@@ -81,7 +81,7 @@ typedef struct ucp_context {
     struct {
 
         /* Bitmap of features supported by the context */
-        unsigned            features;
+        uint64_t            features;
 
         /* Array of allocation methods, a mix of PD allocation methods and non-PD */
         struct {
