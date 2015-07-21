@@ -5,7 +5,9 @@
  * $HEADER$
  */
 
-#define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "debug.h"
 #include "log.h"

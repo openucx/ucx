@@ -126,6 +126,7 @@
 #define UCS_PP_TUPLE_8(_0, _1, _2, _3, _4, _5, _6, _7, _8, ...)            _8
 #define UCS_PP_TUPLE_9(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ...)        _9
 #define UCS_PP_TUPLE_10(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, ...)  _10
+#define UCS_PP_TUPLE_BREAK(...)                                            __VA_ARGS__
 
 
 /* Sequence of numbers

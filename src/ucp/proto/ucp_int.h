@@ -73,17 +73,23 @@ typedef struct ucp_context {
     ucp_rsc_index_t         num_tls;      /* Number of resources in the array*/
 
     struct {
-        ucs_mpool_h         rreq_mp;       /* Receive requests */
+        ucs_mpool_h         rreq_mp;      /* Receive requests */
         ucs_queue_head_t    expected;
         ucs_queue_head_t    unexpected;
     } tag;
 
     struct {
 
+        /* Bitmap of features supported by the context */
+        uint64_t            features;
+
         /* Array of allocation methods, a mix of PD allocation methods and non-PD */
         struct {
-            uct_alloc_method_t method;     /* Allocation method */
-            char               pdc_name[UCT_PD_COMPONENT_NAME_MAX]; /* PD name to use, if method is PD */
+            /* Allocation method */
+            uct_alloc_method_t method;
+
+            /* PD name to use, if method is PD */
+            char               pdc_name[UCT_PD_COMPONENT_NAME_MAX];
         } *alloc_methods;
         unsigned            num_alloc_methods;
 
@@ -223,7 +229,8 @@ typedef struct ucp_wireup_msg {
 /**
  * Calculates a score of specific wireup.
  */
-typedef double (*ucp_wireup_score_function_t)(uct_tl_resource_desc_t *resource,
+typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
+                                              uct_tl_resource_desc_t *resource,
                                               uct_iface_h iface,
                                               uct_iface_attr_t *iface_attr);
 
@@ -249,6 +256,21 @@ SGLIB_DEFINE_LIST_PROTOTYPES(ucp_ep_t, ucp_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_EP_HASH_SIZE, ucp_ep_hash);
 
 
+#define UCP_RMA_RKEY_LOOKUP(_ep, _rkey) \
+    ({ \
+        if (ENABLE_PARAMS_CHECK && \
+            !((_rkey)->pd_map & UCS_BIT((_ep)->uct.dst_pd_index))) \
+        { \
+            ucs_error("Remote key does not support current transport " \
+                       "(remote pd index: %d rkey map: 0x%"PRIx64")", \
+                       (_ep)->uct.dst_pd_index, (_rkey)->pd_map); \
+            return UCS_ERR_UNREACHABLE; \
+        } \
+        \
+        ucp_lookup_uct_rkey(_ep, _rkey); \
+    })
+
+
 static inline void ucp_ep_add_pending_op(ucp_ep_h ep, uct_ep_h uct_ep,
                                          ucp_ep_pending_op_t *op)
 {
@@ -268,6 +290,21 @@ static inline ucp_ep_h ucp_worker_find_ep(ucp_worker_h worker, uint64_t dest_uui
     search.dest_uuid = dest_uuid;
     return sglib_hashed_ucp_ep_t_find_member(worker->ep_hash, &search);
 }
+
+static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
+{
+    unsigned rkey_index;
+
+    /*
+     * Calculate the rkey index inside the compact array. This is actually the
+     * number of PDs in the map with index less-than ours. So mask pd_map to get
+     * only the less-than indices, and then count them using popcount operation.
+     * TODO save the mask in ep->uct, to avoid the shift operation.
+     */
+    rkey_index = ucs_count_one_bits(rkey->pd_map & UCS_MASK(ep->uct.dst_pd_index));
+    return rkey->uct[rkey_index].rkey;
+}
+
 
 
 #endif

@@ -25,7 +25,8 @@ ucp_test::entity::entity(const ucp_test& test) : m_test(test), m_inprogress(0) {
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
 
-    UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init, config, 0);
+    UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup,
+                           ucp_init, test.features(), 0, config);
 
     UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_worker, ucp_worker_destroy,
                            ucp_worker_create, m_ucph, UCS_THREAD_MODE_MULTI);
@@ -41,8 +42,14 @@ void ucp_test::entity::connect(const ucp_test::entity* other) {
     status = ucp_worker_get_address(other->worker(), &address, &address_length);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_CREATE_HANDLE(ucp_ep_h, m_ep, ucp_ep_destroy,
-                           ucp_ep_create, m_worker, address);
+    ucp_ep_h ep;
+    status = ucp_ep_create(m_worker, address, &ep);
+    if (status == UCS_ERR_UNREACHABLE) {
+        UCS_TEST_SKIP_R("could not find a valid transport");
+    }
+
+    ASSERT_UCS_OK(status);
+    m_ep.reset(ep, ucp_ep_destroy);
 
     ucp_worker_release_address(other->worker(), address);
 }
