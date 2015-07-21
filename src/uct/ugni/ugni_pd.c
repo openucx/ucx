@@ -185,7 +185,7 @@ static ucs_status_t uct_ugni_rkey_unpack(uct_pd_component_t *pdc, const void *rk
 
 static int init_device_list(uct_ugni_job_info_t *inf)
 {
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
     int i, num_active_devices;
     int *dev_ids = NULL;
     gni_return_t ugni_rc = GNI_RC_SUCCESS;
