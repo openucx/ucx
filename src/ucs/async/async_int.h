@@ -21,7 +21,7 @@ struct ucs_async_handler {
     ucs_notifier_chain_func_t  cb;      /* Callback function */
     void                       *arg;    /* Callback argument */
     ucs_async_context_t        *async;  /* Async context for the handler. Can be NULL */
-    volatile uint32_t          miss_count; /* Protect against adding to miss queue multiple times */
+    volatile uint32_t          missed; /* Protect against adding to miss queue multiple times */
     ucs_async_handler_t        *next;
 };
 

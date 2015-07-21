@@ -81,9 +81,19 @@ err:
     return status;
 }
 
+static void ucs_ep_purge_pending(ucp_ep_h ep)
+{
+    ucp_ep_pending_op_t *op;
+
+    ucs_queue_for_each_extract(op, &ep->pending_q, queue, 1) {
+        ucs_free(op); /* TODO release callback */
+    }
+}
+
 void ucp_ep_destroy(ucp_ep_h ep)
 {
     ucp_ep_wireup_stop(ep);
+    ucs_ep_purge_pending(ep);
     while (uct_ep_flush(ep->uct.ep) != UCS_OK) {
         ucp_worker_progress(ep->worker);
     }
