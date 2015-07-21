@@ -106,11 +106,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
 
     echo "Running unit tests"
-    $AFFINITY $TIMEOUT make -C test/gtest test
+    $AFFINITY $TIMEOUT make -C test/gtest test UCS_HANDLE_ERRORS=bt
 
     echo "Running valgrind tests"
     module load tools/valgrind-latest
-    $AFFINITY $TIMEOUT make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
+    $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
     module unload tools/valgrind-latest
 
     echo "Build with coverity"
