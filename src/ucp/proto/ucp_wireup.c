@@ -434,8 +434,9 @@ static double ucp_wireup_score_func(ucp_worker_h worker,
                                     uct_iface_h iface,
                                     uct_iface_attr_t *iface_attr)
 {
-    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) ||
-        !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE))
+    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) || /* Need to use it for wireup messages */
+        !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) || /* Should connect immediately */
+        (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_THREAD_SINGLE) /* Should progress asynchronously */)
     {
         return 0.0;
     }
