@@ -7,9 +7,9 @@
 
 #include "ucx_info.h"
 
-#include <ucs/config/parser.c>
+#include <ucs/config/parser.h>
+#include <ucs/config/global_opts.h>
 #include <getopt.h>
-
 
 
 static void usage() {

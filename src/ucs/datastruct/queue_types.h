@@ -13,6 +13,7 @@ typedef struct ucs_queue_elem ucs_queue_elem_t;
 typedef struct ucs_queue_head ucs_queue_head_t;
 typedef ucs_queue_elem_t**    ucs_queue_iter_t;
 
+
 /**
  * Queue element type.
  */
@@ -28,9 +29,6 @@ struct ucs_queue_head {
     ucs_queue_elem_t    *head;
     ucs_queue_elem_t    **ptail;
 };
-
-
-
 
 
 #endif

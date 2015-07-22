@@ -5,9 +5,11 @@
 * $HEADER$
 */
 
-#define HAVE_CONFIG_H
-#include <uct/api/uct.h>
+#define HAVE_CONFIG_H /* Force using config.h, so test would fail if header
+                         actually ties to use it */
+#include <ucp/api/ucp.h>
 #include <stdio.h>
+
 
 int main(int argc, char **argv)
 {
