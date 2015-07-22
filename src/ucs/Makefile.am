@@ -39,6 +39,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/notifier.h \
 	datastruct/ptr_array.h \
+	datastruct/queue_types.h \
 	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
