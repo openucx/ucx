@@ -20,6 +20,9 @@ echo Starting on host: $(hostname)
 
 echo "Autogen"
 ./autogen.sh
+
+exit 1
+
 make $make_opt distclean||:
 
 echo "Making a directory for test build"
