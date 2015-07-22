@@ -6,7 +6,7 @@
 */
 
 #define HAVE_CONFIG_H /* Force using config.h, so test would fail if header
-                         actually ties to use it */
+                         actually tries to use it */
 #include <ucp/api/ucp.h>
 #include <stdio.h>
 
