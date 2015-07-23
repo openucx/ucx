@@ -37,6 +37,7 @@ UCS_TEST_F(test_ucp_wireup, one_sided_wireup) {
     EXPECT_EQ(sizeof(send_data), comp.rcvd_len);
     EXPECT_EQ(TAG, comp.sender_tag);
 
+    ucp_flush(sender->worker());
 }
 
 UCS_TEST_F(test_ucp_wireup, two_sided_wireup) {

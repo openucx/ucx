@@ -96,7 +96,7 @@ void ucp_ep_ready_to_send(ucp_ep_h ep)
 
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep)
 {
-    ucs_assert(uct_ep != NULL);
+    ucs_assert_always(uct_ep != NULL);
     while (uct_ep_flush(uct_ep) != UCS_OK) {
         ucp_worker_progress(ep->worker);
     }

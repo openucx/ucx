@@ -9,6 +9,43 @@
 
 #include <ucs/type/class.h>
 
+/*
+ *  Description of wire-up protocol
+ * ==================================
+ *
+ *   The goal is to expose one-sided connection establishment semantics in UCP
+ * layer, and overcome transport and protocol limitations:
+ *   (1) Some transports require two-sided, point-to-point connection.
+ *   (2) Some protocols require sending replies, which requires creating ucp endpoint
+ *       on the remote side as well (even if the user did not create it explicitly
+ *       by calling ucp_ep_create).
+ *   (3) TBD allow creating multiple endpoints between same pair of workers.
+ *
+ *  Wire-up process:
+ *    1. Select the transport that would be used in runtime, based on required
+ *       features (passed to ucp_init), transport capabilities, and performance
+ *       estimations.
+ *
+ *    2. If the selected transport cannot create ep-to-iface connection, select
+ *       an "auxiliary" transport to use for wire-up protocol. Then, use a 3-way
+ *       handshake protocol (REQ->REP->ACK) to create ep on the remote side and
+ *       connect it to local ep. Until this is completed, create a dummy uct_ep
+ *       whose send functions always return NO_RESOURCE. When the connection is
+ *       ready, the dummy ep is replaced by the real uct ep.
+ *
+ *       If the selected transport is capable of ep-to-iface connection, simply
+ *       create the connected ep.
+ *
+ *
+ *    3. TBD When we start a protocol which requires remote replies (such as
+ *       rendezvous), first need to check if the remote side is also connected
+ *       to us. If not, need to start the same 3-way handshake protocol to let
+ *       it create the reverse connection. This can be either in "half-handshake"
+ *       mode (i.e send the data immediately after sending the connect request)
+ *       or in "full-handshake" mode (i.e send the data only after getting a reply).
+ */
+
+
 
 /**
  * Dummy endpoint, to hold off send requests until wireup process completes.
