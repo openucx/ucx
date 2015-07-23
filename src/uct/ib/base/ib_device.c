@@ -541,7 +541,7 @@ uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
         break;
     case 32: /* EDR */
         resource->latency = 600;
-        signal_rate       = 25.0;
+        signal_rate       = 25.78125;
         encoding          = 64.0/66.0;
         break;
     default:
