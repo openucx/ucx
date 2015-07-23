@@ -139,8 +139,8 @@ uct_iface_ops_t uct_ugni_iface_ops = {
 static void uct_ugni_base_desc_init(void *mp_context, void *obj, void *chunk, void *arg)
 {
     uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
-    /* zero ugni descriptor */
-    memset(&base->desc, 0 , sizeof(base->desc));
+    /* zero base descriptor */
+    memset(base, 0 , sizeof(*base));
 }
 
 static void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh)
