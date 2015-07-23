@@ -28,17 +28,19 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
 {
     unsigned batch = iface->super.config.rx_max_batch;
     struct mlx5_wqe_data_seg *rx_wqes;
-    uct_ib_mlx5_index_t pi, count;
+    uct_ib_mlx5_index_t pi, next_pi, count;
     uct_ib_iface_recv_desc_t *desc;
 
     rx_wqes = iface->rx.wq.wqes;
     pi      = iface->rx.wq.rq_wqe_counter & iface->rx.wq.mask;
 
     for (count = 0; count < batch; count ++) {
+        next_pi = (pi + 1) &  iface->rx.wq.mask;
+        ucs_prefetch(rx_wqes + next_pi);
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, iface->super.rx.mp, desc, break);
         rx_wqes[pi].lkey = htonl(desc->lkey);
         rx_wqes[pi].addr = htonll((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
-        pi = (pi + 1) &  iface->rx.wq.mask;
+        pi = next_pi;
     }
     if (ucs_unlikely(count == 0)) {
         ucs_error("iface(%p) failed to post receive wqes", iface);
@@ -47,7 +49,7 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
     pi = iface->rx.wq.rq_wqe_counter + count;
     iface->rx.wq.rq_wqe_counter = pi;
     iface->super.rx.available -= count;
-    ucs_compiler_fence();
+    ucs_memory_cpu_fence();
     *iface->rx.wq.dbrec = htonl(pi);
 }
 
@@ -90,7 +92,7 @@ static ucs_status_t uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t
     if (!skb) {
         return UCS_ERR_NO_RESOURCE;
     }
-    //ucs_prefetch(skb->neth);
+    ucs_prefetch(skb->neth);
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + sizeof(hdr) + length,
                     iface->super.config.max_inline, "am_short");
@@ -111,7 +113,6 @@ static ucs_status_t uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t
     /* assume that neth and am header fit into one bb */
     ucs_assert(sizeof(*am) + sizeof(*neth) < MLX5_SEND_WQE_BB);
     neth = (void*)(inl + 1);
-    //ucs_prefetch(neth);
     uct_ud_neth_init_data(&ep->super, neth);
     uct_ud_neth_set_type_am(&ep->super, neth, id);
     uct_ud_neth_ack_req(&ep->super, neth);
@@ -151,7 +152,12 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
     uint32_t len;
     char *packet;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size);
+    ci     = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
+    packet = (char *)ntohll(iface->rx.wq.wqes[ci].addr);
+    ucs_prefetch(packet + UCT_IB_GRH_LEN);
+    desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
+
+    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
         if (iface->super.rx.available >= iface->super.config.rx_max_batch) {
             uct_ud_mlx5_iface_post_recv(iface);
@@ -160,13 +166,12 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
     }
     uct_ib_mlx5_log_cqe(cqe);
     ucs_assert(0 == (cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
-    ci     = ntohs(cqe->wqe_counter) & iface->rx.wq.mask;
-    packet = (char *)ntohll(iface->rx.wq.wqes[ci].addr);
-    //ucs_prefetch(packet + UCT_IB_GRH_LEN);
+    ucs_assert(ntohs(cqe->wqe_counter) == iface->rx.wq.cq_wqe_counter);
 
-    len    = ntohl(cqe->byte_cnt);
-    iface->super.rx.available ++;
-    desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
+    iface->super.rx.available++;
+    iface->rx.wq.cq_wqe_counter++;
+
+    len = ntohl(cqe->byte_cnt);
 
     uct_ud_ep_process_rx(&iface->super,
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
@@ -179,7 +184,7 @@ static inline void uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
 {
     struct mlx5_cqe64 *cqe;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, iface->tx.cq.cqe_size);
+    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
         return;
     }
@@ -284,7 +289,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
     if (status != UCS_OK) {
         goto err;
     }
-
     if (self->tx.cq.cqe_size != sizeof(struct mlx5_cqe64)) {
         ucs_error("TX CQE size is not 64");
         goto err;
@@ -292,6 +296,10 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
+        goto err;
+    }
+    if (self->rx.cq.cqe_size != sizeof(struct mlx5_cqe64)) {
+        ucs_error("TX CQE size is not 64");
         goto err;
     }
 
@@ -334,6 +342,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
     }
     self->rx.wq.wqes            = qp_info.rq.buf;
     self->rx.wq.rq_wqe_counter  = 0;
+    self->rx.wq.cq_wqe_counter  = 0;
     self->rx.wq.mask            = qp_info.rq.wqe_cnt - 1;
     self->rx.wq.dbrec           = &qp_info.dbrec[MLX5_RCV_DBR];
     memset(self->rx.wq.wqes, 0, qp_info.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg)); 

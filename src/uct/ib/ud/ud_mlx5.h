@@ -30,7 +30,12 @@ typedef struct uct_ib_mlx5_wq {
 typedef uint16_t uct_ib_mlx5_index_t;
 
 typedef struct uct_ib_mlx5_rxwq {
-    uct_ib_mlx5_index_t       rq_wqe_counter;
+    /* producer index. It updated when new receive wqe is posted */
+    uct_ib_mlx5_index_t       rq_wqe_counter; 
+    /* consumer index. It is better to track it ourselves than to do ntohs() 
+     * on the index in the cqe
+     */
+    uct_ib_mlx5_index_t       cq_wqe_counter;
     uct_ib_mlx5_index_t       mask;
     uint32_t                 *dbrec;
     struct mlx5_wqe_data_seg *wqes;
@@ -106,9 +111,11 @@ static inline void uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
     seg->av.base.rlid           = av->base.rlid | (path_bits << 8);
     seg->av.base.dqp_dct        = av->base.dqp_dct;
     ucs_trace_data("AV: rlid=%d dqp=%x", seg->av.base.rlid, seg->av.base.dqp_dct);
+/*  No need to fill grh
     seg->av.grh_sec.tclass      = av->grh_sec.tclass;
     seg->av.grh_sec.hop_limit   = av->grh_sec.hop_limit;
     seg->av.grh_sec.grh_gid_fl  = av->grh_sec.grh_gid_fl;
+*/
 }
 
 static inline void uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
