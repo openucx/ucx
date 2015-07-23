@@ -21,6 +21,8 @@
 #define UCT_IB_MLX5_WQE_SEG_SIZE    16 /* Size of a segment in a WQE */
 #define UCT_IB_MLX5_CQE64_MAX_INL   32 /* Inline scatter size in 64-byte CQE */
 #define UCT_IB_MLX5_CQE128_MAX_INL  64 /* Inline scatter size in 128-byte CQE */
+#define UCT_IB_MLX5_CQE64_SIZE_LOG   6
+#define UCT_IB_MLX5_CQE128_SIZE_LOG  7
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
@@ -57,6 +59,7 @@ typedef struct uct_ib_mlx5_cq {
     unsigned           cq_ci;
     unsigned           cq_length;
     unsigned           cqe_size;
+    unsigned           cqe_size_log;
 } uct_ib_mlx5_cq_t;
 
 
@@ -122,19 +125,19 @@ static inline void uct_ib_mlx5_wqe_set_data_seg(struct mlx5_wqe_data_seg *seg,
 }
 
 static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,
-                                                     size_t cqe_size)
+                                                     int cqe_size_log)
 {
     struct mlx5_cqe64 *cqe;
     unsigned index;
     uint8_t op_own;
 
     index  = cq->cq_ci;
-    cqe    = cq->cq_buf + (index & (cq->cq_length - 1)) * cqe_size;
+    cqe    = cq->cq_buf + ((index & (cq->cq_length - 1)) << cqe_size_log);
     op_own = cqe->op_own;
 
     if (ucs_likely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
         return NULL;
-    } else if (op_own & 0x80) {
+    } else if (ucs_unlikely(op_own & 0x80)) {
         return uct_ib_mlx5_check_completion(cq, cqe);
     }
 

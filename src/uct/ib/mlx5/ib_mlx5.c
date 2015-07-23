@@ -145,6 +145,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
         return UCS_ERR_UNSUPPORTED;
     }
 
+    mlx5_cq->cqe_size_log = ucs_ilog2(mlx5_cq->cqe_size);
     return UCS_OK;
 }
 

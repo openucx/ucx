@@ -95,7 +95,7 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     unsigned qp_num;
     uint16_t hw_ci;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, sizeof(struct mlx5_cqe64));
+    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
         return;
     }
@@ -132,7 +132,7 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     unsigned max_batch;
     uint16_t wqe_ctr_be;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size);
+    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
         /* If not CQE - post receives */
         max_batch = iface->super.config.rx_max_batch;
