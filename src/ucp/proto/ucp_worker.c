@@ -97,7 +97,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     worker->user_cb_arg   = 0;
     worker->context       = context;
     worker->uuid          = ucs_generate_uuid((uintptr_t)worker);
-    ucs_queue_head_init(&worker->completed);
 
     worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_EP_HASH_SIZE,
                                  "ucp_ep_hash");
@@ -153,9 +152,22 @@ err:
     return status;
 }
 
+static void ucp_worker_destroy_eps(ucp_worker_h worker)
+{
+    struct sglib_hashed_ucp_ep_t_iterator iter;
+    ucp_ep_h ep;
+
+    for (ep = sglib_hashed_ucp_ep_t_it_init(&iter, worker->ep_hash); ep != NULL;
+         ep = sglib_hashed_ucp_ep_t_it_next(&iter))
+    {
+        ucp_ep_destroy(ep);
+    }
+}
+
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_trace_func("worker=%p", worker);
+    ucp_worker_destroy_eps(worker);
     ucp_worker_close_ifaces(worker);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);

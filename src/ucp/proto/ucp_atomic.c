@@ -26,7 +26,7 @@
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
         uct_rkey = UCP_RMA_RKEY_LOOKUP(_ep, _rkey); \
         for (;;) { \
-            status = _uct_func((_ep)->uct.ep, _param, _remote_addr, uct_rkey); \
+            status = _uct_func((_ep)->uct_ep, _param, _remote_addr, uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
                 return status; \
             } \
@@ -46,7 +46,7 @@
         comp.count = 2; \
         \
         for (;;) { \
-            status = _uct_func((_ep)->uct.ep, \
+            status = _uct_func((_ep)->uct_ep, \
                                UCS_PP_TUPLE_BREAK _params, \
                                _remote_addr, uct_rkey, \
                                _result, &comp); \

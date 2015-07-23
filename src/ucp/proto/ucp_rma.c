@@ -33,7 +33,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
      */
     for (;;) {
         if (length <= ep->config.max_short_put) {
-            status = uct_ep_put_short(ep->uct.ep, buffer, length, remote_addr,
+            status = uct_ep_put_short(ep->uct_ep, buffer, length, remote_addr,
                                       uct_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 break;
@@ -41,11 +41,11 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
         } else {
             if (length <= ep->worker->context->config.bcopy_thresh) {
                 frag_length = ucs_min(length, ep->config.max_short_put);
-                status = uct_ep_put_short(ep->uct.ep, buffer, frag_length, remote_addr,
+                status = uct_ep_put_short(ep->uct_ep, buffer, frag_length, remote_addr,
                                           uct_rkey);
             } else {
                 frag_length = ucs_min(length, ep->config.max_bcopy_put);
-                status = uct_ep_put_bcopy(ep->uct.ep, (uct_pack_callback_t)memcpy,
+                status = uct_ep_put_bcopy(ep->uct_ep, (uct_pack_callback_t)memcpy,
                                           (void*)buffer, frag_length, remote_addr,
                                           uct_rkey);
             }
@@ -87,7 +87,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
          * fragment.
          */
         frag_length = ucs_min(ep->config.max_bcopy_get, length);
-        status = uct_ep_get_bcopy(ep->uct.ep, (uct_unpack_callback_t)memcpy,
+        status = uct_ep_get_bcopy(ep->uct_ep, (uct_unpack_callback_t)memcpy,
                                   (void*)buffer, frag_length, remote_addr,
                                   uct_rkey, &comp);
         if (ucs_likely(status == UCS_OK)) {
