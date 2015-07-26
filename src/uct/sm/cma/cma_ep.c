@@ -18,7 +18,7 @@ static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, uct_iface_t *tl_iface,
 {
     uct_cma_iface_t *iface = ucs_derived_of(tl_iface, uct_cma_iface_t);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
-    self->remote_pid = (pid_t)(((uct_sockaddr_process_t*)addr)->cookie);
+    self->remote_pid = (pid_t)(((uct_sockaddr_process_t*)addr)->id);
     return UCS_OK;
 }
 

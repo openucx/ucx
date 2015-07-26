@@ -155,12 +155,6 @@ static inline double ucs_log2(double x)
     __ucs_ilog2_u64((uint64_t)(n))     \
 )
 
-/* An atomic compare and swap. If the current value of `*PTR' is OLDVAL,
- * then write NEWVAL into `*PTR'.
- * Returns the contents of `*PTR' before the operation.
- */
-#define ucs_compare_and_swap(ptr,old_val,new_val)   __sync_val_compare_and_swap(ptr,old_val,new_val)
-
 /**
  * Convert flags without a branch
  * @return 'newflag' oldflag is set in 'value', otherwise - 0
