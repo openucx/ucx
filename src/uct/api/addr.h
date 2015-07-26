@@ -32,7 +32,7 @@ enum {
 typedef struct uct_sockaddr_process {
     UCT_SOCKADDR_COMMON (sp_);
     uint64_t   node_guid;
-    uint64_t   cookie;
+    uint64_t   id;
 } uct_sockaddr_process_t;
 
 
