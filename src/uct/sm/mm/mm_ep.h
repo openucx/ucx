@@ -14,7 +14,7 @@
 
 
 struct uct_mm_ep {
-    uct_base_ep_t      		super;
+    uct_base_ep_t           super;
 
     /* Remote peer */
     uct_mm_fifo_ctl_t       *fifo_ctl;  /* pointer to the beginning of the destination's receive fifo */
