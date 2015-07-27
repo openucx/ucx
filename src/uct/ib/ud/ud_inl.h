@@ -66,18 +66,30 @@ static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         return NULL;
     }
 
-    if (ep->tx.psn == ep->tx.max_psn) {
+    if (ucs_unlikely(ep->tx.psn == ep->tx.max_psn)) {
         ucs_trace_data("iface=%p ep=%p (%d->%d) tx window full (max_psn=%u)",
                        iface, ep, ep->ep_id, ep->dest_ep_id, (unsigned)ep->tx.max_psn);
         return NULL;
     }
 
     skb = iface->tx.skb;
-    if (!skb) {
+    if (ucs_unlikely(!skb)) {
         ucs_trace_data("iface=%p out of tx skbs", iface);
         return NULL;
     }
+    ucs_prefetch(skb->neth);
     return skb;
+}
+
+/* same as function above but also check that iface is connected */
+static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb2(uct_ud_iface_t *iface,
+                                                          uct_ud_ep_t *ep)
+{
+    if (ucs_unlikely(!uct_ud_ep_is_connected(ep))) {
+        return NULL;
+    }
+
+    return uct_ud_iface_get_tx_skb(iface, ep);
 }
 
 static inline void uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface,
@@ -110,3 +122,41 @@ static inline void uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface,
 #define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
     uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); \
     uct_ud_ep_log_tx(ep, skb);
+
+
+static inline void uct_ud_am_neth(uct_ud_neth_t *neth, uct_ud_ep_t *ep, uint8_t id)
+{
+    uct_ud_neth_init_data(ep, neth);
+    uct_ud_neth_set_type_am(ep, neth, id);
+    uct_ud_neth_ack_req(ep, neth);
+}
+
+static inline ucs_status_t uct_ud_am_common(uct_ud_iface_t *iface,
+                                            uct_ud_ep_t *ep,
+                                            uint8_t id,
+                                            uct_ud_send_skb_t **skb_p)
+{
+    uct_ud_send_skb_t *skb;
+
+    UCT_CHECK_AM_ID(id);
+
+    skb = uct_ud_iface_get_tx_skb2(iface, ep);
+    if (!skb) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+    VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
+
+    uct_ud_am_neth(skb->neth, ep, id);
+
+    *skb_p = skb;
+    return UCS_OK;
+}
+
+static inline void uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, 
+                                    uct_pack_callback_t pack_cb, 
+                                    void *arg, size_t length)
+{
+    pack_cb((char *)(skb->neth+1), arg, length);
+    skb->len = length + sizeof(uct_ud_neth_t);
+}
+

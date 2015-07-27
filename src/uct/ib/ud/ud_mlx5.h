@@ -93,6 +93,16 @@ static inline ptrdiff_t uct_ib_mlx5_inline_copy(void *dest, const void *src, uns
     }
 }
 
+static inline void *uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, char *seg_base, int seg_len)
+{
+    void *rseg;
+
+    rseg = seg_base + seg_len;
+    if (ucs_unlikely(rseg >= wq->qend)) {
+        rseg = wq->qstart;
+    }
+    return rseg;
+}
 
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ud_mlx5_calc_max_pi(uct_ud_mlx5_iface_t *iface, uint16_t ci)
@@ -146,6 +156,16 @@ static inline void uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint
     ctrl->fm_ce_se         = fm_ce_se;
 #endif
 }
+
+static inline void uct_ib_mlx5_set_dptr_seg(struct mlx5_wqe_data_seg *dptr, 
+                                            const void *address,
+                                            unsigned length, uint32_t lkey)
+{
+    dptr->byte_count = htonl(length);
+    dptr->lkey       = htonl(lkey);
+    dptr->addr       = htonll((uintptr_t)address);
+}
+
 
 static inline void uct_ib_mlx5_bf_copy_bb(void *dst, void *src)
 {
