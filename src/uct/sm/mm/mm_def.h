@@ -23,4 +23,7 @@ enum {
     UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1), /* if inline or not */
 };
 
+#define UCT_MM_IFACE_GET_FIFO_ELEM(_iface, _fifo , _index) \
+    (uct_mm_fifo_element_t*) ((char*)_fifo + (_index * _iface->elem_size));
+
 #endif /* UCT_MM_H */

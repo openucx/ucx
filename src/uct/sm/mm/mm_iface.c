@@ -14,28 +14,28 @@
 
 static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=pd", NULL,
-    ucs_offsetof(uct_mm_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+     ucs_offsetof(uct_mm_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
     {"FIFO_SIZE", "64",
-    "Size of the receive FIFO in the memory-map UCTs.",
-    ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
+     "Size of the receive FIFO in the memory-map UCTs.",
+     ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
 
-    {"RELEASE_FIFO_FACTOR", "0.5",
-    "Frequency of resource releasing on the receiver's side in the MM UCT.\n"
-    "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1)",
+    {"FIFO_RELEASE_FACTOR", "0.5",
+     "Frequency of resource releasing on the receiver's side in the MM UCT.\n"
+     "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1)",
      ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor), UCS_CONFIG_TYPE_DOUBLE},
 
     UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 256, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
     {"HUGETLB_MODE", "try",
-    "Enable using huge pages for internal shared memory buffers."
-    "Possible values are:\n"
-    " y   - Allocate memory using huge pages only.\n"
-    " n   - Allocate memory using regular pages only.\n"
-    " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.\n",
-    ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
+     "Enable using huge pages for internal shared memory buffers."
+     "Possible values are:\n"
+     " y   - Allocate memory using huge pages only.\n"
+     " n   - Allocate memory using regular pages only.\n"
+     " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.\n",
+     ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
 
     {NULL}
 };
@@ -67,7 +67,7 @@ void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put(mm_desc);
 }
 
-ucs_status_t uct_mm_flush()
+inline ucs_status_t uct_mm_flush()
 {
     ucs_memory_cpu_store_fence();
     return UCS_OK;
@@ -85,9 +85,9 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
     iface_attr->cap.get.max_bcopy      = SIZE_MAX;
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.am.max_short	   = iface->elem_size - sizeof(uct_mm_fifo_element_t);
-    iface_attr->cap.am.max_bcopy	   = iface->config.seg_size;
-    iface_attr->cap.am.max_zcopy	   = 0;
+    iface_attr->cap.am.max_short       = iface->elem_size - sizeof(uct_mm_fifo_element_t);
+    iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
+    iface_attr->cap.am.max_zcopy       = 0;
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT       |
@@ -136,21 +136,20 @@ static uct_iface_ops_t uct_mm_iface_ops = {
 static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
 {
     /* don't progress the tail every time - release in batches. improves performance */
-    if (iface->read_index & iface->fifo_release_factor_mask) return;
-
-    while ((iface->recv_fifo_ctl->tail < iface->read_index)) {
-        uct_mm_flush();
-        iface->recv_fifo_ctl->tail++;
+    if (iface->read_index & iface->fifo_release_factor_mask) {
+        return;
     }
+
+    iface->recv_fifo_ctl->tail = iface->read_index;
 }
 
-static void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
-                                      uct_mm_fifo_element_t* elem_to_read)
+static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
+                                      uct_mm_fifo_element_t* elem)
 {
-    if (elem_to_read->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE) {
+    if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
         /* read inline messages from the FIFO elements */
-        uct_mm_iface_invoke_am(iface, elem_to_read->am_id, (elem_to_read + 1),
-                               elem_to_read->length, iface->last_recv_desc);
+        uct_mm_iface_invoke_am(iface, elem->am_id, (elem + 1),
+                               elem->length, iface->last_recv_desc);
     } else {
         ucs_fatal("bcopy is not implemented");
     }
@@ -164,11 +163,10 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
     read_index = iface->read_index;
     read_index_loc = (read_index & iface->fifo_mask);
     /* the fifo_element which the read_index points to */
-    read_index_elem = (uct_mm_fifo_element_t*) ((char*) iface->recv_fifo_elements +
-                      (read_index_loc * (iface->elem_size)));
+    read_index_elem = UCT_MM_IFACE_GET_FIFO_ELEM(iface, iface->recv_fifo_elements ,read_index_loc);
 
     /* check the read_index to see if there is a new item to read (checking the owner bit) */
-    if (((read_index >> iface->fifo_shift) & 1)	== ((read_index_elem->flags) & 1)) {
+    if (((read_index >> iface->fifo_shift) & 1) == ((read_index_elem->flags) & 1)) {
         /* raise the read_index. */
         iface->read_index++;
 
@@ -177,7 +175,10 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
         ucs_assert(iface->read_index <= iface->recv_fifo_ctl->head);
 
         uct_mm_iface_process_recv(iface, read_index_elem);
-        uct_mm_progress_fifo_tail(iface);
+    } else {
+       /* progress the tail when there is nothing to read
+        * to improve latency of receiving a message */
+       uct_mm_progress_fifo_tail(iface);
     }
 }
 
@@ -200,14 +201,14 @@ void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 }
 
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
-									  uct_mm_iface_config_t *config, uct_pd_h pd)
+                                      uct_mm_iface_config_t *config, uct_pd_h pd)
 {
     ucs_status_t status;
     size_t size_to_alloc;
 
-	/* allocate the receive FIFO */
+    /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_FIFO_CTL_SIZE_ALIGNED +
-                    (config->fifo_size) * (iface->elem_size);
+                    (config->fifo_size * iface->elem_size);
 
     status = uct_mm_pd_mapper_ops(pd)->alloc(&size_to_alloc, config->hugetlb_mode,
                                              &iface->recv_fifo, &iface->fifo_mm_id
@@ -269,19 +270,17 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
 
     /* initiate the beginning of the FIFO to the uct_mm_fifo_ctl struct,
      * holding the head+tail */
-    self->recv_fifo_ctl 		= (uct_mm_fifo_ctl_t*) self->recv_fifo;
+    self->recv_fifo_ctl         = (uct_mm_fifo_ctl_t*) self->recv_fifo;
     self->recv_fifo_ctl->head   = 0;
     self->recv_fifo_ctl->tail   = 0;
-    self->read_index 			= 0;
+    self->read_index            = 0;
 
     /* initiate the pointer to the beginning of the first FIFO element */
-    self->recv_fifo_elements = (uct_mm_fifo_element_t*) ((uintptr_t) self->recv_fifo_ctl +
-                               UCT_MM_FIFO_CTL_SIZE_ALIGNED);
+    self->recv_fifo_elements = (void*) self->recv_fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 
     /* initiate the owner bit in all the FIFO elements */
     for (i = 0; i < mm_config->fifo_size; i++) {
-        fifo_elem_p = (uct_mm_fifo_element_t*) ((char*) self->recv_fifo_elements +
-                      (i * self->elem_size));
+        fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(self, self->recv_fifo_elements, i);
         fifo_elem_p->flags = UCT_MM_FIFO_ELEM_FLAG_OWNER;
     }
 

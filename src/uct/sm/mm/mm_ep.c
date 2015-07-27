@@ -84,30 +84,24 @@ ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return UCS_OK;
 }
 
-inline uint64_t uct_mm_ep_head_index_in_fifo(uct_mm_ep_t *ep)
+static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
+		                                             uct_mm_fifo_element_t **elem)
 {
     uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
-    return (ep->fifo_ctl->head & iface->fifo_mask);
-}
-
-uct_mm_fifo_element_t* uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head)
-{
-    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
-    uct_mm_fifo_element_t* write_elem;  /* the fifo_element which the head points to */
-    uint64_t elem_index;                /* the fifo elem's index in the fifo. */
-                                        /* must be smaller than fifo size */
+    uint64_t elem_index;       /* the fifo elem's index in the fifo. */
+                               /* must be smaller than fifo size */
     uint64_t returned_val;
 
-    elem_index = uct_mm_ep_head_index_in_fifo(ep);
-    write_elem = (uct_mm_fifo_element_t*)(ep->fifo + elem_index * (iface->elem_size));
+    elem_index = ep->fifo_ctl->head & iface->fifo_mask;
+    (*elem) = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo, elem_index);
 
-    /* try to get ownership on the head element */
+    /* try to get ownership of the head element */
     returned_val = ucs_atomic_cswap64(&ep->fifo_ctl->head, head, head+1);
     if (returned_val != head) {
-        return NULL;
+        return UCS_ERR_NO_RESOURCE;
     }
 
-    return write_elem;
+    return UCS_OK;
 }
 
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
@@ -115,7 +109,8 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
-    uct_mm_fifo_element_t *elem_to_write;
+    uct_mm_fifo_element_t *elem;
+    ucs_status_t status;
     uint64_t head;
 
     UCT_CHECK_AM_ID(id);
@@ -124,33 +119,34 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     head = ep->fifo_ctl->head;
     /* check if there is room in the remote process's receive fifo to write */
-    if ((head - ep->fifo_ctl->tail) >= iface->config.fifo_size) {
+    if (ucs_unlikely((head - ep->fifo_ctl->tail) >= iface->config.fifo_size)) {
         return UCS_ERR_NO_RESOURCE;
     }
 
-    elem_to_write = uct_mm_ep_get_remote_elem(ep, head);
+    status = uct_mm_ep_get_remote_elem(ep, head, &elem);
 
-    if (elem_to_write != NULL ) {
+    if (status == UCS_OK) {
         /* write to the remote fifo */
-        *(uint64_t*)(elem_to_write + 1) = header;
-        memcpy((void*)(elem_to_write + 1) + sizeof(header), payload, length);
-        elem_to_write->am_id  = id;
-        elem_to_write->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
-        elem_to_write->length = length + sizeof(header);
+        *(uint64_t*)(elem + 1) = header;
+        memcpy((void*)(elem + 1) + sizeof(header), payload, length);
+        elem->am_id  = id;
+        elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
+        elem->length = length + sizeof(header);
 
         /* memory barrier - make sure that the memory is flushed before setting the
          * 'writing is complete' flag which the reader checks */
-        uct_mm_flush();
+        ucs_memory_cpu_store_fence();
 
-        /* change the owner bit to indicate that the writing is complete */
+        /* change the owner bit to indicate that the writing is complete.
+         * the owner bit flips after every fifo wraparound */
         if (head & iface->config.fifo_size) {
-            elem_to_write->flags |= UCT_MM_FIFO_ELEM_FLAG_OWNER;
+            elem->flags |= UCT_MM_FIFO_ELEM_FLAG_OWNER;
         } else {
-            elem_to_write->flags &= ~UCT_MM_FIFO_ELEM_FLAG_OWNER;
+            elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_OWNER;
         }
     } else {
         /* couldn't get an available fifo element */
-        return UCS_ERR_NO_RESOURCE;
+        return status;
     }
     ucs_trace_data("MM: AM_SHORT am_id: %d buf=%p length=%u", id, payload, length);
     return UCS_OK;

@@ -39,17 +39,17 @@ struct uct_mm_iface {
     uct_mm_fifo_ctl_t       *recv_fifo_ctl;   /* pointer to the struct at the */
                                               /* beginning of the receive fifo */
                                               /* which holds the head and the tail */
-    uct_mm_fifo_element_t   *recv_fifo_elements; /* pointer to the first fifo element */
+    void                    *recv_fifo_elements; /* pointer to the first fifo element */
                                                  /* in the receive fifo */
-    volatile uint64_t       read_index;          /* actual reading location */
+    uint64_t                read_index;          /* actual reading location */
 
     uint8_t                 fifo_shift;          /* = log2(fifo_size) */
     unsigned                fifo_mask;           /* = 2^fifo_shift - 1 */
     unsigned                elem_size;
     uint64_t                fifo_release_factor_mask;
 
-    ucs_mpool_h          	recv_desc_mp;
-    uct_mm_recv_desc_t 		*last_recv_desc;
+    ucs_mpool_h             recv_desc_mp;
+    uct_mm_recv_desc_t      *last_recv_desc;
 
     struct {
         unsigned fifo_size;
@@ -58,17 +58,20 @@ struct uct_mm_iface {
     } config;
 };
 
+
 struct uct_mm_fifo_element {
     uint8_t             flags;
-    uint8_t             am_id;	   /* active message id */
+    uint8_t             am_id;     /* active message id */
     uint16_t            length;    /* length of actual data */
     /* the data follows here */
 } UCS_S_PACKED;
+
 
 struct uct_mm_fifo_ctl {
     volatile uint64_t  head;       /* where to write next */
     volatile uint64_t  tail;       /* how much was read */
 } UCS_S_PACKED;
+
 
 struct uct_mm_recv_desc {
     uct_mm_id_t         key;
@@ -76,12 +79,13 @@ struct uct_mm_recv_desc {
     uct_am_recv_desc_t  am_recv;   /* has to be in the end */
 };
 
+
 static UCS_F_ALWAYS_INLINE void
 uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
                        unsigned length, uct_mm_recv_desc_t *mm_desc)
 {
     ucs_status_t status;
-    void *desc = mm_desc + 1;	/* point the desc to the user's headroom */
+    void *desc = mm_desc + 1;    /* point the desc to the user's headroom */
 
     status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
     if (status != UCS_OK) {
@@ -95,7 +99,7 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
 }
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
-ucs_status_t uct_mm_flush();
+inline ucs_status_t uct_mm_flush();
 
 extern uct_tl_component_t uct_mm_tl;
 
