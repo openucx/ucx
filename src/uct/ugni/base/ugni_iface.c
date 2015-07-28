@@ -267,9 +267,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const uct_iface_config_t *tl_config
                            UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
-  //uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
   uct_ugni_device_t *dev;
-  //ucs_status_t rc;
 
   dev = uct_ugni_device_by_name(dev_name);
   if (NULL == dev) {

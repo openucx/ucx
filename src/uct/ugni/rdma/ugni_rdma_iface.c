@@ -12,11 +12,7 @@
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_rdma_iface.h"
 #include "ugni_rdma_ep.h"
-/*
-UCS_CLASS_DECLARE(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h worker,
-                  const char *dev_name, size_t rx_headroom,
-                           const uct_iface_config_t *tl_config)
-*/
+
 static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     /* This tuning controls the allocation priorities for bouncing buffers */
     { "", "MAX_SHORT=2048;MAX_BCOPY=2048;ALLOC=huge,mmap,heap", NULL,
