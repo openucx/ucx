@@ -154,6 +154,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     ugni, \
     mm, \
     cma, \
+    knem, \
     cuda
 
 #define UCT_TEST_IB_TLS \
