@@ -4,7 +4,7 @@
 knem_happy="no"
 AC_ARG_WITH([knem],
            [AS_HELP_STRING([--with-knem=(DIR)], [Enable the use of KNEM (default is NO).])],
-           [], [with_knem=no])
+           [], [with_knem=guess])
 
 AS_IF([test "x$with_knem" != xno],
       [AS_IF([test ! -d $with_knem], 
