@@ -93,7 +93,7 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
         if (iface->last_recv_desc == NULL ) {
            ucs_fatal("Failed to get a new receive descriptor for MM");
         }
-        /* save the iface of this desc the its later release */
+        /* save the iface of this desc for its later release */
         uct_recv_desc_iface(desc) = &iface->super.super;
     }
 }
