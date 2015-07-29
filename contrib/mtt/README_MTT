@@ -1,0 +1,30 @@
+MTT for the UCX project.
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following section describes the steps for running MTT for the UCX project.
+The scripts in this directory use the Slurm job scheduler to run the MTT job.
+
+1. Clone the MTT repository:
+   git clone https://github.com/open-mpi/mtt
+
+2. Set the path to the cloned directory:
+   export MTT_HOME=$PWD/mtt
+
+3. Set the location of the directory which will hold all the job's information.
+   Please note that this directory should be shared on your file system.
+   export MTT_SCRATCH_ROOT=/path/to/scratch/dir
+
+4. Next is running the job. The following command uses 2 hosts:
+   sbatch -N 2 -p slurm_partition run-ucx.slurm
+
+5. An output file will be created: slurm-$SLURM_JOBID.out.
+   Please view this file to moniter the progress of your MTT job.
+
+The mtt_ucx_oshmem.ini file will:
+=================================
+1) Clone the UCX project and build it. 
+2) Clone the needed ompi branch (which is specified with 
+   'ompi_scm_url' in the ini file, and can be changed from 
+   the command line as well) and compile it with UCX.
+3) Clone the tests in the ini file, build them against 
+   the ompi build and run them with the given parameters.

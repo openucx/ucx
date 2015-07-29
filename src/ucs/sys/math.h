@@ -155,7 +155,6 @@ static inline double ucs_log2(double x)
     __ucs_ilog2_u64((uint64_t)(n))     \
 )
 
-
 /**
  * Convert flags without a branch
  * @return 'newflag' oldflag is set in 'value', otherwise - 0

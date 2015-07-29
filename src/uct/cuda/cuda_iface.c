@@ -32,7 +32,7 @@ static ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface,
 
     cuda_addr->sp_family = UCT_AF_PROCESS;
     cuda_addr->node_guid = ucs_machine_guid();
-    cuda_addr->cookie    = 0;
+    cuda_addr->id        = 0;
     return UCS_OK;
 }
 
