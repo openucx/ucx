@@ -48,7 +48,7 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
 
     iface_addr->sp_family = UCT_AF_PROCESS;
     iface_addr->node_guid = ucs_machine_guid();
-    iface_addr->id 	  = iface->fifo_mm_id;
+    iface_addr->id        = iface->fifo_mm_id;
     return UCS_OK;
 }
 
