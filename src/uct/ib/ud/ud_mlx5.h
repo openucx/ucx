@@ -77,19 +77,17 @@ struct uct_ib_mlx5_ctrl_dgram_seg {
  *
  * @return If there was a wrap-around, return -qp_size. Otherwise, return 0.
  */
-static inline ptrdiff_t uct_ib_mlx5_inline_copy(void *dest, const void *src, unsigned length, uct_ib_mlx5_txwq_t *wq)
+static inline void uct_ib_mlx5_inline_copy(void *dest, const void *src, unsigned length, uct_ib_mlx5_txwq_t *wq)
 {
     void *qend = wq->qend;
     ptrdiff_t n;
 
     if (dest + length <= qend) {
         memcpy(dest, src, length);
-        return 0;
     } else {
         n = qend - dest;
         memcpy(dest, src, n);
         memcpy(wq->qstart, src + n, length - n);
-        return wq->qstart - qend;
     }
 }
 
@@ -101,9 +99,12 @@ static inline void *uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, char *seg_b
     if (ucs_unlikely(rseg >= wq->qend)) {
         rseg = wq->qstart;
     }
+    ucs_assert((unsigned long)rseg % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
+    ucs_assert(rseg >= wq->qstart && rseg < wq->qend);
     return rseg;
 }
 
+/* TODO: we do not need this function */
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ud_mlx5_calc_max_pi(uct_ud_mlx5_iface_t *iface, uint16_t ci)
 {
@@ -120,12 +121,12 @@ static inline void uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
     seg->av.base.fl_mlid        = av->base.fl_mlid | path_bits;
     seg->av.base.rlid           = av->base.rlid | (path_bits << 8);
     seg->av.base.dqp_dct        = av->base.dqp_dct;
-    ucs_trace_data("AV: rlid=%d dqp=%x", seg->av.base.rlid, seg->av.base.dqp_dct);
 /*  No need to fill grh
     seg->av.grh_sec.tclass      = av->grh_sec.tclass;
     seg->av.grh_sec.hop_limit   = av->grh_sec.hop_limit;
     seg->av.grh_sec.grh_gid_fl  = av->grh_sec.grh_gid_fl;
 */
+    seg->av.grh_sec.grh_gid_fl  = 0;
 }
 
 static inline void uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
@@ -134,6 +135,7 @@ static inline void uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint
 {
     uint8_t ds;
 
+    ucs_assert((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
     ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
     ucs_trace_data("ds=%d wqe_size=%d", ds, wqe_size);
 #ifdef __SSE4_2__
@@ -161,6 +163,7 @@ static inline void uct_ib_mlx5_set_dptr_seg(struct mlx5_wqe_data_seg *dptr,
                                             const void *address,
                                             unsigned length, uint32_t lkey)
 {
+    ucs_assert((unsigned long)dptr % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
     dptr->byte_count = htonl(length);
     dptr->lkey       = htonl(lkey);
     dptr->addr       = htonll((uintptr_t)address);
@@ -183,6 +186,7 @@ static inline void uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe
     void *src, *dst;
     uint16_t sw_pi;
 
+    ucs_assert((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
     uct_ib_mlx5_log_tx(IBV_QPT_UD, ctrl, wq->qstart, wq->qend, NULL);
     num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
     sw_pi   = wq->sw_pi;

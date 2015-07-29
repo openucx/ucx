@@ -167,13 +167,13 @@ static ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_
     uct_ud_am_short_hdr_t *am_hdr;
     ucs_status_t status;
 
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + sizeof(hdr) + length,
+                     iface->super.config.max_inline, "am_short");
+
     status = uct_ud_verbs_am_common(iface, ep, id, &skb);
     if (status != UCS_OK) {
         return status;
     }
-
-    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + sizeof(hdr) + length,
-                     iface->super.config.max_inline, "am_short");
 
     am_hdr = (uct_ud_am_short_hdr_t *)(skb->neth+1);
     am_hdr->hdr = hdr;
@@ -334,51 +334,31 @@ static ucs_status_t uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
 
 ucs_status_t uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const struct sockaddr *addr, uct_ep_h *new_ep_p)
 {
-    uct_ud_ep_t *ready_ep;
-    uct_ud_verbs_ep_t *ep;
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
+    uct_ud_verbs_ep_t *ep;
     uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
     uct_ud_send_skb_t *skb;
     struct ibv_ah *ah;
     ucs_status_t status;
 
-
-    /* check if we can reuse half duplex ep */
-    ready_ep = uct_ud_iface_cep_lookup(&iface->super, if_addr, UCT_UD_EP_CONN_ID_MAX);
-    if (ready_ep) {
-        *new_ep_p = &ready_ep->super.super;
+    status = uct_ud_ep_create_connected(&iface->super, 
+                                        if_addr, (uct_ud_ep_t **)&ep, &skb);
+    if (status != UCS_OK) {
+        return status;
+    }
+    *new_ep_p = &ep->super.super.super;
+    if (skb == NULL) {
         return UCS_OK;
     }
 
-    status = iface_h->ops.ep_create(iface_h, new_ep_p);
-    if (status != UCS_OK) {
-        return status;
-    }
-    ep = ucs_derived_of(*new_ep_p, uct_ud_verbs_ep_t);
-
-    status = uct_ud_ep_connect_to_iface(&ep->super, addr);
-    if (status != UCS_OK) {
-        return status;
-    }
     ucs_assert_always(ep->ah == NULL);
     ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         status = UCS_ERR_INVALID_ADDR;
-        goto err1;
+        goto err;
     }
     ep->ah = ah;
-    
-    status = uct_ud_iface_cep_insert(&iface->super, if_addr, &ep->super, UCT_UD_EP_CONN_ID_MAX);
-    if (status != UCS_OK) {
-        goto err2;
-    }
-
-    skb = uct_ud_ep_prepare_creq(&ep->super);
-    if (!skb) {
-        status = UCS_ERR_NO_RESOURCE;
-        goto err3;
-    }
 
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
     iface->tx.sge[0].length = skb->len;
@@ -386,13 +366,8 @@ ucs_status_t uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const struct 
     ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
     return UCS_OK;
 
-err3:
-    uct_ud_iface_cep_rollback(&iface->super, if_addr, &ep->super);
-err2:
-    ibv_destroy_ah(ep->ah);
-    ep->ah = NULL;
-err1:
-    uct_ud_ep_disconnect_from_iface(*new_ep_p);
+err:
+    uct_ud_ep_destroy_connected(&ep->super, if_addr);
     *new_ep_p = NULL;
     return status;
 }
@@ -429,17 +404,21 @@ uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
     .iface_flush         = uct_ud_iface_flush,
     .iface_release_am_desc=uct_ib_iface_release_am_desc,
-    .ep_get_address      = uct_ud_ep_get_address,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_create_connected = uct_ud_verbs_ep_create_connected,
-    .ep_connect_to_ep    = uct_ud_verbs_ep_connect_to_ep, 
     .iface_get_address   = uct_ud_iface_get_address,
     .iface_is_reachable  = uct_ib_iface_is_reachable,
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .iface_query         = uct_ud_verbs_iface_query,
+
+    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
+    .ep_get_address      = uct_ud_ep_get_address,
+
+    .ep_create_connected = uct_ud_verbs_ep_create_connected,
+    .ep_connect_to_ep    = uct_ud_verbs_ep_connect_to_ep, 
+
     .ep_put_short        = uct_ud_verbs_ep_put_short,
     .ep_am_short         = uct_ud_verbs_ep_am_short,
     .ep_am_bcopy         = uct_ud_verbs_ep_am_bcopy,
+
     .ep_req_notify       = uct_ud_ep_req_notify,
     .ep_flush            = uct_ud_ep_flush
 };

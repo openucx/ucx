@@ -70,8 +70,20 @@ static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
     }
 
     if (ack_req) {
-        snprintf(p, max, " ACK_REQ");
+        n = snprintf(p, max, " ACK_REQ");
         p += n; max -= n; ret += n;
+    }
+    /* dump raw neth since it helps out to debug sniffer traces */
+    {
+        int i;
+        char *base = (char *)neth;
+        
+        n = snprintf(p, max, " NETH ");
+        p += n; max -= n; ret += n;
+        for (i = 0; i < sizeof(*neth); i++) {
+           n = snprintf(p, max, "%02X ", (unsigned)(char)base[i]);
+           p += n; max -= n; ret += n;
+        }
     }
     return ret;
 }

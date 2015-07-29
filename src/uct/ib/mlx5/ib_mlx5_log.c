@@ -8,6 +8,7 @@
 #include "ib_mlx5_log.h"
 
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/ud/ud_mlx5.h>
 #include <string.h>
 
 
@@ -121,7 +122,6 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         *is_inline = 1;
         ds         = ucs_div_round_up(sizeof(*inl) + sg->length,
                                      UCT_IB_MLX5_WQE_SEG_SIZE);
-        ucs_warn("inline_seg_blocks=%d length=%d size=%d", ds, sg->length, (int)sizeof(*inl));
     } else {
         dpseg      = *dseg_p;
         sg->addr   = ntohll(dpseg->addr);
@@ -147,6 +147,10 @@ static uint64_t network_to_host(uint64_t value, int size)
     } else {
         return value;
     }
+}
+static void uct_ib_mlx5_dump_dgram(char *buf, size_t max, struct mlx5_wqe_datagram_seg *seg)
+{
+    snprintf(buf, max-1, " [rlid: %d dqp: 0x%x]", ntohs(seg->av.base.rlid), ntohl(seg->av.base.dqp_dct) & ~MXM_IB_MLX5_EXTENDED_UD_AV);
 }
 
 static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qstart,
@@ -192,7 +196,19 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
         seg = qstart;
     }
 
-    /* TODO AV segment */
+    if (qp_type == IBV_QPT_UD) {
+        struct mlx5_wqe_datagram_seg *av;
+
+        av = (struct mlx5_wqe_datagram_seg *)seg;
+        uct_ib_mlx5_dump_dgram(s, ends - s, av);
+        s += strlen(s);
+
+        seg = (char *)seg + sizeof(struct mlx5_wqe_datagram_seg);
+        ds -= ucs_div_round_up(sizeof(struct mlx5_wqe_datagram_seg), UCT_IB_MLX5_WQE_SEG_SIZE);
+    }
+    if (seg == qend) {
+        seg = qstart;
+    }
 
     /* Remote address segment */
     if (op->flags & UCT_IB_OPCODE_FLAG_HAS_RADDR) {
@@ -265,11 +281,9 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
     /* Data segments*/
     i = 0;
     inline_bitmap = 0;
-    ucs_warn("ds = %d", ds);
 
     while ((ds > 0) && (i < sizeof(sg_list) / sizeof(sg_list[0]))) {
         ds -= uct_ib_mlx5_parse_dseg(&seg, qstart, qend, &sg_list[i], &is_inline);
-        ucs_warn("i=%d is_inline=%d", i, is_inline);
         if (is_inline) {
             inline_bitmap |= UCS_BIT(i);
         }
@@ -277,7 +291,7 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
         ++i;
     }
 
-    //uct_ib_log_dump_sg_list(sg_list, i, inline_bitmap, packet_dump_cb, s, ends - s);
+    uct_ib_log_dump_sg_list(sg_list, i, inline_bitmap, packet_dump_cb, s, ends - s); 
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,

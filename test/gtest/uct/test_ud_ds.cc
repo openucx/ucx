@@ -133,4 +133,5 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ud_ds, ud)
+_UCT_INSTANTIATE_TEST_CASE(test_ud_ds, ud_mlx5)
 

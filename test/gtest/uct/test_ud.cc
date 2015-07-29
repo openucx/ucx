@@ -311,4 +311,5 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud)
+_UCT_INSTANTIATE_TEST_CASE(test_ud, ud_mlx5)
 

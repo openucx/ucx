@@ -205,5 +205,6 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id);
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
+
 #endif
 
