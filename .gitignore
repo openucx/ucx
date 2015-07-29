@@ -51,3 +51,5 @@ debian/rules
 debian/ucx.postinst
 ucx.spec
 ucx.pc
+doc/doxygen-doc
+doc/uml/uct.pdf
