@@ -1,0 +1,38 @@
+#
+## Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+##
+## $COPYRIGHT$
+## $HEADER$
+##
+#
+
+
+## 1.1.0 (September 1, 2015)
+
+Workarounds:
+Features:
+  - added support for AM based on FIFO in `mm` shared memory transport
+
+Bugfixes:
+Known issues:
+
+
+## 1.0.0 (July 22, 2015)
+
+Features:
+
+  - added support for UCT `cma` shared memory transport (Cross-Memory Attatch)
+  - added support for UCT `mm` shared memory transport with mmap/sysv APIs
+  - added support for UCT `rc` transport based on Infiniband/RC with verbs
+  - added support for UCT `mlx5_rc` transport based on Infiniband/RC with accelerated verbs
+  - added support for UCT `cm` transport based on Infiniband/SIDR (Service ID Resolution)
+  - added support for UCT `ugni` transport based on Cray/UGNI
+  - added support for Doxygen based documentation generation
+  - added support for UCP basic protocol layer to fit PGAS paradigm (RMA, AMO)
+  - added ucx_perftest utility to exercise major UCX flows and provide performance metrics
+  - added test script for jenkins (contrib/test_jenkins.sh)
+  - added packaging for RPM/DEB based linux distributions (see contrib/buildrpm.sh)
+  - added Unit-tests infractucture for UCX functionality based on Google Test framework (see test/gtest/)
+  - added initial integration for OpenMPI with UCX for PGAS/SHMEM API 
+    (see: https://github.com/openucx/ompi-mirror/pull/1)
+  - added end-to-end testing infrastructure based on MTT (see contrib/mtt/README_MTT)
