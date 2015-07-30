@@ -63,7 +63,10 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const void *buffer,
 
     icopy.write = write; /* if 0 then, READ from the remote region into my local segments
                           * if 1 then, WRITE to the remote region from my local segment */
-    icopy.flags = 0; /* TBD: add check and support for KNEM_FLAG_DMA */  
+    icopy.flags = 0;     /* TBD: add check and support for KNEM_FLAG_DMA */
+    icopy.current_status = 0;
+    icopy.async_status_index = 0;
+    icopy.pad = 0;
 
     ucs_assert(knem_fd > -1);                                      
     rc = ioctl(knem_fd, KNEM_CMD_INLINE_COPY, &icopy);            

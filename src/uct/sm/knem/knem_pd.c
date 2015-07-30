@@ -26,6 +26,8 @@ static ucs_status_t uct_knem_query_pd_resources(uct_pd_resource_desc_t **resourc
     int rc;
     struct knem_cmd_info info;
 
+    memset(&info, 0, sizeof(struct knem_cmd_info));
+
     fd = open("/dev/knem", O_RDWR);
     if (fd < 0) {
         ucs_debug("Could not open the KNEM device file at /dev/knem: %m. Disabling knem resource");
@@ -87,6 +89,7 @@ static ucs_status_t uct_knem_mem_reg(uct_pd_h pd, void *address, size_t length,
     knem_iov[0].base = (uintptr_t) address;
     knem_iov[0].len = length;
 
+    memset(&create, 0, sizeof(struct knem_cmd_create_region));
     create.iovec_array = (uintptr_t) &knem_iov[0];
     create.iovec_nr = 1;
     create.flags = 0;
