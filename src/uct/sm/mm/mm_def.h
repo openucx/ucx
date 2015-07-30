@@ -24,6 +24,6 @@ enum {
 };
 
 #define UCT_MM_IFACE_GET_FIFO_ELEM(_iface, _fifo , _index) \
-    (uct_mm_fifo_element_t*) ((char*)(_fifo) + ((_index) * (_iface->elem_size)));
+    (uct_mm_fifo_element_t*) ((char*)(_fifo) + ((_index) * (_iface)->elem_size));
 
 #endif /* UCT_MM_H */

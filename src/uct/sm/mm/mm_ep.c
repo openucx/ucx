@@ -93,7 +93,7 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
     uint64_t returned_val;
 
     elem_index = ep->fifo_ctl->head & iface->fifo_mask;
-    (*elem) = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo, elem_index);
+    *elem = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo, elem_index);
 
     /* try to get ownership of the head element */
     returned_val = ucs_atomic_cswap64(&ep->fifo_ctl->head, head, head+1);
