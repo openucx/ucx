@@ -16,8 +16,8 @@ static ucs_status_t uct_cma_query_pd_resources(uct_pd_resource_desc_t **resource
                                                unsigned *num_resources_p)
 {
     ssize_t delivered;
-    uint64_t test_dst;
-    uint64_t test_src;
+    uint64_t test_dst = 0;
+    uint64_t test_src = 0;
     pid_t dst = getpid();
     struct iovec local_iov  = {.iov_base = &test_src,
                                .iov_len = sizeof(test_src)};
