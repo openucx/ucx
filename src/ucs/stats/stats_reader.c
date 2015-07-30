@@ -221,7 +221,7 @@ int main(int argc, char **argv)
     GtkWidget *window;
     ucs_status_t status;
     int port;
-    char c;
+    int c;
 
     gtk_init(&argc, &argv);
 
