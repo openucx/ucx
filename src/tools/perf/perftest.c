@@ -496,7 +496,7 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
 static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **argv)
 {
     ucs_status_t status;
-    char c;
+    int c;
 
     ucs_trace_func("");
 
