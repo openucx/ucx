@@ -18,7 +18,7 @@ perftest_dir = $(pkgdatadir)/perftest
 doc_dir = $(pkgdatadir)/doc
 
 dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
-dist_doc__DATA = README
+dist_doc__DATA = README.md
 
 SUBDIRS = \
 	src/ucs \
