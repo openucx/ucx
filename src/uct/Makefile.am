@@ -140,6 +140,7 @@ endif
 noinst_HEADERS += \
     sm/mm/mm_iface.h \
     sm/mm/mm_ep.h \
+    sm/mm/mm_def.h \
     sm/mm/mm_pd.h
 
 libuct_la_SOURCES += \

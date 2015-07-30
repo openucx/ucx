@@ -18,7 +18,6 @@
 /* Shared memory ID */
 typedef uint64_t uct_mm_id_t;
 
-
 /*
  * Memory mapper operations - MM uses them to implement PD and TL functionality.
  */

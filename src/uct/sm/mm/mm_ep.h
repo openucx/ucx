@@ -13,10 +13,13 @@
 #include <uct/tl/tl_log.h>
 
 
-typedef struct uct_mm_ep {
-    uct_base_ep_t      super;
-    struct uct_mm_ep *next;
-} uct_mm_ep_t;
+struct uct_mm_ep {
+    uct_base_ep_t           super;
+
+    /* Remote peer */
+    uct_mm_fifo_ctl_t       *fifo_ctl;  /* pointer to the beginning of the destination's receive fifo */
+    void                    *fifo;      /* fifo elements (destination's receive fifo) */
+};
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
                            const struct sockaddr *);
@@ -29,7 +32,7 @@ ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
                                  void *arg, size_t length, 
                                  uint64_t remote_addr, uct_rkey_t rkey);
-ucs_status_t uct_mm_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
+ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                     uint64_t remote_addr, uct_rkey_t rkey);

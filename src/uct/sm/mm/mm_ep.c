@@ -12,13 +12,39 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
                            const struct sockaddr *addr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+    uct_sockaddr_process_t *remote_iface_addr = (uct_sockaddr_process_t *)addr;
+    ucs_status_t status;
+    void *ptr;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+
+    /* Connect to the remote address */
+    /* Attach the address's memory */
+    status = uct_mm_pd_mapper_ops(iface->super.pd)->attach(remote_iface_addr->id, &ptr);
+    if (status != UCS_OK) {
+        ucs_error("failed to connect to remote peer with mm. remote mm_id: %zu",
+                   remote_iface_addr->id);
+        return status;
+    }
+
+    self->fifo_ctl = ptr;
+    self->fifo     = (void*) self->fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
+
+    ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, remote_iface_addr->id);
+
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
 {
-    /* No op */
+    uct_mm_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_mm_iface_t);
+    ucs_status_t status;
+
+    /* detach the remote proceess's shared memory segment (remote recv FIFO) */
+    status = uct_mm_pd_mapper_ops(iface->super.pd)->release(self->fifo_ctl);
+    if (status != UCS_OK) {
+        ucs_error("error detaching from remote FIFO");
+    }
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
@@ -58,10 +84,72 @@ ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return UCS_OK;
 }
 
-ucs_status_t uct_mm_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
+static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
+		                                             uct_mm_fifo_element_t **elem)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
+    uint64_t elem_index;       /* the fifo elem's index in the fifo. */
+                               /* must be smaller than fifo size */
+    uint64_t returned_val;
+
+    elem_index = ep->fifo_ctl->head & iface->fifo_mask;
+    *elem = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo, elem_index);
+
+    /* try to get ownership of the head element */
+    returned_val = ucs_atomic_cswap64(&ep->fifo_ctl->head, head, head+1);
+    if (returned_val != head) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length)
 {
-    return UCS_ERR_UNSUPPORTED;
+    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+    uct_mm_fifo_element_t *elem;
+    ucs_status_t status;
+    uint64_t head;
+
+    UCT_CHECK_AM_ID(id);
+    UCT_CHECK_LENGTH(length + sizeof(header),
+                     iface->elem_size - sizeof(uct_mm_fifo_element_t), "am_short");
+
+    head = ep->fifo_ctl->head;
+    /* check if there is room in the remote process's receive fifo to write */
+    if (ucs_unlikely((head - ep->fifo_ctl->tail) >= iface->config.fifo_size)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    status = uct_mm_ep_get_remote_elem(ep, head, &elem);
+
+    if (status == UCS_OK) {
+        /* write to the remote fifo */
+        *(uint64_t*)(elem + 1) = header;
+        memcpy((void*)(elem + 1) + sizeof(header), payload, length);
+        elem->am_id  = id;
+        elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
+        elem->length = length + sizeof(header);
+
+        /* memory barrier - make sure that the memory is flushed before setting the
+         * 'writing is complete' flag which the reader checks */
+        ucs_memory_cpu_store_fence();
+
+        /* change the owner bit to indicate that the writing is complete.
+         * the owner bit flips after every fifo wraparound */
+        if (head & iface->config.fifo_size) {
+            elem->flags |= UCT_MM_FIFO_ELEM_FLAG_OWNER;
+        } else {
+            elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_OWNER;
+        }
+    } else {
+        /* couldn't get an available fifo element */
+        return status;
+    }
+    ucs_trace_data("MM: AM_SHORT am_id: %d buf=%p length=%u", id, payload, length);
+    return UCS_OK;
 }
 
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,

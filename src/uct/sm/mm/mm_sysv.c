@@ -12,13 +12,17 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 
+#define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
+#define UCT_MM_SYSV_MSTR (UCT_MM_SYSV_PERM | IPC_CREAT | IPC_EXCL)
 
 static ucs_status_t
 uct_sysv_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
                void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
-    int shmid = 0;
+    int flags, shmid = 0;
+
+    flags = UCT_MM_SYSV_MSTR;
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
@@ -27,7 +31,7 @@ uct_sysv_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     if (hugetlb != UCS_NO) {
-        status = ucs_sysv_alloc(length_p, address_p, SHM_HUGETLB, &shmid
+        status = ucs_sysv_alloc(length_p, address_p, flags | SHM_HUGETLB, &shmid
                                 UCS_MEMTRACK_VAL);
         if (status == UCS_OK) {
             goto out_ok;
@@ -37,7 +41,7 @@ uct_sysv_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     if (hugetlb != UCS_YES) {
-        status = ucs_sysv_alloc(length_p, address_p, 0, &shmid UCS_MEMTRACK_VAL);
+        status = ucs_sysv_alloc(length_p, address_p, flags , &shmid UCS_MEMTRACK_VAL);
         if (status == UCS_OK) {
             goto out_ok;
         }
