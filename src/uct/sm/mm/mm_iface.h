@@ -99,7 +99,7 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
 }
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
-inline ucs_status_t uct_mm_flush();
+ucs_status_t uct_mm_flush();
 
 extern uct_tl_component_t uct_mm_tl;
 
