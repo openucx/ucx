@@ -67,7 +67,7 @@ void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put(mm_desc);
 }
 
-inline ucs_status_t uct_mm_flush()
+ucs_status_t uct_mm_flush()
 {
     ucs_memory_cpu_store_fence();
     return UCS_OK;
