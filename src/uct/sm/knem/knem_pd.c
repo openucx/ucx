@@ -1,10 +1,10 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-*
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ *
+ * $COPYRIGHT$
+ * $HEADER$
+ */
 
 #include "knem_pd.h"
 #include "knem_io.h"
@@ -21,7 +21,8 @@ ucs_status_t uct_knem_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 }
 
 static ucs_status_t uct_knem_query_pd_resources(uct_pd_resource_desc_t **resources_p,
-                                               unsigned *num_resources_p) {
+                                                unsigned *num_resources_p)
+{
     int fd;
     int rc;
     struct knem_cmd_info info;
@@ -34,31 +35,31 @@ static ucs_status_t uct_knem_query_pd_resources(uct_pd_resource_desc_t **resourc
         *resources_p     = NULL;
         *num_resources_p = 0;
         return UCS_OK;
-    } else {
-            rc = ioctl(fd, KNEM_CMD_GET_INFO, &info);
-            if (rc < 0) {
-                *resources_p     = NULL;
-                *num_resources_p = 0;
-                close(fd);
-                ucs_debug("KNEM get info failed. not using knem, err = %d %m", rc);
-                return UCS_OK;
-            } else {
-                if (KNEM_ABI_VERSION != info.abi) {
-                    *resources_p     = NULL;
-                    *num_resources_p = 0;
-                    close(fd);
-                    ucs_error("KNEM ABI mismatch: KNEM_ABI_VERSION: %d, Driver binary interface version: %d",
-                               KNEM_ABI_VERSION, info.abi);
-                    return UCS_OK;
-                }
-            }
-        }
+    }
 
-        /* We have to close it since it is not clear
-         * if it will be selected in future */
+    rc = ioctl(fd, KNEM_CMD_GET_INFO, &info);
+    if (rc < 0) {
+        *resources_p     = NULL;
+        *num_resources_p = 0;
         close(fd);
-        return uct_single_pd_resource(&uct_knem_pd_component, resources_p,
-                                      num_resources_p);
+        ucs_debug("KNEM get info failed. not using knem, err = %d %m", rc);
+        return UCS_OK;
+    }
+
+    if (KNEM_ABI_VERSION != info.abi) {
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        close(fd);
+        ucs_error("KNEM ABI mismatch: KNEM_ABI_VERSION: %d, Driver binary interface version: %d",
+                  KNEM_ABI_VERSION, info.abi);
+        return UCS_OK;
+    }
+
+    /* We have to close it since it is not clear
+     * if it will be selected in future */
+    close(fd);
+    return uct_single_pd_resource(&uct_knem_pd_component, resources_p,
+                                  num_resources_p);
 }
 
 static void uct_knem_pd_close(uct_pd_h pd)
@@ -69,7 +70,7 @@ static void uct_knem_pd_close(uct_pd_h pd)
 }
 
 static ucs_status_t uct_knem_mem_reg(uct_pd_h pd, void *address, size_t length,
-                                   uct_mem_h *memh_p)
+                                     uct_mem_h *memh_p)
 {
     int rc;
     struct knem_cmd_create_region create;
@@ -131,7 +132,7 @@ static ucs_status_t uct_knem_mem_dereg(uct_pd_h pd, uct_mem_h memh)
 }
 
 static ucs_status_t uct_knem_rkey_pack(uct_pd_h pd, uct_mem_h memh,
-                                     void *rkey_buffer)
+                                       void *rkey_buffer)
 {
     uct_knem_key_t *packed = (uct_knem_key_t*)rkey_buffer;
     uct_knem_key_t *key = (uct_knem_key_t *)memh;
@@ -143,8 +144,8 @@ static ucs_status_t uct_knem_rkey_pack(uct_pd_h pd, uct_mem_h memh,
 }
 
 static ucs_status_t uct_knem_rkey_unpack(uct_pd_component_t *pdc,
-                                       const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                       void **handle_p)
+                                         const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                         void **handle_p)
 {
     uct_knem_key_t *packed = (uct_knem_key_t *)rkey_buffer;
     uct_knem_key_t *key;
@@ -205,6 +206,6 @@ static ucs_status_t uct_knem_pd_open(const char *pd_name, uct_pd_h *pd_p)
 }
 
 UCT_PD_COMPONENT_DEFINE(uct_knem_pd_component, "knem",
-        uct_knem_query_pd_resources, uct_knem_pd_open, 0,
-        sizeof(uct_knem_key_t), uct_knem_rkey_unpack,
-        uct_knem_rkey_release)
+                        uct_knem_query_pd_resources, uct_knem_pd_open, 0,
+                        sizeof(uct_knem_key_t), uct_knem_rkey_unpack,
+                        uct_knem_rkey_release)

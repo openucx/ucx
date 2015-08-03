@@ -1,9 +1,9 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
-*/
+ * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * $COPYRIGHT$
+ * $HEADER$
+ */
 
 #ifndef UCT_KNEM_EP_H
 #define UCT_KNEM_EP_H

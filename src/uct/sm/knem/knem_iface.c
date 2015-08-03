@@ -16,13 +16,13 @@ UCT_PD_REGISTER_TL(&uct_knem_pd_component, &uct_knem_tl);
 
 static ucs_config_field_t uct_knem_iface_config_table[] = {
     {"", "ALLOC=huge,mmap,heap", NULL,
-    ucs_offsetof(uct_knem_iface_config_t, super),
-    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+        ucs_offsetof(uct_knem_iface_config_t, super),
+        UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
     {NULL}
 };
 
 static ucs_status_t uct_knem_iface_get_address(uct_iface_t *tl_iface,
-                                             struct sockaddr *addr)
+                                               struct sockaddr *addr)
 {
     uct_sockaddr_process_t *iface_addr = (void*)addr;
     iface_addr->sp_family = UCT_AF_PROCESS;
@@ -31,19 +31,14 @@ static ucs_status_t uct_knem_iface_get_address(uct_iface_t *tl_iface,
 }
 
 static int uct_knem_iface_is_reachable(uct_iface_t *tl_iface,
-                                     const struct sockaddr *addr)
+                                       const struct sockaddr *addr)
 {
     return (addr->sa_family == UCT_AF_PROCESS) &&
-           (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
-}
-
-static ucs_status_t uct_knem_flush()
-{
-    return UCS_OK;
+        (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
 }
 
 static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
-                                       uct_iface_attr_t *iface_attr)
+                                         uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
@@ -65,10 +60,10 @@ static uct_iface_ops_t uct_knem_iface_ops = {
     .iface_query         = uct_knem_iface_query,
     .iface_get_address   = uct_knem_iface_get_address,
     .iface_is_reachable  = uct_knem_iface_is_reachable,
-    .iface_flush         = (void*)uct_knem_flush,
+    .iface_flush         = (void*)ucs_empty_function_return_success,
     .ep_put_zcopy        = uct_knem_ep_put_zcopy,
     .ep_get_zcopy        = uct_knem_ep_get_zcopy,
-    .ep_flush            = (void*)uct_knem_flush,
+    .ep_flush            = (void*)ucs_empty_function_return_success,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_knem_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_ep_t),
 };
@@ -85,6 +80,7 @@ static UCS_CLASS_INIT_FUNC(uct_knem_iface_t, uct_pd_h pd, uct_worker_h worker,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_knem_iface_t)
 {
+    /* No OP */
 }
 
 UCS_CLASS_DEFINE(uct_knem_iface_t, uct_base_iface_t);
@@ -95,8 +91,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_knem_iface_t, uct_iface_t, uct_pd_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_knem_iface_t, uct_iface_t);
 
 static ucs_status_t uct_knem_query_tl_resources(uct_pd_h pd,
-                                              uct_tl_resource_desc_t **resource_p,
-                                              unsigned *num_resources_p)
+                                                uct_tl_resource_desc_t **resource_p,
+                                                unsigned *num_resources_p)
 {
     uct_tl_resource_desc_t *resource;
 
