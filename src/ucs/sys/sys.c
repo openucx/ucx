@@ -432,6 +432,16 @@ size_t ucs_get_huge_page_size()
     return huge_page_size;
 }
 
+size_t ucs_get_phys_mem_size()
+{
+    static size_t phys_pages = 0;
+
+    if (phys_pages == 0) {
+        phys_pages = sysconf(_SC_PHYS_PAGES);
+    }
+    return phys_pages * ucs_get_page_size();
+}
+
 ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid
                             UCS_MEMTRACK_ARG)
 {

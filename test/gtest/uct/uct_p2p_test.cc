@@ -98,40 +98,6 @@ void uct_p2p_test::test_xfer(send_func_t send, size_t length, direction_t direct
     UCS_TEST_SKIP;
 }
 
-class size {
-public:
-    explicit size(size_t value) : m_value(value) {}
-
-    size_t value() const {
-        return m_value;
-    }
-private:
-    size_t m_value;
-};
-
-template <typename O>
-static O& operator<<(O& os, const size& sz)
-{
-    size_t v = sz.value();
-
-    std::iostream::fmtflags f(os.flags());
-
-    /* coverity[format_changed] */
-    os << std::fixed << std::setprecision(1);
-    if (v < 1024) {
-        os << v;
-    } else if (v < 1024 * 1024) {
-        os << (v / 1024.0) << "k";
-    } else if (v < 1024 * 1024 * 1024) {
-        os << (v / 1024.0 / 1024.0) << "m";
-    } else {
-        os << (v / 1024.0 / 1024.0 / 1024.0) << "g";
-    }
-
-    os.flags(f);
-    return os;
-}
-
 ucs_log_func_rc_t
 uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
                           ucs_log_level_t level, const char *prefix, const char *message,
@@ -151,7 +117,7 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
                                    direction_t direction)
 {
     if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-        os << size(length) << " " << std::flush;
+        os << ucs::size_value(length) << " " << std::flush;
     }
 
     /*
@@ -182,6 +148,9 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
 
     /* Trim at 4GB */
     max_length = ucs_min(max_length, 4ull * 1124 * 1024 * 1024);
+
+    /* Trim at max. phys memory */
+    max_length = ucs_min(max_length, ucs_get_phys_mem_size() / 4);
 
     /* For large size, slow down if needed */
     if (max_length > 1 * 1024 * 1024) {
@@ -218,8 +187,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
     }
 
     if (!ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-        ms << repeat_count << "x{" << size(min_length) << ".."
-           << size(max_length) << "} " << std::flush;
+        ms << repeat_count << "x{" << ucs::size_value(min_length) << ".."
+           << ucs::size_value(max_length) << "} " << std::flush;
     }
 
     for (int i = 0; i < repeat_count; ++i) {

@@ -253,6 +253,42 @@ private:
     }
 
 
+class size_value {
+public:
+    explicit size_value(size_t value) : m_value(value) {}
+
+    size_t value() const {
+        return m_value;
+    }
+private:
+    size_t m_value;
+};
+
+
+template <typename O>
+static inline O& operator<<(O& os, const size_value& sz)
+{
+    size_t v = sz.value();
+
+    std::iostream::fmtflags f(os.flags());
+
+    /* coverity[format_changed] */
+    os << std::fixed << std::setprecision(1);
+    if (v < 1024) {
+        os << v;
+    } else if (v < 1024 * 1024) {
+        os << (v / 1024.0) << "k";
+    } else if (v < 1024 * 1024 * 1024) {
+        os << (v / 1024.0 / 1024.0) << "m";
+    } else {
+        os << (v / 1024.0 / 1024.0 / 1024.0) << "g";
+    }
+
+    os.flags(f);
+    return os;
+}
+
+
 namespace detail {
 
 class message_stream {
