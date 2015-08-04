@@ -161,3 +161,16 @@ libuct_la_SOURCES += \
 	sm/cma/cma_ep.c \
 	sm/cma/cma_pd.c
 endif
+
+# Inria's KNEM 
+if HAVE_KNEM
+noinst_HEADERS += \
+	sm/knem/knem_iface.h \
+	sm/knem/knem_ep.h \
+	sm/knem/knem_pd.h
+
+libuct_la_SOURCES += \
+	sm/knem/knem_iface.c \
+	sm/knem/knem_ep.c \
+	sm/knem/knem_pd.c
+endif

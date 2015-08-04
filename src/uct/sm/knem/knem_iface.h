@@ -1,0 +1,30 @@
+/**
+ * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * $COPYRIGHT$
+ * $HEADER$
+ */
+
+#ifndef UCT_KNEM_IFACE_H
+#define UCT_KNEM_IFACE_H
+
+#include <uct/tl/tl_base.h>
+#include "knem_pd.h"
+
+#define UCT_KNEM_TL_NAME "knem"
+
+
+typedef struct uct_knem_iface_config {
+    uct_iface_config_t      super;
+} uct_knem_iface_config_t;
+
+
+typedef struct uct_knem_iface {
+    uct_base_iface_t        super;
+    uct_knem_pd_t        *knem_pd;
+} uct_knem_iface_t;
+
+
+extern uct_tl_component_t uct_knem_tl;
+
+#endif
