@@ -14,13 +14,6 @@
 
 UCT_PD_REGISTER_TL(&uct_knem_pd_component, &uct_knem_tl);
 
-static ucs_config_field_t uct_knem_iface_config_table[] = {
-    {"", "ALLOC=huge,mmap,heap", NULL,
-        ucs_offsetof(uct_knem_iface_config_t, super),
-        UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
-    {NULL}
-};
-
 static ucs_status_t uct_knem_iface_get_address(uct_iface_t *tl_iface,
                                                struct sockaddr *addr)
 {
@@ -119,5 +112,5 @@ UCT_TL_COMPONENT_DEFINE(uct_knem_tl,
                         uct_knem_iface_t,
                         UCT_KNEM_TL_NAME,
                         "",
-                        uct_knem_iface_config_table,
-                        uct_knem_iface_config_t);
+                        uct_iface_config_table,
+                        uct_iface_config_t);
