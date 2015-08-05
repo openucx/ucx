@@ -37,12 +37,13 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
     for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
 
-        size = ucs_max(rand() % memheap_size, alignment);
+        size = ucs_max(rand() % (memheap_size - alignment - 1), alignment);
 
         size_t offset = rand() % (memheap_size - size - alignment);
         offset = ucs_align_up(offset, alignment);
 
         ucs_assert(((((uintptr_t)memheap + offset)) % alignment) == 0);
+        ucs_assert(size + offset <= memheap_size);
 
         std::string expected_data;
         (this->*send)(pe0, size, (void*)((uintptr_t)memheap + offset),
