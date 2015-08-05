@@ -211,6 +211,12 @@ size_t ucs_get_huge_page_size();
 
 
 /**
+ * @return Physical memory size on the system.
+ */
+size_t ucs_get_phys_mem_size();
+
+
+/**
  * Allocate shared memory using SystemV API.
  *
  * @param size      Pointer to memory size to allocate, updated with actual size
