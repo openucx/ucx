@@ -224,7 +224,7 @@ typedef struct uct_iface_mpool_config {
 #define UCT_TL_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     { \
         _desc = ucs_mpool_get(_mp); \
-        if (_desc == NULL) { \
+        if (ucs_unlikely((_desc) == NULL)) { \
             UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_DESC, 1); \
             _failure; \
         } \
@@ -236,7 +236,7 @@ typedef struct uct_iface_mpool_config {
 #define UCT_TL_IFACE_GET_RX_DESC(_iface, _mp, _desc, _failure) \
     { \
         _desc = ucs_mpool_get(_mp); \
-        if ((_desc) == NULL) { \
+        if (ucs_unlikely((_desc) == NULL)) { \
             UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_RX_NO_DESC, 1); \
             _failure; \
         } \
