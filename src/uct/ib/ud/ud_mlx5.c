@@ -243,6 +243,7 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
     iface->rx.wq.cq_wqe_counter++;
 
     len = ntohl(cqe->byte_cnt);
+    VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
     uct_ud_ep_process_rx(&iface->super,
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
