@@ -72,6 +72,9 @@ static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, void **address_p)
 }
 
 static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
+   .query   = ucs_empty_function_return_success,
+   .reg     = NULL,
+   .dereg   = NULL,
    .alloc   = uct_sysv_alloc,
    .attach  = uct_sysv_attach,
    .release = ucs_sysv_free
