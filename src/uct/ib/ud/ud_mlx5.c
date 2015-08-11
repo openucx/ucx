@@ -230,10 +230,7 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
 
     cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
-        if (iface->super.rx.available >= iface->super.config.rx_max_batch) {
-            uct_ud_mlx5_iface_post_recv(iface);
-        }
-        return;
+        goto out;
     }
     uct_ib_mlx5_log_cqe(cqe);
     ucs_assert(0 == (cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
@@ -250,6 +247,14 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
                          len - UCT_IB_GRH_LEN,
                          (uct_ud_recv_skb_t *)desc);
 
+out:
+    if (iface->super.rx.available >= iface->super.config.rx_max_batch) {
+        /* we need to try to post buffers always. Otherwise it is possible
+         * to run out of rx wqes if receiver is slow and there are always
+         * cqe to process
+         */
+        uct_ud_mlx5_iface_post_recv(iface);
+    }
 }
 
 static inline void uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
@@ -516,7 +521,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
         self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset + 
                                                self->super.super.config.seg_size);
     }
-    //self->super.config.rx_max_batch = 16;
     while (self->super.rx.available >= self->super.config.rx_max_batch) {
         uct_ud_mlx5_iface_post_recv(self);
     }
