@@ -342,10 +342,10 @@ static ucs_status_t uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_
     }
 
     uct_ib_mlx5_get_av(ah, &ep->av);
-    ep->av.base.key.qkey.qkey      = htonl(UCT_UD_QKEY);
-    ep->av.base.key.qkey.reserved  = iface->super.qp->qp_num;
-    ep->av.base.dqp_dct            = htonl(if_addr->qp_num |
-                                           MXM_IB_MLX5_EXTENDED_UD_AV); 
+    mlx5_av_base(&ep->av)->key.qkey.qkey      = htonl(UCT_UD_QKEY);
+    mlx5_av_base(&ep->av)->key.qkey.reserved  = iface->super.qp->qp_num;
+    mlx5_av_base(&ep->av)->dqp_dct            = htonl(if_addr->qp_num |
+                                                      MXM_IB_MLX5_EXTENDED_UD_AV); 
     ibv_destroy_ah(ah);
     return UCS_OK;
 }

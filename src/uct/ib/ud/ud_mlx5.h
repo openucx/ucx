@@ -62,6 +62,14 @@ typedef struct {
 #define UCT_UD_MLX5_MAX_BB 4
 #define MXM_IB_MLX5_EXTENDED_UD_AV 0x80000000
 
+#if HAVE_STRUCT_MLX5_WQE_AV_BASE
+#  define mlx5_av_base(_av)   (&(_av)->base)
+#  define mlx5_av_grh(_av)    (&(_av)->grh_sec)
+#else 
+#  define mlx5_av_base(_av)   (_av)
+#  define mlx5_av_grh(_av)    (_av)
+#endif
+
 /* TODO: move common code and update rc_mlx5 header */
 struct uct_ib_mlx5_ctrl_dgram_seg {
     struct mlx5_wqe_ctrl_seg     ctrl;
@@ -116,17 +124,17 @@ static inline void uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
                                              uint8_t path_bits)
 {
 
-    seg->av.base.key.qkey.qkey  = htonl(UCT_UD_QKEY);
-    seg->av.base.stat_rate_sl   = av->base.stat_rate_sl;
-    seg->av.base.fl_mlid        = av->base.fl_mlid | path_bits;
-    seg->av.base.rlid           = av->base.rlid | (path_bits << 8);
-    seg->av.base.dqp_dct        = av->base.dqp_dct;
+    mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_UD_QKEY);
+    mlx5_av_base(&seg->av)->stat_rate_sl   = mlx5_av_base(av)->stat_rate_sl;
+    mlx5_av_base(&seg->av)->fl_mlid        = mlx5_av_base(av)->fl_mlid | path_bits;
+    mlx5_av_base(&seg->av)->rlid           = mlx5_av_base(av)->rlid | (path_bits << 8);
+    mlx5_av_base(&seg->av)->dqp_dct        = mlx5_av_base(av)->dqp_dct;
 /*  No need to fill grh
     seg->av.grh_sec.tclass      = av->grh_sec.tclass;
     seg->av.grh_sec.hop_limit   = av->grh_sec.hop_limit;
     seg->av.grh_sec.grh_gid_fl  = av->grh_sec.grh_gid_fl;
 */
-    seg->av.grh_sec.grh_gid_fl  = 0;
+    mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
 }
 
 static inline void uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,

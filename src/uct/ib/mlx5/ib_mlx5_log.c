@@ -150,7 +150,9 @@ static uint64_t network_to_host(uint64_t value, int size)
 }
 static void uct_ib_mlx5_dump_dgram(char *buf, size_t max, struct mlx5_wqe_datagram_seg *seg)
 {
-    snprintf(buf, max-1, " [rlid: %d dqp: 0x%x]", ntohs(seg->av.base.rlid), ntohl(seg->av.base.dqp_dct) & ~MXM_IB_MLX5_EXTENDED_UD_AV);
+    snprintf(buf, max-1, " [rlid: %d dqp: 0x%x]", 
+             ntohs(mlx5_av_base(&seg->av)->rlid), 
+             ntohl(mlx5_av_base(&seg->av)->dqp_dct) & ~MXM_IB_MLX5_EXTENDED_UD_AV);
 }
 
 static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qstart,
