@@ -86,6 +86,11 @@ test_perf::test_spec test_uct_perf::tests[] =
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5 },
 
+  { "atomic swap latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5 },
+
   { NULL }
 };
 
