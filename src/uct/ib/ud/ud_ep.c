@@ -114,6 +114,7 @@ ucs_status_t uct_ud_ep_create_connected(uct_ud_iface_t *iface,
 {
     ucs_status_t status;
     uct_ud_ep_t *ep;
+    uct_ep_h new_ep_h;
 
     ep = uct_ud_iface_cep_lookup(iface, addr, UCT_UD_EP_CONN_ID_MAX);
     if (ep) {
@@ -122,10 +123,11 @@ ucs_status_t uct_ud_ep_create_connected(uct_ud_iface_t *iface,
         return UCS_OK;
     }
 
-    status = iface->super.super.super.ops.ep_create(&iface->super.super.super, (uct_ep_h *)&ep);
+    status = iface->super.super.super.ops.ep_create(&iface->super.super.super, &new_ep_h);
     if (status != UCS_OK) {
         return status;
     }
+    ep = ucs_derived_of(new_ep_h, uct_ud_ep_t);
 
     status = uct_ud_ep_connect_to_iface(ep, addr);
     if (status != UCS_OK) {

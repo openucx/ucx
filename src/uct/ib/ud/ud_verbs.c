@@ -336,16 +336,18 @@ ucs_status_t uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const struct 
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep;
+    uct_ud_ep_t *new_ud_ep; 
     uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
     uct_ud_send_skb_t *skb;
     struct ibv_ah *ah;
     ucs_status_t status;
 
     status = uct_ud_ep_create_connected(&iface->super, 
-                                        if_addr, (uct_ud_ep_t **)&ep, &skb);
+                                        if_addr, &new_ud_ep, &skb);
     if (status != UCS_OK) {
         return status;
     }
+    ep = ucs_derived_of(new_ud_ep, uct_ud_verbs_ep_t);
     *new_ep_p = &ep->super.super.super;
     if (skb == NULL) {
         return UCS_OK;
