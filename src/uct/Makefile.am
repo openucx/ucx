@@ -147,8 +147,16 @@ libuct_la_SOURCES += \
     sm/mm/mm_iface.c \
     sm/mm/mm_ep.c \
     sm/mm/mm_pd.c \
-    sm/mm/mm_sysv.c \
+    sm/mm/mm_sysv.c
+
+# SGI / Cray XPMEM
+if HAVE_CMA
+libuct_la_CPPFLAGS += $(XPMEM_CPPFLAGS)
+libuct_la_LDFLAGS +=  $(XPMEM_LDFLAGS)
+
+libuct_la_SOURCES += \
     sm/mm/mm_xpmem.c
+endif
 
 # Cross Memory Attached
 if HAVE_CMA

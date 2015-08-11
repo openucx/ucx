@@ -10,12 +10,27 @@
 
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
-#include <ucs/sys/sys.h>
+#include "xpmem.h"
 
 
 static ucs_status_t uct_xpmem_query()
 {
-    return UCS_ERR_UNSUPPORTED;
+    int fd, ver;
+
+    fd = open(XPMEM_DEV_PATH, O_RDWR);
+    if (fd < 0) {
+        ucs_debug("Could not open the XPMEM device file at /dev/xpmem: %m. Disabling xpmem resource");
+        return UCS_ERR_UNSUPPORTED;
+    }
+    close(fd);
+
+    ver = xpmem_version();
+    if (ver < 0) {
+        ucs_debug("Failed to query XPMEM version %d, %m", ver);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_p)
