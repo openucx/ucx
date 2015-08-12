@@ -66,4 +66,7 @@ static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
 
 void uct_ugni_base_desc_init(void *mp_context, void *obj, void *chunk, void *arg);
 void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh);
+ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
+                                         uct_tl_resource_desc_t **resource_p,
+                                         unsigned *num_resources_p);
 #endif

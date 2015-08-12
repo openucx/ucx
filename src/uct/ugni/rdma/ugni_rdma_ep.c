@@ -316,7 +316,6 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
-    uct_ugni_base_desc_t *rdma;
     uct_ugni_fetch_desc_t *fma;
 
     UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);

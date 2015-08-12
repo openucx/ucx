@@ -70,6 +70,46 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
     return UCS_ERR_NO_RESOURCE;
 }
 
+
+
+ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
+                                                uct_tl_resource_desc_t **resource_p,
+                                                unsigned *num_resources_p)
+{
+    uct_tl_resource_desc_t *resources;
+    int num_devices = job_info.num_devices;
+    uct_ugni_device_t *devs = job_info.devices;
+    int i;
+    ucs_status_t rc = UCS_OK;
+
+    assert(!strncmp(pd->component->name,
+                    UCT_UGNI_TL_NAME,
+                    UCT_PD_NAME_MAX));
+
+    pthread_mutex_lock(&uct_ugni_global_lock);
+
+    resources = ucs_calloc(job_info.num_devices, sizeof(uct_tl_resource_desc_t),
+                          "resource desc");
+    if (NULL == resources) {
+      ucs_error("Failed to allocate memory");
+      num_devices = 0;
+      resources = NULL;
+      rc = UCS_ERR_NO_MEMORY;
+      goto error;
+    }
+
+    for (i = 0; i < job_info.num_devices; i++) {
+        uct_ugni_device_get_resource(&devs[i], &resources[i]);
+    }
+
+error:
+    *num_resources_p = num_devices;
+    *resource_p      = resources;
+    pthread_mutex_unlock(&uct_ugni_global_lock);
+
+    return rc;
+}
+
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
                                                struct sockaddr *addr)
 {
@@ -290,8 +330,22 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
                           uct_pd_h, uct_worker_h,
                           const char*, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t *));
-static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t)
-{
+
+static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t){
+    gni_return_t ugni_rc;
+
+    /* TBD: Clean endpoints first (unbind and destroy) ?*/
+    ugni_rc = GNI_CqDestroy(self->local_cq);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
+                 gni_err_str[ugni_rc], ugni_rc);
+    }
+    ugni_rc = GNI_CdmDestroy(self->cdm_handle);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_warn("GNI_CdmDestroy error status: %s (%d)",
+                 gni_err_str[ugni_rc], ugni_rc);
+    }
+    self->activated = false;
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);
