@@ -31,6 +31,11 @@ test_perf::test_spec test_uct_perf::tests[] =
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 2000000l,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 1.1, 80.0 },
 
+  { "am rate64", "Mpps",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_SHORT, 64, 1, 2000000l,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 1.1, 80.0 },
+
   { "am bcopy bw", "MB/sec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_BCOPY, 2048, 1, 100000l,
