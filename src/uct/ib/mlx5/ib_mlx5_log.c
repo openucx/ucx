@@ -152,7 +152,7 @@ static void uct_ib_mlx5_dump_dgram(char *buf, size_t max, struct mlx5_wqe_datagr
 {
     snprintf(buf, max-1, " [rlid: %d dqp: 0x%x]", 
              ntohs(mlx5_av_base(&seg->av)->rlid), 
-             ntohl(mlx5_av_base(&seg->av)->dqp_dct) & ~MXM_IB_MLX5_EXTENDED_UD_AV);
+             ntohl(mlx5_av_base(&seg->av)->dqp_dct) & ~UCT_IB_MLX5_EXTENDED_UD_AV);
 }
 
 static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qstart,

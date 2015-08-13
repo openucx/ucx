@@ -187,3 +187,73 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
         return NULL;
     }
 }
+
+
+ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
+{
+    uct_ib_mlx5_qp_info_t qp_info;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_get_qp_info(qp, &qp_info);
+    if (status != UCS_OK) {
+        ucs_error("Failed to get mlx5 QP information");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if ((qp_info.bf.size == 0) || !ucs_is_pow2(qp_info.bf.size) ||
+            (qp_info.sq.stride != MLX5_SEND_WQE_BB) ||
+            !ucs_is_pow2(qp_info.sq.wqe_cnt))
+    {
+        ucs_error("mlx5 device parameters not suitable for transport");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d], ud_seg=%lu [ctl=%lu av=%lu] inl=%lu data=%lu", 
+              qp_info.sq.stride * qp_info.sq.wqe_cnt,
+              qp_info.sq.stride, qp_info.sq.wqe_cnt,
+              sizeof(struct uct_ib_mlx5_ctrl_dgram_seg),
+              sizeof(struct mlx5_wqe_ctrl_seg),
+              sizeof(struct mlx5_wqe_datagram_seg),
+              sizeof(struct mlx5_wqe_inl_data_seg),
+              sizeof(struct mlx5_wqe_data_seg));
+
+    wq->qstart     = qp_info.sq.buf;
+    wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
+    wq->seg        = wq->qstart;
+    wq->sw_pi      = 0;
+    wq->prev_sw_pi = -1;
+    wq->bf_reg     = qp_info.bf.reg;
+    wq->bf_size    = qp_info.bf.size;
+    wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
+    memset(wq->qstart, 0, wq->qend - wq->qstart); 
+    return UCS_OK;
+} 
+
+ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
+{
+    uct_ib_mlx5_qp_info_t qp_info;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_get_qp_info(qp, &qp_info);
+    if (status != UCS_OK) {
+        ucs_error("Failed to get mlx5 QP information");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (!ucs_is_pow2(qp_info.rq.wqe_cnt) ||
+        qp_info.rq.stride != sizeof(struct mlx5_wqe_data_seg)) {
+        ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters", 
+                  qp_info.rq.wqe_cnt,
+                  qp_info.rq.stride);
+        return UCS_ERR_IO_ERROR;
+    }
+    wq->wqes            = qp_info.rq.buf;
+    wq->rq_wqe_counter  = 0;
+    wq->cq_wqe_counter  = 0;
+    wq->mask            = qp_info.rq.wqe_cnt - 1;
+    wq->dbrec           = &qp_info.dbrec[MLX5_RCV_DBR];
+    memset(wq->wqes, 0, qp_info.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg)); 
+
+    return UCS_OK;
+}
+

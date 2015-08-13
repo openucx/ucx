@@ -66,9 +66,9 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, head);
 
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
-        uct_ib_mlx5_wqe_set_data_seg((void*)(seg + 1), hdr,
-                                     length, /* TODO pre-init length */
-                                     desc->super.lkey);
+        uct_ib_mlx5_set_data_seg((void*)(seg + 1), hdr,
+                                 length, /* TODO pre-init length */
+                                 desc->super.lkey);
         VALGRIND_MAKE_MEM_NOACCESS(hdr, length);
 
         ucs_queue_push(&iface->rx.desc_q, &desc->queue);

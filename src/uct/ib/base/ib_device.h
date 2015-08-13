@@ -32,7 +32,7 @@
 #define UCT_IB_MAX_MESSAGE_SIZE     (2 << 30) /* Maximal IB message size */
 #define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
-
+#define UCT_IB_QKEY                 0x1ee7a330
 
 enum {
     UCT_IB_DEVICE_STAT_MEM_ALLOC,

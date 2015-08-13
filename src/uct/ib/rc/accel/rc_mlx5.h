@@ -49,15 +49,8 @@ typedef struct uct_rc_mlx5_ep {
     unsigned         qp_num;
 
     struct {
-        uint16_t       sw_pi;      /* PI for next WQE */
-        uint16_t       max_pi;     /* Maximal PI which can start a new WQE */
-        uint16_t       prev_sw_pi; /* PI where last WQE *started*  */
-        unsigned       bf_size;
-        void           *bf_reg;
-        uint32_t       *dbrec;
-        void           *seg;
-        void           *qstart;
-        void           *qend;
+        uint16_t            max_pi;  /* Maximal PI which can start a new WQE */
+        uct_ib_mlx5_txwq_t  wq;
     } tx;
 } uct_rc_mlx5_ep_t;
 
@@ -97,7 +90,7 @@ typedef struct {
         UCS_STATS_UPDATE_COUNTER((_iface)->super.stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         return UCS_ERR_NO_RESOURCE; \
     } \
-    if (UCS_CIRCULAR_COMPARE16((_ep)->tx.sw_pi, >, (_ep)->tx.max_pi)) { \
+    if (UCS_CIRCULAR_COMPARE16((_ep)->tx.wq.sw_pi, >, (_ep)->tx.max_pi)) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_RC_EP_STAT_QP_FULL, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }

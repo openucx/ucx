@@ -16,7 +16,7 @@
 #include <uct/ib/base/ib_iface.h>
 
 #define UCT_UD_QP_HASH_SIZE     256    
-#define UCT_UD_QKEY             0x1ee7a330
+#define UCT_UD_QKEY             UCT_IB_QKEY
 #define UCT_UD_MAX_SGE          2
 #define UCT_UD_MAX_WINDOW       1024 /* TODO: make it config param */
 #define UCT_UD_TX_MODERATION    64
