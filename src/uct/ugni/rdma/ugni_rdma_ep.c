@@ -9,9 +9,9 @@
 #include <ucs/debug/log.h>
 #include <uct/tl/tl_log.h>
 
-#include "ugni_ep.h"
-#include "ugni_iface.h"
-#include "ugni_device.h"
+#include "ugni_rdma_ep.h"
+#include "ugni_rdma_iface.h"
+#include <uct/ugni/base/ugni_device.h>
 
 static inline ptrdiff_t uct_ugni_ep_compare(uct_ugni_ep_t *ep1, uct_ugni_ep_t *ep2)
 {
@@ -156,7 +156,7 @@ static inline void uct_ugni_format_rdma(uct_ugni_base_desc_t *rdma, gni_post_typ
     ucs_assert(0 == rdma->not_ready_to_free);
 }
 
-static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_iface_t *iface,
+static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_rdma_iface_t *iface,
                                               uct_ugni_ep_t *ep,
                                               uct_ugni_base_desc_t *rdma)
 {
@@ -177,12 +177,12 @@ static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_iface_t *iface,
     }
 
     ++ep->outstanding;
-    ++iface->outstanding;
+    ++iface->super.outstanding;
 
     return UCS_INPROGRESS;
 }
 
-static inline ucs_status_t uct_ugni_post_fma(uct_ugni_iface_t *iface,
+static inline ucs_status_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
                                              uct_ugni_ep_t *ep,
                                              uct_ugni_base_desc_t *fma,
                                              ucs_status_t ok_status)
@@ -204,7 +204,7 @@ static inline ucs_status_t uct_ugni_post_fma(uct_ugni_iface_t *iface,
     }
 
     ++ep->outstanding;
-    ++iface->outstanding;
+    ++iface->super.outstanding;
 
     return ok_status;
 }
@@ -220,12 +220,13 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                    uct_rkey_t rkey)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_base_desc_t *fma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length, iface->config.fma_seg_size, "put_short");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc,
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc,
                              fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, buffer,
                         remote_addr, rkey, length, ep, NULL, NULL);
@@ -249,12 +250,13 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
      * something like:
      * pack_cb(desc + 1, arg, length); */
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_base_desc_t *fma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length, iface->config.fma_seg_size, "put_bcopy");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_buffer,
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
     ucs_assert(length <= iface->config.fma_seg_size);
     pack_cb(fma + 1, arg, length);
@@ -275,15 +277,16 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t le
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_base_desc_t *rdma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(length, iface->config.rdma_max_size, "put_zcopy");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_NO_RESOURCE);
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc, rdma, return UCS_ERR_NO_RESOURCE);
     /* Setup Callback */
     uct_ugni_format_rdma(rdma, GNI_POST_RDMA_PUT, buffer, remote_addr, memh,
-                         rkey, length, ep, iface->local_cq, comp);
+                         rkey, length, ep, iface->super.local_cq, comp);
 
     ucs_trace_data("Posting PUT ZCOPY, GNI_PostRdma of size %"PRIx64" from %p to %p, with [%"PRIx64" %"PRIx64"]",
                    rdma->desc.length,
@@ -311,10 +314,11 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                       uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_fetch_desc_t *fma;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_ADD,
                             add, 0, NULL, remote_addr,
                             rkey, LEN_64, ep, NULL, NULL, NULL);
@@ -332,10 +336,11 @@ ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
                                        uint64_t *result, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_fetch_desc_t *fma;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_FADD,
                             add, 0, fma + 1, remote_addr,
                             rkey, LEN_64, ep, comp, uct_ugni_amo_unpack64, (void *)result);
@@ -360,10 +365,11 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
                                         uint64_t *result, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_fetch_desc_t *fma;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_famo, fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC_CSWAP,
                             compare, swap, fma + 1, remote_addr,
                             rkey, LEN_64, ep, comp, uct_ugni_amo_unpack64, (void *)result);
@@ -498,13 +504,14 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
                                    uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_fetch_desc_t *fma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
                      iface->config.fma_seg_size, "get_bcopy");
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
 
     uct_ugni_format_get_fma(fma, GNI_POST_FMA_GET,
@@ -595,7 +602,8 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
 {
     uct_ugni_fetch_desc_t *fma = NULL;
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_fetch_desc_t *rdma = NULL;
 
     size_t fma_length, rdma_length, aligned_fma_remote_start;
@@ -607,10 +615,10 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
     rdma_length = length - iface->config.fma_seg_size;
     fma_length = iface->config.fma_seg_size;
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get_buffer,
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
 
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc_get,
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc_get,
                              rdma, return UCS_ERR_NO_RESOURCE);
 
     rdma_remote_start = remote_addr;
@@ -624,7 +632,7 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
     fma->tail = aligned_fma_remote_start - fma_remote_start;
 
     uct_ugni_format_unaligned_rdma(rdma, GNI_POST_RDMA_GET, buffer, rdma_remote_start, memh, rkey,
-                                   rdma_length+fma->tail, ep, iface->local_cq, comp,
+                                   rdma_length+fma->tail, ep, iface->super.local_cq, comp,
                                    uct_ugni_unalign_rdma_composed_cb);
 
     fma->head = rdma;
@@ -661,7 +669,7 @@ static ucs_status_t uct_ugni_ep_get_composed(uct_ep_h tl_ep, void *buffer, size_
     uint64_t aligned_remote = ucs_align_down(remote_addr, UGNI_GET_ALIGN);
     uint64_t remote_padding = remote_addr - aligned_remote;
     uint64_t fetch_length = length + remote_padding;
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
 
     if(fetch_length < iface->config.fma_seg_size) {
         return uct_ugni_ep_get_bcopy(tl_ep,
@@ -680,7 +688,8 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
-    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
+    uct_base_iface_t *base =  ucs_derived_of(tl_ep->iface, uct_base_iface_t);
     uct_ugni_base_desc_t *rdma;
 
     UCT_UGNI_ZERO_LENGTH_POST(length);
@@ -696,10 +705,10 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
     }
 
     /* Everything is perfectly aligned */
-    UCT_TL_IFACE_GET_TX_DESC(&iface->super, iface->free_desc, rdma, return UCS_ERR_NO_RESOURCE);
+    UCT_TL_IFACE_GET_TX_DESC(base, iface->free_desc, rdma, return UCS_ERR_NO_RESOURCE);
     /* Setup Callback */
     uct_ugni_format_rdma(rdma, GNI_POST_RDMA_GET, buffer, remote_addr, memh, rkey,
-                         ucs_align_up_pow2(length, UGNI_GET_ALIGN), ep, iface->local_cq, comp);
+                         ucs_align_up_pow2(length, UGNI_GET_ALIGN), ep, iface->super.local_cq, comp);
 
     ucs_trace_data("Posting GET ZCOPY, GNI_PostRdma of size %"PRIx64" (%lu) "
                    "from %p to %p, with [%"PRIx64" %"PRIx64"]",

@@ -112,16 +112,19 @@ libuct_la_LDFLAGS  += $(CRAY_UGNI_LIBS)
 libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
 
 noinst_HEADERS += \
-    ugni/ugni_pd.h \
-    ugni/ugni_device.h \
-    ugni/ugni_iface.h \
-    ugni/ugni_ep.h
+    ugni/base/ugni_pd.h \
+    ugni/base/ugni_device.h \
+    ugni/base/ugni_iface.h \
+    ugni/base/ugni_ep.h \
+    ugni/rdma/ugni_rdma_iface.h \
+    ugni/rdma/ugni_rdma_ep.h
 
 libuct_la_SOURCES += \
-    ugni/ugni_pd.c \
-    ugni/ugni_device.c \
-    ugni/ugni_iface.c \
-    ugni/ugni_ep.c
+    ugni/base/ugni_pd.c \
+    ugni/base/ugni_device.c \
+    ugni/base/ugni_iface.c \
+    ugni/rdma/ugni_rdma_iface.c \
+    ugni/rdma/ugni_rdma_ep.c
 endif
 
 if HAVE_CUDA
