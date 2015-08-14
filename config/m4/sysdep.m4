@@ -92,7 +92,7 @@ AC_ARG_WITH([valgrind],
 AS_IF([test "x$with_valgrind" == xno],
       [AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])
       ],
-      [AC_CHECK_HEADER([valgrind/memcheck.h], [],
+      [AC_CHECK_HEADER([$with_valgrind/include/valgrind/memcheck.h], [],
                        [AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found, install valgrind-devel rpm.])])
        if test -d $with_valgrind; then
           CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
