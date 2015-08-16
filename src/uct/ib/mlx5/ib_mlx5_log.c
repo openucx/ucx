@@ -56,6 +56,11 @@ void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe)
     wqe_counter = ntohs(ecqe->wqe_counter);
     qp_num      = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
 
+    if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
+        ucs_trace("QP 0x%x wqe[%d] is flushed", qp_num, wqe_counter);
+        return;
+    }
+
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
         snprintf(info, sizeof(info), "Local length");
