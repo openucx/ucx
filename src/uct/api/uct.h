@@ -370,13 +370,14 @@ void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources);
  *
  *  The worker represents a progress engine. Multiple progress engines can be
  * created in an application, for example to be used by multiple threads.
- * Every worker can be progressed independently of others.
+ *  Transports can allocate separate communication resources for every worker,
+ * so that every worker can be progressed independently of others.
  *
  * @param [in]  async         Context for async event handlers.
   *                            Can be NULL, which means that event handlers will
  *                             not have particular context.
- * @param [in]  thread_mode   Thread access mode to the worker and resources
- *                             created on it.
+ * @param [in]  thread_mode   Thread access mode to the worker and all interfaces
+ *                             and endpoints associated with it.
  * @param [out] worker_p      Filled with a pointer to the worker object.
  */
 ucs_status_t uct_worker_create(ucs_async_context_t *async,
