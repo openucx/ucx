@@ -8,8 +8,9 @@
 #ifndef UCS_TIME_H
 #define UCS_TIME_H
 
-#include <ucs/sys/sys.h>
+#include <ucs/arch/arch.h>
 #include <ucs/sys/math.h>
+#include <sys/time.h>
 
 
 /**

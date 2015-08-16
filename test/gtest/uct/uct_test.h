@@ -11,6 +11,7 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <ucs/sys/sys.h>
 }
 #include <ucs/gtest/test.h>
 #include <vector>

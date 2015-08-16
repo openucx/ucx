@@ -16,6 +16,7 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/config/parser.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/sys.h>
 
 #include <sys/ioctl.h>
 #include <linux/futex.h>

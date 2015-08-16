@@ -8,6 +8,7 @@
 #include <ucs/time/timer_wheel.h>
 
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 
 
@@ -20,7 +21,8 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution)
     twheel->num_slots   = 1024;
     twheel->current     = 0;
     twheel->now         = ucs_get_time();
-    twheel->wheel       = malloc(sizeof(*twheel->wheel) * twheel->num_slots);
+    twheel->wheel       = ucs_malloc(sizeof(*twheel->wheel) * twheel->num_slots,
+                                     "twheel");
 
     for (i = 0; i < twheel->num_slots; i++) {
         ucs_list_head_init(&twheel->wheel[i]);
@@ -33,7 +35,7 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution)
 
 void ucs_twheel_cleanup(ucs_twheel_t *twheel)
 {
-    free(twheel->wheel);
+    ucs_free(twheel->wheel);
 }
 
 ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, ucs_callback_func_t func)
