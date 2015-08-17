@@ -7,7 +7,9 @@
 
 #include <ucs/gtest/test.h>
 extern "C" {
+#include <ucs/debug/memtrack.h>
 #include <ucs/type/component.h>
+
 }
 
 
