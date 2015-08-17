@@ -24,7 +24,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     size_to_attach = UCT_MM_GET_FIFO_SIZE(iface);
     status =
         uct_mm_pd_mapper_ops(iface->super.pd)->attach(remote_iface_addr->id,
-                                                      size_to_attach, &ptr);
+                                                      size_to_attach, 0, &ptr);
     if (status != UCS_OK) {
         ucs_error("failed to connect to remote peer with mm. remote mm_id: %zu",
                    remote_iface_addr->id);

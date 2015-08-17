@@ -25,14 +25,16 @@ typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*query)();
 
-    ucs_status_t (*reg)(void *address, size_t size, uct_mm_id_t *mmid_p);
+    ucs_status_t (*reg)(void *address, size_t size, 
+                        off_t *offset, uct_mm_id_t *mmid_p);
 
     ucs_status_t (*dereg)(uct_mm_id_t mm_id);
 
     ucs_status_t (*alloc)(size_t *length_p, ucs_ternary_value_t hugetlb,
                           void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG);
 
-    ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length, void **address_p);
+    ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length, 
+                           off_t offset, void **address_p);
 
     ucs_status_t (*detach)(void *address);
 
@@ -105,6 +107,8 @@ typedef struct uct_mm_seg {
     uct_mm_id_t      mmid;         /* Shared memory ID */
     void             *address;     /* Virtual address */
     size_t           length;       /* Size of the memory */
+    off_t            offset;       /* Offset from the VA to the base of the 
+                                      registration */
 } uct_mm_seg_t;
 
 
@@ -114,7 +118,9 @@ typedef struct uct_mm_seg {
 typedef struct uct_mm_packed_rkey {
     uct_mm_id_t      mmid;         /* Shared memory ID */
     uintptr_t        owner_ptr;    /* VA of in allocating process */
-    size_t           len;          /* Size of the memory */
+    size_t           length;       /* Size of the memory */
+    off_t            offset;       /* Offset from the VA to the base of the 
+                                      registration */
 } uct_mm_packed_rkey_t;
 
 

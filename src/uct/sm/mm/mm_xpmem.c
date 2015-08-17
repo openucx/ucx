@@ -34,14 +34,15 @@ static ucs_status_t uct_xpmem_query()
 }
 
 static ucs_status_t uct_xmpem_reg(void *address, size_t size, 
-                                  uct_mm_id_t *mmid_p)
+                                  off_t *offset, uct_mm_id_t *mmid_p)
 {
     xpmem_segid_t segid; /* 64bit ID*/
     const size_t page_size = ucs_get_page_size();
     void*  addr_aligned   = (void *)ucs_align_down((uintptr_t)address, page_size);
-    size_t length_aligned = ucs_align_up((uintptr_t)address - 
-                                               (uintptr_t)addr_aligned + size, 
-                                                page_size);
+    off_t  diff = (uintptr_t)address - (uintptr_t)addr_aligned;
+    size_t length_aligned = ucs_align_up(diff + size, page_size);
+
+    ucs_assert_always(address >= addr_aligned);
 
     segid = xpmem_make(addr_aligned, length_aligned, XPMEM_PERMIT_MODE, (void *)0666);
     if (segid < 0) {
@@ -51,6 +52,7 @@ static ucs_status_t uct_xmpem_reg(void *address, size_t size,
     }
 
     *mmid_p = segid;
+    *offset = diff;
     return UCS_OK;
 }
 
@@ -69,7 +71,7 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 }
 
 static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length, 
-                                     void **address_p)
+                                     off_t offset, void **address_p)
 {
     xpmem_segid_t segid = (xpmem_segid_t)mmid;
     xpmem_apid_t apid;
@@ -82,7 +84,7 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
     }
 
     addr.apid = apid;
-    addr.offset = 0;
+    addr.offset = offset;
 
     *address_p = xpmem_attach(addr, length, NULL);
     if (*address_p < 0) {
@@ -111,6 +113,7 @@ static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     const size_t page_size = ucs_get_page_size();
     const size_t length_aligned = ucs_align_up(*length_p, page_size);
+    off_t offset; /* dummy value */
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
@@ -125,7 +128,7 @@ static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
         goto err;
     }
 
-    return uct_xmpem_reg(*address_p, length_aligned, mmid_p);
+    return uct_xmpem_reg(*address_p, length_aligned, &offset, mmid_p);
 err:
     return status;
 }

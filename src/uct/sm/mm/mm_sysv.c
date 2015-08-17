@@ -57,7 +57,8 @@ out_ok:
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, void **address_p)
+static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, 
+                                    off_t offset, void **address_p)
 {
     void *ptr;
 
