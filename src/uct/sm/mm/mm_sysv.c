@@ -57,7 +57,7 @@ out_ok:
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, void **address_p)
+static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, void **address_p)
 {
     void *ptr;
 
@@ -77,7 +77,8 @@ static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
    .dereg   = NULL,
    .alloc   = uct_sysv_alloc,
    .attach  = uct_sysv_attach,
-   .release = ucs_sysv_free
+   .detach  = ucs_sysv_free,
+   .free    = ucs_sysv_free
 };
 
 UCT_MM_COMPONENT_DEFINE(uct_sysv_pd, "sysv", &uct_sysv_mapper_ops)

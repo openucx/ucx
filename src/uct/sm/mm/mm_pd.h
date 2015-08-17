@@ -32,10 +32,11 @@ typedef struct uct_mm_mapper_ops {
     ucs_status_t (*alloc)(size_t *length_p, ucs_ternary_value_t hugetlb,
                           void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG);
 
-    ucs_status_t (*attach)(uct_mm_id_t mmid, void **address_p);
+    ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length, void **address_p);
 
-    /* Cleans up after alloc/attach */
-    ucs_status_t (*release)(void *address);
+    ucs_status_t (*detach)(void *address);
+
+    ucs_status_t (*free)(void *address);
 
 } uct_mm_mapper_ops_t;
 
@@ -102,7 +103,8 @@ typedef struct uct_mm_mapper_ops {
  */
 typedef struct uct_mm_seg {
     uct_mm_id_t      mmid;         /* Shared memory ID */
-    void             *address;
+    void             *address;     /* Virtual address */
+    size_t           length;       /* Size of the memory */
 } uct_mm_seg_t;
 
 
@@ -112,6 +114,7 @@ typedef struct uct_mm_seg {
 typedef struct uct_mm_packed_rkey {
     uct_mm_id_t      mmid;         /* Shared memory ID */
     uintptr_t        owner_ptr;    /* VA of in allocating process */
+    size_t           len;          /* Size of the memory */
 } uct_mm_packed_rkey_t;
 
 

@@ -33,34 +33,118 @@ static ucs_status_t uct_xpmem_query()
     return UCS_OK;
 }
 
-static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_p)
+static ucs_status_t uct_xmpem_reg(void *address, size_t size, 
+                                  uct_mm_id_t *mmid_p)
 {
-    // TODO set *mmid_p to xpmem_seg_id
-    return UCS_ERR_UNSUPPORTED;
+    xpmem_segid_t segid; /* 64bit ID*/
+    const size_t page_size = ucs_get_page_size();
+    void*  addr_aligned   = (void *)ucs_align_down((uintptr_t)address, page_size);
+    size_t length_aligned = ucs_align_up((uintptr_t)address - 
+                                               (uintptr_t)addr_aligned + size, 
+                                                page_size);
+
+    segid = xpmem_make(addr_aligned, length_aligned, XPMEM_PERMIT_MODE, (void *)0666);
+    if (segid < 0) {
+        ucs_error("Failed to register memory with xpmem (addr: %p, len: %zu): %m",
+                  address, size);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *mmid_p = segid;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 {
-    return UCS_ERR_UNSUPPORTED;
+    int rc;
+    xpmem_segid_t segid = (xpmem_segid_t)mmid;
+
+    ucs_assert_always(segid > 0);
+    rc = xpmem_remove(segid);
+    if (rc < 0) {
+        ucs_error("Failed to de-register memory");
+        return UCS_ERR_IO_ERROR;
+    }
+    return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, void **address_p)
+static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length, 
+                                     void **address_p)
 {
-    return UCS_ERR_UNSUPPORTED;
+    xpmem_segid_t segid = (xpmem_segid_t)mmid;
+    xpmem_apid_t apid;
+    struct xpmem_addr addr;
+
+    apid = xpmem_get(segid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
+    if (apid < 0) {
+        ucs_error("Failed to xpmem_get: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    addr.apid = apid;
+    addr.offset = 0;
+
+    *address_p = xpmem_attach(addr, length, NULL);
+    if (*address_p < 0) {
+        ucs_error("Failed to xpmem_attach: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t uct_xpmem_detach(void *address)
 {
-    return UCS_ERR_UNSUPPORTED;
+    int rc = xpmem_detach(address);
+    if (rc < 0) {
+        ucs_error("Failed to xpmem_detach: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+    /* TBD: add xpmem release*/
+    return UCS_OK;
+}
+
+static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
+                                    hugetlb, void **address_p, uct_mm_id_t
+                                    *mmid_p UCS_MEMTRACK_ARG)
+{
+    ucs_status_t status = UCS_ERR_NO_MEMORY;
+    const size_t page_size = ucs_get_page_size();
+    const size_t length_aligned = ucs_align_up(*length_p, page_size);
+
+    if (0 == *length_p) {
+        ucs_error("Unexpected length %zu", *length_p);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    /* TBD: any ideas for better allocation */
+    *address_p = ucs_memalign(page_size, length_aligned, "XPMEM memory");
+    if (NULL == *address_p) {
+        ucs_error("Failed to allocate %zu bytes of memory", *length_p);
+        goto err;
+    }
+
+    return uct_xmpem_reg(*address_p, length_aligned, mmid_p);
+err:
+    return status;
+}
+
+static ucs_status_t uct_xpmem_free(void *address)
+{
+    // ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
+    ucs_free(address);
+    return UCS_OK;
 }
 
 static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
     .query   = uct_xpmem_query,
     .reg     = uct_xmpem_reg,
     .dereg   = uct_xpmem_dereg,
-    .alloc   = NULL,
+    .alloc   = uct_xpmem_alloc,
     .attach  = uct_xpmem_attach,
-    .release = uct_xpmem_detach
+    .detach  = uct_xpmem_detach,
+    .free    = uct_xpmem_free
 };
 
 UCT_MM_COMPONENT_DEFINE(uct_xpmem_pd, "xpmem", &uct_xpmem_mapper_ops)
