@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-# Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+# Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # $COPYRIGHT$
 # $HEADER$
 #
@@ -90,13 +90,13 @@ AC_ARG_WITH([valgrind],
     [with_valgrind=no]
 )
 AS_IF([test "x$with_valgrind" == xno],
-      [AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])
-      ],
-      [AC_CHECK_HEADER([valgrind/memcheck.h], [],
+      [AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])],
+      [AS_IF([test ! -d $with_valgrind], 
+              [AC_MSG_NOTICE([Valgrind path was not defined, guessing ...])
+               with_valgrind=/usr], [:])
+        AC_CHECK_HEADER([$with_valgrind/include/valgrind/memcheck.h], [],
                        [AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found, install valgrind-devel rpm.])])
-       if test -d $with_valgrind; then
-          CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
-       fi
+        CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
       ]
 )
 
