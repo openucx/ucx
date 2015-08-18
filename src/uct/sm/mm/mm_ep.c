@@ -14,21 +14,19 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_sockaddr_process_t *remote_iface_addr = (uct_sockaddr_process_t *)addr;
     ucs_status_t status;
-    void *ptr;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
     /* Connect to the remote address */
     /* Attach the address's memory */
-    status = uct_mm_pd_mapper_ops(iface->super.pd)->attach(remote_iface_addr->id, &ptr);
+    status = uct_mm_pd_mapper_ops(iface->super.pd)->attach(remote_iface_addr->id, &self->remote_mem);
     if (status != UCS_OK) {
         ucs_error("failed to connect to remote peer with mm. remote mm_id: %zu",
                    remote_iface_addr->id);
         return status;
     }
 
-    self->fifo_ctl = ptr;
-    self->fifo     = (void*) self->fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
+    uct_mm_set_fifo_ptrs(self->remote_mem, &self->fifo_ctl, &self->fifo);
 
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, remote_iface_addr->id);
 
@@ -41,7 +39,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     ucs_status_t status;
 
     /* detach the remote proceess's shared memory segment (remote recv FIFO) */
-    status = uct_mm_pd_mapper_ops(iface->super.pd)->release(self->fifo_ctl);
+    status = uct_mm_pd_mapper_ops(iface->super.pd)->release(self->remote_mem);
     if (status != UCS_OK) {
         ucs_error("error detaching from remote FIFO");
     }
