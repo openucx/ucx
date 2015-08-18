@@ -39,6 +39,16 @@ static ucs_status_t uct_cma_query_pd_resources(uct_pd_resource_desc_t **resource
                                   num_resources_p);
 }
 
+static ucs_status_t uct_cma_mem_reg(uct_pd_h pd, void *address, size_t length,
+                        uct_mem_h *memh_p)
+{
+    /* For testing we have to make sure that
+     * memh_h != UCT_INVALID_MEM_HANDLE
+     * otherwise gtest is not happy */
+    *memh_p = (void *) 0xdeadbeef;
+    return UCS_OK;
+}
+
 static ucs_status_t uct_cma_pd_open(const char *pd_name, uct_pd_h *pd_p)
 {
     static uct_pd_ops_t pd_ops = {
@@ -47,7 +57,7 @@ static ucs_status_t uct_cma_pd_open(const char *pd_name, uct_pd_h *pd_p)
         .mem_alloc    = (void*)ucs_empty_function_return_success,
         .mem_free     = (void*)ucs_empty_function_return_success,
         .mkey_pack    = (void*)ucs_empty_function_return_success,
-        .mem_reg      = (void*)ucs_empty_function_return_success,
+        .mem_reg      = uct_cma_mem_reg,
         .mem_dereg    = (void*)ucs_empty_function_return_success
     };
     static uct_pd_t pd = {
