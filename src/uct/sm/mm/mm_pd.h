@@ -22,11 +22,19 @@ typedef uint64_t uct_mm_id_t;
  * Memory mapper operations - MM uses them to implement PD and TL functionality.
  */
 typedef struct uct_mm_mapper_ops {
+
+    ucs_status_t (*query)();
+
+    ucs_status_t (*reg)(void *address, size_t size, uct_mm_id_t *mmid_p);
+
+    ucs_status_t (*dereg)(uct_mm_id_t mm_id);
+
     ucs_status_t (*alloc)(size_t *length_p, ucs_ternary_value_t hugetlb,
                           void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG);
 
     ucs_status_t (*attach)(uct_mm_id_t mmid, void **address_p);
 
+    /* Cleans up after alloc/attach */
     ucs_status_t (*release)(void *address);
 
 } uct_mm_mapper_ops_t;
@@ -54,7 +62,13 @@ typedef struct uct_mm_mapper_ops {
     \
     static ucs_status_t _var##_query_pd_resources(uct_pd_resource_desc_t **resources_p, \
                                                    unsigned *num_resources_p) { \
-        return uct_single_pd_resource(&_var, resources_p, num_resources_p); \
+        if ((_ops)->query() == UCS_OK) { \
+            return uct_single_pd_resource(&_var, resources_p, num_resources_p); \
+        } else { \
+            *resources_p = NULL; \
+            *num_resources_p = 0; \
+            return UCS_OK; \
+        } \
     } \
     \
     static ucs_status_t _var##_pd_open(const char *pd_name, uct_pd_h *pd_p) \
@@ -64,6 +78,8 @@ typedef struct uct_mm_mapper_ops {
             .query        = uct_mm_pd_query, \
             .mem_alloc    = uct_mm_mem_alloc, \
             .mem_free     = uct_mm_mem_free, \
+            .mem_reg      = uct_mm_mem_reg, \
+            .mem_dereg    = uct_mm_mem_dereg, \
             .mkey_pack    = uct_mm_mkey_pack, \
         }; \
         static uct_pd_t pd = { \
@@ -103,6 +119,11 @@ ucs_status_t uct_mm_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
                               uct_mem_h *memh_p UCS_MEMTRACK_ARG);
 
 ucs_status_t uct_mm_mem_free(uct_pd_h pd, uct_mem_h memh);
+
+ucs_status_t uct_mm_mem_reg(uct_pd_h pd, void *address, size_t length,
+                            uct_mem_h *memh_p);
+
+ucs_status_t uct_mm_mem_dereg(uct_pd_h pd, uct_mem_h memh);
 
 ucs_status_t uct_mm_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 

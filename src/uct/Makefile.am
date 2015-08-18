@@ -150,7 +150,8 @@ libuct_la_SOURCES += \
     sm/mm/mm_iface.c \
     sm/mm/mm_ep.c \
     sm/mm/mm_pd.c \
-    sm/mm/mm_sysv.c
+    sm/mm/mm_sysv.c \
+    sm/mm/mm_xpmem.c
 
 # Cross Memory Attached
 if HAVE_CMA

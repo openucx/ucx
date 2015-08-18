@@ -50,9 +50,55 @@ ucs_status_t uct_mm_mem_free(uct_pd_h pd, uct_mem_h memh)
     return UCS_OK;
 }
 
+ucs_status_t uct_mm_mem_reg(uct_pd_h pd, void *address, size_t length,
+                            uct_mem_h *memh_p)
+{
+    ucs_status_t status;
+    uct_mm_seg_t *seg;
+
+    seg = ucs_malloc(sizeof(*seg), "mm_seg");
+    if (NULL == seg) {
+        ucs_error("Failed to allocate memory for mm segment");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status = uct_mm_pd_mapper_ops(pd)->reg(address, length, &seg->mmid);
+    if (status != UCS_OK) {
+        ucs_free(seg);
+        return status;
+    }
+
+    seg->address = address;
+    *memh_p      = seg;
+
+    ucs_debug("mm registered address %p length %zu mmid %"PRIu64,
+              address, length, seg->mmid);
+    return UCS_OK;
+}
+
+ucs_status_t uct_mm_mem_dereg(uct_pd_h pd, uct_mem_h memh)
+{
+    uct_mm_seg_t *seg = memh;
+    ucs_status_t status;
+
+    status = uct_mm_pd_mapper_ops(pd)->dereg(seg->mmid);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_free(seg);
+    return UCS_OK;
+}
+
 ucs_status_t uct_mm_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
-    pd_attr->cap.flags     = UCT_PD_FLAG_ALLOC;
+    pd_attr->cap.flags     = 0;
+    if (uct_mm_pd_mapper_ops(pd)->alloc != NULL) {
+        pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
+    }
+    if (uct_mm_pd_mapper_ops(pd)->reg != NULL) {
+        pd_attr->cap.flags |= UCT_PD_FLAG_REG;
+    }
     pd_attr->cap.max_alloc = ULONG_MAX;
     pd_attr->cap.max_reg   = 0;
     memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
