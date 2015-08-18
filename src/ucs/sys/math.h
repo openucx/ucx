@@ -10,6 +10,7 @@
 #ifndef UCS_MATH_H
 #define UCS_MATH_H
 
+#include <ucs/arch/arch.h>
 #include <ucs/sys/compiler.h>
 
 #include <stdint.h>

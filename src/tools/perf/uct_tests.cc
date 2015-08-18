@@ -143,10 +143,10 @@ public:
             }
         case UCX_PERF_CMD_CSWAP:
             if (length == sizeof(uint32_t)) {
-                return uct_ep_atomic_cswap32(ep, sn, prev_sn, remote_addr, rkey,
+                return uct_ep_atomic_cswap32(ep, prev_sn, sn, remote_addr, rkey,
                                              (uint32_t*)buffer, comp);
             } else if (length == sizeof(uint64_t)) {
-                return uct_ep_atomic_cswap64(ep, sn, prev_sn, remote_addr, rkey,
+                return uct_ep_atomic_cswap64(ep, prev_sn, sn, remote_addr, rkey,
                                              (uint64_t*)buffer, comp);
             } else {
                 return UCS_ERR_INVALID_PARAM;
@@ -264,9 +264,11 @@ public:
         ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
         ucs_assert(m_perf.params.uct.fc_window <= ((psn_t)-1) / 2);
 
+        memset(m_perf.send_buffer, 0, m_perf.params.message_size);
+        memset(m_perf.recv_buffer, 0, m_perf.params.message_size);
+
         recv_sn  = direction_to_responder ? (psn_t*)m_perf.recv_buffer :
                                             (psn_t*)m_perf.send_buffer;
-        *recv_sn = 0;
         my_index = rte_call(&m_perf, group_index);
 
         rte_call(&m_perf, barrier);
@@ -412,14 +414,16 @@ public:
                                           zcopy, /* ZCOPY can return INPROGRESS */
                                           true /* data goes to responder */);
             case UCX_PERF_CMD_GET:
+                return run_stream_req_uni(false, /* No flow control for RMA/AMO */
+                                          true, /* Waiting for replies */
+                                          false /* For GET, data is delivered to requester */ );
             case UCX_PERF_CMD_FADD:
             case UCX_PERF_CMD_SWAP:
             case UCX_PERF_CMD_CSWAP:
                 return run_stream_req_uni(false, /* No flow control for RMA/AMO */
                                           true, /* Waiting for replies */
-                                          false /* For GET, data is delivered to requestor.
-                                                   For atomics, data goes both ways, but
-                                                     the reply is easier to predict */ );
+                                          true /* For atomics, data goes both ways, but
+                                                     the request is easier to predict */ );
             default:
                 return UCS_ERR_INVALID_PARAM;
             }

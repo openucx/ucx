@@ -8,8 +8,6 @@
 #ifndef UCS_GENERIC_ATOMIC_H_
 #define UCS_GENERIC_ATOMIC_H_
 
-#include <ucs/debug/log.h>
-
 
 #define UCS_DEFINE_ATOMIC_ADD(wordsize, suffix) \
     static inline void ucs_atomic_add##wordsize(volatile uint##wordsize##_t *ptr, \
@@ -29,7 +27,7 @@
         uint##wordsize##_t old; \
         do { \
            old = *ptr; \
-        }while(old != __sync_val_compare_and_swap(ptr, old, value)); \
+        } while(old != __sync_val_compare_and_swap(ptr, old, value)); \
         return old; \
     }
 

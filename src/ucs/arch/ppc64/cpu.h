@@ -9,11 +9,11 @@
 #ifndef UCS_PPC64_CPU_H_
 #define UCS_PPC64_CPU_H_
 
-#include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #ifdef HAVE_SYS_PLATFORM_PPC_H
 #  include <sys/platform/ppc.h>
 #endif
+#include <stdint.h>
 
 
 #define UCS_SYS_CACHE_LINE_SIZE    128

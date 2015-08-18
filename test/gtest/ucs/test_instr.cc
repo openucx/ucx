@@ -8,6 +8,7 @@
 #include <ucs/gtest/test.h>
 extern "C" {
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/sys.h>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/instrument.h>
 }

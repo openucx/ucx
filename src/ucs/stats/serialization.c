@@ -367,6 +367,8 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
     cls = classes[clsid];
     ptr = malloc(headroom + sizeof *node + sizeof(ucs_stats_counter_t) * cls->num_counters);
     if (ptr == NULL) {
+        ucs_error("Failed to allocate statistics counters (headroom %zu, %u counters)",
+                  headroom, cls->num_counters);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -389,6 +391,7 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
         } else if (status == UCS_ERR_NO_MESSAGE) {
             break; /* Sentinel */
         } else {
+            ucs_error("ucs_stats_deserialize_recurs returned %s", ucs_status_string(status));
             free(ptr); /* Error TODO free previous children */
             return status;
         }

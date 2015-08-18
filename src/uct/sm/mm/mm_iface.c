@@ -207,10 +207,11 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     size_t size_to_alloc;
 
     /* allocate the receive FIFO */
+
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
 
     status = uct_mm_pd_mapper_ops(pd)->alloc(&size_to_alloc, config->hugetlb_mode,
-                                             &iface->recv_fifo, &iface->fifo_mm_id
+                                             &iface->shared_mem, &iface->fifo_mm_id
                                              UCS_MEMTRACK_NAME("mm fifo"));
     if (status != UCS_OK) {
         ucs_error("Failed to allocate memory for the receive FIFO in mm. size: %zu : %m",
@@ -218,7 +219,9 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
         return status;
     }
 
-    ucs_assert(iface->recv_fifo != NULL);
+    uct_mm_set_fifo_ptrs(iface->shared_mem, &iface->recv_fifo_ctl, &iface->recv_fifo_elements);
+
+    ucs_assert(iface->shared_mem != NULL);
     return UCS_OK;
 }
 
@@ -267,15 +270,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto err;
     }
 
-    /* initiate the beginning of the FIFO to the uct_mm_fifo_ctl struct,
-     * holding the head+tail */
-    self->recv_fifo_ctl         = (uct_mm_fifo_ctl_t*) self->recv_fifo;
     self->recv_fifo_ctl->head   = 0;
     self->recv_fifo_ctl->tail   = 0;
     self->read_index            = 0;
-
-    /* initiate the pointer to the beginning of the first FIFO element */
-    self->recv_fifo_elements = (void*) self->recv_fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 
     /* initiate the owner bit in all the FIFO elements */
     for (i = 0; i < mm_config->fifo_size; i++) {
@@ -324,7 +321,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
 
     /* release the memory allocated for the FIFO */
-    status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->recv_fifo);
+    status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem);
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }

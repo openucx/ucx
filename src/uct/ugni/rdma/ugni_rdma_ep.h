@@ -5,23 +5,14 @@
 * $HEADER$
 */
 
-#ifndef UCT_UGNI_EP_H
-#define UCT_UGNI_EP_H
+#ifndef UCT_UGNI_RDMA_EP_H
+#define UCT_UGNI_RDMA_EP_H
 
 #include <gni_pub.h>
 #include <uct/api/uct.h>
 #include <uct/tl/tl_base.h>
 #include <ucs/type/class.h>
-
-
-typedef struct uct_ugni_ep {
-    uct_base_ep_t     super;
-    gni_ep_handle_t   ep;
-    unsigned          outstanding;
-    uintptr_t         hash_key;
-    struct uct_ugni_ep *next;
-} uct_ugni_ep_t;
-
+#include <uct/ugni/base/ugni_ep.h>
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*, const struct sockaddr*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);

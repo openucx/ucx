@@ -198,6 +198,7 @@ static ucs_status_t uct_knem_pd_open(const char *pd_name, uct_pd_h *pd_p)
     knem_pd->knem_fd = open("/dev/knem", O_RDWR);
     if (knem_pd->knem_fd < 0) {
         ucs_error("Could not open the KNEM device file at /dev/knem: %m.");
+        free(knem_pd);
         return UCS_ERR_IO_ERROR;
     }
 

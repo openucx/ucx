@@ -8,6 +8,9 @@
 
 #include "test_perf.h"
 
+extern "C" {
+#include <ucs/sys/sys.h>
+}
 #include <pthread.h>
 #include <string>
 #include <vector>
