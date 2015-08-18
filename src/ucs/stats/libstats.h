@@ -182,4 +182,10 @@ ucs_list_link_t *ucs_stats_server_get_stats(ucs_stats_server_h server);
 void ucs_stats_server_purge_stats(ucs_stats_server_h server);
 
 
+/**
+ * @return Number of packets received by the server.
+ */
+unsigned long ucs_stats_server_rcvd_packets(ucs_stats_server_h server);
+
+
 #endif /* LIBSTATS_H_ */

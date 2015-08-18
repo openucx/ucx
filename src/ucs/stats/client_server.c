@@ -78,7 +78,8 @@ typedef struct ucs_stats_server {
     int                     sockfd;
     int                     udp_port;
     pthread_t               server_thread;
-    int                     stop;
+    volatile unsigned long  rcvd_packets;
+    volatile int            stop;
     ucs_list_link_t         curr_stats;
     pthread_mutex_t         entities_lock;
     stats_entity_t*         entities_hash[ENTITY_HASH_SIZE];
@@ -437,6 +438,7 @@ ucs_stats_server_update_context(ucs_stats_server_h server, struct sockaddr_in *s
                                            pkt->frag_size, pkt->frag_offset);
 
     ucs_stats_server_entity_put(entity);
+    ++server->rcvd_packets;
     return status;
 }
 
@@ -567,7 +569,8 @@ ucs_status_t ucs_stats_server_start(int port, ucs_stats_server_h *p_server)
         return status;
     }
 
-    server->stop = 0;
+    server->rcvd_packets = 0;
+    server->stop         = 0;
     pthread_create(&server->server_thread, NULL, ucs_stats_server_thread_func,
                    server);
 
@@ -639,6 +642,11 @@ void ucs_stats_server_purge_stats(ucs_stats_server_h server)
         ucs_list_del(&node->list);
         ucs_stats_free(node);
     }
+}
+
+unsigned long ucs_stats_server_rcvd_packets(ucs_stats_server_h server)
+{
+   return server->rcvd_packets;
 }
 
 static inline int stats_entity_cmp(stats_entity_t *e1, stats_entity_t *e2)
