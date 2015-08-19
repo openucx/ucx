@@ -153,7 +153,7 @@ libuct_la_SOURCES += \
     sm/mm/mm_sysv.c
 
 # SGI / Cray XPMEM
-if HAVE_CMA
+if HAVE_XPMEM
 libuct_la_CPPFLAGS += $(XPMEM_CPPFLAGS)
 libuct_la_LDFLAGS +=  $(XPMEM_LDFLAGS)
 
