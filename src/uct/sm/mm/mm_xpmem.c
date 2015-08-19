@@ -52,6 +52,8 @@ static ucs_status_t uct_xmpem_reg(void *address, size_t size,
     }
 
     *mmid_p = segid;
+
+    ucs_debug("Calling reg for address %p cookie %lu", address, *mmid_p);
     return UCS_OK;
 }
 
@@ -59,6 +61,8 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 {
     int rc;
     xpmem_segid_t segid = (xpmem_segid_t)mmid;
+
+    ucs_debug("Calling dereg for cookie %lu", mmid);
 
     ucs_assert_always(segid > 0);
     rc = xpmem_remove(segid);
@@ -80,6 +84,8 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
     const size_t page_size = ucs_get_page_size();
     void*  addr_aligned   = (void *)ucs_align_down((uintptr_t)rem_address, page_size);
     off_t  diff = (uintptr_t)rem_address - (uintptr_t)addr_aligned;
+
+    ucs_debug("Calling attach for address %p", rem_address);
 
     *mm_desc = ucs_malloc(sizeof(uct_mm_mapped_desc_t), "mm_desc");
     if (NULL == *mm_desc) {
@@ -117,7 +123,12 @@ err_mem:
 
 static ucs_status_t uct_xpmem_detach(uct_mm_mapped_desc_t *mm_desc)
 {
-    int rc = xpmem_detach(mm_desc->address);
+    int rc;
+
+    ucs_debug("Calling detach with address %p cookie %lu",
+              mm_desc->address, mm_desc->cookie);
+
+    rc = xpmem_detach(mm_desc->address);
     if (rc < 0) {
         ucs_error("Failed to xpmem_detach: %m");
         return UCS_ERR_IO_ERROR;
@@ -128,6 +139,7 @@ static ucs_status_t uct_xpmem_detach(uct_mm_mapped_desc_t *mm_desc)
         return UCS_ERR_IO_ERROR;
     }
     ucs_free(mm_desc);
+
     return UCS_OK;
 }
 
@@ -152,6 +164,7 @@ static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
         goto err;
     }
 
+    ucs_debug("Calling alloc with address %p", *address_p);
     return uct_xmpem_reg(*address_p, length_aligned, mmid_p);
 err:
     return status;
@@ -165,6 +178,7 @@ static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id)
     }
 
     ucs_free(address);
+    ucs_debug("Calling free with address %p, cookie %lu", address, mm_id);
     return UCS_OK;
 }
 
