@@ -9,7 +9,7 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
-#include "uct/ib/ud/ud_ep.h"
+#include <uct/ib/ud/base/ud_ep.h>
 };
 /* TODO: disable ud async progress for most tests once we have it */
 class test_ud : public uct_test {

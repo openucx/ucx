@@ -11,9 +11,9 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 
-#include "ud_iface.h"
-#include "ud_ep.h"
-#include "ud_def.h"
+#include <uct/ib/ud/base/ud_iface.h>
+#include <uct/ib/ud/base/ud_ep.h>
+#include <uct/ib/ud/base/ud_def.h>
 
 typedef struct {
     uct_ud_ep_t          super;

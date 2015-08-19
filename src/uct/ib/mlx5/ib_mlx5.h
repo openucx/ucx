@@ -69,7 +69,6 @@ typedef struct uct_ib_mlx5_cq {
     void               *cq_buf;
     unsigned           cq_ci;
     unsigned           cq_length;
-    unsigned           cqe_size;
     unsigned           cqe_size_log;
 } uct_ib_mlx5_cq_t;
 
@@ -96,20 +95,17 @@ struct uct_ib_mlx5_atomic_masked_cswap64_seg {
     uint64_t           compare_mask;
 } UCS_S_PACKED;
 
-struct uct_ib_mlx5_ctrl_dgram_seg {
-    struct mlx5_wqe_ctrl_seg     ctrl;
-    struct mlx5_wqe_datagram_seg dgram;
-} UCS_S_PACKED;
-
 /**
  * Get internal QP information.
  */
-ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *qp_info);
+ucs_status_t 
+uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *qp_info);
 
 /**
  * Get internal SRQ information.
  */
-ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq, uct_ib_mlx5_srq_info_t *srq_info);
+ucs_status_t
+uct_ib_mlx5_get_srq_info(struct ibv_srq *srq, uct_ib_mlx5_srq_info_t *srq_info);
 
 /**
  * Get internal CQ information.
@@ -131,6 +127,11 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
                                                 struct mlx5_cqe64 *cqe);
 
 
+static inline unsigned uct_ib_mlx5_cqe_size(uct_ib_mlx5_cq_t *cq)
+{
+    return 1<<cq->cqe_size_log;
+}
+
 static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,
                                                      int cqe_size_log)
 {
@@ -142,7 +143,7 @@ static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,
     cqe    = cq->cq_buf + ((index & (cq->cq_length - 1)) << cqe_size_log);
     op_own = cqe->op_own;
 
-    if (ucs_likely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
+    if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & 0x80)) {
         return uct_ib_mlx5_check_completion(cq, cqe);
@@ -160,22 +161,22 @@ typedef struct uct_ib_mlx5_txwq {
     unsigned       bf_size;
     void           *bf_reg;
     uint32_t       *dbrec;
-    void           *seg;
+    void           *curr;
     void           *qstart;
     void           *qend;
+    uint16_t       bb_max;
 } uct_ib_mlx5_txwq_t;
 
-typedef uint16_t uct_ib_mlx5_index_t;
 
 /* receive WQ */
 typedef struct uct_ib_mlx5_rxwq {
     /* producer index. It updated when new receive wqe is posted */
-    uct_ib_mlx5_index_t       rq_wqe_counter; 
+    uint16_t       rq_wqe_counter; 
     /* consumer index. It is better to track it ourselves than to do ntohs() 
      * on the index in the cqe
      */
-    uct_ib_mlx5_index_t       cq_wqe_counter;
-    uct_ib_mlx5_index_t       mask;
+    uint16_t       cq_wqe_counter;
+    uint16_t       mask;
     uint32_t                 *dbrec;
     struct mlx5_wqe_data_seg *wqes;
 } uct_ib_mlx5_rxwq_t;
@@ -184,6 +185,11 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq);
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 
+static inline uint16_t
+uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci) 
+{
+    return wq->bb_max - (wq->prev_sw_pi - hw_ci);
+}
 
 /**
  * Copy data to inline segment, taking into account QP wrap-around.
@@ -193,7 +199,9 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
  * @param length  Data length.
  *
  */
-static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_inline_copy(void *dest, const void *src, unsigned length, uct_ib_mlx5_txwq_t *wq)
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_inline_copy(void *dest, const void *src, unsigned length, 
+                        uct_ib_mlx5_txwq_t *wq)
 {
     void *qend = wq->qend;
     ptrdiff_t n;
@@ -207,7 +215,8 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_inline_copy(void *dest, const void *
     }
 }
 
-static UCS_F_ALWAYS_INLINE void *uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, char *seg_base, int seg_len)
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, void *seg_base, size_t seg_len)
 {
     void *rseg;
 
@@ -215,14 +224,15 @@ static UCS_F_ALWAYS_INLINE void *uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq
     if (ucs_unlikely(rseg >= wq->qend)) {
         rseg = wq->qstart;
     }
-    ucs_assert((unsigned long)rseg % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
+    ucs_assert(((unsigned long)rseg % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     ucs_assert(rseg >= wq->qstart && rseg < wq->qend);
     return rseg;
 }
 
-static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
-                                             struct mlx5_wqe_av *av,
-                                             uint8_t path_bits)
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
+                          struct mlx5_wqe_av *av,
+                          uint8_t path_bits)
 {
 
     mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_QKEY);
@@ -245,7 +255,7 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 {
     uint8_t ds;
 
-    ucs_assert((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
+    ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
     ucs_trace_data("ds=%d wqe_size=%d", ds, wqe_size);
 #ifdef __SSE4_2__
@@ -274,7 +284,7 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
                          const void *address,
                          unsigned length, uint32_t lkey)
 {
-    ucs_assert((unsigned long)dptr % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
+    ucs_assert(((unsigned long)dptr % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     dptr->byte_count = htonl(length);
     dptr->lkey       = htonl(lkey);
     dptr->addr       = htonll((uintptr_t)address);
@@ -291,15 +301,15 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void *dst, void *src)
 }
 
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE uint16_t 
 uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, 
                       struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
 {
-    unsigned n, num_bb;
+    unsigned n;
     void *src, *dst;
-    uint16_t sw_pi;
+    uint16_t num_bb, sw_pi;
 
-    ucs_assert((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE == 0);
+    ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
     sw_pi   = wq->sw_pi;
 
@@ -307,7 +317,6 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     ucs_memory_cpu_store_fence();
 
     /* Write doorbell record */
-    wq->prev_sw_pi = sw_pi;
     *wq->dbrec = htonl(sw_pi += num_bb);
 
     /* Make sure that doorbell record is written before ringing the doorbell */
@@ -334,12 +343,14 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     ucs_compiler_fence();
 
     /* Advance queue pointer */
-    ucs_assert(ctrl == wq->seg);
-    wq->seg   = src;
-    wq->sw_pi = sw_pi;
+    ucs_assert(ctrl == wq->curr);
+    wq->curr       = src;
+    wq->prev_sw_pi = wq->sw_pi;
+    wq->sw_pi      = sw_pi;
 
     /* Flip BF register */
     wq->bf_reg = (void*) ((uintptr_t) wq->bf_reg ^ wq->bf_size);
+    return num_bb;
 }
 
 #endif

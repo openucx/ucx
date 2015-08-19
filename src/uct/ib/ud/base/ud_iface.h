@@ -56,8 +56,7 @@ struct uct_ud_iface {
     struct {
         uct_ud_send_skb_t   *skb; /* ready to use skb */
         ucs_mpool_h          mp;
-        unsigned             available;
-        /* TODO: move to base class as this is common with rc */
+        uint16_t             available;
         unsigned             unsignaled;
         ucs_queue_head_t     pending_ops;
     } tx;
@@ -102,11 +101,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface);
 
 static inline int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 {
-    if (iface->tx.available == 0) {
-        ucs_trace_poll("iface=%p out of tx wqe", iface);
-        return 0;
-    }
-    return 1;
+    return iface->tx.available > 0;
 }
 
 /* 
@@ -191,7 +186,9 @@ void uct_ud_iface_cep_init(uct_ud_iface_t *iface);
  * if conn_id == UCT_UD_EP_CONN_ID_MAX then try to
  * reuse ep with conn_id == conn_last_id
  */
-uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uint32_t conn_id);
+uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
+                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     uint32_t conn_id);
 
 /* remove ep */
 void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
@@ -199,10 +196,14 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
 /*
  * rollback last ordered insert (conn_id == UCT_UD_EP_CONN_ID_MAX).
  */
-void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep);
+void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
+                               const uct_sockaddr_ib_t *src_if_addr,
+                               uct_ud_ep_t *ep);
 
 /* insert new ep that is connected to src_if_addr */
-ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id);
+ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
+                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     uct_ud_ep_t *ep, uint32_t conn_id);
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 

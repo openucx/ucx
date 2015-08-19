@@ -8,7 +8,6 @@
 #include "ib_mlx5_log.h"
 
 #include <uct/ib/base/ib_device.h>
-#include <uct/ib/ud/ud_mlx5.h>
 #include <string.h>
 
 
@@ -293,7 +292,7 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
         ++i;
     }
 
-    uct_ib_log_dump_sg_list(sg_list, i, inline_bitmap, packet_dump_cb, s, ends - s); 
+    uct_ib_log_dump_sg_list(sg_list, i, inline_bitmap, packet_dump_cb, s, ends - s);
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,

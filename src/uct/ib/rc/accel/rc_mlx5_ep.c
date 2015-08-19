@@ -44,7 +44,7 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     uct_ib_mlx5_log_tx(IBV_QPT_RC, ctrl, ep->tx.wq.qstart, ep->tx.wq.qend,
                        (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
-    uct_ib_mlx5_post_send(&ep->tx.wq, ctrl, wqe_size);
+    ep->super.available -= uct_ib_mlx5_post_send(&ep->tx.wq, ctrl, wqe_size);
     uct_rc_ep_tx_posted(&ep->super, sig_flag & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 
@@ -84,7 +84,7 @@ uct_rc_mlx5_ep_inline_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
     unsigned wqe_size;
     unsigned sig_flag;
 
-    ctrl = ep->tx.wq.seg;
+    ctrl = ep->tx.wq.curr;
     UCT_RC_MLX5_CHECK_RES(iface, ep);
 
     switch (opcode) {
@@ -179,7 +179,7 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
     }
 
     opmod = 0;
-    ctrl = ep->tx.wq.seg;
+    ctrl = ep->tx.wq.curr;
     switch (opcode_flags) {
     case MLX5_OPCODE_SEND:
         UCT_CHECK_LENGTH(length + sizeof(*rch) + am_hdr_len,
@@ -313,7 +313,7 @@ uct_rc_mlx5_ep_dptr_post(uct_rc_mlx5_ep_t *ep, unsigned opcode_flags,
         masked_fadd32->filed_boundary = 0;
 
         uct_ib_mlx5_set_data_seg((void*)(masked_fadd32 + 1), buffer, length,
-                                    *lkey_p);
+                                 *lkey_p);
         wqe_size                      = sizeof(*ctrl) + sizeof(*raddr) +
                                         sizeof(*masked_fadd32) + sizeof(*dptr);
         break;
@@ -672,18 +672,10 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
 {
-    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
-    uint16_t exp_max_pi;
 
-    /*
-     * If we got completion for the last posted WQE, max_pi would be advanced
-     * to the value calculated from prev_sw_pi - which is the index where the last
-     * posted WQE started. See also uct_rc_mlx5_iface_poll_tx().
-     */
-    exp_max_pi = uct_rc_mlx5_calc_max_pi(iface, ep->tx.wq.prev_sw_pi);
-    if (ep->tx.max_pi == exp_max_pi) {
+    if (ep->super.available == ep->tx.wq.bb_max) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);
         ucs_trace_data("ep %p is flushed", ep);
         return UCS_OK;
@@ -713,8 +705,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
         return status;
     }
 
-    self->qp_num    = self->super.qp->qp_num;
-    self->tx.max_pi = uct_rc_mlx5_calc_max_pi(iface, self->tx.wq.prev_sw_pi);
+    self->super.available = self->tx.wq.bb_max;
+    self->qp_num          = self->super.qp->qp_num;
     return UCS_OK;
 }
 

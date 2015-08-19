@@ -78,7 +78,7 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
 }
 
 ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
-                                        uct_sockaddr_ib_t *if_addr)
+                                        const uct_sockaddr_ib_t *if_addr)
 {   
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
@@ -107,10 +107,10 @@ ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_create_connected(uct_ud_iface_t *iface, 
-                                        uct_sockaddr_ib_t *addr, 
-                                        uct_ud_ep_t **new_ep_p, 
-                                        uct_ud_send_skb_t **skb_p)
+ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface, 
+                                               const uct_sockaddr_ib_t *addr, 
+                                               uct_ud_ep_t **new_ep_p, 
+                                               uct_ud_send_skb_t **skb_p)
 {
     ucs_status_t status;
     uct_ud_ep_t *ep;
@@ -123,7 +123,7 @@ ucs_status_t uct_ud_ep_create_connected(uct_ud_iface_t *iface,
         return UCS_OK;
     }
 
-    status = iface->super.super.super.ops.ep_create(&iface->super.super.super, &new_ep_h);
+    status = uct_ep_create(&iface->super.super.super, &new_ep_h);
     if (status != UCS_OK) {
         return status;
     }
@@ -136,26 +136,26 @@ ucs_status_t uct_ud_ep_create_connected(uct_ud_iface_t *iface,
 
     status = uct_ud_iface_cep_insert(iface, addr, ep, UCT_UD_EP_CONN_ID_MAX);
     if (status != UCS_OK) {
-        goto err1;
+        goto err_cep_insert;
     }
 
     *skb_p = uct_ud_ep_prepare_creq(ep);
     if (!*skb_p) {
         status = UCS_ERR_NO_RESOURCE;
-        goto err2;
+        goto err_creq;
     }
 
     *new_ep_p = ep;
     return UCS_OK;
 
-err2:
+err_creq:
     uct_ud_iface_cep_rollback(iface, addr, ep);
-err1:
+err_cep_insert:
     uct_ud_ep_disconnect_from_iface(&ep->super.super);
     return status;
 }
 
-void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep, uct_sockaddr_ib_t *addr)
+void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep, const uct_sockaddr_ib_t *addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_iface_cep_rollback(iface, addr, ep);
@@ -206,10 +206,6 @@ static inline void uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     /* update window */
     ep->tx.max_psn =  ep->tx.acked_psn + UCT_UD_MAX_WINDOW;
-
-    if (ucs_unlikely(iface->tx.skb == NULL)) {
-        iface->tx.skb = ucs_mpool_get(iface->tx.mp);
-    }
 }
 
 static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
@@ -321,9 +317,6 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq->conn_req.conn_id        = ep->conn_id;
 
     skb->len = sizeof(*neth) + sizeof(*creq);
-    /* TODO: add to the list of ceps */
-    UCT_UD_EP_HOOK_CALL_TX(ep, skb->neth);
-    uct_ud_iface_complete_tx_skb(iface, ep, skb);
     return skb;
 }
 
@@ -395,7 +388,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_ACK);
     }
 
-    if (ucs_unlikely(!is_am && byte_len == sizeof(*neth))) {
+    if (ucs_unlikely(!is_am && (byte_len == sizeof(*neth)))) {
         goto out;
     }
 
@@ -405,7 +398,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         goto out;
     }
     
-    if (ucs_unlikely(!is_am && neth->packet_type & UCT_UD_PACKET_FLAG_CTL)) {
+    if (ucs_unlikely(!is_am && (neth->packet_type & UCT_UD_PACKET_FLAG_CTL))) {
         uct_ud_ep_rx_ctl(iface, ep, (uct_ud_ctl_hdr_t *)(neth + 1));
         goto out;
     }

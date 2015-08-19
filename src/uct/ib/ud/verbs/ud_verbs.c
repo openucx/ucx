@@ -17,13 +17,13 @@
 
 #include <uct/ib/base/ib_log.h>
 
-#include "ud_iface.h"
-#include "ud_ep.h"
-#include "ud_def.h"
+#include <uct/ib/ud/base/ud_iface.h>
+#include <uct/ib/ud/base/ud_ep.h>
+#include <uct/ib/ud/base/ud_def.h>
 
 #include "ud_verbs.h"
 
-#include "ud_inl.h"
+#include <uct/ib/ud/base/ud_inl.h>
 
 static UCS_F_NOINLINE void
 uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
@@ -79,6 +79,7 @@ static inline void uct_ud_verbs_iface_tx_ctl(uct_ud_verbs_iface_t *iface, uct_ud
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_ctl, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(iface->super.qp,  &iface->tx.wr_ctl, NULL);
+    --iface->super.tx.available;
 }
 
 static inline void uct_ud_verbs_iface_tx_inl(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep, const void *buffer, unsigned length)
@@ -93,6 +94,7 @@ static inline void uct_ud_verbs_iface_tx_inl(uct_ud_verbs_iface_t *iface, uct_ud
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_inl, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(iface->super.qp, &iface->tx.wr_inl, NULL);
+    --iface->super.tx.available;
 }
 
 static inline void uct_ud_verbs_iface_tx_data(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep)
@@ -106,6 +108,7 @@ static inline void uct_ud_verbs_iface_tx_data(uct_ud_verbs_iface_t *iface, uct_u
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_bcp, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(iface->super.qp, &iface->tx.wr_bcp, NULL);
+    --iface->super.tx.available;
 }
 
 
@@ -226,7 +229,7 @@ static ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     uct_ud_neth_t *neth;
 
     /* TODO: UCT_CHECK_LENGTH(length <= iface->config.max_inline, "put_short"); */
-    skb = uct_ud_iface_get_tx_skb2(&iface->super, &ep->super);
+    skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         return UCS_ERR_NO_RESOURCE;
     }
@@ -337,13 +340,13 @@ ucs_status_t uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const struct 
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep;
     uct_ud_ep_t *new_ud_ep; 
-    uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
+    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)addr;
     uct_ud_send_skb_t *skb;
     struct ibv_ah *ah;
     ucs_status_t status;
 
-    status = uct_ud_ep_create_connected(&iface->super, 
-                                        if_addr, &new_ud_ep, &skb);
+    status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
+                                               &new_ud_ep, &skb);
     if (status != UCS_OK) {
         return status;
     }
@@ -362,10 +365,12 @@ ucs_status_t uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const struct 
     }
     ep->ah = ah;
 
+    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
     iface->tx.sge[0].length = skb->len;
     uct_ud_verbs_iface_tx_ctl(iface, ep);
-    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+
     return UCS_OK;
 
 err:
@@ -382,7 +387,7 @@ ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     struct ibv_ah *ah;
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_sockaddr_ib_t *if_addr = (uct_sockaddr_ib_t *)addr;
+    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)addr;
 
     status = uct_ud_ep_connect_to_ep(&ep->super, addr);
     if (status != UCS_OK) {
@@ -476,7 +481,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;
     self->tx.wr_inl.wr_id             = 0xBEEBBEEB;
-    self->tx.wr_inl.wr.ud.remote_qkey = UCT_UD_QKEY;
+    self->tx.wr_inl.wr.ud.remote_qkey = UCT_IB_QKEY;
     self->tx.wr_inl.imm_data          = 0;
     self->tx.wr_inl.next              = 0;
     self->tx.wr_inl.sg_list           = self->tx.sge;
@@ -485,7 +490,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     memset(&self->tx.wr_bcp, 0, sizeof(self->tx.wr_bcp));
     self->tx.wr_bcp.opcode            = IBV_WR_SEND;
     self->tx.wr_bcp.wr_id             = 0xFAAFFAAF;
-    self->tx.wr_bcp.wr.ud.remote_qkey = UCT_UD_QKEY;
+    self->tx.wr_bcp.wr.ud.remote_qkey = UCT_IB_QKEY;
     self->tx.wr_bcp.imm_data          = 0;
     self->tx.wr_bcp.next              = 0;
     self->tx.wr_bcp.sg_list           = self->tx.sge;
@@ -494,7 +499,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     memset(&self->tx.wr_ctl, 0, sizeof(self->tx.wr_ctl));
     self->tx.wr_ctl.opcode            = IBV_WR_SEND;
     self->tx.wr_ctl.wr_id             = 0xCCCCCCCC;
-    self->tx.wr_ctl.wr.ud.remote_qkey = UCT_UD_QKEY;
+    self->tx.wr_ctl.wr.ud.remote_qkey = UCT_IB_QKEY;
     self->tx.wr_ctl.imm_data          = 0;
     self->tx.wr_ctl.next              = 0;
     self->tx.wr_ctl.sg_list           = self->tx.sge;
