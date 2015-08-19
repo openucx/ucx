@@ -45,6 +45,7 @@ static ucs_status_t uct_cma_mem_reg(uct_pd_h pd, void *address, size_t length,
     /* For testing we have to make sure that
      * memh_h != UCT_INVALID_MEM_HANDLE
      * otherwise gtest is not happy */
+    UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_INVALID_MEM_HANDLE);
     *memh_p = (void *) 0xdeadbeef;
     return UCS_OK;
 }
