@@ -58,18 +58,42 @@ out_ok:
 }
 
 static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, 
-                                    off_t offset, void **address_p)
+                                    void *rem_address,
+                                    uct_mm_mapped_desc_t **mm_desc)
 {
     void *ptr;
+
+    *mm_desc = ucs_malloc(sizeof(uct_mm_mapped_desc_t), "mm_desc");
+    if (NULL == *mm_desc) {
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     ptr = shmat(mmid, NULL, 0);
     if (ptr == MAP_FAILED) {
         ucs_error("shmat(shmid=%d) failed: %m", (int)mmid);
+        ucs_free(*mm_desc);
         return UCS_ERR_SHMEM_SEGMENT;
     }
 
-    *address_p = ptr;
+    (*mm_desc)->address = ptr;
+    (*mm_desc)->cookie = 0xdeadbeef;
+
     return UCS_OK;
+}
+
+static ucs_status_t uct_sysv_detach(uct_mm_mapped_desc_t *mm_desc)
+{
+    ucs_status_t status = ucs_sysv_free(mm_desc->address);
+    if (UCS_OK != status) {
+        return status;
+    }
+    ucs_free(mm_desc);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_sysv_free(void *address, uct_mm_id_t mm_id)
+{
+    return ucs_sysv_free(address);
 }
 
 static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
@@ -78,8 +102,8 @@ static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
    .dereg   = NULL,
    .alloc   = uct_sysv_alloc,
    .attach  = uct_sysv_attach,
-   .detach  = ucs_sysv_free,
-   .free    = ucs_sysv_free
+   .detach  = uct_sysv_detach,
+   .free    = uct_sysv_free
 };
 
 UCT_MM_COMPONENT_DEFINE(uct_sysv_pd, "sysv", &uct_sysv_mapper_ops)

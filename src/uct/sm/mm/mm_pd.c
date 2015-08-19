@@ -29,7 +29,6 @@ ucs_status_t uct_mm_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
     }
 
     seg->length = *length_p;
-    seg->offset = 0;
     *address_p  = seg->address;
     *memh_p     = seg;
 
@@ -43,7 +42,7 @@ ucs_status_t uct_mm_mem_free(uct_pd_h pd, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_pd_mapper_ops(pd)->free(seg->address);
+    status = uct_mm_pd_mapper_ops(pd)->free(seg->address, seg->mmid);
     if (status != UCS_OK) {
         return status;
     }
@@ -65,7 +64,7 @@ ucs_status_t uct_mm_mem_reg(uct_pd_h pd, void *address, size_t length,
     }
 
     status = uct_mm_pd_mapper_ops(pd)->reg(address, length, 
-                                           &seg->offset, &seg->mmid);
+                                           &seg->mmid);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -75,8 +74,8 @@ ucs_status_t uct_mm_mem_reg(uct_pd_h pd, void *address, size_t length,
     seg->address = address;
     *memh_p      = seg;
 
-    ucs_debug("mm registered address %p length %zu offset %jd mmid %"PRIu64,
-              address, length, seg->offset, seg->mmid);
+    ucs_debug("mm registered address %p length %zu mmid %"PRIu64,
+              address, length, seg->mmid);
     return UCS_OK;
 }
 
@@ -117,7 +116,6 @@ ucs_status_t uct_mm_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
     rkey->mmid      = seg->mmid;
     rkey->owner_ptr = (uintptr_t)seg->address;
     rkey->length    = seg->length;
-    rkey->offset    = seg->offset;
     ucs_trace("packed rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
               rkey->mmid, rkey->owner_ptr);
     return UCS_OK;
@@ -128,27 +126,27 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
 {
     /* user is responsible to free rkey_buffer */
     const uct_mm_packed_rkey_t *rkey = rkey_buffer;
+    uct_mm_mapped_desc_t *mm_desc;
     ucs_status_t status;
-    void *client_ptr;
 
     ucs_trace("unpacking rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
               rkey->mmid, rkey->owner_ptr);
 
     status = uct_mm_pdc_mapper_ops(pdc)->attach(rkey->mmid, rkey->length, 
-                                                rkey->offset, &client_ptr);
+                                                (void *)rkey->owner_ptr, &mm_desc);
     if (status != UCS_OK) {
         return status;
     }
 
     /* store the offset of the addresses, this can be used directly to translate
      * the remote VA to local VA of the attached segment */
-    *handle_p = client_ptr;
-    *rkey_p   = (uintptr_t)client_ptr - rkey->owner_ptr;
+    *handle_p = mm_desc;
+    *rkey_p   = (uintptr_t)mm_desc->address - rkey->owner_ptr;
     return UCS_OK;
 }
 
 ucs_status_t uct_mm_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey, void *handle)
 {
-    void *client_ptr = handle;
-    return uct_mm_pdc_mapper_ops(pdc)->detach(client_ptr);
+    uct_mm_mapped_desc_t *mm_desc = handle;
+    return uct_mm_pdc_mapper_ops(pdc)->detach(mm_desc);
 }

@@ -321,7 +321,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
 
     /* release the memory allocated for the FIFO */
-    status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem);
+    status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem,
+                                                        self->fifo_mm_id);
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }
