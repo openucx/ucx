@@ -36,7 +36,7 @@ static ucs_status_t uct_xpmem_query()
 static ucs_status_t uct_xmpem_reg(void *address, size_t size, 
                                   uct_mm_id_t *mmid_p)
 {
-    xpmem_segid_t segid; /* 64bit ID*/
+    xpmem_segid_t segid; /* 64bit ID */
     const size_t page_size = ucs_get_page_size();
     void*  addr_aligned   = (void *)ucs_align_down((uintptr_t)address, page_size);
     off_t  diff = (uintptr_t)address - (uintptr_t)addr_aligned;
@@ -67,9 +67,11 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
     ucs_assert_always(segid > 0);
     rc = xpmem_remove(segid);
     if (rc < 0) {
-        ucs_error("Failed to de-register memory: %m");
-        return UCS_ERR_IO_ERROR;
+        /* No error since there a chance that it already
+         * was released or deregistered */
+        ucs_debug("Failed to de-register memory: %m");
     }
+
     return UCS_OK;
 }
 
@@ -144,8 +146,8 @@ static ucs_status_t uct_xpmem_detach(uct_mm_mapped_desc_t *mm_desc)
 }
 
 static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
-                                    hugetlb, void **address_p, uct_mm_id_t
-                                    *mmid_p UCS_MEMTRACK_ARG)
+                                    hugetlb, void **address_p,
+                                    uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     const size_t page_size = ucs_get_page_size();
