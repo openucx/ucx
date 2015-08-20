@@ -165,6 +165,9 @@ typedef struct uct_ib_mlx5_txwq {
     void           *qstart;
     void           *qend;
     uint16_t       bb_max;
+#if ENABLE_ASSERT
+    uint16_t       hw_ci;
+#endif
 } uct_ib_mlx5_txwq_t;
 
 
@@ -188,7 +191,59 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 static inline uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci) 
 {
+#if ENABLE_ASSERT
+    wq->hw_ci = hw_ci;
+#endif
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
+}
+
+/* check that work queue has enough space for the new work request */
+static inline void 
+uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
+{
+
+#if ENABLE_ASSERT
+    uint16_t wqe_s, wqe_e;
+    uint16_t hw_ci, sw_pi;
+    uint16_t wqe_cnt;
+    int is_ok = 1;
+    static int cnt;
+
+    if (cnt++ == 0)
+        return;
+
+    wqe_cnt = (wq->qend - wq->qstart) / MLX5_SEND_WQE_BB;
+    if (wqe_cnt < wq->bb_max) {
+        ucs_fatal("wqe count (%u) < bb_max (%u)", wqe_cnt, wq->bb_max);
+    }
+
+    wqe_s = (wq->curr - wq->qstart) / MLX5_SEND_WQE_BB;
+    wqe_e = (wqe_s + num_bb) % wqe_cnt;
+
+    sw_pi = wq->prev_sw_pi % wqe_cnt;
+    hw_ci = wq->hw_ci % wqe_cnt;
+
+    if (hw_ci <= sw_pi) { 
+        if (hw_ci <= wqe_s && wqe_s <= sw_pi) {
+            is_ok = 0;
+        }
+        if (hw_ci <= wqe_e && wqe_e <= sw_pi) {
+            is_ok = 0;
+        }
+    }
+    else {
+        if (!(sw_pi < wqe_s && wqe_s < hw_ci)) {
+            is_ok = 0;
+        }
+        if (!(sw_pi < wqe_e && wqe_e < hw_ci)) {
+            is_ok = 0;
+        }
+    }
+    if (!is_ok) {
+        ucs_fatal("tx wq overrun: hw_ci: %u sw_pi: %u cur: %u-%u num_bb: %u wqe_cnt: %u", 
+                hw_ci, sw_pi, wqe_s, wqe_e, num_bb, wqe_cnt);
+    }
+#endif
 }
 
 /**
@@ -313,6 +368,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
     sw_pi   = wq->sw_pi;
 
+    uct_ib_mlx5_txwq_validate(wq, num_bb);
     /* TODO Put memory store fence here too, to prevent WC being flushed after DBrec */
     ucs_memory_cpu_store_fence();
 

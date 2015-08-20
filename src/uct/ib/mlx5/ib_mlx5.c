@@ -225,7 +225,13 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
     wq->bf_reg     = qp_info.bf.reg;
     wq->bf_size    = qp_info.bf.size;
     wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
-    wq->bb_max     = qp_info.sq.wqe_cnt - UCT_IB_MLX5_MAX_BB;
+    /* need to reserve 2x because:
+     *  - on completion we only get the index of last wqe and we do not 
+     *    really know how many bb is there (but no more than max bb
+     *  - on send we check that there is at least one bb. We know
+     *  exact number of bbs once we acually are sending.
+     */
+    wq->bb_max     = qp_info.sq.wqe_cnt - 2*UCT_IB_MLX5_MAX_BB;
     ucs_assert_always(wq->bb_max > 0);
     memset(wq->qstart, 0, wq->qend - wq->qstart); 
     return UCS_OK;
