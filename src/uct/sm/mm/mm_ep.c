@@ -24,9 +24,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     status =
         uct_mm_pd_mapper_ops(iface->super.pd)->attach(remote_iface_addr->id,
                                                       size_to_attach,
-                                                      0, /* Making and assumption here
-                                                            that remote address 
-                                                            is always aligned */
+                                                      (void *)remote_iface_addr->vaddr,
                                                       &self->mapped_desc.address,
                                                       &self->mapped_desc.cookie);
     if (status != UCS_OK) {
