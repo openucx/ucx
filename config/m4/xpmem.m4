@@ -13,8 +13,8 @@ AS_IF([test "x$with_xpmem" != xno],
                                  xpmem_happy=yes
                                  AC_SUBST(XPMEM_CPPFLAGS,  "$CRAY_XPMEM_CFLAGS")
                                  AC_SUBST(XPMEM_LDFLAGS,   "$CRAY_XPMEM_LIBS")
-                                 AC_DEFINE([HAVE_XPMEM], [1], [Enable the use of XPMEM])
-                                 ], [])],
+                                 AC_DEFINE([HAVE_XPMEM], [1], [Enable the use of XPMEM])], 
+                                [AC_MSG_WARN([XPMEM was not detected])])],
              [AC_CHECK_HEADER([$with_xpmem/include/xpmem.h],
                              [AC_SUBST(XPMEM_CPPFLAGS,  "-I$with_xpmem/include")
                              AC_SUBST(XPMEM_LDFLAGS,   "-L$with_xpmem/lib -lxpmem")
