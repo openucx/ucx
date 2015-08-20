@@ -126,15 +126,23 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
 {
     /* user is responsible to free rkey_buffer */
     const uct_mm_packed_rkey_t *rkey = rkey_buffer;
-    uct_mm_mapped_desc_t *mm_desc;
+    uct_mm_remote_seg_t *mm_desc;
     ucs_status_t status;
 
     ucs_trace("unpacking rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
               rkey->mmid, rkey->owner_ptr);
 
+    mm_desc = ucs_malloc(sizeof(uct_mm_remote_seg_t), "mm_desc");
+    if (mm_desc == NULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     status = uct_mm_pdc_mapper_ops(pdc)->attach(rkey->mmid, rkey->length, 
-                                                (void *)rkey->owner_ptr, &mm_desc);
+                                                (void *)rkey->owner_ptr, 
+                                                &mm_desc->address,
+                                                &mm_desc->cookie);
     if (status != UCS_OK) {
+        ucs_free(mm_desc);
         return status;
     }
 
@@ -147,6 +155,10 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
 
 ucs_status_t uct_mm_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey, void *handle)
 {
-    uct_mm_mapped_desc_t *mm_desc = handle;
-    return uct_mm_pdc_mapper_ops(pdc)->detach(mm_desc);
+    ucs_status_t status;
+    uct_mm_remote_seg_t *mm_desc = handle;
+
+    status = uct_mm_pdc_mapper_ops(pdc)->detach(mm_desc);
+    ucs_free(mm_desc);
+    return status;
 }

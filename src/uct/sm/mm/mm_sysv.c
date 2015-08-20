@@ -87,7 +87,7 @@ static ucs_status_t uct_sysv_detach(uct_mm_mapped_desc_t *mm_desc)
     if (UCS_OK != status) {
         return status;
     }
-    ucs_free(mm_desc);
+
     return UCS_OK;
 }
 

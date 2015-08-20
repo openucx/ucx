@@ -76,24 +76,18 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 }
 
 static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length, 
-                                     void *rem_address, 
-                                     uct_mm_mapped_desc_t **mm_desc)
+                                     void *rem_address, void **loc_address,
+                                     uint64_t *cookie)
 {
     xpmem_segid_t segid = (xpmem_segid_t)mmid;
     xpmem_apid_t apid;
     struct xpmem_addr addr;
     ucs_status_t status;
     const size_t page_size = ucs_get_page_size();
-    void*  addr_aligned   = (void *)ucs_align_down((uintptr_t)rem_address, page_size);
+    void*  addr_aligned  = (void *)ucs_align_down((uintptr_t)rem_address, page_size);
     off_t  diff = (uintptr_t)rem_address - (uintptr_t)addr_aligned;
 
     ucs_debug("Calling attach for address %p", rem_address);
-
-    *mm_desc = ucs_malloc(sizeof(uct_mm_mapped_desc_t), "mm_desc");
-    if (NULL == *mm_desc) {
-        status = UCS_ERR_NO_RESOURCE;
-        goto err_mem;
-    }
 
     apid = xpmem_get(segid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
     if (apid < 0) {
@@ -105,25 +99,23 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
     addr.apid = apid;
     addr.offset = diff;
 
-    (*mm_desc)->address = xpmem_attach(addr, length, NULL);
-    if ((*mm_desc)->address < 0) {
+    *loc_address = xpmem_attach(addr, length, NULL);
+    if (*loc_address < 0) {
         ucs_error("Failed to xpmem_attach: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_xattach;
     }
-    (*mm_desc)->cookie = apid;
+    *cookie = apid;
 
     return UCS_OK;
 
 err_xattach:
     xpmem_release(apid);
 err_xget:
-    ucs_free(*mm_desc);
-err_mem:
     return status;
 }
 
-static ucs_status_t uct_xpmem_detach(uct_mm_mapped_desc_t *mm_desc)
+static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
 {
     int rc;
 
@@ -135,12 +127,12 @@ static ucs_status_t uct_xpmem_detach(uct_mm_mapped_desc_t *mm_desc)
         ucs_error("Failed to xpmem_detach: %m");
         return UCS_ERR_IO_ERROR;
     }
+
     rc = xpmem_release((xpmem_apid_t) mm_desc->cookie);
     if (rc < 0) {
         ucs_error("Failed to xpmem_release: %m");
         return UCS_ERR_IO_ERROR;
     }
-    ucs_free(mm_desc);
 
     return UCS_OK;
 }
@@ -167,7 +159,10 @@ static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
     }
 
     ucs_debug("Calling alloc with address %p", *address_p);
-    return uct_xmpem_reg(*address_p, length_aligned, mmid_p);
+    status = uct_xmpem_reg(*address_p, length_aligned, mmid_p);
+    if (UCS_OK != status) {
+        ucs_free(*address_p);
+    }
 err:
     return status;
 }
@@ -175,6 +170,7 @@ err:
 static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id)
 {
     ucs_status_t status = uct_xpmem_dereg(mm_id);
+
     if (UCS_OK != status) {
         return status;
     }
