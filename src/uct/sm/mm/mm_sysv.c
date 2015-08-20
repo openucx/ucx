@@ -59,29 +59,24 @@ out_ok:
 
 static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, 
                                     void *rem_address,
-                                    uct_mm_mapped_desc_t **mm_desc)
+                                    void **loc_address,
+                                    uint64_t *cookie)
 {
     void *ptr;
-
-    *mm_desc = ucs_malloc(sizeof(uct_mm_mapped_desc_t), "mm_desc");
-    if (NULL == *mm_desc) {
-        return UCS_ERR_NO_RESOURCE;
-    }
 
     ptr = shmat(mmid, NULL, 0);
     if (ptr == MAP_FAILED) {
         ucs_error("shmat(shmid=%d) failed: %m", (int)mmid);
-        ucs_free(*mm_desc);
         return UCS_ERR_SHMEM_SEGMENT;
     }
 
-    (*mm_desc)->address = ptr;
-    (*mm_desc)->cookie = 0xdeadbeef;
+    *loc_address = ptr;
+    *cookie = 0xdeadbeef;
 
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_detach(uct_mm_mapped_desc_t *mm_desc)
+static ucs_status_t uct_sysv_detach(uct_mm_remote_seg_t *mm_desc)
 {
     ucs_status_t status = ucs_sysv_free(mm_desc->address);
     if (UCS_OK != status) {
