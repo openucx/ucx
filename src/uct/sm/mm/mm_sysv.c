@@ -58,8 +58,8 @@ out_ok:
 }
 
 static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, 
-                                    void *rem_address,
-                                    void **loc_address,
+                                    void *remote_address,
+                                    void **local_address,
                                     uint64_t *cookie)
 {
     void *ptr;
@@ -70,7 +70,7 @@ static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length,
         return UCS_ERR_SHMEM_SEGMENT;
     }
 
-    *loc_address = ptr;
+    *local_address = ptr;
     *cookie = 0xdeadbeef;
 
     return UCS_OK;

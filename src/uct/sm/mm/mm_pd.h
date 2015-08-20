@@ -44,7 +44,7 @@ typedef struct uct_mm_mapper_ops {
                           void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG);
 
     ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length, 
-                           void *rem_addr, void ** address, uint64_t *cookie);
+                           void *remote_address, void **address, uint64_t *cookie);
 
     ucs_status_t (*detach)(uct_mm_remote_seg_t *mm_desc);
 

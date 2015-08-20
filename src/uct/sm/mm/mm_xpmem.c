@@ -76,7 +76,7 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 }
 
 static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length, 
-                                     void *rem_address, void **loc_address,
+                                     void *remote_address, void **local_address,
                                      uint64_t *cookie)
 {
     xpmem_segid_t segid = (xpmem_segid_t)mmid;
@@ -84,10 +84,10 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
     struct xpmem_addr addr;
     ucs_status_t status;
     const size_t page_size = ucs_get_page_size();
-    void*  addr_aligned  = (void *)ucs_align_down((uintptr_t)rem_address, page_size);
-    off_t  diff = (uintptr_t)rem_address - (uintptr_t)addr_aligned;
+    void*  addr_aligned  = (void *)ucs_align_down((uintptr_t)remote_address, page_size);
+    off_t  diff = (uintptr_t)remote_address - (uintptr_t)addr_aligned;
 
-    ucs_debug("Calling attach for address %p", rem_address);
+    ucs_debug("Calling attach for address %p", remote_address);
 
     apid = xpmem_get(segid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
     if (apid < 0) {
@@ -99,8 +99,8 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
     addr.apid = apid;
     addr.offset = diff;
 
-    *loc_address = xpmem_attach(addr, length, NULL);
-    if (*loc_address < 0) {
+    *local_address = xpmem_attach(addr, length, NULL);
+    if (*local_address < 0) {
         ucs_error("Failed to xpmem_attach: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_xattach;
