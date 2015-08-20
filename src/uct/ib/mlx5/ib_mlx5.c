@@ -232,6 +232,9 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
      *  exact number of bbs once we acually are sending.
      */
     wq->bb_max     = qp_info.sq.wqe_cnt - 2*UCT_IB_MLX5_MAX_BB;
+#if ENABLE_ASSERT
+    wq->hw_ci      = 0xFFFF;
+#endif
     ucs_assert_always(wq->bb_max > 0);
     memset(wq->qstart, 0, wq->qend - wq->qstart); 
     return UCS_OK;

@@ -207,10 +207,10 @@ uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
     uint16_t hw_ci, sw_pi;
     uint16_t wqe_cnt;
     int is_ok = 1;
-    static int cnt;
 
-    if (cnt++ == 0)
+    if (wq->hw_ci == 0xFFFF) {
         return;
+    }
 
     wqe_cnt = (wq->qend - wq->qstart) / MLX5_SEND_WQE_BB;
     if (wqe_cnt < wq->bb_max) {
