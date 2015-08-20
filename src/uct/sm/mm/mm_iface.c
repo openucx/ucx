@@ -49,6 +49,7 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
     iface_addr->sp_family = UCT_AF_PROCESS;
     iface_addr->node_guid = ucs_machine_guid();
     iface_addr->id        = iface->fifo_mm_id;
+    iface_addr->vaddr     = (uintptr_t)iface->shared_mem;
     return UCS_OK;
 }
 
@@ -207,8 +208,8 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     size_t size_to_alloc;
 
     /* allocate the receive FIFO */
-    size_to_alloc = UCS_SYS_CACHE_LINE_SIZE -1 + UCT_MM_FIFO_CTL_SIZE_ALIGNED +
-                    (config->fifo_size * iface->elem_size);
+
+    size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
 
     status = uct_mm_pd_mapper_ops(pd)->alloc(&size_to_alloc, config->hugetlb_mode,
                                              &iface->shared_mem, &iface->fifo_mm_id
@@ -321,7 +322,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
 
     /* release the memory allocated for the FIFO */
-    status = uct_mm_pd_mapper_ops(self->super.pd)->release(self->shared_mem);
+    status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem,
+                                                        self->fifo_mm_id);
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }

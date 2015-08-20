@@ -57,7 +57,10 @@ out_ok:
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, void **address_p)
+static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, 
+                                    void *remote_address,
+                                    void **local_address,
+                                    uint64_t *cookie)
 {
     void *ptr;
 
@@ -67,14 +70,35 @@ static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, void **address_p)
         return UCS_ERR_SHMEM_SEGMENT;
     }
 
-    *address_p = ptr;
+    *local_address = ptr;
+    *cookie = 0xdeadbeef;
+
     return UCS_OK;
 }
 
+static ucs_status_t uct_sysv_detach(uct_mm_remote_seg_t *mm_desc)
+{
+    ucs_status_t status = ucs_sysv_free(mm_desc->address);
+    if (UCS_OK != status) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_sysv_free(void *address, uct_mm_id_t mm_id)
+{
+    return ucs_sysv_free(address);
+}
+
 static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
+   .query   = ucs_empty_function_return_success,
+   .reg     = NULL,
+   .dereg   = NULL,
    .alloc   = uct_sysv_alloc,
    .attach  = uct_sysv_attach,
-   .release = ucs_sysv_free
+   .detach  = uct_sysv_detach,
+   .free    = uct_sysv_free
 };
 
 UCT_MM_COMPONENT_DEFINE(uct_sysv_pd, "sysv", &uct_sysv_mapper_ops)
