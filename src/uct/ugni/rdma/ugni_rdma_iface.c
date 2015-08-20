@@ -87,6 +87,8 @@ uct_iface_ops_t uct_ugni_iface_ops = {
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
+    .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
+    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h worker,

@@ -350,6 +350,8 @@ uct_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_atomic_fadd32    = uct_rc_verbs_ep_atomic_fadd32,
     .ep_atomic_swap32    = uct_rc_verbs_ep_atomic_swap32,
     .ep_atomic_cswap32   = uct_rc_verbs_ep_atomic_cswap32,
+    .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
+    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
     .ep_flush            = uct_rc_verbs_ep_flush
 };
 

@@ -29,6 +29,9 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {"RETRY_COUNT", "20", "Number of retries for MAD layer",
    ucs_offsetof(uct_cm_iface_config_t, retry_count), UCS_CONFIG_TYPE_UINT},
 
+  {"MAX_INFLIGHT", "32", "Maximal number of outstanding SIDR requests",
+   ucs_offsetof(uct_cm_iface_config_t, max_inflight), UCS_CONFIG_TYPE_UINT},
+
   {NULL}
 };
 
@@ -37,15 +40,9 @@ static uct_iface_ops_t uct_cm_iface_ops;
 
 static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 {
-    ucs_callback_t *cb;
-    uct_cm_ep_t *ep;
-
-    while ((iface->inflight == 0) && !ucs_list_is_empty(&iface->notify_list)) {
-        ep = ucs_list_extract_head(&iface->notify_list, uct_cm_ep_t, notify.list);
-        cb = ep->notify.cb;
-        ep->notify.cb = NULL;
-        ucs_invoke_callback(cb);
-    }
+    uct_cm_pending_req_priv_t *priv;
+    uct_pending_queue_dispatch(priv, &iface->notify_q,
+                               iface->inflight < iface->config.max_inflight);
 }
 
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
@@ -188,12 +185,14 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
                               0 /* rx_hdr_len */, 1 /* tx_cq_len */,
                               &config->super);
 
-    self->service_id         = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
-                                            (~IB_CM_ASSIGN_SERVICE_ID_MASK));
-    self->inflight           = 0;
-    self->config.timeout_ms  = (int)(config->timeout * 1e3 + 0.5);
-    self->config.retry_count = ucs_min(config->retry_count, UINT8_MAX);
-    ucs_list_head_init(&self->notify_list);
+    self->service_id          = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
+                                             (~IB_CM_ASSIGN_SERVICE_ID_MASK));
+    self->inflight            = 0;
+    self->config.timeout_ms   = (int)(config->timeout * 1e3 + 0.5);
+    self->config.max_inflight = config->max_inflight;
+    self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
+    self->notify_q.head = NULL;
+    ucs_queue_head_init(&self->notify_q);
 
     self->cmdev = ib_cm_open_device(uct_ib_iface_device(&self->super)->ibv_context);
     if (self->cmdev == NULL) {
@@ -249,7 +248,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 {
     ucs_trace_func("");
 
-    if (self->inflight) {
+    if (self->inflight > 0) {
         ucs_warn("waiting for %d in-flight requests to complete", self->inflight);
         while (self->inflight) {
             sched_yield();
@@ -308,7 +307,8 @@ static uct_iface_ops_t uct_cm_iface_ops = {
     .iface_release_am_desc = uct_cm_iface_release_desc,
     .ep_am_short           = uct_cm_ep_am_short,
     .ep_am_bcopy           = uct_cm_ep_am_bcopy,
-    .ep_req_notify         = uct_cm_ep_req_notify,
+    .ep_pending_add        = uct_cm_ep_pending_add,
+    .ep_pending_purge      = uct_cm_ep_pending_purge,
     .ep_flush              = uct_cm_ep_flush,
 };
 

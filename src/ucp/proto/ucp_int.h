@@ -45,10 +45,6 @@ enum {
     UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED = UCS_BIT(4), /* remote also connected to our next_ep */
     UCP_EP_STATE_WIREUP_REPLY_SENT        = UCS_BIT(5), /* wireup reply message has been sent */
     UCP_EP_STATE_WIREUP_ACK_SENT          = UCS_BIT(6), /* wireup ack message has been sent */
-
-    UCP_EP_STATE_PENDING            = UCS_BIT(16) /* Resource-available notification
-                                                     has been requested from one of
-                                                     the UCT endpoints */
 };
 
 
@@ -135,9 +131,6 @@ typedef struct ucp_ep {
     ucp_rsc_index_t     dst_pd_index;  /* Destination protection domain index */
     volatile uint32_t   state;         /* Endpoint state */
 
-    ucs_queue_head_t    pending_q;     /* Queue of pending operations - protected by the async worker lock */
-    ucs_callback_t      notify;        /* Completion token for progressing pending queue */
-
     struct {
         uct_ep_h        aux_ep;        /* Used to wireup the "real" endpoint */
         uct_ep_h        next_ep;       /* Next transport being wired up */
@@ -151,17 +144,8 @@ typedef struct ucp_ep {
  */
 typedef struct ucp_ep_pending_op ucp_ep_pending_op_t;
 struct ucp_ep_pending_op {
-    ucs_queue_elem_t    queue;
-
-    /**
-     * Progress callback for the pending operation.
-     * It attempts to initiate the operation, and returns the status.
-     * If the operation cannot be started, the function returns UCS_ERR_NO_RESOURCE
-     * and *uct_ep_p is filled with the transport endpoint on which the send
-     * was attempted.
-     */
-    ucs_status_t        (*progress)(ucp_ep_h ep, ucp_ep_pending_op_t *op,
-                                    uct_ep_h *uct_ep_p);
+    uct_pending_req_t   uct;
+    ucp_ep_h            ep;
 };
 
 
@@ -298,13 +282,9 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_EP_HASH_SIZE, ucp_ep_hash
 static inline void ucp_ep_add_pending_op(ucp_ep_h ep, uct_ep_h uct_ep,
                                          ucp_ep_pending_op_t *op)
 {
-    UCS_ASYNC_BLOCK(&ep->worker->async);
-    ucs_queue_push(&ep->pending_q, &op->queue);
-    if (!(ep->state & UCP_EP_STATE_PENDING)) {
-        uct_ep_req_notify(uct_ep, &ep->notify);
-        ep->state |= UCP_EP_STATE_PENDING;
-    }
-    UCS_ASYNC_UNBLOCK(&ep->worker->async);
+    ucs_trace_data("add pending operation %p to uct ep %p", op, uct_ep);
+    op->ep = ep;
+    uct_ep_pending_add(uct_ep, &op->uct);
 }
 
 static inline uint64_t ucp_address_uuid(ucp_address_t *address)

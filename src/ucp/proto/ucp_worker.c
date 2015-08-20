@@ -194,24 +194,27 @@ void ucp_worker_progress(ucp_worker_h worker)
 }
 
 static ucs_status_t
-ucp_worker_pack_resource_address(ucp_worker_h worker, const char *tl_name,
-                                 ucp_rsc_index_t rsc_index, ucp_rsc_index_t pd_index,
+ucp_worker_pack_resource_address(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                                  void **addr_buf_p, size_t *length_p)
 {
+    ucp_context_h context = worker->context;
     uct_iface_attr_t *iface_attr = &worker->iface_attrs[rsc_index];
+    ucp_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index];
     ucs_status_t status;
     void *buffer, *ptr;
     uint8_t tl_name_len;
     size_t length;
+    int af;
 
-    tl_name_len = strlen(tl_name);
+    tl_name_len = strlen(resource->tl_rsc.tl_name);
 
     /* Calculate new address buffer size */
     length   = 1 +                           /* address length */
                iface_attr->iface_addr_len +  /* address */
                1 +                           /* tl name length */
                tl_name_len +                 /* tl name */
-               1;                            /* pd index */
+               1 +                           /* pd index */
+               1;                            /* resource index */
 
     /* Enlarge address buffer */
     buffer = ucs_malloc(length, "ucp address");
@@ -232,14 +235,20 @@ ucp_worker_pack_resource_address(ucp_worker_h worker, const char *tl_name,
     if (status != UCS_OK) {
         goto err_free;
     }
+
+    af   = ((struct sockaddr*)ptr)->sa_family;
     ptr += iface_attr->iface_addr_len;
 
     /* Transport name */
     *((uint8_t*)ptr++) = tl_name_len;
-    memcpy(ptr, tl_name, tl_name_len);
+    memcpy(ptr, resource->tl_rsc.tl_name, tl_name_len);
     ptr += tl_name_len;
 
-    *((ucp_rsc_index_t*)ptr++) = pd_index;
+    *((ucp_rsc_index_t*)ptr++) = resource->pd_index;
+    *((ucp_rsc_index_t*)ptr++) = rsc_index;
+
+    ucs_trace("adding resource[%d]: "UCT_TL_RESOURCE_DESC_FMT" family %d address length %zu",
+               rsc_index, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), af, length);
 
     *addr_buf_p = buffer;
     *length_p   = length;
@@ -257,7 +266,6 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     ucp_context_h context = worker->context;
     ucp_address_t *address;
     size_t address_length, rsc_addr_length;
-    ucp_tl_resource_desc_t *resource;
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
     void *rsc_addr;
@@ -272,10 +280,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     *(uint64_t*)address = worker->uuid;
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        resource   = &context->tl_rscs[rsc_index];
-
-        status = ucp_worker_pack_resource_address(worker, resource->tl_rsc.tl_name,
-                                                  rsc_index, resource->pd_index,
+        status = ucp_worker_pack_resource_address(worker, rsc_index,
                                                   &rsc_addr, &rsc_addr_length);
         if (status != UCS_OK) {
             goto err_free;
@@ -291,9 +296,6 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
         }
 
         /* Add the address of the current resource */
-        ucs_trace("adding "UCT_TL_RESOURCE_DESC_FMT" family %d address length %zu",
-                  UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
-                  ((struct sockaddr*)(rsc_addr + 1))->sa_family, rsc_addr_length);
         memcpy((void*)address + address_length - rsc_addr_length, rsc_addr, rsc_addr_length);
         ucs_free(rsc_addr);
     }
