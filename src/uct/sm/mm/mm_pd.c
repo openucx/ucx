@@ -132,7 +132,7 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
     ucs_trace("unpacking rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
               rkey->mmid, rkey->owner_ptr);
 
-    mm_desc = ucs_malloc(sizeof(uct_mm_remote_seg_t), "mm_desc");
+    mm_desc = ucs_malloc(sizeof(*mm_desc), "mm_desc");
     if (mm_desc == NULL) {
         return UCS_ERR_NO_RESOURCE;
     }
