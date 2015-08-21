@@ -58,7 +58,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const void *buffer,
     icopy.local_iovec_array = (uintptr_t) &knem_iov[0];
     icopy.local_iovec_nr = 1;
     icopy.remote_cookie = key->cookie;
-    ucs_assert(remote_addr - key->address >= 0);
+    ucs_assert(remote_addr >= key->address);
     icopy.remote_offset = remote_addr - key->address;
 
     icopy.write = write; /* if 0 then, READ from the remote region into my local segments
