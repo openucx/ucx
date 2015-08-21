@@ -337,7 +337,7 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                       test name, and the rest are command-line arguments for the test.\n");
     printf("     -T <thread>    Thread support level for progress engine (single).\n");
     printf("                     (The test itself is always single-threaded).\n");
-    printf("                        single     : Only the main thread can access.\n");
+    printf("                        single     : Only the master thread can access.\n");
     printf("                        serialized : One thread can access at a time.\n");
     printf("                        multi      : Multiple threads can access.\n");
     printf("     -h             Show this help message.\n");
