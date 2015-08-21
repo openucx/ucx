@@ -3,8 +3,7 @@
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 *
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #ifndef UCS_TYPE_THREAD_MODE_H

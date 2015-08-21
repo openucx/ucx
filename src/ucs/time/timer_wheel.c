@@ -1,8 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2012-2013.  ALL RIGHTS RESERVED.
 *
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #include <ucs/time/timer_wheel.h>

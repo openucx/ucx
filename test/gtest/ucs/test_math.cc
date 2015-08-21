@@ -1,8 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #include <ucs/gtest/test.h>

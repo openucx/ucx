@@ -1,7 +1,6 @@
 #
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-# $COPYRIGHT$
-# $HEADER$
+# See file LICENSE for terms.
 #
 
 AC_DEFUN([AC_PROG_GRAPHVIZ_DOT], [AC_CHECK_PROG([GRAPHVIZ_DOT],[dot],[yes])])

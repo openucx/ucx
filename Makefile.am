@@ -2,8 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 #
-# $COPYRIGHT$
-# $HEADER$
+# See file LICENSE for terms.
 #
 
 # Build . before src so that our all-local and clean-local hooks kicks in at
