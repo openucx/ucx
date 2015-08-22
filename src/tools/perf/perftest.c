@@ -1,7 +1,9 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
+* Copyright (C) The University of Tennessee and The University 
+*               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+*
 * $COPYRIGHT$
 * $HEADER$
 */
@@ -335,9 +337,9 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                       test name, and the rest are command-line arguments for the test.\n");
     printf("     -T <thread>    Thread support level for progress engine (single).\n");
     printf("                     (The test itself is always single-threaded).\n");
-    printf("                        single   : Single thread can access.\n");
-    printf("                        funneled : One thread can access at a time.\n");
-    printf("                        multi    : Multiple threads can access.\n");
+    printf("                        single     : Only the master thread can access.\n");
+    printf("                        serialized : One thread can access at a time.\n");
+    printf("                        multi      : Multiple threads can access.\n");
     printf("     -h             Show this help message.\n");
     printf("\n");
     printf("  Server options:\n");
@@ -440,8 +442,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         if (0 == strcmp(optarg, "single")) {
             params->thread_mode = UCS_THREAD_MODE_SINGLE;
             return UCS_OK;
-        } else if (0 == strcmp(optarg, "funneled")) {
-            params->thread_mode = UCS_THREAD_MODE_FUNNELED;
+        } else if (0 == strcmp(optarg, "serialized")) {
+            params->thread_mode = UCS_THREAD_MODE_SERIALIZED;
             return UCS_OK;
         } else if (0 == strcmp(optarg, "multi")) {
             params->thread_mode = UCS_THREAD_MODE_MULTI;
