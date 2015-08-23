@@ -353,7 +353,7 @@ UCS_TEST_P(test_async, global_event) {
     global_event ge(GetParam());
     ge.push_event();
     suspend_and_poll(&ge, COUNT);
-    EXPECT_EQ(1, ge.count());
+    EXPECT_GE(ge.count(), 1);
 }
 
 UCS_TEST_P(test_async, global_timer) {
@@ -404,7 +404,7 @@ UCS_TEST_P(test_async, ctx_event) {
     local_event le(GetParam());
     le.push_event();
     suspend_and_poll(&le, COUNT);
-    EXPECT_EQ(1, le.count());
+    EXPECT_GE(le.count(), 1);
 }
 
 UCS_TEST_P(test_async, ctx_timer) {
@@ -431,7 +431,7 @@ UCS_TEST_P(test_async, ctx_event_block) {
 
     EXPECT_EQ(0, le.count());
     le.check_miss();
-    EXPECT_EQ(1, le.count());
+    EXPECT_GE(le.count(), 1);
 }
 
 UCS_TEST_P(test_async, ctx_event_block_two_miss) {
