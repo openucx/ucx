@@ -55,7 +55,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # Set CPU affinity to 2 cores, for performance tests
     if [ -n "$EXECUTOR_NUMBER" ]; then
         AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-        TIMEOUT="timeout 40m"
+        TIMEOUT="timeout 80m"
     else
         AFFINITY=""
         TIMEOUT=""
