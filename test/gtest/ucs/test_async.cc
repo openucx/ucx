@@ -230,7 +230,8 @@ protected:
     static const unsigned SLEEP_USEC  = 1000;
 
     void suspend(double scale = 1.0) {
-        ucs::safe_usleep(scale * SLEEP_USEC * ucs::test_time_multiplier());
+        ucs::safe_usleep(ucs_max(scale * SLEEP_USEC, 0) *
+                         ucs::test_time_multiplier());
     }
 
     void suspend_and_poll(async_poll *p, double scale = 1.0) {
@@ -351,7 +352,7 @@ private:
 UCS_TEST_P(test_async, global_event) {
     global_event ge(GetParam());
     ge.push_event();
-    suspend_and_poll(&ge);
+    suspend_and_poll(&ge, COUNT);
     EXPECT_EQ(1, ge.count());
 }
 
@@ -402,7 +403,7 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
 UCS_TEST_P(test_async, ctx_event) {
     local_event le(GetParam());
     le.push_event();
-    suspend_and_poll(&le);
+    suspend_and_poll(&le, COUNT);
     EXPECT_EQ(1, le.count());
 }
 
@@ -425,7 +426,7 @@ UCS_TEST_P(test_async, ctx_event_block) {
 
     le.block();
     le.push_event();
-    suspend_and_poll(&le);
+    suspend_and_poll(&le, COUNT);
     le.unblock();
 
     EXPECT_EQ(0, le.count());
@@ -440,10 +441,10 @@ UCS_TEST_P(test_async, ctx_event_block_two_miss) {
 
     le.block();
     le.push_event();
-    suspend_and_poll(&le);
+    suspend_and_poll(&le, COUNT);
 
     le.push_event();
-    suspend_and_poll(&le);
+    suspend_and_poll(&le, COUNT);
     EXPECT_EQ(0, le.count());
     le.unblock();
 
@@ -457,7 +458,7 @@ UCS_TEST_P(test_async, ctx_event_block_two_miss) {
 
     le.block();
     le.push_event();
-    suspend_and_poll(&le);
+    suspend_and_poll(&le, COUNT);
     le.unblock();
 
     /* Step 2: Check missed events - another event should be found */
