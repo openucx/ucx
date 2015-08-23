@@ -81,18 +81,26 @@ endif
 
 if HAVE_TL_UD
 libuct_la_SOURCES += \
-	ib/ud/ud_verbs.c \
-	ib/ud/ud_iface.c \
-	ib/ud/ud_ep.c \
-	ib/ud/ud_log.c
+	ib/ud/base/ud_iface.c \
+	ib/ud/base/ud_ep.c \
+	ib/ud/base/ud_log.c \
+	ib/ud/verbs/ud_verbs.c
 
 noinst_HEADERS += \
-	ib/ud/ud_iface.h \
-	ib/ud/ud_ep.h \
-	ib/ud/ud_def.h \
-	ib/ud/ud_verbs.h \
-	ib/ud/ud_inl.h \
-	ib/ud/ud_log.h
+	ib/ud/base/ud_iface.h \
+	ib/ud/base/ud_ep.h \
+	ib/ud/base/ud_def.h \
+	ib/ud/base/ud_inl.h \
+	ib/ud/base/ud_log.h \
+	ib/ud/verbs/ud_verbs.h 
+
+if HAVE_MLX5_HW
+noinst_HEADERS += \
+	ib/ud/accel/ud_mlx5.h
+
+libuct_la_SOURCES += \
+	ib/ud/accel/ud_mlx5.c 
+endif
 endif
 
 if HAVE_TL_CM

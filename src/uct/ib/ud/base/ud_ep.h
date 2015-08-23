@@ -110,28 +110,45 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep);
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, const struct sockaddr *addr);
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, 
+                                     const struct sockaddr *addr);
 
-ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep, const struct sockaddr *addr);
+ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
+                                        const uct_sockaddr_ib_t *addr);
+
 ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep);
+
+/* helper function to create/destroy new connected ep */
+ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
+                                               const uct_sockaddr_ib_t *addr,
+                                               uct_ud_ep_t **new_ep_p,
+                                               uct_ud_send_skb_t **skb_p);
+
+void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep, 
+                                 const uct_sockaddr_ib_t *addr);
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep);
 
 void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
-static inline void uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
+static inline void
+uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
 {
     neth->packet_type = (id << UCT_UD_PACKET_AM_ID_SHIFT) |
                         ep->dest_ep_id | 
                         UCT_UD_PACKET_FLAG_AM;
 }
 
-static inline void uct_ud_neth_set_type_put(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+static inline void
+uct_ud_neth_set_type_put(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->packet_type = ep->dest_ep_id | UCT_UD_PACKET_FLAG_PUT;
 }
-void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len, uct_ud_recv_skb_t *skb);
+
+void uct_ud_ep_process_rx(uct_ud_iface_t *iface, 
+                          uct_ud_neth_t *neth, unsigned byte_len, 
+                          uct_ud_recv_skb_t *skb);
 
 
 /*
@@ -146,7 +163,7 @@ static inline int uct_ud_ep_req_ack(uct_ud_ep_t *ep)
     psn       = ep->tx.psn;
 
     return UCT_UD_PSN_COMPARE(psn, ==, ((acked_psn*3 + max_psn)>>2)) ||
-        UCT_UD_PSN_COMPARE(psn+1, ==, max_psn);
+           UCT_UD_PSN_COMPARE(psn+1, ==, max_psn);
 }
 
 static inline void uct_ud_neth_ctl_ack(uct_ud_ep_t *ep, uct_ud_neth_t *neth)

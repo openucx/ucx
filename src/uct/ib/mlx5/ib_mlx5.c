@@ -106,6 +106,7 @@ ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq, uct_ib_mlx5_srq_info_
 
 ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 {
+    unsigned cqe_size;
 #if HAVE_DECL_IBV_MLX5_EXP_GET_CQ_INFO
     struct ibv_mlx5_cq_info ibv_cq_info;
     int ret;
@@ -118,7 +119,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf    = ibv_cq_info.buf;
     mlx5_cq->cq_ci     = 0;
     mlx5_cq->cq_length = ibv_cq_info.cqe_cnt;
-    mlx5_cq->cqe_size  = ibv_cq_info.cqe_size;
+    cqe_size           = ibv_cq_info.cqe_size;
 #else
     struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
     int ret;
@@ -131,13 +132,13 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf      = mcq->active_buf->buf;
     mlx5_cq->cq_ci       = 0;
     mlx5_cq->cq_length   = mcq->ibv_cq.cqe + 1;
-    mlx5_cq->cqe_size    = mcq->cqe_sz;
+    cqe_size             = mcq->cqe_sz;
 #endif
 
     /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
      * 64b when polling.
      */
-    mlx5_cq->cq_buf += mlx5_cq->cqe_size - sizeof(struct mlx5_cqe64);
+    mlx5_cq->cq_buf += cqe_size - sizeof(struct mlx5_cqe64);
 
     ret = ibv_exp_cq_ignore_overrun(cq);
     if (ret != 0) {
@@ -145,6 +146,8 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
         return UCS_ERR_UNSUPPORTED;
     }
 
+    mlx5_cq->cqe_size_log = ucs_ilog2(cqe_size);
+    ucs_assert_always((1<<mlx5_cq->cqe_size_log) == cqe_size);
     return UCS_OK;
 }
 
@@ -186,3 +189,82 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
         return NULL;
     }
 }
+
+
+ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
+{
+    uct_ib_mlx5_qp_info_t qp_info;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_get_qp_info(qp, &qp_info);
+    if (status != UCS_OK) {
+        ucs_error("Failed to get mlx5 QP information");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if ((qp_info.bf.size == 0) || !ucs_is_pow2(qp_info.bf.size) ||
+        (qp_info.sq.stride != MLX5_SEND_WQE_BB) ||
+        !ucs_is_pow2(qp_info.sq.wqe_cnt)) {
+        ucs_error("mlx5 device parameters not suitable for transport");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d], ud_seg=%lu [ctl=%lu av=%lu] inl=%lu data=%lu", 
+              qp_info.sq.stride * qp_info.sq.wqe_cnt,
+              qp_info.sq.stride, qp_info.sq.wqe_cnt,
+              sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(struct mlx5_wqe_datagram_seg),
+              sizeof(struct mlx5_wqe_ctrl_seg),
+              sizeof(struct mlx5_wqe_datagram_seg),
+              sizeof(struct mlx5_wqe_inl_data_seg),
+              sizeof(struct mlx5_wqe_data_seg));
+
+    wq->qstart     = qp_info.sq.buf;
+    wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
+    wq->curr       = wq->qstart;
+    wq->sw_pi      = wq->prev_sw_pi = 0;
+    wq->bf_reg     = qp_info.bf.reg;
+    wq->bf_size    = qp_info.bf.size;
+    wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
+    /* need to reserve 2x because:
+     *  - on completion we only get the index of last wqe and we do not 
+     *    really know how many bb is there (but no more than max bb
+     *  - on send we check that there is at least one bb. We know
+     *  exact number of bbs once we acually are sending.
+     */
+    wq->bb_max     = qp_info.sq.wqe_cnt - 2*UCT_IB_MLX5_MAX_BB;
+#if ENABLE_ASSERT
+    wq->hw_ci      = 0xFFFF;
+#endif
+    ucs_assert_always(wq->bb_max > 0);
+    memset(wq->qstart, 0, wq->qend - wq->qstart); 
+    return UCS_OK;
+} 
+
+ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
+{
+    uct_ib_mlx5_qp_info_t qp_info;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_get_qp_info(qp, &qp_info);
+    if (status != UCS_OK) {
+        ucs_error("Failed to get mlx5 QP information");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (!ucs_is_pow2(qp_info.rq.wqe_cnt) ||
+        qp_info.rq.stride != sizeof(struct mlx5_wqe_data_seg)) {
+        ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters", 
+                  qp_info.rq.wqe_cnt,
+                  qp_info.rq.stride);
+        return UCS_ERR_IO_ERROR;
+    }
+    wq->wqes            = qp_info.rq.buf;
+    wq->rq_wqe_counter  = 0;
+    wq->cq_wqe_counter  = 0;
+    wq->mask            = qp_info.rq.wqe_cnt - 1;
+    wq->dbrec           = &qp_info.dbrec[MLX5_RCV_DBR];
+    memset(wq->wqes, 0, qp_info.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg)); 
+
+    return UCS_OK;
+}
+

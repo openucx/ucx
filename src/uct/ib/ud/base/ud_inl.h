@@ -11,9 +11,10 @@ static inline void uct_ud_iface_queue_pending(uct_ud_iface_t *iface,
 }
 
 
-static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, uct_ud_ep_t **r_ep,
-                                                         uct_ud_neth_t *neth,
-                                                         uct_ud_send_skb_t **skb)
+static inline ucs_status_t
+uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, uct_ud_ep_t **r_ep,
+                              uct_ud_neth_t *neth,
+                              uct_ud_send_skb_t **skb)
 {
     uct_ud_ep_t *ep;
     ucs_queue_elem_t *elem;
@@ -35,7 +36,6 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
     } else if (ucs_likely(ep->tx.pending.ops & UCT_UD_EP_OP_ACK)) {
         *r_ep = ep;
         uct_ud_neth_ctl_ack(ep, neth);
-         --iface->tx.available;
          *skb = NULL;
     } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
         /* someone already cleared this */
@@ -48,13 +48,10 @@ static inline ucs_status_t uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, 
     return UCS_OK;
 }
 
-/* TODO: relay on window check instead */
+/* TODO: relay on window check instead. max_psn = psn  */
 static inline int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
 {
-    if (ucs_unlikely(ep->dest_ep_id == UCT_UD_EP_NULL_ID)) {
-        return 0;
-    }
-    return 1;
+    return ucs_likely(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
 }
 
 static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
@@ -66,27 +63,44 @@ static inline uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         return NULL;
     }
 
-    if (ep->tx.psn == ep->tx.max_psn) {
+    if (ucs_unlikely(ep->tx.psn == ep->tx.max_psn)) {
         ucs_trace_data("iface=%p ep=%p (%d->%d) tx window full (max_psn=%u)",
-                       iface, ep, ep->ep_id, ep->dest_ep_id, (unsigned)ep->tx.max_psn);
+                       iface, ep, ep->ep_id, ep->dest_ep_id,
+                       (unsigned)ep->tx.max_psn);
         return NULL;
     }
 
-    skb = ucs_mpool_get(iface->tx.mp);
-    if (!skb) {
-        ucs_trace_data("iface=%p out of tx skbs", iface);
-        return NULL;
+    skb = iface->tx.skb;
+    if (ucs_unlikely(skb == NULL)) {
+        skb = ucs_mpool_get(iface->tx.mp);
+        if (skb == NULL) {
+            ucs_trace_data("iface=%p out of tx skbs", iface);
+            return NULL;
+        }
     }
+    VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
+    ucs_prefetch(skb->neth);
     return skb;
 }
 
-static inline void uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface,
-                                                      uct_ud_ep_t *ep,
-                                                      uct_ud_send_skb_t *skb,
-                                                      void *data, const void *buffer, unsigned length)
+/* same as function above but also check that iface is connected */
+static inline uct_ud_send_skb_t *
+uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
+    if (!uct_ud_ep_is_connected(ep)) {
+        return NULL;
+    }
+
+    return uct_ud_iface_get_tx_skb(iface, ep);
+}
+
+static inline void
+uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                                   uct_ud_send_skb_t *skb, void *data,
+                                   const void *buffer, unsigned length)
+{
+    iface->tx.skb = ucs_mpool_get(iface->tx.mp);
     ep->tx.psn++;
-    --iface->tx.available;
     skb->len += length;
     memcpy(data, buffer, length);
     ucs_queue_push(&ep->tx.window, &skb->queue);
@@ -100,11 +114,48 @@ static inline void uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface,
                                                       uct_ud_ep_t *ep,
                                                       uct_ud_send_skb_t *skb)
 {
+    iface->tx.skb = ucs_mpool_get(iface->tx.mp);
     ep->tx.psn++;
-    --iface->tx.available;
     ucs_queue_push(&ep->tx.window, &skb->queue);
 }
 
 #define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
     uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); \
     uct_ud_ep_log_tx(ep, skb);
+
+
+static inline void
+uct_ud_am_set_neth(uct_ud_neth_t *neth, uct_ud_ep_t *ep, uint8_t id)
+{
+    uct_ud_neth_init_data(ep, neth);
+    uct_ud_neth_set_type_am(ep, neth, id);
+    uct_ud_neth_ack_req(ep, neth);
+}
+
+static inline ucs_status_t
+uct_ud_am_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
+                 uct_ud_send_skb_t **skb_p)
+{
+    uct_ud_send_skb_t *skb;
+
+    UCT_CHECK_AM_ID(id);
+
+    skb = uct_ud_ep_get_tx_skb(iface, ep);
+    if (!skb) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    uct_ud_am_set_neth(skb->neth, ep, id);
+
+    *skb_p = skb;
+    return UCS_OK;
+}
+
+static inline void uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, 
+                                    uct_pack_callback_t pack_cb, 
+                                    void *arg, size_t length)
+{
+    pack_cb((char *)(skb->neth+1), arg, length);
+    skb->len = length + sizeof(uct_ud_neth_t);
+}
+
