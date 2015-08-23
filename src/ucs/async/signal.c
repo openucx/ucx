@@ -227,7 +227,7 @@ static void ucs_async_signal_allow(int allow)
 
     sigemptyset(&sigset);
     sigaddset(&sigset, ucs_global_opts.async_signo);
-    sigprocmask(allow ? SIG_UNBLOCK : SIG_BLOCK, &sigset, NULL);
+    pthread_sigmask(allow ? SIG_UNBLOCK : SIG_BLOCK, &sigset, NULL);
 }
 
 static void ucs_async_signal_block_all()
