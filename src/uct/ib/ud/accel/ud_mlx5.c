@@ -288,7 +288,6 @@ static inline void uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
         return;
     }
     uct_ib_mlx5_log_cqe(cqe);
-    //iface->super.tx.available += UCT_UD_TX_MODERATION + 1;
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, ntohs(cqe->wqe_counter));
 }
 
