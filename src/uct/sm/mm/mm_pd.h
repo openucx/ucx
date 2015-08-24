@@ -23,8 +23,9 @@ typedef uint64_t uct_mm_id_t;
  * Descriptor of the mapped memory
  */
 typedef struct uct_mm_remote_seg {
-    void *address;    /**< local memory address */
-    uint64_t cookie;  /**< cookie for mmap, xpmem, etc. */
+    void     *address;    /**< local memory address */
+    uint64_t cookie;      /**< cookie for mmap, xpmem, etc. */
+    size_t   length;      /**< size of the memory */
 } uct_mm_remote_seg_t;
 
 
@@ -48,7 +49,7 @@ typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*detach)(uct_mm_remote_seg_t *mm_desc);
 
-    ucs_status_t (*free)(void *address, uct_mm_id_t mm_id);
+    ucs_status_t (*free)(void *address, uct_mm_id_t mm_id, size_t length);
 
 } uct_mm_mapper_ops_t;
 

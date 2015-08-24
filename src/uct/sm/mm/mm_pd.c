@@ -42,7 +42,7 @@ ucs_status_t uct_mm_mem_free(uct_pd_h pd, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_pd_mapper_ops(pd)->free(seg->address, seg->mmid);
+    status = uct_mm_pd_mapper_ops(pd)->free(seg->address, seg->mmid, seg->length);
     if (status != UCS_OK) {
         return status;
     }
@@ -146,6 +146,7 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
         return status;
     }
 
+    mm_desc->length = rkey->length;
     /* store the offset of the addresses, this can be used directly to translate
      * the remote VA to local VA of the attached segment */
     *handle_p = mm_desc;

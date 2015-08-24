@@ -57,7 +57,7 @@ out_ok:
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length, 
+static ucs_status_t uct_sysv_attach(uct_mm_id_t mmid, size_t length,
                                     void *remote_address,
                                     void **local_address,
                                     uint64_t *cookie)
@@ -86,7 +86,7 @@ static ucs_status_t uct_sysv_detach(uct_mm_remote_seg_t *mm_desc)
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_free(void *address, uct_mm_id_t mm_id)
+static ucs_status_t uct_sysv_free(void *address, uct_mm_id_t mm_id, size_t length)
 {
     return ucs_sysv_free(address);
 }

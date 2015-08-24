@@ -167,7 +167,7 @@ err:
     return status;
 }
 
-static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id)
+static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id, size_t length)
 {
     ucs_status_t status = uct_xpmem_dereg(mm_id);
 
