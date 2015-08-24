@@ -132,8 +132,8 @@ static inline unsigned uct_ib_mlx5_cqe_size(uct_ib_mlx5_cq_t *cq)
     return 1<<cq->cqe_size_log;
 }
 
-static inline struct mlx5_cqe64* uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,
-                                                     int cqe_size_log)
+static UCS_F_ALWAYS_INLINE struct mlx5_cqe64* 
+uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq, int cqe_size_log)
 {
     struct mlx5_cqe64 *cqe;
     unsigned index;
@@ -188,7 +188,7 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq);
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 
-static inline uint16_t
+static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci) 
 {
 #if ENABLE_ASSERT

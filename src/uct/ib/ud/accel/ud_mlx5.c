@@ -59,7 +59,39 @@ uct_ud_mlx5_ep_tx_skb(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                           ctrl, UCT_UD_MLX5_WQE_SIZE + sizeof(*dptr));
 }
 
-static void
+static inline void
+uct_ud_mlx5_ep_tx_inl(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
+                      const void *buf, unsigned length)
+{
+    struct mlx5_wqe_ctrl_seg *ctrl;
+    struct mlx5_wqe_inl_data_seg *inl;
+
+    ctrl = iface->tx.wq.curr;
+    inl = uct_ib_mlx5_get_next_seg(&iface->tx.wq, ctrl, UCT_UD_MLX5_WQE_SIZE);
+    inl->byte_count = htonl(length | MLX5_INLINE_SEG);
+    uct_ib_mlx5_inline_copy(inl + 1, buf, length, &iface->tx.wq);
+    UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)buf);
+    uct_ud_mlx5_post_send(iface, ep, ctrl,
+                          UCT_UD_MLX5_WQE_SIZE + sizeof(*inl) + length);
+}
+
+
+static void 
+uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_iface_t *ud_iface, uct_ud_ep_t *ud_ep,
+                          uct_ud_send_skb_t *skb)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ud_iface,
+                                                uct_ud_mlx5_iface_t);
+    uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
+
+    if (skb->len >= iface->super.config.max_inline) {
+        uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
+    } else {
+        uct_ud_mlx5_ep_tx_inl(iface, ep, skb->neth, skb->len);
+    }
+}
+
+static UCS_F_NOINLINE void
 uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
 {
     unsigned batch = iface->super.config.rx_max_batch;
@@ -236,13 +268,15 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     return UCS_OK;
 }
 
-static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE 
+ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
 {
     struct mlx5_cqe64 *cqe;
     uint16_t ci;
     uct_ib_iface_recv_desc_t *desc;
     uint32_t len;
     void *packet;
+    ucs_status_t status;
 
     ci     = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
     packet = (void *)ntohll(iface->rx.wq.wqes[ci].addr);
@@ -251,6 +285,7 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
 
     cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
+        status = UCS_ERR_NO_PROGRESS;
         goto out;
     }
     uct_ib_mlx5_log_cqe(cqe);
@@ -268,6 +303,7 @@ static inline void uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
                          (uct_ud_recv_skb_t *)desc);
+    status = UCS_OK;
 
 out:
     if (iface->super.rx.available >= iface->super.config.rx_max_batch) {
@@ -277,9 +313,11 @@ out:
          */
         uct_ud_mlx5_iface_post_recv(iface);
     }
+    return status;
 }
 
-static inline void uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE void 
+uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
 {
     struct mlx5_cqe64 *cqe;
 
@@ -292,51 +330,19 @@ static inline void uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
 }
 
 
-static void uct_ud_mlx5_iface_progress_pending(uct_ud_mlx5_iface_t *iface)
-{
-    uct_ud_ep_t *ep;
-    ucs_status_t status;
-    uct_ud_neth_t *neth;
-    uct_ud_send_skb_t *skb;
-    struct mlx5_wqe_ctrl_seg *ctrl;
-    struct mlx5_wqe_inl_data_seg *inl;
-
-    while (!ucs_queue_is_empty(&iface->super.tx.pending_ops)) {
-        ctrl = iface->tx.wq.curr;
-        inl = uct_ib_mlx5_get_next_seg(&iface->tx.wq, ctrl,
-                                       UCT_UD_MLX5_WQE_SIZE);
-        neth = (void*)(inl + 1);
-
-        status = uct_ud_iface_get_next_pending(&iface->super, &ep, neth, &skb);
-        if (status == UCS_ERR_NO_RESOURCE) {
-            return;
-        }
-        if (status == UCS_INPROGRESS) {
-            continue;
-        }
-
-        if (ucs_unlikely(skb != NULL)) {
-            uct_ud_mlx5_ep_tx_skb(iface, ucs_derived_of(ep, uct_ud_mlx5_ep_t), skb);
-            uct_ud_ep_log_tx_tag("PENDING_TX: (skb)", ep, skb->neth, skb->len);
-        } 
-        else {
-            inl->byte_count = htonl(sizeof(*neth) | MLX5_INLINE_SEG);
-            UCT_UD_EP_HOOK_CALL_TX(ep, neth);
-            uct_ud_mlx5_post_send(iface, ucs_derived_of(ep, uct_ud_mlx5_ep_t), 
-                                  ctrl, UCT_UD_MLX5_WQE_SIZE + sizeof(*inl) + sizeof(*neth));
-            uct_ud_ep_log_tx_tag("PENDING_TX: (neth)", ep, neth, sizeof(neth));
-        }
-    }
-}
-
 
 static void uct_ud_mlx5_iface_progress(void *arg)
 {
     uct_ud_mlx5_iface_t *iface = arg;
+    ucs_status_t status;
 
-    uct_ud_mlx5_iface_poll_rx(iface);
-    uct_ud_mlx5_iface_poll_tx(iface);
-    uct_ud_mlx5_iface_progress_pending(iface);
+    status = uct_ud_mlx5_iface_poll_rx(iface);
+    if (status == UCS_ERR_NO_PROGRESS) {
+        uct_ud_mlx5_iface_poll_tx(iface);
+    }
+    if (uct_ud_iface_has_pending(&iface->super)) {
+        uct_ud_iface_progress_pending(&iface->super, uct_ud_mlx5_ep_tx_ctl_skb);
+    }
 }
 
 static ucs_status_t 

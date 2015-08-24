@@ -117,6 +117,11 @@ typedef struct uct_ud_send_skb {
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED uct_ud_send_skb_t;
 
+typedef struct uct_ud_send_skb_inl {
+    uct_ud_send_skb_t  super;
+    uct_ud_neth_t      neth;
+} UCS_S_PACKED uct_ud_send_skb_inl_t;
+
 typedef struct uct_ud_recv_skb {
     uct_ib_iface_recv_desc_t super;
     ucs_frag_list_elem_t     ooo_elem;
