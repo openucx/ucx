@@ -71,7 +71,8 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
     return uct_rc_verbs_iface_post_recv_always(iface, count);
 }
 
-static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
+static UCS_F_ALWAYS_INLINE void 
+uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     struct ibv_wc wc[UCT_IB_MAX_WC];
     uct_rc_verbs_ep_t *ep;
@@ -111,7 +112,8 @@ static inline void uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     }
 }
 
-static inline ucs_status_t uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
+static UCS_F_ALWAYS_INLINE ucs_status_t 
+uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 {
     uct_ib_iface_recv_desc_t *desc;
     uct_rc_hdr_t *hdr;
