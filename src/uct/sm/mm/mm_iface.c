@@ -47,6 +47,9 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
     uct_sockaddr_process_t *iface_addr = (void*)addr;
 
     iface_addr->sp_family = UCT_AF_PROCESS;
+    /* The address should be different for different mm 'devices' so that
+     * they won't seem reachable one to another. Their 'name' will create the
+     * uniqueness in the address */
     iface_addr->node_guid = ucs_machine_guid() *
                             ucs_string_to_id(iface->super.pd->component->name);
     iface_addr->id        = iface->fifo_mm_id;

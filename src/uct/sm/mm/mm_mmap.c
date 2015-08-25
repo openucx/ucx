@@ -60,9 +60,11 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     /* mmap the shared memory segment that was created by shm_open */
+#ifdef MAP_HUGETLB
     if (hugetlb != UCS_NO) {
        (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_MMAP_PROT,
-                           MAP_SHARED | MAP_HUGETLB, shm_fd, 0 UCS_MEMTRACK_VAL);
+                               MAP_SHARED | MAP_HUGETLB,
+                               shm_fd, 0 UCS_MEMTRACK_VAL);
        if ((*address_p) !=  MAP_FAILED) {
            /* indicate that the memory was mapped with hugepages */
            uuid |= UCT_MM_MMAP_HUGETLB;
@@ -72,9 +74,17 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
        ucs_debug("mm failed to allocate %zu bytes with hugetlb %m", *length_p);
     }
 
+#else
+    if (hugetlb == UCS_YES) {
+        ucs_error("Hugepages were requested but they cannot be used with mmap.");
+        status = UCS_ERR_SHMEM_SEGMENT;
+        goto err_shm_unlink;
+    }
+#endif
+
     if (hugetlb != UCS_YES) {
        (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_MMAP_PROT,
-                           MAP_SHARED, shm_fd, 0 UCS_MEMTRACK_VAL);
+                               MAP_SHARED, shm_fd, 0 UCS_MEMTRACK_VAL);
        if ((*address_p) != MAP_FAILED) {
            /* indicate that the memory was mapped without hugepages */
            uuid &= ~UCT_MM_MMAP_HUGETLB;
@@ -85,10 +95,10 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
 err_shm_unlink:
+    close(shm_fd);
     if (shm_unlink(file_name) != 0) {
         ucs_warn("unable to unlink the shared memory segment");
     }
-    close(shm_fd);
 err_free_file:
     ucs_free(file_name);
 err:
@@ -122,17 +132,21 @@ static ucs_status_t uct_mmap_attach(uct_mm_id_t mmid, size_t length,
     /* use the mmid (63 bits) to recreate the file_name for opening */
     sprintf(file_name, "/ucx_shared_mr_uuid_%zu", mmid >> 1);
     shm_fd = shm_open(file_name, O_RDWR | O_EXCL,
-    		          UCT_MM_MMAP_SHM_OPEN_MODE);
+                      UCT_MM_MMAP_SHM_OPEN_MODE);
     if (shm_fd == -1) {
         ucs_error("Error returned from shm_open in attach. %m");
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free_file;
     }
 
+#ifdef MAP_HUGETLB
     if (mmid & UCT_MM_MMAP_HUGETLB) {
-        ptr = ucs_mmap(NULL ,length, UCT_MM_MMAP_PROT, MAP_SHARED | MAP_HUGETLB,
-        		       shm_fd, 0 UCS_MEMTRACK_NAME("mmap attach"));
-    } else {
+        ptr = ucs_mmap(NULL ,length, UCT_MM_MMAP_PROT,
+                       MAP_SHARED | MAP_HUGETLB,
+                       shm_fd, 0 UCS_MEMTRACK_NAME("mmap attach"));
+    } else
+#endif
+    {
         ptr = ucs_mmap(NULL ,length, UCT_MM_MMAP_PROT, MAP_SHARED,
         		       shm_fd, 0 UCS_MEMTRACK_NAME("mmap attach"));
     }
