@@ -8,6 +8,8 @@
 #include "ud_iface.h"
 #include "ud_ep.h"
 
+#include "ud_inl.h"
+
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
@@ -337,6 +339,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err_mpool;
     }
     self->tx.skb = ucs_mpool_get(self->tx.mp);
+    self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
 
     ucs_queue_head_init(&self->tx.pending_ops);
     return UCS_OK;
@@ -484,5 +487,66 @@ uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
                                   name,
                                   mp_p);
 
+}
+
+
+
+static ucs_status_t
+uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, uct_ud_ep_t **r_ep,
+                              uct_ud_send_skb_t **skb)
+{
+    uct_ud_ep_t *ep;
+    ucs_queue_elem_t *elem;
+
+    if (!uct_ud_iface_can_tx(iface)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* TODO: notify ucp that it can push more data */
+    elem = ucs_queue_pull_non_empty(&iface->tx.pending_ops);
+    ep = ucs_container_of(elem, uct_ud_ep_t, tx.pending.queue);
+    if (ep->tx.pending.ops & UCT_UD_EP_OP_CREP) {
+        *skb = uct_ud_ep_prepare_crep(ep);
+        if (!*skb) {
+            uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_CREP);
+            return UCS_ERR_NO_RESOURCE;
+        }
+        *r_ep = ep;
+    } else if (ucs_likely(ep->tx.pending.ops & UCT_UD_EP_OP_ACK)) {
+        *r_ep = ep;
+         *skb = &iface->tx.skb_inl.super;
+        uct_ud_neth_ctl_ack(ep, (*skb)->neth);
+    } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
+        /* someone already cleared this */
+        return UCS_INPROGRESS;
+    } else {
+        /* TODO: support other ops */
+        ucs_fatal("unsupported pending op mask: %x", ep->tx.pending.ops);
+    }
+    ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    return UCS_OK;
+}
+
+
+void
+uct_ud_iface_progress_pending(uct_ud_iface_t *iface, uct_ud_ep_tx_skb_t tx_skb)
+{
+    uct_ud_ep_t *ep;
+    ucs_status_t status;
+    uct_ud_send_skb_t *skb;
+
+    ucs_assert(!ucs_queue_is_empty(&iface->tx.pending_ops));
+    do {
+        status = uct_ud_iface_get_next_pending(iface, &ep, &skb);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return;
+        }
+        if (status == UCS_INPROGRESS) {
+            continue;
+        }
+        tx_skb(iface, ep, skb);
+        uct_ud_ep_log_tx_tag("PENDING_TX: (skb)", ep, skb->neth, skb->len);
+    }
+    while (!ucs_queue_is_empty(&iface->tx.pending_ops));
 }
 

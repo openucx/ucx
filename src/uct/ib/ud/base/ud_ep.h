@@ -132,7 +132,7 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep);
 
 void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
-static inline void
+static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
 {
     neth->packet_type = (id << UCT_UD_PACKET_AM_ID_SHIFT) |
@@ -140,7 +140,7 @@ uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
                         UCT_UD_PACKET_FLAG_AM;
 }
 
-static inline void
+static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_set_type_put(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->packet_type = ep->dest_ep_id | UCT_UD_PACKET_FLAG_PUT;
@@ -154,7 +154,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface,
 /*
  * Request ACK once we sent 1/4 of the window. Request another ack once we got to the window end. 
  */
-static inline int uct_ud_ep_req_ack(uct_ud_ep_t *ep)
+static UCS_F_ALWAYS_INLINE int uct_ud_ep_req_ack(uct_ud_ep_t *ep)
 {
     uct_ud_psn_t acked_psn, max_psn, psn;
 
@@ -166,21 +166,24 @@ static inline int uct_ud_ep_req_ack(uct_ud_ep_t *ep)
            UCT_UD_PSN_COMPARE(psn+1, ==, max_psn);
 }
 
-static inline void uct_ud_neth_ctl_ack(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+static UCS_F_ALWAYS_INLINE void
+uct_ud_neth_ctl_ack(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn         = ep->tx.psn;
     neth->ack_psn     = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
     neth->packet_type = ep->dest_ep_id;
 }
 
-static inline void uct_ud_neth_init_data(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+static UCS_F_ALWAYS_INLINE void 
+uct_ud_neth_init_data(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn = ep->tx.psn;
     neth->ack_psn = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
 }
 
 
-static inline void uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+static UCS_F_ALWAYS_INLINE void 
+uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->packet_type |= uct_ud_ep_req_ack(ep) << UCT_UD_PACKET_ACK_REQ_SHIFT;
     ep->tx.pending.ops &= ~UCT_UD_EP_OP_ACK;

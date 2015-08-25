@@ -54,11 +54,12 @@ struct uct_ud_iface {
         unsigned             available;
     } rx;
     struct {
-        uct_ud_send_skb_t   *skb; /* ready to use skb */
-        ucs_mpool_h          mp;
-        uint16_t             available;
-        unsigned             unsignaled;
-        ucs_queue_head_t     pending_ops;
+        uct_ud_send_skb_t     *skb; /* ready to use skb */
+        uct_ud_send_skb_inl_t  skb_inl;
+        ucs_mpool_h            mp;
+        uint16_t               available;
+        unsigned               unsignaled;
+        ucs_queue_head_t       pending_ops;
     } tx;
     struct {
         unsigned             tx_qp_len;
@@ -99,9 +100,20 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface);
 
-static inline int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
+static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 {
     return iface->tx.available > 0;
+}
+
+typedef void (*uct_ud_ep_tx_skb_t)(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                                   uct_ud_send_skb_t *skb);
+
+void uct_ud_iface_progress_pending(uct_ud_iface_t *iface, 
+                                   uct_ud_ep_tx_skb_t tx_skb);
+
+static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_pending(uct_ud_iface_t *iface)
+{
+    return !ucs_queue_is_empty(&iface->tx.pending_ops);
 }
 
 /* 

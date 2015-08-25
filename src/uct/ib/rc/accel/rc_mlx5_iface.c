@@ -89,7 +89,8 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
     return count;
 }
 
-static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE void 
+uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 {
     uct_rc_iface_send_op_t *op;
     struct mlx5_cqe64 *cqe;
@@ -121,7 +122,8 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     }
 }
 
-static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
 {
     struct mlx5_wqe_srq_next_seg *seg;
     uct_rc_mlx5_recv_desc_t *desc;
@@ -130,10 +132,12 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     unsigned byte_len;
     uint16_t wqe_ctr_be;
     uint16_t max_batch;
+    ucs_status_t status;
 
     cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
         /* If not CQE - post receives */
+        status = UCS_ERR_NO_PROGRESS;
         goto done;
     }
 
@@ -173,12 +177,14 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     seg->next_wqe_index = wqe_ctr_be;
     iface->rx.tail = ntohs(wqe_ctr_be);
     ++iface->super.rx.available;
+    status = UCS_OK;
 
 done:
     max_batch = iface->super.config.rx_max_batch;
     if (iface->super.rx.available >= max_batch) {
         uct_rc_mlx5_iface_post_recv(iface, max_batch);
     }
+    return status;
 }
 
 static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
@@ -196,9 +202,12 @@ static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
 static void uct_rc_mlx5_iface_progress(void *arg)
 {
     uct_rc_mlx5_iface_t *iface = arg;
+    ucs_status_t status;
 
-    uct_rc_mlx5_iface_poll_tx(iface);
-    uct_rc_mlx5_iface_poll_rx(iface);
+    status = uct_rc_mlx5_iface_poll_rx(iface);
+    if (status == UCS_ERR_NO_PROGRESS) {
+        uct_rc_mlx5_iface_poll_tx(iface);
+    }
 }
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
