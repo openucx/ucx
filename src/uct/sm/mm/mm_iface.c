@@ -29,7 +29,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
     UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 256, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
-    {"HUGETLB_MODE", "try",
+    {"HUGETLB_MODE", "no",
      "Enable using huge pages for internal shared memory buffers."
      "Possible values are:\n"
      " y   - Allocate memory using huge pages only.\n"
@@ -47,7 +47,11 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
     uct_sockaddr_process_t *iface_addr = (void*)addr;
 
     iface_addr->sp_family = UCT_AF_PROCESS;
-    iface_addr->node_guid = ucs_machine_guid();
+    /* The address should be different for different mm 'devices' so that
+     * they won't seem reachable one to another. Their 'name' will create the
+     * uniqueness in the address */
+    iface_addr->node_guid = ucs_machine_guid() *
+                            ucs_string_to_id(iface->super.pd->component->name);
     iface_addr->id        = iface->fifo_mm_id;
     iface_addr->vaddr     = (uintptr_t)iface->shared_mem;
     return UCS_OK;
@@ -56,8 +60,11 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
 static int uct_mm_iface_is_reachable(uct_iface_t *tl_iface,
                                      const struct sockaddr *addr)
 {
+    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+
     return (addr->sa_family == UCT_AF_PROCESS) &&
-           (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
+           (((uct_sockaddr_process_t*)addr)->node_guid ==
+           (ucs_machine_guid() * ucs_string_to_id(iface->super.pd->component->name)));
 }
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
@@ -320,10 +327,14 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
 {
     ucs_status_t status;
+    size_t size_to_free;
+
+    size_to_free = UCT_MM_GET_FIFO_SIZE(self);
 
     /* release the memory allocated for the FIFO */
     status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem,
-                                                        self->fifo_mm_id);
+                                                        self->fifo_mm_id,
+                                                        size_to_free);
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }

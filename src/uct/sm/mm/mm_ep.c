@@ -33,8 +33,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
         return status;
     }
 
-    uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl,
-                         &self->fifo);
+    self->mapped_desc.length = size_to_attach;
+    uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl, &self->fifo);
 
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, remote_iface_addr->id);
 

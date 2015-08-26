@@ -365,6 +365,12 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         p += pd_size;
     }
 
+    if (rkey->pd_map == 0) {
+        ucs_debug("The unpacked rkey from the destination is unreachable");
+        status = UCS_ERR_UNREACHABLE;
+        goto err_destroy;
+    }
+
     *rkey_p = rkey;
     return UCS_OK;
 

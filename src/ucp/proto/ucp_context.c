@@ -30,7 +30,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "no  - try using the available devices from the device list.",
    ucs_offsetof(ucp_config_t, force_all_devices), UCS_CONFIG_TYPE_BOOL},
 
-  {"ALLOC_PRIO", "pd:sysv,huge,pd:*,mmap,heap",
+  {"ALLOC_PRIO", "pd:sysv,pd:posix,huge,pd:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, mmap, libc) or pd:<NAME> which means to use the\n"
    "specified protection domain for allocation. NAME can be either a PD component\n"
@@ -109,6 +109,12 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
                *devices_mask_p |= UCS_MASK(config_idx);
             }
         }
+    }
+
+    /* Disable the posix mmap and xpmem 'devices'. ONLY for now - use sysv for mm .
+     * This will be removed after multi-rail is supported */
+    if (!strcmp(resource->dev_name,"posix") || !strcmp(resource->dev_name, "xpmem")) {
+        device_enabled  = 0;
     }
 
     ucs_assert(config->tls.count > 0);
