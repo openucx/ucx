@@ -13,13 +13,13 @@
 #include <sys/mman.h>
 #include <ucs/sys/sys.h>
 
-#define UCT_MM_MMAP_SHM_OPEN_MODE  (0666)
-#define UCT_MM_MMAP_PROT           (PROT_READ | PROT_WRITE)
-#define UCT_MM_MMAP_HUGETLB        UCS_BIT(0)
+#define UCT_MM_POSIX_SHM_OPEN_MODE  (0666)
+#define UCT_MM_POSIX_MMAP_PROT      (PROT_READ | PROT_WRITE)
+#define UCT_MM_POSIX_HUGETLB        UCS_BIT(0)
 
 static ucs_status_t
-uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
-               void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
+uct_posix_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
+                void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     int shm_fd;
@@ -32,7 +32,7 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
         goto err;
     }
 
-    file_name = ucs_malloc(NAME_MAX, "file name shared mr mmap");
+    file_name = ucs_malloc(NAME_MAX, "file name shared mr posix");
     if (file_name == NULL) {
         status = UCS_ERR_NO_MEMORY;
         ucs_error("Failed to allocate memory for the shm_open file name. %m");
@@ -46,7 +46,7 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
 
     /* Create shared memory object and set its size */
     shm_fd = shm_open(file_name, O_CREAT | O_RDWR | O_EXCL,
-    		          UCT_MM_MMAP_SHM_OPEN_MODE);
+                      UCT_MM_POSIX_SHM_OPEN_MODE);
     if (shm_fd == -1) {
         ucs_error("Error returned from shm_open %m");
         status = UCS_ERR_SHMEM_SEGMENT;
@@ -62,12 +62,12 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
     /* mmap the shared memory segment that was created by shm_open */
 #ifdef MAP_HUGETLB
     if (hugetlb != UCS_NO) {
-       (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_MMAP_PROT,
+       (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_POSIX_MMAP_PROT,
                                MAP_SHARED | MAP_HUGETLB,
                                shm_fd, 0 UCS_MEMTRACK_VAL);
        if ((*address_p) !=  MAP_FAILED) {
            /* indicate that the memory was mapped with hugepages */
-           uuid |= UCT_MM_MMAP_HUGETLB;
+           uuid |= UCT_MM_POSIX_HUGETLB;
            goto out_ok;
        }
 
@@ -76,18 +76,18 @@ uct_mmap_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
 
 #else
     if (hugetlb == UCS_YES) {
-        ucs_error("Hugepages were requested but they cannot be used with mmap.");
+        ucs_error("Hugepages were requested but they cannot be used with posix mmap.");
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_shm_unlink;
     }
 #endif
 
     if (hugetlb != UCS_YES) {
-       (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_MMAP_PROT,
+       (*address_p) = ucs_mmap(NULL, *length_p, UCT_MM_POSIX_MMAP_PROT,
                                MAP_SHARED, shm_fd, 0 UCS_MEMTRACK_VAL);
        if ((*address_p) != MAP_FAILED) {
            /* indicate that the memory was mapped without hugepages */
-           uuid &= ~UCT_MM_MMAP_HUGETLB;
+           uuid &= ~UCT_MM_POSIX_HUGETLB;
            goto out_ok;
        }
 
@@ -112,19 +112,19 @@ out_ok:
     return UCS_OK;
 }
 
-static ucs_status_t uct_mmap_attach(uct_mm_id_t mmid, size_t length,
-                                    void *remote_address,
-                                    void **local_address,
-                                    uint64_t *cookie)
+static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
+                                     void *remote_address,
+                                     void **local_address,
+                                     uint64_t *cookie)
 {
     void *ptr;
     char *file_name;
     int shm_fd;
     ucs_status_t status = UCS_OK;
 
-    file_name = ucs_malloc(NAME_MAX, "file name shared mr mmap");
+    file_name = ucs_malloc(NAME_MAX, "file name shared mr posix");
     if (file_name == NULL) {
-    	ucs_error("Failed to allocate memory for file_name to attach. %m");
+        ucs_error("Failed to allocate memory for file_name to attach. %m");
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
@@ -132,7 +132,7 @@ static ucs_status_t uct_mmap_attach(uct_mm_id_t mmid, size_t length,
     /* use the mmid (63 bits) to recreate the file_name for opening */
     sprintf(file_name, "/ucx_shared_mr_uuid_%zu", mmid >> 1);
     shm_fd = shm_open(file_name, O_RDWR | O_EXCL,
-                      UCT_MM_MMAP_SHM_OPEN_MODE);
+                      UCT_MM_POSIX_SHM_OPEN_MODE);
     if (shm_fd == -1) {
         ucs_error("Error returned from shm_open in attach. %m");
         status = UCS_ERR_SHMEM_SEGMENT;
@@ -140,18 +140,18 @@ static ucs_status_t uct_mmap_attach(uct_mm_id_t mmid, size_t length,
     }
 
 #ifdef MAP_HUGETLB
-    if (mmid & UCT_MM_MMAP_HUGETLB) {
-        ptr = ucs_mmap(NULL ,length, UCT_MM_MMAP_PROT,
+    if (mmid & UCT_MM_POSIX_HUGETLB) {
+        ptr = ucs_mmap(NULL ,length, UCT_MM_POSIX_MMAP_PROT,
                        MAP_SHARED | MAP_HUGETLB,
-                       shm_fd, 0 UCS_MEMTRACK_NAME("mmap attach"));
+                       shm_fd, 0 UCS_MEMTRACK_NAME("posix mmap attach"));
     } else
 #endif
     {
-        ptr = ucs_mmap(NULL ,length, UCT_MM_MMAP_PROT, MAP_SHARED,
-        		       shm_fd, 0 UCS_MEMTRACK_NAME("mmap attach"));
+        ptr = ucs_mmap(NULL ,length, UCT_MM_POSIX_MMAP_PROT, MAP_SHARED,
+                       shm_fd, 0 UCS_MEMTRACK_NAME("posix mmap attach"));
     }
     if (ptr == MAP_FAILED) {
-        ucs_error("mmap(shm_fd=%d) failed: %m", (int)shm_fd);
+        ucs_error("ucs_mmap(shm_fd=%d) failed: %m", (int)shm_fd);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_close_fd;
     }
@@ -167,7 +167,7 @@ err:
     return status;
 }
 
-static ucs_status_t uct_mmap_detach(uct_mm_remote_seg_t *mm_desc)
+static ucs_status_t uct_posix_detach(uct_mm_remote_seg_t *mm_desc)
 {
     int ret;
 
@@ -181,7 +181,7 @@ static ucs_status_t uct_mmap_detach(uct_mm_remote_seg_t *mm_desc)
     return UCS_OK;
 }
 
-static ucs_status_t uct_mmap_free(void *address, uct_mm_id_t mm_id, size_t length)
+static ucs_status_t uct_posix_free(void *address, uct_mm_id_t mm_id, size_t length)
 {
     char *file_name;
     int ret;
@@ -195,7 +195,7 @@ static ucs_status_t uct_mmap_free(void *address, uct_mm_id_t mm_id, size_t lengt
         goto err;
     }
 
-    file_name = ucs_malloc(NAME_MAX, "file name shared mr mmap");
+    file_name = ucs_malloc(NAME_MAX, "file name shared mr posix mmap");
     if (file_name == NULL) {
         ucs_error("Failed to allocate memory for the shm_unlink file name. %m");
         status = UCS_ERR_NO_MEMORY;
@@ -216,15 +216,15 @@ err:
     return status;
 }
 
-static uct_mm_mapper_ops_t uct_mmap_mapper_ops = {
+static uct_mm_mapper_ops_t uct_posix_mapper_ops = {
    .query   = ucs_empty_function_return_success,
    .reg     = NULL,
    .dereg   = NULL,
-   .alloc   = uct_mmap_alloc,
-   .attach  = uct_mmap_attach,
-   .detach  = uct_mmap_detach,
-   .free    = uct_mmap_free
+   .alloc   = uct_posix_alloc,
+   .attach  = uct_posix_attach,
+   .detach  = uct_posix_detach,
+   .free    = uct_posix_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_mmap_pd, "mmap", &uct_mmap_mapper_ops)
-UCT_PD_REGISTER_TL(&uct_mmap_pd, &uct_mm_tl);
+UCT_MM_COMPONENT_DEFINE(uct_posix_pd, "posix", &uct_posix_mapper_ops)
+UCT_PD_REGISTER_TL(&uct_posix_pd, &uct_mm_tl);
