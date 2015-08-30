@@ -9,9 +9,9 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
-#include "uct/ib/ud/ud_def.h"
-#include "uct/ib/ud/ud_ep.h"
-#include "uct/ib/ud/ud_iface.h"
+#include <uct/ib/ud/base/ud_def.h>
+#include <uct/ib/ud/base/ud_ep.h>
+#include <uct/ib/ud/base/ud_iface.h>
 };
 /* test ud connect data structures */
 class test_ud_ds : public uct_test {
@@ -133,4 +133,5 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ud_ds, ud)
+_UCT_INSTANTIATE_TEST_CASE(test_ud_ds, ud_mlx5)
 

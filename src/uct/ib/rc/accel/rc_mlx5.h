@@ -49,15 +49,7 @@ typedef struct uct_rc_mlx5_ep {
     unsigned         qp_num;
 
     struct {
-        uint16_t       sw_pi;      /* PI for next WQE */
-        uint16_t       max_pi;     /* Maximal PI which can start a new WQE */
-        uint16_t       prev_sw_pi; /* PI where last WQE *started*  */
-        unsigned       bf_size;
-        void           *bf_reg;
-        uint32_t       *dbrec;
-        void           *seg;
-        void           *qstart;
-        void           *qend;
+        uct_ib_mlx5_txwq_t  wq;
     } tx;
 } uct_rc_mlx5_ep_t;
 
@@ -97,26 +89,10 @@ typedef struct {
         UCS_STATS_UPDATE_COUNTER((_iface)->super.stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         return UCS_ERR_NO_RESOURCE; \
     } \
-    if (UCS_CIRCULAR_COMPARE16((_ep)->tx.sw_pi, >, (_ep)->tx.max_pi)) { \
+    if ((_ep)->super.available == 0) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_RC_EP_STAT_QP_FULL, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }
-
-/**
- * Calculate max_pi, based on the start index of last completed WQE.
- * The result guarantees at least UCT_RC_MLX5_MAX_BB free BB's.
- *
- * @param iface  RC interface.
- * @param ci     Value of last completion form hardware.
- *
- * @return Value of max_pi, assuming "ci" was completed in hardware.
- */
-static UCS_F_ALWAYS_INLINE uint16_t
-uct_rc_mlx5_calc_max_pi(uct_rc_mlx5_iface_t *iface, uint16_t ci)
-{
-    return ci + iface->super.config.tx_qp_len - UCT_RC_MLX5_MAX_BB + 1;
-}
-
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);

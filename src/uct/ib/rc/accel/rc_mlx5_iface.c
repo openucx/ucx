@@ -5,12 +5,14 @@
 * $HEADER$
 */
 
-#include "rc_mlx5.h"
 
+#include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/tl/context.h>
 #include <ucs/debug/log.h>
+
+#include "rc_mlx5.h"
 
 
 #define UCT_RC_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
@@ -66,9 +68,9 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, head);
 
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
-        uct_ib_mlx5_wqe_set_data_seg((void*)(seg + 1), hdr,
-                                     length, /* TODO pre-init length */
-                                     desc->super.lkey);
+        uct_ib_mlx5_set_data_seg((void*)(seg + 1), hdr,
+                                 length, /* TODO pre-init length */
+                                 desc->super.lkey);
         VALGRIND_MAKE_MEM_NOACCESS(hdr, length);
 
         ucs_queue_push(&iface->rx.desc_q, &desc->queue);
@@ -87,7 +89,8 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
     return count;
 }
 
-static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE void 
+uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 {
     uct_rc_iface_send_op_t *op;
     struct mlx5_cqe64 *cqe;
@@ -95,7 +98,7 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     unsigned qp_num;
     uint16_t hw_ci;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, sizeof(struct mlx5_cqe64));
+    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
         return;
     }
@@ -108,11 +111,8 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num), uct_rc_mlx5_ep_t);
     ucs_assert(ep != NULL);
 
-    /* "cqe->wqe_counter" is the index of the completed wqe (modulo 2^16).
-     * Calculate new max_pi based on that value.
-     */
-    hw_ci         = ntohs(cqe->wqe_counter);
-    ep->tx.max_pi = uct_rc_mlx5_calc_max_pi(iface, hw_ci);
+    hw_ci = ntohs(cqe->wqe_counter);
+    ep->super.available = uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci);
     ++iface->super.tx.cq_available;
 
     /* Process completions */
@@ -122,24 +122,23 @@ static inline void uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     }
 }
 
-static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
 {
     struct mlx5_wqe_srq_next_seg *seg;
     uct_rc_mlx5_recv_desc_t *desc;
     uct_rc_hdr_t *hdr;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
-    unsigned max_batch;
     uint16_t wqe_ctr_be;
+    uint16_t max_batch;
+    ucs_status_t status;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size);
+    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
         /* If not CQE - post receives */
-        max_batch = iface->super.config.rx_max_batch;
-        if (iface->super.rx.available >= max_batch) {
-            uct_rc_mlx5_iface_post_recv(iface, max_batch);
-        }
-        return;
+        status = UCS_ERR_NO_PROGRESS;
+        goto done;
     }
 
     UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
@@ -178,6 +177,14 @@ static inline void uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     seg->next_wqe_index = wqe_ctr_be;
     iface->rx.tail = ntohs(wqe_ctr_be);
     ++iface->super.rx.available;
+    status = UCS_OK;
+
+done:
+    max_batch = iface->super.config.rx_max_batch;
+    if (iface->super.rx.available >= max_batch) {
+        uct_rc_mlx5_iface_post_recv(iface, max_batch);
+    }
+    return status;
 }
 
 static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
@@ -195,9 +202,12 @@ static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
 static void uct_rc_mlx5_iface_progress(void *arg)
 {
     uct_rc_mlx5_iface_t *iface = arg;
+    ucs_status_t status;
 
-    uct_rc_mlx5_iface_poll_tx(iface);
-    uct_rc_mlx5_iface_poll_rx(iface);
+    status = uct_rc_mlx5_iface_poll_rx(iface);
+    if (status == UCS_ERR_NO_PROGRESS) {
+        uct_rc_mlx5_iface_poll_tx(iface);
+    }
 }
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -269,7 +279,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
         goto err;
     }
 
-    if (self->tx.cq.cqe_size != sizeof(struct mlx5_cqe64)) {
+    if (uct_ib_mlx5_cqe_size(&self->tx.cq) != sizeof(struct mlx5_cqe64)) {
         ucs_error("TX CQE size is not 64");
         goto err;
     }

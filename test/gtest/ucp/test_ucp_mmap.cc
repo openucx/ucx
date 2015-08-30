@@ -36,10 +36,15 @@ void test_ucp_mmap::test_mapped_memory(entity *e, ucp_mem_h memh,
 
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(e->ep(), rkey_buffer, &rkey);
-    ASSERT_UCS_OK(status);
+
+    /* some transports don't support memory registration so the destination may
+     * be unreachable */
+    if (status != UCS_ERR_UNREACHABLE) {
+        ASSERT_UCS_OK(status);
+        ucp_rkey_destroy(rkey);
+    }
 
     ucp_rkey_buffer_release(rkey_buffer);
-    ucp_rkey_destroy(rkey);
 }
 
 

@@ -8,6 +8,8 @@
 #include "ud_iface.h"
 #include "ud_ep.h"
 
+#include "ud_inl.h"
+
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
@@ -22,7 +24,8 @@ void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
     sglib_hashed_uct_ud_iface_peer_t_init(iface->peers);
 }
 
-static void uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
+static void 
+uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
 {
     uct_ud_ep_t *ep, *tmp;
     uct_iface_t *iface_h = &iface->super.super.super;
@@ -57,7 +60,9 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
     }
 }
 
-static uct_ud_iface_peer_t *uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr)
+static uct_ud_iface_peer_t *
+uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, 
+                             const uct_sockaddr_ib_t *src_if_addr)
 {
     uct_ud_iface_peer_t *peer, key;
 
@@ -69,7 +74,8 @@ static uct_ud_iface_peer_t *uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, 
 }
 
 
-static uct_ud_ep_t *uct_ud_iface_cep_lookup_ep(uct_ud_iface_peer_t *peer, uint32_t conn_id)
+static uct_ud_ep_t *
+uct_ud_iface_cep_lookup_ep(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 {
     uint32_t id;
     uct_ud_ep_t *ep;
@@ -91,7 +97,8 @@ static uct_ud_ep_t *uct_ud_iface_cep_lookup_ep(uct_ud_iface_peer_t *peer, uint32
     return NULL;
 }
 
-static uint32_t uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
+static uint32_t
+uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 {
     uint32_t new_id;
 
@@ -103,7 +110,9 @@ static uint32_t uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_
 }
 
 /* insert new ep that is connected to src_if_addr */
-ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep, uint32_t conn_id)
+ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
+                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     uct_ud_ep_t *ep, uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *cep;
@@ -150,7 +159,9 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
   ucs_list_head_init(&ep->cep_list);
 }
 
-uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_sockaddr_ib_t  *src_if_addr, uint32_t conn_id)
+uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, 
+                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *ep;
@@ -167,7 +178,9 @@ uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, uct_sockaddr_ib_t  *
     return ep;
 }
 
-void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_addr, uct_ud_ep_t *ep)
+void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, 
+                               const uct_sockaddr_ib_t *src_if_addr,
+                               uct_ud_ep_t *ep)
 {
     uct_ud_iface_peer_t *peer;
 
@@ -184,11 +197,13 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, uct_sockaddr_ib_t *src_if_
 }
 
 
-static ucs_status_t uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
-                                                 uct_ib_iface_config_t *config, 
-                                                 const char *name, ucs_mpool_h *mp_p);
+static ucs_status_t
+uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
+                             uct_ib_iface_config_t *config, 
+                             const char *name, ucs_mpool_h *mp_p);
 
-static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
+static ucs_status_t
+uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
 {
     /* TODO: exp attrs autoconf */
     struct ibv_exp_qp_init_attr qp_init_attr;
@@ -231,9 +246,9 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
 #endif
     if (self->qp == NULL) {
         ucs_error("Failed to create qp: %m [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",
-                qp_init_attr.cap.max_inline_data, qp_init_attr.cap.max_recv_sge,
-                qp_init_attr.cap.max_send_sge, qp_init_attr.cap.max_recv_wr,
-                qp_init_attr.cap.max_send_wr);
+                  qp_init_attr.cap.max_inline_data, qp_init_attr.cap.max_recv_sge,
+                  qp_init_attr.cap.max_send_sge, qp_init_attr.cap.max_recv_wr,
+                  qp_init_attr.cap.max_send_wr);
         goto err;
     }
 
@@ -245,9 +260,9 @@ static ucs_status_t uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_co
     qp_attr.qp_state   = IBV_QPS_INIT;
     qp_attr.pkey_index = self->super.pkey_index;
     qp_attr.port_num   = self->super.port_num;
-    qp_attr.qkey       = UCT_UD_QKEY;
+    qp_attr.qkey       = UCT_IB_QKEY;
     ret = ibv_modify_qp(self->qp, &qp_attr,
-            IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_QKEY);
+                        IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_QKEY);
     if (ret) {
         ucs_error("Failed to modify UD QP to INIT: %m");
         goto err_destroy_qp;
@@ -323,6 +338,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     if (status != UCS_OK) {
         goto err_mpool;
     }
+    self->tx.skb = ucs_mpool_get(self->tx.mp);
+    self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
 
     ucs_queue_head_init(&self->tx.pending_ops);
     return UCS_OK;
@@ -383,7 +400,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->ep_addr_len           = sizeof(uct_sockaddr_ib_t);
 }
 
-ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *iface_addr)
+ucs_status_t
+uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *iface_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
     uct_sockaddr_ib_t *addr = (uct_sockaddr_ib_t *)iface_addr;
@@ -424,7 +442,8 @@ void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 }
 
-void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
+void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
+                             uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
 {
     void *p;
     ucs_assert_always(old_ep != new_ep);
@@ -435,7 +454,8 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_
     ucs_ptr_array_remove(&iface->eps, new_ep->ep_id, 0);
 }
 
-static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
+static void
+uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {       
     uct_ud_send_skb_t *skb = obj;
     struct ibv_mr *mr = memh;
@@ -443,9 +463,10 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_mem_
 }
 
 
-static ucs_status_t uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
-                                                 uct_ib_iface_config_t *config, 
-                                                 const char *name, ucs_mpool_h *mp_p)
+static ucs_status_t
+uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
+                             uct_ib_iface_config_t *config, 
+                             const char *name, ucs_mpool_h *mp_p)
 {
     unsigned grow;
     int mtu;
@@ -466,5 +487,66 @@ static ucs_status_t uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
                                   name,
                                   mp_p);
 
+}
+
+
+
+static ucs_status_t
+uct_ud_iface_get_next_pending(uct_ud_iface_t *iface, uct_ud_ep_t **r_ep,
+                              uct_ud_send_skb_t **skb)
+{
+    uct_ud_ep_t *ep;
+    ucs_queue_elem_t *elem;
+
+    if (!uct_ud_iface_can_tx(iface)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* TODO: notify ucp that it can push more data */
+    elem = ucs_queue_pull_non_empty(&iface->tx.pending_ops);
+    ep = ucs_container_of(elem, uct_ud_ep_t, tx.pending.queue);
+    if (ep->tx.pending.ops & UCT_UD_EP_OP_CREP) {
+        *skb = uct_ud_ep_prepare_crep(ep);
+        if (!*skb) {
+            uct_ud_iface_queue_pending(iface, ep, UCT_UD_EP_OP_CREP);
+            return UCS_ERR_NO_RESOURCE;
+        }
+        *r_ep = ep;
+    } else if (ucs_likely(ep->tx.pending.ops & UCT_UD_EP_OP_ACK)) {
+        *r_ep = ep;
+         *skb = &iface->tx.skb_inl.super;
+        uct_ud_neth_ctl_ack(ep, (*skb)->neth);
+    } else if (ep->tx.pending.ops == UCT_UD_EP_OP_INPROGRESS) {
+        /* someone already cleared this */
+        return UCS_INPROGRESS;
+    } else {
+        /* TODO: support other ops */
+        ucs_fatal("unsupported pending op mask: %x", ep->tx.pending.ops);
+    }
+    ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    return UCS_OK;
+}
+
+
+void
+uct_ud_iface_progress_pending(uct_ud_iface_t *iface, uct_ud_ep_tx_skb_t tx_skb)
+{
+    uct_ud_ep_t *ep;
+    ucs_status_t status;
+    uct_ud_send_skb_t *skb;
+
+    ucs_assert(!ucs_queue_is_empty(&iface->tx.pending_ops));
+    do {
+        status = uct_ud_iface_get_next_pending(iface, &ep, &skb);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return;
+        }
+        if (status == UCS_INPROGRESS) {
+            continue;
+        }
+        tx_skb(iface, ep, skb);
+        uct_ud_ep_log_tx_tag("PENDING_TX: (skb)", ep, skb->neth, skb->len);
+    }
+    while (!ucs_queue_is_empty(&iface->tx.pending_ops));
 }
 

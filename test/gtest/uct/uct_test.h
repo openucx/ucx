@@ -162,6 +162,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     rc_mlx5, \
     rc, \
     ud, \
+    ud_mlx5, \
     cm
 
 /**

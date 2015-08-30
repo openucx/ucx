@@ -124,7 +124,7 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         sg->lkey   = 0;
         sg->length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
         *is_inline = 1;
-        ds         = ucs_div_round_up(sizeof(inl) + sg->length,
+        ds         = ucs_div_round_up(sizeof(*inl) + sg->length,
                                      UCT_IB_MLX5_WQE_SEG_SIZE);
     } else {
         dpseg      = *dseg_p;
@@ -151,6 +151,12 @@ static uint64_t network_to_host(uint64_t value, int size)
     } else {
         return value;
     }
+}
+static void uct_ib_mlx5_dump_dgram(char *buf, size_t max, struct mlx5_wqe_datagram_seg *seg)
+{
+    snprintf(buf, max-1, " [rlid: %d dqp: 0x%x]", 
+             ntohs(mlx5_av_base(&seg->av)->rlid), 
+             ntohl(mlx5_av_base(&seg->av)->dqp_dct) & ~UCT_IB_MLX5_EXTENDED_UD_AV);
 }
 
 static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qstart,
@@ -196,7 +202,19 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
         seg = qstart;
     }
 
-    /* TODO AV segment */
+    if (qp_type == IBV_QPT_UD) {
+        struct mlx5_wqe_datagram_seg *av;
+
+        av = (struct mlx5_wqe_datagram_seg *)seg;
+        uct_ib_mlx5_dump_dgram(s, ends - s, av);
+        s += strlen(s);
+
+        seg = (char *)seg + sizeof(struct mlx5_wqe_datagram_seg);
+        ds -= ucs_div_round_up(sizeof(struct mlx5_wqe_datagram_seg), UCT_IB_MLX5_WQE_SEG_SIZE);
+    }
+    if (seg == qend) {
+        seg = qstart;
+    }
 
     /* Remote address segment */
     if (op->flags & UCT_IB_OPCODE_FLAG_HAS_RADDR) {
@@ -269,6 +287,7 @@ static void uct_ib_mlx5_wqe_dump(enum ibv_qp_type qp_type, void *wqe, void *qsta
     /* Data segments*/
     i = 0;
     inline_bitmap = 0;
+
     while ((ds > 0) && (i < sizeof(sg_list) / sizeof(sg_list[0]))) {
         ds -= uct_ib_mlx5_parse_dseg(&seg, qstart, qend, &sg_list[i], &is_inline);
         if (is_inline) {
@@ -291,11 +310,28 @@ void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
     uct_log_data(file, line, function, buf);
 }
 
+void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function, struct mlx5_cqe64 *cqe)
+{
+    char buf[256] = {0};
+
+    snprintf(buf, sizeof(buf) - 1,
+            "CQE(op_own 0x%x) qp 0x%x sqp 0x%x slid %d bytes %d wqe_idx %d ",
+            (unsigned)cqe->op_own,
+            (unsigned)(ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)),
+            (unsigned)(ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER)),
+            (unsigned)ntohs(cqe->slid),
+            (unsigned)ntohl(cqe->byte_cnt),
+            (unsigned)ntohs(cqe->wqe_counter));
+
+    uct_log_data(file, line, function, buf);
+}
+
 void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                           enum ibv_qp_type qp_type, struct mlx5_cqe64 *cqe, void *data,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
+
     uct_ib_log_dump_recv_completion(qp_type,
                                     ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER),
                                     ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER),

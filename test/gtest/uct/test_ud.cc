@@ -9,7 +9,7 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
-#include "uct/ib/ud/ud_ep.h"
+#include <uct/ib/ud/base/ud_ep.h>
 };
 /* TODO: disable ud async progress for most tests once we have it */
 class test_ud : public uct_test {
@@ -311,4 +311,5 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud)
+_UCT_INSTANTIATE_TEST_CASE(test_ud, ud_mlx5)
 

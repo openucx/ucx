@@ -17,6 +17,12 @@
 #define UCT_MM_TL_NAME "mm"
 #define UCT_MM_FIFO_CTL_SIZE_ALIGNED  ucs_align_up(sizeof(uct_mm_fifo_ctl_t),UCS_SYS_CACHE_LINE_SIZE)
 
+#define UCT_MM_GET_FIFO_SIZE(iface)  (UCS_SYS_CACHE_LINE_SIZE - 1 +  \
+                                      UCT_MM_FIFO_CTL_SIZE_ALIGNED + \
+                                     ((iface)->config.fifo_size *    \
+                                     (iface)->elem_size))
+
+
 typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
     unsigned                 fifo_size;            /* Size of the receive FIFO */

@@ -144,6 +144,9 @@ AS_IF([test "x$with_ib" == xyes],
                          struct ibv_async_event.element.dct],
                         [], [], [[#include <infiniband/verbs_exp.h>]])
 
+       AC_CHECK_MEMBERS([struct mlx5_wqe_av.base],
+                        [], [], [[#include <infiniband/mlx5_hw.h>]])
+
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
        AS_IF([test "x$with_dc" != xno],

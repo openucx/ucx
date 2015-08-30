@@ -17,9 +17,9 @@ struct uct_mm_ep {
     uct_base_ep_t       super;
 
     /* Remote peer */
-    void                *remote_mem;/* pointer to the beginning of the destination's shared_mem */
-    uct_mm_fifo_ctl_t   *fifo_ctl;  /* pointer to the destination's ctl struct in the receive fifo */
-    void                *fifo;      /* fifo elements (destination's receive fifo) */
+    uct_mm_remote_seg_t  mapped_desc;/* pointer to the descriptor of the destination's shared_mem */
+    uct_mm_fifo_ctl_t    *fifo_ctl;   /* pointer to the destination's ctl struct in the receive fifo */
+    void                 *fifo;       /* fifo elements (destination's receive fifo) */
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,

@@ -183,15 +183,19 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h work
         goto clean_famo;
     }
 
-    ucs_notifier_chain_add(&worker->progress_chain, uct_ugni_progress, self);
-
     rc = ugni_activate_iface(&self->super);
-    if (UCS_OK == rc) {
-        goto exit;
+    if (UCS_OK != rc) {
+        ucs_error("Failed to activate the interface");
+        goto clean_get_buffer;
     }
 
-    ucs_error("Failed to activate interface");
+    /* TBD: eventually the uct_ugni_progress has to be moved to 
+     * rdma layer so each ugni layer will have own progress */
+    ucs_notifier_chain_add(&worker->progress_chain, uct_ugni_progress, self);
+    pthread_mutex_unlock(&uct_ugni_global_lock);
+    return UCS_OK;
 
+clean_get_buffer:
     ucs_mpool_destroy(self->free_desc_get_buffer);
 clean_famo:
     ucs_mpool_destroy(self->free_desc_famo);
@@ -202,6 +206,7 @@ clean_desc_get:
 clean_desc:
     ucs_mpool_destroy(self->free_desc);
 exit:
+    ucs_error("Failed to activate interface");
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return rc;
 }

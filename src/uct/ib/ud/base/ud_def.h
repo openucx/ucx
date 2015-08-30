@@ -16,7 +16,6 @@
 #include <uct/ib/base/ib_iface.h>
 
 #define UCT_UD_QP_HASH_SIZE     256    
-#define UCT_UD_QKEY             0x1ee7a330
 #define UCT_UD_MAX_SGE          2
 #define UCT_UD_MAX_WINDOW       1024 /* TODO: make it config param */
 #define UCT_UD_TX_MODERATION    64
@@ -117,6 +116,11 @@ typedef struct uct_ud_send_skb {
     uint32_t                len;        /* data size */
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED uct_ud_send_skb_t;
+
+typedef struct uct_ud_send_skb_inl {
+    uct_ud_send_skb_t  super;
+    uct_ud_neth_t      neth;
+} UCS_S_PACKED uct_ud_send_skb_inl_t;
 
 typedef struct uct_ud_recv_skb {
     uct_ib_iface_recv_desc_t super;

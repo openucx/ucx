@@ -10,9 +10,9 @@
 
 #include <uct/ib/base/ib_verbs.h>
 
-#include "ud_iface.h"
-#include "ud_ep.h"
-#include "ud_def.h"
+#include <uct/ib/ud/base/ud_iface.h>
+#include <uct/ib/ud/base/ud_ep.h>
+#include <uct/ib/ud/base/ud_def.h>
 
 
 typedef struct {
@@ -25,8 +25,7 @@ typedef struct {
     struct {
         struct ibv_sge      sge[UCT_UD_MAX_SGE];
         struct ibv_send_wr  wr_inl;
-        struct ibv_send_wr  wr_bcp;
-        struct ibv_send_wr  wr_ctl;
+        struct ibv_send_wr  wr_skb;
     } tx;
 } uct_ud_verbs_iface_t;
 
