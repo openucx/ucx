@@ -121,9 +121,15 @@ typedef struct uct_iface_ops {
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uint32_t *result, uct_completion_t *comp);
 
-    /* Synchronization */
+    /* Pending queue */
 
-    ucs_status_t (*ep_req_notify)(uct_ep_h ep, ucs_callback_t *cb);
+    ucs_status_t (*ep_pending_add)(uct_ep_h ep, uct_pending_req_t *n);
+
+    ucs_status_t (*ep_pending_purge)(uct_ep_h ep, uct_pending_callback_t cb);
+
+    /* TODO purge per iface */
+
+    /* Synchronization */
 
     ucs_status_t (*ep_flush)(uct_ep_h ep);
 

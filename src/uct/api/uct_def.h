@@ -17,6 +17,7 @@
 #define UCT_PD_COMPONENT_NAME_MAX  8
 #define UCT_PD_NAME_MAX          16
 #define UCT_DEVICE_NAME_MAX      32
+#define UCT_PENDING_REQ_PRIV_LEN 16
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_INVALID_MEM_HANDLE   NULL
@@ -35,6 +36,7 @@ typedef void                     *uct_rkey_ctx_h;
 typedef struct uct_iface_attr    uct_iface_attr_t;
 typedef struct uct_pd_attr       uct_pd_attr_t;
 typedef struct uct_completion    uct_completion_t;
+typedef struct uct_pending_req  uct_pending_req_t;
 typedef struct uct_worker        *uct_worker_h;
 typedef struct uct_pd            uct_pd_t;
 
@@ -67,6 +69,21 @@ typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
  *                       initially passed to the operation.
  */
 typedef void (*uct_completion_callback_t)(uct_completion_t *self);
+
+
+/**
+ * Callback to process pending requests.
+ *
+ * @param [in]  self     Pointer to relevant pending structure, which was
+ *                       initially passed to the operation.
+ *
+ * @return UCS_OK              - This pending request should be removed.
+ *         UCS_INPROGRESS      - Keep this pending request on the queue, and
+ *                               continue to next requests.
+ *         < 0 (UCS_ERR_xx)    - Keep this pending request on the queue, and
+ *                               stop processing the queue.
+ */
+typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
 
 
 /**

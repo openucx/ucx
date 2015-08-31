@@ -98,7 +98,8 @@ UCS_CLASS_INIT_FUNC(ucp_dummy_ep_t, ucp_ep_h ucp_ep) {
     memset(&self->iface, 0, sizeof(self->iface));
     self->iface.ops.ep_flush          = (void*)ucs_empty_function_return_success;
     self->iface.ops.ep_destroy        = UCS_CLASS_DELETE_FUNC_NAME(ucp_dummy_ep_t);
-    self->iface.ops.ep_req_notify     = (void*)ucs_empty_function_return_success;
+    self->iface.ops.ep_pending_add    = (void*)ucs_empty_function_return_success;
+    self->iface.ops.ep_pending_purge  = (void*)ucs_empty_function_return_success;
     self->iface.ops.ep_put_short      = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_put_bcopy      = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_put_zcopy      = (void*)ucp_dummy_ep_send_func;
@@ -149,7 +150,8 @@ static void ucp_address_iter_init(ucp_address_t *address, void **iter)
 }
 
 static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
-                                 char *tl_name, ucp_rsc_index_t *pd_index)
+                                 char *tl_name, ucp_rsc_index_t *pd_index,
+                                 ucp_rsc_index_t *rsc_index)
 {
     char *ptr = *iter;
     uint8_t iface_addr_len;
@@ -169,7 +171,8 @@ static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
     tl_name[tl_name_len] = '\0';
     ptr += tl_name_len;
 
-    *pd_index = *((ucp_rsc_index_t*)ptr++);
+    *pd_index  = *((ucp_rsc_index_t*)ptr++);
+    *rsc_index = *((ucp_rsc_index_t*)ptr++);
 
     *iter = ptr;
     return 1;
@@ -188,6 +191,7 @@ static struct sockaddr * ucp_wireup_msg_get_aux_addr(ucp_wireup_msg_t *msg)
 static void ucp_wireup_log(ucp_worker_h worker, ucp_wireup_msg_t *msg, int is_send)
 {
     ucp_context_h context = worker->context;
+    int af;
 
     #define UCP_WIREUP_MSG_FLAGS_FMT  "%c%c%c%c%c"
     #define UCP_WIREUP_MSG_FLAGS_ARG(_flags) \
@@ -197,21 +201,24 @@ static void ucp_wireup_log(ucp_worker_h worker, ucp_wireup_msg_t *msg, int is_se
         ((_flags) & UCP_WIREUP_FLAG_ADDR    ) ? 't' : '-', \
         ((_flags) & UCP_WIREUP_FLAG_AUX_ADDR) ? 'x' : '-'
 
+    af = (msg->flags & UCP_WIREUP_FLAG_ADDR ) ?
+                    ucp_wireup_msg_get_addr(msg)->sa_family :
+                    0;
+
     if (is_send) {
         ucs_trace_data("TX: WIREUP "UCP_WIREUP_MSG_FLAGS_FMT" "
                        "[uuid 0x%"PRIx64" from "UCT_TL_RESOURCE_DESC_FMT" pd %s to %d af %d]",
                        UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), msg->src_uuid,
                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[msg->src_rsc_index].tl_rsc),
                        context->pd_rscs[msg->src_pd_index].pd_name,
-                       msg->dst_rsc_index,
-                       ucp_wireup_msg_get_addr(msg)->sa_family);
+                       msg->dst_rsc_index, af);
     } else {
         ucs_trace_data("RX: WIREUP "UCP_WIREUP_MSG_FLAGS_FMT" "
                        "[uuid 0x%"PRIx64" from %d pd %d to "UCT_TL_RESOURCE_DESC_FMT" af %d]",
                        UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), msg->src_uuid,
                        msg->src_rsc_index, msg->src_pd_index,
                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[msg->dst_rsc_index].tl_rsc),
-                       ucp_wireup_msg_get_addr(msg)->sa_family);
+                       af);
     }
 }
 
@@ -300,8 +307,9 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
     status = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP,
                              (uct_pack_callback_t)memcpy, msg, total_len);
     if (status != UCS_OK) {
-        ucs_debug("failed to send conn msg: %s%s", ucs_status_string(status),
-                  (status == UCS_ERR_NO_RESOURCE) ? ", will retry" : "");
+        if (status != UCS_ERR_NO_RESOURCE) {
+            ucs_error("failed to send conn msg: %s", ucs_status_string(status));
+        }
         goto err_free;
     }
 
@@ -335,15 +343,20 @@ static uct_ep_h ucp_wireup_msg_ep(ucp_ep_h ep)
     ucs_fatal("no valid transport to send wireup message");
 }
 
-static ucs_status_t ucp_ep_wireup_op_progress(ucp_ep_h ep, ucp_ep_pending_op_t *op,
-                                              uct_ep_h *uct_ep_p)
+static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
 {
-    ucp_ep_wireup_op_t *wireup_op = ucs_derived_of(op, ucp_ep_wireup_op_t);
+    ucp_ep_wireup_op_t *wireup_op = ucs_container_of(self, ucp_ep_wireup_op_t,
+                                                     super.uct);
+    ucp_ep_h ep = wireup_op->super.ep;
+    ucs_status_t status;
 
-    *uct_ep_p = ucp_wireup_msg_ep(ep);
-    return ucp_wireup_send_am(ep, *uct_ep_p, wireup_op->flags,
-                                 wireup_op->dst_rsc_index,
-                                 wireup_op->dst_aux_rsc_index);
+    status = ucp_wireup_send_am(ep, ucp_wireup_msg_ep(ep), wireup_op->flags,
+                                wireup_op->dst_rsc_index,
+                                wireup_op->dst_aux_rsc_index);
+    if (status == UCS_OK) {
+        ucs_free(wireup_op);
+    }
+    return status;
 }
 
 static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint32_t flags,
@@ -367,7 +380,7 @@ static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint32_t flags,
         return UCS_ERR_NO_MEMORY;
     }
 
-    wireup_op->super.progress    = ucp_ep_wireup_op_progress;
+    wireup_op->super.uct.func    = ucp_ep_wireup_op_progress;
     wireup_op->flags             = flags;
     wireup_op->dst_rsc_index     = dst_rsc_index;
     wireup_op->dst_aux_rsc_index = dst_aux_rsc_index;
@@ -723,9 +736,8 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
     /*
      * Find the best combination of local resource and reachable remote address.
      */
-    dst_rsc_index = 0;
     ucp_address_iter_init(address, &iter);
-    while (ucp_address_iter_next(&iter, &addr, tl_name, &pd_index)) {
+    while (ucp_address_iter_next(&iter, &addr, tl_name, &pd_index, &dst_rsc_index)) {
 
         for (src_rsc_index = 0; src_rsc_index < context->num_tls; ++src_rsc_index) {
             resource   = &context->tl_rscs[src_rsc_index].tl_rsc;
@@ -742,8 +754,9 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
             *reachable_pds |= UCS_BIT(pd_index);
 
             score = score_func(worker, resource, iface, iface_attr);
-            ucs_trace("%s " UCT_TL_RESOURCE_DESC_FMT " score %.2f",
-                      title, UCT_TL_RESOURCE_DESC_ARG(resource), score);
+            ucs_trace("%s " UCT_TL_RESOURCE_DESC_FMT " [%d->%d] score %.2f",
+                      title, UCT_TL_RESOURCE_DESC_ARG(resource), src_rsc_index,
+                      dst_rsc_index, score);
             if (score > best_score) {
                 ucs_assert(addr != NULL);
                 best_score       = score;
@@ -753,17 +766,15 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
                 *dst_pd_index_p  = pd_index;
             }
         }
-
-        ++dst_rsc_index;
     }
 
     if (best_addr == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_debug("selected for %s: " UCT_TL_RESOURCE_DESC_FMT " to %d pd %d", title,
+    ucs_debug("selected for %s: " UCT_TL_RESOURCE_DESC_FMT " [%d->%d] pd %d", title,
               UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[*src_rsc_index_p].tl_rsc),
-              *dst_rsc_index_p, *dst_pd_index_p);
+              *src_rsc_index_p, *dst_rsc_index_p, *dst_pd_index_p);
     *addr_p = best_addr;
     return UCS_OK;
 }

@@ -11,6 +11,7 @@
 #include <uct/api/uct.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
@@ -250,6 +251,100 @@ typedef struct uct_iface_mpool_config {
  */
 typedef void (*uct_iface_mpool_init_obj_cb_t)(uct_iface_h iface, void *obj,
                 uct_mem_h memh);
+
+
+/**
+ * Base structure for private data held inside a pending request. Contains
+ * a queue element so we can put this on a queue.
+ */
+typedef struct {
+    ucs_queue_elem_t  queue;
+} uct_pending_req_priv_t;
+
+
+/**
+ * Add a pending request to the queue.
+ */
+#define uct_pending_req_push(_queue, _req) \
+    ucs_queue_push((_queue), &uct_pending_req_priv(_req)->queue);
+
+
+/**
+ * Dispatch all requests in the pending queue, as long as _cond holds true.
+ * _cond is an expression which can use "_priv" variable.
+ *
+ * @param _priv   Variable which will hold a pointer to request private data.
+ * @param _queue  The pending queue.
+ * @param _cond   Condition which should be true in order to keep dispatching.
+ *
+ * TODO support a callback returning UCS_INPROGRESS.
+ */
+#define uct_pending_queue_dispatch(_priv, _queue, _cond) \
+    while (!ucs_queue_is_empty(_queue)) { \
+        uct_pending_req_priv_t *_base_priv; \
+        uct_pending_req_t *_req; \
+        ucs_status_t _status; \
+        \
+        _base_priv = ucs_queue_head_elem_non_empty((_queue), uct_pending_req_priv_t, \
+                                                   queue); \
+        \
+        UCS_STATIC_ASSERT(sizeof(*(_priv)) <= UCT_PENDING_REQ_PRIV_LEN); \
+        _priv = ucs_derived_of(_base_priv, typeof(*(_priv))); \
+        \
+        if (!(_cond)) { \
+            break; \
+        } \
+        \
+        _req = ucs_container_of(priv, uct_pending_req_t, priv); \
+        ucs_queue_pull_non_empty(_queue); \
+        _status = _req->func(_req); \
+        if (_status != UCS_OK) { \
+            ucs_queue_push_head(_queue, &_base_priv->queue); \
+            break; \
+        } \
+    }
+
+
+/**
+ * Purge messages from the pending queue.
+ *
+ * @param _priv   Variable which will hold a pointer to request private data.
+ * @param _queue  The pending queue.
+ * @param _cond   Condition which should be true in order to remove a request.
+ * @param _cb     Callback for purging the request.
+ * @return Callback return value.
+ */
+#define uct_pending_queue_purge(_priv, _queue, _cond, _cb) \
+    ({ \
+        uct_pending_req_priv_t *_base_priv; \
+        ucs_queue_iter_t _iter; \
+        ucs_status_t _status; \
+        \
+        ucs_queue_for_each_safe(_base_priv, _iter, _queue, queue) { \
+            _priv = ucs_derived_of(_base_priv, typeof(*_priv)); \
+            if (_cond) { \
+                ucs_queue_del_iter(_queue, _iter); \
+                _status = _cb(ucs_container_of(_base_priv, uct_pending_req_t, priv)); \
+                if (_status != UCS_OK) { \
+                    ucs_queue_push_head(_queue, &_base_priv->queue); \
+                    goto out; \
+                } \
+            } \
+        } \
+        _status = UCS_OK; \
+    out: \
+        _status; \
+    })
+
+
+/**
+ * @return Private data field of a pending request.
+ */
+static inline uct_pending_req_priv_t* uct_pending_req_priv(uct_pending_req_t *req)
+{
+    UCS_STATIC_ASSERT(sizeof(uct_pending_req_priv_t) <= UCT_PENDING_REQ_PRIV_LEN);
+    return (uct_pending_req_priv_t*)&req->priv;
+}
 
 
 extern ucs_config_field_t uct_iface_config_table[];

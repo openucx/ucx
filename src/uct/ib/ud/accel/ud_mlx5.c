@@ -461,7 +461,9 @@ uct_iface_ops_t uct_ud_mlx5_iface_ops = {
     .ep_am_short           = uct_ud_mlx5_ep_am_short,
     .ep_am_bcopy           = uct_ud_mlx5_ep_am_bcopy,
 
-    .ep_req_notify         = uct_ud_ep_req_notify,
+    .ep_pending_add        = (void*)ucs_empty_function_return_success, /* TODO */
+    .ep_pending_purge      = (void*)ucs_empty_function_return_success,
+
     .ep_flush              = uct_ud_ep_flush
 };
 

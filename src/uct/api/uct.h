@@ -278,6 +278,19 @@ struct uct_completion {
 };
 
 
+/**
+ * @ingroup RESOURCE
+ * @brief Pending request.
+ *
+ * This structure should be passed to uct_pending_add() and is used to signal
+ * new available resources back to user.
+ */
+struct uct_pending_req {
+    uct_pending_callback_t    func;   /**< User callback function */
+    char                      priv[UCT_PENDING_REQ_PRIV_LEN]; /**< Used internally by UCT */
+};
+
+
 extern const char *uct_alloc_method_names[];
 
 
@@ -978,20 +991,45 @@ UCT_INLINE_API ucs_status_t uct_ep_atomic_cswap32(uct_ep_h ep, uint32_t compare,
 
 /**
  * @ingroup RESOURCE
- * @brief Request a notification when more send resources are available on this
- *        endpoint.
+ * @brief Add a pending request to an endpoint.
  *
- *  This function can be used when send operations fail with ERR_NO_RESOURCE, and
- * the user would like to know when send resources become available (opposed to
- * repeatedly calling progress/send until it returns OK).
+ *  Add a pending request to the endpoint pending queue. The request will be
+ * dispatched when the endpoint could potentially have additional send resources.
  *
- * @param ep    Endpoint to request notification on.
- * @param cb    Completion callback, which would be invoked (once) when more
- *              resources become available.
+ * @param [in]  ep    Endpoint to add the pending request to.
+ * @param [in]  req   Pending request, which would be dispatched when more
+ *                    resources become available. The user is expected to initialize
+ *                    the "func" field.
+ *                    After passed to the function, the request is owned by UCT,
+ *                    until the callback is called and returns UCS_OK.
+ *
+ * @return UCS_OK       - request added to pending queue
+ *         UCS_ERR_BUSY - request was not added to pending queue, because send
+ *                        resources are available now. The user is advised to
+ *                        retry.
  */
-UCT_INLINE_API ucs_status_t uct_ep_req_notify(uct_ep_h ep, ucs_callback_t *cb)
+UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req)
 {
-    return ep->iface->ops.ep_req_notify(ep, cb);
+    return ep->iface->ops.ep_pending_add(ep, req);
+}
+
+
+/**
+ * @ingroup RESOURCE
+ * @brief Remove all pending requests from an endpoint.
+ *
+ *  Remove pending requests from the given endpoint and pass them to the provided
+ * callback function. The callback returns != UCS_OK, processing would stop and
+ * this value would be returned.
+ *
+ * @param [in]  ep  Endpoint to remove pending requests from.
+ * @param [in]  cb  Callback to pass the removed requests to.
+ *
+ * @return Return value from the provided callback.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
+{
+    return ep->iface->ops.ep_pending_purge(ep, cb);
 }
 
 

@@ -23,6 +23,7 @@ typedef struct uct_cm_iface_config {
     ucs_async_mode_t       async_mode;
     double                 timeout;
     unsigned               retry_count;
+    unsigned               max_inflight;
 } uct_cm_iface_config_t;
 
 
@@ -35,10 +36,11 @@ typedef struct uct_cm_iface {
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
     volatile uint32_t      inflight;    /* Atomic: number of inflight sends */
-    ucs_list_link_t        notify_list;
+    ucs_queue_head_t       notify_q;    /* Notification queue */
 
     struct {
         int                timeout_ms;
+        uint32_t           max_inflight;
         uint8_t            retry_count;
     } config;
 } uct_cm_iface_t;
@@ -50,10 +52,6 @@ typedef struct uct_cm_iface {
 typedef struct uct_cm_ep {
     uct_base_ep_t          super;
     uct_sockaddr_ib_t      dest_addr;
-    struct {
-        ucs_callback_t     *cb;
-        ucs_list_link_t    list;
-    } notify;
 } uct_cm_ep_t;
 
 
@@ -64,6 +62,15 @@ typedef struct uct_cm_hdr {
     uint8_t                am_id;   /* Active message ID */
     uint8_t                length;  /* Payload length */
 } UCS_S_PACKED uct_cm_hdr_t;
+
+
+/**
+ * CM pending request private data
+ */
+typedef struct {
+    uct_pending_req_priv_t super;
+    uct_cm_ep_t            *ep;
+} uct_cm_pending_req_priv_t;
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
@@ -80,7 +87,8 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                 uct_pack_callback_t pack_cb, void *arg,
                                 size_t length);
 
-ucs_status_t uct_cm_ep_req_notify(uct_ep_h tl_ep, ucs_callback_t *cb);
+ucs_status_t uct_cm_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req);
+ucs_status_t uct_cm_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
 

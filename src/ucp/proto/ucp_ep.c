@@ -12,40 +12,6 @@
 #include <string.h>
 
 
-static void ucp_ep_progress_pending(ucs_callback_t *self)
-{
-    ucp_ep_h ep = ucs_container_of(self, ucp_ep_t, notify);
-    ucp_worker_h worker = ep->worker;
-    ucp_ep_pending_op_t *op;
-    ucs_status_t status;
-    uct_ep_h uct_ep;
-
-    ucs_trace_func("ep=%p", ep);
-
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    while (!ucs_queue_is_empty(&ep->pending_q)) {
-        op = ucs_queue_head_elem_non_empty(&ep->pending_q, ucp_ep_pending_op_t,
-                                           queue);
-        status = op->progress(ep, op, &uct_ep);
-        if (status == UCS_ERR_NO_RESOURCE) {
-            /* We could not progress the operation. Request another notification
-             * from the transport, and keep the endpoint in pending state.
-             */
-            uct_ep_req_notify(uct_ep, &ep->notify);
-            goto out;
-        }
-
-        ucs_queue_pull_non_empty(&ep->pending_q);
-        ucs_free(op);
-    }
-
-    ep->state &= ~UCP_EP_STATE_PENDING;
-
-out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
-}
-
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *message, ucp_ep_h *ep_p)
 {
@@ -67,8 +33,6 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->rsc_index            = -1;
     ep->dst_pd_index         = -1;
     ep->state                = 0;
-    ucs_queue_head_init(&ep->pending_q);
-    ep->notify.func          = ucp_ep_progress_pending;
     ep->wireup.aux_ep        = NULL;
     ep->wireup.next_ep       = NULL;
 
@@ -94,9 +58,19 @@ void ucp_ep_ready_to_send(ucp_ep_h ep)
     ep->config.max_bcopy_get = iface_attr->cap.get.max_bcopy;
 }
 
+static ucs_status_t ucp_pending_req_release(uct_pending_req_t *self)
+{
+    ucp_ep_pending_op_t *op = ucs_container_of(self, ucp_ep_pending_op_t, uct);
+    ucs_free(op);
+    return UCS_OK;
+}
+
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep)
 {
     ucs_assert_always(uct_ep != NULL);
+
+    uct_ep_pending_purge(uct_ep, ucp_pending_req_release);
+
     while (uct_ep_flush(uct_ep) != UCS_OK) {
         ucp_worker_progress(ep->worker);
     }
@@ -141,20 +115,10 @@ err:
     return status;
 }
 
-static void ucs_ep_purge_pending(ucp_ep_h ep)
-{
-    ucp_ep_pending_op_t *op;
-
-    ucs_queue_for_each_extract(op, &ep->pending_q, queue, 1) {
-        ucs_free(op); /* TODO release callback */
-    }
-}
-
 void ucp_ep_destroy(ucp_ep_h ep)
 {
     ucs_debug("destroy ep %p", ep);
     ucp_wireup_stop(ep);
-    ucs_ep_purge_pending(ep);
     ucp_ep_destroy_uct_ep_safe(ep, ep->uct_ep);
     ucs_free(ep);
 }
