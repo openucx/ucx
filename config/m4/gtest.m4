@@ -1,6 +1,5 @@
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-# $COPYRIGHT$
-# $HEADER$
+# See file LICENSE for terms.
 #
 
 dnl GTEST_LIB_CHECK([minimum version [,

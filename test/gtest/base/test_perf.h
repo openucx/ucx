@@ -1,8 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 *
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #ifndef TEST_PERF_H_

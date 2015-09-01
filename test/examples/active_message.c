@@ -1,7 +1,6 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #include <ucs/type/status.h>

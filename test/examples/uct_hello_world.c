@@ -1,8 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 *
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #define HAVE_CONFIG_H /* Force using config.h, so test would fail if header

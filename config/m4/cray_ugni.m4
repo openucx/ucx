@@ -1,7 +1,6 @@
 #
 # Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-# $COPYRIGHT$
-# $HEADER$
+# See file LICENSE for terms.
 #
 
 cray_ugni_supported=no

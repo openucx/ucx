@@ -1,8 +1,7 @@
 /**_t
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 *
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #include "ucx_info.h"

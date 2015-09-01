@@ -1,8 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
 *
-* $COPYRIGHT$
-* $HEADER$
+* See file LICENSE for terms.
 */
 
 #ifndef UCS_TEST_HELPERS_H
