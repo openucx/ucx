@@ -16,7 +16,64 @@
 
 
 /**
- * @ingroup CONTEXT
+* @defgroup UCP_CONFIG UCP Configuration
+* @{
+* This section describes routines for configuration
+* of the UCP network layer
+* @}
+*/
+
+/**
+ * @defgroup UCP_CONTEXT UCP Application Context
+ * @{
+ * Application  context is a primary concept of UCP design which
+ * provides an isolation mechanism, allowing resources associated
+ * with the context to separate or share network communication context
+ * across multiple instances of applications.
+ *
+ * This section provides a detailed description of this concept and
+ * routines associated with it.
+ *
+ * @}
+ */
+
+ /**
+ * @defgroup UCP_WORKER UCP Worker
+ * @{
+ * UCP Worker routines
+ * @}
+ */
+
+ /**
+ * @defgroup UCP_WORKER UCP Worker
+ * @{
+ * UCP Worker routines
+ * @}
+ */
+
+ /**
+ * @defgroup UCP_MEM UCP Memory routines
+ * @{
+ * UCP Memory routines
+ * @}
+ */
+
+ /**
+ * @defgroup UCP_ENDPOINT UCP Endpoint
+ * @{
+ * UCP Endpoint routines
+ * @}
+ */
+
+ /**
+ * @defgroup UCP_COMM UCP Communication routines
+ * @{
+ * UCP Communication routines
+ * @}
+ */
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP features
  */
 enum {
@@ -27,7 +84,7 @@ enum {
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONFIG
  * @brief UCP configuration
  *
  *  This structure defines the configuration for UCP context.
@@ -78,7 +135,7 @@ typedef void (*ucp_user_progress_func_t)(void *arg);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONFIG
  * @brief Read UCP configuration.
  *
  * @param [in]  env_prefix    If non-NULL, search for environment variables
@@ -95,7 +152,7 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONFIG
  * @brief Release configuration memory returned from @ref ucp_config_read().
  *
  * @param [in]  config        Configuration to release.
@@ -104,7 +161,7 @@ void ucp_config_release(ucp_config_t *config);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONFIG
  * @brief Print UCP configuration.
  *
  * @param [in]  config        Configuration to print.
@@ -117,7 +174,7 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONTEXT
  * @brief Initialize global ucp context.
  *
  * @param [in]  config            UCP configuration returned from @ref ucp_config_read().
@@ -134,7 +191,7 @@ ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONTEXT
  * @brief Destroy global ucp context.
  *
  * @param [in] context_p   Handle to the ucp context.
@@ -143,7 +200,7 @@ void ucp_cleanup(ucp_context_h context_p);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_WORKER
  * @brief Create a worker object.
  *
  *  The worker represents a progress engine. Multiple progress engines can be
@@ -160,7 +217,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_WORKER
  * @brief Destroy a worker object.
  *
  * @param [in]  worker        Worker object to destroy.
@@ -169,7 +226,7 @@ void ucp_worker_destroy(ucp_worker_h worker);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_WORKER
  * @brief Register user worker progress callback. The callback is called
  * from @ref ucp_worker_progress().
  *
@@ -182,7 +239,7 @@ void ucp_worker_progress_register(ucp_worker_h worker,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_WORKER
  * @brief Get the address of worker object.
  *
  *  Returns the address of a worker object. This address should be passed to any
@@ -199,7 +256,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_WORKER
  * @brief Release an address of worker object.
  *
  * @param [in] address            Address to release, returned from
@@ -209,7 +266,7 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_WORKER
  * @brief Progress all communications on a specific worker.
  *
  *  This function progresses all communications and returns handles to completed
@@ -226,7 +283,7 @@ void ucp_worker_progress(ucp_worker_h worker);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_ENDPOINT
  * @brief Create and open an endpoint.
  *
  *  Create an endpoint to remote peer. This function is non-blocking, and
@@ -245,7 +302,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_ENDPOINT
  * @brief Close the remote endpoint.
  *
  * @param [in]  ep   Handle to the remote endpoint.
@@ -254,7 +311,7 @@ void ucp_ep_destroy(ucp_ep_h ep);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief Map or allocate memory for zero-copy sends and remote access.
  * 
  * @param [in]     context    UCP context to map memory on.
@@ -269,7 +326,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief Undo the operation of uct_mem_map().
  *
  * @param [in]  context     UCP context which was used to allocate/map the memory.
@@ -279,7 +336,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief Serialize memory region remote access key.
  *
  * @param [in]  context       UCP context.
@@ -293,7 +350,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief Release packed remote key buffer, returned from @ref ucp_rkey_pack().
  *
  * @param [in]  rkey_buffer   Buffer to release.
@@ -302,7 +359,7 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief Create remote access key from serialized data.
  *
  * @param [in]  ep            Endpoint to access using the remote key.
@@ -313,7 +370,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief Destroy remote key returned from @ref ucp_rkey_unpack().
  *
  * @param [in]  ep           Endpoint which has created the remote key.
@@ -323,7 +380,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_MEM
  * @brief If possible translate remote address into local address which can be
  *        used for direct memory access
  * 
@@ -337,7 +394,7 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Send tagged message.
  *
  * This function is blocking - it returns only after the buffer can be reused.
@@ -352,7 +409,7 @@ ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Receive-match a tagged message.
  *
  * @param [in]  worker      UCP worker.
@@ -368,7 +425,7 @@ ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t length,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Remote put. Returns when local buffer is safe for reuse.
  *
  *  Write a buffer to remote memory.
@@ -384,7 +441,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Remote get. Returns when data are in local buffer
  *
  *  Read a buffer from remote memory.
@@ -400,7 +457,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 32-bit add.
  *
  * Atomically add a value to a remote 32-bit integer variable.
@@ -416,7 +473,7 @@ ucs_status_t ucp_atomic_add32(ucp_ep_h ep, uint32_t add,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 64-bit add.
  *
  * Atomically add a value to a remote 64-bit integer variable.
@@ -432,7 +489,7 @@ ucs_status_t ucp_atomic_add64(ucp_ep_h ep, uint64_t add,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 32-bit fetch-and-add.
  *
  * Atomically add a value to a remote 32-bit integer variable, and put the
@@ -450,7 +507,7 @@ ucs_status_t ucp_atomic_fadd32(ucp_ep_h ep, uint32_t add, uint64_t remote_addr,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 64-bit fetch-and-add.
  *
  * Atomically add a value to a remote 64-bit integer variable, and put the
@@ -467,7 +524,7 @@ ucs_status_t ucp_atomic_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
                                ucp_rkey_h rkey, uint64_t *result);
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 32-bit swap.
  *
  * Atomically assign a new value to a remote 32-bit variable, and put the
@@ -485,7 +542,7 @@ ucs_status_t ucp_atomic_swap32(ucp_ep_h ep, uint32_t swap, uint64_t remote_addr,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 64-bit swap.
  *
  * Atomically assign a new value to a remote 64-bit variable, and put the
@@ -503,7 +560,7 @@ ucs_status_t ucp_atomic_swap64(ucp_ep_h ep, uint64_t swap, uint64_t remote_addr,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 32-bit compare-and-swap.
  *
  * Atomically compare a remote 32-bit variable to "compare", if it equals - assign
@@ -524,7 +581,7 @@ ucs_status_t ucp_atomic_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  * @brief Atomic 64-bit compare-and-swap.
  *
  * Atomically compare a remote 64-bit variable to "compare", if it equals - assign
@@ -545,7 +602,7 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  *
  * @brief Force ordering between operations
  *
@@ -558,7 +615,7 @@ ucs_status_t ucp_fence(ucp_worker_h worker);
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_COMM
  *
  * @brief Force remote completion.
  *

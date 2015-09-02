@@ -23,7 +23,7 @@
 #include <sched.h>
 
 /**
-* @defgroup RESOURCE   Communication Resource
+* @defgroup RESOURCE   UCT Communication Resource
 * @{
 * This section describes a concept of the Communication Resource and routines
 * associated with the concept.
@@ -53,21 +53,21 @@
  */
 
 /**
- * @defgroup AM   Active messages
+ * @defgroup AM   UCT Active messages
  * @{
  * Defines active message functions.
  * @}
  */
 
 /**
- * @defgroup RMA  Remote memeory access operations.
+ * @defgroup RMA  UCT Remote memeory access operations.
  * @{
  * Defines remote memory access operairons.
  * @}
  */
 
 /**
- * @defgroup AMO   Atomic operations.
+ * @defgroup AMO   UCT Atomic operations.
  * @{
  * Defines atomic operations..
  * @}
