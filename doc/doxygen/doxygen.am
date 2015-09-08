@@ -1,3 +1,5 @@
+# Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
 #     ----- begin aminclude.am -------------------------------------
 #
 ## --------------------------------- ##
@@ -79,6 +81,8 @@ doxygen-ps: @DX_DOCDIR@/@PACKAGE@.ps
 	rm -f *.aux *.toc *.idx *.ind *.ilg *.log *.out; \
 	$(DX_LATEX) refman.tex; \
 	$(MAKEINDEX_PATH) refman.idx; \
+	$(DX_BIBTEX) refman; \
+	$(DX_LATEX) refman.tex; \
 	$(DX_LATEX) refman.tex; \
 	countdown=5; \
 	while $(DX_EGREP) 'Rerun (LaTeX|to get cross-references right)' \
@@ -108,6 +112,8 @@ doxygen-pdf: @DX_DOCDIR@/@PACKAGE@.pdf
 	rm -f *.aux *.toc *.idx *.ind *.ilg *.log *.out; \
 	$(DX_PDFLATEX) refman.tex; \
 	$(DX_MAKEINDEX) refman.idx; \
+	$(DX_BIBTEX) refman; \
+	$(DX_PDFLATEX) refman.tex; \
 	$(DX_PDFLATEX) refman.tex; \
 	countdown=5; \
 	while $(DX_EGREP) 'Rerun (LaTeX|to get cross-references right)' \
