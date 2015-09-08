@@ -36,6 +36,22 @@ static inline void ucs_list_head_init(ucs_list_link_t *head)
     head->prev = head->next = head;
 }
 
+/* Insert an element in-between to list elements. Any elements which were in this
+ * section will be discarded.
+ *
+ * @param prev Element to insert after
+ * @param next Element to insert before.
+ */
+static inline void ucs_list_insert_replace(ucs_list_link_t *prev,
+                                           ucs_list_link_t *next,
+                                           ucs_list_link_t *elem)
+{
+    elem->prev = prev;
+    elem->next = next;
+    prev->next = elem;
+    next->prev = elem;
+}
+
 /**
  * Insert an item to a list after another item.
  *
@@ -45,10 +61,7 @@ static inline void ucs_list_head_init(ucs_list_link_t *head)
 static inline void ucs_list_insert_after(ucs_list_link_t *pos,
                                          ucs_list_link_t *new_link)
 {
-    new_link->next = pos->next;
-    new_link->prev = pos;
-    pos->next->prev = new_link;
-    pos->next = new_link;
+    ucs_list_insert_replace(pos, pos->next, new_link);
 }
 
 /**
@@ -60,10 +73,7 @@ static inline void ucs_list_insert_after(ucs_list_link_t *pos,
 static inline void ucs_list_insert_before(ucs_list_link_t *pos,
                                           ucs_list_link_t *new_link)
 {
-    new_link->next = pos;
-    new_link->prev = pos->prev;
-    pos->prev->next = new_link;
-    pos->prev = new_link;
+    ucs_list_insert_replace(pos->prev, pos, new_link);
 }
 
 /**
@@ -134,16 +144,26 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
     ucs_list_insert_before(_head, _item)
 
 /**
+ * Get the previous element in the list
+ */
+#define ucs_list_prev(_elem, _type, _member) \
+    (ucs_container_of((_elem)->prev, _type, _member))
+
+/**
+ * Get the next element in the list
+ */
+#define ucs_list_next(_elem, _type, _member) \
+    (ucs_container_of((_elem)->next, _type, _member))
+
+/**
  * Get the first element in the list
  */
-#define ucs_list_head(_head, _type, _member) \
-    (ucs_container_of((_head)->next, _type, _member))
+#define ucs_list_head   ucs_list_next
 
 /**
  * Get the last element in the list
  */
-#define ucs_list_tail(_head, _type, _member) \
-    (ucs_container_of((_head)->prev, _type, _member))
+#define ucs_list_tail   ucs_list_prev
 
 /**
  * Iterate over members of the list.
