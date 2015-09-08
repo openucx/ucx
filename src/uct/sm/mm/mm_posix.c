@@ -156,6 +156,7 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
     }
 
     *local_address = ptr;
+    *cookie = 0xdeadbeef;
 
 err_close_fd:
     /* closing the fd here won't unmap the mem region (if ucs_mmap was successful) */

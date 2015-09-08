@@ -10,7 +10,6 @@
 #include <uct/api/addr.h>
 #include <uct/tl/context.h>
 
-
 static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=pd", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
@@ -108,7 +107,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64  |
                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
                                          UCT_IFACE_FLAG_GET_BCOPY       |
-                                         UCT_IFACE_FLAG_AM_SHORT		|
+                                         UCT_IFACE_FLAG_AM_SHORT        |
+                                         UCT_IFACE_FLAG_AM_BCOPY        |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     return UCS_OK;
@@ -127,6 +127,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_put_bcopy        = uct_mm_ep_put_bcopy,
     .ep_get_bcopy        = uct_mm_ep_get_bcopy,
     .ep_am_short         = uct_mm_ep_am_short,
+    .ep_am_bcopy         = uct_mm_ep_am_bcopy,
     .ep_atomic_add64     = uct_mm_ep_atomic_add64,
     .ep_atomic_fadd64    = uct_mm_ep_atomic_fadd64,
     .ep_atomic_cswap64   = uct_mm_ep_atomic_cswap64,
@@ -152,15 +153,48 @@ static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
     iface->recv_fifo_ctl->tail = iface->read_index;
 }
 
-static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
-                                      uct_mm_fifo_element_t* elem)
+ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
+                                     uct_mm_fifo_element_t *fifo_elem_p)
 {
+    uct_mm_recv_desc_t *desc;
+
+    UCT_TL_IFACE_GET_RX_DESC(&iface->super, iface->recv_desc_mp, desc,
+                             return UCS_ERR_NO_RESOURCE);
+
+    fifo_elem_p->desc_mmid   = desc->key;
+    fifo_elem_p->desc_offset = iface->rx_headroom +
+                               (ptrdiff_t) ((void*) (desc + 1) - desc->base_address);
+    fifo_elem_p->desc_chunk_base_addr = desc->base_address;
+    fifo_elem_p->desc_mpool_size      = desc->mpool_length;
+
+    return UCS_OK;
+}
+
+static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
+                                             uct_mm_fifo_element_t* elem)
+{
+    ucs_status_t status;
+
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
-        /* read inline messages from the FIFO elements */
-        uct_mm_iface_invoke_am(iface, elem->am_id, (elem + 1),
-                               elem->length, iface->last_recv_desc);
+        /* read short (inline) messages from the FIFO elements */
+        uct_mm_iface_invoke_am(iface, elem->am_id, (elem + 1), elem->length,
+                               iface->last_recv_desc, 1);
     } else {
-        ucs_fatal("bcopy is not implemented");
+        /* read bcopy messages from the receive descriptors */
+        VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
+                                  elem->length);
+        status = uct_mm_iface_invoke_am(iface, elem->am_id,
+                                        elem->desc_chunk_base_addr + elem->desc_offset,
+                                        elem->length,
+                                        (uct_mm_recv_desc_t *) (elem->desc_chunk_base_addr +
+                                        elem->desc_offset - iface->rx_headroom) - 1,
+                                        0);
+        if (status != UCS_OK) {
+            status = uct_mm_assign_desc_to_fifo_elem(iface, elem);
+            if (status != UCS_OK) {
+                ucs_error("Failed to allocate a descriptor for MM");
+            }
+        }
     }
 }
 
@@ -207,6 +241,19 @@ void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
      * mem pool it belongs to */
     desc->key          = seg->mmid;
     desc->base_address = seg->address;
+    desc->mpool_length = seg->length;
+}
+
+static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems)
+{
+    uct_mm_fifo_element_t* fifo_elem_p;
+    unsigned i;
+
+    for (i = 0; i < num_elems; i++) {
+        fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(iface, iface->recv_fifo_elements, i);
+        ucs_mpool_put((uct_mm_recv_desc_t *) (fifo_elem_p->desc_chunk_base_addr +
+                       fifo_elem_p->desc_offset - iface->rx_headroom) - 1);
+    }
 }
 
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
@@ -216,7 +263,6 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     size_t size_to_alloc;
 
     /* allocate the receive FIFO */
-
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
 
     status = uct_mm_pd_mapper_ops(pd)->alloc(&size_to_alloc, config->hugetlb_mode,
@@ -241,7 +287,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     uct_mm_iface_config_t *mm_config = ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
     ucs_status_t status;
-    int i;
+    unsigned i;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_mm_iface_ops, pd, worker,
                               tl_config UCS_STATS_ARG(NULL));
@@ -270,10 +316,11 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
                                      1)));
     self->fifo_mask                = mm_config->fifo_size - 1;
     self->fifo_shift               = ucs_count_zero_bits(mm_config->fifo_size);
+    self->rx_headroom              = rx_headroom;
 
     /* create the receive FIFO */
     /* use specific allocator to allocate and attach memory and check the
-    * requested hugetlb allocation mode */
+     * requested hugetlb allocation mode */
     status = uct_mm_allocate_fifo_mem(self, mm_config, pd);
     if (status != UCS_OK) {
         goto err;
@@ -282,12 +329,6 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     self->recv_fifo_ctl->head   = 0;
     self->recv_fifo_ctl->tail   = 0;
     self->read_index            = 0;
-
-    /* initiate the owner bit in all the FIFO elements */
-    for (i = 0; i < mm_config->fifo_size; i++) {
-        fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(self, self->recv_fifo_elements, i);
-        fifo_elem_p->flags = UCT_MM_FIFO_ELEM_FLAG_OWNER;
-    }
 
     /* create a memory pool for receive descriptors */
     status = uct_iface_mpool_create(&self->super.super,
@@ -301,17 +342,30 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
                                     "mm_recv_desc", &self->recv_desc_mp);
     if (status != UCS_OK) {
         ucs_error("Failed to create a receive descriptor memory pool for the MM transport");
-        goto err;
+        goto err_free_fifo;
     }
 
     /* set the first receive descriptor */
     self->last_recv_desc = ucs_mpool_get(self->recv_desc_mp);
+    VALGRIND_MAKE_MEM_DEFINED(self->last_recv_desc, sizeof(*(self->last_recv_desc)));
     if (self->last_recv_desc == NULL) {
         ucs_error("Failed to get the first receive descriptor");
         status = UCS_ERR_NO_RESOURCE;
         goto destroy_recv_mpool;
     }
-    VALGRIND_MAKE_MEM_DEFINED(self->last_recv_desc, sizeof(*(self->last_recv_desc)));
+
+    /* initiate the owner bit in all the FIFO elements and assign a receive descriptor
+     * per every FIFO element */
+    for (i = 0; i < mm_config->fifo_size; i++) {
+        fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(self, self->recv_fifo_elements, i);
+        fifo_elem_p->flags = UCT_MM_FIFO_ELEM_FLAG_OWNER;
+
+        status = uct_mm_assign_desc_to_fifo_elem(self, fifo_elem_p);
+        if (status != UCS_OK) {
+            ucs_error("Failed to allocate a descriptor for MM");
+            goto destroy_descs;
+        }
+    }
 
     // TODO - Move this call to the ep_init function
     ucs_notifier_chain_add(&worker->progress_chain, uct_mm_iface_progress, self);
@@ -319,8 +373,14 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
     return UCS_OK;
 
+destroy_descs:
+    uct_mm_iface_free_rx_descs(self, i);
+    ucs_mpool_put(self->last_recv_desc);
 destroy_recv_mpool:
     ucs_mpool_destroy(self->recv_desc_mp);
+err_free_fifo:
+    uct_mm_pd_mapper_ops(pd)->free(self->shared_mem, self->fifo_mm_id,
+                                   UCT_MM_GET_FIFO_SIZE(self));
 err:
     return status;
 }
@@ -329,6 +389,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
 {
     ucs_status_t status;
     size_t size_to_free;
+
+    /* return all the descriptors that are now 'assigned' to the FIFO,
+     * to their mpool */
+    uct_mm_iface_free_rx_descs(self, self->config.fifo_size);
+
+    ucs_mpool_put(self->last_recv_desc);
+    ucs_mpool_destroy(self->recv_desc_mp);
 
     size_to_free = UCT_MM_GET_FIFO_SIZE(self);
 
@@ -339,9 +406,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }
-
-    ucs_mpool_put(self->last_recv_desc);
-    ucs_mpool_destroy(self->recv_desc_mp);
 
     ucs_notifier_chain_remove(&self->super.worker->progress_chain,
                               uct_mm_iface_progress, self);
