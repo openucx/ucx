@@ -61,7 +61,7 @@ typedef struct {
 
     struct {
         uct_ib_mlx5_cq_t   cq;
-        ucs_mpool_h        atomic_desc_mp;
+        ucs_mpool_t        atomic_desc_mp;
     } tx;
 
     struct {

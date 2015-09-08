@@ -5,6 +5,7 @@
 */
 
 #include "mpool.h"
+#include "mpool.inl"
 #include "queue.h"
 
 #include <ucs/debug/log.h>
@@ -12,308 +13,242 @@
 #include <ucs/sys/sys.h>
 
 
-typedef struct ucs_mpool_elem {
-    union {
-        struct ucs_mpool_elem       *next;   /* Used when elem is in the pool */
-        ucs_mpool_h                 mpool;  /* Used when elem is outside the pool */
-    };
-} ucs_mpool_elem_t;
-
-typedef struct ucs_mpool_chunk {
-    ucs_queue_elem_t                    queue;
-} ucs_mpool_chunk_t;
-
-
-#define ELEM_TO_OBJECT(_elem)   ((void*)( (char*)_elem + sizeof(ucs_mpool_elem_t) ))
-#define OBJECT_TO_ELEM(_obj)    ((void*)( (char*)_obj  - sizeof(ucs_mpool_elem_t) ))
-
-#define UCS_MPOOL_CHUNK_GROW     8
-
-/*
- *
- * A chunk of elements looks like this:
- * +-----------+-------+----------+-------+----------+------+---------+
- * | <padding> | elem0 | padding0 | elem1 | padding1 | .... | elemN-1 |
- * +-----------+-------+----------+-------+----------+------+---------+
- *
- * An element looks like this:
- * +------------+--------+------+
- * | mpool_elem | header | data |
- * +------------+--------+------+
- *                       |
- *                       This location is aligned.
- */
-
-struct ucs_mpool {
-    ucs_mpool_elem_t                *freelist;
-
-    size_t                          elem_size; /* Size of element in the chunk */
-    size_t                          elem_padding;
-    size_t                          align_offset;
-    size_t                          alignment;
-
-    unsigned                        num_elems;
-    unsigned                        max_elems;
-    unsigned                        elems_per_chunk;
-    ucs_queue_head_t                chunks;
-#if ENABLE_ASSERT
-    unsigned                        num_elems_inuse;
-#endif
-
-    void                            *mp_context;
-    ucs_mpool_chunk_alloc_cb_t      chunk_alloc_cb;
-    ucs_mpool_chunk_free_cb_t       chunk_free_cb;
-    ucs_mpool_init_obj_cb_t         init_obj_cb;
-    void                            *init_obj_arg;
-
-    /* Used mostly for debugging (memtrack) */
-    char                            *name;
-    unsigned                        alloc_id;
-};
-
-
-
-static ucs_status_t ucs_mpool_allocate_chunk(ucs_mpool_h mp);
-
-
-ucs_status_t
-ucs_mpool_create(const char *name, size_t elem_size, size_t align_offset,
-                 size_t alignment, unsigned elems_per_chunk, unsigned max_elems,
-                 void *mp_context,
-                 ucs_mpool_chunk_alloc_cb_t alloc_chunk_cb,
-                 ucs_mpool_chunk_free_cb_t free_chunk_cb,
-                 ucs_mpool_init_obj_cb_t init_obj_cb, void *init_obj_arg,
-                 ucs_mpool_h *mpp)
+static inline unsigned ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
 {
-    ucs_mpool_h mp;
+    return ucs_align_up_pow2(data->elem_size, data->alignment);
+}
 
+static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_data_t *data,
+                                                     ucs_mpool_chunk_t *chunk,
+                                                     unsigned elem_index)
+{
+    return chunk->elems + elem_index * ucs_mpool_elem_total_size(data);
+}
+
+static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
+{
+    ucs_mpool_elem_t *elem;
+    unsigned i;
+
+    for (i = 0; i < chunk->num_elems; ++i) {
+        elem = ucs_mpool_chunk_elem(mp->data, chunk, i);
+        if (elem->mpool != NULL) {
+            ucs_warn("object %p was not returned to mpool %s", elem + 1,
+                     ucs_mpool_name(mp));
+        }
+    }
+}
+
+ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
+                            size_t elem_size, size_t align_offset, size_t alignment,
+                            unsigned elems_per_chunk, unsigned max_elems,
+                            ucs_mpool_ops_t *ops, const char *name)
+{
     /* Check input values */
-    if ((alignment < 1) || (elem_size == 0) || (elems_per_chunk < 1) ||
-        (max_elems < elems_per_chunk))
+    if ((elem_size == 0) || (align_offset > elem_size) ||
+        (alignment == 0) || !ucs_is_pow2(alignment) ||
+        (elems_per_chunk == 0) || (max_elems < elems_per_chunk))
     {
         ucs_error("Invalid memory pool parameter(s)");
         return UCS_ERR_INVALID_PARAM;
     }
 
-    mp = ucs_malloc(sizeof *mp, "mpool context");
-    if (mp == NULL) {
-        ucs_error("Failed to allocate memory pool");
+    mp->data = ucs_malloc(sizeof(*mp->data) + priv_size, "mpool_data");
+    if (mp->data == NULL) {
+        ucs_error("Failed to allocate memory pool slow-path area");
         return UCS_ERR_NO_MEMORY;
     }
 
-    UCS_STATIC_ASSERT(UCS_MPOOL_HEADER_SIZE == sizeof(ucs_mpool_elem_t));
-
-    /* Initialize the pool */
-    mp->freelist = NULL;
-    mp->alignment = alignment;
-    mp->elems_per_chunk = elems_per_chunk;
-    mp->mp_context = mp_context;
-    mp->chunk_alloc_cb = alloc_chunk_cb;
-    mp->chunk_free_cb = free_chunk_cb;
-    mp->init_obj_cb = init_obj_cb;
-    mp->init_obj_arg = init_obj_arg;
-    mp->name = strdup(name);
-#if ENABLE_MEMTRACK
-    mp->alloc_id = ucs_calc_crc32(0, name, strlen(name));
-#endif
-    mp->num_elems = 0;
-    mp->max_elems = max_elems;
-    ucs_queue_head_init(&mp->chunks);
-#if ENABLE_ASSERT
-    mp->num_elems_inuse = 0;
-#endif
-
-    /* Calculate element size and padding */
-    mp->elem_size    = sizeof(ucs_mpool_elem_t) + elem_size;
-    mp->align_offset = sizeof(ucs_mpool_elem_t) + align_offset;
-    mp->elem_padding = ucs_padding(mp->elem_size, alignment);
+    mp->freelist           = NULL;
+    mp->data->elem_size    = sizeof(ucs_mpool_elem_t) + elem_size;
+    mp->data->alignment    = alignment;
+    mp->data->align_offset = sizeof(ucs_mpool_elem_t) + align_offset;
+    mp->data->quota        = max_elems;
+    mp->data->chunk_size   = sizeof(ucs_mpool_chunk_t) + alignment +
+                             elems_per_chunk * ucs_mpool_elem_total_size(mp->data);
+    mp->data->chunks       = NULL;
+    mp->data->ops          = ops;
+    mp->data->name         = strdup(name);
 
     VALGRIND_CREATE_MEMPOOL(mp, 0, 0);
 
-    ucs_debug("mpool %s: align %lu, maxelems %d, elemsize %lu, padding %lu",
-              mp->name, mp->alignment, mp->max_elems, mp->elem_size, mp->elem_padding);
-    *mpp = mp;
+    ucs_debug("mpool %s: align %u, maxelems %u, elemsize %u",
+              ucs_mpool_name(mp), mp->data->alignment, max_elems, mp->data->elem_size);
     return UCS_OK;
 }
 
-static void __mpool_destroy(ucs_mpool_h mp)
+void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
 {
-    ucs_mpool_chunk_t *chunk;
+    ucs_mpool_chunk_t *chunk, *next_chunk;
+    ucs_mpool_elem_t *elem, *next_elem;
+    ucs_mpool_data_t *data = mp->data;
 
-    while (!ucs_queue_is_empty(&mp->chunks)) {
-        chunk = ucs_queue_pull_elem_non_empty(&mp->chunks, ucs_mpool_chunk_t, queue);
-        mp->chunk_free_cb(mp->mp_context, chunk);
+    /* Cleanup all elements in the freelist and set their header to NULL to mark
+     * them as released for the leak check.
+     */
+    next_elem = mp->freelist;
+    while (next_elem != NULL) {
+        elem = next_elem;
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
+        next_elem = elem->next;
+        if (data->ops->obj_cleanup != NULL) {
+            data->ops->obj_cleanup(mp, elem + 1);
+        }
+        elem->mpool = NULL;
+    }
+
+    /*
+     * Go over all elements in the chunks and make sure they were on the freelist.
+     * Then, release the chunk.
+     */
+    next_chunk = data->chunks;
+    while (next_chunk != NULL) {
+        chunk      = next_chunk;
+        next_chunk = chunk->next;
+
+        if (leak_check) {
+            ucs_mpool_chunk_leak_check(mp, chunk);
+        }
+        data->ops->chunk_release(mp, chunk);
     }
 
     VALGRIND_DESTROY_MEMPOOL(mp);
-    ucs_debug("mpool %s destroyed", mp->name);
-    free(mp->name);
-    ucs_free(mp);
+    ucs_debug("mpool %s destroyed", ucs_mpool_name(mp));
+
+    free(data->name);
+    ucs_free(data);
 }
 
-void ucs_mpool_destroy(ucs_mpool_h mp)
+void *ucs_mpool_priv(ucs_mpool_t *mp)
 {
-    ucs_mpool_check_empty(mp);
-    __mpool_destroy(mp);
+    return mp->data + 1;
 }
 
-void ucs_mpool_destroy_unchecked(ucs_mpool_h mp)
+const char *ucs_mpool_name(ucs_mpool_t *mp)
 {
-    __mpool_destroy(mp);
+    return mp->data->name;
 }
 
-void ucs_mpool_check_empty(ucs_mpool_h mp)
+int ucs_mpool_is_empty(ucs_mpool_t *mp)
 {
-    ucs_assertv(mp->num_elems_inuse == 0,
-                "destroying memory pool %s with %u used elements", mp->name,
-                mp->num_elems_inuse);
+    return (mp->freelist == NULL) && (mp->data->quota == 0);
 }
 
-void *ucs_mpool_get(ucs_mpool_h mp)
+void *ucs_mpool_get(ucs_mpool_t *mp)
 {
-    ucs_mpool_elem_t *elem;
-    void *obj;
-
-    if (mp->freelist == NULL && ucs_mpool_allocate_chunk(mp) != UCS_OK) {
-        return NULL;
-    }
-
-    /* Disconnect an element from the pool */
-    elem = mp->freelist;
-    VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
-    mp->freelist = elem->next;
-    elem->mpool = mp;
-    VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
-
-#if ENABLE_ASSERT
-    ++mp->num_elems_inuse;
-    ucs_assert(mp->num_elems_inuse <= mp->num_elems);
-#endif
-
-    obj = ELEM_TO_OBJECT(elem);
-    VALGRIND_MEMPOOL_ALLOC(mp, obj, mp->elem_size - sizeof(ucs_mpool_elem_t));
-    return obj;
+    return ucs_mpool_get_inline(mp);
 }
 
 void ucs_mpool_put(void *obj)
 {
-    ucs_mpool_elem_t *elem;
-    ucs_mpool_h mp;
-
-    /* Reconnect the element to the pool */
-    elem = OBJECT_TO_ELEM(obj);
-    VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
-    mp = elem->mpool;
-    elem->next = mp->freelist;
-    VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
-    mp->freelist = elem;
-
-    VALGRIND_MEMPOOL_FREE(mp, obj);
-
-#if ENABLE_ASSERT
-    ucs_assert(mp->num_elems_inuse > 0);
-    --mp->num_elems_inuse;
-#endif
+    ucs_mpool_put_inline(obj);
 }
 
-static UCS_F_NOINLINE ucs_status_t ucs_mpool_allocate_chunk(ucs_mpool_h mp)
+void *ucs_mpool_get_grow(ucs_mpool_t *mp)
 {
-    ucs_mpool_elem_t *elem, *nextelem;
     size_t chunk_size, chunk_padding;
+    ucs_mpool_data_t *data = mp->data;
     ucs_mpool_chunk_t *chunk;
+    ucs_mpool_elem_t *elem;
     ucs_status_t status;
-    int elems_in_chunk;
     unsigned i;
     void *ptr;
 
-    if (mp->num_elems >= mp->max_elems) {
-        return UCS_ERR_NO_MEMORY;
+    if (data->quota == 0) {
+        return NULL;
     }
 
-    chunk_size = sizeof(ucs_mpool_chunk_t) + mp->alignment +
-                 mp->elems_per_chunk * (mp->elem_size + mp->elem_padding);
-    status = mp->chunk_alloc_cb(mp->mp_context, &chunk_size, &ptr
-                                UCS_MEMTRACK_NAME(mp->name));
+    chunk_size = data->chunk_size;
+    status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
     if (status != UCS_OK) {
         ucs_error("Failed to allocate memory pool chunk: %s", ucs_status_string(status));
-        return status;
+        return NULL;
     }
 
     /* Calculate padding, and update element count according to allocated size */
-    chunk = ptr;
-    chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + mp->align_offset, mp->alignment);
-    elems_in_chunk = (chunk_size - chunk_padding) /
-                    (mp->elem_size + mp->elem_padding);
-    ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
-              mp->name, chunk, chunk_size, elems_in_chunk);
+    chunk            = ptr;
+    chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
+                                   data->alignment);
+    chunk->elems     = (void*)(chunk + 1) + chunk_padding;
+    chunk->num_elems = (chunk_size - chunk_padding - sizeof(*chunk)) /
+                       ucs_mpool_elem_total_size(data);
 
-    nextelem = mp->freelist;
-    for (i = 0; i < elems_in_chunk; ++i) {
-        elem = (ucs_mpool_elem_t*)((char*)(chunk + 1) + chunk_padding +
-                        i * (mp->elem_size + mp->elem_padding));
-        elem->next = nextelem;
-        nextelem = elem;
-        if (mp->init_obj_cb) {
-            mp->init_obj_cb(mp->mp_context, ELEM_TO_OBJECT(elem), chunk, mp->init_obj_arg);
+    ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
+              ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
+
+    for (i = 0; i < chunk->num_elems; ++i) {
+        elem         = ucs_mpool_chunk_elem(data, chunk, i);
+        elem->next   = mp->freelist;
+        mp->freelist = elem;
+        if (data->ops->obj_init != NULL) {
+            data->ops->obj_init(mp, elem + 1, chunk);
         }
     }
 
-    mp->freelist = nextelem;
-    mp->num_elems += elems_in_chunk;
-    ucs_queue_push(&mp->chunks, &chunk->queue);
+    chunk->next  = data->chunks;
+    data->chunks = chunk;
+
+    if (data->quota == UINT_MAX) {
+        /* Infinite memory pool */
+    } else if (data->quota >= chunk->num_elems) {
+        data->quota -= chunk->num_elems;
+    } else {
+        data->quota = 0;
+    }
 
     VALGRIND_MAKE_MEM_NOACCESS(chunk + 1, chunk_size - sizeof(*chunk));
-    return UCS_OK;
+
+    ucs_assert(mp->freelist != NULL); /* Should not recurse */
+    return ucs_mpool_get(mp);
 }
 
-ucs_status_t ucs_mpool_chunk_malloc(void *mp_context, size_t *size, void **chunk_p
-                                    UCS_MEMTRACK_ARG)
+ucs_status_t ucs_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    *chunk_p = ucs_calloc(1, *size UCS_MEMTRACK_VAL);
+    *chunk_p = ucs_malloc(*size_p, ucs_mpool_name(mp));
     return (*chunk_p == NULL) ? UCS_ERR_NO_MEMORY : UCS_OK;
 }
 
-void ucs_mpool_chunk_free(void *mp_context, void *chunk)
+void ucs_mpool_chunk_free(ucs_mpool_t *mp, void *chunk)
 {
     ucs_free(chunk);
 }
+
 
 typedef struct ucs_mmap_mpool_chunk_hdr {
     size_t size;
 } ucs_mmap_mpool_chunk_hdr_t;
 
-ucs_status_t ucs_mpool_chunk_mmap(void *mp_context, size_t *size, void **chunk_p
-                                  UCS_MEMTRACK_ARG)
+ucs_status_t ucs_mpool_chunk_mmap(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
     ucs_mmap_mpool_chunk_hdr_t *chunk;
     size_t real_size;
 
-    real_size = ucs_align_up(*size + sizeof(*chunk), ucs_get_page_size());
+    real_size = ucs_align_up(*size_p + sizeof(*chunk), ucs_get_page_size());
     chunk = ucs_mmap(NULL, real_size, PROT_READ|PROT_WRITE,
-                     MAP_PRIVATE|MAP_ANONYMOUS, -1, 0 UCS_MEMTRACK_VAL);
+                     MAP_PRIVATE|MAP_ANONYMOUS, -1, 0, ucs_mpool_name(mp));
     if (chunk == MAP_FAILED) {
         return UCS_ERR_NO_MEMORY;
     }
 
     chunk->size = real_size;
-    *size = real_size - sizeof(*chunk);
-    *chunk_p = chunk + 1;
+    *size_p     = real_size - sizeof(*chunk);
+    *chunk_p    = chunk + 1;
     return UCS_OK;
 }
 
-void ucs_mpool_chunk_munmap(void *mp_context, void *chunk)
+void ucs_mpool_chunk_munmap(ucs_mpool_t *mp, void *chunk)
 {
     ucs_mmap_mpool_chunk_hdr_t *hdr = chunk;
     hdr -= 1;
     ucs_munmap(hdr, hdr->size);
 }
 
+
 typedef struct ucs_hugetlb_mpool_chunk_hdr {
     int hugetlb;
 } ucs_hugetlb_mpool_chunk_hdr_t;
 
-ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chunk_p
-                                      UCS_MEMTRACK_ARG)
+ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
     ucs_hugetlb_mpool_chunk_hdr_t *chunk;
     void *ptr;
@@ -322,9 +257,9 @@ ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chu
     int shmid;
 
     /* First, try hugetlb */
-    real_size = *size;
+    real_size = *size_p;
     status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid
-                            UCS_MEMTRACK_VAL);
+                            UCS_MEMTRACK_NAME(ucs_mpool_name(mp)));
     if (status == UCS_OK) {
         chunk = ptr;
         chunk->hugetlb = 1;
@@ -332,8 +267,8 @@ ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chu
     }
 
     /* Fallback to glibc */
-    real_size = *size;
-    chunk = ucs_malloc(real_size UCS_MEMTRACK_VAL);
+    real_size = *size_p;
+    chunk = ucs_malloc(real_size, ucs_mpool_name(mp));
     if (chunk != NULL) {
         chunk->hugetlb = 0;
         goto out_ok;
@@ -342,12 +277,12 @@ ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chu
     return UCS_ERR_NO_MEMORY;
 
 out_ok:
-    *size = real_size - sizeof(*chunk);
+    *size_p  = real_size - sizeof(*chunk);
     *chunk_p = chunk + 1;
     return UCS_OK;
 }
 
-void ucs_mpool_hugetlb_free(void *mp_context, void *chunk)
+void ucs_mpool_hugetlb_free(ucs_mpool_t *mp, void *chunk)
 {
     ucs_hugetlb_mpool_chunk_hdr_t *hdr;
 

@@ -290,22 +290,23 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     }
 
     /* create a memory pool for receive descriptors */
-    status = uct_iface_mpool_create(&self->super.super,
-                                    sizeof(uct_mm_recv_desc_t) + rx_headroom +
-                                    self->config.seg_size,
-                                    sizeof(uct_mm_recv_desc_t),
-                                    UCS_SYS_CACHE_LINE_SIZE,
-                                    &mm_config->mp,
-                                    256,
-                                    uct_mm_iface_recv_desc_init,
-                                    "mm_recv_desc", &self->recv_desc_mp);
+    status = uct_iface_mpool_init(&self->super,
+                                  &self->recv_desc_mp,
+                                  sizeof(uct_mm_recv_desc_t) + rx_headroom +
+                                  self->config.seg_size,
+                                  sizeof(uct_mm_recv_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &mm_config->mp,
+                                  256,
+                                  uct_mm_iface_recv_desc_init,
+                                  "mm_recv_desc");
     if (status != UCS_OK) {
         ucs_error("Failed to create a receive descriptor memory pool for the MM transport");
         goto err;
     }
 
     /* set the first receive descriptor */
-    self->last_recv_desc = ucs_mpool_get(self->recv_desc_mp);
+    self->last_recv_desc = ucs_mpool_get(&self->recv_desc_mp);
     if (self->last_recv_desc == NULL) {
         ucs_error("Failed to get the first receive descriptor");
         status = UCS_ERR_NO_RESOURCE;
@@ -320,7 +321,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     return UCS_OK;
 
 destroy_recv_mpool:
-    ucs_mpool_destroy(self->recv_desc_mp);
+    ucs_mpool_cleanup(&self->recv_desc_mp, 1);
 err:
     return status;
 }
@@ -341,7 +342,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     }
 
     ucs_mpool_put(self->last_recv_desc);
-    ucs_mpool_destroy(self->recv_desc_mp);
+    ucs_mpool_cleanup(&self->recv_desc_mp, 1);
 
     ucs_notifier_chain_remove(&self->super.worker->progress_chain,
                               uct_mm_iface_progress, self);

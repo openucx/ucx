@@ -54,14 +54,14 @@ struct uct_rc_iface {
     uct_ib_iface_t           super;
 
     struct {
-        ucs_mpool_h          mp;
-        uct_rc_iface_send_op_t     *ops;
+        ucs_mpool_t          mp;
+        uct_rc_iface_send_op_t *ops;
         unsigned             cq_available;
         unsigned             next_op;
     } tx;
 
     struct {
-        ucs_mpool_h          mp;
+        ucs_mpool_t          mp;
         struct ibv_srq       *srq;
         unsigned             available;
     } rx;

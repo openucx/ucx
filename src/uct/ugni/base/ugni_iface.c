@@ -3,7 +3,7 @@
 
 static unsigned ugni_domain_global_counter = 0;
 
-void uct_ugni_base_desc_init(void *mp_context, void *obj, void *chunk, void *arg)
+void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
   uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *) obj;
   /* zero base descriptor */
@@ -14,7 +14,7 @@ void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh)
 {
   uct_ugni_base_desc_t *base = (uct_ugni_base_desc_t *)obj;
   /* call base initialization */
-  uct_ugni_base_desc_init(iface, obj, NULL, NULL);
+  uct_ugni_base_desc_init(NULL, obj, NULL);
   /* set local keys */
   base->desc.local_mem_hndl = *(gni_mem_handle_t *)memh;
 }

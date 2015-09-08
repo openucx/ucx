@@ -41,7 +41,7 @@ typedef struct uct_rc_verbs_ep {
 typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t     super;
 
-    ucs_mpool_h        short_desc_mp;
+    ucs_mpool_t        short_desc_mp;
     struct ibv_send_wr inl_am_wr;
     struct ibv_send_wr inl_rwrite_wr;
     struct ibv_sge     inl_sge[2];

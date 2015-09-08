@@ -195,11 +195,32 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
     uct_ud_iface_cep_remove(ep);
 }
 
+static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
+                                       uct_mem_h memh)
+{
+    uct_ud_send_skb_t *skb = obj;
+    struct ibv_mr *mr = memh;
+    skb->lkey = mr->lkey;
+}
 
 static ucs_status_t
-uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
-                             uct_ib_iface_config_t *config, 
-                             const char *name, ucs_mpool_h *mp_p);
+uct_ud_iface_tx_mpool_init(uct_ib_iface_t *iface, ucs_mpool_t *mp,
+                           uct_ib_iface_config_t *config, const char *name)
+{
+    unsigned grow;
+    int mtu;
+
+    if (config->tx.queue_len < 1024) {
+        grow = 1024;
+    }
+
+    mtu = 4096; /* TODO: calculate mtu */
+    return uct_iface_mpool_init(&iface->super, mp,
+                                sizeof(uct_ud_send_skb_t) + mtu, 0,
+                                UCS_SYS_CACHE_LINE_SIZE,
+                                &config->tx.mp, grow,
+                                uct_ud_iface_send_skb_init, name);
+}
 
 static ucs_status_t
 uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
@@ -326,25 +347,25 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     uct_ud_iface_cep_init(self);    
 
     /* TODO: correct hdr + payload offset  */
-    status = uct_ib_iface_recv_mpool_create(&self->super, &config->super,
+    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
                                             "ud_recv_skb", &self->rx.mp); 
     if (status != UCS_OK) {
         goto err_qp;
     }
 
-    status = uct_ud_iface_tx_mpool_create(&self->super, &config->super,
-                                          "ud_tx_skb", &self->tx.mp); 
+    status = uct_ud_iface_tx_mpool_init(&self->super, &self->tx.mp,
+                                        &config->super, "ud_tx_skb");
     if (status != UCS_OK) {
         goto err_mpool;
     }
-    self->tx.skb = ucs_mpool_get(self->tx.mp);
+    self->tx.skb = ucs_mpool_get(&self->tx.mp);
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
 
     ucs_queue_head_init(&self->tx.pending_ops);
     return UCS_OK;
 
 err_mpool:
-    ucs_mpool_destroy(self->rx.mp);
+    ucs_mpool_cleanup(&self->rx.mp, 1);
 err_qp:
     ibv_destroy_qp(self->qp);
     ucs_ptr_array_cleanup(&self->eps);
@@ -358,9 +379,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     /* TODO: proper flush and connection termination */
     ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_cep_cleanup(self);
-    ucs_mpool_destroy_unchecked(self->tx.mp);
+    ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
-    ucs_mpool_destroy_unchecked(self->rx.mp);
+    ucs_mpool_cleanup(&self->rx.mp, 0);
     ibv_destroy_qp(self->qp);
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
@@ -453,40 +474,6 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
     ucs_ptr_array_remove(&iface->eps, new_ep->ep_id, 0);
 }
 
-static void
-uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
-{       
-    uct_ud_send_skb_t *skb = obj;
-    struct ibv_mr *mr = memh;
-    skb->lkey = mr->lkey;
-}
-
-
-static ucs_status_t
-uct_ud_iface_tx_mpool_create(uct_ib_iface_t *iface,
-                             uct_ib_iface_config_t *config, 
-                             const char *name, ucs_mpool_h *mp_p)
-{
-    unsigned grow;
-    int mtu;
-
-    if (config->tx.queue_len < 1024) {
-        grow = 1024;
-    }
-
-    mtu = 4096; /* TODO: calculate mtu */
-
-    return uct_iface_mpool_create(&iface->super.super,
-                                  sizeof(uct_ud_send_skb_t) + mtu,
-                                  0,
-                                  UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->tx.mp,
-                                  grow,
-                                  uct_ud_iface_send_skb_init,
-                                  name,
-                                  mp_p);
-
-}
 
 
 

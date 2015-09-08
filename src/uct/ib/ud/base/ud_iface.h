@@ -49,13 +49,13 @@ struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;
     struct {
-        ucs_mpool_h          mp;
+        ucs_mpool_t          mp;
         unsigned             available;
     } rx;
     struct {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
         uct_ud_send_skb_inl_t  skb_inl;
-        ucs_mpool_h            mp;
+        ucs_mpool_t            mp;
         uint16_t               available;
         unsigned               unsignaled;
         ucs_queue_head_t       pending_ops;

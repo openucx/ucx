@@ -180,7 +180,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
 
     UCT_CHECK_PARAM(comp != NULL, "completion must be non-NULL");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     desc->super.handler   = iface->config.atomic64_handler;
     desc->super.result    = result;
@@ -247,7 +247,7 @@ uct_rc_verbs_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
 
     UCT_CHECK_PARAM(comp != NULL, "completion must be non-NULL");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     switch (length) {
     case sizeof(uint32_t):
@@ -299,7 +299,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "put_bcopy");
     UCT_RC_VERBS_ZERO_LENGTH_POST(length);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
     pack_cb(desc + 1, arg, length);
@@ -338,7 +338,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
 
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "get_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     ucs_assert(length <= iface->super.super.config.seg_size);
 
@@ -411,7 +411,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_CHECK_LENGTH(sizeof(*rch) + length, iface->super.super.config.seg_size,
                      "am_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 
@@ -456,7 +456,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_CHECK_LENGTH(header_length + length, iface->super.super.config.seg_size,
                      "am_zcopy payload");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     if (comp == NULL) {
         desc->super.handler   = (uct_rc_send_handler_t)ucs_mpool_put;
@@ -499,7 +499,7 @@ ucs_status_t uct_rc_verbs_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 
     /* TODO don't allocate descriptor - have dummy buffer */
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
     uct_rc_verbs_ep_atomic_post(ucs_derived_of(tl_ep, uct_rc_verbs_ep_t),
@@ -550,7 +550,7 @@ ucs_status_t uct_rc_verbs_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_VERBS_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->short_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     /* TODO don't allocate descriptor - have dummy buffer */
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;

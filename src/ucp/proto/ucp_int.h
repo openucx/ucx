@@ -81,7 +81,6 @@ typedef struct ucp_context {
     ucp_rsc_index_t         num_tls;      /* Number of resources in the array*/
 
     struct {
-        ucs_mpool_h         rreq_mp;      /* Receive requests */
         ucs_queue_head_t    expected;
         ucs_queue_head_t    unexpected;
     } tag;

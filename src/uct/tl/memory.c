@@ -15,6 +15,12 @@ typedef struct {
 } uct_iface_mp_chunk_hdr_t;
 
 
+typedef struct {
+    uct_base_iface_t               *iface;
+    uct_iface_mpool_init_obj_cb_t  init_obj_cb;
+} uct_iface_mp_priv_t;
+
+
 const char *uct_alloc_method_names[] = {
     [UCT_ALLOC_METHOD_PD]   = "pd",
     [UCT_ALLOC_METHOD_HEAP] = "heap",
@@ -231,17 +237,22 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem)
     uct_mem_free(mem);
 }
 
-ucs_status_t uct_iface_mp_chunk_alloc(void *mp_context, size_t *size, void **chunk_p
-                                      UCS_MEMTRACK_ARG)
+static inline uct_iface_mp_priv_t* uct_iface_mp_priv(ucs_mpool_t *mp)
 {
-    uct_base_iface_t *iface = mp_context;
+    return (uct_iface_mp_priv_t*)ucs_mpool_priv(mp);
+}
+
+static ucs_status_t uct_iface_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
+                                             void **chunk_p)
+{
+    uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
     uct_iface_mp_chunk_hdr_t *hdr;
     uct_allocated_memory_t mem;
     ucs_status_t status;
     size_t length;
 
-    length = sizeof(*hdr) + *size;
-    status = uct_iface_mem_alloc(&iface->super, length, UCS_MEMTRACK_VAL_ALWAYS, &mem);
+    length = sizeof(*hdr) + *size_p;
+    status = uct_iface_mem_alloc(&iface->super, length, ucs_mpool_name(mp), &mem);
     if (status != UCS_OK) {
         return status;
     }
@@ -253,14 +264,14 @@ ucs_status_t uct_iface_mp_chunk_alloc(void *mp_context, size_t *size, void **chu
     hdr->method = mem.method;
     hdr->length = mem.length;
     hdr->memh   = mem.memh;
-    *size       = mem.length - sizeof(*hdr);
+    *size_p       = mem.length - sizeof(*hdr);
     *chunk_p    = hdr + 1;
     return UCS_OK;
 }
 
-void uct_iface_mp_chunk_free(void *mp_context, void *chunk)
+static void uct_iface_mp_chunk_release(ucs_mpool_t *mp, void *chunk)
 {
-    uct_base_iface_t *iface = mp_context;
+    uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
     uct_iface_mp_chunk_hdr_t *hdr;
     uct_allocated_memory_t mem;
 
@@ -275,30 +286,46 @@ void uct_iface_mp_chunk_free(void *mp_context, void *chunk)
     uct_iface_mem_free(&mem);
 }
 
-void uct_iface_mp_init_obj(void *mp_context, void *obj, void *chunk, void *arg)
+static void uct_iface_mp_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_iface_t *iface = mp_context;
-    uct_iface_mpool_init_obj_cb_t cb = arg;
+    uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
+    uct_iface_mpool_init_obj_cb_t init_obj_cb;
     uct_iface_mp_chunk_hdr_t *hdr;
 
+    init_obj_cb = uct_iface_mp_priv(mp)->init_obj_cb;
     hdr = chunk - sizeof(*hdr);
-    if (cb) {
-        cb(iface, obj, hdr->memh);
+    if (init_obj_cb != NULL) {
+        init_obj_cb(&iface->super, obj, hdr->memh);
     }
 }
 
-ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
-                                    size_t align_offset, size_t alignment,
-                                    uct_iface_mpool_config_t *config, unsigned grow,
-                                    uct_iface_mpool_init_obj_cb_t init_obj_cb,
-                                    const char *name, ucs_mpool_h *mp_p)
+static ucs_mpool_ops_t uct_iface_mpool_ops = {
+    .chunk_alloc   = uct_iface_mp_chunk_alloc,
+    .chunk_release = uct_iface_mp_chunk_release,
+    .obj_init      = uct_iface_mp_obj_init,
+    .obj_cleanup   = NULL
+};
+
+ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
+                                  size_t elem_size, size_t align_offset, size_t alignment,
+                                  uct_iface_mpool_config_t *config, unsigned grow,
+                                  uct_iface_mpool_init_obj_cb_t init_obj_cb,
+                                  const char *name)
 {
     unsigned elems_per_chunk;
+    ucs_status_t status;
 
     elems_per_chunk = (config->bufs_grow != 0) ? config->bufs_grow : grow;
-    return ucs_mpool_create(name, elem_size, align_offset, alignment,
-                            elems_per_chunk, config->max_bufs, iface,
-                            uct_iface_mp_chunk_alloc, uct_iface_mp_chunk_free,
-                            uct_iface_mp_init_obj, init_obj_cb, mp_p);
+    status = ucs_mpool_init(mp, sizeof(uct_iface_mp_priv_t),
+                            elem_size, align_offset, alignment,
+                            elems_per_chunk, config->max_bufs,
+                            &uct_iface_mpool_ops, name);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_iface_mp_priv(mp)->iface       = iface;
+    uct_iface_mp_priv(mp)->init_obj_cb = init_obj_cb;
+    return UCS_OK;
 }
 

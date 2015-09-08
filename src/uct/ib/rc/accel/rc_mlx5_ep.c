@@ -418,7 +418,7 @@ uct_rc_mlx5_ep_atomic(uct_rc_mlx5_ep_t *ep, int opcode, void *result, unsigned l
 
     UCT_CHECK_PARAM(comp != NULL, "completion must be non-NULL");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->tx.atomic_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->tx.atomic_desc_mp, desc);
 
     desc->super.handler   = handler;
     desc->super.result    = result;
@@ -437,7 +437,7 @@ uct_rc_mlx5_ep_atomic_add(uct_ep_h tl_ep, int opcode, unsigned length,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_RC_MLX5_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->tx.atomic_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->tx.atomic_desc_mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
     return uct_rc_mlx5_ep_atomic_post(ep, opcode, desc, length, remote_addr, rkey,
@@ -467,7 +467,7 @@ ucs_status_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_c
 
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "put_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
     pack_cb(desc + 1, arg, length);
@@ -505,7 +505,7 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
 
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "get_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler     = (comp == NULL) ?
                                 uct_rc_ep_get_bcopy_handler_no_completion :
@@ -564,7 +564,7 @@ ucs_status_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_CHECK_LENGTH(sizeof(*rch) + length, iface->super.super.config.seg_size,
                      "am_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, iface->super.tx.mp, desc);
+    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 

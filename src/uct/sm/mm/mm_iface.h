@@ -55,7 +55,7 @@ struct uct_mm_iface {
     unsigned                elem_size;
     uint64_t                fifo_release_factor_mask;
 
-    ucs_mpool_h             recv_desc_mp;
+    ucs_mpool_t             recv_desc_mp;
     uct_mm_recv_desc_t      *last_recv_desc;
 
     struct {
@@ -96,7 +96,7 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
 
     status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
     if (status != UCS_OK) {
-        iface->last_recv_desc = ucs_mpool_get(iface->recv_desc_mp);
+        iface->last_recv_desc = ucs_mpool_get(&iface->recv_desc_mp);
         if (iface->last_recv_desc == NULL ) {
            ucs_fatal("Failed to get a new receive descriptor for MM");
         }

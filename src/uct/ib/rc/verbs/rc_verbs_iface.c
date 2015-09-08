@@ -36,8 +36,8 @@ uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
-    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super,
-                                        iface->super.rx.mp, wrs, max);
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super, &iface->super.rx.mp,
+                                        wrs, max);
     if (count == 0) {
         return 0;
     }
@@ -279,15 +279,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->config.max_inline = cap.max_inline_data;
 
     /* Create AH headers and Atomic mempool */
-    status = uct_iface_mpool_create(&self->super.super.super.super,
-                                    sizeof(uct_rc_iface_send_desc_t) +
-                                        self->config.short_desc_size,
-                                    sizeof(uct_rc_iface_send_desc_t),
-                                    UCS_SYS_CACHE_LINE_SIZE,
-                                    &config->super.super.tx.mp,
-                                    self->super.config.tx_qp_len,
-                                    uct_rc_iface_send_desc_init,
-                                    "rc_verbs_short_desc", &self->short_desc_mp);
+    status = uct_iface_mpool_init(&self->super.super.super,
+                                  &self->short_desc_mp,
+                                  sizeof(uct_rc_iface_send_desc_t) +
+                                      self->config.short_desc_size,
+                                  sizeof(uct_rc_iface_send_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->super.super.tx.mp,
+                                  self->super.config.tx_qp_len,
+                                  uct_rc_iface_send_desc_init,
+                                  "rc_verbs_short_desc");
     if (status != UCS_OK) {
         goto err;
     }
@@ -305,7 +306,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     return UCS_OK;
 
 err_destroy_short_desc_mp:
-    ucs_mpool_destroy(self->short_desc_mp);
+    ucs_mpool_cleanup(&self->short_desc_mp, 1);
 err:
     return status;
 }
@@ -314,7 +315,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     ucs_notifier_chain_remove(&self->super.super.super.worker->progress_chain,
                               uct_rc_verbs_iface_progress, self);
-    ucs_mpool_destroy(self->short_desc_mp);
+    ucs_mpool_cleanup(&self->short_desc_mp, 1);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);

@@ -410,8 +410,8 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
 
     wrs  = ucs_alloca(sizeof *wrs  * max);
 
-    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super,
-                                        iface->super.rx.mp, wrs, max);
+    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super, &iface->super.rx.mp,
+                                        wrs, max);
     if (count == 0) {
         return;
     }
