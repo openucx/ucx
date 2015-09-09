@@ -158,6 +158,15 @@ UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
                     DIRECTION_SEND_TO_RECV);
 }
 
+UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    set_keep_data(true);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
+                    sizeof(uint64_t),
+                    sender().iface_attr().cap.am.max_bcopy,
+                    DIRECTION_SEND_TO_RECV);
+}
+
 UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),

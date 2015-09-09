@@ -9,6 +9,7 @@
 
 #include <uct/tl/tl_base.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/sys/sys.h>
 #include <sys/shm.h>
 #include "mm_def.h"
 #include "mm_pd.h"
@@ -20,7 +21,6 @@
                                       UCT_MM_FIFO_CTL_SIZE_ALIGNED + \
                                      ((iface)->config.fifo_size *    \
                                      (iface)->elem_size))
-
 
 typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
@@ -58,6 +58,8 @@ struct uct_mm_iface {
     ucs_mpool_h             recv_desc_mp;
     uct_mm_recv_desc_t      *last_recv_desc;
 
+    size_t                  rx_headroom;
+
     struct {
         unsigned fifo_size;
         unsigned seg_size;          /* size of the receive descriptor */
@@ -67,10 +69,19 @@ struct uct_mm_iface {
 
 
 struct uct_mm_fifo_element {
-    uint8_t             flags;
-    uint8_t             am_id;     /* active message id */
-    uint16_t            length;    /* length of actual data */
-    /* the data follows here */
+    uint8_t         flags;
+    uint8_t         am_id;          /* active message id */
+    uint16_t        length;         /* length of actual data */
+
+    /* bcopy parameters */
+    size_t          desc_mpool_size;
+    uct_mm_id_t     desc_mmid;      /* the mmid of the the memory chunk that
+                                     * the desc (that this fifo_elem points to)
+                                     * belongs to */
+    size_t          desc_offset;    /* the offset of the desc (its data location for bcopy)
+                                     * within the memory chunk it belongs to */
+    void            *desc_chunk_base_addr;
+    /* the data follows here (in case of inline messaging) */
 } UCS_S_PACKED;
 
 
@@ -83,26 +94,32 @@ struct uct_mm_fifo_ctl {
 struct uct_mm_recv_desc {
     uct_mm_id_t         key;
     void                *base_address;
+    size_t              mpool_length;
     uct_am_recv_desc_t  am_recv;   /* has to be in the end */
 };
 
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
-                       unsigned length, uct_mm_recv_desc_t *mm_desc)
+                       unsigned length, uct_mm_recv_desc_t *mm_desc,
+                       uint8_t is_short)
 {
     ucs_status_t status;
     void *desc = mm_desc + 1;    /* point the desc to the user's headroom */
 
     status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
     if (status != UCS_OK) {
-        iface->last_recv_desc = ucs_mpool_get(iface->recv_desc_mp);
-        if (iface->last_recv_desc == NULL ) {
-           ucs_fatal("Failed to get a new receive descriptor for MM");
+        if (is_short) {
+            iface->last_recv_desc = ucs_mpool_get(iface->recv_desc_mp);
+            VALGRIND_MAKE_MEM_DEFINED(iface->last_recv_desc, sizeof(*(iface->last_recv_desc)));
+            if (iface->last_recv_desc == NULL ) {
+                ucs_fatal("Failed to get a new receive descriptor for MM");
+            }
         }
         /* save the iface of this desc for its later release */
         uct_recv_desc_iface(desc) = &iface->super.super;
     }
+    return status;
 }
 
 /**
