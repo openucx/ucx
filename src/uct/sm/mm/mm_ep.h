@@ -8,7 +8,6 @@
 #define UCT_MM_EP_H
 
 #include "mm_iface.h"
-
 #include <uct/tl/tl_log.h>
 #include <ucs/datastruct/sglib.h>
 #include <ucs/datastruct/sglib_wrapper.h>
@@ -71,12 +70,12 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
 
-static inline int uct_mm_remote_seg_hash(uct_mm_remote_seg_t *seg)
+static inline uint64_t uct_mm_remote_seg_hash(uct_mm_remote_seg_t *seg)
 {
     return seg->mmid % UCT_MM_BASE_ADDRESS_HASH_SIZE;
 }
 
-static inline int uct_mm_remote_seg_compare(uct_mm_remote_seg_t *seg1, uct_mm_remote_seg_t *seg2)
+static inline int64_t uct_mm_remote_seg_compare(uct_mm_remote_seg_t *seg1, uct_mm_remote_seg_t *seg2)
 {
     return  seg1->mmid - seg2->mmid;
 }

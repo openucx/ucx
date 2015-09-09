@@ -154,12 +154,18 @@ static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
 }
 
 ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
-                                     uct_mm_fifo_element_t *fifo_elem_p)
+                                             uct_mm_fifo_element_t *fifo_elem_p,
+                                             const unsigned abort_on_failure)
 {
     uct_mm_recv_desc_t *desc;
 
-    UCT_TL_IFACE_GET_RX_DESC(&iface->super, iface->recv_desc_mp, desc,
-                             return UCS_ERR_NO_RESOURCE);
+    if (abort_on_failure) {
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, iface->recv_desc_mp, desc,
+                                 ucs_fatal("Failed to get a receive descriptor"));
+    } else {
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, iface->recv_desc_mp, desc,
+                                 return UCS_ERR_NO_RESOURCE);
+    }
 
     fifo_elem_p->desc_mmid   = desc->key;
     fifo_elem_p->desc_offset = iface->rx_headroom +
@@ -174,26 +180,24 @@ static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
                                              uct_mm_fifo_element_t* elem)
 {
     ucs_status_t status;
+    uct_mm_recv_desc_t *desc;
 
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
         /* read short (inline) messages from the FIFO elements */
         uct_mm_iface_invoke_am(iface, elem->am_id, (elem + 1), elem->length,
-                               iface->last_recv_desc, 1);
+                               iface->last_recv_desc, UCT_MM_AM_SHORT);
     } else {
         /* read bcopy messages from the receive descriptors */
         VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
                                   elem->length);
+        desc = UCT_MM_IFACE_GET_DESC_START(iface, elem);
         status = uct_mm_iface_invoke_am(iface, elem->am_id,
                                         elem->desc_chunk_base_addr + elem->desc_offset,
-                                        elem->length,
-                                        (uct_mm_recv_desc_t *) (elem->desc_chunk_base_addr +
-                                        elem->desc_offset - iface->rx_headroom) - 1,
-                                        0);
+                                        elem->length, desc, UCT_MM_AM_BCOPY);
         if (status != UCS_OK) {
-            status = uct_mm_assign_desc_to_fifo_elem(iface, elem);
-            if (status != UCS_OK) {
-                ucs_error("Failed to allocate a descriptor for MM");
-            }
+            /* assign a new receive descriptor to this FIFO element.
+             * abort if the new descriptor allocation failed */
+            uct_mm_assign_desc_to_fifo_elem(iface, elem, 1);
         }
     }
 }
@@ -247,12 +251,13 @@ void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems)
 {
     uct_mm_fifo_element_t* fifo_elem_p;
+    uct_mm_recv_desc_t *desc;
     unsigned i;
 
     for (i = 0; i < num_elems; i++) {
         fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(iface, iface->recv_fifo_elements, i);
-        ucs_mpool_put((uct_mm_recv_desc_t *) (fifo_elem_p->desc_chunk_base_addr +
-                       fifo_elem_p->desc_offset - iface->rx_headroom) - 1);
+        desc = UCT_MM_IFACE_GET_DESC_START(iface, fifo_elem_p);
+        ucs_mpool_put(desc);
     }
 }
 
@@ -360,7 +365,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
         fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(self, self->recv_fifo_elements, i);
         fifo_elem_p->flags = UCT_MM_FIFO_ELEM_FLAG_OWNER;
 
-        status = uct_mm_assign_desc_to_fifo_elem(self, fifo_elem_p);
+        status = uct_mm_assign_desc_to_fifo_elem(self, fifo_elem_p, 0);
         if (status != UCS_OK) {
             ucs_error("Failed to allocate a descriptor for MM");
             goto destroy_descs;

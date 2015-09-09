@@ -24,7 +24,16 @@ enum {
     UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1), /* if inline or not */
 };
 
+enum {
+    UCT_MM_AM_BCOPY,
+    UCT_MM_AM_SHORT,
+};
+
 #define UCT_MM_IFACE_GET_FIFO_ELEM(_iface, _fifo , _index) \
-    (uct_mm_fifo_element_t*) ((char*)(_fifo) + ((_index) * (_iface)->elem_size));
+          (uct_mm_fifo_element_t*) ((char*)(_fifo) + ((_index) * (_iface)->elem_size));
+
+#define UCT_MM_IFACE_GET_DESC_START(_iface, _fifo_elem_p) \
+          (uct_mm_recv_desc_t *) ((_fifo_elem_p)->desc_chunk_base_addr +  \
+          (_fifo_elem_p)->desc_offset - (_iface)->rx_headroom) - 1;
 
 #endif /* UCT_MM_H */
