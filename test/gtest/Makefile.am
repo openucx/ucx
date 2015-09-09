@@ -71,6 +71,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_wireup.cc \
 	ucp/ucp_test.cc \
 	\
+	ucs/test_arbiter.cc \
 	ucs/test_async.cc \
 	ucs/test_class.cc \
 	ucs/test_component.cc \
