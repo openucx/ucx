@@ -464,13 +464,13 @@ ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
     /* fill resources we should use */
     status = ucp_fill_resources(context, config);
     if (status != UCS_OK) {
-        goto err_free_resources;
+        goto err_free_config;
     }
 
     /* initialize tag matching */
     status = ucp_tag_init(context);
     if (status != UCS_OK) {
-        goto err_free_config;
+        goto err_free_resources;
     }
 
     *context_p = context;
