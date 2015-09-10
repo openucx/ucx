@@ -20,7 +20,7 @@
 #define UCT_MM_GET_FIFO_SIZE(iface)  (UCS_SYS_CACHE_LINE_SIZE - 1 +  \
                                       UCT_MM_FIFO_CTL_SIZE_ALIGNED + \
                                      ((iface)->config.fifo_size *    \
-                                     (iface)->elem_size))
+                                     (iface)->config.fifo_elem_size))
 
 typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
@@ -52,7 +52,6 @@ struct uct_mm_iface {
 
     uint8_t                 fifo_shift;          /* = log2(fifo_size) */
     unsigned                fifo_mask;           /* = 2^fifo_shift - 1 */
-    unsigned                elem_size;
     uint64_t                fifo_release_factor_mask;
 
     ucs_mpool_h             recv_desc_mp;
@@ -62,8 +61,8 @@ struct uct_mm_iface {
 
     struct {
         unsigned fifo_size;
-        unsigned seg_size;          /* size of the receive descriptor */
-                                    /* (for payload) */
+        unsigned fifo_elem_size;
+        unsigned seg_size;       /* size of the receive descriptor (for payload)*/
     } config;
 };
 

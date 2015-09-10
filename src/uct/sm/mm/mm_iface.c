@@ -91,7 +91,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
     iface_attr->cap.get.max_bcopy      = SIZE_MAX;
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.am.max_short       = iface->elem_size - sizeof(uct_mm_fifo_element_t);
+    iface_attr->cap.am.max_short       = iface->config.fifo_elem_size -
+                                         sizeof(uct_mm_fifo_element_t);
     iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
     iface_attr->cap.am.max_zcopy       = 0;
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
@@ -313,8 +314,16 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto err;
     }
 
+    if (mm_config->super.max_short <= sizeof(uct_mm_fifo_element_t)) {
+        ucs_error("The UCT_MM_MAX_SHORT parameter must be larger than the FIFO "
+                  "element header size. ( >= %ld bytes).",
+                  sizeof(uct_mm_fifo_element_t));
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
     self->config.fifo_size         = mm_config->fifo_size;
-    self->elem_size                = UCT_MM_FIFO_ELEMENT_SIZE;
+    self->config.fifo_elem_size    = mm_config->super.max_short;
     self->config.seg_size          = mm_config->super.max_bcopy;
     self->fifo_release_factor_mask = UCS_MASK(ucs_ilog2(ucs_max((int)
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
