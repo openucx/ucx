@@ -12,7 +12,9 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/frag_list.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/sglib.h>
+#include <ucs/time/timer_wheel.h>
 
 #define UCT_UD_EP_NULL_ID     ((1<<24)-1)
 #define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
@@ -44,12 +46,18 @@ typedef ucs_status_t (*uct_ud_ep_hook_t)(uct_ud_ep_t *ep, uct_ud_neth_t *neth);
 
 #define UCT_UD_EP_HOOK_DECLARE(name) uct_ud_ep_hook_t name
 
-#define UCT_UD_EP_HOOK_CALL_RX(ep, neth) \
+#define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len) \
     if ((ep)->rx.rx_hook(ep, neth) != UCS_OK) { \
+        uct_ud_log_packet(__FILE__, __LINE__, __FUNCTION__, \
+                          ucs_derived_of(ep->super.super.iface, uct_ud_iface_t), \
+                          ep, \
+                          UCT_AM_TRACE_TYPE_RECV_DROP, \
+                          neth, len); \
         return; \
     }
 
 #define UCT_UD_EP_HOOK_CALL_TX(ep, neth) (ep)->tx.tx_hook(ep, neth);
+#define UCT_UD_EP_HOOK_CALL_TIMER(ep)    (ep)->timer_hook(ep, NULL);
 
 static inline ucs_status_t uct_ud_ep_null_hook(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
@@ -60,20 +68,77 @@ static inline ucs_status_t uct_ud_ep_null_hook(uct_ud_ep_t *ep, uct_ud_neth_t *n
 do { \
    (ep)->tx.tx_hook = uct_ud_ep_null_hook; \
    (ep)->rx.rx_hook = uct_ud_ep_null_hook; \
+   (ep)->timer_hook = uct_ud_ep_null_hook; \
 } while(0);
 
 #else 
 
 #define UCT_UD_EP_HOOK_DECLARE(name)
-#define UCT_UD_EP_HOOK_CALL_RX(ep, neth) 
+#define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len) 
 #define UCT_UD_EP_HOOK_CALL_TX(ep, neth) 
+#define UCT_UD_EP_HOOK_CALL_TIMER(ep) 
 #define UCT_UD_EP_HOOK_INIT(ep) 
 
 #endif
 
-typedef struct {
-    uct_pending_req_priv_t  super;
-} uct_ud_notification_priv_t;
+
+/**
+ * Slow ep timer 
+ * The purpose of the slow timer is to schedule resends and ack replies.
+ * The timer is a wheel timer. Timer wheel sweep is done on every async
+ * progress invocation. One tick usually happens once in 0.1 seconds. 
+ * It is best to avoid to take time in the fast path.
+ *
+ * wheel_time is the time of last timer wheel sweep. 
+ * on send:
+ *   - try to start wheel timer. 
+ *   - send_time = wheel_time. That is sending a packet resets retransmission
+ *   timeout. This does not allow infinite number of resets because number of
+ *   outstanding packets is bound by the TX window size. 
+ * on ack recv:
+ *   - send_time = wheel_time. (advance last send time)
+ * on timer expiration:
+ *   - if wheel_time - saved_time > 3*one_tick_time 
+ *        schedule resend 
+ *        send_time = wheel_time
+ *   - if window is not empty resched timer
+ *   3x is needed to avoid false resends because of errors in timekeeping
+ *
+ * Fast ep timer
+ * The purpose of the fast timer is to detect packet loss as early as
+ * possible. The timer is a wheel timer. Fast timer sweep is done on 
+ * CQ polling which happens either in explicit polling or in async
+ * progress. As a result fast timer resolution may vary.   
+ *
+ * TODO: adaptive CHK algo description
+ *
+ * Fast time is relatively expensive. It is best to disable if packet loss
+ * is not expected. Usual reasons for packet loss are: slow receiver,
+ * many to one traffic pattern. 
+ */
+
+/* 
+ * Endpoint pending control operations. The operations
+ * are executed in time of progress along with
+ * pending requests added by uct user. 
+ */
+enum {
+    UCT_UD_EP_OP_NONE       = 0,
+    UCT_UD_EP_OP_ACK        = UCS_BIT(0),  /* ack data */
+    UCT_UD_EP_OP_ACK_REQ    = UCS_BIT(1),  /* request ack of sent packets */
+    UCT_UD_EP_OP_RESEND     = UCS_BIT(2),  /* resend un acked packets */
+    UCT_UD_EP_OP_CREP       = UCS_BIT(3),  /* send connection reply */
+};
+
+#define UCT_UD_EP_OP_CTL_LOW_PRIO (UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_ACK)
+#define UCT_UD_EP_OP_CTL_HI_PRIO  (UCT_UD_EP_OP_CREP|UCT_UD_EP_OP_RESEND)
+
+typedef struct uct_ud_ep_pending_op {
+    ucs_arbiter_group_t   group;  
+    uint32_t              ops;    /* bitmask that describes what control ops are sceduled */
+    ucs_arbiter_elem_t    elem;
+} uct_ud_ep_pending_op_t;
+
 
 struct uct_ud_ep {
     uct_base_ep_t           super;
@@ -84,8 +149,11 @@ struct uct_ud_ep {
          uct_ud_psn_t           psn;          /* Next PSN to send */
          uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent - (ack_psn + window) (from incoming packet) */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
+         uct_ud_psn_t           rt_psn;       /* last psn that was retransmitted */
          ucs_queue_head_t       window;       /* send window */
-         uct_ud_ep_pending_op_t pending;      /* pending control ops */
+         uct_ud_ep_pending_op_t pending;      /* pending ops */
+         ucs_time_t             send_time;    /* tx time of last packet */
+         ucs_queue_iter_t       rt_pos;       /* points to the part of tx window that needs to be resent */
          UCS_STATS_NODE_DECLARE(stats);
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;
@@ -98,6 +166,8 @@ struct uct_ud_ep {
     } rx;
     ucs_list_link_t          cep_list;
     uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
+    ucs_wtimer_t slow_timer;
+    UCT_UD_EP_HOOK_DECLARE(timer_hook);
 };
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
@@ -114,6 +184,11 @@ ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
 
 ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep);
 
+ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n);
+
+void         uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
+
+
 /* helper function to create/destroy new connected ep */
 ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
                                                const uct_sockaddr_ib_t *addr,
@@ -124,7 +199,10 @@ void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
                                  const uct_sockaddr_ib_t *addr);
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
-uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep);
+
+ucs_arbiter_cb_result_t
+uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
+                     void *arg);
 
 void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
@@ -197,6 +275,44 @@ static inline int uct_ud_ep_hash(uct_ud_ep_t *ep)
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_ep_t, uct_ud_ep_compare, next)
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_ep_t, UCT_UD_HASH_SIZE, uct_ud_ep_hash)
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_ctl_op_del(uct_ud_ep_t *ep, uint32_t ops)
+{
+    ep->tx.pending.ops &= ~ops;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_ep_ctl_op_check(uct_ud_ep_t *ep, uint32_t op)
+{
+    return ep->tx.pending.ops & op;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_ep_ctl_op_isany(uct_ud_ep_t *ep)
+{
+    return ep->tx.pending.ops; 
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
+{
+    return ep->tx.pending.ops == ops;
+}
+
+
+/* TODO: relay on window check instead. max_psn = psn  */
+static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
+{
+        return ep->dest_ep_id != UCT_UD_EP_NULL_ID;
+}
+
+static UCS_F_ALWAYS_INLINE int uct_ud_ep_no_window(uct_ud_ep_t *ep)
+{
+        return ep->tx.psn == ep->tx.max_psn;
+}
+
 
 #endif 
 

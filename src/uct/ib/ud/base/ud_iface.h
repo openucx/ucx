@@ -13,6 +13,9 @@
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/sglib.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/arbiter.h>
+#include <ucs/async/async.h>
+#include <ucs/time/timer_wheel.h>
 
 #include "ud_def.h"
 #include "ud_ep.h"
@@ -45,6 +48,14 @@ static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a) {
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE, uct_ud_iface_peer_hash)
 
+typedef void (*uct_ud_ep_tx_skb_t)(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                                   uct_ud_send_skb_t *skb);
+typedef struct uct_ud_iface_ops {
+    ucs_notifier_chain_func_t async_progress;
+    uct_ud_ep_tx_skb_t        tx_skb;
+} uct_ud_iface_ops_t;
+
+
 struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;
@@ -58,7 +69,9 @@ struct uct_ud_iface {
         ucs_mpool_t            mp;
         int16_t                available;
         unsigned               unsignaled;
-        ucs_queue_head_t       pending_ops;
+        /* pool of skbs that are reserved for retransmissions/ctl packects */
+        ucs_queue_head_t       res_skbs;
+        ucs_arbiter_t          pending_q;
     } tx;
     struct {
         unsigned             tx_qp_len;
@@ -67,7 +80,13 @@ struct uct_ud_iface {
     } config;
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE]; 
+    struct {
+        int               timer_id;
+        ucs_twheel_t      slow_timer;
+    } async;
+    uct_ud_iface_ops_t    ops;
 };
+
 UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char *, unsigned, unsigned, uct_ud_iface_config_t*)
 
@@ -104,15 +123,31 @@ static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
     return iface->tx.available > 0;
 }
 
-typedef void (*uct_ud_ep_tx_skb_t)(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                   uct_ud_send_skb_t *skb);
-
-void uct_ud_iface_progress_pending(uct_ud_iface_t *iface, 
-                                   uct_ud_ep_tx_skb_t tx_skb);
-
-static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_pending(uct_ud_iface_t *iface)
+static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
 {
-    return !ucs_queue_is_empty(&iface->tx.pending_ops);
+    return iface->tx.skb || !ucs_mpool_is_empty(&iface->tx.mp);
+}
+
+
+uct_ud_send_skb_t *uct_ud_iface_res_skb_get(uct_ud_iface_t *iface);
+
+static inline void 
+uct_ud_iface_res_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
+{
+    if (skb != &iface->tx.skb_inl.super) {
+        ucs_queue_push(&iface->tx.res_skbs, &skb->queue);
+    }
+}
+
+
+static UCS_F_ALWAYS_INLINE void uct_ud_enter(uct_ud_iface_t *iface)
+{
+    UCS_ASYNC_BLOCK(iface->super.super.worker->async);
+}
+
+static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
+{
+    UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
 }
 
 /* 
@@ -218,5 +253,23 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 
+/* get time of the last async wakeup */
+static UCS_F_ALWAYS_INLINE ucs_time_t
+uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
+{
+    return iface->super.super.worker->async->last_wakeup;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
+{
+
+    if (!uct_ud_iface_can_tx(iface)) {
+        return;
+    }
+
+    ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
+             uct_ud_ep_do_pending, (void *)is_async);
+}
 #endif
 

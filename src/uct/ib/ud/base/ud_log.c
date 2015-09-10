@@ -105,6 +105,21 @@ static int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
     return n;
 } 
 
+static char *pkt_type2str(int type)
+{
+    switch(type) {
+    case UCT_AM_TRACE_TYPE_SEND:
+        return "TX";
+    case UCT_AM_TRACE_TYPE_RECV:
+        return "RX";
+    case UCT_AM_TRACE_TYPE_RECV_DROP:
+        return "RX **DROPPED BY FILTER**";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+
 void uct_ud_log_packet(const char *file, int line, const char *function,
                        uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                        uct_am_trace_type_t type, uct_ud_neth_t *neth, uint32_t len)
@@ -117,7 +132,7 @@ void uct_ud_log_packet(const char *file, int line, const char *function,
     max = sizeof(buf);
 
     n = snprintf(p, max, "%s: if=%p ",
-                 (type == UCT_AM_TRACE_TYPE_SEND) ? "TX" : "RX", iface);
+                 pkt_type2str(type), iface);
     p += n; max -= n;
 
     n = uct_ud_dump_ep(p, max, ep);

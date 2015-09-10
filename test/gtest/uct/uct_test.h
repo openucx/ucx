@@ -11,6 +11,7 @@
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
+#include <ucs/async/async.h>
 }
 #include <ucs/gtest/test.h>
 #include <vector>
@@ -74,6 +75,14 @@ protected:
         void flush() const;
 
     private:
+        class async_wrapper {
+        public:
+            ucs_async_context_t   m_async;
+            async_wrapper();
+            ~async_wrapper();
+        private:
+            async_wrapper(const async_wrapper &);
+        };
         typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const entity&);
@@ -83,6 +92,7 @@ protected:
         void connect_to_ep(uct_ep_h from, uct_ep_h to);
 
         ucs::handle<uct_pd_h>      m_pd;
+        async_wrapper              m_async;
         ucs::handle<uct_worker_h>  m_worker;
         ucs::handle<uct_iface_h>   m_iface;
         eps_vec_t                  m_eps;

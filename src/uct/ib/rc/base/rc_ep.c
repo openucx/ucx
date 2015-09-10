@@ -229,6 +229,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     }
 
     UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
+    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
     ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)n->priv);
 
     if (ep->available > 0) {

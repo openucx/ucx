@@ -77,6 +77,9 @@ static ucs_status_t ucs_async_dispatch_handler_cb(ucs_async_handler_t *handler,
 
     mode  = handler->mode;
     async = handler->async;
+    if (async != NULL) {
+        async->last_wakeup = ucs_get_time();
+    }
     if (async == NULL) {
         ucs_trace_async("calling async handler %d", handler->id);
         handler->cb(handler->arg);
@@ -92,7 +95,7 @@ static ucs_status_t ucs_async_dispatch_handler_cb(ucs_async_handler_t *handler,
         ucs_async_method_call(mode, context_unblock, async);
     } else /* async != NULL */ {
         ucs_assert(from_async);
-        ucs_trace_async("missed %d", handler->id);
+        ucs_trace_async("missed %d miss_time %llu", handler->id, async->last_wakeup);
         if (ucs_atomic_cswap32(&handler->missed, 0, 1) == 0) {
             status = ucs_mpmc_queue_push(&async->missed, handler->id);
             if (status != UCS_OK) {
@@ -150,6 +153,7 @@ ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t
 
     async->mode         = mode;
     async->num_handlers = 0;
+    async->last_wakeup  = ucs_get_time();
     return UCS_OK;
 
 err_free_miss_fds:
@@ -177,6 +181,8 @@ static ucs_status_t ucs_async_add_handler(ucs_async_mode_t mode, int id,
 
     /* If async context is given, it should have same mode */
     if ((async != NULL) && (async->mode != mode)) {
+        ucs_error("async mode mismatch. mode: %d async context mode: %d", 
+                  mode, async->mode);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }

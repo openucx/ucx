@@ -12,7 +12,6 @@
 #include <ucs/type/status.h>
 #include <stdio.h>
 
-
 /*
  *  A mechanism to arbitrate among groups of queued work elements, which attempts
  * to be "fair" with respect to the groups.
@@ -81,9 +80,14 @@ typedef enum {
     UCS_ARBITER_CB_RESULT_REMOVE_ELEM,  /* Remove the current element, move to
                                            the next element. */
     UCS_ARBITER_CB_RESULT_NEXT_GROUP,   /* Keep current element and move to next
-                                           group. */
+                                           group. Group IS NOT descheduled */
     UCS_ARBITER_CB_RESULT_DESCHED_GROUP,/* Keep current element but remove the
                                            current group and move to next group. */
+    UCS_ARBITER_CB_RESULT_RESCHED_GROUP,/* Keep current element, do not process 
+                                           the group anymore during current
+                                           dispatch cycle. After dispatch()
+                                           is finished group automagically 
+                                           scheduled */
     UCS_ARBITER_CB_RESULT_STOP          /* Stop dispatching work altogether */
 } ucs_arbiter_cb_result_t;
 
@@ -146,14 +150,37 @@ void ucs_arbiter_cleanup(ucs_arbiter_t *arbiter);
 void ucs_arbiter_group_init(ucs_arbiter_group_t *group);
 void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group);
 
+/**
+ * Initialize an element object.
+ *
+ * @param [in]  elem    Element to initialize.
+ */
+static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
+{
+    elem->next = NULL;
+}
 
 /**
- * Add a new work element to a group.
+ * Add a new work element to a group - internal function
+ */
+void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, 
+                                        ucs_arbiter_elem_t *elem);
+
+/**
+ * Add a new work element to a group if it is not already there
  *
  * @param [in]  group    Group to add the element to.
  * @param [in]  elem     Work element to add.
  */
-void ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem);
+static inline void 
+ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
+                            ucs_arbiter_elem_t *elem)
+{
+    if (elem->next != NULL) {
+        return;
+    }
+    ucs_arbiter_group_push_elem_always(group, elem);
+}
 
 
 /**

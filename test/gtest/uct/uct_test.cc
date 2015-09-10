@@ -140,8 +140,10 @@ void uct_test::progress() const {
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          size_t rx_headroom, uct_pd_config_t *pd_config) {
+    ucs_status_t status;
+
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
-                           uct_worker_create, NULL, UCS_THREAD_MODE_MULTI /* TODO */);
+                           uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
 
     UCS_TEST_CREATE_HANDLE(uct_pd_h, m_pd, uct_pd_close,
                            uct_pd_open, resource.pd_name.c_str(), pd_config);
@@ -150,7 +152,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            uct_iface_open, m_pd, m_worker, resource.tl_name.c_str(),
                            resource.dev_name.c_str(), rx_headroom, iface_config);
 
-    ucs_status_t status = uct_iface_query(m_iface, &m_iface_attr);
+    status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
 }
 
@@ -458,4 +460,22 @@ size_t uct_test::mapped_buffer::pack(void *dest, void *arg) {
 std::ostream& operator<<(std::ostream& os, const resource* resource) {
     return os << resource->name();
 }
+
+uct_test::entity::async_wrapper::async_wrapper()
+{
+    ucs_status_t status;
+
+    /* Initialize context */
+    status = ucs_async_context_init(&m_async, UCS_ASYNC_MODE_THREAD);
+    if (UCS_OK != status) {
+        fprintf(stderr, "Failed to init async context.\n");fflush(stderr);
+    }
+    ASSERT_UCS_OK(status);
+}
+
+uct_test::entity::async_wrapper::~async_wrapper()
+{
+    ucs_async_context_cleanup(&m_async);
+}
+
 

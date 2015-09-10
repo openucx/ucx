@@ -30,7 +30,7 @@ void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group)
     ucs_assert(group->tail == NULL);
 }
 
-void ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
 {
     ucs_arbiter_elem_t *tail = group->tail;
 
@@ -82,6 +82,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     do {
         ptr  = next;
         next = ptr->next;
+        ptr->next = NULL;
         cb(arbiter, ptr, cb_arg);
     } while (ptr != tail);
     group->tail = NULL;
@@ -117,6 +118,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
     ucs_arbiter_group_t *group;
     ucs_arbiter_cb_result_t result;
     unsigned group_dispatch_count;
+    UCS_LIST_HEAD(resched_groups);
 
     next_group = arbiter->current;
     ucs_assert(next_group != NULL);
@@ -134,12 +136,14 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
         next_elem     = group_head;
 
         do {
-            elem      = next_elem;
-            next_elem = elem->next;
+            elem       = next_elem;
+            next_elem  = elem->next;
+            elem->next = NULL;
 
             ucs_assert(elem->group == group);
             ucs_trace_data("dispatching arbiter element %p", elem);
             result = cb(arbiter, elem, cb_arg);
+            ucs_trace_data("dispatch result %d", result);
             ++group_dispatch_count;
 
             if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
@@ -169,8 +173,12 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     last_elem->next = next_elem; /* Tail points to new head */
                 }
             } else if (result == UCS_ARBITER_CB_RESULT_NEXT_GROUP) {
+                elem->next = next_elem;
+                /* avoid infinite loop */
                 break;
-            } else if (result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) {
+            } else if ((result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) ||
+                       (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP)) {
+                elem->next = next_elem;
                 elem->list.next = NULL;
                 if (group_head == prev_group) {
                     next_group = NULL; /* No more groups */
@@ -178,16 +186,28 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     prev_group->list.next = &next_group->list;
                     next_group->list.prev = &prev_group->list;
                 }
+                if (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP) {
+                    ucs_list_add_tail(&resched_groups, &elem->list);
+                }
                 break;
             } else if (result == UCS_ARBITER_CB_RESULT_STOP) {
+                elem->next = next_elem;
                 goto out;
             } else {
+                elem->next = next_elem;
                 ucs_bug("unexpected return value from arbiter callback");
             }
         } while ((elem != last_elem) && (group_dispatch_count < per_group));
     } while (next_group != NULL);
 out:
     arbiter->current = next_group;
+
+    ucs_list_for_each_safe(elem, next_elem, &resched_groups, list) {
+        ucs_list_del(&elem->list);
+        elem->list.next = NULL;
+        ucs_trace_data("reschedule group %p", elem->group);
+        ucs_arbiter_group_schedule_nonempty(arbiter, elem->group);
+    }
 }
 
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream)

@@ -26,6 +26,19 @@ protected:
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
+    static ucs_arbiter_cb_result_t resched_groups(ucs_arbiter_t *arbitrer,
+                                                  ucs_arbiter_elem_t *elem,
+                                                  void *arg)
+    {
+        int *counter = (int*)arg;
+        if (*counter == 0) {
+            return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+        } else {
+            --(*counter);
+            return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+        }
+    }
+
     struct arb_elem {
         unsigned           group_idx;
         unsigned           elem_idx;
@@ -130,9 +143,10 @@ UCS_TEST_F(test_arbiter, add_purge) {
     ucs_arbiter_elem_t elem2_1;
     ucs_arbiter_elem_t elem2_2;
 
-    ucs_arbiter_group_push_elem(&group1, &elem1);
-    ucs_arbiter_group_push_elem(&group2, &elem2_1);
-    ucs_arbiter_group_push_elem(&group2, &elem2_2);
+    /* test internal function */
+    ucs_arbiter_group_push_elem_always(&group1, &elem1);
+    ucs_arbiter_group_push_elem_always(&group2, &elem2_1);
+    ucs_arbiter_group_push_elem_always(&group2, &elem2_2);
 
     ucs_arbiter_group_schedule(&arbiter, &group1);
     ucs_arbiter_group_schedule(&arbiter, &group2);
@@ -164,6 +178,7 @@ UCS_TEST_F(test_arbiter, multiple_dispatch) {
             e->group_idx = i;
             e->elem_idx  = j;
             e->last      = (j == num_elems - 1);
+            ucs_arbiter_elem_init(&e->elem);
             ucs_arbiter_group_push_elem(&groups[i], &e->elem);
             /* coverity[leaked_storage] */
         }
@@ -193,3 +208,47 @@ UCS_TEST_F(test_arbiter, multiple_dispatch) {
 
     ucs_arbiter_cleanup(&arbiter);
 }
+
+UCS_TEST_F(test_arbiter, resched) {
+
+    ucs_arbiter_t arbiter;
+
+    ucs_arbiter_group_t group1;
+    ucs_arbiter_group_t group2;
+
+    ucs_arbiter_init(&arbiter);
+    ucs_arbiter_group_init(&group1);
+    ucs_arbiter_group_init(&group2);
+
+
+    ucs_arbiter_elem_t elem1;
+    ucs_arbiter_elem_t elem2_1;
+
+    ucs_arbiter_elem_init(&elem1);
+    ucs_arbiter_elem_init(&elem2_1);
+    ucs_arbiter_group_push_elem(&group1, &elem1);
+    ucs_arbiter_group_push_elem(&group2, &elem2_1);
+
+    ucs_arbiter_group_schedule(&arbiter, &group1);
+    ucs_arbiter_group_schedule(&arbiter, &group2);
+
+    int count = 2;
+    ucs_arbiter_dispatch_nonempty(&arbiter, 1, resched_groups, &count);
+
+    EXPECT_EQ(0, count);
+
+    count = 1;
+    ucs_arbiter_dispatch_nonempty(&arbiter, 1, resched_groups, &count);
+    EXPECT_EQ(0, count);
+
+    /* one group with one elem should be there */
+    count = 1;
+    ucs_arbiter_dispatch_nonempty(&arbiter, 3, count_elems, &count);
+    EXPECT_EQ(0, count);
+    ASSERT_TRUE(arbiter.current == NULL);
+
+    ucs_arbiter_group_cleanup(&group2);
+    ucs_arbiter_group_cleanup(&group1);
+    ucs_arbiter_cleanup(&arbiter);
+}
+

@@ -95,7 +95,10 @@ gtest_SOURCES += \
     uct/test_ib.cc
 if HAVE_TL_UD
 gtest_SOURCES += \
+	uct/ud_base.cc \
 	uct/test_ud.cc \
+	uct/test_ud_slow_timer.cc \
+	uct/test_ud_pending.cc \
 	uct/test_ud_ds.cc
 endif
 endif
@@ -106,6 +109,7 @@ noinst_HEADERS = \
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
+	uct/ud_base.h \
 	\
 	ucp/test_ucp_memheap.h \
 	ucp/ucp_test.h

@@ -5,68 +5,45 @@
 */
 
 #include "uct_test.h"
+#include "ud_base.h"
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/ib/ud/base/ud_ep.h>
 };
-/* TODO: disable ud async progress for most tests once we have it */
-class test_ud : public uct_test {
+
+class test_ud : public ud_base_test {
 public:
-    virtual void init() {
-        uct_test::init();
 
-        m_e1 = uct_test::create_entity(0);
-        m_e2 = uct_test::create_entity(0);
-
-        m_entities.push_back(m_e1);
-        m_entities.push_back(m_e2);
+    static ucs_status_t clear_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        neth->packet_type &= ~UCT_UD_PACKET_FLAG_ACK_REQ;
+        return UCS_OK;
     }
 
-    uct_ud_ep_t *ep(entity *e) {
-        return ucs_derived_of(e->ep(0), uct_ud_ep_t);
-    }
+    static int ack_req_tx_cnt;
 
-    uct_ud_ep_t *ep(entity *e, int i) {
-        return ucs_derived_of(e->ep(i), uct_ud_ep_t);
-    }
+    static uct_ud_psn_t tx_ack_psn;
 
-    void short_progress_loop() {
-        ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(10.0* ucs::test_time_multiplier());
-        while (ucs_get_time() < end_time) {
-            progress();
+    static ucs_status_t ack_req_count_tx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
+            tx_ack_psn = neth->psn;
+            ack_req_tx_cnt++;
         }
+        return UCS_OK;
     }
-
-    void connect() {
-        m_e1->connect(0, *m_e2, 0);
-        m_e2->connect(0, *m_e1, 0);
-    }
-
-    void cleanup() {
-        uct_test::cleanup();
-    }
-
-    ucs_status_t tx(entity *e) {
-        ucs_status_t err;
-        err = uct_ep_put_short(e->ep(0), &m_dummy, sizeof(m_dummy), (uint64_t)&m_dummy, 0);
-        return err;
-    }
-
-    void set_tx_win(entity *e, int size) {
-        /* force window */
-        ep(e)->tx.max_psn = size;
-    }
-
-
-protected:
-    entity *m_e1, *m_e2;
-    uint64_t m_dummy;
 };
+
+int test_ud::ack_req_tx_cnt = 0;
+
+uct_ud_psn_t test_ud::tx_ack_psn = 0;
 
 UCS_TEST_P(test_ud, basic_tx) {
     unsigned i, N=13;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, 1024);
     for (i = 0; i < N; i++) {
@@ -132,11 +109,6 @@ UCS_TEST_P(test_ud, tx_window1) {
 }
 
 #ifdef UCT_UD_EP_DEBUG_HOOKS
-static ucs_status_t clear_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    neth->packet_type &= ~UCT_UD_PACKET_FLAG_ACK_REQ;
-    return UCS_OK;
-}
 
 /* disable ack req,
  * send full window, 
@@ -145,6 +117,8 @@ static ucs_status_t clear_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 UCS_TEST_P(test_ud, tx_window2) {
     unsigned i, N=13;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, N+1);
     ep(m_e1)->tx.tx_hook = clear_ack_req;
@@ -160,16 +134,6 @@ UCS_TEST_P(test_ud, tx_window2) {
     EXPECT_EQ(N, ucs_queue_length(&ep(m_e1)->tx.window));
 }
 
-static int ack_req_tx_cnt;
-uct_ud_psn_t tx_ack_psn;
-static ucs_status_t ack_req_count_tx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
-        tx_ack_psn = neth->psn;
-        ack_req_tx_cnt++;
-    }
-    return UCS_OK;
-}
 
 /* last packet in window must have ack_req
  * answered with ack control message
@@ -258,7 +222,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e2)->ep_id);
     EXPECT_EQ(0U, ep(m_e2)->conn_id);
-    EXPECT_EQ(2, ep(m_e2)->tx.psn);
+    EXPECT_EQ(1, ep(m_e2)->tx.psn);
     EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), 1);
 }
 
