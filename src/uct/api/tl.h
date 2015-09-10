@@ -122,7 +122,7 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_pending_add)(uct_ep_h ep, uct_pending_req_t *n);
 
-    ucs_status_t (*ep_pending_purge)(uct_ep_h ep, uct_pending_callback_t cb);
+    void         (*ep_pending_purge)(uct_ep_h ep, uct_pending_callback_t cb);
 
     /* TODO purge per iface */
 

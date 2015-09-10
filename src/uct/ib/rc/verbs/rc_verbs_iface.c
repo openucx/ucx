@@ -75,9 +75,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     struct ibv_wc wc[UCT_IB_MAX_WC];
     uct_rc_verbs_ep_t *ep;
-    uct_rc_iface_send_op_t *op;
     unsigned count;
-    uint16_t sn;
     int i, ret;
 
     ret = ibv_poll_cq(iface->super.super.send_cq, UCT_IB_MAX_WC, wc);
@@ -95,7 +93,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 
         UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
 
-        ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num), uct_rc_verbs_ep_t);
+        ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
+                            uct_rc_verbs_ep_t);
         ucs_assert(ep != NULL);
 
         count = wc[i].wr_id + 1; /* Number of sends with WC completes in batch */
@@ -103,11 +102,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep->tx.completion_count     += count;
         ++iface->super.tx.cq_available;
 
-        sn = ep->tx.completion_count;
-        ucs_queue_for_each_extract(op, &ep->super.outstanding, queue,
-                                   UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-            op->handler(op);
-        }
+        uct_rc_ep_process_tx_completion(&iface->super, &ep->super,
+                                        ep->tx.completion_count);
     }
 }
 
@@ -352,8 +348,8 @@ uct_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_atomic_fadd32    = uct_rc_verbs_ep_atomic_fadd32,
     .ep_atomic_swap32    = uct_rc_verbs_ep_atomic_swap32,
     .ep_atomic_cswap32   = uct_rc_verbs_ep_atomic_cswap32,
-    .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
-    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    .ep_pending_add      = uct_rc_ep_pending_add,
+    .ep_pending_purge    = uct_rc_ep_pending_purge,
     .ep_flush            = uct_rc_verbs_ep_flush
 };
 
