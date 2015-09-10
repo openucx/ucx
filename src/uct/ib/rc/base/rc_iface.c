@@ -193,21 +193,22 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     ucs_list_head_init(&self->ep_list);
 
     /* Create RX buffers mempool */
-    status = uct_ib_iface_recv_mpool_create(&self->super, &config->super,
+    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
                                             "rc_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* Create TX buffers mempool */
-    status = uct_iface_mpool_create(&self->super.super.super,
-                                    sizeof(uct_rc_iface_send_desc_t) + self->super.config.seg_size,
-                                    sizeof(uct_rc_iface_send_desc_t),
-                                    UCS_SYS_CACHE_LINE_SIZE,
-                                    &config->super.tx.mp,
-                                    self->config.tx_qp_len,
-                                    uct_rc_iface_send_desc_init,
-                                    "rc_send_desc", &self->tx.mp);
+    status = uct_iface_mpool_init(&self->super.super,
+                                  &self->tx.mp,
+                                  sizeof(uct_rc_iface_send_desc_t) + self->super.config.seg_size,
+                                  sizeof(uct_rc_iface_send_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->super.tx.mp,
+                                  self->config.tx_qp_len,
+                                  uct_rc_iface_send_desc_init,
+                                  "rc_send_desc");
     if (status != UCS_OK) {
         goto err_destroy_rx_mp;
     }
@@ -245,9 +246,9 @@ err_destroy_srq:
 err_free_tx_ops:
     ucs_free(self->tx.ops);
 err_destroy_tx_mp:
-    ucs_mpool_destroy(self->tx.mp);
+    ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_rx_mp:
-    ucs_mpool_destroy(self->rx.mp);
+    ucs_mpool_cleanup(&self->rx.mp, 1);
 err:
     return status;
 }
@@ -275,8 +276,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     }
 
     ucs_free(self->tx.ops);
-    ucs_mpool_destroy(self->tx.mp);
-    ucs_mpool_destroy_unchecked(self->rx.mp); /* Cannot flush SRQ */
+    ucs_mpool_cleanup(&self->tx.mp, 1);
+    ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
 }
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);

@@ -10,6 +10,7 @@
 #include <ucs/async/pipe.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/frag_list.h>
+#include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/time/timerq.h>
 #include <ucs/time/timer_wheel.h>
@@ -55,6 +56,9 @@ void print_type_info(const char * tl_name)
 {
     if (tl_name == NULL) {
         printf("UCS:\n");
+        PRINT_SIZE(ucs_mpool_t);
+        PRINT_SIZE(ucs_mpool_chunk_t);
+        PRINT_SIZE(ucs_mpool_elem_t);
         PRINT_SIZE(ucs_async_context_t);
         PRINT_SIZE(ucs_async_handler_t);
         PRINT_SIZE(ucs_async_ops_t);

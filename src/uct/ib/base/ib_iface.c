@@ -142,9 +142,9 @@ static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem
     desc->lkey = mr->lkey;
 }
 
-ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
-                                            uct_ib_iface_config_t *config,
-                                            const char *name, ucs_mpool_h *mp_p)
+ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
+                                          uct_ib_iface_config_t *config,
+                                          const char *name, ucs_mpool_t *mp)
 {
     unsigned grow;
 
@@ -156,15 +156,13 @@ ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
                         config->rx.mp.max_bufs);
     }
 
-    return uct_iface_mpool_create(&iface->super.super,
-                                  iface->config.rx_payload_offset + iface->config.seg_size,
-                                  iface->config.rx_hdr_offset,
-                                  UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->rx.mp,
-                                  grow,
-                                  uct_ib_iface_recv_desc_init,
-                                  name,
-                                  mp_p);
+    return uct_iface_mpool_init(&iface->super, mp,
+                                iface->config.rx_payload_offset + iface->config.seg_size,
+                                iface->config.rx_hdr_offset,
+                                UCS_SYS_CACHE_LINE_SIZE,
+                                &config->rx.mp, grow,
+                                uct_ib_iface_recv_desc_init,
+                                name);
 }
 
 void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
@@ -456,8 +454,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 
 UCS_CLASS_DEFINE(uct_ib_iface_t, uct_base_iface_t);
 
-int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
-                                ucs_mpool_h rx_mp, 
+int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n)
 {
     uct_ib_iface_recv_desc_t *desc;
@@ -465,7 +462,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
 
     count = 0;
     while (count < n) {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, rx_mp, desc, break);
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
         wrs[count].sg.length = iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;

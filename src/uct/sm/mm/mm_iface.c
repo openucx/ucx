@@ -161,10 +161,10 @@ ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
     uct_mm_recv_desc_t *desc;
 
     if (abort_on_failure) {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, iface->recv_desc_mp, desc,
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp, desc,
                                  ucs_fatal("Failed to get a receive descriptor"));
     } else {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, iface->recv_desc_mp, desc,
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp, desc,
                                  return UCS_ERR_NO_RESOURCE);
     }
 
@@ -345,22 +345,23 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     self->read_index            = 0;
 
     /* create a memory pool for receive descriptors */
-    status = uct_iface_mpool_create(&self->super.super,
-                                    sizeof(uct_mm_recv_desc_t) + rx_headroom +
-                                    self->config.seg_size,
-                                    sizeof(uct_mm_recv_desc_t),
-                                    UCS_SYS_CACHE_LINE_SIZE,
-                                    &mm_config->mp,
-                                    256,
-                                    uct_mm_iface_recv_desc_init,
-                                    "mm_recv_desc", &self->recv_desc_mp);
+    status = uct_iface_mpool_init(&self->super,
+                                  &self->recv_desc_mp,
+                                  sizeof(uct_mm_recv_desc_t) + rx_headroom +
+                                  self->config.seg_size,
+                                  sizeof(uct_mm_recv_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &mm_config->mp,
+                                  256,
+                                  uct_mm_iface_recv_desc_init,
+                                  "mm_recv_desc");
     if (status != UCS_OK) {
         ucs_error("Failed to create a receive descriptor memory pool for the MM transport");
         goto err_free_fifo;
     }
 
     /* set the first receive descriptor */
-    self->last_recv_desc = ucs_mpool_get(self->recv_desc_mp);
+    self->last_recv_desc = ucs_mpool_get(&self->recv_desc_mp);
     VALGRIND_MAKE_MEM_DEFINED(self->last_recv_desc, sizeof(*(self->last_recv_desc)));
     if (self->last_recv_desc == NULL) {
         ucs_error("Failed to get the first receive descriptor");
@@ -391,7 +392,7 @@ destroy_descs:
     uct_mm_iface_free_rx_descs(self, i);
     ucs_mpool_put(self->last_recv_desc);
 destroy_recv_mpool:
-    ucs_mpool_destroy(self->recv_desc_mp);
+    ucs_mpool_cleanup(&self->recv_desc_mp, 1);
 err_free_fifo:
     uct_mm_pd_mapper_ops(pd)->free(self->shared_mem, self->fifo_mm_id,
                                    UCT_MM_GET_FIFO_SIZE(self));
@@ -409,7 +410,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     uct_mm_iface_free_rx_descs(self, self->config.fifo_size);
 
     ucs_mpool_put(self->last_recv_desc);
-    ucs_mpool_destroy(self->recv_desc_mp);
+    ucs_mpool_cleanup(&self->recv_desc_mp, 1);
 
     size_to_free = UCT_MM_GET_FIFO_SIZE(self);
 

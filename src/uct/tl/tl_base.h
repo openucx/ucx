@@ -350,8 +350,9 @@ extern ucs_config_field_t uct_iface_config_table[];
 
 
 /**
- * Create a memory pool for buffers used by TL interface.
+ * Initialize a memory pool for buffers used by TL interface.
  *
+ * @param mp
  * @param elem_size
  * @param align_offset
  * @param alignment    Data will be aligned to these units.
@@ -359,13 +360,12 @@ extern ucs_config_field_t uct_iface_config_table[];
  * @param grow         Default number of buffers added for every chunk.
  * @param init_obj_cb  Object constructor.
  * @param name         Memory pool name.
- * @param mp_p         Filled with memory pool handle.
  */
-ucs_status_t uct_iface_mpool_create(uct_iface_h iface, size_t elem_size,
-                                    size_t align_offset, size_t alignment,
-                                    uct_iface_mpool_config_t *config, unsigned grow,
-                                    uct_iface_mpool_init_obj_cb_t init_obj_cb,
-                                    const char *name, ucs_mpool_h *mp_p);
+ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
+                                  size_t elem_size, size_t align_offset, size_t alignment,
+                                  uct_iface_mpool_config_t *config, unsigned grow,
+                                  uct_iface_mpool_init_obj_cb_t init_obj_cb,
+                                  const char *name);
 
 
 /**

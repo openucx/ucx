@@ -21,17 +21,17 @@ struct uct_ugni_iface;
 
 typedef struct uct_ugni_rdma_iface {
     uct_ugni_iface_t        super;                       /**< Super type */
-    ucs_mpool_h             free_desc;                   /**< Pool of FMA descriptors for
+    ucs_mpool_t             free_desc;                   /**< Pool of FMA descriptors for
                                                               requests without bouncing buffers */
-    ucs_mpool_h             free_desc_get;               /**< Pool of FMA descriptors for
+    ucs_mpool_t             free_desc_get;               /**< Pool of FMA descriptors for
                                                               unaligned get requests without
                                                               bouncing buffers */
-    ucs_mpool_h             free_desc_buffer;            /**< Pool of FMA descriptors for
+    ucs_mpool_t             free_desc_buffer;            /**< Pool of FMA descriptors for
                                                               requests with bouncing buffer*/
-    ucs_mpool_h             free_desc_famo;              /**< Pool of FMA descriptors for
+    ucs_mpool_t             free_desc_famo;              /**< Pool of FMA descriptors for
                                                               64/32 bit fetched-atomic operations
                                                               (registered memory) */
-    ucs_mpool_h             free_desc_get_buffer;        /**< Pool of FMA descriptors for
+    ucs_mpool_t             free_desc_get_buffer;        /**< Pool of FMA descriptors for
                                                               FMA_SIZE fetch operations
                                                               (registered memory) */
     struct {

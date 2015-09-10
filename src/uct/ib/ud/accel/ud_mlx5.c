@@ -104,8 +104,8 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
     for (count = 0; count < batch; count ++) {
         next_pi = (pi + 1) &  iface->rx.wq.mask;
         ucs_prefetch(rx_wqes + next_pi);
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super,
-                                 iface->super.rx.mp, desc, break);
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
+                                 desc, break);
         rx_wqes[pi].lkey = htonl(desc->lkey);
         rx_wqes[pi].addr = htonll((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
         pi = next_pi;

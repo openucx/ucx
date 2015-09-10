@@ -36,7 +36,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
 
     skb = iface->tx.skb;
     if (ucs_unlikely(skb == NULL)) {
-        skb = ucs_mpool_get(iface->tx.mp);
+        skb = ucs_mpool_get(&iface->tx.mp);
         if (skb == NULL) {
             ucs_trace_data("iface=%p out of tx skbs", iface);
             return NULL;
@@ -63,7 +63,7 @@ uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                    uct_ud_send_skb_t *skb, void *data,
                                    const void *buffer, unsigned length)
 {
-    iface->tx.skb = ucs_mpool_get(iface->tx.mp);
+    iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
     skb->len += length;
     memcpy(data, buffer, length);
@@ -78,7 +78,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                    uct_ud_send_skb_t *skb)
 {
-    iface->tx.skb = ucs_mpool_get(iface->tx.mp);
+    iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
     ucs_queue_push(&ep->tx.window, &skb->queue);
 }

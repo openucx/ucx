@@ -141,21 +141,13 @@ out:
 
 ucs_status_t ucp_tag_init(ucp_context_h context)
 {
-    ucs_status_t status;
-
     if (!(context->config.features & UCP_FEATURE_TAG)) {
         return UCS_OK;
     }
 
-    status = ucs_mpool_create("ucp_recv_req",  sizeof(ucp_recv_request_t),
-                              0, UCS_SYS_CACHE_LINE_SIZE,
-                              10000, -1,
-                              NULL, ucs_mpool_hugetlb_malloc, ucs_mpool_hugetlb_free,
-                              NULL, NULL,
-                              &context->tag.rreq_mp);
     ucs_queue_head_init(&context->tag.expected);
     ucs_queue_head_init(&context->tag.unexpected);
-    return status;
+    return UCS_OK;
 }
 
 void ucp_tag_cleanup(ucp_context_h context)
@@ -163,8 +155,6 @@ void ucp_tag_cleanup(ucp_context_h context)
     if (!(context->config.features & UCP_FEATURE_TAG)) {
         return;
     }
-
-    ucs_mpool_destroy(context->tag.rreq_mp);
 }
 
 ucs_status_t ucp_tag_set_am_handlers(ucp_worker_h worker, uct_iface_h iface)

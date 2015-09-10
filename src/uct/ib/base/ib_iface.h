@@ -13,6 +13,7 @@
 #include <uct/tl/tl_base.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
+#include <ucs/datastruct/mpool.inl>
 
 
 /**
@@ -140,9 +141,9 @@ extern const char *uct_ib_mtu_values[];
 /**
  * Create memory pool of receive descriptors.
  */
-ucs_status_t uct_ib_iface_recv_mpool_create(uct_ib_iface_t *iface,
+ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                             uct_ib_iface_config_t *config,
-                                            const char *name, ucs_mpool_h *mp_p);
+                                            const char *name, ucs_mpool_t *mp);
 
 void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
 
@@ -197,8 +198,8 @@ typedef struct uct_ib_recv_wr {
  *
  * @return number of prepared wrs
  */
-int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface,
-                                ucs_mpool_h rx_mp, uct_ib_recv_wr_t *wrs, unsigned n);
+int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
+                                uct_ib_recv_wr_t *wrs, unsigned n);
 
 
 static inline void uct_ib_iface_desc_received(uct_ib_iface_t *iface,

@@ -61,7 +61,7 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
     while (count < max) {
         ucs_assert(head != iface->rx.tail);
 
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, iface->super.rx.mp,
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
 
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, head);
@@ -195,7 +195,6 @@ static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
                                              uct_rc_mlx5_recv_desc_t, queue);
         ucs_mpool_put(desc);
     }
-    ucs_mpool_check_empty(iface->super.rx.mp);
 }
 
 static void uct_rc_mlx5_iface_progress(void *arg)
@@ -299,14 +298,15 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
         goto err;
     }
 
-    status = uct_iface_mpool_create(&self->super.super.super.super,
-                                    sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
-                                    sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
-                                    UCS_SYS_CACHE_LINE_SIZE,
-                                    &config->super.super.tx.mp,
-                                    self->super.config.tx_qp_len,
-                                    uct_rc_iface_send_desc_init,
-                                    "rc_mlx5_atomic_desc", &self->tx.atomic_desc_mp);
+    status = uct_iface_mpool_init(&self->super.super.super,
+                                  &self->tx.atomic_desc_mp,
+                                  sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
+                                  sizeof(uct_rc_iface_send_desc_t) + UCT_RC_MAX_ATOMIC_SIZE,
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->super.super.tx.mp,
+                                  self->super.config.tx_qp_len,
+                                  uct_rc_iface_send_desc_init,
+                                  "rc_mlx5_atomic_desc");
     if (status != UCS_OK) {
         goto err;
     }
@@ -337,7 +337,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
 err_free_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_atomic_mp:
-    ucs_mpool_destroy(self->tx.atomic_desc_mp);
+    ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
 err:
     return status;
 }
@@ -348,7 +348,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
                               uct_rc_mlx5_iface_progress, self);
     uct_rc_mlx5_iface_free_rx_descs(self);
     UCS_STATS_NODE_FREE(self->stats);
-    ucs_mpool_destroy(self->tx.atomic_desc_mp);
+    ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
 }
 
 

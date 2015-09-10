@@ -7,119 +7,232 @@
 #ifndef UCS_MPOOL_H_
 #define UCS_MPOOL_H_
 
+
+#include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
 
 
-#define UCS_MPOOL_INFINITE     ((unsigned)-1)
-#define UCS_MPOOL_HEADER_SIZE  (sizeof(void*))
+typedef struct ucs_mpool_chunk   ucs_mpool_chunk_t;
+typedef union  ucs_mpool_elem    ucs_mpool_elem_t;
+typedef struct ucs_mpool         ucs_mpool_t;
+typedef struct ucs_mpool_data    ucs_mpool_data_t;
+typedef struct ucs_mpool_ops     ucs_mpool_ops_t;
 
 
 /**
- * @param mp_context Mempool context as passed to ucs_mpool_create().
- */
-typedef void  (*ucs_mpool_non_empty_cb_t)(void *mp_context);
-
-/**
- * @param size         Minimal size to allocate. The function may modify it to
- *                     the actual allocated size.
- * @param chunk_p      Filled with a pointer to the allocated chunk.
- * @param mp_context   Mempool context as passed to ucs_mpool_create().
+ * Manages memory allocations of same-size objects.
  *
- * @return             Error status.
- */
-typedef ucs_status_t (*ucs_mpool_chunk_alloc_cb_t)(void *mp_context, size_t *size,
-                                                   void **chunk_p UCS_MEMTRACK_ARG);
-
-
-/**
- * @param mp_context Mempool context as passed to ucs_mpool_create().
- * @param chunk      Pointer to the chunk to free.
- */
-typedef void  (*ucs_mpool_chunk_free_cb_t)(void *mp_context, void *chunk);
-
-
-/**
- * @param mp_context  Mempool context as passed to ucs_mpool_create().
- * @param
- * @param obj         Object to initialize.
- * @param arg         User-defined argument to init function.
- */
-typedef void  (*ucs_mpool_init_obj_cb_t)(void *mp_context, void *obj, void *chunk,
-                                         void *arg);
-
-
-typedef struct ucs_mpool *ucs_mpool_h;
-
-
-/**
- * Create a memory pool, which returns elements consisting of header and data.
- * The data is guaranteed to be aligned to the specified value.
+ * A chunk of elements looks like this:
+ * +-----------+-------+----------+-------+----------+------+---------+
+ * | <padding> | elem0 | padding0 | elem1 | padding1 | .... | elemN-1 |
+ * +-----------+-------+----------+-------+----------+------+---------+
  *
+ * An element looks like this:
+ * +------------+--------+------+
+ * | mpool_elem | header | data |
+ * +------------+--------+------+
+ *                       |
+ *                       This location is aligned.
+ */
+
+
+/**
+ * Memory pool element header.
+ */
+union ucs_mpool_elem {
+    ucs_mpool_elem_t       *next;   /* Next free elem - when elem is in the pool */
+    ucs_mpool_t            *mpool;  /* Used when elem is allocated */
+};
+
+
+/**
+ * Memory pool chunk, which contains many elements.
+ */
+struct ucs_mpool_chunk {
+    ucs_mpool_chunk_t      *next;      /* Next chunk */
+    void                   *elems;     /* Array of elements */
+    unsigned               num_elems;  /* How many elements */
+};
+
+
+/**
+ * Memory pool structure.
+ */
+struct ucs_mpool {
+    ucs_mpool_elem_t       *freelist;  /* List of available elements */
+    ucs_mpool_data_t       *data;      /* Slow-path data */
+};
+
+
+/**
+ * Memory pool slow-path data.
+ */
+struct ucs_mpool_data {
+    unsigned               elem_size;    /* Size of element in the chunk */
+    unsigned               alignment;    /* Element alignment */
+    unsigned               align_offset; /* Offset to alignment point */
+    unsigned               quota;        /* How many more elements can be allocated */
+    size_t                 chunk_size;   /* Size of each chunk */
+    ucs_mpool_chunk_t      *chunks;      /* List of allocated chunks */
+    ucs_mpool_ops_t        *ops;         /* Memory pool operations */
+    char                   *name;        /* Name - used for debugging */
+};
+
+
+/**
+ * Defines callbacks for memory pool operations.
+ */
+struct ucs_mpool_ops {
+    /**
+     * Allocate a chunk of memory to be used by the mpool.
+     *
+     * @param mp           Memory pool structure.
+     * @param size_p       Points to minimal size to allocate. The function may
+     *                      modify it to the actual allocated size. which must be
+     *                      larger or equal.
+     * @param chunk_p      Filled with a pointer to the allocated chunk.
+     *
+     * @return             Error status.
+     */
+    ucs_status_t (*chunk_alloc)(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+
+    /**
+     * Release previously allocated chunk of memory.
+     *
+     * @param mp           Memory pool structure.
+     * @param chunk        Chunk to release.
+     */
+    void         (*chunk_release)(ucs_mpool_t *mp, void *chunk);
+
+    /**
+     * Initialize an object in the memory pool on the first time it's allocated.
+     * May be NULL.
+     *
+     * @param mp           Memory pool structure.
+     * @param obj          Object to initialize.
+     * @param chunk        The chunk on which the object was allocated, as returned
+     *                      from chunk_alloc().
+     */
+    void         (*obj_init)(ucs_mpool_t *mp, void *obj, void *chunk);
+
+    /**
+     * Cleanup an object in the memory pool just before its memory is released.
+     * May be NULL.
+     *
+     * @param mp           Memory pool structure.
+     * @param obj          Object to initialize.
+     */
+    void         (*obj_cleanup)(ucs_mpool_t *mp, void *obj);
+};
+
+
+/**
+ * Initialize a memory pool.
+ *
+ * @param mp               Memory pool structure.
+ * @param priv_size        Size of user-defined private data area.
  * @param elem_size        Size of an element.
- * @param align_offset     Offset in the element which should be aligned to the given boundary..
+ * @param align_offset     Offset in the element which should be aligned to the given boundary.
  * @param alignment        Boundary to which align the given offset within the element.
  * @param elems_per_chunk  Number of elements in a single chunk.
  * @param max_elems        Maximal number of elements which can be allocated by the pool.
  *                         -1 or UINT_MAX means no limit.
- * @param mp_context       Mempool context, passed to all callbacks
- * @param alloc_chunk_cb   Called to allocate a chunk of objects.
- * @param free_chunk_cb    Called to free a previously allocated chunk of objects.
- * @param init_obj_cb      Called to first-time initialize an object.
- * @param init_obj_arg     Additional rgument for init_obj_cb.
- * @param mpp              Upon success, filled with a handle to the memory pool.
+ * @param ops              Memory pool operations.
+ * @param name             Memory pool name.
  *
  * @return UCS status code.
  */
-ucs_status_t
-ucs_mpool_create(const char *name, size_t elem_size, size_t align_offset,
-                 size_t alignment, unsigned elems_per_chunk, unsigned max_elems,
-                 void *mp_context,
-                 ucs_mpool_chunk_alloc_cb_t alloc_chunk_cb,
-                 ucs_mpool_chunk_free_cb_t free_chunk_cb,
-                 ucs_mpool_init_obj_cb_t init_obj_cb, void *init_obj_arg,
-                 ucs_mpool_h *mpp);
+ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
+                            size_t elem_size, size_t align_offset, size_t alignment,
+                            unsigned elems_per_chunk, unsigned max_elems,
+                            ucs_mpool_ops_t *ops, const char *name);
 
-void ucs_mpool_destroy(ucs_mpool_h mp);
-void ucs_mpool_destroy_unchecked(ucs_mpool_h mp);
 
 /**
- * Check that memory pool is empty. Also called from ucs_mpool_destroy().
+ * Cleanup a memory pool and release all its memory.
+ *
+ * @param mp               Memory pool structure.
+ * @param leak_check       Whether to check for leaks (object which were not
+ *                          returned to the pool).
  */
-void ucs_mpool_check_empty(ucs_mpool_h mp);
+void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check);
+
+
+/**
+ * @param mp               Memory pool structure.
+ *
+ * @return Memory pool name.
+ */
+const char *ucs_mpool_name(ucs_mpool_t *mp);
+
+
+/**
+ * @param mp               Memory pool structure.
+ *
+ * @return User-defined context, as passed to mpool_init().
+ */
+void *ucs_mpool_priv(ucs_mpool_t *mp);
+
+
+/**
+ * Check if a memory pool is empty (cannot allocate more objects).
+ *
+ * @param mp               Memory pool structure.
+ *
+ * @return Whether a memory pool is empty.
+ */
+int ucs_mpool_is_empty(ucs_mpool_t *mp);
+
 
 /**
  * Get an element from the memory pool.
+ *
+ * @param mp               Memory pool structure.
+ *
+ * @return New allocated object, or NULL if cannot allocate.
  */
-void *ucs_mpool_get(ucs_mpool_h mp);
+void *ucs_mpool_get(ucs_mpool_t *mp);
 
 
 /**
- * Return an element to its memory pool.
+ * Return an object to the memory pool.
+ *
+ * @param obj              Object to return.
  */
 void ucs_mpool_put(void *obj);
 
+
 /**
- * Simple chunk allocator (default).
+ * Allocate and object and grow the memory pool if necessary.
+ * Used internally by ucs_mpool_get().
+ *
+ * @param mp               Memory pool structure.
+ *
+ * @return New allocated object, or NULL if cannot allocate.
  */
-ucs_status_t ucs_mpool_chunk_malloc(void *mp_context, size_t *size, void **chunk_p
-                                    UCS_MEMTRACK_ARG);
-void ucs_mpool_chunk_free(void *mp_context, void *chunk);
+void *ucs_mpool_get_grow(ucs_mpool_t *mp);
+
+
+/**
+ * heap-based chunk allocator.
+ */
+ucs_status_t ucs_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+void ucs_mpool_chunk_free(ucs_mpool_t *mp, void *chunk);
 
 
 /*
  * mmap chunk allocator.
  */
-ucs_status_t ucs_mpool_chunk_mmap(void *mp_context, size_t *size, void **chunk_p
-                                  UCS_MEMTRACK_ARG);
-void ucs_mpool_chunk_munmap(void *mp_context, void *chunk);
+ucs_status_t ucs_mpool_chunk_mmap(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+void ucs_mpool_chunk_munmap(ucs_mpool_t *mp, void *chunk);
+
 
 /**
- * Hugetlb chunk allocator.
+ * hugetlb chunk allocator.
  */
-ucs_status_t ucs_mpool_hugetlb_malloc(void *mp_context, size_t *size, void **chunk_p
-                                      UCS_MEMTRACK_ARG);
-void ucs_mpool_hugetlb_free(void *mp_context, void *chunk);
+ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+void ucs_mpool_hugetlb_free(ucs_mpool_t *mp, void *chunk);
 
 
 #endif /* MPOOL_H_ */
