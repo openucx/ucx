@@ -245,7 +245,8 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(length + sizeof(header),
-                     iface->elem_size - sizeof(uct_mm_fifo_element_t), "am_short");
+                     iface->config.fifo_elem_size - sizeof(uct_mm_fifo_element_t),
+                     "am_short");
 
     status = uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface, id, length,
                                       header, payload, NULL, NULL);
