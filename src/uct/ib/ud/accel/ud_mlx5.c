@@ -40,7 +40,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                        iface->tx.wq.qstart, iface->tx.wq.qend, NULL);
     iface->super.tx.available -= uct_ib_mlx5_post_send(&iface->tx.wq,
                                                        ctrl, wqe_size);
-    ucs_assert(iface->tx.wq.bb_max >= iface->super.tx.available);
+    ucs_assert((int16_t)iface->tx.wq.bb_max >= iface->super.tx.available);
 }
 
 static UCS_F_ALWAYS_INLINE void
