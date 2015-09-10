@@ -79,13 +79,26 @@ enum {
                     "Invalid %s length: %zu (expected: <= %zu)", \
                     _name, (size_t)(_length), (size_t)(_max_length))
 
+/**
+ * Skip if this is a zero-length operation.
+ */
+#define UCT_SKIP_ZERO_LENGTH(_length, ...) \
+    if (0 == (_length)) { \
+        ucs_trace_data("Zero length request: skip it"); \
+        UCS_PP_FOREACH(_UCT_RELEASE_DESC, _, __VA_ARGS__)  \
+        return UCS_OK; \
+    }
+#define _UCT_RELEASE_DESC(_, _desc) \
+    ucs_mpool_put(_desc);
+
 
 /**
  * In debug mode, check that active message ID is valid.
  */
 #define UCT_CHECK_AM_ID(_am_id) \
     UCT_CHECK_PARAM((_am_id) < UCT_AM_ID_MAX, \
-                    "Invalid active message id (valid range: 0..%d)", (int)UCT_AM_ID_MAX - 1)
+                    "Invalid active message id (valid range: 0..%d)", \
+                    (int)UCT_AM_ID_MAX - 1)
 
 
 /**

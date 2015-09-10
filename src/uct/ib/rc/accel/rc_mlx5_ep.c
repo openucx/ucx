@@ -457,20 +457,20 @@ ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsign
 }
 
 ucs_status_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                      void *arg, size_t length, uint64_t remote_addr,
-                                      uct_rkey_t rkey)
+                                      void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_send_desc_t *desc;
     ucs_status_t status;
+    size_t length;
 
-    UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "put_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
-    pack_cb(desc + 1, arg, length);
+    length = pack_cb(desc + 1, arg);
+
     status = uct_rc_mlx5_ep_bcopy_post(ep, MLX5_OPCODE_RDMA_WRITE, length, 0, NULL,
                                        0, remote_addr, rkey, MLX5_WQE_CTRL_CQ_UPDATE,
                                        desc, UCS_OK);
@@ -551,18 +551,16 @@ ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 }
 
 ucs_status_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                     uct_pack_callback_t pack_cb, void *arg,
-                                     size_t length)
+                                     uct_pack_callback_t pack_cb, void *arg)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_send_desc_t *desc;
     ucs_status_t status;
     uct_rc_hdr_t *rch;
+    size_t length;
 
     UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(sizeof(*rch) + length, iface->super.super.config.seg_size,
-                     "am_bcopy");
     UCT_RC_MLX5_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
@@ -570,7 +568,8 @@ ucs_status_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     rch        = (void*)(desc + 1);
     rch->am_id = id;
-    pack_cb(rch + 1, arg, length);
+    length = pack_cb(rch + 1, arg);
+
     status = uct_rc_mlx5_ep_bcopy_post(ep, MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
                                        sizeof(*rch) + length, 0, NULL, 0, 0, 0, 0, desc,
                                        UCS_OK);

@@ -56,8 +56,7 @@ typedef struct uct_iface_ops {
                                  uint64_t remote_addr, uct_rkey_t rkey);
 
     ucs_status_t (*ep_put_bcopy)(uct_ep_h ep, uct_pack_callback_t pack_cb,
-                                 void *arg, size_t length, uint64_t remote_addr,
-                                 uct_rkey_t rkey);
+                                 void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 
     ucs_status_t (*ep_put_zcopy)(uct_ep_h ep, const void *buffer, size_t length,
                                  uct_mem_h memh, uint64_t remote_addr,
@@ -80,8 +79,7 @@ typedef struct uct_iface_ops {
                                 const void *payload, unsigned length);
 
     ucs_status_t (*ep_am_bcopy)(uct_ep_h ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg,
-                                size_t length);
+                                uct_pack_callback_t pack_cb, void *arg);
 
     ucs_status_t (*ep_am_zcopy)(uct_ep_h ep, uint8_t id, const void *header,
                                 unsigned header_length, const void *payload,

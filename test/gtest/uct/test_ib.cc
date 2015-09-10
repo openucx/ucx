@@ -157,6 +157,8 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
         UCS_TEST_SKIP_R("pkey not found");
     }
 
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+
     recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
     recv_buffer->length = 0; /* Initialize length to 0 */
 

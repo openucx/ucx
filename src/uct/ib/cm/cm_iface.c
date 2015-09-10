@@ -68,8 +68,7 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     VALGRIND_MAKE_MEM_DEFINED(hdr, sizeof(hdr));
     VALGRIND_MAKE_MEM_DEFINED(hdr + 1, hdr->length);
 
-    ucs_trace_data("RECV SIDR_REQ am_id %d length %d", hdr->am_id,
-                   hdr->length);
+    ucs_trace_data("RECV SIDR_REQ am_id %d length %d", hdr->am_id, hdr->length);
 
     /* Allocate temporary buffer to serve as receive descriptor */
     cm_desc = ucs_malloc(iface->super.config.rx_payload_offset + hdr->length,
@@ -272,13 +271,10 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
                   UINT8_MAX);
 
     memset(iface_attr, 0, sizeof(*iface_attr));
-    iface_attr->cap.am.max_short      = mtu;
     iface_attr->cap.am.max_bcopy      = mtu;
-    iface_attr->cap.am.max_zcopy      = 0;
     iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = 0;
-    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
-                                        UCT_IFACE_FLAG_AM_BCOPY |
+    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     return UCS_OK;
 }
@@ -304,7 +300,6 @@ static uct_iface_ops_t uct_cm_iface_ops = {
     .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
     .iface_release_am_desc = uct_cm_iface_release_desc,
-    .ep_am_short           = uct_cm_ep_am_short,
     .ep_am_bcopy           = uct_cm_ep_am_bcopy,
     .ep_pending_add        = uct_cm_ep_pending_add,
     .ep_pending_purge      = uct_cm_ep_pending_purge,

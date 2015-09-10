@@ -208,12 +208,6 @@ static inline ucs_status_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
     return ok_status;
 }
 
-#define UCT_UGNI_ZERO_LENGTH_POST(len)              \
-if (0 == len) {                                     \
-    ucs_trace_data("Zero length request: skip it"); \
-    return UCS_OK;                                  \
-}
-
 ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                    unsigned length, uint64_t remote_addr,
                                    uct_rkey_t rkey)
@@ -222,7 +216,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_base_desc_t *fma;
 
-    UCT_UGNI_ZERO_LENGTH_POST(length);
+    UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(length, iface->config.fma_seg_size, "put_short");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
                              fma, return UCS_ERR_NO_RESOURCE);
@@ -239,8 +233,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 }
 
 ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                   void *arg, size_t length, uint64_t remote_addr,
-                                   uct_rkey_t rkey)
+                                   void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     /* Since custom pack function is used
      * we have to allocate separate memory to pack
@@ -250,13 +243,14 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_base_desc_t *fma;
+    size_t length;
 
-    UCT_UGNI_ZERO_LENGTH_POST(length);
-    UCT_CHECK_LENGTH(length, iface->config.fma_seg_size, "put_bcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
-    ucs_assert(length <= iface->config.fma_seg_size);
-    pack_cb(fma + 1, arg, length);
+
+    length = pack_cb(fma + 1, arg);
+    UCT_SKIP_ZERO_LENGTH(length, fma);
+
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, fma + 1,
                         remote_addr, rkey, length, ep, NULL, NULL);
     ucs_trace_data("Posting PUT BCOPY, GNI_PostFma of size %"PRIx64" from %p to "
@@ -277,7 +271,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t le
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_base_desc_t *rdma;
 
-    UCT_UGNI_ZERO_LENGTH_POST(length);
+    UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(length, iface->config.rdma_max_size, "put_zcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc, rdma,
                              return UCS_ERR_NO_RESOURCE);
@@ -504,7 +498,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_fetch_desc_t *fma;
 
-    UCT_UGNI_ZERO_LENGTH_POST(length);
+    UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
                      iface->config.fma_seg_size, "get_bcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_get_buffer,
@@ -686,7 +680,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_base_desc_t *rdma;
 
-    UCT_UGNI_ZERO_LENGTH_POST(length);
+    UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
                      iface->config.rdma_max_size, "get_zcopy");
 

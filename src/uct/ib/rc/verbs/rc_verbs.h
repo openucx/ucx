@@ -78,7 +78,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        uct_rkey_t rkey);
 
 ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                       void *arg, size_t length, uint64_t remote_addr,
+                                       void *arg, uint64_t remote_addr,
                                        uct_rkey_t rkey);
 
 ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
@@ -99,8 +99,7 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                       const void *buffer, unsigned length);
 
 ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                      uct_pack_callback_t pack_cb, void *arg,
-                                      size_t length);
+                                      uct_pack_callback_t pack_cb, void *arg);
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                       unsigned header_length, const void *payload,

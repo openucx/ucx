@@ -493,3 +493,11 @@ void ucp_cleanup(ucp_context_h context)
     ucp_free_config(context);
     ucs_free(context);
 }
+
+size_t ucp_memcpy_pack(void *dest, void *arg)
+{
+    ucp_memcpy_pack_context_t *ctx = arg;
+    size_t length = ctx->length;
+    memcpy(dest, ctx->src, length);
+    return length;
+}

@@ -34,13 +34,11 @@ ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr, 
                                  uct_rkey_t rkey);
 ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
-                                 void *arg, size_t length, 
-                                 uint64_t remote_addr, uct_rkey_t rkey);
+                                 void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
 ucs_status_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg,
-                                size_t length);
+                                uct_pack_callback_t pack_cb, void *arg);
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                     uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_mm_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,

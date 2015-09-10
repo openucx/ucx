@@ -100,15 +100,12 @@ ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 }
 
 ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                 void *arg, size_t length, 
-                                 uint64_t remote_addr, uct_rkey_t rkey)
+                                 void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
-    if (ucs_likely(length != 0)) {
-        pack_cb((void *)(rkey + remote_addr), arg, length);
-        uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
-    } else {
-        ucs_trace_data("PUT_BCOPY [zero-length]");
-    }
+    size_t length;
+
+    length = pack_cb((void *)(rkey + remote_addr), arg);
+    uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
     return UCS_OK;
 }
 
@@ -179,7 +176,7 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
-                         uint8_t am_id, unsigned length, uint64_t header,
+                         uint8_t am_id, size_t length, uint64_t header,
                          const void *payload, uct_pack_callback_t pack_cb, void *arg)
 {
     uct_mm_fifo_element_t *elem;
@@ -198,6 +195,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
 
     if (status != UCS_OK) {
+        ucs_trace_poll("couldn't get an available FIFO element");
         return status;
     }
 
@@ -209,17 +207,21 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
 
         elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
+
+        ucs_trace_data("AM_SHORT am_id %d length %zu", am_id, length);
     } else {
         /* AM_BCOPY */
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
         base_address = uct_mm_ep_attach_remote_seg(ep, iface, elem);
-        pack_cb(base_address + elem->desc_offset, arg, length);
+        length = pack_cb(base_address + elem->desc_offset, arg);
 
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length;
 
+        ucs_trace_data("AM_BCOPY am_id %d length %zu", am_id, length);
     }
+
     elem->am_id = am_id;
 
     /* memory barrier - make sure that the memory is flushed before setting the
@@ -250,31 +252,20 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     status = uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface, id, length,
                                       header, payload, NULL, NULL);
-    if (status == UCS_OK) {
-        ucs_trace_data("MM: AM_SHORT [%p] am_id: %d buf=%p length=%u",
-                        iface, id, payload, length);
-    } else {
-        ucs_trace_poll("Couldn't get an available FIFO element in am_short");
-    }
 
     return status;
 }
 
 ucs_status_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg,
-                                size_t length)
+                                uct_pack_callback_t pack_cb, void *arg)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_LENGTH(length, iface->config.seg_size, "am_bcopy");
-
-    status = uct_mm_ep_am_common_send(UCT_MM_AM_BCOPY, ep, iface, id, length,
-                                      0, NULL, pack_cb, arg);
+    status = uct_mm_ep_am_common_send(UCT_MM_AM_BCOPY, ep, iface, id, 0, 0, NULL,
+                                      pack_cb, arg);
     if (status == UCS_OK) {
-        ucs_trace_data("MM: AM_BCOPY [%p] am_id: %d buf=%p length=%u",
-                        iface, id, arg, (int)length);
     } else {
         ucs_trace_poll("Couldn't get an available FIFO element in am_bcopy");
     }

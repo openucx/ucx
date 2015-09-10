@@ -43,10 +43,12 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
                 status = uct_ep_put_short(ep->uct_ep, buffer, frag_length, remote_addr,
                                           uct_rkey);
             } else {
-                frag_length = ucs_min(length, ep->config.max_bcopy_put);
-                status = uct_ep_put_bcopy(ep->uct_ep, (uct_pack_callback_t)memcpy,
-                                          (void*)buffer, frag_length, remote_addr,
-                                          uct_rkey);
+                ucp_memcpy_pack_context_t pack_ctx;
+                pack_ctx.src    = buffer;
+                pack_ctx.length = frag_length =
+                                ucs_min(length, ep->config.max_bcopy_put);
+                status = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
+                                          remote_addr, uct_rkey);
             }
             if (ucs_likely(status == UCS_OK)) {
                 length      -= frag_length;

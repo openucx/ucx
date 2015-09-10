@@ -195,7 +195,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
 static ucs_status_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                             uct_pack_callback_t pack_cb,
-                                            void *arg, size_t length)
+                                            void *arg)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -203,14 +203,12 @@ static ucs_status_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
 
-    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + length, 
-                     4096 /* TODO */, "am_bcopy");
     status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_ud_skb_bcopy(skb, pack_cb, arg, length);
+    uct_ud_skb_bcopy(skb, pack_cb, arg);
 
     uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);

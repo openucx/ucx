@@ -27,9 +27,7 @@ public:
     ucs_status_t put_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        return uct_ep_put_bcopy(ep,
-                                (uct_pack_callback_t)memcpy,
-                                sendbuf.ptr(), sendbuf.length(),
+        return uct_ep_put_bcopy(ep, sendbuf_pack, (void*)&sendbuf,
                                 recvbuf.addr(), recvbuf.rkey());
     }
 

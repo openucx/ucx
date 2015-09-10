@@ -231,6 +231,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
     uct_iface_attr_t *iface_attr = &worker->iface_attrs[rsc_index];
     uct_iface_attr_t aux_iface_attr;
     size_t addr_len = 0, aux_addr_len = 0, total_len;
+    ucp_memcpy_pack_context_t pack_ctx;
     ucp_wireup_msg_t *msg;
     ucs_status_t status;
 
@@ -303,8 +304,9 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
     }
 
     /* Send active message */
-    status = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP,
-                             (uct_pack_callback_t)memcpy, msg, total_len);
+    pack_ctx.src    = msg;
+    pack_ctx.length = total_len;
+    status = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP, ucp_memcpy_pack, &pack_ctx);
     if (status != UCS_OK) {
         if (status != UCS_ERR_NO_RESOURCE) {
             ucs_error("failed to send conn msg: %s", ucs_status_string(status));
