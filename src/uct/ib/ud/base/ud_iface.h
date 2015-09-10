@@ -56,7 +56,7 @@ struct uct_ud_iface {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
         uct_ud_send_skb_inl_t  skb_inl;
         ucs_mpool_h            mp;
-        uint16_t               available;
+        int16_t                available;
         unsigned               unsignaled;
         ucs_queue_head_t       pending_ops;
     } tx;
