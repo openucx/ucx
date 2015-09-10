@@ -301,8 +301,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
         }
     }
 
-    ucs_notifier_chain_add(&worker->progress_chain, uct_rc_verbs_iface_progress,
-                           self);
+    uct_worker_progress_register(worker, uct_rc_verbs_iface_progress, self);
     return UCS_OK;
 
 err_destroy_short_desc_mp:
@@ -313,8 +312,8 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    ucs_notifier_chain_remove(&self->super.super.super.worker->progress_chain,
-                              uct_rc_verbs_iface_progress, self);
+    uct_worker_progress_unregister(self->super.super.super.worker,
+                                   uct_rc_verbs_iface_progress, self);
     ucs_mpool_cleanup(&self->short_desc_mp, 1);
 }
 

@@ -205,6 +205,19 @@ void uct_worker_progress(uct_worker_h worker)
     ucs_notifier_chain_call(&worker->progress_chain);
 }
 
+
+void uct_worker_progress_register(uct_worker_h worker,
+                                  ucs_notifier_chain_func_t func, void *arg)
+{
+    ucs_notifier_chain_add(&worker->progress_chain, func, arg);
+}
+
+void uct_worker_progress_unregister(uct_worker_h worker,
+                                    ucs_notifier_chain_func_t func, void *arg)
+{
+    ucs_notifier_chain_remove(&worker->progress_chain, func, arg);
+}
+
 UCS_CLASS_DEFINE(uct_worker_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
                                 ucs_async_context_t*, ucs_thread_mode_t)
