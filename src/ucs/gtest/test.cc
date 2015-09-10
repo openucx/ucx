@@ -17,6 +17,7 @@ namespace ucs {
 unsigned test_base::m_total_warnings = 0;
 
 test_base::test_base() : m_state(NEW),
+                m_initialized(false),
                 m_num_valgrind_errors_before(0),
                 m_num_warnings_before(0) {
 }
@@ -79,6 +80,7 @@ void test_base::SetUpProxy() {
 
     try {
         init();
+        m_initialized = true;
         m_state = RUNNING;
     } catch (test_skip_exception& e) {
         skipped(e);
@@ -92,7 +94,11 @@ void test_base::TearDownProxy() {
                        m_state == SKIPPED ||
                        m_state == ABORTED,
                        "state=%d", m_state);
-    cleanup();
+
+
+    if (m_initialized) {
+        cleanup();
+    }
 
     ucs_log_pop_handler();
 
