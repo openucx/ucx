@@ -171,7 +171,7 @@ void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     void *ib_desc;
 
     ib_desc = desc - iface->config.rx_headroom_offset;
-    ucs_mpool_put(ib_desc);
+    ucs_mpool_put_inline(ib_desc);
 }
 
 ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr)

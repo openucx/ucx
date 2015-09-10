@@ -145,7 +145,11 @@ uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq, int cqe_size_log)
     if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & 0x80)) {
-        return uct_ib_mlx5_check_completion(cq, cqe);
+        if (op_own >> 4 == MLX5_CQE_INVALID) {
+            return NULL; /* No CQE */
+        } else {
+            return uct_ib_mlx5_check_completion(cq, cqe);
+        }
     }
 
     cq->cq_ci = index + 1;
@@ -159,8 +163,8 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t       prev_sw_pi; /* PI where last WQE *started*  */
     unsigned       bf_size;
     void           *bf_reg;
-    uint32_t       *dbrec;
     void           *curr;
+    uint32_t       *dbrec;
     void           *qstart;
     void           *qend;
     uint16_t       bb_max;
@@ -311,7 +315,6 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
-    ucs_trace_data("ds=%d wqe_size=%d", ds, wqe_size);
 #ifdef __SSE4_2__
     *(__m128i *) ctrl = _mm_shuffle_epi8(
                     _mm_set_epi32(qp_num, ds, pi,

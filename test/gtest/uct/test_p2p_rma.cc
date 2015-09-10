@@ -28,7 +28,7 @@ public:
                            const mapped_buffer &recvbuf)
     {
         ssize_t packed_len;
-        packed_len = uct_ep_put_bcopy(ep, sendbuf_pack, (void*)&sendbuf,
+        packed_len = uct_ep_put_bcopy(ep, mapped_buffer::pack, (void*)&sendbuf,
                                       recvbuf.addr(), recvbuf.rkey());
         if (packed_len >= 0) {
             EXPECT_EQ(sendbuf.length(), (size_t)packed_len);

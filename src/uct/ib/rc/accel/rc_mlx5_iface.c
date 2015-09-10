@@ -36,55 +36,65 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 };
 #endif
 
-static inline struct mlx5_wqe_srq_next_seg*
-uct_rc_mlx5_iface_get_srq_wqe(uct_rc_mlx5_iface_t *iface, unsigned index)
+static inline uct_rc_mlx5_srq_seg_t*
+uct_rc_mlx5_iface_get_srq_wqe(uct_rc_mlx5_iface_t *iface, uint16_t index)
 {
+    ucs_assert(index <= iface->rx.mask);
     return iface->rx.buf + index * UCT_RC_MLX5_SRQ_STRIDE;
 }
 
-static inline unsigned uct_rc_mlx5_srq_next_wqe_ind(struct mlx5_wqe_srq_next_seg* seg)
+static UCS_F_NOINLINE unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface)
 {
-    return ntohs(seg->next_wqe_index);
-}
-
-static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned max)
-{
-    struct mlx5_wqe_srq_next_seg *seg;
-    uct_rc_mlx5_recv_desc_t *desc;
-    unsigned count, head;
+    uct_rc_mlx5_srq_seg_t *seg;
+    uct_ib_iface_recv_desc_t *desc;
+    uint16_t count, index, next_index;
     uct_rc_hdr_t *hdr;
-    unsigned length;
 
-    head   = iface->rx.head;
-    length = iface->super.super.config.seg_size;
-    count = 0;
-    while (count < max) {
-        ucs_assert(head != iface->rx.tail);
+    /* Make sure the union is right */
+    UCS_STATIC_ASSERT(ucs_offsetof(uct_rc_mlx5_srq_seg_t, mlx5_srq.next_wqe_index) ==
+                      ucs_offsetof(uct_rc_mlx5_srq_seg_t, srq.next_wqe_index));
+    UCS_STATIC_ASSERT(ucs_offsetof(uct_rc_mlx5_srq_seg_t, dptr) ==
+                      sizeof(struct mlx5_wqe_srq_next_seg));
 
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
-                                 desc, break);
+    ucs_assert(UCS_CIRCULAR_COMPARE16(iface->rx.ready, <=, iface->rx.free));
 
-        seg = uct_rc_mlx5_iface_get_srq_wqe(iface, head);
+    index = iface->rx.ready;
+    for (;;) {
+        next_index = index + 1;
+        seg = uct_rc_mlx5_iface_get_srq_wqe(iface, next_index & iface->rx.mask);
+        if (UCS_CIRCULAR_COMPARE16(next_index, >, iface->rx.free)) {
+            if (!seg->srq.ooo) {
+                break;
+            }
 
-        hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
-        uct_ib_mlx5_set_data_seg((void*)(seg + 1), hdr,
-                                 length, /* TODO pre-init length */
-                                 desc->super.lkey);
-        VALGRIND_MAKE_MEM_NOACCESS(hdr, length);
+            ucs_assert(next_index == (uint16_t)(iface->rx.free + 1));
+            seg->srq.ooo   = 0;
+            iface->rx.free = next_index;
+        }
 
-        ucs_queue_push(&iface->rx.desc_q, &desc->queue);
-        head = uct_rc_mlx5_srq_next_wqe_ind(seg);
-        ++count;
+        index = next_index;
+
+        if (seg->srq.desc == NULL) {
+            UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
+                                     desc, break);
+
+            /* Set receive data segment pointer. Length is pre-initialized. */
+            hdr            = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+            seg->srq.desc  = desc;
+            seg->dptr.lkey = htonl(desc->lkey);
+            seg->dptr.addr = htonll((uintptr_t)hdr);
+            VALGRIND_MAKE_MEM_NOACCESS(hdr, iface->super.super.config.seg_size);
+        }
     }
 
+    count = index - iface->rx.sw_pi;
     if (count > 0) {
-        iface->rx.head             = head;
-        iface->rx.sw_pi           += count;
+        iface->rx.ready            = index;
+        iface->rx.sw_pi            = index;
         iface->super.rx.available -= count;
         ucs_memory_cpu_store_fence();
         *iface->rx.db = htonl(iface->rx.sw_pi);
     }
-
     return count;
 }
 
@@ -121,17 +131,27 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     }
 }
 
+static inline void uct_rc_mlx5_iface_rx_inline(uct_rc_mlx5_iface_t *iface,
+                                              uct_ib_iface_recv_desc_t *desc,
+                                              int stats_counter, unsigned byte_len)
+{
+    UCS_STATS_UPDATE_COUNTER(iface->stats, stats_counter, 1);
+    VALGRIND_MAKE_MEM_UNDEFINED(uct_ib_iface_recv_desc_hdr(&iface->super.super, desc),
+                                byte_len);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
 {
-    struct mlx5_wqe_srq_next_seg *seg;
-    uct_rc_mlx5_recv_desc_t *desc;
+    uct_rc_mlx5_srq_seg_t *seg;
+    uct_ib_iface_recv_desc_t *desc;
     uct_rc_hdr_t *hdr;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
-    uint16_t wqe_ctr_be;
+    uint16_t wqe_ctr;
     uint16_t max_batch;
     ucs_status_t status;
+    void *udesc;
 
     cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
@@ -140,63 +160,65 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
         goto done;
     }
 
+    ucs_memory_cpu_load_fence();
     UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
 
-    ucs_assert(!ucs_queue_is_empty(&iface->rx.desc_q));
-    ucs_memory_cpu_load_fence();
-
-    desc     = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q, uct_rc_mlx5_recv_desc_t, queue);
     byte_len = ntohl(cqe->byte_cnt);
-
-    uct_ib_iface_desc_received(&iface->super.super, &desc->super, byte_len,
-                               !(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
+    wqe_ctr  = ntohs(cqe->wqe_counter);
+    seg      = uct_rc_mlx5_iface_get_srq_wqe(iface, wqe_ctr);
+    desc     = seg->srq.desc;
 
     /* Get a pointer to AM header (after which comes the payload)
      * Support cases of inline scatter by pointing directly to CQE.
      */
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-        hdr = (uct_rc_hdr_t*)cqe;
-        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_32, 1);
+        hdr = (uct_rc_hdr_t*)(cqe);
+        uct_rc_mlx5_iface_rx_inline(iface, desc, UCT_RC_MLX5_IFACE_STAT_RX_INL_32, byte_len);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         hdr = (uct_rc_hdr_t*)(cqe - 1);
-        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_MLX5_IFACE_STAT_RX_INL_64, 1)
+        uct_rc_mlx5_iface_rx_inline(iface, desc, UCT_RC_MLX5_IFACE_STAT_RX_INL_64, byte_len);
     } else {
-        hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
+        hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+        VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
     }
 
     uct_ib_mlx5_log_rx(&iface->super.super, IBV_QPT_RC, cqe, hdr,
                        uct_rc_ep_am_packet_dump);
 
-    uct_rc_iface_invoke_am(&iface->super, hdr, byte_len, &desc->super);
+    udesc  = (char*)desc + iface->super.super.config.rx_headroom_offset;
+    status = uct_iface_invoke_am(&iface->super.super.super, hdr->am_id,
+                                 hdr + 1, byte_len - sizeof(*hdr), udesc);
+    if ((status == UCS_OK) && (wqe_ctr == ((iface->rx.ready + 1) & iface->rx.mask))) {
+        /* If the descriptor was not used - if there are no "holes", we can just
+         * reuse it on the receive queue. Otherwise, ready pointer will stay behind
+         * until post_recv allocated more descriptors from the memory pool, fills
+         * the holes, and moves it forward.
+         */
+        ucs_assert(wqe_ctr == ((iface->rx.free + 1) & iface->rx.mask));
+        ++iface->rx.ready;
+        ++iface->rx.free;
+   } else {
+        if (status != UCS_OK) {
+            uct_recv_desc_iface(udesc) = &iface->super.super.super.super;
+            seg->srq.desc              = NULL;
+        }
+        if (wqe_ctr == ((iface->rx.free + 1) & iface->rx.mask)) {
+            ++iface->rx.free;
+        } else {
+            /* Mark the segment as out-of-order, post_recv will advance free */
+            seg->srq.ooo = 1;
+        }
+    }
 
-    /* Add completed SRQ WQE to the tail
-     * TODO return the descriptor directly to SRQ
-     * TODO use SRQ reserved fields for desc pointer
-     * */
-    seg = uct_rc_mlx5_iface_get_srq_wqe(iface, iface->rx.tail);
-    wqe_ctr_be = cqe->wqe_counter;
-    seg->next_wqe_index = wqe_ctr_be;
-    iface->rx.tail = ntohs(wqe_ctr_be);
     ++iface->super.rx.available;
     status = UCS_OK;
 
 done:
     max_batch = iface->super.config.rx_max_batch;
     if (iface->super.rx.available >= max_batch) {
-        uct_rc_mlx5_iface_post_recv(iface, max_batch);
+        uct_rc_mlx5_iface_post_recv(iface);
     }
     return status;
-}
-
-static void uct_rc_mlx5_iface_free_rx_descs(uct_rc_mlx5_iface_t *iface)
-{
-    uct_rc_mlx5_recv_desc_t *desc;
-
-    while (!ucs_queue_is_empty(&iface->rx.desc_q)) {
-        desc = ucs_queue_pull_elem_non_empty(&iface->rx.desc_q,
-                                             uct_rc_mlx5_recv_desc_t, queue);
-        ucs_mpool_put(desc);
-    }
 }
 
 static void uct_rc_mlx5_iface_progress(void *arg)
@@ -260,19 +282,68 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     return UCS_OK;
 }
 
+static ucs_status_t uct_rc_mlx5_iface_init_rx(uct_rc_mlx5_iface_t *iface)
+{
+    uct_ib_mlx5_srq_info_t srq_info;
+    uct_rc_mlx5_srq_seg_t *seg;
+    ucs_status_t status;
+    unsigned i;
+
+    status = uct_ib_mlx5_get_srq_info(iface->super.rx.srq, &srq_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (srq_info.head != 0) {
+        ucs_error("SRQ head is not 0 (%d)", srq_info.head);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (srq_info.stride != UCT_RC_MLX5_SRQ_STRIDE) {
+        ucs_error("SRQ stride is not %lu (%d)", UCT_RC_MLX5_SRQ_STRIDE,
+                  srq_info.stride);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (!ucs_is_pow2(iface->rx.cq.cq_length)) {
+        ucs_error("CQ length is not power of 2 (%d)", iface->rx.cq.cq_length);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (srq_info.tail + 1 != iface->rx.cq.cq_length) {
+        ucs_error("RX CQ size (%d) and SRQ length (%d) are not the same",
+                  iface->rx.cq.cq_length, srq_info.tail + 1);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    iface->super.rx.available = srq_info.tail + 1;
+    iface->rx.buf             = srq_info.buf;
+    iface->rx.db              = srq_info.dbrec;
+    iface->rx.free            = srq_info.tail;
+    iface->rx.ready           = -1;
+    iface->rx.sw_pi           = -1;
+    iface->rx.mask            = iface->rx.cq.cq_length - 1;
+
+    for (i = srq_info.head; i <= srq_info.tail; ++i) {
+        seg = uct_rc_mlx5_iface_get_srq_wqe(iface, i);
+        seg->srq.ooo         = 0;
+        seg->srq.desc        = NULL;
+        seg->dptr.byte_count = htonl(iface->super.super.config.seg_size);
+    }
+
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
     uct_rc_mlx5_iface_config_t *config = ucs_derived_of(tl_config, uct_rc_mlx5_iface_config_t);
-    uct_ib_mlx5_srq_info_t srq_info;
     ucs_status_t status;
 
     extern uct_iface_ops_t uct_rc_mlx5_iface_ops;
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, pd, worker,
-                              dev_name, rx_headroom,
-                              sizeof(uct_rc_mlx5_recv_desc_t) - sizeof(uct_ib_iface_recv_desc_t),
-                              &config->super);
+                              dev_name, rx_headroom, 0, &config->super);
 
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
     if (status != UCS_OK) {
@@ -289,16 +360,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
         goto err;
     }
 
-    status = uct_ib_mlx5_get_srq_info(self->super.rx.srq, &srq_info);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    if (srq_info.stride != UCT_RC_MLX5_SRQ_STRIDE) {
-        ucs_error("SRQ stride is not %lu (%d)", UCT_RC_MLX5_SRQ_STRIDE, srq_info.stride);
-        status = UCS_ERR_NO_DEVICE;
-        goto err;
-    }
 
     status = uct_iface_mpool_init(&self->super.super.super,
                                   &self->tx.atomic_desc_mp,
@@ -313,20 +374,18 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker
         goto err;
     }
 
+    status = uct_rc_mlx5_iface_init_rx(self);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_mlx5_iface_stats_class,
                                   self->super.stats);
     if (status != UCS_OK) {
         goto err_destroy_atomic_mp;
     }
 
-    self->rx.buf   = srq_info.buf;
-    self->rx.db    = srq_info.dbrec;
-    self->rx.head  = srq_info.head;
-    self->rx.tail  = srq_info.tail;
-    self->rx.sw_pi = 0;
-    ucs_queue_head_init(&self->rx.desc_q);
-
-    if (uct_rc_mlx5_iface_post_recv(self, self->super.rx.available) == 0) {
+    if (uct_rc_mlx5_iface_post_recv(self) == 0) {
         ucs_error("Failed to post receives");
         status = UCS_ERR_NO_MEMORY;
         goto err_free_stats;
@@ -347,7 +406,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 {
     uct_worker_progress_unregister(self->super.super.super.worker,
                                    uct_rc_mlx5_iface_progress, self);
-    uct_rc_mlx5_iface_free_rx_descs(self);
     UCS_STATS_NODE_FREE(self->stats);
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
 }

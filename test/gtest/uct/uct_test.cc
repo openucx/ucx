@@ -97,11 +97,12 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
     ucs_status_t status;
     status = uct_iface_config_modify(m_iface_config, name.c_str(), value.c_str());
 
-    if (status == UCS_ERR_INVALID_PARAM) {
+    if (status == UCS_ERR_NO_ELEM) {
         test_base::modify_config(name, value);
     } else if (status != UCS_OK) {
         UCS_TEST_ABORT("Couldn't modify config parameter: "
-                        << name.c_str() << " to " << value.c_str());
+                        << name.c_str() << " to " << value.c_str() << ": " <<
+                        ucs_status_string(status));
     }
 }
 
@@ -367,6 +368,12 @@ void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
     pattern_check(ptr(), length(), seed);
 }
 
+void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length) {
+    if (length > sizeof(uint64_t)) {
+        pattern_check(buffer, length, *(const uint64_t*)buffer);
+    }
+}
+
 void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length,
                                             uint64_t seed) {
     const char* end = (const char*)buffer + length;
@@ -423,6 +430,12 @@ uct_mem_h uct_test::mapped_buffer::memh() const {
 
 uct_rkey_t uct_test::mapped_buffer::rkey() const {
     return m_rkey.rkey;
+}
+
+size_t uct_test::mapped_buffer::pack(void *dest, void *arg) {
+    const mapped_buffer* buf = (const mapped_buffer*)arg;
+    memcpy(dest, buf->ptr(), buf->length());
+    return buf->length();
 }
 
 std::ostream& operator<<(std::ostream& os, const resource* resource) {

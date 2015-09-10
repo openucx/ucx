@@ -157,7 +157,7 @@ uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
 
     status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
     if (status == UCS_OK) {
-        ucs_mpool_put(ib_desc);
+        ucs_mpool_put_inline(ib_desc);
     } else {
         uct_recv_desc_iface(desc) = &iface->super.super;
     }
@@ -200,20 +200,6 @@ typedef struct uct_ib_recv_wr {
  */
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
-
-
-static inline void uct_ib_iface_desc_received(uct_ib_iface_t *iface,
-                                              uct_ib_iface_recv_desc_t *desc,
-                                              unsigned byte_len, int has_data)
-{
-    if (has_data) {
-        /* Memory has valid data */
-        VALGRIND_MAKE_MEM_DEFINED((char*)desc + iface->config.rx_hdr_offset, byte_len);
-    } else {
-        /* Data is invalid, but memory is addressable */
-        VALGRIND_MAKE_MEM_UNDEFINED((char*)desc + iface->config.rx_hdr_offset, byte_len);
-    }
-}
 
 struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid);
 
