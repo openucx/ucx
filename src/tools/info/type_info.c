@@ -8,6 +8,7 @@
 
 #include <ucs/async/async_int.h>
 #include <ucs/async/pipe.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/frag_list.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/ptr_array.h>
@@ -86,6 +87,9 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_timer_queue_t);
         PRINT_SIZE(ucs_twheel_t);
         PRINT_SIZE(ucs_wtimer_t);
+        PRINT_SIZE(ucs_arbiter_t);
+        PRINT_SIZE(ucs_arbiter_group_t);
+        PRINT_SIZE(ucs_arbiter_elem_t);
 
         printf("\nUCT:\n");
         PRINT_SIZE(uct_am_handler_t);

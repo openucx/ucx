@@ -12,6 +12,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
 #include <uct/tl/context.h>
+#include "mm_def.h"
 
 
 /* Shared memory ID */
@@ -21,11 +22,13 @@ typedef uint64_t uct_mm_id_t;
 /*
  * Descriptor of the mapped memory
  */
-typedef struct uct_mm_remote_seg {
-    void     *address;    /**< local memory address */
-    uint64_t cookie;      /**< cookie for mmap, xpmem, etc. */
-    size_t   length;      /**< size of the memory */
-} uct_mm_remote_seg_t;
+struct uct_mm_remote_seg {
+    uct_mm_remote_seg_t *next;
+    uct_mm_id_t mmid;        /**< mmid of the remote memory chunk */
+    void        *address;    /**< local memory address */
+    uint64_t    cookie;      /**< cookie for mmap, xpmem, etc. */
+    size_t      length;      /**< size of the memory */
+};
 
 
 /*

@@ -47,11 +47,13 @@
 
 #if ENABLE_ASSERT
 
+#define ucs_bug(_message, ...)                  __ucs_abort(__FILE__, __LINE__, __FUNCTION__, "Bug: " _message, ## __VA_ARGS__)
 #define ucs_assert(_expression)                 ucs_assert_always(_expression)
 #define ucs_assertv(_expression, _fmt, ...)     ucs_assertv_always(_expression, _fmt, ## __VA_ARGS__)
 
 #else
 
+#define ucs_bug(_message, ...)
 #define ucs_assert(_expression)
 #define ucs_assertv(_expression, _fmt, ...)
 

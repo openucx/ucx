@@ -146,6 +146,7 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
     }
 
     mm_desc->length = rkey->length;
+    mm_desc->mmid   = rkey->mmid;
     /* store the offset of the addresses, this can be used directly to translate
      * the remote VA to local VA of the attached segment */
     *handle_p = mm_desc;

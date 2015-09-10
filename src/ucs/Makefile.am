@@ -31,6 +31,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/global_opts.h \
 	config/parser.h \
 	config/types.h \
+	datastruct/arbiter.h \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
 	datastruct/list.h \
@@ -78,6 +79,7 @@ libucs_la_SOURCES = \
 	async/thread.c \
 	config/global_opts.c \
 	config/parser.c \
+	datastruct/arbiter.c \
 	datastruct/frag_list.c \
 	datastruct/notifier.c \
 	datastruct/mpmc.c \
