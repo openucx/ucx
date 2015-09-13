@@ -212,7 +212,7 @@ uint64_t ucs_generate_uuid(uint64_t seed)
 
     gettimeofday(&tv, NULL);
     return seed +
-           ucs_get_prime(0) * getpid() +
+           ucs_get_prime(0) * ucs_get_tid() +
            ucs_get_prime(1) * ucs_get_time() +
            ucs_get_prime(2) * ucs_get_mac_address() +
            ucs_get_prime(3) * tv.tv_sec +
