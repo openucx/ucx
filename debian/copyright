@@ -3,8 +3,8 @@ Upstream-Name: UCX
 Source: http://www.openucx.org
 
 Files: *
-Copyright (c) 2014      UT-Battelle, LLC. All rights reserved.
-Copyright (C) 2014      Mellanox Technologies Ltd. All rights reserved.
+Copyright (c) 2014-2015      UT-Battelle, LLC. All rights reserved.
+Copyright (C) 2014-2015      Mellanox Technologies Ltd. All rights reserved.
 License: BSD
  Redistribution and use in source and binary forms, with or without 
  modification, are permitted provided that the following conditions 
