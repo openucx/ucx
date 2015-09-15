@@ -47,10 +47,14 @@ public:
 
 UCS_TEST_F(test_ucp_rma, blocking_put) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
-                       1);
+                       1, 0);
+    test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       1, 1);
 }
 
 UCS_TEST_F(test_ucp_rma, blocking_get) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
-                       1);
+                       1, 0);
+    test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
+                       1, 1);
 }

@@ -26,7 +26,8 @@ public:
                                                             std::string& expected_data);
 
 protected:
-    void test_blocking_xfer(blocking_send_func_t send, size_t alignment);
+    void test_blocking_xfer(blocking_send_func_t send, size_t alignment,
+                            int malloc_allocation = 0);
 };
 
 
