@@ -102,7 +102,7 @@ test_perf::test_spec test_uct_perf::tests[] =
 UCS_TEST_P(test_uct_perf, envelope) {
     bool check_perf;
 
-    if (GetParam()->tl_name == "cm") {
+    if (GetParam()->tl_name == "cm" || GetParam()->tl_name == "ugni_udt") {
         /* TODO calibrate expected performance and iterations based on transport */
         UCS_TEST_SKIP;
     }

@@ -13,8 +13,6 @@
 #include <ucs/type/class.h>
 #include <uct/ugni/base/ugni_ep.h>
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*, const struct sockaddr*);
-UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                    unsigned length, uint64_t remote_addr,

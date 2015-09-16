@@ -17,13 +17,14 @@
 
 
 void uct_ugni_device_get_resource(const char *tl_name, 
+                                  uint64_t latency, size_t bandwidth,
                                   uct_ugni_device_t *dev,
                                   uct_tl_resource_desc_t *resource)
 {
     ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", tl_name);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
-    resource->latency    = 900; /* nano sec*/
-    resource->bandwidth  = (long) (6911 * pow(1024,2));
+    resource->latency    = latency;
+    resource->bandwidth  = bandwidth;
 }
 
 static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
@@ -75,16 +76,16 @@ static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
 
 ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *dev_p)
 {
-    ucs_status_t rc;
+    ucs_status_t status;
     gni_return_t ugni_rc;
 
     dev_p->device_id = (uint32_t)dev_id;
     dev_p->device_index = index;
 
-    rc = get_nic_address(dev_p);
-    if (rc != UCS_OK) {
+    status = get_nic_address(dev_p);
+    if (UCS_OK != status) {
         ucs_error("Failed to get NIC address");
-        return rc;
+        return status;
     }
 
     ugni_rc = GNI_GetDeviceType(&dev_p->type);
