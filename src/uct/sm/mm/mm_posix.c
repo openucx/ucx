@@ -31,7 +31,7 @@ uct_posix_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
         goto err;
     }
 
-    file_name = ucs_malloc(NAME_MAX, "file name shared mr posix");
+    file_name = ucs_malloc(NAME_MAX, "shared mr posix");
     if (file_name == NULL) {
         status = UCS_ERR_NO_MEMORY;
         ucs_error("Failed to allocate memory for the shm_open file name. %m");
@@ -47,7 +47,8 @@ uct_posix_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
     shm_fd = shm_open(file_name, O_CREAT | O_RDWR | O_EXCL,
                       UCT_MM_POSIX_SHM_OPEN_MODE);
     if (shm_fd == -1) {
-        ucs_error("Error returned from shm_open %m");
+        ucs_error("Error returned from shm_open %m. File name is: %s",
+                  file_name);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free_file;
     }
@@ -121,7 +122,7 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
     int shm_fd;
     ucs_status_t status = UCS_OK;
 
-    file_name = ucs_malloc(NAME_MAX, "file name shared mr posix");
+    file_name = ucs_malloc(NAME_MAX, "shared mr posix");
     if (file_name == NULL) {
         ucs_error("Failed to allocate memory for file_name to attach. %m");
         status = UCS_ERR_NO_MEMORY;
@@ -133,7 +134,8 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
     shm_fd = shm_open(file_name, O_RDWR | O_EXCL,
                       UCT_MM_POSIX_SHM_OPEN_MODE);
     if (shm_fd == -1) {
-        ucs_error("Error returned from shm_open in attach. %m");
+        ucs_error("Error returned from shm_open in attach. %m. File name is: %s",
+                  file_name);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free_file;
     }
@@ -195,7 +197,7 @@ static ucs_status_t uct_posix_free(void *address, uct_mm_id_t mm_id, size_t leng
         goto err;
     }
 
-    file_name = ucs_malloc(NAME_MAX, "file name shared mr posix mmap");
+    file_name = ucs_malloc(NAME_MAX, "shared mr posix mmap");
     if (file_name == NULL) {
         ucs_error("Failed to allocate memory for the shm_unlink file name. %m");
         status = UCS_ERR_NO_MEMORY;
@@ -205,7 +207,8 @@ static ucs_status_t uct_posix_free(void *address, uct_mm_id_t mm_id, size_t leng
     /* use the mmid (63 bits uuid) to recreate the file_name for shm_unlink */
     sprintf(file_name, "/ucx_shared_mr_uuid_%zu", mm_id >> 1);
     if (shm_unlink(file_name) != 0) {
-        ucs_warn("unable to unlink the shared memory segment");
+        ucs_warn("unable to unlink the shared memory segment. File name is: %s",
+                 file_name);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free_file;
     }
