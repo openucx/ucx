@@ -1,7 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) The University of Tennessee and The University 
+*               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -199,6 +200,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.command         = test.command;
     params.test_type       = test.test_type;
     params.thread_mode     = UCS_THREAD_MODE_SINGLE;
+    params.thread_count    = 1;
     params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params.flags           = flags;
     params.message_size    = test.msglen;
