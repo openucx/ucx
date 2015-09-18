@@ -14,7 +14,7 @@
 
 
 #define UCT_UGNI_MAX_TYPE_NAME     (10)
-#define UCT_UGNI_TL_NAME   "ugni"
+#define UCT_UGNI_PD_NAME   "ugni"
 
 typedef struct uct_ugni_device {
     gni_nic_device_t type;                      /**< Device type */
@@ -35,6 +35,7 @@ ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *de
 
 void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 
-void uct_ugni_device_get_resource(uct_ugni_device_t *dev,
-                             uct_tl_resource_desc_t *resource);
+void uct_ugni_device_get_resource(const char *tl_name, 
+                                  uct_ugni_device_t *dev,
+                                  uct_tl_resource_desc_t *resource);
 #endif

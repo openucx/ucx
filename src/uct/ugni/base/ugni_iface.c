@@ -72,19 +72,15 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 
 
 
-ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
-                                                uct_tl_resource_desc_t **resource_p,
-                                                unsigned *num_resources_p)
+ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
+                                         uct_tl_resource_desc_t **resource_p,
+                                         unsigned *num_resources_p)
 {
     uct_tl_resource_desc_t *resources;
     int num_devices = job_info.num_devices;
     uct_ugni_device_t *devs = job_info.devices;
     int i;
     ucs_status_t rc = UCS_OK;
-
-    assert(!strncmp(pd->component->name,
-                    UCT_UGNI_TL_NAME,
-                    UCT_PD_NAME_MAX));
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
@@ -99,7 +95,7 @@ ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd,
     }
 
     for (i = 0; i < job_info.num_devices; i++) {
-        uct_ugni_device_get_resource(&devs[i], &resources[i]);
+        uct_ugni_device_get_resource(tl_name, &devs[i], &resources[i]);
     }
 
 error:
@@ -111,7 +107,7 @@ error:
 }
 
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
-                                               struct sockaddr *addr)
+                                        struct sockaddr *addr)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     uct_sockaddr_ugni_t *iface_addr = (uct_sockaddr_ugni_t*)addr;
