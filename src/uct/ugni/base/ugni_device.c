@@ -16,10 +16,11 @@
 #include <ucs/sys/sys.h>
 
 
-void uct_ugni_device_get_resource(uct_ugni_device_t *dev,
-        uct_tl_resource_desc_t *resource)
+void uct_ugni_device_get_resource(const char *tl_name, 
+                                  uct_ugni_device_t *dev,
+                                  uct_tl_resource_desc_t *resource)
 {
-    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", UCT_UGNI_TL_NAME);
+    ucs_snprintf_zero(resource->tl_name,  sizeof(resource->tl_name), "%s", tl_name);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
     resource->latency    = 900; /* nano sec*/
     resource->bandwidth  = (long) (6911 * pow(1024,2));

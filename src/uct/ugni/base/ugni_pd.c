@@ -267,8 +267,6 @@ static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p)
     int domain_id;
     ucs_status_t rc = UCS_OK;
 
-    assert(!strncmp(pd_name, UCT_UGNI_TL_NAME, UCT_TL_NAME_MAX));
-
     pthread_mutex_lock(&uct_ugni_global_lock);
     static uct_pd_ops_t pd_ops = {
         .close        = uct_ugni_pd_close,
@@ -335,7 +333,7 @@ uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name)
 }
 
 UCT_PD_COMPONENT_DEFINE(uct_ugni_pd_component,
-                        UCT_UGNI_TL_NAME,
+                        UCT_UGNI_PD_NAME,
                         uct_ugni_query_pd_resources,
                         uct_ugni_pd_open,
                         NULL,
