@@ -30,17 +30,11 @@ ucs_global_opts_t ucs_global_opts = {
     .instrument_file       = "",
     .instrument_max_size   = 1048576,
     .memtrack_dest         = "",
-#if ENABLE_STATS
     .stats_dest            = "",
     .stats_trigger         = "exit",
-#endif
-#if ENABLE_MEMTRACK
     .memtrack_dest         = "",
-#endif
-#if HAVE_INSTRUMENTATION
     .instrument_file       = "",
     .instrument_max_size   = 1048576,
-#endif
 };
 
 static const char *handle_error_modes[] = {
