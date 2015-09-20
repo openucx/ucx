@@ -22,7 +22,7 @@ static inline unsigned uct_ugni_ep_hash(uct_ugni_ep_t *ep)
     return ep->hash_key;
 }
 
-static inline void uct_ugni_invoke_orig_comp(uct_ugni_fetch_desc_t *fma)
+static inline void uct_ugni_invoke_orig_comp(uct_ugni_rdma_fetch_desc_t *fma)
 {
     if (ucs_likely(NULL != fma->orig_comp_cb)) {
         uct_invoke_completion(fma->orig_comp_cb);
@@ -110,7 +110,7 @@ static inline void uct_ugni_format_fma(uct_ugni_base_desc_t *fma, gni_post_type_
     ucs_assert(0 == fma->not_ready_to_free);
 }
 
-static inline void uct_ugni_format_fma_amo(uct_ugni_fetch_desc_t *amo, gni_post_type_t type,
+static inline void uct_ugni_format_fma_amo(uct_ugni_rdma_fetch_desc_t *amo, gni_post_type_t type,
                                            gni_fma_cmd_type_t amo_op,
                                            uint64_t first_operand, uint64_t second_operand,
                                            void *buffer, uint64_t remote_addr,
@@ -293,8 +293,8 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t le
 
 static void uct_ugni_amo_unpack64(uct_completion_t *self)
 {
-    uct_ugni_fetch_desc_t *fma = (uct_ugni_fetch_desc_t *)
-        ucs_container_of(self, uct_ugni_fetch_desc_t, tmp);
+    uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
+        ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
     /* Call the orignal callback and skip padding */
     *(uint64_t *)fma->user_buffer = *(uint64_t *)(fma + 1);
@@ -306,7 +306,7 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
-    uct_ugni_fetch_desc_t *fma;
+    uct_ugni_rdma_fetch_desc_t *fma;
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
                              return UCS_ERR_NO_RESOURCE);
@@ -328,7 +328,7 @@ ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
-    uct_ugni_fetch_desc_t *fma;
+    uct_ugni_rdma_fetch_desc_t *fma;
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
                              return UCS_ERR_NO_RESOURCE);
@@ -357,7 +357,7 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
-    uct_ugni_fetch_desc_t *fma;
+    uct_ugni_rdma_fetch_desc_t *fma;
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
                              return UCS_ERR_NO_RESOURCE);
@@ -410,8 +410,8 @@ ucs_status_t uct_ugni_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
 
 static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
 {
-    uct_ugni_fetch_desc_t *fma = (uct_ugni_fetch_desc_t *)
-        ucs_container_of(self, uct_ugni_fetch_desc_t, tmp);
+    uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
+        ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
     /* Call the orignal callback and skip padding */
     fma->super.unpack_cb(fma->user_buffer, (char *)(fma + 1) + fma->padding,
@@ -422,7 +422,7 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
 
 #define UGNI_GET_ALIGN (4)
 
-static inline void uct_ugni_format_get_fma(uct_ugni_fetch_desc_t *fma,
+static inline void uct_ugni_format_get_fma(uct_ugni_rdma_fetch_desc_t *fma,
                                            gni_post_type_t type, uint64_t
                                            remote_addr, uct_rkey_t rkey,
                                            unsigned length, uct_ugni_ep_t *ep,
@@ -455,7 +455,7 @@ static inline void uct_ugni_format_get_fma(uct_ugni_fetch_desc_t *fma,
                         ep, comp, unpack_cb);
 }
 
-static inline void uct_ugni_format_unaligned_rdma(uct_ugni_fetch_desc_t *rdma, gni_post_type_t type,
+static inline void uct_ugni_format_unaligned_rdma(uct_ugni_rdma_fetch_desc_t *rdma, gni_post_type_t type,
                                                   const void *buffer, uint64_t remote_addr,
                                                   uct_mem_h memh, uct_rkey_t rkey,
                                                   unsigned length, uct_ugni_ep_t *ep,
@@ -496,7 +496,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
-    uct_ugni_fetch_desc_t *fma;
+    uct_ugni_rdma_fetch_desc_t *fma;
 
     UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
@@ -520,10 +520,10 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
-static void assemble_composed_unaligned(uct_ugni_fetch_desc_t *fma_head)
+static void assemble_composed_unaligned(uct_ugni_rdma_fetch_desc_t *fma_head)
 {
     char *buffer = fma_head->user_buffer;
-    uct_ugni_fetch_desc_t *rdma = fma_head->head;
+    uct_ugni_rdma_fetch_desc_t *rdma = fma_head->head;
 
     if(fma_head->head == NULL){
         memcpy(buffer, (char *)(fma_head + 1) + fma_head->padding,
@@ -538,9 +538,9 @@ static void assemble_composed_unaligned(uct_ugni_fetch_desc_t *fma_head)
 
 static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
 {
-    uct_ugni_fetch_desc_t *rdma = (uct_ugni_fetch_desc_t *)
-        ucs_container_of(self, uct_ugni_fetch_desc_t, tmp);
-    uct_ugni_fetch_desc_t *head_fma = rdma->head;
+    uct_ugni_rdma_fetch_desc_t *rdma = (uct_ugni_rdma_fetch_desc_t *)
+        ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
+    uct_ugni_rdma_fetch_desc_t *head_fma = rdma->head;
 
     head_fma->network_completed_bytes += rdma->super.desc.length;
 
@@ -560,9 +560,9 @@ static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
 
 static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self)
 {
-    uct_ugni_fetch_desc_t *fma = (uct_ugni_fetch_desc_t *)
-        ucs_container_of(self, uct_ugni_fetch_desc_t, tmp);
-    uct_ugni_fetch_desc_t *head_fma = fma;
+    uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
+        ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
+    uct_ugni_rdma_fetch_desc_t *head_fma = fma;
 
     ucs_assert(head_fma->network_completed_bytes == 0 &&
                head_fma->expected_bytes != 0);
@@ -590,10 +590,10 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
                                                       uct_mem_h memh, uint64_t remote_addr,
                                                       uct_rkey_t rkey, uct_completion_t *comp)
 {
-    uct_ugni_fetch_desc_t *fma = NULL;
+    uct_ugni_rdma_fetch_desc_t *fma = NULL;
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
-    uct_ugni_fetch_desc_t *rdma = NULL;
+    uct_ugni_rdma_fetch_desc_t *rdma = NULL;
 
     size_t fma_length, rdma_length, aligned_fma_remote_start;
 

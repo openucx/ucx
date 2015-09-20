@@ -307,13 +307,14 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
         goto err;
     }
 
-    /* check the value defining the fifo batch release */
+    /* check the value defining the FIFO batch release */
     if ((mm_config->release_fifo_factor < 0) || (mm_config->release_fifo_factor >= 1)) {
         ucs_error("The MM release FIFO factor must be: (0 =< factor < 1).");
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
 
+    /* check the value defining the size of the FIFO element */
     if (mm_config->super.max_short <= sizeof(uct_mm_fifo_element_t)) {
         ucs_error("The UCT_MM_MAX_SHORT parameter must be larger than the FIFO "
                   "element header size. ( >= %ld bytes).",

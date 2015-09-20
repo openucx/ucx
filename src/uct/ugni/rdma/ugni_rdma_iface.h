@@ -40,12 +40,12 @@ typedef struct uct_ugni_rdma_iface {
     } config;
 } uct_ugni_rdma_iface_t;
 
-typedef struct uct_ugni_iface_config {
+typedef struct uct_ugni_rdma_iface_config {
     uct_iface_config_t       super;
     uct_iface_mpool_config_t mpool;
-} uct_ugni_iface_config_t;
+} uct_ugni_rdma_iface_config_t;
 
-typedef struct uct_ugni_fetch_desc {
+typedef struct uct_ugni_rdma_fetch_desc {
     uct_ugni_base_desc_t super;
     uct_completion_t tmp;
     uct_completion_t *orig_comp_cb;
@@ -55,10 +55,10 @@ typedef struct uct_ugni_fetch_desc {
     size_t expected_bytes;          /**< Number of bytes expected to be delivered
                                          including padding */
     size_t network_completed_bytes; /**< Total number of delivered bytes */
-    struct uct_ugni_fetch_desc* head; /**< Pointer to the head descriptor
+    struct uct_ugni_rdma_fetch_desc* head; /**< Pointer to the head descriptor
                                          that manages the completion of the operation */
     void *user_buffer;              /**< Pointer to user's buffer, here to ensure it's always available for composed messages */
     size_t tail;                    /**< Tail parameter to specify how many bytes at the end of a fma/rdma are garbage*/
-} uct_ugni_fetch_desc_t;
+} uct_ugni_rdma_fetch_desc_t;
 
 #endif
