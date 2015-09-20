@@ -73,6 +73,25 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     return UCS_OK;
 }
 
+ucs_status_t uct_iface_set_am_tracer(uct_iface_h tl_iface, uct_am_tracer_t tracer,
+                                     void *arg)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+
+    iface->am_tracer     = tracer;
+    iface->am_tracer_arg = arg;
+    return UCS_OK;
+}
+
+void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                       uint8_t id, const void *data, size_t length,
+                       char *buffer, size_t max)
+{
+    if (iface->am_tracer != NULL) {
+        iface->am_tracer(iface->am_tracer_arg, type, id, data, length, buffer, max);
+    }
+}
+
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
     return iface->ops.iface_query(iface, iface_attr);
@@ -119,8 +138,10 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
-    self->pd     = pd;
-    self->worker = worker;
+    self->pd            = pd;
+    self->worker        = worker;
+    self->am_tracer     = NULL;
+    self->am_tracer_arg = NULL;
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         uct_iface_set_stub_am_handler(self, id);

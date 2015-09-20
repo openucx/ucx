@@ -68,7 +68,7 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     VALGRIND_MAKE_MEM_DEFINED(hdr, sizeof(hdr));
     VALGRIND_MAKE_MEM_DEFINED(hdr + 1, hdr->length);
 
-    ucs_trace_data("RECV SIDR_REQ am_id %d length %d", hdr->am_id, hdr->length);
+    uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_RECV, hdr, "RX: SIDR_REQ");
 
     /* Allocate temporary buffer to serve as receive descriptor */
     cm_desc = ucs_malloc(iface->super.config.rx_payload_offset + hdr->length,
@@ -79,7 +79,7 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     }
 
     /* Send reply */
-    ucs_trace_data("SEND SIDR_REP (dummy)");
+    ucs_trace_data("TX: SIDR_REP");
     memset(&rep, 0, sizeof rep);
     rep.status = IB_SIDR_SUCCESS;
     ret = ib_cm_send_sidr_rep(event->cm_id, &rep);
@@ -130,10 +130,10 @@ static void uct_cm_iface_event_handler(void *arg)
             destroy_id = 1; /* Destroy the ID created by the driver */
             break;
         case IB_CM_SIDR_REP_RECEIVED:
-            ucs_trace_data("RECV SIDR_REP (dummy)");
+            ucs_trace_data("RX: SIDR_REP");
             ucs_assert(iface->inflight > 0);
             ucs_atomic_add32(&iface->inflight, -1);
-            destroy_id      = 1; /* Destroy the ID which was used for sending */
+            destroy_id = 1; /* Destroy the ID which was used for sending */
             break;
         default:
             ucs_warn("Unexpected CM event: %d", event->event);

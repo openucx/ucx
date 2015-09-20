@@ -32,7 +32,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     wr->send_flags = send_flags;
     wr->wr_id      = ep->super.unsignaled;
 
-    uct_ib_log_post_send(ep->super.qp, wr,
+    uct_ib_log_post_send(&iface->super.super, ep->super.qp, wr,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     ret = ibv_post_send(ep->super.qp, wr, &bad_wr);
@@ -60,7 +60,7 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
     wr->exp_send_flags |= signal;
     wr->wr_id          = ep->super.unsignaled;
 
-    uct_ib_log_exp_post_send(ep->super.qp, wr,
+    uct_ib_log_exp_post_send(&iface->super.super, ep->super.qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     ret = ibv_exp_post_send(ep->super.qp, wr, &bad_wr);

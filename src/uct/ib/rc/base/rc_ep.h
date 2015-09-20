@@ -44,7 +44,8 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr);
 
-void uct_rc_ep_am_packet_dump(void *data, size_t length, size_t valid_length,
+void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                              void *data, size_t length, size_t valid_length,
                               char *buffer, size_t max);
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op);

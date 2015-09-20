@@ -127,6 +127,8 @@ typedef struct uct_base_iface {
     uct_worker_h      worker;                /* Worker this interface is on */
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
+    uct_am_tracer_t   am_tracer;             /* Active message tracer */
+    void              *am_tracer_arg;        /* Tracer argument */
 
     struct {
         unsigned            num_alloc_methods;
@@ -379,6 +381,14 @@ ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   uct_iface_mpool_config_t *config, unsigned grow,
                                   uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name);
+
+
+/**
+ * Dump active message contents using the user-defined tracer callback.
+ */
+void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                       uint8_t id, const void *data, size_t length,
+                       char *buffer, size_t max);
 
 
 /**

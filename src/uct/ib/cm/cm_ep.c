@@ -153,8 +153,9 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
         goto err_destroy_id;
     }
 
-    ucs_trace_data("SEND SIDR_REQ [dlid %d service_id 0x%"PRIx64"] am_id %d",
-                   ntohs(path.dlid), req.service_id, hdr->am_id);
+    uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_SEND, hdr,
+                            "TX: SIDR_REQ [dlid %d svc 0x%"PRIx64"]",
+                            ntohs(path.dlid), req.service_id);
     ucs_free(hdr);
     return payload_len;
 
