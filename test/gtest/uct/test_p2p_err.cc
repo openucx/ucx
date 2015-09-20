@@ -78,6 +78,7 @@ public:
         UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
 
         ucs_status_t status = UCS_OK;
+        ssize_t packed_len;
         do {
             switch (op) {
             case OP_PUT_SHORT:
@@ -87,8 +88,9 @@ public:
             case OP_PUT_BCOPY:
                 arg.buffer = buffer;
                 arg.length = length;
-                status = uct_ep_put_bcopy(sender_ep(), pack_cb, &arg, remote_addr,
+                packed_len = uct_ep_put_bcopy(sender_ep(), pack_cb, &arg, remote_addr,
                                           rkey);
+                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)status;
                 break;
             case OP_PUT_ZCOPY:
                 status = uct_ep_put_zcopy(sender_ep(), buffer, length, memh,
@@ -100,7 +102,8 @@ public:
             case OP_AM_BCOPY:
                 arg.buffer = buffer;
                 arg.length = length;
-                status = uct_ep_am_bcopy(sender_ep(), am_id, pack_cb, &arg);
+                packed_len = uct_ep_am_bcopy(sender_ep(), am_id, pack_cb, &arg);
+                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)status;
                 break;
             case OP_AM_ZCOPY:
                 status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,

@@ -75,7 +75,14 @@ public:
     ucs_status_t am_bcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
-        return uct_ep_am_bcopy(ep, AM_ID, sendbuf_pack, (void*)&sendbuf);
+        ssize_t packed_len;
+        packed_len = uct_ep_am_bcopy(ep, AM_ID, sendbuf_pack, (void*)&sendbuf);
+        if (packed_len >= 0) {
+            EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
+            return UCS_OK;
+        } else {
+            return (ucs_status_t)packed_len;
+        }
     }
 
     ucs_status_t am_zcopy(uct_ep_h ep, const mapped_buffer& sendbuf,

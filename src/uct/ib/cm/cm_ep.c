@@ -89,8 +89,8 @@ static void uct_cm_dump_path(struct ibv_sa_path_rec *path)
                    path->preference);
 }
 
-ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
-                                uct_pack_callback_t pack_cb, void *arg)
+ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
+                           uct_pack_callback_t pack_cb, void *arg)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
     uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
@@ -99,7 +99,8 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     struct ib_cm_id *id;
     ucs_status_t status;
     uct_cm_hdr_t *hdr;
-    size_t total_length;
+    size_t payload_len;
+    size_t total_len;
     int ret;
 
     UCT_CHECK_AM_ID(am_id);
@@ -116,9 +117,10 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
         goto err_dec_inflight;
     }
 
-    hdr->am_id   = am_id;
-    hdr->length  = pack_cb(hdr + 1, arg);
-    total_length = sizeof(*hdr) + hdr->length;
+    payload_len = pack_cb(hdr + 1, arg);
+    hdr->am_id  = am_id;
+    hdr->length = payload_len;
+    total_len   = sizeof(*hdr) + payload_len;
 
     status = uct_cm_ep_fill_path_rec(ep, &path);
     if (status != UCS_OK) {
@@ -131,7 +133,7 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     req.service_id       = ep->dest_addr.id;
     req.timeout_ms       = iface->config.timeout_ms;
     req.private_data     = hdr;
-    req.private_data_len = total_length;
+    req.private_data_len = total_len;
     req.max_cm_retries   = iface->config.retry_count;
 
     /* Create temporary ID for this message. Will be released when getting REP. */
@@ -154,7 +156,7 @@ ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     ucs_trace_data("SEND SIDR_REQ [dlid %d service_id 0x%"PRIx64"] am_id %d",
                    ntohs(path.dlid), req.service_id, hdr->am_id);
     ucs_free(hdr);
-    return UCS_OK;
+    return payload_len;
 
 err_destroy_id:
     ib_cm_destroy_id(id);

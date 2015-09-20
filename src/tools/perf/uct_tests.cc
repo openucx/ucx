@@ -71,6 +71,7 @@ public:
     {
         uint64_t am_short_hdr;
         size_t header_size;
+        ssize_t packed_len;
 
         switch (CMD) {
         case UCX_PERF_CMD_AM:
@@ -82,7 +83,8 @@ public:
                                        length - sizeof(am_short_hdr));
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 *(psn_t*)buffer = sn;
-                return uct_ep_am_bcopy(ep, UCT_PERF_TEST_AM_ID, pack_cb, (void*)this);
+                packed_len = uct_ep_am_bcopy(ep, UCT_PERF_TEST_AM_ID, pack_cb, (void*)this);
+                return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 *(psn_t*)buffer = sn;
                 header_size = m_perf.params.am_hdr_size;
@@ -101,7 +103,8 @@ public:
             case UCT_PERF_DATA_LAYOUT_SHORT:
                 return uct_ep_put_short(ep, buffer, length, remote_addr, rkey);
             case UCT_PERF_DATA_LAYOUT_BCOPY:
-                return uct_ep_put_bcopy(ep, pack_cb, (void*)this, remote_addr, rkey);
+                packed_len = uct_ep_put_bcopy(ep, pack_cb, (void*)this, remote_addr, rkey);
+                return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 return uct_ep_put_zcopy(ep, buffer, length, m_perf.uct.send_mem.memh,
                                         remote_addr, rkey, comp);

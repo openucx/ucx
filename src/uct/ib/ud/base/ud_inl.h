@@ -115,9 +115,13 @@ uct_ud_am_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE size_t
 uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, uct_pack_callback_t pack_cb, void *arg)
 {
-    skb->len = sizeof(uct_ud_neth_t) + pack_cb(skb->neth + 1, arg);
+    size_t payload_len;
+
+    payload_len = pack_cb(skb->neth + 1, arg);
+    skb->len = sizeof(skb->neth) + payload_len;
+    return payload_len;
 }
 

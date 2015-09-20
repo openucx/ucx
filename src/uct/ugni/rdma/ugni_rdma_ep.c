@@ -181,10 +181,10 @@ static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_rdma_iface_t *iface,
     return UCS_INPROGRESS;
 }
 
-static inline ucs_status_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
-                                             uct_ugni_ep_t *ep,
-                                             uct_ugni_base_desc_t *fma,
-                                             ucs_status_t ok_status)
+static inline ssize_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
+                                        uct_ugni_ep_t *ep,
+                                        uct_ugni_base_desc_t *fma,
+                                        ssize_t ok_status)
 {
     gni_return_t ugni_rc;
 
@@ -232,8 +232,8 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return uct_ugni_post_fma(iface, ep, fma, UCS_OK);
 }
 
-ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                   void *arg, uint64_t remote_addr, uct_rkey_t rkey)
+ssize_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                              void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     /* Since custom pack function is used
      * we have to allocate separate memory to pack
@@ -260,7 +260,7 @@ ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                    (void *)fma->desc.remote_addr,
                    fma->desc.remote_mem_hndl.qword1,
                    fma->desc.remote_mem_hndl.qword2);
-    return uct_ugni_post_fma(iface, ep, fma, UCS_OK);
+    return uct_ugni_post_fma(iface, ep, fma, length);
 }
 
 ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,

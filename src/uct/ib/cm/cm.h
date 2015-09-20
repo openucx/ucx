@@ -79,8 +79,8 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h ep, const struct sockaddr *iface_addr);
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface);
 
-ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg);
+ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
+                           void *arg);
 
 ucs_status_t uct_cm_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req);
 ucs_status_t uct_cm_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);

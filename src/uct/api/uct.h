@@ -812,9 +812,9 @@ UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, const void *buffer, un
  * @ingroup RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
-                                             void *arg, uint64_t remote_addr,
-                                             uct_rkey_t rkey)
+UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                        void *arg, uint64_t remote_addr,
+                                        uct_rkey_t rkey)
 {
     return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, remote_addr, rkey);
 }
@@ -875,8 +875,8 @@ UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t he
  * @ingroup AM
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
-                                            uct_pack_callback_t pack_cb, void *arg)
+UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
+                                       uct_pack_callback_t pack_cb, void *arg)
 {
     return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg);
 }

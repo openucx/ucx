@@ -279,8 +279,8 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                       void *arg, uint64_t remote_addr, uct_rkey_t rkey)
+ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                  void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -301,7 +301,7 @@ ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SIGNALED);
-    return UCS_OK;
+    return length;
 }
 
 ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
@@ -389,8 +389,8 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                      uct_pack_callback_t pack_cb, void *arg)
+ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                 uct_pack_callback_t pack_cb, void *arg)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -417,7 +417,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
-    return UCS_OK;
+    return length;
 }
 
 static void uct_rc_verbs_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op)
