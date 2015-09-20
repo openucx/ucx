@@ -58,28 +58,36 @@ UCS_TEST_F(test_mpool, basic) {
        NULL
     };
 
-    status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
-                             6, 18, &ops, "test");
-    ASSERT_UCS_OK(status);
+    push_config();
 
-    for (unsigned loop = 0; loop < 10; ++loop) {
-        std::vector<void*> objs;
-        for (unsigned i = 0; i < 18; ++i) {
-            void *ptr = ucs_mpool_get(&mp);
-            ASSERT_TRUE(ptr != NULL);
-            ASSERT_EQ(0ul, ((uintptr_t)ptr + header_size) % align) << ptr;
-            memset(ptr, 0xAA, header_size + data_size);
-            objs.push_back(ptr);
+    for (int mpool_fifo = 0; mpool_fifo <= 1; ++mpool_fifo) {
+        modify_config("MPOOL_FIFO", ucs::to_string(mpool_fifo).c_str());
+
+        status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
+                                 6, 18, &ops, "test");
+        ASSERT_UCS_OK(status);
+
+        for (unsigned loop = 0; loop < 10; ++loop) {
+            std::vector<void*> objs;
+            for (unsigned i = 0; i < 18; ++i) {
+                void *ptr = ucs_mpool_get(&mp);
+                ASSERT_TRUE(ptr != NULL);
+                ASSERT_EQ(0ul, ((uintptr_t)ptr + header_size) % align) << ptr;
+                memset(ptr, 0xAA, header_size + data_size);
+                objs.push_back(ptr);
+            }
+
+            ASSERT_TRUE(NULL == ucs_mpool_get(&mp));
+
+            for (std::vector<void*>::iterator iter = objs.begin(); iter != objs.end(); ++iter) {
+                ucs_mpool_put(*iter);
+            }
         }
 
-        ASSERT_TRUE(NULL == ucs_mpool_get(&mp));
-
-        for (std::vector<void*>::iterator iter = objs.begin(); iter != objs.end(); ++iter) {
-            ucs_mpool_put(*iter);
-        }
+        ucs_mpool_cleanup(&mp, 1);
     }
 
-    ucs_mpool_cleanup(&mp, 1);
+    pop_config();
 }
 
 UCS_TEST_F(test_mpool, custom_alloc) {
