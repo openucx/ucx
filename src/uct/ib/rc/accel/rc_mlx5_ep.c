@@ -563,6 +563,16 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     ucs_status_t status;
 
     UCT_CHECK_AM_ID(id);
+
+    UCT_CHECK_LENGTH(sizeof(struct mlx5_wqe_ctrl_seg) +
+                     sizeof(struct mlx5_wqe_data_seg) +
+                     sizeof(struct mlx5_wqe_inl_data_seg) +
+                     sizeof(uct_rc_hdr_t) + header_length,
+                     UCT_RC_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
+                     "am zcopy");
+    UCT_CHECK_LENGTH(header_length + length + sizeof(uct_rc_hdr_t),
+                     ucs_derived_of(tl_ep->iface, uct_ib_iface_t)->config.seg_size,
+                     "am_zcopy");
     UCT_CHECK_LENGTH(header_length + length, UCT_IB_MAX_MESSAGE_SIZE, "am_zcopy");
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_SEND, payload, length, memh,
