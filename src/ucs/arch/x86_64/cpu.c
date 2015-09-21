@@ -77,7 +77,7 @@ static double ucs_x86_tsc_freq_from_cpu_model()
             continue;
         }
 
-        max_ghz = ucs_max(ghz, ghz);
+        max_ghz = ucs_max(max_ghz, ghz);
         if (max_ghz != ghz) {
             warn = 1;
         }
