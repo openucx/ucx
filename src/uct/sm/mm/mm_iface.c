@@ -384,7 +384,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     }
 
     // TODO - Move this call to the ep_init function
-    ucs_notifier_chain_add(&worker->progress_chain, uct_mm_iface_progress, self);
+    uct_worker_progress_register(worker, uct_mm_iface_progress, self);
 
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
     return UCS_OK;
@@ -423,8 +423,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
         ucs_warn("Unable to release shared memory segment: %m");
     }
 
-    ucs_notifier_chain_remove(&self->super.worker->progress_chain,
-                              uct_mm_iface_progress, self);
+    uct_worker_progress_unregister(self->super.worker, uct_mm_iface_progress,
+                                   self);
 }
 
 UCS_CLASS_DEFINE(uct_mm_iface_t, uct_base_iface_t);

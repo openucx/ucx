@@ -60,8 +60,8 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
 {
-    ucs_notifier_chain_remove(&self->super.super.worker->progress_chain,
-                              uct_ugni_progress, self);
+    uct_worker_progress_unregister(self->super.super.worker,
+                                   uct_ugni_progress, self);
 
     if (!self->super.activated) {
         /* We done with release */
@@ -200,7 +200,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h work
 
     /* TBD: eventually the uct_ugni_progress has to be moved to 
      * rdma layer so each ugni layer will have own progress */
-    ucs_notifier_chain_add(&worker->progress_chain, uct_ugni_progress, self);
+    uct_worker_progress_register(worker, uct_ugni_progress, self);
     pthread_mutex_unlock(&uct_ugni_global_lock);
     return UCS_OK;
 

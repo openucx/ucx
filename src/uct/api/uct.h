@@ -15,6 +15,7 @@
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
+#include <ucs/datastruct/notifier.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 
@@ -417,9 +418,45 @@ void uct_worker_destroy(uct_worker_h worker);
  * @note @li In the current implementation, users @b MUST call this routine
  * to receive the active message requests.
  *
- * @param [in] worker   Handle to worker.
+ * @param [in]  worker        Handle to worker.
  */
 void uct_worker_progress(uct_worker_h worker);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Add a callback function to a worker progress.
+ *
+ * Add a function which will be called every time a progress is made on the worker.
+ *
+ * @param [in]  worker        Handle to worker.
+ * @param [in]  func          Pointer to callback function.
+ * @param [in]  arg           Argument to the function.
+ *
+ * @note If the same function and argument are already on the list, their reference
+ *       count will be incremented.
+ * @note This operation could potentially be slow.
+ */
+void uct_worker_progress_register(uct_worker_h worker,
+                                  ucs_notifier_chain_func_t func, void *arg);
+
+
+/**
+ * @ingroup CONTEXT
+ * @brief Remove a callback function from worker's progress.
+ *
+ * Remove a previously added function from worker's progress.
+ *
+ * @param [in]  worker        Handle to worker.
+ * @param [in]  func          Pointer to callback function.
+ * @param [in]  arg           Argument to the function.
+ *
+ * @note If the reference count of the function is >1, it will be decremented and
+ *       the function will not be removed.
+ * @note This operation could potentially be slow.
+ */
+void uct_worker_progress_unregister(uct_worker_h worker,
+                                    ucs_notifier_chain_func_t func, void *arg);
 
 
 /**

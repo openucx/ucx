@@ -468,8 +468,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->tx.wr_skb.num_sge           = 1;
 
     /* TODO: add progress on first ep creation */
-    ucs_notifier_chain_add(&worker->progress_chain, uct_ud_verbs_iface_progress,
-                           self);
+    uct_worker_progress_register(worker, uct_ud_verbs_iface_progress, self);
     return UCS_OK;
 }
 
@@ -477,8 +476,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 {
     ucs_trace_func("");
-    ucs_notifier_chain_remove(&self->super.super.super.worker->progress_chain,
-                              uct_ud_verbs_iface_progress, self);
+    uct_worker_progress_unregister(self->super.super.super.worker,
+                                   uct_ud_verbs_iface_progress, self);
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_iface_t, uct_ud_iface_t);
