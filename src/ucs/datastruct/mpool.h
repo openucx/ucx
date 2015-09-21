@@ -73,6 +73,7 @@ struct ucs_mpool_data {
     unsigned               alignment;    /* Element alignment */
     unsigned               align_offset; /* Offset to alignment point */
     unsigned               quota;        /* How many more elements can be allocated */
+    ucs_mpool_elem_t       *tail;        /* Free list tail */
     size_t                 chunk_size;   /* Size of each chunk */
     ucs_mpool_chunk_t      *chunks;      /* List of allocated chunks */
     ucs_mpool_ops_t        *ops;         /* Memory pool operations */

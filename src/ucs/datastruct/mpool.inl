@@ -33,6 +33,28 @@ static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
     return obj;
 }
 
+static inline void ucs_mpool_add_to_freelist(ucs_mpool_t *mp, ucs_mpool_elem_t *elem,
+                                             int add_to_tail)
+{
+    ucs_mpool_elem_t *tail;
+
+    if (add_to_tail) {
+        elem->next = NULL;
+        if (mp->freelist == NULL) {
+            mp->freelist = elem;
+        } else {
+            tail = mp->data->tail;
+            VALGRIND_MAKE_MEM_DEFINED(tail, sizeof *tail);
+            tail->next = elem;
+            VALGRIND_MAKE_MEM_NOACCESS(tail, sizeof *tail);
+        }
+        mp->data->tail = elem;
+    } else {
+        elem->next = mp->freelist;
+        mp->freelist = elem;
+    }
+}
+
 static inline void ucs_mpool_put_inline(void *obj)
 {
     ucs_mpool_elem_t *elem;
@@ -42,9 +64,9 @@ static inline void ucs_mpool_put_inline(void *obj)
     elem = (ucs_mpool_elem_t*)obj - 1;
     VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
     mp = elem->mpool;
-    elem->next = mp->freelist;
+    ucs_mpool_add_to_freelist(mp, elem,
+                              ENABLE_DEBUG_DATA && ucs_global_opts.mpool_fifo);
     VALGRIND_MAKE_MEM_NOACCESS(elem, sizeof *elem);
-    mp->freelist = elem;
     VALGRIND_MEMPOOL_FREE(mp, obj);
 }
 

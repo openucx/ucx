@@ -64,6 +64,7 @@ ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
     mp->data->alignment    = alignment;
     mp->data->align_offset = sizeof(ucs_mpool_elem_t) + align_offset;
     mp->data->quota        = max_elems;
+    mp->data->tail         = NULL;
     mp->data->chunk_size   = sizeof(ucs_mpool_chunk_t) + alignment +
                              elems_per_chunk * ucs_mpool_elem_total_size(mp->data);
     mp->data->chunks       = NULL;
@@ -82,6 +83,7 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
     ucs_mpool_chunk_t *chunk, *next_chunk;
     ucs_mpool_elem_t *elem, *next_elem;
     ucs_mpool_data_t *data = mp->data;
+    void *obj;
 
     /* Cleanup all elements in the freelist and set their header to NULL to mark
      * them as released for the leak check.
@@ -92,7 +94,11 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
         VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
         next_elem = elem->next;
         if (data->ops->obj_cleanup != NULL) {
-            data->ops->obj_cleanup(mp, elem + 1);
+            obj = elem + 1;
+            VALGRIND_MEMPOOL_ALLOC(mp, obj, mp->data->elem_size - sizeof(ucs_mpool_elem_t));
+            VALGRIND_MAKE_MEM_DEFINED(obj, mp->data->elem_size - sizeof(ucs_mpool_elem_t));
+            data->ops->obj_cleanup(mp, obj);
+            VALGRIND_MEMPOOL_FREE(mp, obj);
         }
         elem->mpool = NULL;
     }
@@ -178,12 +184,16 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp)
 
     for (i = 0; i < chunk->num_elems; ++i) {
         elem         = ucs_mpool_chunk_elem(data, chunk, i);
-        elem->next   = mp->freelist;
-        mp->freelist = elem;
         if (data->ops->obj_init != NULL) {
             data->ops->obj_init(mp, elem + 1, chunk);
         }
+
+        ucs_mpool_add_to_freelist(mp, elem, 0);
+        if (mp->data->tail == NULL) {
+            mp->data->tail = elem;
+        }
     }
+
 
     chunk->next  = data->chunks;
     data->chunks = chunk;
