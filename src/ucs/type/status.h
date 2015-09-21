@@ -41,8 +41,21 @@ typedef enum {
     UCS_ERR_TIMED_OUT              = -20,
     UCS_ERR_EXCEEDS_LIMIT          = -21,
     UCS_ERR_UNSUPPORTED            = -22,
-    UCS_ERR_LAST
+    UCS_ERR_LAST                   = -100
 } ucs_status_t;
+
+
+/**
+ * A pointer can represent one of these values:
+ * - NULL / UCS_OK
+ * - Error code pointer (UCS_ERR_xx)
+ * - Valid pointer
+ */
+typedef void *ucs_status_ptr_t;
+
+#define UCS_PTR_STATUS(_ptr)    ((ucs_status_t)(intptr_t)(_ptr))
+#define UCS_PTR_IS_ERR(_ptr)    (((uintptr_t)(_ptr)) >= ((uintptr_t)UCS_ERR_LAST))
+#define UCS_STATUS_PTR(_status) ((void*)(intptr_t)(_status))
 
 
 /**
