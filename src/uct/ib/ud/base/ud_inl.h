@@ -121,7 +121,7 @@ uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, uct_pack_callback_t pack_cb, void *arg)
     size_t payload_len;
 
     payload_len = pack_cb(skb->neth + 1, arg);
-    skb->len = sizeof(skb->neth) + payload_len;
+    skb->len = sizeof(skb->neth[0]) + payload_len;
     return payload_len;
 }
 
