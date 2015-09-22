@@ -92,6 +92,11 @@ static ucs_status_t ucp_dummy_ep_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
+static ssize_t ucp_dummy_ep_bcopy_send_func(uct_ep_h uct_ep)
+{
+    return ucp_dummy_ep_send_func(uct_ep);
+}
+
 UCS_CLASS_INIT_FUNC(ucp_dummy_ep_t, ucp_ep_h ucp_ep) {
 
     memset(&self->iface, 0, sizeof(self->iface));
@@ -105,7 +110,7 @@ UCS_CLASS_INIT_FUNC(ucp_dummy_ep_t, ucp_ep_h ucp_ep) {
     self->iface.ops.ep_get_bcopy      = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_get_zcopy      = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_am_short       = (void*)ucp_dummy_ep_send_func;
-    self->iface.ops.ep_am_bcopy       = (void*)ucp_dummy_ep_send_func;
+    self->iface.ops.ep_am_bcopy       = (void*)ucp_dummy_ep_bcopy_send_func;
     self->iface.ops.ep_am_zcopy       = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_atomic_add64   = (void*)ucp_dummy_ep_send_func;
     self->iface.ops.ep_atomic_fadd64  = (void*)ucp_dummy_ep_send_func;
@@ -234,6 +239,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
     ucp_memcpy_pack_context_t pack_ctx;
     ucp_wireup_msg_t *msg;
     ucs_status_t status;
+    ssize_t packed_len;
 
     /* Get runtime address length */
     if (flags & UCP_WIREUP_FLAG_ADDR) {
@@ -306,8 +312,9 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
     /* Send active message */
     pack_ctx.src    = msg;
     pack_ctx.length = total_len;
-    status = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP, ucp_memcpy_pack, &pack_ctx);
-    if (status != UCS_OK) {
+    packed_len = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP, ucp_memcpy_pack, &pack_ctx);
+    if (packed_len < 0) {
+        status = (ucs_status_t)packed_len;
         if (status != UCS_ERR_NO_RESOURCE) {
             ucs_error("failed to send conn msg: %s", ucs_status_string(status));
         }
