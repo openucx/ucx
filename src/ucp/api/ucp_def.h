@@ -10,7 +10,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct ucp_config        ucp_config_t;
 typedef struct ucp_context       *ucp_context_h;
 typedef struct ucp_ep            *ucp_ep_h;
 typedef struct ucp_address       ucp_address_t;
