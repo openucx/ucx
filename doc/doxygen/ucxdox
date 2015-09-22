@@ -761,10 +761,10 @@ WARN_LOGFILE           =
 # spaces.
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = $(SRCDIR)/src/uct/api/ \
-                         $(SRCDIR)/src/ucp/api/ \
+INPUT                  = $(SRCDIR)/src/ucp/api/ \
+                         $(SRCDIR)/src/uct/api/ \
                          $(SRCDIR)/doc/doxygen/intro.dox \
-                         $(SRCDIR)/doc/doxygen/design.dox
+                         $(SRCDIR)/doc/doxygen/design.dox \
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
@@ -785,10 +785,8 @@ INPUT_ENCODING         = UTF-8
 # *.qsf, *.as and *.js.
 
 FILE_PATTERNS          = ucp.h      \
-                         ucp_def.h  \
                          uct.h      \
-                         uct_def.h  \
-                         tl.h
+                         uct_def.h
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
 # be searched for input files as well.
@@ -830,7 +828,7 @@ EXCLUDE_PATTERNS       =
 # Note that the wildcards are matched against the file with absolute path, so to
 # exclude all test directories use the pattern */test/*
 
-EXCLUDE_SYMBOLS        =
+EXCLUDE_SYMBOLS        =  *UCS_CONFIG_STRING_ARRAY_FIELD*
 
 # The EXAMPLE_PATH tag can be used to specify one or more files or directories
 # that contain example code fragments that are included (see the \include
