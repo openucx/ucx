@@ -21,6 +21,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
     ucs_status_t status;
     uct_rkey_t uct_rkey;
     size_t frag_length;
+    ssize_t packed_len;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
@@ -47,8 +48,9 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
                 pack_ctx.src    = buffer;
                 pack_ctx.length = frag_length =
                                 ucs_min(length, ep->config.max_bcopy_put);
-                status = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
-                                          remote_addr, uct_rkey);
+                packed_len = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
+                                              remote_addr, uct_rkey);
+                status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
             }
             if (ucs_likely(status == UCS_OK)) {
                 length      -= frag_length;
