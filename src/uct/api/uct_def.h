@@ -90,11 +90,10 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  *
  * @param [in]  dest     Memory buffer to pack the data to.
  * @param [in]  arg      Custom user-argument.
- * @param [in]  length   How much data to produce (size of "dest")
  *
- * @note The arguments for this callback are in the same order as libc's memcpy().
+ * @return  How much data was actually produced.
  */
-typedef void (*uct_pack_callback_t)(void *dest, void *arg, size_t length);
+typedef size_t (*uct_pack_callback_t)(void *dest, void *arg);
 
 
 /**

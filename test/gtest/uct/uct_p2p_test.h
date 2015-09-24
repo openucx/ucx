@@ -55,6 +55,8 @@ protected:
     const entity& receiver() const;
     uct_completion_t *comp();
 
+    static size_t sendbuf_pack(void *dest, void *arg);
+
 private:
     template <typename O>
     void test_xfer_print(O& os, send_func_t send, size_t length,

@@ -19,9 +19,8 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                    unsigned length, uint64_t remote_addr,
                                    uct_rkey_t rkey);
-ucs_status_t uct_ugni_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
-                                   void *arg, size_t length, uint64_t remote_addr,
-                                   uct_rkey_t rkey);
+ssize_t uct_ugni_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                              void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
                                    uct_mem_h memh, uint64_t remote_addr,
                                    uct_rkey_t rkey, uct_completion_t *comp);

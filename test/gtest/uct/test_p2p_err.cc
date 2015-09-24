@@ -20,6 +20,11 @@ public:
         OP_AM_ZCOPY
     };
 
+    struct pack_arg {
+        void   *buffer;
+        size_t length;
+    };
+
     uct_p2p_err_test() : uct_p2p_test(0) {
         errors.clear();
     }
@@ -53,17 +58,27 @@ public:
         return UCS_LOG_FUNC_RC_STOP;
     }
 
+    static size_t pack_cb(void *dest, void *arg)
+    {
+        pack_arg *pa = (pack_arg*)arg;
+        memcpy(dest, pa->buffer, pa->length);
+        return pa->length;
+    }
+
     void test_error_run(enum operation op, uint8_t am_id,
                         void *buffer, size_t length, uct_mem_h memh,
                         uint64_t remote_addr, uct_rkey_t rkey,
                         const std::string& error_pattern)
     {
+        pack_arg arg;
+
         errors.clear();
 
         ucs_log_push_handler(log_handler);
         UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
 
         ucs_status_t status = UCS_OK;
+        ssize_t packed_len;
         do {
             switch (op) {
             case OP_PUT_SHORT:
@@ -71,8 +86,11 @@ public:
                                           remote_addr, rkey);
                 break;
             case OP_PUT_BCOPY:
-                status = uct_ep_put_bcopy(sender_ep(), (uct_pack_callback_t)memcpy,
-                                          buffer, length, remote_addr, rkey);
+                arg.buffer = buffer;
+                arg.length = length;
+                packed_len = uct_ep_put_bcopy(sender_ep(), pack_cb, &arg, remote_addr,
+                                          rkey);
+                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)status;
                 break;
             case OP_PUT_ZCOPY:
                 status = uct_ep_put_zcopy(sender_ep(), buffer, length, memh,
@@ -82,8 +100,10 @@ public:
                 status = uct_ep_am_short(sender_ep(), am_id, 0, buffer, length);
                 break;
             case OP_AM_BCOPY:
-                status = uct_ep_am_bcopy(sender_ep(), am_id,
-                                         (uct_pack_callback_t)memcpy, buffer, length);
+                arg.buffer = buffer;
+                arg.length = length;
+                packed_len = uct_ep_am_bcopy(sender_ep(), am_id, pack_cb, &arg);
+                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)status;
                 break;
             case OP_AM_ZCOPY:
                 status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,
@@ -176,7 +196,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
 }
 
 UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
-    check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
+    check_caps(UCT_IFACE_FLAG_PUT_BCOPY | UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN);
     size_t max_bcopy = sender().iface_attr().cap.put.max_bcopy;
     if (max_bcopy > (2 * 1024 * 1024)) {
         UCS_TEST_SKIP_R("max_bcopy too large");
@@ -210,7 +230,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
 }
 
 UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
-    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN);
     size_t max_bcopy = sender().iface_attr().cap.am.max_bcopy;
     if (max_bcopy > (2 * 1024 * 1024)) {
         UCS_TEST_SKIP_R("max_bcopy too large");

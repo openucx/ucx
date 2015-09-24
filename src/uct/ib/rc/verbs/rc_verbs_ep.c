@@ -10,13 +10,6 @@
 #include <uct/ib/base/ib_log.h>
 
 
-
-#define UCT_RC_VERBS_ZERO_LENGTH_POST(len)              \
-    if (ucs_unlikely(len == 0)) {                       \
-        ucs_trace_data("Zero length request: skip it"); \
-        return UCS_OK;                                  \
-    }
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_posted(uct_rc_verbs_ep_t* ep, int signaled)
 {
@@ -135,7 +128,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const void *buffer, size_t len
     struct ibv_send_wr wr;
     struct ibv_sge sge;
 
-    UCT_RC_VERBS_ZERO_LENGTH_POST(length);
+    UCT_SKIP_ZERO_LENGTH(length);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
 
     uct_rc_verbs_fill_rdma_wr(&wr, opcode, &sge, length, remote_addr, rkey);
@@ -286,29 +279,29 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                       void *arg, size_t length, uint64_t remote_addr,
-                                       uct_rkey_t rkey)
+ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                                  void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_iface_send_desc_t *desc;
     struct ibv_send_wr wr;
     struct ibv_sge sge;
+    size_t length;
 
-    UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "put_bcopy");
-    UCT_RC_VERBS_ZERO_LENGTH_POST(length);
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
-    pack_cb(desc + 1, arg, length);
+    length = pack_cb(desc + 1, arg);
+    UCT_SKIP_ZERO_LENGTH(length, desc);
+
     uct_rc_verbs_fill_rdma_wr(&wr, IBV_WR_RDMA_WRITE, &sge, length, remote_addr,
                               rkey);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SIGNALED);
-    return UCS_OK;
+    return length;
 }
 
 ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
@@ -396,9 +389,8 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                      uct_pack_callback_t pack_cb, void *arg,
-                                      size_t length)
+ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                 uct_pack_callback_t pack_cb, void *arg)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -406,10 +398,9 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     struct ibv_send_wr wr;
     struct ibv_sge sge;
     uct_rc_hdr_t *rch;
+    size_t length;
 
     UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(sizeof(*rch) + length, iface->super.super.config.seg_size,
-                     "am_bcopy");
     UCT_RC_VERBS_CHECK_RES(iface, ep);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
@@ -417,7 +408,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     rch = (void*)(desc + 1);
     rch->am_id = id;
-    pack_cb(rch + 1, arg, length);
+    length = pack_cb(rch + 1, arg);
 
     wr.sg_list = &sge;
     wr.num_sge = 1;
@@ -426,7 +417,7 @@ ucs_status_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
-    return UCS_OK;
+    return length;
 }
 
 static void uct_rc_verbs_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op)

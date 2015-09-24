@@ -27,10 +27,15 @@ public:
     ucs_status_t put_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        return uct_ep_put_bcopy(ep,
-                                (uct_pack_callback_t)memcpy,
-                                sendbuf.ptr(), sendbuf.length(),
-                                recvbuf.addr(), recvbuf.rkey());
+        ssize_t packed_len;
+        packed_len = uct_ep_put_bcopy(ep, sendbuf_pack, (void*)&sendbuf,
+                                      recvbuf.addr(), recvbuf.rkey());
+        if (packed_len >= 0) {
+            EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
+            return UCS_OK;
+        } else {
+            return (ucs_status_t)packed_len;
+        }
     }
 
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,

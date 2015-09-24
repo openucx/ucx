@@ -145,7 +145,8 @@ enum {
     UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF  = UCS_BIT(33), /**< Invalid buffer for buffered operation */
     UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
     UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /**< Invalid AM id on remote */
-    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**<  Remote memory access */
+    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**< Remote memory access */
+    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN  = UCS_BIT(36), /**< Invalid length for buffered operation */
 
     /* Connection establishment */
     UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
@@ -848,11 +849,11 @@ UCT_INLINE_API ucs_status_t uct_ep_put_short(uct_ep_h ep, const void *buffer, un
  * @ingroup RMA
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
-                                             void *arg, size_t length, uint64_t remote_addr,
-                                             uct_rkey_t rkey)
+UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
+                                        void *arg, uint64_t remote_addr,
+                                        uct_rkey_t rkey)
 {
-    return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, length, remote_addr, rkey);
+    return ep->iface->ops.ep_put_bcopy(ep, pack_cb, arg, remote_addr, rkey);
 }
 
 
@@ -911,11 +912,10 @@ UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t he
  * @ingroup AM
  * @brief
  */
-UCT_INLINE_API ucs_status_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
-                                            uct_pack_callback_t pack_cb,
-                                            void *arg, size_t length)
+UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
+                                       uct_pack_callback_t pack_cb, void *arg)
 {
-    return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg, length);
+    return ep->iface->ops.ep_am_bcopy(ep, id, pack_cb, arg);
 }
 
 
