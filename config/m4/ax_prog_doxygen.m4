@@ -249,6 +249,7 @@
 # LICENSE
 #
 #   Copyright (c) 2009 Oren Ben-Kiki <oren@ben-kiki.org>
+#   Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 #
 #   Copying and distribution of this file, with or without modification, are
 #   permitted in any medium without royalty provided the copyright notice
@@ -483,6 +484,7 @@ DX_ARG_ABLE(ps, [generate doxygen PostScript documentation],
             [DX_CLEAR_DEPEND(doc, 1)],
             [DX_REQUIRE_PROG([DX_LATEX], latex)
              DX_REQUIRE_PROG([DX_MAKEINDEX], makeindex)
+             DX_REQUIRE_PROG([DX_BIBTEX], bibtex)
              DX_REQUIRE_PROG([DX_DVIPS], dvips)
              DX_REQUIRE_PROG([DX_EGREP], egrep)])
 
@@ -492,6 +494,7 @@ DX_ARG_ABLE(pdf, [generate doxygen PDF documentation],
             [DX_CLEAR_DEPEND(doc, 1)],
             [DX_REQUIRE_PROG([DX_PDFLATEX], pdflatex)
              DX_REQUIRE_PROG([DX_MAKEINDEX], makeindex)
+             DX_REQUIRE_PROG([DX_BIBTEX], bibtex)
              DX_REQUIRE_PROG([DX_EGREP], egrep)])
 
 # LaTeX generation for PS and/or PDF:
