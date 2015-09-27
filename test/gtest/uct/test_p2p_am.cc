@@ -22,6 +22,10 @@ public:
         /* data follows */
     } receive_desc_t;
 
+    typedef struct {
+        unsigned        count;
+    } tracer_ctx_t;
+
     uct_p2p_am_test() :
         uct_p2p_test(sizeof(receive_desc_t)),
         m_keep_data(false),
@@ -31,11 +35,33 @@ public:
     virtual void init() {
         uct_p2p_test::init();
         m_am_count = 0;
+        uct_iface_set_am_tracer(sender().iface(),   am_tracer, &m_send_tracer);
+        if (&sender() != &receiver()) {
+            uct_iface_set_am_tracer(receiver().iface(), am_tracer, &m_recv_tracer);
+        }
+    }
+
+    virtual void cleanup() {
+        uct_iface_set_am_tracer(receiver().iface(), NULL, NULL);
+        uct_iface_set_am_tracer(sender().iface(), NULL, NULL);
+        uct_p2p_test::cleanup();
     }
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length, void *desc) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
         return self->am_handler(data, length, desc);
+    }
+
+    static void am_tracer(void *arg, uct_am_trace_type_t type, uint8_t id,
+                          const void *data, size_t length, char *buffer,
+                          size_t max)
+    {
+        tracer_ctx_t *ctx = (tracer_ctx_t *)arg;
+
+        EXPECT_EQ(uint8_t(AM_ID), id);
+        mapped_buffer::pattern_check(data, length, SEED1);
+        *buffer = '\0';
+        ++ctx->count;
     }
 
     ucs_status_t am_handler(void *data, size_t length, void *desc) {
@@ -105,6 +131,8 @@ public:
         ucs_status_t status;
 
         m_am_count = 0;
+        m_send_tracer.count = 0;
+        m_recv_tracer.count = 0;
 
         status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
         ASSERT_UCS_OK(status);
@@ -123,6 +151,15 @@ public:
         ASSERT_UCS_OK(status);
 
         check_backlog();
+
+        if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+            if (&sender() == &receiver()) {
+                EXPECT_EQ(2u, m_send_tracer.count);
+            } else {
+                EXPECT_EQ(1u, m_send_tracer.count);
+                EXPECT_EQ(1u, m_recv_tracer.count);
+            }
+        }
     }
 
     void set_keep_data(bool keep) {
@@ -133,7 +170,8 @@ private:
     bool                         m_keep_data;
     unsigned                     m_am_count;
     std::vector<receive_desc_t*> m_backlog;
-
+    tracer_ctx_t                 m_send_tracer;
+    tracer_ctx_t                 m_recv_tracer;
 };
 
 UCS_TEST_P(uct_p2p_am_test, am_short) {

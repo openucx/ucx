@@ -367,12 +367,14 @@ void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
     pattern_check(ptr(), length(), seed);
 }
 
-void uct_test::mapped_buffer::pattern_check(void *buffer, size_t length, uint64_t seed) {
-    char* end = (char*)buffer + length;
-    uint64_t *ptr = (uint64_t*)buffer;
-    while ((char*)(ptr + 1) <= end) {
+void uct_test::mapped_buffer::pattern_check(const void *buffer, size_t length,
+                                            uint64_t seed) {
+    const char* end = (const char*)buffer + length;
+    const uint64_t *ptr = (const uint64_t*)buffer;
+
+    while ((const char*)(ptr + 1) <= end) {
        if (*ptr != seed) {
-            UCS_TEST_ABORT("At offset " << ((char*)ptr - (char*)buffer) << ": " <<
+            UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) << ": " <<
                            "Expected: 0x" << std::hex << seed << " " <<
                            "Got: 0x" << std::hex << (*ptr) << std::dec);
         }
@@ -380,14 +382,14 @@ void uct_test::mapped_buffer::pattern_check(void *buffer, size_t length, uint64_
         ++ptr;
     }
 
-    size_t remainder = (end - (char*)ptr);
+    size_t remainder = (end - (const char*)ptr);
     if (remainder > 0) {
         ucs_assert(remainder < sizeof(*ptr));
         uint64_t mask = UCS_MASK_SAFE(remainder * 8 * sizeof(char));
         uint64_t value = 0;
         memcpy(&value, ptr, remainder);
         if (value != (seed & mask)) {
-             UCS_TEST_ABORT("At offset " << ((char*)ptr - (char*)buffer) <<
+             UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) <<
                             " (remainder " << remainder << ") : " <<
                             "Expected: 0x" << std::hex << (seed & mask) << " " <<
                             "Mask: 0x" << std::hex << mask << " " <<

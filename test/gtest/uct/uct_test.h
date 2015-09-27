@@ -104,7 +104,7 @@ protected:
         void pattern_fill(uint64_t seed);
         void pattern_check(uint64_t seed);
 
-        static void pattern_check(void *buffer, size_t length, uint64_t seed);
+        static void pattern_check(const void *buffer, size_t length, uint64_t seed);
     private:
         static uint64_t pat(uint64_t prev);
 
