@@ -72,7 +72,7 @@ uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 #define uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length) \
     uct_ud_iface_complete_tx_inl_nolog(iface, ep, skb, data, buffer, length); \
-    uct_ud_ep_log_tx(ep, skb);
+    uct_ud_ep_log_tx(iface, ep, skb);
 
 static UCS_F_ALWAYS_INLINE void 
 uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
@@ -85,7 +85,7 @@ uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 #define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
     uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); \
-    uct_ud_ep_log_tx(ep, skb);
+    uct_ud_ep_log_tx(iface, ep, skb);
 
 
 static UCS_F_ALWAYS_INLINE void
