@@ -29,7 +29,10 @@ public:
     uct_p2p_am_test() :
         uct_p2p_test(sizeof(receive_desc_t)),
         m_keep_data(false),
-        m_am_count(0) {
+        m_am_count(0)
+    {
+        m_send_tracer.count = 0;
+        m_recv_tracer.count = 0;
     }
 
     virtual void init() {
