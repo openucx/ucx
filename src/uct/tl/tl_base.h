@@ -352,6 +352,25 @@ typedef struct {
 
 
 /**
+ * Helper macro to trace active message send/receive.
+ *
+ * @param _iface    Interface.
+ * @param _type     Message type (send/receive)
+ * @param _am_id    Active message ID.
+ * @param _payload  Active message payload.
+ * @paral _length   Active message length
+ */
+#define uct_iface_trace_am(_iface, _type, _am_id, _payload, _length, _fmt, ...) \
+    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+        char buf[256] = {0}; \
+        uct_iface_dump_am(_iface, _type, _am_id, _payload, _length, \
+                          buf, sizeof(buf) - 1); \
+        ucs_trace_data(_fmt " am_id %d len %zu %s", ## __VA_ARGS__, \
+                       _am_id, (size_t)(_length), buf); \
+    }
+
+
+/**
  * @return Private data field of a pending request.
  */
 static inline uct_pending_req_priv_t* uct_pending_req_priv(uct_pending_req_t *req)

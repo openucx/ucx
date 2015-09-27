@@ -89,12 +89,8 @@ ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
 
 
 #define uct_cm_iface_trace_data(_iface, _type, _hdr, _fmt, ...) \
-    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        char buf[256] = {0}; \
-        uct_iface_dump_am(&(_iface)->super.super, _type, (_hdr)->am_id, (_hdr) + 1, \
-                          (_hdr)->length, buf, sizeof(buf) - 1); \
-        ucs_trace_data(_fmt " am %d len %d %s", ## __VA_ARGS__, \
-                       (_hdr)->am_id, (_hdr)->length, buf); \
-    }
+    uct_iface_trace_am(&(_iface)->super.super, _type, (_hdr)->am_id, \
+                       (_hdr) + 1, (_hdr)->length, _fmt, ## __VA_ARGS__)
+
 
 #endif
