@@ -16,14 +16,6 @@
 
 
 /**
-* @defgroup UCP_CONFIG UCP Configuration
-* @{
-* This section describes routines for configuration
-* of the UCP network layer
-* @}
-*/
-
-/**
  * @defgroup UCP_CONTEXT UCP Application Context
  * @{
  * Application  context is a primary concept of UCP design which
@@ -37,12 +29,6 @@
  * @}
  */
 
- /**
- * @defgroup UCP_WORKER UCP Worker
- * @{
- * UCP Worker routines
- * @}
- */
 
  /**
  * @defgroup UCP_WORKER UCP Worker
@@ -50,6 +36,7 @@
  * UCP Worker routines
  * @}
  */
+
 
  /**
  * @defgroup UCP_MEM UCP Memory routines
@@ -58,6 +45,7 @@
  * @}
  */
 
+
  /**
  * @defgroup UCP_ENDPOINT UCP Endpoint
  * @{
@@ -65,12 +53,23 @@
  * @}
  */
 
+
  /**
  * @defgroup UCP_COMM UCP Communication routines
  * @{
  * UCP Communication routines
  * @}
  */
+
+
+/**
+* @defgroup UCP_CONFIG UCP Configuration
+* @{
+* This section describes routines for configuration
+* of the UCP network layer
+* @}
+*/
+
 
 /**
  * @ingroup UCP_CONTEXT
@@ -87,22 +86,19 @@ enum {
  * @ingroup UCP_CONFIG
  * @brief UCP configuration
  *
- *  This structure defines the configuration for UCP context.
+ * This structure defines the configuration for UCP context.
  */
-struct ucp_config {
+typedef struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices; /**< Array of device names to use */
     UCS_CONFIG_STRING_ARRAY_FIELD(names)   tls;     /**< Array of device names to use */
-
     int                                    force_all_devices; /**< Whether to force using all devices */
-
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;   /**< Array of allocation methods */
-
     size_t                                 bcopy_thresh;  /**< Threshold for switching to bcopy protocol */
-};
+} ucp_config_t;
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONTEXT
  * @brief Completion status of a tag-matched receive.
  */
 typedef struct ucp_tag_recv_completion {
@@ -112,7 +108,7 @@ typedef struct ucp_tag_recv_completion {
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONTEXT
  * @brief Non-blocking tag-match receive request.
  */
 typedef struct ucp_recv_request {
@@ -128,7 +124,7 @@ typedef struct ucp_recv_request {
 
 
 /**
- * @ingroup CONTEXT
+ * @ingroup UCP_CONTEXT
  * @brief Progress callback. Used to progress user context during blocking operations.
  */
 typedef void (*ucp_user_progress_func_t)(void *arg);
