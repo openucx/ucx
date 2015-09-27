@@ -15,7 +15,7 @@ AC_DEFUN([GTEST_LIB_CHECK],
 [
 dnl Provide a flag to enable or disable Google Test usage.
 AC_ARG_ENABLE([gtest],
-  [AS_HELP_STRING([--enable-gtest],
+  [AS_HELP_STRING([--enable-gtest=(DIR)],
                   [Enable tests using the Google C++ Testing Framework.
                   (Default is enabled.)])],
   [],
