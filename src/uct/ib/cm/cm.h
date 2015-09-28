@@ -22,7 +22,7 @@ typedef struct uct_cm_iface_config {
     ucs_async_mode_t       async_mode;
     double                 timeout;
     unsigned               retry_count;
-    unsigned               max_inflight;
+    unsigned               max_outstanding;
 } uct_cm_iface_config_t;
 
 
@@ -34,12 +34,12 @@ typedef struct uct_cm_iface {
     uint32_t               service_id;  /* Service ID we're listening to */
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
-    volatile uint32_t      inflight;    /* Atomic: number of inflight sends */
+    volatile uint32_t      outstanding; /* Atomic: number of outstanding sends */
     ucs_queue_head_t       notify_q;    /* Notification queue */
 
     struct {
         int                timeout_ms;
-        uint32_t           max_inflight;
+        uint32_t           max_outstanding;
         uint8_t            retry_count;
     } config;
 } uct_cm_iface_t;
