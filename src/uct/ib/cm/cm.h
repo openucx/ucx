@@ -87,4 +87,10 @@ ucs_status_t uct_cm_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
 
+
+#define uct_cm_iface_trace_data(_iface, _type, _hdr, _fmt, ...) \
+    uct_iface_trace_am(&(_iface)->super.super, _type, (_hdr)->am_id, \
+                       (_hdr) + 1, (_hdr)->length, _fmt, ## __VA_ARGS__)
+
+
 #endif

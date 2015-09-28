@@ -164,7 +164,9 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
         hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, &desc->super);
     }
 
-    uct_ib_mlx5_log_rx(IBV_QPT_RC, cqe, hdr, uct_rc_ep_am_packet_dump);
+    uct_ib_mlx5_log_rx(&iface->super.super, IBV_QPT_RC, cqe, hdr,
+                       uct_rc_ep_am_packet_dump);
+
     uct_rc_iface_invoke_am(&iface->super, hdr, byte_len, &desc->super);
 
     /* Add completed SRQ WQE to the tail

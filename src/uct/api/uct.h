@@ -610,6 +610,23 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
 
 
 /**
+ * @ingroup UCT_AM
+ * @brief Set active message tracer for the interface.
+ *
+ * Sets a function which dumps active message debug information to a buffer,
+ * which is printed every time the an active message is sent or received, when
+ * data tracing is on. Without the trancer, only transport-level information is
+ * printed.
+ *
+ * @param [in]  iface    Interface to set the active message handler for.
+ * @param [in]  tracer   Active message tracer. NULL to clear.
+ * @param [in]  arg      Tracer custom argument.
+ */
+ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
+                                     void *arg);
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *

@@ -42,7 +42,8 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
     uct_ib_mlx5_set_ctrl_seg(ctrl, ep->tx.wq.sw_pi, 
                              opcode, opmod, ep->qp_num, sig_flag, wqe_size);
 
-    uct_ib_mlx5_log_tx(IBV_QPT_RC, ctrl, ep->tx.wq.qstart, ep->tx.wq.qend,
+    uct_ib_mlx5_log_tx(ucs_derived_of(ep->super.super.super.iface, uct_ib_iface_t),
+                       IBV_QPT_RC, ctrl, ep->tx.wq.qstart, ep->tx.wq.qend,
                        (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     posted = uct_ib_mlx5_post_send(&ep->tx.wq, ctrl, wqe_size);

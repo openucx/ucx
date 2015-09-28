@@ -7,6 +7,8 @@
 #ifndef UCT_TL_LOG_H_
 #define UCT_TL_LOG_H_
 
+#include "tl_base.h"
+
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
 
@@ -21,8 +23,9 @@
 /**
  * Log callback which prints information about transport headers.
  */
-typedef void (*uct_log_data_dump_func_t)(void *data, size_t length, size_t valid_length,
+typedef void (*uct_log_data_dump_func_t)(uct_base_iface_t *iface,
+                                         uct_am_trace_type_t type, void *data,
+                                         size_t length, size_t valid_length,
                                          char *bufer, size_t max);
-
 
 #endif

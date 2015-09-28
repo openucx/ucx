@@ -16,26 +16,28 @@ void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe);
 
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
-                          enum ibv_qp_type qp_type, void *wqe, void *qstart,
-                          void *qend, uct_log_data_dump_func_t packet_dump_cb);
+                          uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+                          void *wqe, void *qstart, void *qend,
+                          uct_log_data_dump_func_t packet_dump_cb);
 
 void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
-                          enum ibv_qp_type qp_type, struct mlx5_cqe64 *cqe, void *data,
+                          uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+                          struct mlx5_cqe64 *cqe, void *data,
                           uct_log_data_dump_func_t packet_dump_cb);
 
 void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function,
                           struct mlx5_cqe64 *cqe);
 
-#define uct_ib_mlx5_log_tx(_qpt, _wqe, _qstart, _qend, _dump_cb) \
+#define uct_ib_mlx5_log_tx(_iface, _qpt, _wqe, _qstart, _qend, _dump_cb) \
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_mlx5_log_tx(__FILE__, __LINE__, __FUNCTION__, \
-                             _qpt, _wqe, _qstart, _qend, _dump_cb); \
+                             _iface, _qpt, _wqe, _qstart, _qend, _dump_cb); \
     }
 
-#define uct_ib_mlx5_log_rx(_qpt, _cqe, _data, _dump_cb) \
+#define uct_ib_mlx5_log_rx(_iface, _qpt, _cqe, _data, _dump_cb) \
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
         __uct_ib_mlx5_log_rx(__FILE__, __LINE__, __FUNCTION__, \
-                             _qpt, _cqe, _data, _dump_cb); \
+                             _iface, _qpt, _cqe, _data, _dump_cb); \
     }
 
 #define uct_ib_mlx5_log_cqe(_cqe) \

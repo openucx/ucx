@@ -127,6 +127,8 @@ typedef struct uct_base_iface {
     uct_worker_h      worker;                /* Worker this interface is on */
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
+    uct_am_tracer_t   am_tracer;             /* Active message tracer */
+    void              *am_tracer_arg;        /* Tracer argument */
 
     struct {
         unsigned            num_alloc_methods;
@@ -350,6 +352,25 @@ typedef struct {
 
 
 /**
+ * Helper macro to trace active message send/receive.
+ *
+ * @param _iface    Interface.
+ * @param _type     Message type (send/receive)
+ * @param _am_id    Active message ID.
+ * @param _payload  Active message payload.
+ * @paral _length   Active message length
+ */
+#define uct_iface_trace_am(_iface, _type, _am_id, _payload, _length, _fmt, ...) \
+    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+        char buf[256] = {0}; \
+        uct_iface_dump_am(_iface, _type, _am_id, _payload, _length, \
+                          buf, sizeof(buf) - 1); \
+        ucs_trace_data(_fmt " am_id %d len %zu %s", ## __VA_ARGS__, \
+                       _am_id, (size_t)(_length), buf); \
+    }
+
+
+/**
  * @return Private data field of a pending request.
  */
 static inline uct_pending_req_priv_t* uct_pending_req_priv(uct_pending_req_t *req)
@@ -379,6 +400,14 @@ ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   uct_iface_mpool_config_t *config, unsigned grow,
                                   uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name);
+
+
+/**
+ * Dump active message contents using the user-defined tracer callback.
+ */
+void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                       uint8_t id, const void *data, size_t length,
+                       char *buffer, size_t max);
 
 
 /**

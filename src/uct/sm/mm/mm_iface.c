@@ -182,19 +182,27 @@ static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
 {
     ucs_status_t status;
     uct_mm_recv_desc_t *desc;
+    void *data;
 
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
         /* read short (inline) messages from the FIFO elements */
-        uct_mm_iface_invoke_am(iface, elem->am_id, (elem + 1), elem->length,
+        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
+                           elem + 1, elem->length, "AM_SHORT");
+        uct_mm_iface_invoke_am(iface, elem->am_id, elem + 1, elem->length,
                                iface->last_recv_desc, UCT_MM_AM_SHORT);
     } else {
         /* read bcopy messages from the receive descriptors */
         VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
                                   elem->length);
+
         desc = UCT_MM_IFACE_GET_DESC_START(iface, elem);
-        status = uct_mm_iface_invoke_am(iface, elem->am_id,
-                                        elem->desc_chunk_base_addr + elem->desc_offset,
-                                        elem->length, desc, UCT_MM_AM_BCOPY);
+        data = elem->desc_chunk_base_addr + elem->desc_offset;
+
+        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
+                           data, elem->length, "AM_BCOPY");
+
+        status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
+                                        desc, UCT_MM_AM_BCOPY);
         if (status != UCS_OK) {
             /* assign a new receive descriptor to this FIFO element.
              * abort if the new descriptor allocation failed */

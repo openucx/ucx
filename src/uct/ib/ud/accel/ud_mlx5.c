@@ -36,7 +36,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                              wqe_size);
     uct_ib_mlx5_set_dgram_seg((struct mlx5_wqe_datagram_seg *)(ctrl+1),
                               &ep->av, 0);
-    uct_ib_mlx5_log_tx(IBV_QPT_UD, ctrl, 
+    uct_ib_mlx5_log_tx(&iface->super.super, IBV_QPT_UD, ctrl,
                        iface->tx.wq.qstart, iface->tx.wq.qend, NULL);
     iface->super.tx.available -= uct_ib_mlx5_post_send(&iface->tx.wq,
                                                        ctrl, wqe_size);

@@ -531,7 +531,7 @@ uct_ud_iface_progress_pending(uct_ud_iface_t *iface, uct_ud_ep_tx_skb_t tx_skb)
             continue;
         }
         tx_skb(iface, ep, skb);
-        uct_ud_ep_log_tx_tag("PENDING_TX: (skb)", ep, skb->neth, skb->len);
+        uct_ud_ep_log_tx(iface, ep, skb);
     }
     while (!ucs_queue_is_empty(&iface->tx.pending_ops));
 }

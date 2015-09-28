@@ -81,7 +81,7 @@ uct_ud_verbs_ep_tx_inlv(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)iface->tx.sge[0].addr);
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_inl, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
-    uct_ib_log_post_send(iface->super.qp, &iface->tx.wr_inl, NULL);
+    uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_inl, NULL);
     --iface->super.tx.available;
 }
 
@@ -99,7 +99,7 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface,
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)iface->tx.sge[0].addr);
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_skb, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
-    uct_ib_log_post_send(iface->super.qp, &iface->tx.wr_skb, NULL);
+    uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_skb, NULL);
     --iface->super.tx.available;
 }
 
@@ -170,7 +170,8 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
 
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
-    ucs_trace_data("TX(iface=%p): AM_BCOPY [%d] skb=%p buf=%p len=%u", iface, id, skb, arg, skb->len);
+    ucs_trace_data("TX(iface=%p): AM_BCOPY [%d] skb=%p buf=%p len=%u", iface, id,
+                   skb, arg, skb->len);
 
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     return length;

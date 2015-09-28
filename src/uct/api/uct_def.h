@@ -24,6 +24,17 @@
 #define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
+/**
+ * @ingroup AM
+ * @brief Trace types for active message tracer.
+ */
+enum uct_am_trace_type {
+    UCT_AM_TRACE_TYPE_SEND,
+    UCT_AM_TRACE_TYPE_RECV,
+    UCT_AM_TRACE_TYPE_LAST
+};
+
+
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_config  uct_iface_config_t;
 typedef struct uct_ep            *uct_ep_h;
@@ -38,6 +49,7 @@ typedef struct uct_completion    uct_completion_t;
 typedef struct uct_pending_req  uct_pending_req_t;
 typedef struct uct_worker        *uct_worker_h;
 typedef struct uct_pd            uct_pd_t;
+typedef enum uct_am_trace_type   uct_am_trace_type_t;
 
 
 /**
@@ -59,6 +71,23 @@ typedef struct uct_pd            uct_pd_t;
  */
 typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
                                           void *desc);
+
+
+/**
+ * Callback to trace active messages. Writes a string which represents active
+ * message contents into 'buffer'.
+ *
+ * @param [in]  arg      User-defined argument.
+ * @param [in]  type     Message type.
+ * @param [in]  id       Active message id.
+ * @param [in]  data     Points to the received data.
+ * @param [in]  length   Length of data.
+ * @param [out] buffer   Filled with a debug information string.
+ * @param [in]  max      Maximal length of the string.
+ */
+typedef void (*uct_am_tracer_t)(void *arg, uct_am_trace_type_t type, uint8_t id,
+                                const void *data, size_t length, char *buffer,
+                                size_t max);
 
 
 /**
