@@ -89,50 +89,38 @@ static void uct_cm_dump_path(struct ibv_sa_path_rec *path)
                    path->preference);
 }
 
-static ucs_status_t uct_cm_ep_send(uct_cm_ep_t *ep, uct_cm_iov_t *iov, int iovcnt)
+ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
+                           uct_pack_callback_t pack_cb, void *arg)
 {
-    uct_cm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_cm_iface_t);
+    uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
+    uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
     struct ib_cm_sidr_req_param req;
     struct ibv_sa_path_rec path;
     struct ib_cm_id *id;
     ucs_status_t status;
-    size_t length, offset;
-    void *buffer;
+    uct_cm_hdr_t *hdr;
+    size_t payload_len;
+    size_t total_len;
     int ret;
-    int i;
 
-    ucs_trace_func("");
+    UCT_CHECK_AM_ID(am_id);
 
-    /* Count total length */
-    length = 0;
-    for (i = 0; i < iovcnt; ++i) {
-        length += iov[i].length;
-    }
-    if (length > IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE) {
-        UCT_CHECK_LENGTH(length, (size_t)IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
-                         "SIDR request");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-
-    if (ucs_atomic_fadd32(&iface->inflight, 1) >= iface->config.max_inflight) {
+    if (ucs_atomic_fadd32(&iface->outstanding, 1) >= iface->config.max_outstanding) {
         status = UCS_ERR_NO_RESOURCE;
-        goto err_dec_inflight;
+        goto err_dec_outstanding;
     }
 
     /* Allocate temporary contiguous buffer */
-    buffer = ucs_malloc(length, "cm_send_buf");
-    if (buffer == NULL) {
+    hdr = ucs_malloc(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, "cm_send_buf");
+    if (hdr == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_dec_inflight;
+        goto err_dec_outstanding;
     }
 
-    /* Copy IOV data to buffer */
-    offset = 0;
-    for (i = 0; i < iovcnt; ++i) {
-        iov[i].pack(buffer + offset, (void*)iov[i].arg, iov[i].length);
-        offset += iov[i].length;
-    }
+    payload_len = pack_cb(hdr + 1, arg);
+    hdr->am_id  = am_id;
+    hdr->length = payload_len;
+    total_len   = sizeof(*hdr) + payload_len;
 
     status = uct_cm_ep_fill_path_rec(ep, &path);
     if (status != UCS_OK) {
@@ -144,8 +132,8 @@ static ucs_status_t uct_cm_ep_send(uct_cm_ep_t *ep, uct_cm_iov_t *iov, int iovcn
     req.path             = &path;
     req.service_id       = ep->dest_addr.id;
     req.timeout_ms       = iface->config.timeout_ms;
-    req.private_data     = buffer;
-    req.private_data_len = length;
+    req.private_data     = hdr;
+    req.private_data_len = total_len;
     req.max_cm_retries   = iface->config.retry_count;
 
     /* Create temporary ID for this message. Will be released when getting REP. */
@@ -165,71 +153,18 @@ static ucs_status_t uct_cm_ep_send(uct_cm_ep_t *ep, uct_cm_iov_t *iov, int iovcn
         goto err_destroy_id;
     }
 
-    ucs_trace_data("SEND SIDR_REQ [dlid %d service_id 0x%"PRIx64"] am_id %d",
-                   ntohs(path.dlid), req.service_id, ((uct_cm_hdr_t*)buffer)->am_id);
-    ucs_free(buffer);
-    return UCS_OK;
+    uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_SEND, hdr,
+                            "TX: SIDR_REQ [dlid %d svc 0x%"PRIx64"]",
+                            ntohs(path.dlid), req.service_id);
+    ucs_free(hdr);
+    return payload_len;
 
 err_destroy_id:
     ib_cm_destroy_id(id);
 err_free:
-    ucs_free(buffer);
-err_dec_inflight:
-    ucs_atomic_add32(&iface->inflight, -1);
-err:
-    return status;
-}
-
-ucs_status_t uct_cm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
-                                const void *payload, unsigned length)
-{
-    uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
-    ucs_status_t status;
-    uct_cm_iov_t iov[3];
-    uct_cm_hdr_t hdr;
-
-    UCT_CHECK_AM_ID(id);
-
-    hdr.am_id       = id;
-    hdr.length      = sizeof(header) + length;
-    iov[0].pack     = (uct_pack_callback_t)memcpy;
-    iov[0].arg      = &hdr;
-    iov[0].length   = sizeof(hdr);
-    iov[1].pack     = (uct_pack_callback_t)memcpy;
-    iov[1].arg      = &header;
-    iov[1].length   = sizeof(header);
-    iov[2].pack     = (uct_pack_callback_t)memcpy;
-    iov[2].arg      = payload;
-    iov[2].length   = length;
-
-    status = uct_cm_ep_send(ep, iov, 3);
-    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super, AM, SHORT,
-                                 sizeof(header) + length);
-    return status;
-}
-
-ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg,
-                                size_t length)
-{
-    uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
-    ucs_status_t status;
-    uct_cm_iov_t iov[3];
-    uct_cm_hdr_t hdr;
-
-    UCT_CHECK_AM_ID(id);
-
-    hdr.am_id       = id;
-    hdr.length      = length;
-    iov[0].pack     = (uct_pack_callback_t)memcpy;
-    iov[0].arg      = &hdr;
-    iov[0].length   = sizeof(hdr);
-    iov[1].pack     = pack_cb;
-    iov[1].arg      = arg;
-    iov[1].length   = length;
-
-    status = uct_cm_ep_send(ep, iov, 2);
-    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super, AM, BCOPY, length);
+    ucs_free(hdr);
+err_dec_outstanding:
+    ucs_atomic_add32(&iface->outstanding, -1);
     return status;
 }
 

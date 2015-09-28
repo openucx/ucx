@@ -224,6 +224,15 @@ typedef struct ucp_wireup_msg {
 
 
 /**
+ * Context for memcpy pack callback.
+ */
+typedef struct {
+    const void                    *src;
+    size_t                        length;
+} ucp_memcpy_pack_context_t;
+
+
+/**
  * Calculates a score of specific wireup.
  */
 typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
@@ -253,6 +262,8 @@ ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address);
 void ucp_wireup_stop(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_set_am_handlers(ucp_worker_h worker, uct_iface_h iface);
+
+size_t ucp_memcpy_pack(void *dest, void *arg);
 
 
 #define ucp_ep_compare(_ep1, _ep2) ((int64_t)(_ep1)->dest_uuid - (int64_t)(_ep2)->dest_uuid)

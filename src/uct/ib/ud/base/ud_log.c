@@ -8,7 +8,9 @@
 #include "ud_iface.h"
 #include "ud_ep.h"
 
-static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
+
+static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
+                             char *p, int max, uct_ud_neth_t *neth, int pkt_len)
 {
     int n, ret = 0;
     uint32_t dest_id;
@@ -30,11 +32,15 @@ static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
                  (unsigned)neth->psn, (unsigned)neth->ack_psn,
                  (unsigned)(pkt_len - sizeof(*neth))
             );
-    p += n; max -= n; ret += n;
+    p += n; max -= n;
 
     if (is_am) {
         n = snprintf(p, max, "AM: %d", am_id);
-        p += n; max -= n; ret += n;
+        p += n; max -= n;
+        uct_iface_dump_am(&iface->super.super, type, am_id, neth + 1,
+                          pkt_len - sizeof(*neth), p, max);
+        n = strlen(p);
+        p += n; max -= n;
     } else if (is_put) { 
         uct_ud_put_hdr_t *put_hdr;
         
@@ -52,25 +58,25 @@ static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
                          ctl_hdr->conn_req.ib_addr.lid,
                          ctl_hdr->conn_req.ib_addr.id,
                          ctl_hdr->conn_req.conn_id);
-            p += n; max -= n; ret += n;
+            p += n; max -= n;
             break;
         case UCT_UD_PACKET_CREP:
             n = snprintf(p, max, "CREP: src_ep_id=%d ", ctl_hdr->conn_rep.src_ep_id);
-            p += n; max -= n; ret += n;
+            p += n; max -= n;
             break;
         default:
             n = snprintf(p, max, "WTF_CTL");
-            p += n; max -= n; ret += n;
+            p += n; max -= n;
             break;
         }
     } else if (pkt_len != sizeof(neth)) {
         n = snprintf(p, max, "WTF UKNOWN DATA");
-        p += n; max -= n; ret += n;
+        p += n; max -= n;
     }
 
     if (ack_req) {
         n = snprintf(p, max, " ACK_REQ");
-        p += n; max -= n; ret += n;
+        p += n; max -= n;
     }
     /* dump raw neth since it helps out to debug sniffer traces */
     {
@@ -78,13 +84,12 @@ static int uct_ud_dump_neth(char *p, int max, uct_ud_neth_t *neth, int pkt_len)
         char *base = (char *)neth;
         
         n = snprintf(p, max, " NETH ");
-        p += n; max -= n; ret += n;
+        p += n; max -= n;
         for (i = 0; i < sizeof(*neth); i++) {
            n = snprintf(p, max, "%02X ", (unsigned)(char)base[i]);
-           p += n; max -= n; ret += n;
+           p += n; max -= n;
         }
     }
-    return ret;
 }
 
 static int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
@@ -101,10 +106,8 @@ static int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
 } 
 
 void uct_ud_log_packet(const char *file, int line, const char *function,
-                         char *tag,
-                         uct_ud_iface_t *iface, 
-                         uct_ud_ep_t *ep, 
-                         uct_ud_neth_t *neth, uint32_t len)
+                       uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                       uct_am_trace_type_t type, uct_ud_neth_t *neth, uint32_t len)
 {
     char buf[256] = {0};
     char *p;
@@ -113,13 +116,14 @@ void uct_ud_log_packet(const char *file, int line, const char *function,
     p = buf;
     max = sizeof(buf);
 
-    n = snprintf(p, max, "%s: if=%p ", tag, iface);
+    n = snprintf(p, max, "%s: if=%p ",
+                 (type == UCT_AM_TRACE_TYPE_SEND) ? "TX" : "RX", iface);
     p += n; max -= n;
 
     n = uct_ud_dump_ep(p, max, ep);
     p += n; max -= n;
 
-    uct_ud_dump_neth(p, max, neth, len);
+    uct_ud_dump_neth(iface, type, p, max, neth, len);
 
     uct_log_data(file, line, function, buf);
 }

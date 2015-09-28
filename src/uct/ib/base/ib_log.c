@@ -16,8 +16,11 @@ void uct_ib_log_dump_opcode(uint32_t qp_num, uct_ib_opcode_t *op, int signal,
              signal ? 's' : '-', fence ? 'f' : '-', se ? 'e' : '-');
 }
 
-void uct_ib_log_dump_sg_list(struct ibv_sge *sg_list, int num_sge, uint64_t inline_bitmap,
-                             uct_log_data_dump_func_t data_dump, char *buf, size_t max)
+void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
+                             struct ibv_sge *sg_list, int num_sge,
+                             uint64_t inline_bitmap,
+                             uct_log_data_dump_func_t data_dump,
+                             char *buf, size_t max)
 {
     char data[256];
     size_t total_len       = 0;
@@ -46,7 +49,7 @@ void uct_ib_log_dump_sg_list(struct ibv_sge *sg_list, int num_sge, uint64_t inli
     }
 
     if (data_dump != NULL) {
-        data_dump(data, total_len, total_valid_len, s, ends - s);
+        data_dump(&iface->super, type, data, total_len, total_valid_len, s, ends - s);
     }
 }
 
@@ -80,7 +83,7 @@ void uct_ib_log_dump_atomic_masked_cswap(int argsize, uint64_t compare, uint64_t
              argsize * 8, compare, compare_mask, swap, swap_mask);
 }
 
-void uct_ib_log_dump_recv_completion(enum ibv_qp_type qp_type,
+void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
                                      uint32_t local_qp, uint32_t sender_qp,
                                      uint16_t sender_lid, void *data, size_t length,
                                      uct_log_data_dump_func_t data_dump,
@@ -101,7 +104,8 @@ void uct_ib_log_dump_recv_completion(enum ibv_qp_type qp_type,
     s += strlen(s);
 
     if (data_dump != NULL) {
-        data_dump(data, length, length, s, ends - s);
+        data_dump(&iface->super, UCT_AM_TRACE_TYPE_RECV, data, length, length,
+                  s, ends - s);
     }
 }
 
@@ -140,7 +144,8 @@ static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
     }
 }
 
-static void uct_ib_dump_send_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
+static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
+                                struct ibv_send_wr *wr,
                                 uct_log_data_dump_func_t data_dump,
                                 char *buf, size_t max)
 {
@@ -162,36 +167,39 @@ static void uct_ib_dump_send_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
     uct_ib_dump_wr(qp, op, wr, s, ends - s);
     s += strlen(s);
 
-    uct_ib_log_dump_sg_list(wr->sg_list, wr->num_sge,
+    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list, wr->num_sge,
                             (wr->send_flags & IBV_SEND_INLINE) ? -1 : 0,
                             data_dump, s, ends - s);
 }
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
-                            struct ibv_qp *qp, struct ibv_send_wr *wr,
+                            uct_ib_iface_t *iface, struct ibv_qp *qp,
+                            struct ibv_send_wr *wr,
                             uct_log_data_dump_func_t data_dump_cb)
 {
     char buf[256] = {0};
     while (wr != NULL) {
-        uct_ib_dump_send_wr(qp, wr, data_dump_cb, buf, sizeof(buf) - 1);
+        uct_ib_dump_send_wr(iface, qp, wr, data_dump_cb, buf, sizeof(buf) - 1);
         uct_log_data(file, line, function, buf);
         wr = wr->next;
     }
 }
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
-                                  enum ibv_qp_type qp_type, struct ibv_wc *wc, void *data,
+                                  uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
+                                  struct ibv_wc *wc, void *data,
                                   uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
-    uct_ib_log_dump_recv_completion(qp_type, wc->qp_num, wc->src_qp, wc->slid,
-                                    data, wc->byte_len, packet_dump_cb,
+    uct_ib_log_dump_recv_completion(iface, qp_type, wc->qp_num, wc->src_qp,
+                                    wc->slid, data, wc->byte_len, packet_dump_cb,
                                     buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }
 
 #if HAVE_DECL_IBV_EXP_POST_SEND
-static void uct_ib_dump_exp_send_wr(struct ibv_qp *qp, struct ibv_exp_send_wr *wr,
+static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
+                                    struct ibv_exp_send_wr *wr,
                                     uct_log_data_dump_func_t data_dump_cb,
                                     char *buf, size_t max)
 {
@@ -260,18 +268,19 @@ static void uct_ib_dump_exp_send_wr(struct ibv_qp *qp, struct ibv_exp_send_wr *w
    }
 #endif
 
-   uct_ib_log_dump_sg_list(wr->sg_list, wr->num_sge,
+   uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list, wr->num_sge,
                            (wr->exp_send_flags & IBV_EXP_SEND_INLINE) ? -1 : 0,
                            data_dump_cb, s, ends - s);
 }
 
 void __uct_ib_log_exp_post_send(const char *file, int line, const char *function,
-                                struct ibv_qp *qp, struct ibv_exp_send_wr *wr,
+                                uct_ib_iface_t *iface, struct ibv_qp *qp,
+                                struct ibv_exp_send_wr *wr,
                                 uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
     while (wr != NULL) {
-        uct_ib_dump_exp_send_wr(qp, wr, packet_dump_cb, buf, sizeof(buf) - 1);
+        uct_ib_dump_exp_send_wr(iface, qp, wr, packet_dump_cb, buf, sizeof(buf) - 1);
         uct_log_data(file, line, function, buf);
         wr = wr->next;
     }

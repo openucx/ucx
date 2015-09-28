@@ -22,7 +22,7 @@ typedef struct uct_cm_iface_config {
     ucs_async_mode_t       async_mode;
     double                 timeout;
     unsigned               retry_count;
-    unsigned               max_inflight;
+    unsigned               max_outstanding;
 } uct_cm_iface_config_t;
 
 
@@ -34,12 +34,12 @@ typedef struct uct_cm_iface {
     uint32_t               service_id;  /* Service ID we're listening to */
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
-    volatile uint32_t      inflight;    /* Atomic: number of inflight sends */
+    volatile uint32_t      outstanding; /* Atomic: number of outstanding sends */
     ucs_queue_head_t       notify_q;    /* Notification queue */
 
     struct {
         int                timeout_ms;
-        uint32_t           max_inflight;
+        uint32_t           max_outstanding;
         uint8_t            retry_count;
     } config;
 } uct_cm_iface_t;
@@ -79,16 +79,18 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h ep, const struct sockaddr *iface_addr);
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface);
 
-ucs_status_t uct_cm_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t header,
-                                const void *payload, unsigned length);
-
-ucs_status_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg,
-                                size_t length);
+ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
+                           void *arg);
 
 ucs_status_t uct_cm_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req);
 ucs_status_t uct_cm_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
+
+
+#define uct_cm_iface_trace_data(_iface, _type, _hdr, _fmt, ...) \
+    uct_iface_trace_am(&(_iface)->super.super, _type, (_hdr)->am_id, \
+                       (_hdr) + 1, (_hdr)->length, _fmt, ## __VA_ARGS__)
+
 
 #endif

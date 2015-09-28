@@ -72,7 +72,7 @@ uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 #define uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length) \
     uct_ud_iface_complete_tx_inl_nolog(iface, ep, skb, data, buffer, length); \
-    uct_ud_ep_log_tx(ep, skb);
+    uct_ud_ep_log_tx(iface, ep, skb);
 
 static UCS_F_ALWAYS_INLINE void 
 uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
@@ -85,7 +85,7 @@ uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 #define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
     uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); \
-    uct_ud_ep_log_tx(ep, skb);
+    uct_ud_ep_log_tx(iface, ep, skb);
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -115,11 +115,13 @@ uct_ud_am_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void 
-uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, uct_pack_callback_t pack_cb, 
-                 void *arg, size_t length)
+static UCS_F_ALWAYS_INLINE size_t
+uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, uct_pack_callback_t pack_cb, void *arg)
 {
-    pack_cb((char *)(skb->neth+1), arg, length);
-    skb->len = length + sizeof(uct_ud_neth_t);
+    size_t payload_len;
+
+    payload_len = pack_cb(skb->neth + 1, arg);
+    skb->len = sizeof(skb->neth[0]) + payload_len;
+    return payload_len;
 }
 

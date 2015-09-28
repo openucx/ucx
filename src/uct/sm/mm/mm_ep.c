@@ -99,17 +99,14 @@ ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return UCS_OK;
 }
 
-ucs_status_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                                 void *arg, size_t length, 
-                                 uint64_t remote_addr, uct_rkey_t rkey)
+ssize_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                            void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
-    if (ucs_likely(length != 0)) {
-        pack_cb((void *)(rkey + remote_addr), arg, length);
-        uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
-    } else {
-        ucs_trace_data("PUT_BCOPY [zero-length]");
-    }
-    return UCS_OK;
+    size_t length;
+
+    length = pack_cb((void *)(rkey + remote_addr), arg);
+    uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
+    return length;
 }
 
 void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm_fifo_element_t *elem)
@@ -177,15 +174,15 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
  * 1 - perform am short sending
  * 0 - perform am bcopy sending
  */
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE ssize_t
 uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
-                         uint8_t am_id, unsigned length, uint64_t header,
+                         uint8_t am_id, size_t length, uint64_t header,
                          const void *payload, uct_pack_callback_t pack_cb, void *arg)
 {
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
-    uint64_t head;
     void *base_address;
+    uint64_t head;
 
     UCT_CHECK_AM_ID(am_id);
 
@@ -196,8 +193,8 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     }
 
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
-
     if (status != UCS_OK) {
+        ucs_trace_poll("couldn't get an available FIFO element");
         return status;
     }
 
@@ -209,17 +206,23 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
 
         elem->flags |= UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
+
+        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
+                           elem + 1, length + sizeof(header), "TX: AM_SHORT");
     } else {
         /* AM_BCOPY */
         /* write to the remote descriptor */
         /* get the base_address: local ptr to remote memory chunk after attaching to it */
         base_address = uct_mm_ep_attach_remote_seg(ep, iface, elem);
-        pack_cb(base_address + elem->desc_offset, arg, length);
+        length = pack_cb(base_address + elem->desc_offset, arg);
 
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length;
 
+        uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
+                           base_address + elem->desc_offset, length, "TX: AM_BCOPY");
     }
+
     elem->am_id = am_id;
 
     /* memory barrier - make sure that the memory is flushed before setting the
@@ -234,7 +237,11 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
         elem->flags &= ~UCT_MM_FIFO_ELEM_FLAG_OWNER;
     }
 
-    return UCS_OK;
+    if (is_short) {
+        return UCS_OK;
+    } else {
+        return length;
+    }
 }
 
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
@@ -242,44 +249,23 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
-    ucs_status_t status;
 
     UCT_CHECK_LENGTH(length + sizeof(header),
                      iface->config.fifo_elem_size - sizeof(uct_mm_fifo_element_t),
                      "am_short");
 
-    status = uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface, id, length,
-                                      header, payload, NULL, NULL);
-    if (status == UCS_OK) {
-        ucs_trace_data("MM: AM_SHORT [%p] am_id: %d buf=%p length=%u",
-                        iface, id, payload, length);
-    } else {
-        ucs_trace_poll("Couldn't get an available FIFO element in am_short");
-    }
-
-    return status;
+    return uct_mm_ep_am_common_send(UCT_MM_AM_SHORT, ep, iface, id, length,
+                                    header, payload, NULL, NULL);
 }
 
-ucs_status_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                uct_pack_callback_t pack_cb, void *arg,
-                                size_t length)
+ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
+                           void *arg)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
-    ucs_status_t status;
 
-    UCT_CHECK_LENGTH(length, iface->config.seg_size, "am_bcopy");
-
-    status = uct_mm_ep_am_common_send(UCT_MM_AM_BCOPY, ep, iface, id, length,
-                                      0, NULL, pack_cb, arg);
-    if (status == UCS_OK) {
-        ucs_trace_data("MM: AM_BCOPY [%p] am_id: %d buf=%p length=%u",
-                        iface, id, arg, (int)length);
-    } else {
-        ucs_trace_poll("Couldn't get an available FIFO element in am_bcopy");
-    }
-
-    return status;
+    return uct_mm_ep_am_common_send(UCT_MM_AM_BCOPY, ep, iface, id, 0, 0, NULL,
+                                    pack_cb, arg);
 }
 
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,

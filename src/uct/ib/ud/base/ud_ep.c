@@ -352,7 +352,8 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     return skb;
 }
 
-void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len, uct_ud_recv_skb_t *skb)
+void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len,
+                          uct_ud_recv_skb_t *skb)
 {
     uint32_t dest_id;
     uint32_t is_am, am_id;
