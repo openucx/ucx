@@ -28,8 +28,8 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {"RETRY_COUNT", "20", "Number of retries for MAD layer",
    ucs_offsetof(uct_cm_iface_config_t, retry_count), UCS_CONFIG_TYPE_UINT},
 
-  {"MAX_INFLIGHT", "32", "Maximal number of outstanding SIDR requests",
-   ucs_offsetof(uct_cm_iface_config_t, max_inflight), UCS_CONFIG_TYPE_UINT},
+  {"MAX_OP", "1024", "Maximal number of outstanding SIDR operations",
+   ucs_offsetof(uct_cm_iface_config_t, max_outstanding), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -41,14 +41,14 @@ static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 {
     uct_cm_pending_req_priv_t *priv;
     uct_pending_queue_dispatch(priv, &iface->notify_q,
-                               iface->inflight < iface->config.max_inflight);
+                               iface->outstanding < iface->config.max_outstanding);
 }
 
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
 
-    if (iface->inflight == 0) {
+    if (iface->outstanding == 0) {
         return UCS_OK;
     }
 
@@ -131,8 +131,8 @@ static void uct_cm_iface_event_handler(void *arg)
             break;
         case IB_CM_SIDR_REP_RECEIVED:
             ucs_trace_data("RX: SIDR_REP");
-            ucs_assert(iface->inflight > 0);
-            ucs_atomic_add32(&iface->inflight, -1);
+            ucs_assert(iface->outstanding > 0);
+            ucs_atomic_add32(&iface->outstanding, -1);
             destroy_id = 1; /* Destroy the ID which was used for sending */
             break;
         default:
@@ -185,9 +185,9 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
 
     self->service_id          = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
                                              (~IB_CM_ASSIGN_SERVICE_ID_MASK));
-    self->inflight            = 0;
+    self->outstanding         = 0;
     self->config.timeout_ms   = (int)(config->timeout * 1e3 + 0.5);
-    self->config.max_inflight = config->max_inflight;
+    self->config.max_outstanding = config->max_outstanding;
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
     self->notify_q.head = NULL;
     ucs_queue_head_init(&self->notify_q);
@@ -246,9 +246,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 {
     ucs_trace_func("");
 
-    if (self->inflight > 0) {
-        ucs_warn("waiting for %d in-flight requests to complete", self->inflight);
-        while (self->inflight) {
+    if (self->outstanding > 0) {
+        ucs_warn("waiting for %d in-flight requests to complete", self->outstanding);
+        while (self->outstanding) {
             sched_yield();
         }
     }
