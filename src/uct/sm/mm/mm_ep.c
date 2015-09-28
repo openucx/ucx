@@ -208,7 +208,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
         elem->length = length + sizeof(header);
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           elem + 1, length + sizeof(header), "AM_SHORT");
+                           elem + 1, length + sizeof(header), "TX: AM_SHORT");
     } else {
         /* AM_BCOPY */
         /* write to the remote descriptor */
@@ -220,7 +220,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
         elem->length = length;
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           base_address + elem->desc_offset, length, "AM_BCOPY");
+                           base_address + elem->desc_offset, length, "TX: AM_BCOPY");
     }
 
     elem->am_id = am_id;

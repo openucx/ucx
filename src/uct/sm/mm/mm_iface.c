@@ -187,7 +187,7 @@ static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
         /* read short (inline) messages from the FIFO elements */
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
-                           elem + 1, elem->length, "AM_SHORT");
+                           elem + 1, elem->length, "RX: AM_SHORT");
         uct_mm_iface_invoke_am(iface, elem->am_id, elem + 1, elem->length,
                                iface->last_recv_desc, UCT_MM_AM_SHORT);
     } else {
@@ -199,7 +199,7 @@ static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
         data = elem->desc_chunk_base_addr + elem->desc_offset;
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
-                           data, elem->length, "AM_BCOPY");
+                           data, elem->length, "RX: AM_BCOPY");
 
         status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
                                         desc, UCT_MM_AM_BCOPY);
