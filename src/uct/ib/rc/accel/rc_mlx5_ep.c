@@ -37,13 +37,16 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
                       uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size)
 {
+    uint16_t posted;
+
     uct_ib_mlx5_set_ctrl_seg(ctrl, ep->tx.wq.sw_pi, 
                              opcode, opmod, ep->qp_num, sig_flag, wqe_size);
 
     uct_ib_mlx5_log_tx(IBV_QPT_RC, ctrl, ep->tx.wq.qstart, ep->tx.wq.qend,
                        (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
-    ep->super.available -= uct_ib_mlx5_post_send(&ep->tx.wq, ctrl, wqe_size);
+    posted = uct_ib_mlx5_post_send(&ep->tx.wq, ctrl, wqe_size);
+    ep->super.available -= posted;
     uct_rc_ep_tx_posted(&ep->super, sig_flag & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 

@@ -31,7 +31,7 @@ struct uct_rc_ep {
     struct ibv_qp       *qp;
     ucs_queue_head_t    outstanding;
     unsigned            unsignaled;
-    uint16_t            available;
+    int16_t             available;
     uint8_t             sl;
     uint8_t             path_bits;
     ucs_list_link_t     list;

@@ -88,7 +88,7 @@ typedef struct {
         UCS_STATS_UPDATE_COUNTER((_iface)->super.stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         return UCS_ERR_NO_RESOURCE; \
     } \
-    if ((_ep)->super.available == 0) { \
+    if ((_ep)->super.available <= 0) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_RC_EP_STAT_QP_FULL, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }
