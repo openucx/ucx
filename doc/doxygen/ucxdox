@@ -763,8 +763,9 @@ WARN_LOGFILE           =
 
 INPUT                  = $(SRCDIR)/src/ucp/api/ \
                          $(SRCDIR)/src/uct/api/ \
+                         $(SRCDIR)/doc/doxygen/preface.dox \
                          $(SRCDIR)/doc/doxygen/intro.dox \
-                         $(SRCDIR)/doc/doxygen/design.dox \
+                         $(SRCDIR)/doc/doxygen/design.dox
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
