@@ -14,7 +14,7 @@
 
 
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
-                        const char *message, ucp_ep_h *ep_p)
+                        const char *peer_name, const char *message, ucp_ep_h *ep_p)
 {
     ucp_ep_h ep;
 
@@ -39,9 +39,12 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->wireup.next_ep       = NULL;
 
     sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
+#if ENABLE_DEBUG_DATA
+    ucs_snprintf_zero(ep->peer_name, UCP_PEER_NAME_MAX, "%s", peer_name);
+#endif
 
-    ucs_debug("created ep %p 0x%"PRIx64"->0x%"PRIx64" %s", ep, worker->uuid,
-              ep->dest_uuid, message);
+    ucs_debug("created ep %p to %s 0x%"PRIx64"->0x%"PRIx64" %s", ep,
+              ucp_ep_peer_name(ep), worker->uuid, ep->dest_uuid, message);
     *ep_p = ep;
     return UCS_OK;
 }
@@ -95,6 +98,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
                            ucp_ep_h *ep_p)
 {
     uint64_t dest_uuid = ucp_address_uuid(address);
+    char peer_name[UCP_PEER_NAME_MAX];
     ucs_status_t status;
     ucp_ep_h ep;
 
@@ -107,7 +111,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
         goto out;
     }
 
-    status = ucp_ep_new(worker, dest_uuid, " from api call", &ep);
+    ucp_address_peer_name(address, peer_name);
+    status = ucp_ep_new(worker, dest_uuid, peer_name, " from api call", &ep);
     if (status != UCS_OK) {
         goto err;
     }

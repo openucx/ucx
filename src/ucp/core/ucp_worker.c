@@ -6,6 +6,8 @@
 
 #include "ucp_worker.h"
 
+#include <ucp/wireup/wireup.h>
+
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
@@ -317,20 +319,38 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
                                     size_t *address_length_p)
 {
     ucp_context_h context = worker->context;
+    char name[UCP_PEER_NAME_MAX];
     ucp_address_t *address;
     size_t address_length, rsc_addr_length;
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
     void *rsc_addr;
 
-    address_length = sizeof(uint64_t);
+    UCS_STATIC_ASSERT(address + 1 == (void*)address + 1);
+
+#if ENABLE_DEBUG_DATA
+    ucs_snprintf_zero(name, UCP_PEER_NAME_MAX, "%s:%d", ucs_get_host_name(),
+                      getpid()); /* TODO tid? */
+#else
+    memset(name, 0, sizeof(name));
+#endif
+
+    address_length = sizeof(uint64_t) + strlen(name) + 1;
     address        = ucs_malloc(address_length + 1, "ucp address");
     if (address == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free;
     }
 
+    /* Set address UUID */
     *(uint64_t*)address = worker->uuid;
+
+    /* Set peer name */
+    UCS_STATIC_ASSERT(UCP_PEER_NAME_MAX <= UINT8_MAX);
+    *(uint8_t*)(address + sizeof(uint64_t)) = strlen(name);
+    strcpy(address + sizeof(uint64_t) + 1, name);
+
+    ucs_assert(ucp_address_iter_start(address) == address + address_length);
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         status = ucp_worker_pack_resource_address(worker, rsc_index,
@@ -349,7 +369,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
         }
 
         /* Add the address of the current resource */
-        memcpy((void*)address + address_length - rsc_addr_length, rsc_addr, rsc_addr_length);
+        memcpy(address + address_length - rsc_addr_length, rsc_addr, rsc_addr_length);
         ucs_free(rsc_addr);
     }
 

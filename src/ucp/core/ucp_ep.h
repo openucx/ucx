@@ -15,6 +15,9 @@
 #include <ucs/debug/log.h>
 
 
+#define UCP_PEER_NAME_MAX         16
+
+
 /**
  * Remote protocol layer endpoint
  */
@@ -42,16 +45,30 @@ typedef struct ucp_ep {
         uct_ep_h                  next_ep;       /* Next transport being wired up */
     } wireup;
 
+#if ENABLE_DEBUG_DATA
+    char                          peer_name[UCP_PEER_NAME_MAX];
+#endif
+
 } ucp_ep_t;
 
 
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
-                        const char *message, ucp_ep_h *ep_p);
+                        const char *peer_name, const char *message, ucp_ep_h *ep_p);
 
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 
 
 void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req);
+
+
+static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
+{
+#if ENABLE_DEBUG_DATA
+    return ep->peer_name;
+#else
+    return "??";
+#endif
+}
 
 
 #endif

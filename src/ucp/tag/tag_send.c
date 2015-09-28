@@ -85,7 +85,8 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     ucs_status_t status;
     ucp_request_t *req;
 
-    ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64, buffer, count, tag);
+    ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s", buffer,
+                  count, tag, ucp_ep_peer_name(ep));
 
     status = ucp_tag_send_try(ep, buffer, count, datatype, tag);
     if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
