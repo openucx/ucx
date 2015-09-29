@@ -329,26 +329,18 @@ typedef struct {
  * @return Callback return value.
  */
 #define uct_pending_queue_purge(_priv, _queue, _cond, _cb) \
-    ({ \
+    { \
         uct_pending_req_priv_t *_base_priv; \
         ucs_queue_iter_t _iter; \
-        ucs_status_t _status; \
         \
         ucs_queue_for_each_safe(_base_priv, _iter, _queue, queue) { \
             _priv = ucs_derived_of(_base_priv, typeof(*_priv)); \
             if (_cond) { \
                 ucs_queue_del_iter(_queue, _iter); \
-                _status = _cb(ucs_container_of(_base_priv, uct_pending_req_t, priv)); \
-                if (_status != UCS_OK) { \
-                    ucs_queue_push_head(_queue, &_base_priv->queue); \
-                    goto out; \
-                } \
+                (void)_cb(ucs_container_of(_base_priv, uct_pending_req_t, priv)); \
             } \
         } \
-        _status = UCS_OK; \
-    out: \
-        _status; \
-    })
+    }
 
 
 /**

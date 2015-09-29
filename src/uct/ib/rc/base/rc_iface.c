@@ -190,6 +190,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
+    ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
 
     /* Create RX buffers mempool */
@@ -266,6 +267,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     if (!ucs_list_is_empty(&self->ep_list)) {
         ucs_warn("some eps were not destroyed");
     }
+
+    ucs_arbiter_cleanup(&self->tx.arbiter);
 
     UCS_STATS_NODE_FREE(self->stats);
 

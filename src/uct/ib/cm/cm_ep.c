@@ -180,13 +180,13 @@ ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req)
     return UCS_OK;
 }
 
-ucs_status_t uct_cm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
+void uct_cm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
     uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
     uct_cm_pending_req_priv_t *priv;
 
-    return uct_pending_queue_purge(priv, &iface->notify_q, priv->ep == ep, cb);
+    uct_pending_queue_purge(priv, &iface->notify_q, priv->ep == ep, cb);
 }
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep)

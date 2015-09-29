@@ -91,7 +91,6 @@ static unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *iface, unsigned
 static UCS_F_ALWAYS_INLINE void 
 uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 {
-    uct_rc_iface_send_op_t *op;
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
@@ -114,11 +113,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ep->super.available = uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci);
     ++iface->super.tx.cq_available;
 
-    /* Process completions */
-    ucs_queue_for_each_extract(op, &ep->super.outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, hw_ci)) {
-        op->handler(op);
-    }
+    uct_rc_ep_process_tx_completion(&iface->super, &ep->super, hw_ci);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -386,8 +381,8 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic_fadd32    = uct_rc_mlx5_ep_atomic_fadd32,
     .ep_atomic_swap32    = uct_rc_mlx5_ep_atomic_swap32,
     .ep_atomic_cswap32   = uct_rc_mlx5_ep_atomic_cswap32,
-    .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
-    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    .ep_pending_add      = uct_rc_ep_pending_add,
+    .ep_pending_purge    = uct_rc_ep_pending_purge,
     .ep_flush            = uct_rc_mlx5_ep_flush
 };
 

@@ -88,7 +88,7 @@ uct_rc_mlx5_ep_inline_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
     unsigned sig_flag;
 
     ctrl = ep->tx.wq.curr;
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     switch (opcode) {
     case MLX5_OPCODE_SEND:
@@ -361,7 +361,7 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep, unsigned opcode, const void *buf
                                                  uct_rc_mlx5_iface_t);
     uint16_t sn;
 
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_ep_dptr_post(ep, opcode, buffer, length, &mr->lkey,
@@ -400,11 +400,11 @@ uct_rc_mlx5_ep_atomic(uct_rc_mlx5_ep_t *ep, int opcode, void *result, unsigned l
     uct_rc_iface_send_desc_t *desc;
 
     UCT_CHECK_PARAM(comp != NULL, "completion must be non-NULL");
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->tx.atomic_desc_mp, desc);
 
     desc->super.handler   = handler;
-    desc->super.result    = result;
+    desc->super.buffer    = result;
     desc->super.user_comp = comp;
     uct_rc_mlx5_ep_atomic_post(ep, opcode, desc, length, remote_addr, rkey,
                                compare_mask, compare, swap_add,
@@ -420,7 +420,7 @@ uct_rc_mlx5_ep_atomic_add(uct_ep_h tl_ep, int opcode, unsigned length,
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_send_desc_t *desc;
 
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->tx.atomic_desc_mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
@@ -449,7 +449,7 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     uct_rc_iface_send_desc_t *desc;
     size_t length;
 
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
@@ -487,7 +487,7 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_CHECK_LENGTH(length, iface->super.super.config.seg_size, "get_bcopy");
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler     = (comp == NULL) ?
@@ -543,7 +543,7 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     size_t length;
 
     UCT_CHECK_AM_ID(id);
-    UCT_RC_MLX5_CHECK_RES(iface, ep);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;

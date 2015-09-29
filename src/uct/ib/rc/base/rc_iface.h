@@ -11,6 +11,7 @@
 
 #include <uct/tl/tl_base.h>
 #include <uct/ib/base/ib_iface.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 
@@ -58,6 +59,7 @@ struct uct_rc_iface {
         uct_rc_iface_send_op_t *ops;
         unsigned             cq_available;
         unsigned             next_op;
+        ucs_arbiter_t        arbiter;
     } tx;
 
     struct {
@@ -101,7 +103,7 @@ struct uct_rc_iface_send_op {
     uint16_t                      sn;
     unsigned                      length;
     union {
-        void                      *result;
+        void                      *buffer;
         void                      *unpack_arg;
     };
     uct_completion_t              *user_comp;

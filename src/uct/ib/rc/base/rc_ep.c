@@ -47,6 +47,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     self->sl         = iface->config.sl;          /* TODO multi-rail */
     self->path_bits  = iface->super.path_bits[0]; /* TODO multi-rail */
     ucs_queue_head_init(&self->outstanding);
+    ucs_arbiter_group_init(&self->arb_group);
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
@@ -65,6 +66,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ucs_debug("destroy rc ep %p", self);
 
     uct_rc_iface_remove_ep(iface, self);
+
+    ucs_arbiter_group_cleanup(&self->arb_group);
 
     UCS_STATS_NODE_FREE(self->stats);
     ret = ibv_destroy_qp(self->qp);
@@ -201,6 +204,82 @@ void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
     uct_invoke_completion(op->user_comp);
 }
 
+static int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
+{
+    return uct_rc_iface_have_tx_cqe_avail(iface) &&
+           !ucs_mpool_is_empty(&iface->tx.mp);
+}
+
+ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
+
+    if ((ep->available > 0) && uct_rc_iface_has_tx_resources(iface)) {
+        return UCS_ERR_BUSY;
+    }
+
+    UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
+    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)n->priv);
+
+    if (ep->available > 0) {
+        /* If we have ep (but not iface) resources, we need to schedule the ep */
+        ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
+    }
+
+    return UCS_OK;
+}
+
+ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_elem_t *elem,
+                                                  void *arg)
+{
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_rc_iface_t *iface UCS_V_UNUSED;
+    ucs_status_t status;
+    uct_rc_ep_t *ep;
+
+    status = req->func(req);
+    ucs_trace_data("progress pending request %p returned %s", req,
+                   ucs_status_string(status));
+
+    if (status == UCS_OK) {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else {
+        ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
+        if (ep->available <= 0) {
+            /* No ep resources */
+            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+        } else {
+            /* No iface resources */
+            iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+            ucs_assertv(!uct_rc_iface_has_tx_resources(iface),
+                        "pending callback returned error but send resources are available");
+            return UCS_ARBITER_CB_RESULT_STOP;
+        }
+    }
+}
+
+static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                          ucs_arbiter_elem_t *elem,
+                                                          void *arg)
+{
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_pending_callback_t cb = arg;
+
+    cb(req);
+    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
+void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
+
+    ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->arb_group,
+                            uct_rc_ep_abriter_purge_cb, cb);
+}
+
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
             (uct_rc_iface_send_op_t *op) \
@@ -208,7 +287,7 @@ void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
         uct_rc_iface_send_desc_t *desc = \
             ucs_derived_of(op, uct_rc_iface_send_desc_t); \
         uint##_num_bits##_t *value = (void*)(desc + 1); \
-        uint##_num_bits##_t *dest = desc->super.result; \
+        uint##_num_bits##_t *dest = desc->super.buffer; \
         \
         VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
         if (_is_be && (_num_bits == 32)) { \

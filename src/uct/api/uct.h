@@ -1073,17 +1073,14 @@ UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *r
  * @brief Remove all pending requests from an endpoint.
  *
  *  Remove pending requests from the given endpoint and pass them to the provided
- * callback function. The callback returns != UCS_OK, processing would stop and
- * this value would be returned.
+ * callback function. The callback return value is ignored.
  *
  * @param [in]  ep  Endpoint to remove pending requests from.
  * @param [in]  cb  Callback to pass the removed requests to.
- *
- * @return Return value from the provided callback.
  */
-UCT_INLINE_API ucs_status_t uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
+UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
 {
-    return ep->iface->ops.ep_pending_purge(ep, cb);
+    ep->iface->ops.ep_pending_purge(ep, cb);
 }
 
 
