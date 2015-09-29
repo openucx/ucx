@@ -763,6 +763,7 @@ WARN_LOGFILE           =
 
 INPUT                  = $(SRCDIR)/src/ucp/api/ \
                          $(SRCDIR)/src/uct/api/ \
+                         $(SRCDIR)/doc/doxygen/preface.dox \
                          $(SRCDIR)/doc/doxygen/intro.dox \
                          $(SRCDIR)/doc/doxygen/design.dox \
 
