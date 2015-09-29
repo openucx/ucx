@@ -94,8 +94,8 @@ protected:
         return ((size_t)state) * sizeof(uint32_t);
     }
 
-    __attribute__((optimize("no-tree-vectorize")))
     static size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length)
+    UCS_F_NO_VECTORIZE
     {
         size_t remaining = (size_t)state;
         uint32_t *p = (uint32_t*)dest;
@@ -108,8 +108,9 @@ protected:
         return count * sizeof(uint32_t);
     }
 
-    __attribute__((optimize("no-tree-vectorize")))
-    static ucs_status_t dt_unpack(void *state, size_t offset, const void *src, size_t length)
+    static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
+                                  size_t length)
+    UCS_F_NO_VECTORIZE
     {
         uint32_t count;
 
@@ -225,27 +226,7 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
     std::vector<char> recvbuf(size, 0);
 
     /* 1st send */
-/*
- *     status = ucp_tag_send(sender->ep(), &sendbuf[0], sendbuf.size(), DATATYPE,
-                          0x110001);
-    ASSERT_UCS_OK(status);
-    status = ucp_tag_recv(receiver->worker(), &recvbuf[0], recvbuf.size(),
-                          DATATYPE, 0x1, 0xffff, &info);
-    ASSERT_UCS_OK(status);
-    EXPECT_EQ((ucp_tag_t)0x110001, info.sender_tag);
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
-    request *my_send_req;
-    my_send_req = (request*)ucp_tag_send_nb(sender->ep(), &sendbuf[0],
-                                            sendbuf.size(), DATATYPE, 0x110002,
-                                            send_callback);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
-    status = ucp_tag_recv(receiver->worker(), &recvbuf[0], recvbuf.size(),
-                          DATATYPE, 0x2, 0xffff, &info);
-    ASSERT_UCS_OK(status);
-    EXPECT_EQ(sendbuf.size(),      info.length);
-    EXPECT_EQ((ucp_tag_t)0x110002, info.sender_tag);
- *
- */
+
     status = ucp_tag_send(sender->ep(), &sendbuf[0], sendbuf.size(), DATATYPE,
                           0x111337);
     ASSERT_UCS_OK(status);
@@ -355,13 +336,13 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_medium_wildcard) {
         EXPECT_EQ(size, rreq2->info.length);
 
         /* The order may be any, but the messages have to be received correctly */
-        if (rreq1->info.sender_tag == 1) {
-            ASSERT_EQ(2, rreq2->info.sender_tag);
+        if (rreq1->info.sender_tag == 1u) {
+            ASSERT_EQ(2u, rreq2->info.sender_tag);
             EXPECT_EQ(sendbuf1, recvbuf1);
             EXPECT_EQ(sendbuf2, recvbuf2);
         } else {
-            ASSERT_EQ(2, rreq1->info.sender_tag);
-            ASSERT_EQ(1, rreq2->info.sender_tag);
+            ASSERT_EQ(2u, rreq1->info.sender_tag);
+            ASSERT_EQ(1u, rreq2->info.sender_tag);
             EXPECT_EQ(sendbuf2, recvbuf1);
             EXPECT_EQ(sendbuf1, recvbuf2);
         }

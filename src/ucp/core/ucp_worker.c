@@ -235,9 +235,14 @@ void ucp_worker_progress_unregister(ucp_worker_h worker,
 
 void ucp_worker_progress(ucp_worker_h worker)
 {
+    /* worker->inprogress is used only for assertion check.
+     * coverity[assert_side_effect]
+     */
     ucs_assert(worker->inprogress++ == 0);
     uct_worker_progress(worker->uct);
     ucs_async_check_miss(&worker->async);
+
+    /* coverity[assert_side_effect] */
     ucs_assert(--worker->inprogress == 0);
 }
 

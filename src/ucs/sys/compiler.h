@@ -88,6 +88,12 @@
 /* Aligned variable */
 #define UCS_V_ALIGNED(_align) __attribute__((aligned(_align)))
 
+#if defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && (__GNUC_MINOR__ >= 4)))
+#  define UCS_F_NO_VECTORIZE  __attribute__((optimize("no-tree-vectorize")))
+#else
+#  define UCS_F_NO_VECTORIZE
+#endif
+
 /* Used for labels */
 #define UCS_EMPTY_STATEMENT {}
 
