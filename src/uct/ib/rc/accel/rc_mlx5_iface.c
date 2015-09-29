@@ -305,14 +305,8 @@ static ucs_status_t uct_rc_mlx5_iface_init_rx(uct_rc_mlx5_iface_t *iface)
         return UCS_ERR_NO_DEVICE;
     }
 
-    if (!ucs_is_pow2(iface->rx.cq.cq_length)) {
-        ucs_error("CQ length is not power of 2 (%d)", iface->rx.cq.cq_length);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if (srq_info.tail + 1 != iface->rx.cq.cq_length) {
-        ucs_error("RX CQ size (%d) and SRQ length (%d) are not the same",
-                  iface->rx.cq.cq_length, srq_info.tail + 1);
+    if (!ucs_is_pow2(srq_info.tail + 1)) {
+        ucs_error("SRQ length is not power of 2 (%d)", srq_info.tail + 1);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -322,7 +316,7 @@ static ucs_status_t uct_rc_mlx5_iface_init_rx(uct_rc_mlx5_iface_t *iface)
     iface->rx.free_idx        = srq_info.tail;
     iface->rx.ready_idx       = -1;
     iface->rx.sw_pi           = -1;
-    iface->rx.mask            = iface->rx.cq.cq_length - 1;
+    iface->rx.mask            = srq_info.tail;
 
     for (i = srq_info.head; i <= srq_info.tail; ++i) {
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, i);
