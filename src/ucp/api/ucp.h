@@ -809,7 +809,7 @@ void ucp_request_release(void *request);
  * @param [out] datatype_p   Filled with a pointer to datatype.
  */
 ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
-                                   ucp_datatype_t *datatytpe_p);
+                                   ucp_datatype_t *datatype_p);
 
 
 /**
@@ -818,7 +818,7 @@ ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
  *
  * @param [in]  datatype     Data-type to destroy.
  */
-void ucp_dt_destroy(ucp_datatype_t datatytpe);
+void ucp_dt_destroy(ucp_datatype_t datatype);
 
 
 /**
