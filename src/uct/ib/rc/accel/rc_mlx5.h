@@ -24,13 +24,6 @@ enum {
 };
 
 
-typedef struct uct_rc_mlx5_recv_desc uct_rc_mlx5_recv_desc_t;
-struct uct_rc_mlx5_recv_desc {
-    uct_ib_iface_recv_desc_t   super;
-    ucs_queue_elem_t           queue;
-} UCS_S_PACKED;
-
-
 /**
  * RC mlx5 interface configuration
  */
@@ -38,6 +31,30 @@ typedef struct uct_rc_mlx5_iface_config {
     uct_rc_iface_config_t  super;
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
+
+
+/**
+ * SRQ segment
+ *
+ * We add some SW book-keeping information in the unused HW fields:
+ *  - next_hole - points to the next out-of-order completed segment
+ *  - desc      - the receive descriptor.
+ *
+ */
+typedef struct uct_rc_mlx5_srq_seg {
+    union {
+        struct mlx5_wqe_srq_next_seg   mlx5_srq;
+        struct {
+            uint8_t                    rsvd0[2];
+            uint16_t                   next_wqe_index; /* Network byte order */
+            uint8_t                    signature;
+            uint8_t                    rsvd1[2];
+            uint8_t                    ooo;
+            uct_ib_iface_recv_desc_t   *desc;          /* Host byte order */
+        } srq;
+    };
+    struct mlx5_wqe_data_seg           dptr;
+} uct_rc_mlx5_srq_seg_t;
 
 
 /**
@@ -66,12 +83,12 @@ typedef struct {
 
     struct {
         uct_ib_mlx5_cq_t   cq;
-        ucs_queue_head_t   desc_q;
         void               *buf;
         uint32_t           *db;
-        uint16_t           head;
-        uint16_t           tail;
-        uint16_t           sw_pi;
+        uint16_t           free_idx;   /* what is completed contiguously */
+        uint16_t           ready_idx;  /* what is ready to be posted to hw */
+        uint16_t           sw_pi;      /* what is posted to hw */
+        uint16_t           mask;
     } rx;
 
     UCS_STATS_NODE_DECLARE(stats);

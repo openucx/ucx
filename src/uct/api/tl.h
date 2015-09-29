@@ -158,7 +158,7 @@ typedef struct uct_am_recv_desc {
 
 
 #define uct_recv_desc_iface(_desc) \
-    ((((uct_am_recv_desc_t*)desc) - 1)->iface)
+    ((((uct_am_recv_desc_t*)(_desc)) - 1)->iface)
 
 
 

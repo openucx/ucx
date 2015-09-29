@@ -13,7 +13,7 @@
 
 
 ucs_config_field_t uct_rc_iface_config_table[] = {
-  {"IB_", "RX_INLINE=64", NULL,
+  {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
   {"PATH_MTU", "default",
@@ -171,7 +171,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     self->tx.cq_available           = config->tx.cq_len - 1; /* Reserve one for error */
     self->tx.next_op                = 0;
-    self->rx.available              = config->super.rx.queue_len;
+    self->rx.available              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
@@ -195,7 +195,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
-                                            "rc_recv_desc", &self->rx.mp);
+                                          "rc_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
         goto err;
     }
@@ -233,6 +233,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         status = UCS_ERR_IO_ERROR;
         goto err_free_tx_ops;
     }
+
+    self->rx.available           = srq_init_attr.attr.max_wr;
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);

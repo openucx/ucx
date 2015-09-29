@@ -263,9 +263,3 @@ void uct_p2p_test::completion_cb(uct_completion_t *self) {
     completion *comp = ucs_container_of(self, completion, uct);
     ++comp->self->m_completion_count;
 }
-
-size_t uct_p2p_test::sendbuf_pack(void *dest, void *arg) {
-    const mapped_buffer* sendbuf = (const mapped_buffer*)arg;
-    memcpy(dest, sendbuf->ptr(), sendbuf->length());
-    return sendbuf->length();
-}

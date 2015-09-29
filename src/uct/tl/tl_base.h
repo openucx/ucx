@@ -16,6 +16,8 @@
 #include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
 
+#include <ucs/datastruct/mpool.inl>
+
 
 enum {
     UCT_EP_STAT_AM,
@@ -250,7 +252,7 @@ typedef struct uct_iface_mpool_config {
 
 #define UCT_TL_IFACE_GET_RX_DESC(_iface, _mp, _desc, _failure) \
     { \
-        _desc = ucs_mpool_get(_mp); \
+        _desc = ucs_mpool_get_inline(_mp); \
         if (ucs_unlikely((_desc) == NULL)) { \
             UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_RX_NO_DESC, 1); \
             _failure; \

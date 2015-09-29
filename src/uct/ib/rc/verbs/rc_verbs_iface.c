@@ -125,13 +125,13 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
             UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
 
             desc = (void*)wc[i].wr_id;
-            uct_ib_iface_desc_received(&iface->super.super, desc, wc[i].byte_len, 1);
-
             hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+            VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
+
             uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_RC, &wc[i],
                                        hdr, uct_rc_ep_am_packet_dump);
-
-            uct_rc_iface_invoke_am(&iface->super, hdr, wc[i].byte_len, desc);
+            uct_ib_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                                   wc[i].byte_len - sizeof(*hdr), desc);
         }
 
         iface->super.rx.available += ret;

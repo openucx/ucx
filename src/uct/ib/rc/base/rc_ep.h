@@ -43,7 +43,7 @@ struct uct_rc_ep {
     uct_base_ep_t       super;
     struct ibv_qp       *qp;
     ucs_queue_head_t    outstanding;
-    unsigned            unsignaled;
+    uint16_t            unsignaled;
     int16_t             available;
     uint8_t             sl;
     uint8_t             path_bits;
