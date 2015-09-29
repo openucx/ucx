@@ -5,27 +5,17 @@
 */
 
 #include "test_ucp_memheap.h"
-extern "C" {
-#include <ucp/proto/ucp_int.h> /* To validate the contents of a memory handle */
-}
 
 
 class test_ucp_mmap : public test_ucp_memheap {
 protected:
     void test_mapped_memory(entity *e, ucp_mem_h memh, void *ptr, size_t size);
-
-    virtual uint64_t features() const {
-        return UCP_FEATURE_RMA;
-    }
 };
 
 
 void test_ucp_mmap::test_mapped_memory(entity *e, ucp_mem_h memh,
                                        void *ptr, size_t size)
 {
-    EXPECT_EQ(ptr, memh->address);
-    EXPECT_GE(memh->length, size);
-
     size_t rkey_size;
     void *rkey_buffer;
     ucs_status_t status;

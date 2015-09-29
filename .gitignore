@@ -53,3 +53,4 @@ ucx.spec
 ucx.pc
 doc/doxygen-doc
 doc/uml/uct.pdf
+test-driver

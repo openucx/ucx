@@ -4,7 +4,12 @@
 * See file LICENSE for terms.
 */
 
-#include "ucp_int.h"
+#include <ucp/core/ucp_mm.h>
+
+#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_context.h>
+#include <ucp/dt/dt_contig.h>
 
 
 #define UCP_RMA_CHECK_PARAMS(_buffer, _length) \
@@ -25,7 +30,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
-    uct_rkey = UCP_RMA_RKEY_LOOKUP(ep, rkey);
+    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
 
     /* Loop until all message has been sent.
      * We re-check the configuration on every iteration, because it can be
@@ -80,7 +85,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
-    uct_rkey = UCP_RMA_RKEY_LOOKUP(ep, rkey);
+    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
 
     comp.count = 1;
 
@@ -123,12 +128,12 @@ retry:
     return UCS_OK;
 }
 
-ucs_status_t ucp_fence(ucp_worker_h worker)
+ucs_status_t ucp_worker_fence(ucp_worker_h worker)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
-ucs_status_t ucp_flush(ucp_worker_h worker)
+ucs_status_t ucp_worker_flush(ucp_worker_h worker)
 {
     unsigned rsc_index;
 

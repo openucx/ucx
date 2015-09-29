@@ -7,7 +7,6 @@
 #define UCP_H_
 
 #include <ucp/api/ucp_def.h>
-#include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/config/types.h>
@@ -62,13 +61,21 @@
  */
 
 
-/**
-* @defgroup UCP_CONFIG UCP Configuration
-* @{
-* This section describes routines for configuration
-* of the UCP network layer
-* @}
-*/
+ /**
+ * @defgroup UCP_CONFIG UCP Configuration
+ * @{
+ * This section describes routines for configuration
+ * of the UCP network layer
+ * @}
+ */
+
+
+ /**
+ * @defgroup UCP_DATATYPE UCP Data type routines
+ * @{
+ * UCP Data type routines
+ * @}
+ */
 
 
 /**
@@ -79,6 +86,119 @@ enum {
     UCP_FEATURE_TAG = UCS_BIT(1),  /**< Request tag matching support */
     UCP_FEATURE_RMA = UCS_BIT(2),  /**< Request remote memory access support */
     UCP_FEATURE_AMO = UCS_BIT(3)   /**< Request atomic operations support */
+};
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Data type classification - used internally
+ */
+enum {
+    UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous type */
+    UCP_DATATYPE_STRIDED = 1,      /**< Strided type */
+    UCP_DATATYPE_GENERIC = 7,      /**< Generic type with user-defined pack/unpack routines */
+
+    UCP_DATATYPE_SHIFT   = 3,      /**< How many bits define the data-type classification */
+    UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT)
+};
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Generate an identifier for contiguous data type.
+ *
+ * Create an identifier for contiguous data-type, which is defined by the size
+ * of the basic element.
+ *
+ * @param [in]  _elem_size    Size of the basic element of the type.
+ *
+ * @return Data-type identifier.
+ */
+#define ucp_dt_make_contig(_elem_size) \
+    (((ucp_datatype_t)(_elem_size) << UCP_DATATYPE_SHIFT) | UCP_DATATYPE_CONTIG)
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Represents a generic data type.
+ */
+struct ucp_generic_dt_ops {
+
+    /**
+     * Start a packing request.
+     *
+     * @param [in]  context        User-defined context.
+     * @param [in]  buffer         Buffer to pack.
+     * @param [in]  count          Number of elements to pack in the buffer.
+     *
+     * @return  A custom "state" which would be passed to the pack function later.
+     */
+    void* (*start_pack)(void *context, const void *buffer, size_t count);
+
+    /**
+     * Start an unpacking request.
+     *
+     * @param [in]  context        User-defined context.
+     * @param [in]  buffer         Buffer to unpack to.
+     * @param [in]  count          Number of elements to unpack in the buffer.
+     *
+     * @return  A custom "state" which would be passed to the unpack function later.
+     */
+    void* (*start_unpack)(void *context, void *buffer, size_t count);
+
+    /**
+     * Get the total size of packed data. For packing this is the output size,
+     * for unpacking this is the maximal input size.
+     *
+     * @param [in]  state          State as returned from start_pack().
+     *
+     * @return Size of data in packed form.
+     */
+    size_t (*packed_size)(void *state);
+
+    /**
+     * Pack some data.
+     *
+     * @param [in]  state          State as returned from start_pack().
+     * @param [in]  offset         Virtual offset in the output stream.
+     * @param [in]  dest           Destination to pack data to.
+     * @param [in]  max_length     Maximal length to pack.
+     *
+     * @return How much was actually written to the destination buffer. Must be
+     *         less than or equal to "max_length".
+     */
+    size_t (*pack) (void *state, size_t offset, void *dest, size_t max_length);
+
+    /**
+     * Unpack some data.
+     *
+     * @param [in]  state          State as returned from start_unpack().
+     * @param [in]  offset         Virtual offset in the input stream.
+     * @param [in]  src            Source to unpack data from.
+     * @param [in]  length         How much to unpack.
+     *
+     * @return UCS_OK or an error if unpacking failed.
+     */
+    ucs_status_t (*unpack)(void *state, size_t offset, const void *src, size_t count);
+
+    /**
+     * Finish packing/unpacking.
+     *
+     * @param [in]  state          State as returned from start_pack()/start_unpack().
+     */
+    void (*finish)(void *state);
+};
+
+
+/**
+ * @ingroup UCP_CONFIG
+ */
+struct ucp_params {
+    uint64_t                    features;        /**< Which UCP features to activate. Using other
+                                                      features would result in undefined behavior. */
+    size_t                      request_size;    /**< How much space to reserve in non-blocking requests. */
+    ucp_request_init_callback_t request_init;    /**< Callback for initializing a request May be NULL. */
+    ucp_request_cleanup_callback_t request_cleanup; /**< Callback for cleaning-up a request. May be NULL. */
 };
 
 
@@ -94,6 +214,7 @@ typedef struct ucp_config {
     int                                    force_all_devices; /**< Whether to force using all devices */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;   /**< Array of allocation methods */
     size_t                                 bcopy_thresh;  /**< Threshold for switching to bcopy protocol */
+    size_t                                 rndv_thresh;  /** Threshold for using rendezvous protocol */
 } ucp_config_t;
 
 
@@ -127,7 +248,10 @@ typedef struct ucp_recv_request {
  * @ingroup UCP_CONTEXT
  * @brief Progress callback. Used to progress user context during blocking operations.
  */
-typedef void (*ucp_user_progress_func_t)(void *arg);
+struct ucp_tag_recv_info {
+    ucp_tag_t                              sender_tag;  /**< Full sender tag */
+    size_t                                 length;      /**< How much data was received */
+};
 
 
 /**
@@ -173,17 +297,13 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
  * @ingroup UCP_CONTEXT
  * @brief Initialize global ucp context.
  *
- * @param [in]  config            UCP configuration returned from @ref ucp_config_read().
- * @param [in]  features          Which UCP features to activate. Using other
- *                                 features would result in undefined behavior.
- * @param [in]  request_headroom  How many bytes to reserve before every request
- *                                 returned by non-blocking operations.
- * @param [out] context_p         Filled with a ucp context handle.
+ * @param [in]  config        UCP configuration returned from @ref ucp_config_read().
+ * @param [out] context_p     Filled with a ucp context handle.
  *
  * @return Error code.
  */
-ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
-                      const ucp_config_t *config, ucp_context_h *context_p);
+ucs_status_t ucp_init(const ucp_params_t *params, const ucp_config_t *config,
+                      ucp_context_h *context_p);
 
 
 /**
@@ -227,11 +347,22 @@ void ucp_worker_destroy(ucp_worker_h worker);
  * from @ref ucp_worker_progress().
  *
  * @param [in]  worker     Worker object.
- * @param [in]  func       Callback function. If NULL, removes the current callback.
+ * @param [in]  func       Callback function to add.
  * @param [in]  arg        Custom argument that is passed to callback function.
  */
 void ucp_worker_progress_register(ucp_worker_h worker,
                                   ucp_user_progress_func_t func, void *arg);
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Remove a previously registered user worker progress callback.
+ *
+ * @param [in]  worker     Worker object.
+ * @param [in]  func       Callback function to remove.
+ * @param [in]  arg        Custom argument that is passed to callback function.
+ */
+void ucp_worker_progress_unregister(ucp_worker_h worker,
+                                    ucp_user_progress_func_t func, void *arg);
 
 
 /**
@@ -397,11 +528,38 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  *
  * @param [in]  ep          Destination to send to.
  * @param [in]  buffer      Message payload to send.
- * @param [in]  length      Message length to send.
+ * @param [in]  count       Number of elements in the buffer.
+ * @param [in]  datatype    Type of elements in the buffer.
  * @param [in]  tag         Message tag to send.
  */
-ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length,
-                          ucp_tag_t tag);
+ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t count,
+                          ucp_datatype_t datatype, ucp_tag_t tag);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Send tagged message in a non-blocking fashion.
+ *
+ *  Non-blocking tag send. The function returns immediately, however the actual
+ * send may be delayed.
+ *
+ * @param [in]  ep          Destination to send to.
+ * @param [in]  buffer      Message payload to send.
+ * @param [in]  count       Number of elements in the buffer.
+ * @param [in]  datatype    Type of elements in the buffer.
+ * @param [in]  tag         Message tag to send.
+ * @param [in]  cb          Callback function which would be called when the
+ *                          send is completed (buffer can be reused), in case
+ *                          the return value is a request handle.
+ *
+ * @return NULL/UCS_OK            - The send is completed.
+ *         UCS_PTR_IS_ERR(_ptr)   - Error during send.
+ *         otherwise              - A request handle. the handle should be released
+ *                                  by calling ucp_request_release().
+ */
+ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
+                                 ucp_datatype_t datatype, ucp_tag_t tag,
+                                 ucp_send_callback_t cb);
 
 
 /**
@@ -410,14 +568,47 @@ ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t length,
  *
  * @param [in]  worker      UCP worker.
  * @param [in]  buffer      Buffer to receive the data to.
- * @param [in]  length      Size of the buffer.
+ * @param [in]  count       Number of elements in the buffer.
+ * @param [in]  datatype    Type of elements in the buffer.
+ * @param [in]  tag         Message tag to expect.
+ * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
+ *                           against the expected tag. If the bit is '1', the
+ *                           equivalent bit from the tag must match the incoming
+ *                           message.
+ * @param [out] info        Filled with details about the received message.
+ */
+ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t count,
+                          ucp_datatype_t datatype, ucp_tag_t tag,
+                          ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Receive tagged message in a non-blocking fashion.
+ *
+ *  Non-blocking tag receive. The function returns immediately, however the actual
+ * receive may occur later.
+ *
+ * @param [in]  worker      UCP worker.
+ * @param [in]  buffer      Buffer to receive the data to.
+ * @param [in]  count       Number of elements in the buffer.
+ * @param [in]  datatype    Type of elements in the buffer.
  * @param [in]  tag         Message tag to expect.
  * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
  *                           against the expected tag.
+ * @param [in]  cb          Callback function which would be called when the
+ *                           data is ready in the receive buffer.
+ *
+ * @return UCS_PTR_IS_ERR(_ptr) - Error during receive.
+ *         otherwise            - A request handle. the handle should be released
+ *                                 by calling ucp_request_release().
+ *
+ * @note This function cannot return UCS_OK/NULL. It always returns a request
+ *       handle or an error.
  */
-ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t length,
-                          ucp_tag_t tag, ucp_tag_t tag_mask,
-                          ucp_tag_recv_completion_t *comp);
+ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
+                                 ucp_datatype_t datatype, ucp_tag_t tag,
+                                 ucp_tag_t tag_mask, ucp_tag_recv_callback_t cb);
 
 
 /**
@@ -599,6 +790,39 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
 
 /**
  * @ingroup UCP_COMM
+ * @brief Release a communications request.
+ *
+ * @param [in]  request      Non-blocking request to release.
+ *
+ * @note If the request is not completed yet, it will actually be released when
+ *       completed.
+ */
+void ucp_request_release(void *request);
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Create a generic data type.
+ *
+ * @param [in]  ops          Generic datatype function table.
+ * @param [in]  context      User-defined context passed to the functions.
+ * @param [out] datatype_p   Filled with a pointer to datatype.
+ */
+ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
+                                   ucp_datatype_t *datatytpe_p);
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Destroy a datatype and release its resources.
+ *
+ * @param [in]  datatype     Data-type to destroy.
+ */
+void ucp_dt_destroy(ucp_datatype_t datatytpe);
+
+
+/**
+ * @ingroup UCP_COMM
  *
  * @brief Force ordering between operations
  *
@@ -607,7 +831,7 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  *
  * @param [in] worker        UCP worker.
  */
-ucs_status_t ucp_fence(ucp_worker_h worker);
+ucs_status_t ucp_worker_fence(ucp_worker_h worker);
 
 
 /**
@@ -620,7 +844,7 @@ ucs_status_t ucp_fence(ucp_worker_h worker);
  *
  * @param [in] worker        UCP worker.
  */
-ucs_status_t ucp_flush(ucp_worker_h worker);
+ucs_status_t ucp_worker_flush(ucp_worker_h worker);
 
 
 #endif

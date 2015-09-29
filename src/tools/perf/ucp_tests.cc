@@ -45,7 +45,8 @@ public:
     {
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            return ucp_tag_send(ep, buffer, length, TAG);
+            return ucp_tag_send(ep, buffer, length, ucp_dt_make_contig(1),
+                                TAG);
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
             return ucp_put(ep, buffer, length, remote_addr, rkey);
@@ -91,12 +92,13 @@ public:
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv(ucp_worker_h worker, void *buffer, unsigned length, uint8_t sn)
     {
-        ucp_tag_recv_completion_t comp;
+        ucp_tag_recv_info_t comp;
         volatile uint8_t *ptr;
 
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            return ucp_tag_recv(worker, buffer, length, TAG, 0, &comp);
+            return ucp_tag_recv(worker, buffer, length, ucp_dt_make_contig(1),
+                                TAG, 0, &comp);
         case UCX_PERF_CMD_PUT:
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
@@ -173,7 +175,7 @@ public:
             }
         }
 
-        ucp_flush(m_perf.ucp.worker);
+        ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
     }
@@ -220,7 +222,7 @@ public:
             }
         }
 
-        ucp_flush(m_perf.ucp.worker);
+        ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
     }

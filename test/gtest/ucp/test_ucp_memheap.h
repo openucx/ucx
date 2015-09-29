@@ -27,6 +27,8 @@ public:
 
 protected:
     void test_blocking_xfer(blocking_send_func_t send, size_t alignment);
+
+    virtual void get_params(ucp_params_t& params) const;
 };
 
 

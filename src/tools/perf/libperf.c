@@ -899,6 +899,7 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
 
 static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
 {
+    ucp_params_t ucp_params;
     ucp_config_t *config;
     ucs_status_t status;
     uint64_t features;
@@ -913,7 +914,12 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err;
     }
 
-    status = ucp_init(features, 0, config, &perf->ucp.context);
+    ucp_params.features        = features;
+    ucp_params.request_size    = 0;
+    ucp_params.request_init    = NULL;
+    ucp_params.request_cleanup = NULL;
+
+    status = ucp_init(&ucp_params, config, &perf->ucp.context);
     ucp_config_release(config);
     if (status != UCS_OK) {
         goto err;

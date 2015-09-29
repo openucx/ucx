@@ -4,9 +4,10 @@
 * See file LICENSE for terms.
 */
 
-#include "ucp_int.h"
-
+#include <ucp/core/ucp_mm.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/debug/log.h>
+#include <inttypes.h>
 
 
 #define UCP_RMA_CHECK_ATOMIC(_remote_addr, _size) \
@@ -23,7 +24,7 @@
         uct_rkey_t uct_rkey; \
         \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
-        uct_rkey = UCP_RMA_RKEY_LOOKUP(_ep, _rkey); \
+        uct_rkey = UCP_RKEY_LOOKUP(_ep, _rkey); \
         for (;;) { \
             status = _uct_func((_ep)->uct_ep, _param, _remote_addr, uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
@@ -41,7 +42,7 @@
         uct_rkey_t uct_rkey; \
         \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
-        uct_rkey   = UCP_RMA_RKEY_LOOKUP(_ep, _rkey); \
+        uct_rkey   = UCP_RKEY_LOOKUP(_ep, _rkey); \
         comp.count = 2; \
         \
         for (;;) { \

@@ -1,0 +1,215 @@
+#!/bin/sh
+#
+# Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+#
+# Convenience script to run MPI applications with UCX
+#
+# Usage: run_mpi.sh <options> <executable> <arguments>
+#
+
+verbose()
+{
+	[ $VERBOSE -ne 0 ] && echo "$@"
+}
+
+ex()
+{
+	verbose "$@"
+	$@
+}
+
+check_slurm_env()
+{
+	if [ -z "$SLURM_JOBID" ]
+	then
+		# Search for jobs of the current user
+		SLURM_JOBID=$(squeue -h -u $USER -o "%i"|head -1)
+	fi
+
+	if [ -z "$SLURM_JOBID" ]
+	then
+		# Skip slurm
+		return
+	fi
+
+	# Nodes to run on
+	export HOSTS=$(hostlist -e $(squeue -j ${SLURM_JOBID} -h -o "%N"))
+	SLURM_NNODES=$(squeue -j ${SLURM_JOBID} -h -o "%D")
+	NNODES=$SLURM_NNODES
+
+	if [ -n "$SLURM_JOB_CPUS_PER_NODE" ]
+	then
+		export PPN=$(echo $SLURM_JOB_CPUS_PER_NODE|cut -d'(' -f1)
+	else
+		TOTAL_CPUS=$(squeue  -j ${SLURM_JOBID} -h -o "%C")
+		export PPN=$((${TOTAL_CPUS} / ${SLURM_NNODES}))
+	fi
+
+}
+
+usage()
+{
+	echo "Usage: run_mpi.sh <options> <executable> <arguments> -- <additional arguments to launcher>"
+	echo
+	echo "  -h|--help                     Show this help message"
+	echo "  -v|--verbose                  Turn on verbosity"
+	echo "  -c|--config  <name>=<value>   Set UCX configuration"
+	echo "  -N|--nnodes  <count>          Number of nodes to run on ($NNODES)"
+	echo "  --ppn  <count>                Number of processes per node ($PPN)"
+	echo "  --mpi-log-level <level>       Log level for MPI UCX component ($MPI_LOG_LEVEL)"
+	echo "  --valgrind                    Run with valgrind"
+	echo
+}
+
+initialize()
+{
+	export MPIRUN=@MPIRUN@
+	export LIBUCS=@abs_top_builddir@/src/ucs/.libs/libucs.so
+	export LIBUCT=@abs_top_builddir@/src/uct/.libs/libuct.so
+	export LIBUCP=@abs_top_builddir@/src/ucp/.libs/libucp.so
+	export VERBOSE=0
+	export EXE=""
+	export EXE_ARGS=""
+	export EXTRA_MPI_ARGS=""
+	export NNODES=1
+	export PPN=1
+	export CONFIG=""
+	export MPI_LOG_LEVEL=0
+	export VALGRIND=0
+}
+
+parse_args()
+{
+	while [[ $# -gt 0 ]]
+	do
+		key="$1"
+		case $key in
+		-h|--help)
+			usage
+			exit 0
+			;;
+		-v|--verbose)
+			export VERBOSE=1
+			;;
+		-c|--config)
+			export CONFIG="$CONFIG $2"
+			shift
+			;;
+		-N|--nnodes)
+			export NNODES=$2
+			shift
+			;;
+		--ppn)
+			export PPN=$2
+			shift
+			;;
+		--mpi-log-level)
+			export MPI_LOG_LEVEL=$2
+			shift
+			;;
+		--valgrind)
+			export VALGRIND=1
+			;;
+		[^-]*)
+			export EXE=$key
+			shift
+			break
+			;;
+		*)
+			usage
+			exit -2
+			;;
+		esac
+		shift
+	done
+
+	ARGS=""
+	while [[ $# -gt 0 ]]
+	do
+		key="$1"
+		case $key in
+		--)
+			shift
+			export EXTRA_MPI_ARGS="$@"
+			break
+			;;
+		*)
+			export ARGS="$ARGS $key"
+			;;
+		esac
+		shift
+	done
+}
+
+adjust_run_params()
+{
+	export NP=$((${NNODES} * ${PPN}))
+	export HOSTLIST=$(echo $HOSTS|cut -d' ' -f 1-$NNODES|tr ' ' ',')
+}
+
+run_open_mpi()
+{
+	OMPI_ARGS=""
+	OMPI_ARGS="$OMPI_ARGS -mca pml ucx"
+	OMPI_ARGS="$OMPI_ARGS -mca pml_ucx_verbose $MPI_LOG_LEVEL"
+	OMPI_ARGS="$OMPI_ARGS -mca spml ucx"
+	OMPI_ARGS="$OMPI_ARGS -mca spml_ucx_verbose $MPI_LOG_LEVEL"
+	OMPI_ARGS="$OMPI_ARGS -H $HOSTLIST"
+	OMPI_ARGS="$OMPI_ARGS -n $NP"
+	OMPI_ARGS="$OMPI_ARGS --map-by node"
+	OMPI_ARGS="$OMPI_ARGS -mca ess_base_stream_buffering 0"
+	OMPI_ARGS="$OMPI_ARGS -mca mpi_abort_delay -1"
+
+	OMPI_ARGS="$OMPI_ARGS -x LD_PRELOAD=$LD_PRELOAD:$LIBUCP"
+	if [ $VALGRIND -ne 0 ]
+	then
+		# Preload valgrind-enabled libraries
+		for lib in /usr/lib64/mlnx_ofed/valgrind/*.so
+		do
+			[ -f $lib ] && OMPI_ARGS="$OMPI_ARGS:$lib"
+		done
+	fi
+
+	OMPI_ARGS="$OMPI_ARGS -x UCS_HANDLE_ERRORS=freeze"
+	for c in $CONFIG
+	do
+		OMPI_ARGS="$OMPI_ARGS -x $c"
+	done
+
+	if [ $VALGRIND -ne 0 ]
+	then
+		EXE="valgrind \
+			--fair-sched=try \
+			--track-origins=yes \
+			--leak-check=yes \
+			--suppressions=@abs_srcdir@/ompi.supp \
+			$EXE"
+	fi
+
+	ex $MPIRUN \
+		$OMPI_ARGS \
+		$EXTRA_MPI_ARGS \
+		$EXE $ARGS
+}
+
+main()
+{
+	initialize
+	check_slurm_env
+	parse_args $@
+	adjust_run_params
+
+	if strings $MPIRUN|grep -qi ompi_mca
+	then
+		run_open_mpi
+	else
+		echo "Unrecognized MPI flavor ($MPIRUN)"
+		exit -3
+	fi
+}
+
+main $@

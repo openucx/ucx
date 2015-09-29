@@ -4,7 +4,7 @@
 * See file LICENSE for terms.
 */
 
-#include "ucp_int.h"
+#include "ucp_worker.h"
 
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
@@ -20,6 +20,39 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
             uct_worker_progress(worker->uct);
         }
         uct_iface_close(worker->ifaces[rsc_index]);
+    }
+}
+
+static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
+                                               uct_iface_h iface)
+{
+    ucp_context_h context = worker->context;
+    ucs_status_t status;
+    unsigned am_id;
+
+    for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+        if (context->config.features & ucp_am_handlers[am_id].features) {
+            status = uct_iface_set_am_handler(iface, am_id, ucp_am_handlers[am_id].cb,
+                                              worker);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+    }
+
+    return UCS_OK;
+}
+
+static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
+                                 uint8_t id, const void *data, size_t length,
+                                 char *buffer, size_t max)
+{
+    ucp_worker_h worker = arg;
+    ucp_am_tracer_t tracer;
+
+    tracer = ucp_am_handlers[id].tracer;
+    if (tracer != NULL) {
+        tracer(worker, type, id, data, length, buffer, max);
     }
 }
 
@@ -55,12 +88,12 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     }
 
     /* Set active message handlers for tag matching */
-    status = ucp_tag_set_am_handlers(worker, iface);
+    status = ucp_worker_set_am_handlers(worker, iface);
     if (status != UCS_OK) {
         goto out_close_iface;
     }
 
-    status = ucp_wireup_set_am_handlers(worker, iface);
+    status = uct_iface_set_am_tracer(iface, ucp_worker_am_tracer, worker);
     if (status != UCS_OK) {
         goto out_close_iface;
     }
@@ -92,12 +125,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
         goto err;
     }
 
-    worker->user_cb       = 0;
-    worker->user_cb_arg   = 0;
     worker->context       = context;
     worker->uuid          = ucs_generate_uuid((uintptr_t)worker);
+#if ENABLE_ASSERT
+    worker->inprogress    = 0;
+#endif
 
-    worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_EP_HASH_SIZE,
+    worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_WORKER_EP_HASH_SIZE,
                                  "ucp_ep_hash");
     if (worker->ep_hash == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -125,6 +159,15 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
         goto err_destroy_async;
     }
 
+    /* Create memory pool for requests */
+    status = ucs_mpool_init(&worker->req_mp, 0,
+                            sizeof(ucp_request_t) + context->config.request.size,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 1000, UINT_MAX,
+                            &ucp_request_mpool_ops, "ucp_requests");
+    if (status != UCS_OK) {
+        goto err_destroy_uct_worker;
+    }
+
     /* Open all resources as interfaces on this worker */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         status = ucp_worker_add_iface(worker, rsc_index);
@@ -138,6 +181,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
+    ucs_mpool_cleanup(&worker->req_mp, 1);
+err_destroy_uct_worker:
     uct_worker_destroy(worker->uct);
 err_destroy_async:
     ucs_async_context_cleanup(&worker->async);
@@ -168,6 +213,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
     ucp_worker_destroy_eps(worker);
     ucp_worker_close_ifaces(worker);
+    ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
     ucs_free(worker->iface_attrs);
@@ -178,18 +224,21 @@ void ucp_worker_destroy(ucp_worker_h worker)
 void ucp_worker_progress_register(ucp_worker_h worker,
                                   ucp_user_progress_func_t func, void *arg)
 {
-    worker->user_cb     = func;
-    worker->user_cb_arg = arg;
+    return uct_worker_progress_register(worker->uct, func, arg);
+}
+
+void ucp_worker_progress_unregister(ucp_worker_h worker,
+                                    ucp_user_progress_func_t func, void *arg)
+{
+    uct_worker_progress_unregister(worker->uct, func, arg);
 }
 
 void ucp_worker_progress(ucp_worker_h worker)
 {
+    ucs_assert(worker->inprogress++ == 0);
     uct_worker_progress(worker->uct);
-    if (worker->user_cb != NULL) {
-        /* TODO add to UCT callback chain */
-        worker->user_cb(worker->user_cb_arg);
-    }
     ucs_async_check_miss(&worker->async);
+    ucs_assert(--worker->inprogress == 0);
 }
 
 static ucs_status_t
@@ -324,5 +373,6 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
     ucs_free(address);
 }
 
-SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucp_ep_t, UCP_EP_HASH_SIZE, ucp_ep_hash);
+SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_worker_ep_compare, next);
+SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE,
+                                        ucp_worker_ep_hash);

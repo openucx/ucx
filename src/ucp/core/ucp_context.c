@@ -1,15 +1,22 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
 
-#include "ucp_int.h"
+#include "ucp_context.h"
+
 
 #include <ucs/config/parser.h>
+#include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 #include <string.h>
+
+
+ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
 
 static ucs_config_field_t ucp_config_table[] = {
@@ -39,6 +46,10 @@ static ucs_config_field_t ucp_config_table[] = {
   {"BCOPY_THRESH", "1024",
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_THRESH", "1gb",
+   "Threshold for switching from eager to rendezvous protocol",
+   ucs_offsetof(ucp_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -324,7 +335,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }
-        
+
         /* If the PD does not have transport resources, don't use it */
         if (num_tl_resources > 0) {
             ++pd_index;
@@ -362,20 +373,25 @@ err:
     return status;
 }
 
-static ucs_status_t ucp_fill_config(ucp_context_h context, uint64_t features,
+static ucs_status_t ucp_fill_config(ucp_context_h context,
+                                    const ucp_params_t *params,
                                     const ucp_config_t *config)
 {
     unsigned i, num_alloc_methods, method;
     const char *method_name;
     ucs_status_t status;
 
-    if (0 == features) {
+    if (0 == params->features) {
         ucs_error("empty features set passed to ucp context create");
         return UCS_ERR_INVALID_PARAM;
     }
-    context->config.features = features;
 
-    context->config.bcopy_thresh = config->bcopy_thresh;
+    context->config.features        = params->features;
+    context->config.request.size    = params->request_size;
+    context->config.request.init    = params->request_init;
+    context->config.request.cleanup = params->request_cleanup;
+    context->config.bcopy_thresh    = config->bcopy_thresh;
+    context->config.rndv_thresh     = config->rndv_thresh;
 
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
@@ -443,8 +459,8 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
-                      const ucp_config_t *config, ucp_context_h *context_p)
+ucs_status_t ucp_init(const ucp_params_t *params, const ucp_config_t *config,
+                      ucp_context_h *context_p)
 {
     ucp_context_t *context;
     ucs_status_t status;
@@ -456,7 +472,7 @@ ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
         goto err;
     }
 
-    status = ucp_fill_config(context, features, config);
+    status = ucp_fill_config(context, params, config);
     if (status != UCS_OK) {
         goto err_free_ctx;
     }
@@ -468,16 +484,12 @@ ucs_status_t ucp_init(uint64_t features, size_t request_headroom,
     }
 
     /* initialize tag matching */
-    status = ucp_tag_init(context);
-    if (status != UCS_OK) {
-        goto err_free_resources;
-    }
+    ucs_queue_head_init(&context->tag.expected);
+    ucs_queue_head_init(&context->tag.unexpected);
 
     *context_p = context;
     return UCS_OK;
 
-err_free_resources:
-    ucp_free_resources(context);
 err_free_config:
     ucp_free_config(context);
 err_free_ctx:
@@ -488,16 +500,7 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
-    ucp_tag_cleanup(context);
     ucp_free_resources(context);
     ucp_free_config(context);
     ucs_free(context);
-}
-
-size_t ucp_memcpy_pack(void *dest, void *arg)
-{
-    ucp_memcpy_pack_context_t *ctx = arg;
-    size_t length = ctx->length;
-    memcpy(dest, ctx->src, length);
-    return length;
 }
