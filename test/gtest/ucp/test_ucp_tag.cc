@@ -12,6 +12,8 @@ extern "C" {
 #include <ucs/debug/debug.h>
 }
 
+using namespace ucs; /* For vector<char> serialization */
+
 class test_ucp_tag : public ucp_test {
 protected:
     struct request {
