@@ -56,20 +56,20 @@ static UCS_F_NOINLINE unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *
     UCS_STATIC_ASSERT(ucs_offsetof(uct_rc_mlx5_srq_seg_t, dptr) ==
                       sizeof(struct mlx5_wqe_srq_next_seg));
 
-    ucs_assert(UCS_CIRCULAR_COMPARE16(iface->rx.ready, <=, iface->rx.free));
+    ucs_assert(UCS_CIRCULAR_COMPARE16(iface->rx.ready_idx, <=, iface->rx.free_idx));
 
-    index = iface->rx.ready;
+    index = iface->rx.ready_idx;
     for (;;) {
         next_index = index + 1;
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, next_index & iface->rx.mask);
-        if (UCS_CIRCULAR_COMPARE16(next_index, >, iface->rx.free)) {
+        if (UCS_CIRCULAR_COMPARE16(next_index, >, iface->rx.free_idx)) {
             if (!seg->srq.ooo) {
                 break;
             }
 
-            ucs_assert(next_index == (uint16_t)(iface->rx.free + 1));
+            ucs_assert(next_index == (uint16_t)(iface->rx.free_idx + 1));
             seg->srq.ooo   = 0;
-            iface->rx.free = next_index;
+            iface->rx.free_idx = next_index;
         }
 
         index = next_index;
@@ -89,7 +89,7 @@ static UCS_F_NOINLINE unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *
 
     count = index - iface->rx.sw_pi;
     if (count > 0) {
-        iface->rx.ready            = index;
+        iface->rx.ready_idx        = index;
         iface->rx.sw_pi            = index;
         iface->super.rx.available -= count;
         ucs_memory_cpu_store_fence();
@@ -186,24 +186,24 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
                        uct_rc_ep_am_packet_dump);
 
     udesc  = (char*)desc + iface->super.super.config.rx_headroom_offset;
-    status = uct_iface_invoke_am(&iface->super.super.super, hdr->am_id,
-                                 hdr + 1, byte_len - sizeof(*hdr), udesc);
-    if ((status == UCS_OK) && (wqe_ctr == ((iface->rx.ready + 1) & iface->rx.mask))) {
+    status = uct_iface_invoke_am(&iface->super.super.super, hdr->am_id, hdr + 1,
+                                 byte_len - sizeof(*hdr), udesc);
+    if ((status == UCS_OK) && (wqe_ctr == ((iface->rx.ready_idx + 1) & iface->rx.mask))) {
         /* If the descriptor was not used - if there are no "holes", we can just
          * reuse it on the receive queue. Otherwise, ready pointer will stay behind
          * until post_recv allocated more descriptors from the memory pool, fills
          * the holes, and moves it forward.
          */
-        ucs_assert(wqe_ctr == ((iface->rx.free + 1) & iface->rx.mask));
-        ++iface->rx.ready;
-        ++iface->rx.free;
+        ucs_assert(wqe_ctr == ((iface->rx.free_idx + 1) & iface->rx.mask));
+        ++iface->rx.ready_idx;
+        ++iface->rx.free_idx;
    } else {
         if (status != UCS_OK) {
             uct_recv_desc_iface(udesc) = &iface->super.super.super.super;
             seg->srq.desc              = NULL;
         }
-        if (wqe_ctr == ((iface->rx.free + 1) & iface->rx.mask)) {
-            ++iface->rx.free;
+        if (wqe_ctr == ((iface->rx.free_idx + 1) & iface->rx.mask)) {
+            ++iface->rx.free_idx;
         } else {
             /* Mark the segment as out-of-order, post_recv will advance free */
             seg->srq.ooo = 1;
@@ -319,8 +319,8 @@ static ucs_status_t uct_rc_mlx5_iface_init_rx(uct_rc_mlx5_iface_t *iface)
     iface->super.rx.available = srq_info.tail + 1;
     iface->rx.buf             = srq_info.buf;
     iface->rx.db              = srq_info.dbrec;
-    iface->rx.free            = srq_info.tail;
-    iface->rx.ready           = -1;
+    iface->rx.free_idx        = srq_info.tail;
+    iface->rx.ready_idx       = -1;
     iface->rx.sw_pi           = -1;
     iface->rx.mask            = iface->rx.cq.cq_length - 1;
 
