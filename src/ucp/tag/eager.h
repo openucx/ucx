@@ -57,12 +57,22 @@ static inline size_t ucp_eager_hdr_len(unsigned flags)
     }
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_eager_total_len(ucp_eager_hdr_t *hdr, unsigned flags, unsigned payload_length)
+{
+    ucs_assert(flags & UCP_RECV_DESC_FLAG_FIRST);
+    if (flags & UCP_RECV_DESC_FLAG_LAST) {
+        return payload_length;
+    } else {
+        return ucs_container_of(hdr, ucp_eager_first_hdr_t, super)->total_len;
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
                       void *buffer, size_t count, ucp_datatype_t datatype,
                       size_t *offset, ucp_tag_recv_info_t *info)
 {
-    ucp_eager_first_hdr_t *eager_first_hdr;
     size_t recv_len, hdr_len;
     ucs_status_t status;
     void *data = rdesc + 1;
@@ -75,13 +85,7 @@ ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
 
     if (flags & UCP_RECV_DESC_FLAG_FIRST) {
         info->sender_tag = tag;
-        if (flags & UCP_RECV_DESC_FLAG_LAST) {
-            info->length = recv_len;
-        } else {
-            ucs_assert(hdr_len == sizeof(*eager_first_hdr));
-            eager_first_hdr = data;
-            info->length = eager_first_hdr->total_len;
-        }
+        info->length     = ucp_eager_total_len(data, flags, recv_len);
     }
 
     if (flags & UCP_RECV_DESC_FLAG_LAST) {

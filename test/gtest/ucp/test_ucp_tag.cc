@@ -18,6 +18,7 @@ class test_ucp_tag : public ucp_test {
 protected:
     struct request {
         bool                completed;
+        ucs_status_t        status;
         ucp_tag_recv_info_t info;
     };
 
@@ -57,8 +58,8 @@ protected:
     static void send_callback(void *request, ucs_status_t status)
     {
         struct request *req = (struct request *)request;
-        ASSERT_UCS_OK(status);
         ucs_assert(req->completed == false);
+        req->status    = status;
         req->completed = true;
     }
 
@@ -67,7 +68,7 @@ protected:
     {
         struct request *req = (struct request *)request;
         ucs_assert(req->completed == false);
-        ASSERT_UCS_OK(status);
+        req->status    = status;
         req->info      = *info;
         req->completed = true;
     }
@@ -267,6 +268,7 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
     status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
+    EXPECT_EQ(UCS_OK,              my_send_req->status);
     EXPECT_EQ(sendbuf.size(),      info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
@@ -464,6 +466,7 @@ UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
     status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
+    EXPECT_EQ(UCS_OK,              my_send_req->status);
     EXPECT_EQ(sizeof(send_data),   info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
@@ -492,6 +495,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
     wait(my_recv_req);
 
     EXPECT_TRUE(my_recv_req->completed);
+    EXPECT_EQ(UCS_OK,              my_recv_req->status);
     EXPECT_EQ(sizeof(send_data),   my_recv_req->info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
@@ -531,8 +535,110 @@ UCS_TEST_F(test_ucp_tag, send_nb_multiple_recv_unexp) {
     for (unsigned i = 0; i < num_requests; ++i) {
         if (send_reqs[i] != NULL) {
             EXPECT_TRUE(send_reqs[i]->completed);
+            EXPECT_EQ(UCS_OK, send_reqs[i]->status);
             request_release(send_reqs[i]);
         }
     }
 }
 
+UCS_TEST_F(test_ucp_tag, send_probe) {
+
+    uint64_t send_data = 0xdeadbeefdeadbeef;
+    uint64_t recv_data = 0;
+    ucp_tag_recv_info info;
+    ucs_status_t status;
+
+    status = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
+    EXPECT_EQ(UCS_ERR_NO_MESSAGE, status);
+
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+
+    do {
+        status = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
+    } while (status == UCS_ERR_NO_MESSAGE);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(sizeof(send_data),   info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+
+    request *my_recv_req;
+    my_recv_req = (request*)ucp_tag_recv_nb(receiver->worker(), &recv_data,
+                                            sizeof(recv_data), DATATYPE, 0x1337,
+                                            0xffff, recv_callback);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+
+    wait(my_recv_req);
+    EXPECT_TRUE(my_recv_req->completed);
+    EXPECT_EQ(UCS_OK,              my_recv_req->status);
+    EXPECT_EQ(sizeof(send_data),   my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(send_data, recv_data);
+    request_release(my_recv_req);
+}
+
+UCS_TEST_F(test_ucp_tag, send_medium_msg_probe) {
+    static const size_t size = 50000;
+    ucp_tag_recv_info info;
+    void *message;
+
+    std::vector<char> sendbuf(size, 0);
+    std::vector<char> recvbuf(size, 0);
+
+    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+
+    message = ucp_tag_msg_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
+    EXPECT_EQ(UCS_ERR_NO_MESSAGE, UCS_PTR_STATUS(message));
+
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+
+    short_progress_loop();
+
+    message = ucp_tag_msg_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(message));
+    EXPECT_EQ(sendbuf.size(),      info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+
+    request *my_recv_req;
+    my_recv_req = (request*)ucp_tag_msg_recv_nb(receiver->worker(), &recvbuf[0],
+                                                recvbuf.size(), DATATYPE, message,
+                                                recv_callback);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+
+    wait(my_recv_req);
+    EXPECT_TRUE(my_recv_req->completed);
+    EXPECT_EQ(UCS_OK,              my_recv_req->status);
+    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf, recvbuf);
+    request_release(my_recv_req);
+}
+
+UCS_TEST_F(test_ucp_tag, send_medium_msg_probe_truncated) {
+    static const size_t size = 50000;
+    ucp_tag_recv_info info;
+    void *message;
+
+    std::vector<char> sendbuf(size, 0);
+
+    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+
+    short_progress_loop();
+
+    message = ucp_tag_msg_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(message));
+    EXPECT_EQ(sendbuf.size(),      info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+
+    request *my_recv_req;
+    my_recv_req = (request*)ucp_tag_msg_recv_nb(receiver->worker(), NULL, 0,
+                                                DATATYPE, message, recv_callback);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+
+    wait(my_recv_req);
+
+    EXPECT_TRUE(my_recv_req->completed);
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, my_recv_req->status);
+    request_release(my_recv_req);
+}
