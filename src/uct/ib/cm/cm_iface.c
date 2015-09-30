@@ -89,12 +89,11 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
 
     /* Call active message handler */
     desc = cm_desc + iface->super.config.rx_headroom_offset;
+    uct_recv_desc_iface(desc) = &iface->super.super.super;
     status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
                                  hdr->length, desc);
     if (status == UCS_OK) {
         ucs_free(cm_desc);
-    } else {
-        uct_recv_desc_iface(desc) = &iface->super.super.super;
     }
 }
 
