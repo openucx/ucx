@@ -231,6 +231,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucp_rsc_index_t i;
     unsigned pd_index;
     uct_pd_h pd;
+    uct_pd_config_t *pd_config;
 
     /* if we got here then num_resources > 0.
      * if the user's device list is empty, there is no match */
@@ -304,7 +305,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      */
     pd_index = 0;
     for (i = 0; i < num_pd_resources; ++i) {
-        status = uct_pd_open(pd_rscs[i].pd_name, &pd);
+        status = uct_pd_config_read(pd_rscs[i].pd_name, NULL, NULL, &pd_config);
+        if (status != UCS_OK) {
+            goto err_free_context_resources;
+        }
+
+        status = uct_pd_open(pd_rscs[i].pd_name, pd_config, &pd);
+        uct_config_release(pd_config);
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }

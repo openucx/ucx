@@ -16,8 +16,18 @@
 #define UCT_MM_POSIX_MMAP_PROT      (PROT_READ | PROT_WRITE)
 #define UCT_MM_POSIX_HUGETLB        UCS_BIT(0)
 
+static ucs_config_field_t uct_posix_pd_config_table[] = {
+  {"MM_", "", NULL,
+   ucs_offsetof(uct_posix_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_pd_config_table)},
+
+  {"DIR", "/dev/shm", "The path to the backing file",
+   ucs_offsetof(uct_posix_pd_config_t, path), UCS_CONFIG_TYPE_STRING},
+
+  {NULL}
+};
+
 static ucs_status_t
-uct_posix_alloc(size_t *length_p, ucs_ternary_value_t hugetlb,
+uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
                 void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
@@ -229,5 +239,5 @@ static uct_mm_mapper_ops_t uct_posix_mapper_ops = {
    .free    = uct_posix_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_posix_pd, "posix", &uct_posix_mapper_ops)
+UCT_MM_COMPONENT_DEFINE(uct_posix_pd, "posix", &uct_posix_mapper_ops, uct_posix, "POSIX_")
 UCT_PD_REGISTER_TL(&uct_posix_pd, &uct_mm_tl);

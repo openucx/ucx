@@ -7,6 +7,20 @@
 
 #include "mm_pd.h"
 
+ucs_config_field_t uct_mm_pd_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_mm_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_pd_config_table)},
+
+  {"HUGETLB_MODE", "yes",
+   "Enable using huge pages for internal buffers. "
+   "Possible values are:\n"
+   " y   - Allocate memory using huge pages only.\n"
+   " n   - Allocate memory using regular pages only.\n"
+   " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.\n",
+   ucs_offsetof(uct_mm_pd_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
+
+  {NULL}
+};
 
 ucs_status_t uct_mm_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
                               uct_mem_h *memh_p UCS_MEMTRACK_ARG)
@@ -20,7 +34,7 @@ ucs_status_t uct_mm_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_mm_pd_mapper_ops(pd)->alloc(length_p, UCS_TRY, &seg->address,
+    status = uct_mm_pd_mapper_ops(pd)->alloc(pd, length_p, UCS_TRY, &seg->address,
                                              &seg->mmid UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_free(seg);
@@ -162,4 +176,52 @@ ucs_status_t uct_mm_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey, void 
     status = uct_mm_pdc_mapper_ops(pdc)->detach(mm_desc);
     ucs_free(mm_desc);
     return status;
+}
+
+static void uct_mm_pd_close(uct_pd_h pd)
+{
+    uct_mm_pd_t *mm_pd = ucs_derived_of(pd, uct_mm_pd_t);
+
+    ucs_config_parser_release_opts(mm_pd->config, pd->component->pd_config_table);
+    ucs_free(mm_pd->config);
+    ucs_free(mm_pd);
+}
+
+uct_pd_ops_t uct_mm_pd_ops = {
+    .close        = uct_mm_pd_close,
+    .query        = uct_mm_pd_query,
+    .mem_alloc    = uct_mm_mem_alloc,
+    .mem_free     = uct_mm_mem_free,
+    .mem_reg      = uct_mm_mem_reg,
+    .mem_dereg    = uct_mm_mem_dereg,
+    .mkey_pack    = uct_mm_mkey_pack,
+};
+
+ucs_status_t uct_mm_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
+                            uct_pd_h *pd_p, uct_pd_component_t *pdc)
+{
+    uct_mm_pd_t *mm_pd;
+    ucs_status_t status;
+
+    mm_pd = ucs_malloc(sizeof(*mm_pd), "uct_mm_pd_t");
+    if (mm_pd == NULL) {
+        ucs_error("Failed to allocate memory for uct_mm_pd_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    mm_pd->config = ucs_malloc(pdc->pd_config_size, "mm_pd config");
+    status = ucs_config_parser_clone_opts(pd_config, mm_pd->config,
+                                          pdc->pd_config_table);
+    if (status != UCS_OK) {
+        ucs_error("Failed to clone opts");
+        ucs_free(mm_pd->config);
+        ucs_free(mm_pd);
+        return status;
+    }
+
+    mm_pd->super.ops = &uct_mm_pd_ops;
+    mm_pd->super.component = pdc;
+
+    *pd_p = &mm_pd->super;
+    return UCS_OK;
 }

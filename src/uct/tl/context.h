@@ -21,7 +21,8 @@ struct uct_pd_component {
     ucs_status_t           (*query_resources)(uct_pd_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
-    ucs_status_t           (*pd_open)(const char *pd_name, uct_pd_h *pd_p);
+    ucs_status_t           (*pd_open)(const char *pd_name, const uct_pd_config_t *config,
+                                      uct_pd_h *pd_p);
 
     ucs_status_t           (*rkey_unpack)(uct_pd_component_t *pdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
@@ -31,9 +32,20 @@ struct uct_pd_component {
 
     const char             name[UCT_PD_COMPONENT_NAME_MAX];
     void                   *priv;
+    const char             *cfg_prefix;        /**< Prefix for configuration environment vars */
+    ucs_config_field_t     *pd_config_table;   /**< Defines PD configuration options */
+    size_t                 pd_config_size;     /**< PD configuration structure size */
     size_t                 rkey_buf_size;
-    ucs_list_link_t        tl_list;  /* List of uct_pd_registered_tl_t */
+    ucs_list_link_t        tl_list;            /* List of uct_pd_registered_tl_t */
     ucs_list_link_t        list;
+};
+
+
+/**
+ * "Base" structure which defines PD configuration options.
+ * Specific PDs extend this structure.
+ */
+struct uct_pd_config {
 };
 
 
@@ -59,11 +71,15 @@ typedef struct uct_pd_registered_tl {
  * @param _rkey_release  Function to release a remote key handle.
  */
 #define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, _priv, \
-                                _rkey_buf_size, _rkey_unpack, _rkey_release) \
+                                _rkey_buf_size, _rkey_unpack, _rkey_release, \
+                                _cfg_prefix, _cfg_table, _cfg_struct) \
     \
     uct_pd_component_t _pdc = { \
         .query_resources = _query, \
         .pd_open         = _open, \
+        .cfg_prefix      = _cfg_prefix, \
+        .pd_config_table = _cfg_table, \
+        .pd_config_size  = sizeof(_cfg_struct), \
         .priv            = _priv, \
         .rkey_unpack     = _rkey_unpack, \
         .rkey_release    = _rkey_release, \
@@ -136,6 +152,6 @@ ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
 
 
 extern ucs_list_link_t uct_pd_components_list;
-
+extern ucs_config_field_t uct_pd_config_table[];
 
 #endif

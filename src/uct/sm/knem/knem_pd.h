@@ -32,4 +32,8 @@ typedef struct uct_knem_key {
     uintptr_t address; /**< base addr for the registration */
 } uct_knem_key_t;
 
+typedef struct uct_knem_pd_config {
+    uct_pd_config_t      super;
+} uct_knem_pd_config_t;
+
 #endif

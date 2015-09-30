@@ -63,7 +63,7 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
 
     status = uct_iface_open(pd, worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
-    uct_iface_config_release(iface_config);
+    uct_config_release(iface_config);
 
     if (status != UCS_OK) {
         printf("#   < failed to open interface >\n");
@@ -191,10 +191,17 @@ static void print_pd_info(const char *pd_name, int print_opts,
     unsigned resource_index, j, num_resources, count;
     ucs_status_t status;
     const char *tl_name;
+    uct_pd_config_t *pd_config;
     uct_pd_attr_t pd_attr;
     uct_pd_h pd;
 
-    status = uct_pd_open(pd_name, &pd);
+    status = uct_pd_config_read(pd_name, NULL, NULL, &pd_config);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_pd_open(pd_name, pd_config, &pd);
+    uct_config_release(pd_config);
     if (status != UCS_OK) {
         printf("# < failed to open protection domain %s >\n", pd_name);
         goto out;

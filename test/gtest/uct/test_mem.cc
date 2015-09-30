@@ -56,6 +56,7 @@ UCS_TEST_P(test_mem, pd_alloc) {
     unsigned i, num_pd_resources;
     ucs_status_t status;
     uct_pd_h pd;
+    uct_pd_config_t *pd_config;
 
     status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
     ASSERT_UCS_OK(status);
@@ -66,7 +67,11 @@ UCS_TEST_P(test_mem, pd_alloc) {
 
     for (i = 0; i < num_pd_resources; ++i) {
 
-        status = uct_pd_open(pd_resources[i].pd_name, &pd);
+        status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL, &pd_config);
+        ASSERT_UCS_OK(status);
+
+        status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
+        uct_config_release(pd_config);
         ASSERT_UCS_OK(status);
 
         status = uct_pd_query(pd, &pd_attr);

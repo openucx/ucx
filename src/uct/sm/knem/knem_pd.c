@@ -8,6 +8,13 @@
 #include "knem_pd.h"
 #include "knem_io.h"
 
+static ucs_config_field_t uct_knem_pd_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_knem_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_pd_config_table)},
+
+  {NULL}
+};
+
 ucs_status_t uct_knem_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
     pd_attr->rkey_packed_size  = sizeof(uct_knem_key_t);
@@ -171,7 +178,8 @@ static ucs_status_t uct_knem_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rk
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_pd_open(const char *pd_name, uct_pd_h *pd_p)
+static ucs_status_t uct_knem_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
+                                     uct_pd_h *pd_p)
 {
     uct_knem_pd_t *knem_pd;
 
@@ -208,4 +216,5 @@ static ucs_status_t uct_knem_pd_open(const char *pd_name, uct_pd_h *pd_p)
 UCT_PD_COMPONENT_DEFINE(uct_knem_pd_component, "knem",
                         uct_knem_query_pd_resources, uct_knem_pd_open, 0,
                         sizeof(uct_knem_key_t), uct_knem_rkey_unpack,
-                        uct_knem_rkey_release)
+                        uct_knem_rkey_release, "KNEM_", uct_knem_pd_config_table,
+                        uct_knem_pd_config_t)

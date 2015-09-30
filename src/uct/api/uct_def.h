@@ -34,9 +34,12 @@ enum uct_am_trace_type {
     UCT_AM_TRACE_TYPE_LAST
 };
 
+#define UCT_CONFIG_ENV_PREFIX "UCT_"
+#define UCT_PD_CONFIG_ENV_PREFIX "UCT_PD_"
 
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_iface_config  uct_iface_config_t;
+typedef struct uct_pd_config     uct_pd_config_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef void *                   uct_mem_h;
 typedef uintptr_t                uct_rkey_t;

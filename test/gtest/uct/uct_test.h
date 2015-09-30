@@ -46,7 +46,7 @@ protected:
     class entity {
     public:
         entity(const resource& resource, uct_iface_config_t *iface_config,
-               size_t rx_headroom);
+               size_t rx_headroom, uct_pd_config_t *pd_config);
 
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle) const;
@@ -145,6 +145,7 @@ protected:
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
+    uct_pd_config_t         *m_pd_config;
 
 };
 
