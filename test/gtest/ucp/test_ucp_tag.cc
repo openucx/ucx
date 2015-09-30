@@ -95,7 +95,6 @@ protected:
     }
 
     static size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length)
-    UCS_F_NO_VECTORIZE
     {
         size_t remaining = (size_t)state;
         uint32_t *p = (uint32_t*)dest;
@@ -110,7 +109,6 @@ protected:
 
     static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
                                   size_t length)
-    UCS_F_NO_VECTORIZE
     {
         uint32_t count;
 
