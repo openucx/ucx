@@ -60,7 +60,10 @@ typedef void (*ucp_request_cleanup_callback_t)(void *request);
  * @brief Completion callback for non-blocking sends.
  *
  * @param [in]  request   The completed send request.
- * @param [in]  status    Completion status.
+ * @param [in]  status    Completion status:
+ *                           UCS_OK           - completed successfully.
+ *                           UCS_ERR_CANCELED - send was canceled.
+ *                           otherwise        - error during send.
  */
 typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 
@@ -71,7 +74,12 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  *
  * @param [in]  request   The completed receive request.
  * @param [in]  status    Completion status.
- * @param [in]  info      Completion information (tag, length).
+ *                           UCS_OK             - completed successfully.
+ *                           UCS_ERR_TRUNCATRED - data could not fit to buffer.
+ *                           UCS_ERR_CANCELED   - receive was canceled.
+ *                           otherwise          - error during receive.
+ * @param [in]  info      Completion information (tag, length). Valid only id
+ *                        status is UCS_OK.
  */
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
                                         ucp_tag_recv_info_t *info);

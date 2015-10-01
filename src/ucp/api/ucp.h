@@ -531,6 +531,9 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * @param [in]  count       Number of elements in the buffer.
  * @param [in]  datatype    Type of elements in the buffer.
  * @param [in]  tag         Message tag to send.
+ *
+ * @return UCS_OK - request was sent successfully.
+ *         otherwise - error during send.
  */
 ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t count,
                           ucp_datatype_t datatype, ucp_tag_t tag);
@@ -576,6 +579,11 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *                           equivalent bit from the tag must match the incoming
  *                           message.
  * @param [out] info        Filled with details about the received message.
+ *
+ * @return UCS_OK            - request was sent successfully.
+ *         UCS_ERR_TRUNCATED - request was received but data could not fit into
+ *                             the provided buffer. info is undefined.
+ *         otherwise         - error during receive.
  */
 ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t count,
                           ucp_datatype_t datatype, ucp_tag_t tag,
