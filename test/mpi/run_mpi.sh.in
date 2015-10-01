@@ -16,12 +16,6 @@ verbose()
 	[ $VERBOSE -ne 0 ] && echo "$@"
 }
 
-ex()
-{
-	verbose "$@"
-	$@
-}
-
 check_slurm_env()
 {
 	if [ -z "$SLURM_JOBID" ]
@@ -127,7 +121,6 @@ parse_args()
 		shift
 	done
 
-	ARGS=""
 	while [[ $# -gt 0 ]]
 	do
 		key="$1"
@@ -138,7 +131,7 @@ parse_args()
 			break
 			;;
 		*)
-			export ARGS="$ARGS $key"
+			EXE_ARGS+=("$key")
 			;;
 		esac
 		shift
@@ -190,20 +183,19 @@ run_open_mpi()
 			$EXE"
 	fi
 
-	ex $MPIRUN \
-		$OMPI_ARGS \
-		$EXTRA_MPI_ARGS \
-		$EXE $ARGS
+	verbose $MPIRUN $OMPI_ARGS $EXTRA_MPI_ARGS $EXE "${EXE_ARGS[@]}"
+	$MPIRUN $OMPI_ARGS $EXTRA_MPI_ARGS $EXE "${EXE_ARGS[@]}"
 }
 
 main()
 {
+	EXE_ARGS=()
 	initialize
 	check_slurm_env
-	parse_args $@
+	parse_args "$@"
 	adjust_run_params
 
-	if strings $MPIRUN|grep -qi ompi_mca
+	if (strings $MPIRUN|grep -qi orte) && (strings $MPIRUN|grep -qi mca_base)
 	then
 		run_open_mpi
 	else
@@ -212,4 +204,4 @@ main()
 	fi
 }
 
-main $@
+main "$@"
