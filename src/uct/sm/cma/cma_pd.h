@@ -20,8 +20,4 @@ extern uct_pd_component_t uct_cma_pd_component;
 
 ucs_status_t uct_cma_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
 
-typedef struct uct_cma_pd_config {
-    uct_pd_config_t      super;
-} uct_cma_pd_config_t;
-
 #endif

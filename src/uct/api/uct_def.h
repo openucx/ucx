@@ -34,7 +34,7 @@ enum uct_am_trace_type {
     UCT_AM_TRACE_TYPE_LAST
 };
 
-#define UCT_CONFIG_ENV_PREFIX "UCT_"
+#define UCT_CONFIG_ENV_PREFIX    "UCT_"
 #define UCT_PD_CONFIG_ENV_PREFIX "UCT_PD_"
 
 typedef struct uct_iface         *uct_iface_h;

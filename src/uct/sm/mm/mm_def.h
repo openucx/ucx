@@ -52,8 +52,4 @@ typedef struct uct_posix_pd_config {
     char                    *path;
 } uct_posix_pd_config_t;
 
-typedef struct uct_xpmem_pd_config {
-    uct_mm_pd_config_t      super;
-} uct_xpmem_pd_config_t;
-
 #endif /* UCT_MM_H */

@@ -206,17 +206,22 @@ ucs_status_t uct_mm_pd_open(const char *pd_name, const uct_pd_config_t *pd_confi
     mm_pd = ucs_malloc(sizeof(*mm_pd), "uct_mm_pd_t");
     if (mm_pd == NULL) {
         ucs_error("Failed to allocate memory for uct_mm_pd_t");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     mm_pd->config = ucs_malloc(pdc->pd_config_size, "mm_pd config");
+    if (mm_pd->config == NULL) {
+        ucs_error("Failed to allocate memory for mm_pd config");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_mm_pd;
+    }
+
     status = ucs_config_parser_clone_opts(pd_config, mm_pd->config,
                                           pdc->pd_config_table);
     if (status != UCS_OK) {
         ucs_error("Failed to clone opts");
-        ucs_free(mm_pd->config);
-        ucs_free(mm_pd);
-        return status;
+        goto err_free_mm_pd_config;
     }
 
     mm_pd->super.ops = &uct_mm_pd_ops;
@@ -224,4 +229,11 @@ ucs_status_t uct_mm_pd_open(const char *pd_name, const uct_pd_config_t *pd_confi
 
     *pd_p = &mm_pd->super;
     return UCS_OK;
+
+err_free_mm_pd_config:
+    ucs_free(mm_pd->config);
+err_free_mm_pd:
+    ucs_free(mm_pd);
+err:
+    return status;
 }

@@ -69,6 +69,9 @@ typedef struct uct_pd_registered_tl {
  * @param _rkey_buf_size Size of buffer needed for packed rkey.
  * @param _rkey_unpack   Function to unpack a remote key buffer to handle.
  * @param _rkey_release  Function to release a remote key handle.
+ * @param _cfg_prefix    Prefix for configuration environment vars.
+ * @param _cfg_table     Defines the PDC's configuration values.
+ * @param _cfg_struct    PDC configuration structure.
  */
 #define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, _priv, \
                                 _rkey_buf_size, _rkey_unpack, _rkey_release, \

@@ -245,16 +245,20 @@ static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
     status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
                                          env_prefix, cfg_prefix, 0);
     if (status != UCS_OK) {
-        goto err_free_opts;
+        goto err_free_bundle;
     }
 
     config_bundle->table = config_table;
-    config_bundle->table_prefix = cfg_prefix;
+    config_bundle->table_prefix = strdup(cfg_prefix);
+    if (config_bundle->table_prefix == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_bundle;
+    }
 
     *bundle = config_bundle;
     return UCS_OK;
 
-err_free_opts:
+err_free_bundle:
     ucs_free(config_bundle);
 err:
     return status;
@@ -375,6 +379,7 @@ void uct_config_release(void *config)
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
 
     ucs_config_parser_release_opts(config, bundle->table);
+    ucs_free((void*)(bundle->table_prefix));
     ucs_free(bundle);
 }
 

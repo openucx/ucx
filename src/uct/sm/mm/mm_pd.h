@@ -68,9 +68,11 @@ typedef struct uct_mm_mapper_ops {
 /*
  * Define a memory-mapper component for MM.
  *
- * @param _var     Variable for PD component.
- * @param _name    String which is the component name.
- * @param _ops     Mapper operations, of type uct_mm_mapper_ops_t.
+ * @param _var          Variable for PD component.
+ * @param _name         String which is the component name.
+ * @param _ops          Mapper operations, of type uct_mm_mapper_ops_t.
+ * @param _prefix       Prefix for defining the vars config table and config struct.
+ * @param _cfg_prefix   Prefix for configuration environment vars.
  */
 #define UCT_MM_COMPONENT_DEFINE(_var, _name, _ops, _prefix, _cfg_prefix) \
     \
