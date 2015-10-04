@@ -98,17 +98,29 @@ AS_IF([test "x$with_ib" == xyes],
            verbs_exp=yes],
            [verbs_exp=no])
 
-       with_mlx5_hw=no
        AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
-           [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
-           AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
-           with_mlx5_hw=yes])
+                        [with_mlx5_hw=yes],
+                        [with_mlx5_hw=no])
 
        AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
                        ibv_mlx5_exp_get_cq_info,
                        ibv_mlx5_exp_get_srq_info,
                        ibv_mlx5_exp_update_cq_ci],
                       [], [], [[#include <infiniband/mlx5_hw.h>]])
+
+       # Disable mlx5_hw if the driver does not provide BF locking information
+       AS_IF([test "x$ac_cv_have_decl_ibv_mlx5_exp_get_qp_info" == "xyes"],
+             [AC_CHECK_MEMBERS([struct ibv_mlx5_qp_info.bf.need_lock],
+                               [],
+                               [AC_MSG_WARN([Cannot use mlx5 QP because it assumes dedicated BF])
+                                with_mlx5_hw=no],
+                               [[#include <infiniband/mlx5_hw.h>]])],
+             [])
+
+       AS_IF([test "x$with_mlx5_hw" == xyes],
+             [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
+              AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])],
+             [])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_EVENT_GID_CHANGE,
