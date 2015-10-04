@@ -27,7 +27,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
     UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 256, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
-    {"HUGETLB_MODE", "no",
+    {"FIFO_HUGETLB", "no",
      "Enable using huge pages for internal shared memory buffers."
      "Possible values are:\n"
      " y   - Allocate memory using huge pages only.\n"
@@ -279,7 +279,7 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
 
-    status = uct_mm_pd_mapper_ops(pd)->alloc(&size_to_alloc, config->hugetlb_mode,
+    status = uct_mm_pd_mapper_ops(pd)->alloc(pd, &size_to_alloc, config->hugetlb_mode,
                                              &iface->shared_mem, &iface->fifo_mm_id
                                              UCS_MEMTRACK_NAME("mm fifo"));
     if (status != UCS_OK) {

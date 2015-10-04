@@ -27,10 +27,14 @@ uct_test::uct_test() {
     status = uct_iface_config_read(GetParam()->tl_name.c_str(), NULL, NULL,
                                    &m_iface_config);
     ASSERT_UCS_OK(status);
+    status = uct_pd_config_read(GetParam()->pd_name.c_str(), NULL, NULL,
+                                &m_pd_config);
+    ASSERT_UCS_OK(status);
 }
 
 uct_test::~uct_test() {
-    uct_iface_config_release(m_iface_config);
+    uct_config_release(m_iface_config);
+    uct_config_release(m_pd_config);
 }
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
@@ -49,7 +53,13 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
         for (unsigned i = 0; i < num_pd_resources; ++i) {
             uct_pd_h pd;
-            status = uct_pd_open(pd_resources[i].pd_name, &pd);
+            uct_pd_config_t *pd_config;
+            status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL,
+                                        &pd_config);
+            ASSERT_UCS_OK(status);
+
+            status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
+            uct_config_release(pd_config);
             ASSERT_UCS_OK(status);
 
             uct_pd_attr_t pd_attr;
@@ -95,19 +105,26 @@ void uct_test::check_caps(uint64_t flags) {
 
 void uct_test::modify_config(const std::string& name, const std::string& value) {
     ucs_status_t status;
-    status = uct_iface_config_modify(m_iface_config, name.c_str(), value.c_str());
+    status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
 
     if (status == UCS_ERR_NO_ELEM) {
-        test_base::modify_config(name, value);
+        status = uct_config_modify(m_pd_config, name.c_str(), value.c_str());
+        if (status == UCS_ERR_NO_ELEM) {
+            test_base::modify_config(name, value);
+        } else if (status != UCS_OK) {
+            UCS_TEST_ABORT("Couldn't modify pd config parameter: " << name.c_str() <<
+                           " to " << value.c_str() << ": " << ucs_status_string(status));
+        }
+
     } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't modify config parameter: "
-                        << name.c_str() << " to " << value.c_str() << ": " <<
-                        ucs_status_string(status));
+        UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
+                       " to " << value.c_str() << ": " << ucs_status_string(status));
     }
 }
 
 uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
-    entity *new_ent = new entity(*GetParam(), m_iface_config, rx_headroom);
+    entity *new_ent = new entity(*GetParam(), m_iface_config, rx_headroom,
+                                 m_pd_config);
     return new_ent;
 }
 
@@ -122,12 +139,12 @@ void uct_test::progress() const {
 }
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
-                         size_t rx_headroom) {
+                         size_t rx_headroom, uct_pd_config_t *pd_config) {
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, NULL, UCS_THREAD_MODE_MULTI /* TODO */);
 
     UCS_TEST_CREATE_HANDLE(uct_pd_h, m_pd, uct_pd_close,
-                           uct_pd_open, resource.pd_name.c_str());
+                           uct_pd_open, resource.pd_name.c_str(), pd_config);
 
     UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
                            uct_iface_open, m_pd, m_worker, resource.tl_name.c_str(),

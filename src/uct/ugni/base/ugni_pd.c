@@ -262,7 +262,8 @@ static void uct_ugni_pd_close(uct_pd_h pd)
     pthread_mutex_unlock(&uct_ugni_global_lock);
 }
 
-static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p)
+static ucs_status_t uct_ugni_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
+                                     uct_pd_h *pd_p)
 {
     int domain_id;
     ucs_status_t rc = UCS_OK;
@@ -339,4 +340,7 @@ UCT_PD_COMPONENT_DEFINE(uct_ugni_pd_component,
                         NULL,
                         (3 * sizeof(uint64_t)),
                         uct_ugni_rkey_unpack,
-                        uct_ugni_rkey_release)
+                        uct_ugni_rkey_release,
+                        "UGNI_",
+                        uct_pd_config_table,
+                        uct_pd_config_t);

@@ -8,6 +8,8 @@
 
 #include <ucs/sys/math.h>
 #include <ucs/datastruct/queue.h>
+#include <uct/api/uct_def.h>
+#include <uct/tl/context.h>
 
 typedef struct uct_mm_ep                uct_mm_ep_t;
 typedef struct uct_mm_iface             uct_mm_iface_t;
@@ -35,5 +37,10 @@ enum {
 #define UCT_MM_IFACE_GET_DESC_START(_iface, _fifo_elem_p) \
           (uct_mm_recv_desc_t *) ((_fifo_elem_p)->desc_chunk_base_addr +  \
           (_fifo_elem_p)->desc_offset - (_iface)->rx_headroom) - 1;
+
+typedef struct uct_mm_pd_config {
+    uct_pd_config_t      super;
+    ucs_ternary_value_t  hugetlb_mode;     /* Enable using huge pages */
+} uct_mm_pd_config_t;
 
 #endif /* UCT_MM_H */

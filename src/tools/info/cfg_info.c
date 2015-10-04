@@ -36,15 +36,26 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
     unsigned i, num_tls;
     ucs_status_t status;
     uct_pd_h pd;
+    uct_pd_config_t *pd_config;
 
     status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
     if (status != UCS_OK) {
         return;
     }
 
+    uct_pd_component_config_print(print_flags);
+
     num_tls = 0;
     for (pd_rsc_index = 0; pd_rsc_index < num_pd_resources; ++pd_rsc_index) {
-        status = uct_pd_open(pd_resources[pd_rsc_index].pd_name, &pd);
+
+        status = uct_pd_config_read(pd_resources[pd_rsc_index].pd_name, NULL,
+                                    NULL, &pd_config);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        status = uct_pd_open(pd_resources[pd_rsc_index].pd_name, pd_config, &pd);
+        uct_config_release(pd_config);
         if (status != UCS_OK) {
             continue;
         }
@@ -91,8 +102,8 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
             continue;
         }
 
-        uct_iface_config_print(config, stdout, cfg_title, print_flags);
-        uct_iface_config_release(config);
+        uct_config_print(config, stdout, UCT_CONFIG_ENV_PREFIX, cfg_title, print_flags);
+        uct_config_release(config);
     }
 
 }

@@ -333,11 +333,15 @@ void uct_release_pd_resource_list(uct_pd_resource_desc_t *resources);
  *
  * @param [in]  pd_name         Protection domain name, as returned from @ref
  *                              uct_query_pd_resources.
+ * @param [in]  config          PD configuration options. Should be obtained
+ *                              from uct_pd_config_read() function, or point to
+ *                              PD-specific structure which extends uct_pd_config_t.
  * @param [out] pd_p            Filled with a handle to the protection domain.
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_open(const char *pd_name, uct_pd_h *pd_p);
+ucs_status_t uct_pd_open(const char *pd_name, const uct_pd_config_t *config,
+                         uct_pd_h *pd_p);
 
 /**
  * @ingroup UCT_RESOURCE
@@ -481,38 +485,41 @@ ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Release configuration memory returned from uct_iface_read_config().
+ * @brief Release configuration memory returned from uct_iface_config_read() or
+ * from uct_pd_config_read().
  *
  * @param [in]  config        Configuration to release.
  */
-void uct_iface_config_release(uct_iface_config_t *config);
+void uct_config_release(void *config);
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Print interface configuration to a stream.
+ * @brief Print interface/PD configuration to a stream.
  *
  * @param [in]  config        Configuration to print.
  * @param [in]  stream        Output stream to print to.
+ * @param [in]  env_prefix    Print variables starting with <env_prefix>.
+ *                            This parameter distinguishes between interface/PD
+ *                            configuration to print.
  * @param [in]  title         Title to the output.
  * @param [in]  print_flags   Controls how the configuration is printed.
  */
-void uct_iface_config_print(const uct_iface_config_t *config, FILE *stream,
-                            const char *title, ucs_config_print_flags_t print_flags);
+void uct_config_print(const void *config, FILE *stream, const char *env_prefix,
+                      const char *title, ucs_config_print_flags_t print_flags);
 
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Print interface configuration to a stream.
+ * @brief Modify interface/PD configuration.
  *
- * @param [in]  config        Configuration to release.
+ * @param [in]  config        Configuration to modify.
  * @param [in]  name          Configuration variable name.
  * @param [in]  value         Value to set.
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
-                                     const char *name, const char *value);
+ucs_status_t uct_config_modify(void *config, const char *name, const char *value);
 
 
 /**
@@ -526,7 +533,7 @@ ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
  * @param [in]  dev_name      Hardware device name,
  * @param [in]  rx_headroom   How much bytes to reserve before the receive segment.
  * @param [in]  config        Interface configuration options. Should be obtained
- *                            from uct_iface_read_config() function, or point to
+ *                            from uct_iface_config_read() function, or point to
  *                            transport-specific structure which extends uct_iface_config_t.
  * @param [out] iface_p       Filled with a handle to opened communication interface.
  *
@@ -788,6 +795,24 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
  *                          @ref uct_mem_alloc.
  */
 ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
+
+/**
+ * @ingroup RESOURCE
+ * @brief Read the configuration of the PD component.
+ *
+ * @param [in]  name          Name of the PD or the PD component.
+ * @param [in]  env_prefix    If non-NULL, search for environment variables
+ *                            starting with this UCT_<prefix>_. Otherwise, search
+ *                            for environment variables starting with just UCT_.
+ * @param [in]  filename      If non-NULL, read configuration from this file. If
+ *                            the file does not exist, it will be ignored.
+ * @param [out] config_p      Filled with a pointer to the configuration.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_pd_config_read(const char *name, const char *env_prefix,
+                                const char *filename,
+                                uct_pd_config_t **config_p);
 
 
 /**

@@ -11,7 +11,6 @@
 #include <ucs/debug/log.h>
 #include "xpmem.h"
 
-
 static ucs_status_t uct_xpmem_query()
 {
     int fd, ver;
@@ -136,7 +135,7 @@ static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_alloc(size_t *length_p, ucs_ternary_value_t
+static ucs_status_t uct_xpmem_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t
                                     hugetlb, void **address_p,
                                     uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
 {
@@ -189,5 +188,5 @@ static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
     .free    = uct_xpmem_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_xpmem_pd, "xpmem", &uct_xpmem_mapper_ops)
+UCT_MM_COMPONENT_DEFINE(uct_xpmem_pd, "xpmem", &uct_xpmem_mapper_ops, uct, "XPMEM_")
 UCT_PD_REGISTER_TL(&uct_xpmem_pd, &uct_mm_tl);

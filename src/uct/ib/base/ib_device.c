@@ -26,6 +26,13 @@
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
+static ucs_config_field_t uct_ib_pd_config_table[] = {
+  {"", "", NULL,
+   ucs_offsetof(uct_ib_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_pd_config_table)},
+
+  {NULL}
+};
+
 #if ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
@@ -686,7 +693,8 @@ out:
     return status;
 }
 
-static ucs_status_t uct_ib_pd_open(const char *pd_name, uct_pd_h *pd_p)
+static ucs_status_t uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
+                                   uct_pd_h *pd_p)
 {
     char tmp_pd_name[UCT_PD_NAME_MAX];
     struct ibv_device **device_list;
@@ -725,4 +733,5 @@ out:
 UCT_PD_COMPONENT_DEFINE(uct_ib_pd, UCT_IB_PD_PREFIX,
                         uct_ib_query_pd_resources, uct_ib_pd_open, NULL,
                         sizeof(uint32_t), uct_ib_rkey_unpack,
-                        (void*)ucs_empty_function_return_success /* release */)
+                        (void*)ucs_empty_function_return_success /* release */,
+                        "IB_", uct_ib_pd_config_table, uct_ib_pd_config_t);
