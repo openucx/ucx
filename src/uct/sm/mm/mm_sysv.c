@@ -14,13 +14,16 @@
 #define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #define UCT_MM_SYSV_MSTR (UCT_MM_SYSV_PERM | IPC_CREAT | IPC_EXCL)
 
+typedef struct uct_sysv_pd_config {
+    uct_mm_pd_config_t      super;
+} uct_sysv_pd_config_t;
+
 static ucs_config_field_t uct_sysv_pd_config_table[] = {
   {"MM_", "", NULL,
    ucs_offsetof(uct_sysv_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_pd_config_table)},
 
   {NULL}
 };
-
 
 static ucs_status_t
 uct_sysv_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,

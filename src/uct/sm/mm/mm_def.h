@@ -43,13 +43,4 @@ typedef struct uct_mm_pd_config {
     ucs_ternary_value_t  hugetlb_mode;     /* Enable using huge pages */
 } uct_mm_pd_config_t;
 
-typedef struct uct_sysv_pd_config {
-    uct_mm_pd_config_t      super;
-} uct_sysv_pd_config_t;
-
-typedef struct uct_posix_pd_config {
-    uct_mm_pd_config_t      super;
-    char                    *path;
-} uct_posix_pd_config_t;
-
 #endif /* UCT_MM_H */

@@ -16,6 +16,11 @@
 #define UCT_MM_POSIX_MMAP_PROT      (PROT_READ | PROT_WRITE)
 #define UCT_MM_POSIX_HUGETLB        UCS_BIT(0)
 
+typedef struct uct_posix_pd_config {
+    uct_mm_pd_config_t      super;
+    char                    *path;
+} uct_posix_pd_config_t;
+
 static ucs_config_field_t uct_posix_pd_config_table[] = {
   {"MM_", "", NULL,
    ucs_offsetof(uct_posix_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_pd_config_table)},
