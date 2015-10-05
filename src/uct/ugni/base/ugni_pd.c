@@ -12,7 +12,6 @@
 #include "ugni_pd.h"
 
 /* Forward declarations */
-static ucs_status_t uct_ugni_pd_open(const char *pd_name, uct_pd_h *pd_p);
 
 UCS_CONFIG_DEFINE_ARRAY(ugni_alloc_methods, sizeof(uct_alloc_method_t),
                         UCS_CONFIG_TYPE_ENUM(uct_alloc_method_names));
