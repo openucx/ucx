@@ -80,8 +80,10 @@ typedef struct ucs_arbiter_elem   ucs_arbiter_elem_t;
 typedef enum {
     UCS_ARBITER_CB_RESULT_REMOVE_ELEM,  /* Remove the current element, move to
                                            the next element. */
+    UCS_ARBITER_CB_RESULT_NEXT_GROUP,   /* Keep current element and move to next
+                                           group. */
     UCS_ARBITER_CB_RESULT_DESCHED_GROUP,/* Keep current element but remove the
-                                           group and move to next group. */
+                                           current group and move to next group. */
     UCS_ARBITER_CB_RESULT_STOP          /* Stop dispatching work altogether */
 } ucs_arbiter_cb_result_t;
 
@@ -197,11 +199,11 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
 
 /**
  * Dispatch work elements in the arbiter. For every group, up to per_group work
- * elements are dispatched, as long as the callback returns REMOVE_ELEM. Then,
- * the same is done for the next group, until the arbiter becomes empty or the
- * callback returns STOP. If a group is either out of elements, or its callback
- * returns REMOVE_GROUP, it will be removed until ucs_arbiter_group_schedule()
- * is used to put it back on the arbiter.
+ * elements are dispatched, as long as the callback returns REMOVE_ELEM or
+ * NEXT_GROUP. Then, the same is done for the next group, until either the
+ * arbiter becomes empty or the callback returns STOP. If a group is either out
+ * of elements, or its callback returns REMOVE_GROUP, it will be removed until
+ * ucs_arbiter_group_schedule() is used to put it back on the arbiter.
  *
  * @param [in]  arbiter    Arbiter object to dispatch work on.
  * @param [in]  per_group  How many elements to dispatch form each group.

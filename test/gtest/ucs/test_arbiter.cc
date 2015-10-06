@@ -33,12 +33,18 @@ protected:
         ucs_arbiter_elem_t elem;
     };
 
-    void advance_expected_element()
+    void skip_empty_groups()
+    {
+        while (m_empty_groups.find(m_expected_group_idx) != m_empty_groups.end()) {
+            advance_expected_group();
+        }
+    }
+
+    void advance_expected_group()
     {
         ++m_expected_group_idx;
         if (m_expected_group_idx >= m_num_groups) {
             m_expected_group_idx = 0;
-            ++m_expected_elem_idx;
         }
     }
 
@@ -53,18 +59,16 @@ protected:
     {
         arb_elem *e = ucs_container_of(elem, arb_elem, elem);
 
-        /* Skip empty groups */
-        while (m_empty_groups.find(m_expected_group_idx) != m_empty_groups.end()) {
-            advance_expected_element();
-        }
+        skip_empty_groups();
 
-        EXPECT_EQ(m_expected_group_idx, e->group_idx);
-        EXPECT_EQ(m_expected_elem_idx,  e->elem_idx);
+        EXPECT_EQ(m_expected_group_idx,               e->group_idx);
+        EXPECT_EQ(m_expected_elem_idx[e->group_idx],  e->elem_idx);
 
-        advance_expected_element();
+        advance_expected_group();
 
-        if (e->last) {
-            m_empty_groups.insert(e->group_idx);
+        /* Sometimes we just move to the next group */
+        if ((rand() % 5) == 0) {
+            return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
         }
 
         /* Sometimes we want to detach the whole group */
@@ -74,7 +78,13 @@ protected:
             return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
         }
 
+        ++m_expected_elem_idx[e->group_idx];
+
+        if (e->last) {
+            m_empty_groups.insert(e->group_idx);
+        }
         release_element(e);
+
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
@@ -96,11 +106,11 @@ protected:
     }
 
 protected:
-    std::set<unsigned> m_empty_groups;
-    std::set<unsigned> m_detached_groups;
-    unsigned           m_expected_elem_idx;
-    unsigned           m_expected_group_idx;
-    unsigned           m_num_groups;
+    std::set<unsigned>    m_empty_groups;
+    std::set<unsigned>    m_detached_groups;
+    std::vector<unsigned> m_expected_elem_idx;
+    unsigned              m_expected_group_idx;
+    unsigned              m_num_groups;
 };
 
 
@@ -166,7 +176,8 @@ UCS_TEST_F(test_arbiter, multiple_dispatch) {
     }
 
     m_expected_group_idx = 0;
-    m_expected_elem_idx  = 0;
+    m_expected_elem_idx.resize(m_num_groups, 0);
+    std::fill(m_expected_elem_idx.begin(), m_expected_elem_idx.end(), 0);
 
     ucs_arbiter_dispatch(&arbiter, 1, dispatch_cb, this);
 
