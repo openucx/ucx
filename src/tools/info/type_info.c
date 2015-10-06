@@ -106,6 +106,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_iface_attr_t);
         PRINT_SIZE(uct_iface_config_t);
         PRINT_SIZE(uct_iface_mpool_config_t);
+        PRINT_SIZE(uct_pd_config_t);
         PRINT_SIZE(uct_iface_ops_t);
         PRINT_SIZE(uct_pd_t);
         PRINT_SIZE(uct_pd_attr_t);

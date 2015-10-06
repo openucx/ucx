@@ -43,7 +43,7 @@ static ucs_status_t resource_supported(char *dev_name, char *tl_name, int kill_i
 
 	/* Open communication interface */
 	status = uct_iface_open(pd, worker, tl_name, dev_name, 0, iface_config, &iface);
-	uct_iface_config_release(iface_config);
+	uct_config_release(iface_config);
 	if (UCS_OK != status) {
 		fprintf(stderr, "Failed to open temporary interface.\n");fflush(stderr);
 		goto error0;
@@ -85,6 +85,7 @@ static ucs_status_t dev_tl_lookup()
 	uct_tl_resource_desc_t *tl_resources; /*Communication resource descriptor */
 	unsigned num_pd_resources; /* Number of protected domain */
 	unsigned num_tl_resources; /* Number of transport resources resource objects created */
+	uct_pd_config_t *pd_config;
 
 	status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
 	if (UCS_OK != status) {
@@ -94,7 +95,14 @@ static ucs_status_t dev_tl_lookup()
 
 	/* Iterate through protected domain resources */
 	for (i = 0; i < num_pd_resources; ++i) {
-		status = uct_pd_open(pd_resources[i].pd_name, &pd);
+        status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL,
+                                    &pd_config);
+        if (status != UCS_OK) {
+            goto release1;
+        }
+
+		status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
+		uct_config_release(pd_config);
 		if (UCS_OK != status) {
 			fprintf(stderr, "Failed to open protected domain.\n"); fflush(stderr);
 			goto release1;
@@ -132,7 +140,13 @@ static ucs_status_t dev_tl_lookup()
 
 	/* IMPORTANT: Certain functions that operate on an interface rely on a pointer to the protection domain that created it */
 	/* Reopen new protection domain and */
+    status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL, &pd_config);
+    if (status != UCS_OK) {
+        goto release1;
+    }
+
 	status = uct_pd_open(pd_resources[pd_index].pd_name, &pd);
+	uct_config_release(pd_config);
 	if (UCS_OK != status) {
 		fprintf(stderr, "Failed to open final protected domain.\n"); fflush(stderr);
 		goto release1;

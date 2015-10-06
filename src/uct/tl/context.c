@@ -14,9 +14,12 @@
 #include <ucs/type/class.h>
 #include <malloc.h>
 
-#define UCT_CONFIG_ENV_PREFIX "UCT_"
-
 UCS_LIST_HEAD(uct_pd_components_list);
+
+ucs_config_field_t uct_pd_config_table[] = {
+
+  {NULL}
+};
 
 /**
  * Keeps information about allocated configuration structure, to be used when
@@ -83,7 +86,8 @@ void uct_release_pd_resource_list(uct_pd_resource_desc_t *resources)
     ucs_free(resources);
 }
 
-ucs_status_t uct_pd_open(const char *pd_name, uct_pd_h *pd_p)
+ucs_status_t uct_pd_open(const char *pd_name, const uct_pd_config_t *config,
+                         uct_pd_h *pd_p)
 {
     uct_pd_component_t *pdc;
     ucs_status_t status;
@@ -91,7 +95,7 @@ ucs_status_t uct_pd_open(const char *pd_name, uct_pd_h *pd_p)
 
     ucs_list_for_each(pdc, &uct_pd_components_list, list) {
         if (!strncmp(pd_name, pdc->name, strlen(pdc->name))) {
-            status = pdc->pd_open(pd_name, &pd);
+            status = pdc->pd_open(pd_name, config, &pd);
             if (status != UCS_OK) {
                 return status;
             }
@@ -223,6 +227,42 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
                                 ucs_async_context_t*, ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
+static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
+                                    ucs_config_field_t *config_table,
+                                    size_t config_size, const char *cfg_prefix,
+                                    const char *env_prefix)
+{
+    uct_config_bundle_t *config_bundle;
+    ucs_status_t status;
+
+    config_bundle = ucs_calloc(1, sizeof(*config_bundle) + config_size, "uct_config");
+    if (config_bundle == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* TODO use env_prefix */
+    status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
+                                         env_prefix, cfg_prefix, 0);
+    if (status != UCS_OK) {
+        goto err_free_bundle;
+    }
+
+    config_bundle->table = config_table;
+    config_bundle->table_prefix = strdup(cfg_prefix);
+    if (config_bundle->table_prefix == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_bundle;
+    }
+
+    *bundle = config_bundle;
+    return UCS_OK;
+
+err_free_bundle:
+    ucs_free(config_bundle);
+err:
+    return status;
+}
 
 static uct_tl_component_t *uct_find_tl_on_pd(uct_pd_component_t *pdc,
                                              const char *tl_name)
@@ -263,60 +303,19 @@ ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
     if (tlc == NULL) {
         ucs_error("Transport '%s' does not exist", tl_name);
         status = UCS_ERR_NO_DEVICE; /* Non-existing transport */
-        goto err;
+        return status;
     }
 
-    bundle = ucs_calloc(1, sizeof(*bundle) + tlc->iface_config_size,
-                        "uct_iface_config");
-    if (bundle == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    /* TODO use env_prefix */
-    status = ucs_config_parser_fill_opts(bundle->data, tlc->iface_config_table,
-                                         UCT_CONFIG_ENV_PREFIX, tlc->cfg_prefix,
-                                         0);
-
+    status = uct_config_read(&bundle, tlc->iface_config_table,
+                             tlc->iface_config_size, tlc->cfg_prefix,
+                             UCT_CONFIG_ENV_PREFIX);
     if (status != UCS_OK) {
-        goto err_free_opts;
+        ucs_error("Failed to read iface config");
+        return status;
     }
 
-    bundle->table        = tlc->iface_config_table;
-    bundle->table_prefix = tlc->cfg_prefix;
-    *config_p = (uct_iface_config_t*)bundle->data; /* coverity[leaked_storage] */
+    *config_p = (uct_iface_config_t*) bundle->data;
     return UCS_OK;
-
-err_free_opts:
-    ucs_free(bundle);
-err:
-    return status;
-
-}
-
-void uct_iface_config_release(uct_iface_config_t *config)
-{
-    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t,
-                                                   data);
-
-    ucs_config_parser_release_opts(config, bundle->table);
-    ucs_free(bundle);
-}
-
-void uct_iface_config_print(const uct_iface_config_t *config, FILE *stream,
-                            const char *title, ucs_config_print_flags_t print_flags)
-{
-    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
-    ucs_config_parser_print_opts(stream, title, bundle->data, bundle->table,
-                                 UCT_CONFIG_ENV_PREFIX, bundle->table_prefix,
-                                 print_flags);
-}
-
-ucs_status_t uct_iface_config_modify(uct_iface_config_t *config,
-                                     const char *name, const char *value)
-{
-    uct_config_bundle_t *bundle = ucs_container_of(config, uct_config_bundle_t, data);
-    return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
 }
 
 ucs_status_t uct_iface_open(uct_pd_h pd, uct_worker_h worker, const char *tl_name,
@@ -332,6 +331,93 @@ ucs_status_t uct_iface_open(uct_pd_h pd, uct_worker_h worker, const char *tl_nam
     }
 
     return tlc->iface_open(pd, worker, dev_name, rx_headroom, config, iface_p);
+}
+
+static uct_pd_component_t *uct_find_pdc(const char *name)
+{
+    uct_pd_component_t *pdc;
+
+    ucs_list_for_each(pdc, &uct_pd_components_list, list) {
+        if (!strncmp(name, pdc->name, strlen(pdc->name))) {
+            return pdc;
+        }
+    }
+    return NULL;
+}
+
+ucs_status_t uct_pd_config_read(const char *name, const char *env_prefix,
+                                const char *filename,
+                                uct_pd_config_t **config_p)
+{
+    uct_config_bundle_t *bundle;
+    uct_pd_component_t *pdc;
+    ucs_status_t status;
+
+    /* find the matching pdc. the search can be by pd_name or by pdc_name.
+     * (depending on the caller) */
+    pdc = uct_find_pdc(name);
+    if (pdc == NULL) {
+        ucs_error("PD component does not exist for '%s'", name);
+        status = UCS_ERR_INVALID_PARAM; /* Non-existing PDC */
+        return status;
+    }
+
+    status = uct_config_read(&bundle, pdc->pd_config_table,
+                             pdc->pd_config_size, pdc->cfg_prefix,
+                             UCT_PD_CONFIG_ENV_PREFIX);
+    if (status != UCS_OK) {
+        ucs_error("Failed to read PD config");
+        return status;
+    }
+
+    *config_p = (uct_pd_config_t*) bundle->data;
+    return UCS_OK;
+}
+
+void uct_config_release(void *config)
+{
+    uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
+
+    ucs_config_parser_release_opts(config, bundle->table);
+    ucs_free((void*)(bundle->table_prefix));
+    ucs_free(bundle);
+}
+
+void uct_config_print(const void *config, FILE *stream, const char *env_prefix,
+                      const char *title, ucs_config_print_flags_t print_flags)
+{
+    uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
+    ucs_config_parser_print_opts(stream, title, bundle->data, bundle->table,
+                                 env_prefix, bundle->table_prefix,
+                                 print_flags);
+}
+
+ucs_status_t uct_config_modify(void *config, const char *name, const char *value)
+{
+    uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
+    return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
+}
+
+void uct_pd_component_config_print(ucs_config_print_flags_t print_flags)
+{
+    uct_pd_component_t *pdc;
+    uct_pd_config_t *pd_config;
+    char cfg_title[UCT_TL_NAME_MAX + 128];
+    ucs_status_t status;
+
+    /* go over the list of pd components and print the config table per each */
+    ucs_list_for_each(pdc, &uct_pd_components_list, list)
+    {
+        snprintf(cfg_title, sizeof(cfg_title), "%s PD component configuration",
+                 pdc->name);
+        status = uct_pd_config_read(pdc->name, NULL, NULL, &pd_config);
+        if (status != UCS_OK) {
+            ucs_error("Failed to read pd_config for PD component %s", pdc->name);
+            continue;
+        }
+        uct_config_print(pd_config, stdout, UCT_PD_CONFIG_ENV_PREFIX, cfg_title, print_flags);
+        uct_config_release(pd_config);
+    }
 }
 
 ucs_status_t uct_pd_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)

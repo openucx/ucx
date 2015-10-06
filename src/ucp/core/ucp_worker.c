@@ -76,7 +76,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     status = uct_iface_open(context->pds[resource->pd_index], worker->uct,
                             resource->tl_rsc.tl_name, resource->tl_rsc.dev_name,
                             sizeof(ucp_recv_desc_t), iface_config, &iface);
-    uct_iface_config_release(iface_config);
+    uct_config_release(iface_config);
 
     if (status != UCS_OK) {
         goto out;

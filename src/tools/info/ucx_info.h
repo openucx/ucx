@@ -35,5 +35,12 @@ void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
 
 void print_type_info(const char * tl_name);
 
+/**
+ * @ingroup RESOURCE
+ * @brief Print PD component configuration to a stream.
+ *
+ * @param [in]  print_flags   Controls how the configuration is printed.
+ */
+void uct_pd_component_config_print(ucs_config_print_flags_t print_flags);
 
 #endif

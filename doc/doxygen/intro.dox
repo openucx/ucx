@@ -5,27 +5,31 @@
 
 /**
  * @page Introduction
- * 
+
+
  * \section Motivation
- * The current state of the art in the world of communication middle ware
- * typically takes two approaches.  First, communication packages such as
- * Intel's (previously Qlogic) PSM, Mellanox's MXM, Portals, and IBM's PAMI
- * provide flexible and high performance APIs for specific network vendors'
- * hardware technologies.  As a result, multiple network technologies create
- * significant challenges for programming model developers. While having
- * multiple options is advantageous, the ability to use the option that best fits
- * a given communication task is highly desirable, regardless of which API it
- * comes from. Second, communication middleware such as VMI, Cactus, ARMCI,
- * GASNet, and Open MPI take a more universal approach.  The APIs are tuned for
- * specific programming models and do not provide enough interface flexibility
- * for broader interface reconciliation. A detailed overview of existing
- * communication middleware solutions can be found in an ORNL Technical Report
- * \cite cm_overview. 
- * 
- * To answer the demand for universal, performance portble,
+ * A communication middleware abstracts the vendor-specific software and hardware
+ * interfaces. 
+ * They bridge the semantic and functionality gap between the programming models
+ * and the software and hardware network interfaces by providing
+ * data transfer interfaces and implementation, optimized protocols for data
+ * transfer between various memories, and managing network resources. There are many
+ * communication middleware APIs and libraries to support parallel programming
+ * models such as MPI, OpenSHMEM, and task-based models. 
+ *
+ * Current communication middleware designs typically take two approaches. First,
+ * communication middleware such as Intel’s PSM (previously Qlogic), Mellanox’s
+ * MXM, and IBM’s PAMI provide high-performance implementations for specific
+ * network hardware. Second, communication middleware such as VMI, Cactus, ARMCI,
+ * GASNet, and Open MPI are tightly coupled to a specific programming model. 
+ * Communication middleware designed with either of this design approach 
+ * requires significant porting effort to move a new network
+ * interface or programming model. 
+ *
+ * To answer the demand for universal, performance portable,
  * multi-platform, multi-protocol, multi-network, scalable, and open source
  * network library, we introduce a new communication framework.  
- * The design framework is based based on decades of experince in designing
+ * The design framework is based based on decades of experience in designing
  * high performance network interfaces such as IBM's PAMI, Mellanox's MXM, Portals,
  * and UCCS. (TBD Add references)
  * 
@@ -74,7 +78,7 @@
  * requirements:
  * + Minimal memory consumption - the design avoids order N (the number of processes) data structures usage and provides resource sharing capabilities for communication libraries.
  * + Low-latency  - low-level API minimizes software overhead.
- * + High bandwidth - minimal software overhead combined with multi-rail and multi-device capabilities provide all the hooks that are necessary for exploiting hardware bandwith capabilities.
+ * + High bandwidth - minimal software overhead combined with multi-rail and multi-device capabilities provide all the hooks that are necessary for exploiting hardware bandwidth capabilities.
  * + Asynchronous - the API provides non-blocking communication interfaces.
  * + Resilience - the API exposes communication control hooks, which are necessary for fault tolerant communication library implementation.
  * 

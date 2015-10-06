@@ -263,7 +263,7 @@
 ## ----------##
 
 DX_ENV=""
-DX_MIN_VERSION="1.8.9.1"
+DX_MIN_VERSION="1.8.6"
 
 AC_DEFUN([DX_FEATURE_doc],  ON)
 AC_DEFUN([DX_FEATURE_dot],  OFF)

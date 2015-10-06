@@ -778,6 +778,7 @@ static ucs_status_t uct_perf_create_pd(ucx_perf_context_t *perf)
     unsigned j, num_tl_resources;
     ucs_status_t status;
     uct_pd_h pd;
+    uct_pd_config_t *pd_config;
 
     status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
     if (status != UCS_OK) {
@@ -785,7 +786,13 @@ static ucs_status_t uct_perf_create_pd(ucx_perf_context_t *perf)
     }
 
     for (i = 0; i < num_pd_resources; ++i) {
-        status = uct_pd_open(pd_resources[i].pd_name, &pd);
+        status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL, &pd_config);
+        if (status != UCS_OK) {
+            goto out_release_pd_resources;
+        }
+
+        status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
+        uct_config_release(pd_config);
         if (status != UCS_OK) {
             goto out_release_pd_resources;
         }
@@ -849,7 +856,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 
     status = uct_iface_open(perf->uct.pd, perf->uct.worker, params->uct.tl_name,
                             params->uct.dev_name, 0, iface_config, &perf->uct.iface);
-    uct_iface_config_release(iface_config);
+    uct_config_release(iface_config);
     if (status != UCS_OK) {
         ucs_error("Failed to open iface: %s", ucs_status_string(status));
         goto out_destroy_pd;

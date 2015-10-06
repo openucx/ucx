@@ -49,7 +49,8 @@ static ucs_status_t uct_cma_mem_reg(uct_pd_h pd, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cma_pd_open(const char *pd_name, uct_pd_h *pd_p)
+static ucs_status_t uct_cma_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
+                                    uct_pd_h *pd_p)
 {
     static uct_pd_ops_t pd_ops = {
         .close        = (void*)ucs_empty_function,
@@ -72,7 +73,8 @@ static ucs_status_t uct_cma_pd_open(const char *pd_name, uct_pd_h *pd_p)
 UCT_PD_COMPONENT_DEFINE(uct_cma_pd_component, "cma",
         uct_cma_query_pd_resources, uct_cma_pd_open, NULL,
         0, ucs_empty_function_return_success,
-        ucs_empty_function_return_success)
+        ucs_empty_function_return_success, "CMA_", uct_pd_config_table,
+        uct_pd_config_t)
 
 ucs_status_t uct_cma_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {

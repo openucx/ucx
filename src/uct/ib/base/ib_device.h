@@ -66,6 +66,11 @@ struct uct_ib_device {
 extern uct_pd_component_t uct_ib_pd;
 
 
+typedef struct uct_ib_pd_config {
+    uct_pd_config_t      super;
+} uct_ib_pd_config_t;
+
+
 /*
  * Helper function to list IB transport resources.
  *
