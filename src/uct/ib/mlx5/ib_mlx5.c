@@ -39,7 +39,7 @@ ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *q
 #else
     struct mlx5_qp *mqp = ucs_container_of(qp, struct mlx5_qp, verbs_qp.qp);
 
-    if ((mqp->sq.cur_post != 0) || (mqp->rq.head != 0) || mqp->bf->need_lock) {
+    if ((mqp->sq.cur_post != 0) || (mqp->rq.head != 0)) {
         ucs_warn("cur_post=%d head=%d need_lock=%d", mqp->sq.cur_post,
                  mqp->rq.head, mqp->bf->need_lock);
         return UCS_ERR_NO_DEVICE;
