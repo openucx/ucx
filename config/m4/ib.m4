@@ -113,6 +113,7 @@ AS_IF([test "x$with_ib" == xyes],
              [AC_CHECK_MEMBERS([struct ibv_mlx5_qp_info.bf.need_lock],
                                [],
                                [AC_MSG_WARN([Cannot use mlx5 QP because it assumes dedicated BF])
+                                AC_MSG_WARN([Please upgrade MellanoxOFED to 3.0 or above])
                                 with_mlx5_hw=no],
                                [[#include <infiniband/mlx5_hw.h>]])],
              [])
