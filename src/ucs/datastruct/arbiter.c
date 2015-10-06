@@ -168,6 +168,8 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     }
                     last_elem->next = next_elem; /* Tail points to new head */
                 }
+            } else if (result == UCS_ARBITER_CB_RESULT_NEXT_GROUP) {
+                break;
             } else if (result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) {
                 elem->list.next = NULL;
                 if (group_head == prev_group) {
