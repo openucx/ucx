@@ -702,12 +702,16 @@ static double ucp_runtime_score_func(ucp_worker_h worker,
                  UCT_IFACE_FLAG_GET_BCOPY;
     }
 
-    if (context->config.features & UCP_FEATURE_AMO) {
+    if (context->config.features & UCP_FEATURE_AMO32) {
         /* TODO remove this requirement once we have SW atomics */
-        flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 | UCT_IFACE_FLAG_ATOMIC_ADD64 |
-                 UCT_IFACE_FLAG_ATOMIC_FADD32 | UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                 UCT_IFACE_FLAG_ATOMIC_SWAP32 | UCT_IFACE_FLAG_ATOMIC_SWAP64 |
-                 UCT_IFACE_FLAG_ATOMIC_CSWAP32 | UCT_IFACE_FLAG_ATOMIC_CSWAP64;
+        flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 | UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                 UCT_IFACE_FLAG_ATOMIC_SWAP32 | UCT_IFACE_FLAG_ATOMIC_CSWAP32;
+    }
+
+    if (context->config.features & UCP_FEATURE_AMO64) {
+        /* TODO remove this requirement once we have SW atomics */
+        flags |= UCT_IFACE_FLAG_ATOMIC_ADD64 | UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                 UCT_IFACE_FLAG_ATOMIC_SWAP64 | UCT_IFACE_FLAG_ATOMIC_CSWAP64;
     }
 
     ucs_trace("required transport flags for runtime: 0x%"PRIx64", "

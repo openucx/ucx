@@ -578,16 +578,17 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
     case UCX_PERF_CMD_FADD:
     case UCX_PERF_CMD_SWAP:
     case UCX_PERF_CMD_CSWAP:
-        if ((params->message_size != sizeof(uint32_t)) &&
-            (params->message_size != sizeof(uint64_t)))
-        {
+        if (params->message_size == sizeof(uint32_t)) {
+            *features = UCP_FEATURE_AMO32;
+        } else if (params->message_size == sizeof(uint64_t)) {
+            *features = UCP_FEATURE_AMO64;
+        } else {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("Atomic size should be either 32 or 64 bit");
             }
             return UCS_ERR_INVALID_PARAM;
         }
 
-        *features = UCP_FEATURE_AMO;
         break;
     case UCX_PERF_CMD_TAG:
         *features = UCP_FEATURE_TAG;
