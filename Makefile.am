@@ -28,6 +28,10 @@ SUBDIRS = \
 	src/tools/perf \
 	test/examples
 
+if BUILD_TCMALLOC
+SUBDIRS += src/tools/hook/gperftools
+endif
+
 if HAVE_GTEST
 SUBDIRS += test/gtest
 endif
