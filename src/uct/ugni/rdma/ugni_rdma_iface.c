@@ -56,6 +56,16 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_GET_BCOPY      |
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+
+    if(GNI_DEVICE_ARIES == iface->super.dev->type) {
+        iface_attr->cap.flags         |= UCT_IFACE_FLAG_PUT_SHORT |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP32;
+    }
+
     return UCS_OK;
 }
 
@@ -94,6 +104,11 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .ep_atomic_add64     = uct_ugni_ep_atomic_add64,
     .ep_atomic_fadd64    = uct_ugni_ep_atomic_fadd64,
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
+    .ep_atomic_swap64    = uct_ugni_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_ugni_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_ugni_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_ugni_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_ugni_ep_atomic_swap32,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
     .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
