@@ -36,6 +36,7 @@ ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *de
 void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 
 void uct_ugni_device_get_resource(const char *tl_name, 
+                                  uint64_t latency, size_t bandwidth,
                                   uct_ugni_device_t *dev,
                                   uct_tl_resource_desc_t *resource);
 #endif

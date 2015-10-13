@@ -73,6 +73,7 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 
 
 ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
+                                         uint64_t latency, size_t bandwidth,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p)
 {
@@ -80,7 +81,7 @@ ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
     int num_devices = job_info.num_devices;
     uct_ugni_device_t *devs = job_info.devices;
     int i;
-    ucs_status_t rc = UCS_OK;
+    ucs_status_t status = UCS_OK;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
@@ -90,12 +91,13 @@ ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
       ucs_error("Failed to allocate memory");
       num_devices = 0;
       resources = NULL;
-      rc = UCS_ERR_NO_MEMORY;
+      status = UCS_ERR_NO_MEMORY;
       goto error;
     }
 
     for (i = 0; i < job_info.num_devices; i++) {
-        uct_ugni_device_get_resource(tl_name, &devs[i], &resources[i]);
+        uct_ugni_device_get_resource(tl_name, latency, bandwidth,
+                                     &devs[i], &resources[i]);
     }
 
 error:
@@ -103,7 +105,7 @@ error:
     *resource_p      = resources;
     pthread_mutex_unlock(&uct_ugni_global_lock);
 
-    return rc;
+    return status;
 }
 
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
@@ -229,13 +231,13 @@ ucs_status_t uct_ugni_init_nic(int device_index,
                                uint32_t *address)
 {
     int modes;
-    ucs_status_t rc;
+    ucs_status_t status;
     gni_return_t ugni_rc = GNI_RC_SUCCESS;
 
-    rc = uct_ugni_fetch_pmi();
-    if (UCS_OK != rc) {
-        ucs_error("Failed to activate context, Error status: %d", rc);
-        return rc;
+    status = uct_ugni_fetch_pmi();
+    if (UCS_OK != status) {
+        ucs_error("Failed to activate context, Error status: %d", status);
+        return status;
     }
 
     *domain_id = job_info.pmi_rank_id + job_info.pmi_num_of_ranks * ugni_domain_global_counter;
@@ -269,19 +271,19 @@ ucs_status_t uct_ugni_init_nic(int device_index,
 
 ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface)
 {
-    int rc;
+    ucs_status_t status;
     gni_return_t ugni_rc;
 
     if(iface->activated) {
         return UCS_OK;
     }
 
-    rc = uct_ugni_init_nic(0, &iface->domain_id,
-                           &iface->cdm_handle, &iface->nic_handle,
-                           &iface->pe_address);
-    if (UCS_OK != rc) {
-        ucs_error("Failed to UGNI NIC, Error status: %d", rc);
-        return rc;
+    status = uct_ugni_init_nic(0, &iface->domain_id,
+                               &iface->cdm_handle, &iface->nic_handle,
+                               &iface->pe_address);
+    if (UCS_OK != status) {
+        ucs_error("Failed to UGNI NIC, Error status: %d", status);
+        return status;
     }
 
     ugni_rc = GNI_CqCreate(iface->nic_handle, UCT_UGNI_LOCAL_CQ, 0,
@@ -295,6 +297,31 @@ ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface)
     iface->activated = true;
 
     /* iface is activated */
+    return UCS_OK;
+}
+
+ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface)
+{
+    gni_return_t ugni_rc;
+
+    if(!iface->activated) {
+        return UCS_OK;
+    }
+
+    ugni_rc = GNI_CqDestroy(iface->local_cq);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
+                 gni_err_str[ugni_rc], ugni_rc);
+        return UCS_ERR_IO_ERROR;
+    }
+    ugni_rc = GNI_CdmDestroy(iface->cdm_handle);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        ucs_warn("GNI_CdmDestroy error status: %s (%d)",
+                 gni_err_str[ugni_rc], ugni_rc);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    iface->activated = false ;
     return UCS_OK;
 }
 
@@ -328,20 +355,8 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
                           const char*, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t *));
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t){
-    gni_return_t ugni_rc;
 
-    /* TBD: Clean endpoints first (unbind and destroy) ?*/
-    ugni_rc = GNI_CqDestroy(self->local_cq);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CqDestroy failed, Error status: %s %d",
-                 gni_err_str[ugni_rc], ugni_rc);
-    }
-    ugni_rc = GNI_CdmDestroy(self->cdm_handle);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        ucs_warn("GNI_CdmDestroy error status: %s (%d)",
-                 gni_err_str[ugni_rc], ugni_rc);
-    }
-    self->activated = false;
+    ugni_deactivate_iface(self);
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);

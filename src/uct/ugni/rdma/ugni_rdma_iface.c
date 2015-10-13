@@ -17,7 +17,7 @@ static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     { "", "MAX_SHORT=2048;MAX_BCOPY=2048;ALLOC=huge,mmap,heap", NULL,
     ucs_offsetof(uct_ugni_rdma_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("FMA", -1, 0, "fma",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("RDMA", -1, 0, "rdma",
                                   ucs_offsetof(uct_ugni_rdma_iface_config_t, mpool),
                                   "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
                                   "and could cause deadlock or performance degradation."),
@@ -30,6 +30,8 @@ static ucs_status_t uct_ugni_rdma_query_tl_resources(uct_pd_h pd,
                                                      unsigned *num_resources_p)
 {
     return uct_ugni_query_tl_resources(pd, UCT_UGNI_RDMA_TL_NAME,
+                                       900, /* nano sec*/
+                                       (6911 * pow(1024,2)), /* bytes */
                                        resource_p, num_resources_p);
 }
 
@@ -110,7 +112,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h work
                            const uct_iface_config_t *tl_config)
 {
     uct_ugni_rdma_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_rdma_iface_config_t);
-    ucs_status_t rc;
+    ucs_status_t status;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
@@ -121,79 +123,79 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h work
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;
     self->config.rdma_max_size = UCT_UGNI_MAX_RDMA;
 
-    rc = ucs_mpool_init(&self->free_desc,
-                        0,
-                        sizeof(uct_ugni_base_desc_t),
-                        0,                            /* alignment offset */
-                        UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                        128,                          /* grow */
-                        config->mpool.max_bufs,       /* max buffers */
-                        &uct_ugni_rdma_desc_mpool_ops,
-                        "UGNI-DESC-ONLY");
-    if (UCS_OK != rc) {
+    status = ucs_mpool_init(&self->free_desc,
+                            0,
+                            sizeof(uct_ugni_base_desc_t),
+                            0,                            /* alignment offset */
+                            UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128,                          /* grow */
+                            config->mpool.max_bufs,       /* max buffers */
+                            &uct_ugni_rdma_desc_mpool_ops,
+                            "UGNI-DESC-ONLY");
+    if (UCS_OK != status) {
         ucs_error("Mpool creation failed");
         goto exit;
     }
 
-    rc = ucs_mpool_init(&self->free_desc_get,
-                        0,
-                        sizeof(uct_ugni_rdma_fetch_desc_t),
-                        0,                            /* alignment offset */
-                        UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                        128 ,                         /* grow */
-                        config->mpool.max_bufs,       /* max buffers */
-                        &uct_ugni_rdma_desc_mpool_ops,
-                        "UGNI-GET-DESC-ONLY");
-    if (UCS_OK != rc) {
+    status = ucs_mpool_init(&self->free_desc_get,
+                            0,
+                            sizeof(uct_ugni_rdma_fetch_desc_t),
+                            0,                            /* alignment offset */
+                            UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128 ,                         /* grow */
+                            config->mpool.max_bufs,       /* max buffers */
+                            &uct_ugni_rdma_desc_mpool_ops,
+                            "UGNI-GET-DESC-ONLY");
+    if (UCS_OK != status) {
         ucs_error("Mpool creation failed");
         goto clean_desc;
     }
 
-    rc = ucs_mpool_init(&self->free_desc_buffer,
-                        0,
-                        sizeof(uct_ugni_base_desc_t) + self->config.fma_seg_size,
-                        sizeof(uct_ugni_base_desc_t), /* alignment offset */
-                        UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                        128 ,                         /* grow */
-                        config->mpool.max_bufs,       /* max buffers */
-                        &uct_ugni_rdma_desc_mpool_ops,
-                        "UGNI-DESC-BUFFER");
-    if (UCS_OK != rc) {
+    status = ucs_mpool_init(&self->free_desc_buffer,
+                            0,
+                            sizeof(uct_ugni_base_desc_t) + self->config.fma_seg_size,
+                            sizeof(uct_ugni_base_desc_t), /* alignment offset */
+                            UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                            128 ,                         /* grow */
+                            config->mpool.max_bufs,       /* max buffers */
+                            &uct_ugni_rdma_desc_mpool_ops,
+                            "UGNI-DESC-BUFFER");
+    if (UCS_OK != status) {
         ucs_error("Mpool creation failed");
         goto clean_desc_get;
     }
 
-    rc = uct_iface_mpool_init(&self->super.super,
-                              &self->free_desc_famo,
-                              sizeof(uct_ugni_rdma_fetch_desc_t) + 8,
-                              sizeof(uct_ugni_rdma_fetch_desc_t),/* alignment offset */
-                              UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                              &config->mpool,               /* mpool config */
-                              128 ,                         /* grow */
-                              uct_ugni_base_desc_key_init,  /* memory/key init */
-                              "UGNI-DESC-FAMO");
-    if (UCS_OK != rc) {
+    status = uct_iface_mpool_init(&self->super.super,
+                                  &self->free_desc_famo,
+                                  sizeof(uct_ugni_rdma_fetch_desc_t) + 8,
+                                  sizeof(uct_ugni_rdma_fetch_desc_t),/* alignment offset */
+                                  UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                                  &config->mpool,               /* mpool config */
+                                  128 ,                         /* grow */
+                                  uct_ugni_base_desc_key_init,  /* memory/key init */
+                                  "UGNI-DESC-FAMO");
+    if (UCS_OK != status) {
         ucs_error("Mpool creation failed");
         goto clean_buffer;
     }
 
-    rc = uct_iface_mpool_init(&self->super.super,
-                              &self->free_desc_get_buffer,
-                              sizeof(uct_ugni_rdma_fetch_desc_t) +
-                              self->config.fma_seg_size,
-                              sizeof(uct_ugni_rdma_fetch_desc_t), /* alignment offset */
-                              UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
-                              &config->mpool,               /* mpool config */
-                              128 ,                         /* grow */
-                              uct_ugni_base_desc_key_init,  /* memory/key init */
-                              "UGNI-DESC-GET");
-    if (UCS_OK != rc) {
+    status = uct_iface_mpool_init(&self->super.super,
+                                  &self->free_desc_get_buffer,
+                                  sizeof(uct_ugni_rdma_fetch_desc_t) +
+                                  self->config.fma_seg_size,
+                                  sizeof(uct_ugni_rdma_fetch_desc_t), /* alignment offset */
+                                  UCS_SYS_CACHE_LINE_SIZE,      /* alignment */
+                                  &config->mpool,               /* mpool config */
+                                  128 ,                         /* grow */
+                                  uct_ugni_base_desc_key_init,  /* memory/key init */
+                                  "UGNI-DESC-GET");
+    if (UCS_OK != status) {
         ucs_error("Mpool creation failed");
         goto clean_famo;
     }
 
-    rc = ugni_activate_iface(&self->super);
-    if (UCS_OK != rc) {
+    status = ugni_activate_iface(&self->super);
+    if (UCS_OK != status) {
         ucs_error("Failed to activate the interface");
         goto clean_get_buffer;
     }
@@ -217,7 +219,7 @@ clean_desc:
 exit:
     ucs_error("Failed to activate interface");
     pthread_mutex_unlock(&uct_ugni_global_lock);
-    return rc;
+    return status;
 }
 
 UCS_CLASS_DEFINE(uct_ugni_rdma_iface_t, uct_ugni_iface_t);

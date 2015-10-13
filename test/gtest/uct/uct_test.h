@@ -155,6 +155,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
 #define UCT_TEST_TLS \
     UCT_TEST_IB_TLS, \
     ugni_rdma, \
+    ugni_udt, \
     mm, \
     cma, \
     knem, \
