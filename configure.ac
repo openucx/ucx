@@ -164,9 +164,14 @@ AC_ARG_ENABLE([debug-data],
 
 AC_ARG_ENABLE([tcmalloc],
         AS_HELP_STRING([--enable-tcmalloc],
-                       [Compile with tcmalloc, libtcmalloc will be installed in the same place as UCX. default: NO]),
-        [tcmalloc_enabled=yes],
-        [])
+                       [Compile with tcmalloc, libtcmalloc will be installed in the same place as UCX. default: YES]),
+        [if test "x$enableval" = xyes; then
+	   tcmalloc_enabled=yes
+	 else
+	   tcmalloc_enabled=no
+	 fi
+	 ],
+        [tcmalloc_enabled=yes])
 
 AS_IF([test "x$tcmalloc_enabled" == xyes],
           [AS_MESSAGE([compiling tcmalloc])
@@ -178,7 +183,7 @@ AS_IF([test "x$tcmalloc_enabled" == xyes],
 # subdir must always be configured to make sure that dist checks work
 #
 
-AC_CONFIG_SUBDIRS([src/tools/hook/gperftools])
+AC_CONFIG_SUBDIRS([external/gperftools])
 AM_CONDITIONAL([BUILD_TCMALLOC],[test "x$BUILD_TCMALLOC" = "xyes"])
 
 #

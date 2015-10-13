@@ -29,7 +29,7 @@ SUBDIRS = \
 	test/examples
 
 if BUILD_TCMALLOC
-SUBDIRS += src/tools/hook/gperftools
+SUBDIRS += external/gperftools
 endif
 
 if HAVE_GTEST
