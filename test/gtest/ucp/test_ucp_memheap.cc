@@ -7,7 +7,9 @@
 #include "test_ucp_memheap.h"
 
 
-void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alignment)
+void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, 
+                                          size_t alignment,
+                                          int malloc_allocation)
 {
     static const size_t memheap_size = 512 * 1024;
     entity *pe0 = create_entity();
@@ -17,6 +19,12 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
     ucp_mem_h memh;
     void *memheap = NULL;
+
+    if (malloc_allocation) {
+        memheap = malloc(memheap_size);
+        EXPECT_TRUE(memheap != NULL);
+    }
+
     status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
     ASSERT_UCS_OK(status);
 
