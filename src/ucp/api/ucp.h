@@ -353,6 +353,7 @@ void ucp_worker_destroy(ucp_worker_h worker);
 void ucp_worker_progress_register(ucp_worker_h worker,
                                   ucp_user_progress_func_t func, void *arg);
 
+
 /**
  * @ingroup UCP_WORKER
  * @brief Remove a previously registered user worker progress callback.
@@ -522,25 +523,6 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
 
 /**
  * @ingroup UCP_COMM
- * @brief Send tagged message.
- *
- * This function is blocking - it returns only after the buffer can be reused.
- *
- * @param [in]  ep          Destination to send to.
- * @param [in]  buffer      Message payload to send.
- * @param [in]  count       Number of elements in the buffer.
- * @param [in]  datatype    Type of elements in the buffer.
- * @param [in]  tag         Message tag to send.
- *
- * @return UCS_OK - request was sent successfully.
- *         otherwise - error during send.
- */
-ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t count,
-                          ucp_datatype_t datatype, ucp_tag_t tag);
-
-
-/**
- * @ingroup UCP_COMM
  * @brief Send tagged message in a non-blocking fashion.
  *
  *  Non-blocking tag send. The function returns immediately, however the actual
@@ -563,31 +545,6 @@ ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t count,
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
                                  ucp_send_callback_t cb);
-
-
-/**
- * @ingroup UCP_COMM
- * @brief Receive-match a tagged message.
- *
- * @param [in]  worker      UCP worker.
- * @param [in]  buffer      Buffer to receive the data to.
- * @param [in]  count       Number of elements in the buffer.
- * @param [in]  datatype    Type of elements in the buffer.
- * @param [in]  tag         Message tag to expect.
- * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
- *                           against the expected tag. If the bit is '1', the
- *                           equivalent bit from the tag must match the incoming
- *                           message.
- * @param [out] info        Filled with details about the received message.
- *
- * @return UCS_OK            - request was sent successfully.
- *         UCS_ERR_TRUNCATED - request was received but data could not fit into
- *                             the provided buffer. info is undefined.
- *         otherwise         - error during receive.
- */
-ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t count,
-                          ucp_datatype_t datatype, ucp_tag_t tag,
-                          ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
 
 
 /**
@@ -794,6 +751,21 @@ ucs_status_t ucp_atomic_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
 ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
                                 uint64_t remote_addr, ucp_rkey_h rkey,
                                 uint64_t *result);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Check the current status of a request.
+ *
+ * @param [in]  request      Non-blocking request to check.
+ *
+ * @return UCS_INPROGRESS if the request is no completed.
+ *         UCS_OK if completed successfully.
+ *         UCS_ERR_CACNELED if canceled.
+ *         UCS_ERR_MESSAGE_TRUNCATED if receive was truncated.
+ *         UCS_ERR_xx if completed with an error.
+ */
+ucs_status_t ucp_request_test(void *request);
 
 
 /**

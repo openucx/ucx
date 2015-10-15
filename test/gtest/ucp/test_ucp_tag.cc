@@ -79,6 +79,39 @@ protected:
         }
     }
 
+    void send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
+                ucp_tag_t tag)
+    {
+        request *req;
+        req = (request*)ucp_tag_send_nb(sender->ep(), buffer, count, datatype,
+                                        tag, send_callback);
+        if (!UCS_PTR_IS_PTR(req)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+        } else {
+            wait(req);
+            request_release(req);
+        }
+    }
+
+    ucs_status_t recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
+                        ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info)
+    {
+        request *req;
+
+        req = (request*)ucp_tag_recv_nb(receiver->worker(), buffer, count, datatype,
+                                        tag, tag_mask, recv_callback);
+        if (UCS_PTR_IS_ERR(req)) {
+            return UCS_PTR_STATUS(req);
+        } else if (req == NULL) {
+            UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+        } else {
+            wait(req);
+            *info = req->info;
+            request_release(req);
+            return UCS_OK;
+        }
+    }
+
     static void* dt_start_pack(void *context, const void *buffer, size_t count)
     {
         return (void*)count;
@@ -149,20 +182,17 @@ ucp_generic_dt_ops test_ucp_tag::test_dt_ops = {
 
 
 UCS_TEST_F(test_ucp_tag, send_recv_exp) {
-    ucs_status_t status;
     ucp_tag_recv_info_t info;
+    ucs_status_t status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
 
-    status = ucp_tag_send(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
-                          0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
 
     /* No progress - goes to expected */
 
-    status = ucp_tag_recv(receiver->worker(), &recv_data, sizeof(recv_data),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sizeof(send_data),   info.length);
@@ -171,20 +201,17 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp) {
 }
 
 UCS_TEST_F(test_ucp_tag, send_recv_unexp) {
-    ucs_status_t status;
     ucp_tag_recv_info_t info;
+    ucs_status_t status;
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
 
-    status = ucp_tag_send(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
-                          0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
 
     short_progress_loop(); /* Receive messages as unexpected */
 
-    status = ucp_tag_recv(receiver->worker(), &recv_data, sizeof(recv_data),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sizeof(send_data),   info.length);
@@ -202,12 +229,9 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp_medium) {
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    status = ucp_tag_send(sender->ep(), &sendbuf[0], sendbuf.size(), DATATYPE,
-                          0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
 
-    status = ucp_tag_recv(receiver->worker(), &recvbuf[0], recvbuf.size(),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sendbuf.size(),      info.length);
@@ -217,20 +241,17 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp_medium) {
 
 UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
     static const size_t size = 50000;
-    ucs_status_t status;
     ucp_tag_recv_info_t info;
+    ucs_status_t status;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     /* 1st send */
 
-    status = ucp_tag_send(sender->ep(), &sendbuf[0], sendbuf.size(), DATATYPE,
-                          0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
 
-    status = ucp_tag_recv(receiver->worker(), &recvbuf[0], recvbuf.size(),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     /* 2nd send */
@@ -243,8 +264,7 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
                                             send_callback);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
-    status = ucp_tag_recv(receiver->worker(), &recvbuf[0], recvbuf.size(),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sendbuf.size(),      info.length);
@@ -358,16 +378,13 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_medium_wildcard) {
 
 UCS_TEST_F(test_ucp_tag, send_recv_nb_partial_exp_medium) {
     static const size_t size = 50000;
-    ucs_status_t status;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    status = ucp_tag_send(sender->ep(), &sendbuf[0], sendbuf.size(), DATATYPE,
-                          0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
 
     usleep(1000);
     progress();
@@ -397,14 +414,11 @@ UCS_TEST_F(test_ucp_tag, send_recv_unexp_medium) {
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    status = ucp_tag_send(sender->ep(), &sendbuf[0], sendbuf.size(), DATATYPE,
-                          0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
 
     short_progress_loop(); /* Receive messages as unexpected */
 
-    status = ucp_tag_recv(receiver->worker(), &recvbuf[0], recvbuf.size(),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sendbuf.size(),      info.length);
@@ -421,11 +435,9 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp_gentype) {
     status = ucp_dt_create_generic(&test_dt_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
-    status = ucp_tag_send(sender->ep(), NULL, count, dt, 0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(NULL, count, dt, 0x111337);
 
-    status = ucp_tag_recv(receiver->worker(), NULL, count, dt, 0x1337, 0xffff,
-                          &info);
+    status = recv_b(NULL, count, dt, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(count * sizeof(uint32_t), info.length);
@@ -449,8 +461,7 @@ UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
 
     ucp_worker_progress(receiver->worker());
 
-    status = ucp_tag_recv(receiver->worker(), &recv_data, sizeof(recv_data),
-                          DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sizeof(send_data),   info.length);
@@ -467,7 +478,6 @@ UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
-    ucs_status_t status;
 
     request *my_recv_req;
     my_recv_req = (request*)ucp_tag_recv_nb(receiver->worker(), &recv_data,
@@ -477,9 +487,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
 
-    status = ucp_tag_send(sender->ep(), &send_data, sizeof(send_data),
-                          DATATYPE, 0x111337);
-    ASSERT_UCS_OK(status);
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
 
     wait(my_recv_req);
 
@@ -510,8 +518,8 @@ UCS_TEST_F(test_ucp_tag, send_nb_multiple_recv_unexp) {
     ucp_worker_progress(receiver->worker());
 
     for (unsigned i = 0; i < num_requests; ++i) {
-        status = ucp_tag_recv(receiver->worker(), &recv_data, sizeof(recv_data),
-                              DATATYPE, 0x1337, 0xffff, &info);
+        status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff,
+                        &info);
         ASSERT_UCS_OK(status);
         ASSERT_EQ(num_requests, send_reqs.size());
 

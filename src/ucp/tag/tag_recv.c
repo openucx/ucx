@@ -70,42 +70,6 @@ ucp_tag_recv_request_fill(ucp_request_t *req, void *buffer, size_t count,
     // TODO init gen type
 }
 
-ucs_status_t ucp_tag_recv(ucp_worker_h worker, void *buffer, size_t count,
-                          uintptr_t datatype, ucp_tag_t tag, uint64_t tag_mask,
-                          ucp_tag_recv_info_t *info)
-{
-    ucp_context_h context = worker->context;
-    ucs_status_t status;
-    ucp_request_t req;
-
-    ucs_trace_req("recv buffer %p count %zu tag %"PRIx64"/%"PRIx64, buffer,
-                  count, tag, tag_mask);
-
-    /* First, search in unexpected list */
-    req.recv.state.offset = 0;
-    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
-        info->sender_tag = 0;
-    }
-    status = ucp_tag_search_unexp(context, buffer, count, datatype, tag, tag_mask,
-                                  &req, info);
-    if (status != UCS_INPROGRESS) {
-        return status;
-    }
-
-    /* If not found on unexpected, wait until it arrives */
-    ucs_trace_req("expecting receive request %p", &req);
-    ucp_tag_recv_request_fill(&req, buffer, count, datatype, tag, tag_mask);
-    req.cb.tag_recv   = (ucp_tag_recv_callback_t)ucs_empty_function; // TODO flag?
-    req.recv.exp_info = info;
-    ucs_queue_push(&context->tag.expected, &req.recv.queue);
-
-    do {
-        uct_worker_progress(worker->uct);
-        /* coverity[loop_condition] */
-    } while (!(req.flags & UCP_REQUEST_FLAG_COMPLETED));
-    return req.status;
-}
-
 ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
                                  uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                                  ucp_tag_recv_callback_t cb)

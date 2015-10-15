@@ -573,46 +573,14 @@ UCS_TEST_F(test_datatype, notifier_chain) {
     }
 }
 
-#if 0
-void test_callbackq_cb(ucs_callback_t *self)
-{
-    ucs_test_callbackq_elem_t *elem = ucs_derived_of(self, ucs_test_callbackq_elem_t);
-    elem->sn = 0;
+UCS_TEST_F(test_datatype, ptr_status) {
+    void *ptr1 = (void*)(UCS_BIT(63) + 10);
+    EXPECT_TRUE(UCS_PTR_IS_PTR(ptr1));
+    EXPECT_FALSE(UCS_PTR_IS_PTR(NULL));
+    EXPECT_FALSE(UCS_PTR_IS_ERR(NULL));
+    EXPECT_FALSE(UCS_PTR_IS_ERR(ptr1));
+
+    void *ptr2 = (void*)(uintptr_t)(UCS_ERR_LAST + 1);
+    EXPECT_TRUE(UCS_PTR_IS_ERR(ptr2));
 }
 
-UCS_TEST_F(test_datatype, callbackq) {
-    ucs_callbackq_t cbq;
-    ucs_test_callbackq_elem_t elem1, elem2, elem3;
-    unsigned count;
-
-    ucs_callbackq_init(&cbq);
-
-    elem1.sn = 1;
-    elem1.super.func = test_callbackq_cb;
-    elem2.sn = 2;
-    elem2.super.func = test_callbackq_cb;
-    elem3.sn = 3;
-    elem3.super.func = test_callbackq_cb;
-
-    ucs_callbackq_push(&cbq, &elem1);
-    ucs_callbackq_push(&cbq, &elem2);
-    ucs_callbackq_push(&cbq, &elem3);
-
-    count = ucs_test_callbackq_pull(&cbq, 0);
-    EXPECT_EQ(0u, count);
-
-    count = ucs_test_callbackq_pull(&cbq, 1);
-    EXPECT_EQ(1u, count);
-
-    count = ucs_test_callbackq_pull(&cbq, 2);
-    EXPECT_EQ(1u, count);
-    EXPECT_EQ(0u, elem1.sn); /* should be removed */
-    EXPECT_EQ(0u, elem2.sn); /* should be removed */
-
-    count = ucs_test_callbackq_pull(&cbq, 10);
-    EXPECT_EQ(1u, count);
-    EXPECT_EQ(0u, elem3.sn); /* should be removed */
-
-    ucs_callbackq_cleanup(&cbq);
-}
-#endif

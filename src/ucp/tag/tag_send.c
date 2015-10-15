@@ -79,41 +79,6 @@ ucp_tag_send_try(ucp_ep_h ep, const void *buffer, size_t count,
     return UCS_ERR_NO_RESOURCE; /* Fallback to slower progress */
 }
 
-static void ucp_tag_send_blocking_completion(void *request, ucs_status_t status)
-{
-    ucp_request_t *req = (ucp_request_t*)request - 1;
-    req->status = status;
-}
-
-ucs_status_t ucp_tag_send(ucp_ep_h ep, const void *buffer, size_t count,
-                          uintptr_t datatype, ucp_tag_t tag)
-{
-    ucs_status_t status;
-    ucp_request_t req;
-
-    ucs_trace_req("send buffer %p count %zu tag %"PRIx64, buffer, count, tag);
-
-    status = ucp_tag_send_try(ep, buffer, count, datatype, tag);
-    if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-        return UCS_OK;
-    }
-
-    req.flags    = UCP_REQUEST_FLAG_BLOCKING;
-    req.cb.send  = ucp_tag_send_blocking_completion;
-
-    status = ucp_tag_send_start_req(ep, buffer, count, datatype, tag, &req);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    do {
-        ucp_worker_progress(ep->worker);
-        req.send.uct.func(&req.send.uct);
-        /* coverity[loop_condition] */
-    } while (!(req.flags & UCP_REQUEST_FLAG_COMPLETED));
-    return req.status;
-}
-
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  uintptr_t datatype, ucp_tag_t tag,
                                  ucp_send_callback_t cb)

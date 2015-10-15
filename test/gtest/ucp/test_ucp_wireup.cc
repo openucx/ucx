@@ -12,6 +12,23 @@ protected:
         ucp_test::get_params(params);
         params.features |= UCP_FEATURE_TAG;
     }
+
+    static void send_completion(void *request, ucs_status_t status) {
+    }
+
+    static void recv_completion(void *request, ucs_status_t status,
+                                ucp_tag_recv_info_t *info) {
+    }
+
+    void wait(void *req) {
+        ucs_status_t status;
+        do {
+            progress();
+            status = ucp_request_test(req);
+        } while (status == UCS_INPROGRESS);
+        ucp_request_release(req);
+        ASSERT_UCS_OK(status);
+    }
 };
 
 UCS_TEST_F(test_ucp_wireup, one_sided_wireup) {
@@ -21,19 +38,24 @@ UCS_TEST_F(test_ucp_wireup, one_sided_wireup) {
     uint64_t send_data = 0x12121212;
     entity *sender   = create_entity();
     entity *receiver = create_entity();
-    ucs_status_t status;
+    void *req;
 
     sender->connect(receiver);
 
-    status = ucp_tag_send(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
-                          TAG);
-    ASSERT_UCS_OK(status);
+    req = ucp_tag_send_nb(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
+                          TAG, send_completion);
+    if (UCS_PTR_IS_PTR(req)) {
+        wait(req);
+    } else {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    }
 
     ucp_tag_recv_info_t info;
     uint64_t recv_data;
-    status = ucp_tag_recv(receiver->worker(), &recv_data, sizeof(recv_data),
-                          DATATYPE, TAG, (ucp_tag_t)-1, &info);
-    ASSERT_UCS_OK(status);
+    req = ucp_tag_recv_nb(receiver->worker(), &recv_data, sizeof(recv_data),
+                          DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
+    wait(req);
+
 
     EXPECT_EQ(send_data, recv_data);
     EXPECT_EQ(sizeof(send_data), info.length);
