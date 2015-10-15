@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -715,4 +716,9 @@ void ucs_empty_function()
 ucs_status_t ucs_empty_function_return_success()
 {
     return UCS_OK;
+}
+
+ucs_status_t uct_empty_function_return_unsupported()
+{
+    return UCS_ERR_UNSUPPORTED;
 }

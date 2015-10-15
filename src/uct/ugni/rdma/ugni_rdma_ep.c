@@ -295,43 +295,6 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
-#if GNI_VERSION < GNI_VERSION_CHECK(0x00, 0x5c, 0x0101)
-ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                       uint64_t remote_addr, uct_rkey_t rkey,
-                                       uint64_t *result, uct_completion_t *comp)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-ucs_status_t uct_ugni_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                      uint64_t remote_addr, uct_rkey_t rkey)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-ucs_status_t uct_ugni_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                       uint64_t remote_addr, uct_rkey_t rkey,
-                                       uint32_t *result, uct_completion_t *comp)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-ucs_status_t uct_ugni_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                       uint64_t remote_addr, uct_rkey_t rkey,
-                                       uint32_t *result, uct_completion_t *comp)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uint32_t *result, uct_completion_t *comp)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-#else
-
 static void uct_ugni_amo_unpack32(uct_completion_t *self)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
@@ -450,7 +413,6 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
                    fma->super.desc.remote_mem_hndl.qword2);
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
-#endif
 
 /* Align to the next 4 bytes */
 

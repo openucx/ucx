@@ -104,15 +104,16 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .ep_atomic_add64     = uct_ugni_ep_atomic_add64,
     .ep_atomic_fadd64    = uct_ugni_ep_atomic_fadd64,
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
-    .ep_atomic_swap64    = uct_ugni_ep_atomic_swap64,
-    .ep_atomic_add32     = uct_ugni_ep_atomic_add32,
-    .ep_atomic_fadd32    = uct_ugni_ep_atomic_fadd32,
-    .ep_atomic_cswap32   = uct_ugni_ep_atomic_cswap32,
-    .ep_atomic_swap32    = uct_ugni_ep_atomic_swap32,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
     .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
     .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    /* Not supported on Gemini and we overlaod it for Aries */
+    .ep_atomic_swap64    = (void*)uct_empty_function_return_unsupported,
+    .ep_atomic_add32     = (void*)uct_empty_function_return_unsupported,
+    .ep_atomic_fadd32    = (void*)uct_empty_function_return_unsupported,
+    .ep_atomic_cswap32   = (void*)uct_empty_function_return_unsupported,
+    .ep_atomic_swap32    = (void*)uct_empty_function_return_unsupported,
 };
 
 static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
@@ -213,6 +214,14 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_pd_h pd, uct_worker_h work
     if (UCS_OK != status) {
         ucs_error("Failed to activate the interface");
         goto clean_get_buffer;
+    }
+
+    if(GNI_DEVICE_ARIES == self->super.dev->type) {
+        uct_ugni_rdma_iface_ops.ep_atomic_swap64    = uct_ugni_ep_atomic_swap64;
+        uct_ugni_rdma_iface_ops.ep_atomic_add32     = uct_ugni_ep_atomic_add32;
+        uct_ugni_rdma_iface_ops.ep_atomic_fadd32    = uct_ugni_ep_atomic_fadd32;
+        uct_ugni_rdma_iface_ops.ep_atomic_cswap32   = uct_ugni_ep_atomic_cswap32;
+        uct_ugni_rdma_iface_ops.ep_atomic_swap32    = uct_ugni_ep_atomic_swap32;
     }
 
     /* TBD: eventually the uct_ugni_progress has to be moved to 
