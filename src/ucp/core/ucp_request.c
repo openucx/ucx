@@ -12,15 +12,10 @@
 #include <ucs/debug/log.h>
 
 
-ucs_status_t ucp_request_test(void *request)
+int ucp_request_is_completed(void *request)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
-
-    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        return req->status;
-    } else {
-        return UCS_INPROGRESS;
-    }
+    return !!(req->flags & UCP_REQUEST_FLAG_COMPLETED);
 }
 
 void ucp_request_release(void *request)

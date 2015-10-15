@@ -41,8 +41,6 @@ public:
 
     ucs_status_t UCS_F_ALWAYS_INLINE wait(void *request, bool is_requestor)
     {
-        ucs_status_t status;
-
         if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
             return UCS_PTR_STATUS(request);
         }
@@ -53,10 +51,9 @@ public:
             } else {
                 progress_responder();
             }
-            status = ucp_request_test(request);
-        } while (status == UCS_INPROGRESS);
+        } while (!ucp_request_is_completed(request));
         ucp_request_release(request);
-        return status;
+        return UCS_OK;
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE

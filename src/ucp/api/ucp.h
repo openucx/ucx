@@ -762,17 +762,13 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
 
 /**
  * @ingroup UCP_COMM
- * @brief Check the current status of a request.
+ * @brief Check if a non-blocking request is completed.
  *
  * @param [in]  request      Non-blocking request to check.
  *
- * @return UCS_INPROGRESS if the request is no completed.
- *         UCS_OK if completed successfully.
- *         UCS_ERR_CACNELED if canceled.
- *         UCS_ERR_MESSAGE_TRUNCATED if receive was truncated.
- *         UCS_ERR_xx if completed with an error.
+ * @return Whether the request is completed.
  */
-ucs_status_t ucp_request_test(void *request);
+int ucp_request_is_completed(void *request);
 
 
 /**

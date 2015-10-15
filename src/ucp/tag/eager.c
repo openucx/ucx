@@ -58,7 +58,6 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
             /* Last fragment completes the request */
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 ucs_queue_del_iter(&context->tag.expected, iter);
-                req->status                    = status;
                 ucp_request_complete(req, req->cb.tag_recv, status, req->recv.exp_info);
             } else {
                 req->recv.state.offset += recv_len;

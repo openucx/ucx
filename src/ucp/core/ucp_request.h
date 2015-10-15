@@ -66,8 +66,8 @@ typedef struct ucp_send_state {
  * Request in progress.
  */
 typedef struct ucp_request {
-    ucs_status_t                  status;  /* Status */
     uint16_t                      flags;   /* Request flags */
+
     union {
         ucp_send_callback_t       send;
         ucp_tag_recv_callback_t   tag_recv;

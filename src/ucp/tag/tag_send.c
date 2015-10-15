@@ -26,7 +26,6 @@ ucp_tag_send_start_req(ucp_ep_h ep, const void *buffer, size_t count,
     ucp_dt_generic_t *dt_gen;
     void *state;
 
-    req->status            = UCS_INPROGRESS;
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.count        = count;
