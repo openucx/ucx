@@ -162,7 +162,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
                             sizeof(ucp_request_t) + context->config.request.size,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 1000, UINT_MAX,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                             &ucp_request_mpool_ops, "ucp_requests");
     if (status != UCS_OK) {
         goto err_destroy_uct_worker;
