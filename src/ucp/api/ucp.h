@@ -125,7 +125,7 @@ enum {
 struct ucp_generic_dt_ops {
 
     /**
-     * Start a packing request.
+     * @brief Start a packing request.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to pack.
@@ -136,7 +136,8 @@ struct ucp_generic_dt_ops {
     void* (*start_pack)(void *context, const void *buffer, size_t count);
 
     /**
-     * Start an unpacking request.
+     * @ingroup UCP_DATATYPE
+     * @brief Start an unpacking request.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to unpack to.
@@ -147,8 +148,10 @@ struct ucp_generic_dt_ops {
     void* (*start_unpack)(void *context, void *buffer, size_t count);
 
     /**
-     * Get the total size of packed data. For packing this is the output size,
-     * for unpacking this is the maximal input size.
+     * @ingroup UCP_DATATYPE
+     * @brief Get the total size of packed data.
+     *
+     * For packing return is the output size, for unpacking - the maximal input size.
      *
      * @param [in]  state          State as returned from start_pack().
      *
@@ -157,7 +160,8 @@ struct ucp_generic_dt_ops {
     size_t (*packed_size)(void *state);
 
     /**
-     * Pack some data.
+     * @ingroup UCP_DATATYPE
+     * @brief Pack some data.
      *
      * @param [in]  state          State as returned from start_pack().
      * @param [in]  offset         Virtual offset in the output stream.
@@ -170,7 +174,8 @@ struct ucp_generic_dt_ops {
     size_t (*pack) (void *state, size_t offset, void *dest, size_t max_length);
 
     /**
-     * Unpack some data.
+     * @ingroup UCP_DATATYPE
+     * @brief Unpack some data.
      *
      * @param [in]  state          State as returned from start_unpack().
      * @param [in]  offset         Virtual offset in the input stream.
@@ -182,7 +187,8 @@ struct ucp_generic_dt_ops {
     ucs_status_t (*unpack)(void *state, size_t offset, const void *src, size_t count);
 
     /**
-     * Finish packing/unpacking.
+     * @ingroup UCP_DATATYPE
+     * @brief Finish packing/unpacking.
      *
      * @param [in]  state          State as returned from start_pack()/start_unpack().
      */
@@ -192,6 +198,7 @@ struct ucp_generic_dt_ops {
 
 /**
  * @ingroup UCP_CONFIG
+ * @brief Parameters for UCP configuration.
  */
 struct ucp_params {
     uint64_t                    features;        /**< Which UCP features to activate. Using other
