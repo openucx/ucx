@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -287,5 +288,6 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
  */
 void ucs_empty_function();
 ucs_status_t ucs_empty_function_return_success();
+ucs_status_t uct_empty_function_return_unsupported();
 
 #endif
