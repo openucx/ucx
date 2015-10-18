@@ -474,6 +474,20 @@ UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
     }
 }
 
+UCS_TEST_F(test_ucp_tag, send_recv_truncated) {
+    ucp_tag_recv_info_t info;
+    ucs_status_t status;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef;
+
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+
+    short_progress_loop(); /* Receive messages as unexpected */
+
+    status = recv_b(NULL, 0, DATATYPE, 0x1337, 0xffff, &info);
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
+}
+
 UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
