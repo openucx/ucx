@@ -97,6 +97,7 @@ protected:
     ucs_status_t recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
                         ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info)
     {
+        ucs_status_t status;
         request *req;
 
         req = (request*)ucp_tag_recv_nb(receiver->worker(), buffer, count, datatype,
@@ -107,9 +108,10 @@ protected:
             UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
         } else {
             wait(req);
-            *info = req->info;
+            status = req->status;
+            *info  = req->info;
             request_release(req);
-            return UCS_OK;
+            return status;
         }
     }
 
@@ -475,6 +477,20 @@ UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
         EXPECT_TRUE(my_send_req->completed);
         request_release(my_send_req);
     }
+}
+
+UCS_TEST_F(test_ucp_tag, send_recv_truncated) {
+    ucp_tag_recv_info_t info;
+    ucs_status_t status;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef;
+
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+
+    short_progress_loop(); /* Receive messages as unexpected */
+
+    status = recv_b(NULL, 0, DATATYPE, 0x1337, 0xffff, &info);
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
 }
 
 UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
