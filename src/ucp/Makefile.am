@@ -17,14 +17,33 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp.h
 
 noinst_HEADERS = \
-	proto/ucp_int.h
+	core/ucp_context.h \
+	core/ucp_ep.h \
+	core/ucp_mm.h \
+	core/ucp_request.h \
+	core/ucp_worker.h \
+	dt/dt_contig.h \
+	dt/dt_generic.h \
+	tag/eager.h \
+	tag/match.h \
+	tag/rndv.h \
+	wireup/stub_ep.h \
+	wireup/wireup.h
 
 libucp_la_SOURCES = \
-	proto/ucp_atomic.c \
-	proto/ucp_context.c \
-	proto/ucp_ep.c \
-	proto/ucp_mm.c \
-	proto/ucp_rma.c \
-	proto/ucp_tag.c \
-	proto/ucp_wireup.c \
-	proto/ucp_worker.c
+	amo/basic_amo.c \
+	core/ucp_context.c \
+	core/ucp_ep.c \
+	core/ucp_mm.c \
+	core/ucp_request.c \
+	core/ucp_rkey.c \
+	core/ucp_worker.c \
+	dt/dt_contig.c \
+	dt/dt_generic.c \
+	rma/basic_rma.c \
+	tag/eager.c \
+	tag/rndv.c \
+	tag/tag_recv.c \
+	tag/tag_send.c \
+	wireup/stub_ep.c \
+	wireup/wireup.c

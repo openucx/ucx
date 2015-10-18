@@ -38,10 +38,6 @@ public:
         EXPECT_EQ(std::string((char*)memheap_addr, reply_buffer.length()),
                   reply_buffer);
     }
-
-    virtual uint64_t features() const {
-        return UCP_FEATURE_RMA;
-    }
 };
 
 

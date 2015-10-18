@@ -39,13 +39,34 @@ public:
         ucp_worker_progress(m_perf.ucp.worker);
     }
 
+    ucs_status_t UCS_F_ALWAYS_INLINE wait(void *request, bool is_requestor)
+    {
+        if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+            return UCS_PTR_STATUS(request);
+        }
+
+        do {
+            if (is_requestor) {
+                progress_requestor();
+            } else {
+                progress_responder();
+            }
+        } while (!ucp_request_is_completed(request));
+        ucp_request_release(request);
+        return UCS_OK;
+    }
+
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, unsigned length, uint8_t sn,
          uint64_t remote_addr, ucp_rkey_h rkey)
     {
+        void *request;
+
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            return ucp_tag_send(ep, buffer, length, TAG);
+            request = ucp_tag_send_nb(ep, buffer, length, ucp_dt_make_contig(1),
+                                      TAG, (ucp_send_callback_t)ucs_empty_function);
+            return wait(request, true);
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
             return ucp_put(ep, buffer, length, remote_addr, rkey);
@@ -91,12 +112,15 @@ public:
     ucs_status_t UCS_F_ALWAYS_INLINE
     recv(ucp_worker_h worker, void *buffer, unsigned length, uint8_t sn)
     {
-        ucp_tag_recv_completion_t comp;
         volatile uint8_t *ptr;
+        void *request;
 
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            return ucp_tag_recv(worker, buffer, length, TAG, 0, &comp);
+            request = ucp_tag_recv_nb(worker, buffer, length, ucp_dt_make_contig(1),
+                                      TAG, 0,
+                                      (ucp_tag_recv_callback_t)ucs_empty_function);
+            return wait(request, false);
         case UCX_PERF_CMD_PUT:
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
@@ -173,7 +197,7 @@ public:
             }
         }
 
-        ucp_flush(m_perf.ucp.worker);
+        ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
     }
@@ -220,7 +244,7 @@ public:
             }
         }
 
-        ucp_flush(m_perf.ucp.worker);
+        ucp_worker_flush(m_perf.ucp.worker);
         rte_call(&m_perf, barrier);
         return UCS_OK;
     }

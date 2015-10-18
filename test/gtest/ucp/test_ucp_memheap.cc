@@ -48,7 +48,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
         (this->*send)(pe0, size, (void*)((uintptr_t)memheap + offset),
                         rkey, expected_data);
 
-        status = ucp_flush(pe0->worker());
+        status = ucp_worker_flush(pe0->worker());
         ASSERT_UCS_OK(status);
 
         EXPECT_EQ(expected_data,
@@ -57,7 +57,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
     ucp_rkey_destroy(rkey);
 
-    status = ucp_flush(pe1->worker());
+    status = ucp_worker_flush(pe1->worker());
     ASSERT_UCS_OK(status);
 
     pe0->disconnect();
@@ -66,4 +66,9 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(pe1->ucph(), memh);
     ASSERT_UCS_OK(status);
+}
+
+void test_ucp_memheap::get_params(ucp_params_t& params) const {
+    ucp_test::get_params(params);
+    params.features |= UCP_FEATURE_RMA;
 }

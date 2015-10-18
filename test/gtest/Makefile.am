@@ -43,7 +43,7 @@ gtest_CPPFLAGS = \
 	$(GTEST_CPPFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
-gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3
+gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
 
 gtest_SOURCES = \
 	base/test_perf.cc \

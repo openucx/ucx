@@ -17,7 +17,11 @@
 #include <ucs/type/class.h>
 #include <uct/tl/context.h>
 #include <uct/tl/tl_base.h>
-#include <ucp/proto/ucp_int.h>
+#include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_request.h>
+#include <ucp/core/ucp_worker.h>
 
 #if HAVE_IB
 #  include <uct/ib/base/ib_device.h>
@@ -175,7 +179,9 @@ void print_type_info(const char * tl_name)
     PRINT_SIZE(ucp_context_t);
     PRINT_SIZE(ucp_worker_t);
     PRINT_SIZE(ucp_ep_t);
-    PRINT_SIZE(ucp_ep_pending_op_t);
+    PRINT_SIZE(ucp_request_t);
+    PRINT_SIZE(ucp_tag_recv_info_t);
+    PRINT_SIZE(ucp_mem_t);
     PRINT_SIZE(ucp_rkey_t);
 
 }

@@ -198,5 +198,6 @@ AC_CONFIG_FILES([
                  test/examples/Makefile
                  test/gtest/Makefile
                  ])
+AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
 
 AC_OUTPUT

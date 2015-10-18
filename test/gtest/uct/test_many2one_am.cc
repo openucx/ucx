@@ -25,7 +25,6 @@ public:
     }
 
     ucs_status_t am_handler(void *data, size_t length, void *desc) {
-        ++m_am_count;
         if (rand() % 4 == 0) {
             receive_desc_t *my_desc = (receive_desc_t *)desc;
             my_desc->magic  = MAGIC;
@@ -34,9 +33,11 @@ public:
                 memcpy(my_desc + 1, data, length);
             }
             m_backlog.push_back(my_desc);
+            ucs_atomic_add32(&m_am_count, 1);
             return UCS_INPROGRESS;
         }
         mapped_buffer::pattern_check(data, length);
+        ucs_atomic_add32(&m_am_count, 1);
         return UCS_OK;
     }
 
@@ -53,7 +54,7 @@ public:
     static const size_t NUM_SENDERS = 10;
 
 protected:
-    unsigned                     m_am_count;
+    volatile uint32_t            m_am_count;
     std::vector<receive_desc_t*> m_backlog;
 };
 

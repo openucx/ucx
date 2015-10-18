@@ -141,8 +141,9 @@ public:
         test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T));
     }
 
-    virtual uint64_t features() const {
-        return UCP_FEATURE_AMO;
+    virtual void get_params(ucp_params_t& params) const {
+        test_ucp_memheap::get_params(params);
+        params.features |= UCP_FEATURE_AMO;
     }
 };
 
