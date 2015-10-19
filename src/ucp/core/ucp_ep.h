@@ -13,9 +13,10 @@
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
+#include <limits.h>
 
 
-#define UCP_PEER_NAME_MAX         16
+#define UCP_PEER_NAME_MAX         HOST_NAME_MAX
 
 
 /**

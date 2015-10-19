@@ -916,7 +916,7 @@ void ucp_wireup_stop(ucp_ep_h ep)
 void ucp_address_peer_name(ucp_address_t *address, char *name)
 {
     uint8_t length = *(uint8_t*)(address + sizeof(uint64_t));
-    ucs_assert(length + 1 < UCP_PEER_NAME_MAX);
+    ucs_assertv(length < UCP_PEER_NAME_MAX, "length=%d", length);
     memcpy(name, address + sizeof(uint64_t) + 1, length);
     name[length] = '\0';
 }
