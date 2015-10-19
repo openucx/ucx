@@ -89,7 +89,8 @@ void ucp_wireup_progress(ucp_ep_h ep)
     sched_yield();
     ucs_async_check_miss(&ep->worker->async);
     if ((ep->state & UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED) &&
-        (ep->state & (UCP_EP_STATE_WIREUP_REPLY_SENT|UCP_EP_STATE_WIREUP_ACK_SENT)))
+        (ep->state & (UCP_EP_STATE_WIREUP_REPLY_SENT|UCP_EP_STATE_WIREUP_ACK_SENT)) &&
+        (ep->wireup.pending_ops == 0))
     {
         ucs_memory_cpu_fence();
         UCS_ASYNC_BLOCK(&worker->async);
@@ -363,6 +364,7 @@ static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
                                 req->send.wireup.dst_rsc_index,
                                 req->send.wireup.dst_aux_rsc_index);
     if (status == UCS_OK) {
+        ucs_atomic_add32(&ep->wireup.pending_ops, -1);
         ucs_mpool_put(req);
     }
     return status;
@@ -393,6 +395,7 @@ static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint32_t flags,
     req->send.wireup.flags             = flags;
     req->send.wireup.dst_rsc_index     = dst_rsc_index;
     req->send.wireup.dst_aux_rsc_index = dst_aux_rsc_index;
+    ucs_atomic_add32(&ep->wireup.pending_ops, 1);
     ucp_ep_add_pending(ep, uct_ep, req);
     return UCS_OK;
 }

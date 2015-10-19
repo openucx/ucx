@@ -37,7 +37,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->state                = 0;
     ep->wireup.aux_ep        = NULL;
     ep->wireup.next_ep       = NULL;
-
+    ep->wireup.pending_ops   = 0;
     sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_PEER_NAME_MAX, "%s", peer_name);

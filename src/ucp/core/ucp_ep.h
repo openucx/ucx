@@ -44,6 +44,7 @@ typedef struct ucp_ep {
     struct {
         uct_ep_h                  aux_ep;        /* Used to wireup the "real" endpoint */
         uct_ep_h                  next_ep;       /* Next transport being wired up */
+        volatile uint32_t         pending_ops;   /* Number of pending wireup operations */
     } wireup;
 
 #if ENABLE_DEBUG_DATA
