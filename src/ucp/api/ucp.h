@@ -1,5 +1,6 @@
-/**
+/*
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -82,7 +83,7 @@
  * @ingroup UCP_CONTEXT
  * @brief UCP features
  */
-enum {
+enum ucp_type {
     UCP_FEATURE_TAG   = UCS_BIT(0),  /**< Request tag matching support */
     UCP_FEATURE_RMA   = UCS_BIT(1),  /**< Request remote memory access support */
     UCP_FEATURE_AMO32 = UCS_BIT(2),  /**< Request 32-bit atomic operations support */
@@ -123,7 +124,7 @@ enum {
  * @ingroup UCP_DATATYPE
  * @brief Represents a generic data type.
  */
-struct ucp_generic_dt_ops {
+typedef struct ucp_generic_dt_ops {
 
     /**
      * @brief Start a packing request.
@@ -194,27 +195,27 @@ struct ucp_generic_dt_ops {
      * @param [in]  state          State as returned from start_pack()/start_unpack().
      */
     void (*finish)(void *state);
-};
+} ucp_generic_dt_ops_t;
 
 
 /**
  * @ingroup UCP_CONFIG
  * @brief Parameters for UCP configuration.
  */
-struct ucp_params {
+typedef struct ucp_params {
     uint64_t                    features;        /**< Which UCP features to activate. Using other
                                                       features would result in undefined behavior. */
     size_t                      request_size;    /**< How much space to reserve in non-blocking requests. */
     ucp_request_init_callback_t request_init;    /**< Callback for initializing a request May be NULL. */
     ucp_request_cleanup_callback_t request_cleanup; /**< Callback for cleaning-up a request. May be NULL. */
-};
+} ucp_params_t;
 
 
 /**
  * @ingroup UCP_CONFIG
  * @brief UCP configuration
  *
- * This structure defines the configuration for UCP context.
+ * This structure defines the configuration for @ref ucp_context_h "UCP application context".
  */
 typedef struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices; /**< Array of device names to use */
@@ -256,10 +257,10 @@ typedef struct ucp_recv_request {
  * @ingroup UCP_CONTEXT
  * @brief Progress callback. Used to progress user context during blocking operations.
  */
-struct ucp_tag_recv_info {
+typedef struct ucp_tag_recv_info {
     ucp_tag_t                              sender_tag;  /**< Full sender tag */
     size_t                                 length;      /**< How much data was received */
-};
+} ucp_tag_recv_info_t;
 
 
 /**
