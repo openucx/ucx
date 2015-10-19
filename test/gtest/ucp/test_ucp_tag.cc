@@ -270,13 +270,13 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
     status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(UCS_OK,              my_send_req->status);
     EXPECT_EQ(sendbuf.size(),      info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
     if (my_send_req != NULL) {
         EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
         request_release(my_send_req);
     }
 }
@@ -468,13 +468,13 @@ UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
     status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(UCS_OK,              my_send_req->status);
     EXPECT_EQ(sizeof(send_data),   info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
 
     if (my_send_req != NULL) {
         EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
         request_release(my_send_req);
     }
 }
