@@ -17,7 +17,7 @@
 typedef struct ucp_params                ucp_params_t;
 typedef struct ucp_context               *ucp_context_h;
 typedef struct ucp_ep                    *ucp_ep_h;
-typedef struct ucp_address               ucp_address_t;
+typedef void                             ucp_address_t;
 typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
 typedef struct ucp_generic_dt_ops        ucp_generic_dt_ops_t;
 typedef struct ucp_rkey                  *ucp_rkey_h;

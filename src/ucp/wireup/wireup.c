@@ -59,7 +59,8 @@ static void ucp_wireup_ep_ready_to_send(ucp_ep_h ep)
     ucp_worker_h worker          = ep->worker;
     uct_iface_attr_t *iface_attr = &worker->iface_attrs[ep->rsc_index];
 
-    ucs_debug("connected 0x%"PRIx64"->0x%"PRIx64, worker->uuid, ep->dest_uuid);
+    ucs_debug("ready to send to %s 0x%"PRIx64"->0x%"PRIx64,
+              ucp_ep_peer_name(ep), worker->uuid, ep->dest_uuid);
 
     ep->state               |= UCP_EP_STATE_READY_TO_SEND;
     ep->config.max_short_egr = iface_attr->cap.am.max_short - sizeof(ucp_tag_t);
@@ -146,11 +147,6 @@ void ucp_wireup_progress(ucp_ep_h ep)
  * The last record starts with '\0' (as if the tl_name is empty string)
  */
 
-
-static void ucp_address_iter_init(ucp_address_t *address, void **iter)
-{
-    *iter = (void*)( (uint64_t*)address + 1);
-}
 
 static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
                                  char *tl_name, ucp_rsc_index_t *pd_index,
@@ -416,6 +412,10 @@ static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, struct sockaddr *aux_addr,
         goto err;
     }
 
+    ucs_debug("created connected aux ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
+              ep->wireup.aux_ep, ucp_ep_peer_name(ep),
+              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_rsc_index].tl_rsc));
+
     /*
      * Until the transport is connected, send operations should return NO_RESOURCE.
      * Plant a dummy endpoint object which will do it.
@@ -425,6 +425,8 @@ static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, struct sockaddr *aux_addr,
         goto err_destroy_aux_ep;
     }
 
+    ucs_debug("created dummy ep %p to %s", ep->uct_ep, ucp_ep_peer_name(ep));
+
     /*
      * Create endpoint for the transport we need to wire-up.
      */
@@ -432,6 +434,10 @@ static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, struct sockaddr *aux_addr,
     if (status != UCS_OK) {
         goto err_destroy_dummy_ep;
     }
+
+    ucs_debug("created next ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
+              ep->wireup.next_ep, ucp_ep_peer_name(ep),
+              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[ep->rsc_index].tl_rsc));
 
     ep->state |= UCP_EP_STATE_AUX_EP|UCP_EP_STATE_NEXT_EP;
 
@@ -478,7 +484,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
 
     if (ep == NULL) {
-        status = ucp_ep_new(worker, msg->src_uuid, "on-demand", &ep);
+        status = ucp_ep_new(worker, msg->src_uuid, "on-demand", "??", &ep);
         if (status != UCS_OK) {
             return;
         }
@@ -540,6 +546,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                 return;
             }
 
+            ucs_debug("connected next ep %p", ep->wireup.next_ep);
             ep->state |= UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED;
         }
 
@@ -597,25 +604,29 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
             return;
         }
 
+        ucs_debug("connected next ep %p", ep->wireup.next_ep);
         ep->state |= UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED;
+    }
+
+    /* If we already sent a reply to the remote side, no need to send an ACK. */
+    if (ep->state & (UCP_EP_STATE_WIREUP_REPLY_SENT|UCP_EP_STATE_WIREUP_ACK_SENT)) {
+        ucs_debug("ep %p not sending wireup_ack - state is 0x%x", ep, ep->state);
+        return;
     }
 
     /*
      * Send ACK to let remote side know it can start sending.
-     * If we already sent a reply to the remote side, no need to send an ACK.
      *
      * We can use the new ep even from async thread, because main thread will not
      * started using it before ACK_SENT is turned on.
      */
-    if (!(ep->state & (UCP_EP_STATE_WIREUP_REPLY_SENT|UCP_EP_STATE_WIREUP_ACK_SENT))) {
-        status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_ACK, msg->src_rsc_index, -1);
-        if (status != UCS_OK) {
-            return;
-        }
-
-        ucs_memory_cpu_fence();
-        ep->state |= UCP_EP_STATE_WIREUP_ACK_SENT;
+    status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_ACK, msg->src_rsc_index, -1);
+    if (status != UCS_OK) {
+        return;
     }
+
+    ucs_memory_cpu_fence();
+    ep->state |= UCP_EP_STATE_WIREUP_ACK_SENT;
 }
 
 static void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
@@ -755,7 +766,7 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
     /*
      * Find the best combination of local resource and reachable remote address.
      */
-    ucp_address_iter_init(address, &iter);
+    iter = ucp_address_iter_start(address);
     while (ucp_address_iter_next(&iter, &addr, tl_name, &pd_index, &dst_rsc_index)) {
 
         for (src_rsc_index = 0; src_rsc_index < context->num_tls; ++src_rsc_index) {
@@ -846,6 +857,9 @@ ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address)
             goto err;
         }
 
+        ucs_debug("created connected ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
+                  ep->uct_ep, ucp_ep_peer_name(ep),
+                  UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[ep->rsc_index].tl_rsc));
         ucp_wireup_ep_ready_to_send(ep);
         goto out;
     } else if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)) {
@@ -901,6 +915,14 @@ void ucp_wireup_stop(ucp_ep_h ep)
     sglib_hashed_ucp_ep_t_delete(worker->ep_hash, ep);
     ucp_wireup_stop_aux(ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+void ucp_address_peer_name(ucp_address_t *address, char *name)
+{
+    uint8_t length = *(uint8_t*)(address + sizeof(uint64_t));
+    ucs_assertv(length < UCP_PEER_NAME_MAX, "length=%d", length);
+    memcpy(name, address + sizeof(uint64_t) + 1, length);
+    name[length] = '\0';
 }
 
 UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, ucp_wireup_msg_dump);
