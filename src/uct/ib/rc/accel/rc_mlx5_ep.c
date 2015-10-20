@@ -7,7 +7,7 @@
 #include "rc_mlx5.h"
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <ucs/arch/arch.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
 #include <arpa/inet.h> /* For htonl */
 

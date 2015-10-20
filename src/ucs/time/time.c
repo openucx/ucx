@@ -5,7 +5,6 @@
 */
 
 #include <ucs/time/time.h>
-#include <ucs/arch/arch.h>
 #include <ucs/debug/log.h>
 
 

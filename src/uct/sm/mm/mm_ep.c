@@ -6,6 +6,9 @@
 
 #include "mm_ep.h"
 
+#include <ucs/arch/atomic.h>
+
+
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_mm_remote_seg_t, uct_mm_remote_seg_compare, next)
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_mm_remote_seg_t,
                                         UCT_MM_BASE_ADDRESS_HASH_SIZE,

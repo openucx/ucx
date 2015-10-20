@@ -9,6 +9,7 @@
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_iface.h>
 #include <uct/tl/context.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
 #include <poll.h>

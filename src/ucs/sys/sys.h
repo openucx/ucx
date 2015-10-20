@@ -13,7 +13,6 @@
 #endif
 
 #include <ucs/sys/compiler.h>
-#include <ucs/arch/arch.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/memtrack.h>
 

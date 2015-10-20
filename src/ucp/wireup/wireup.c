@@ -11,6 +11,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/tag/eager.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/queue.h>
 

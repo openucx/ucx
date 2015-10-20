@@ -12,7 +12,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/sys.h>
+#include <ucs/arch/bitops.h>
 #include <string.h>
 
 

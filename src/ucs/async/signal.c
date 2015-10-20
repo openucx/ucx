@@ -11,6 +11,7 @@
 #include "signal.h"
 #include "async_int.h"
 
+#include <ucs/arch/atomic.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hash.h>
 #include <ucs/debug/debug.h>

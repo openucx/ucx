@@ -10,6 +10,8 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/tl/context.h>
+#include <ucs/arch/bitops.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <string.h>
 

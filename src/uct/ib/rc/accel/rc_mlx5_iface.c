@@ -9,6 +9,7 @@
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/tl/context.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 
 #include "rc_mlx5.h"

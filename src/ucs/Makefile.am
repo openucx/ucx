@@ -22,7 +22,9 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/x86_64/atomic.h \
 	arch/x86_64/bitops.h \
 	arch/x86_64/cpu.h \
-	arch/arch.h \
+	arch/atomic.h \
+	arch/bitops.h \
+	arch/cpu.h \
 	async/async_fwd.h \
 	async/async.h \
 	async/pipe.h \

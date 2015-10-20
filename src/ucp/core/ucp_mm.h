@@ -11,8 +11,8 @@
 #include <ucp/api/ucp_def.h>
 #include <ucp/core/ucp_ep.h>
 #include <uct/api/uct.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
-#include <ucs/sys/math.h>
 
 #include <inttypes.h>
 

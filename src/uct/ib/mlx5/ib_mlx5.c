@@ -9,6 +9,7 @@
 
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/base/ib_device.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>

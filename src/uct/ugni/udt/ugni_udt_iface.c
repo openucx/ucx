@@ -8,6 +8,7 @@
 #include "ucs/type/class.h"
 #include "uct/tl/context.h"
 
+#include <ucs/arch/cpu.h>
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_udt_iface.h"
 #include "ugni_udt_ep.h"

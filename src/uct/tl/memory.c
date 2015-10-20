@@ -7,6 +7,8 @@
 #include "context.h"
 #include "tl_base.h"
 
+#include <ucs/arch/cpu.h>
+
 
 typedef struct {
     uct_alloc_method_t method;

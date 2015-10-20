@@ -7,6 +7,7 @@
 #include "rc_iface.h"
 #include "rc_ep.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>

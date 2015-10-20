@@ -7,12 +7,15 @@
 #ifndef UCT_MM_IFACE_H
 #define UCT_MM_IFACE_H
 
+#include "mm_def.h"
+#include "mm_pd.h"
+
 #include <uct/tl/tl_base.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
-#include "mm_def.h"
-#include "mm_pd.h"
+
 
 #define UCT_MM_TL_NAME "mm"
 #define UCT_MM_FIFO_CTL_SIZE_ALIGNED  ucs_align_up(sizeof(uct_mm_fifo_ctl_t),UCS_SYS_CACHE_LINE_SIZE)

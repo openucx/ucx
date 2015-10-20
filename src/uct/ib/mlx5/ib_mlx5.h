@@ -10,8 +10,9 @@
 
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_device.h>
-#include <ucs/type/status.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <ucs/type/status.h>
 
 #include <infiniband/mlx5_hw.h>
 #include <infiniband/arch.h>
