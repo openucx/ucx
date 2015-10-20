@@ -37,6 +37,15 @@
 #  endif
 #endif
 
+#if HAVE_TL_UD
+#  include <uct/ib/ud/base/ud_def.h>
+#  include <uct/ib/ud/verbs/ud_verbs.h>
+#  if HAVE_MLX5_HW
+#    include <uct/ib/ud/accel/ud_mlx5.h>
+#  endif
+#endif
+
+
 #if HAVE_TL_UGNI
 #  include <uct/ugni/ugni_ep.h>
 #  include <uct/ugni/ugni_iface.h>
@@ -143,7 +152,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_rc_iface_send_desc_t);
 
         PRINT_SIZE(uct_rc_iface_send_desc_t);
-        if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs")) {
+        if (tl_name == NULL || !strcasecmp(tl_name, "rc")) {
             PRINT_SIZE(uct_rc_verbs_ep_t);
             PRINT_SIZE(uct_rc_verbs_iface_config_t);
             PRINT_SIZE(uct_rc_verbs_iface_t);
@@ -152,6 +161,37 @@ void print_type_info(const char * tl_name)
 #if HAVE_MLX5_HW
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_ep_t);
+            PRINT_SIZE(uct_rc_mlx5_iface_config_t);
+        }
+#endif
+        printf("\n");
+    }
+#endif
+
+#if HAVE_TL_UD
+    if (tl_name == NULL || !strcasecmp(tl_name, "ud") ||
+        !strcasecmp(tl_name, "ud_mlx5"))
+    {
+        printf("UD:\n");
+        PRINT_SIZE(uct_ud_ep_t);
+        PRINT_SIZE(uct_ud_neth_t);
+        PRINT_SIZE(uct_ud_iface_t);
+        PRINT_SIZE(uct_ud_iface_config_t);
+        PRINT_SIZE(uct_ud_ep_pending_op_t);
+        PRINT_SIZE(uct_ud_send_skb_t);
+        PRINT_SIZE(uct_ud_send_skb_inl_t);
+        PRINT_SIZE(uct_ud_recv_skb_t);
+
+        PRINT_SIZE(uct_rc_iface_send_desc_t);
+        if (tl_name == NULL || !strcasecmp(tl_name, "ud")) {
+            PRINT_SIZE(uct_ud_verbs_ep_t);
+            PRINT_SIZE(uct_ud_verbs_iface_t);
+        }
+
+#if HAVE_MLX5_HW
+        if (tl_name == NULL || !strcasecmp(tl_name, "ud_mlx5")) {
+            PRINT_SIZE(uct_ud_mlx5_ep_t);
+            PRINT_SIZE(uct_ud_mlx5_iface_t);
             PRINT_SIZE(uct_rc_mlx5_iface_config_t);
         }
 #endif
