@@ -53,28 +53,13 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
     return NULL;
 }
 
-ucs_status_t ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
-                              ucp_tag_t tag_mask, ucp_tag_recv_info_t *info)
+ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
+                                   ucp_tag_t tag_mask, int remove,
+                                   ucp_tag_recv_info_t *info)
 {
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc;
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64, tag, tag_mask);
     ucp_worker_progress(worker);
-    rdesc = ucp_tag_probe_search(context, tag, tag_mask, info, 0);
-    return (rdesc != NULL) ? UCS_OK : UCS_ERR_NO_MESSAGE;
-}
-
-ucs_status_ptr_t ucp_tag_msg_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
-                                      ucp_tag_t tag_mask,
-                                      ucp_tag_recv_info_t *info)
-{
-    ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc;
-
-    ucs_trace_req("msg_probe_nb tag %"PRIx64"/%"PRIx64, tag, tag_mask);
-    ucp_worker_progress(worker);
-    rdesc = ucp_tag_probe_search(context, tag, tag_mask, info, 1);
-    ucs_trace_req("msg_probe_nb returning %p", rdesc);
-    return (rdesc != NULL) ? rdesc : UCS_STATUS_PTR(UCS_ERR_NO_MESSAGE);
+    return ucp_tag_probe_search(context, tag, tag_mask, info, remove);
 }

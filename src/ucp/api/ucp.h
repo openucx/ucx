@@ -585,27 +585,6 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
 
 /**
  * @ingroup UCP_COMM
- * @brief Non-blocking probe.
- *
- *  Probe for incoming unexpected message. The function returns immediately with
- * the status.
- *
- * @param [in]  worker      UCP worker.
- * @param [in]  tag         Message tag to expect.
- * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
- *                           against the expected tag.
- * @param [out] info        Filled with details about the received message.
- *
- * @return UCS_OK              - A match was found, more details in 'info'.
- *         UCS_ERR_NO_MESSAGE) - No match found.
- *         otherwise           - Error during receive.
- */
-ucs_status_t ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
-                              ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
-
-
-/**
- * @ingroup UCP_COMM
  * @brief Non-blocking probe and return a message.
  *
  *  Probe for incoming unexpected message. The function returns immediately and
@@ -615,16 +594,17 @@ ucs_status_t ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * @param [in]  tag         Message tag to expect.
  * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
  *                           against the expected tag.
+ * @param [in]  remove      Whether to remove the probed message from unexpected
+ *                           queue (true), or keep it there (false).
  * @param [out] info        Filled with details about the received message.
  *
- * @return UCS_PTR_IS_ERR(UCS_ERR_NO_MESSAGE) - No match found.
- *         other UCS_PTR_IS_ERR(_ptr)         - Error during receive.
- *         otherwise                          - A message handle. The handle should
- *                                              be passed to ucp_tag_msg_recv_nb().
+ * @return NULL       - No match found.
+ *         otherwise  - A message handle. If remove==1, the handle should be
+ *                      passed to ucp_tag_msg_recv_nb().
  */
-ucs_status_ptr_t ucp_tag_msg_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
-                                      ucp_tag_t tag_mask,
-                                      ucp_tag_recv_info_t *info);
+ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
+                                   ucp_tag_t tag_mask, int remove,
+                                   ucp_tag_recv_info_t *info);
 
 
 /**
@@ -651,7 +631,8 @@ ucs_status_ptr_t ucp_tag_msg_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  */
 ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
                                      size_t count, ucp_datatype_t datatype,
-                                     void *message, ucp_tag_recv_callback_t cb);
+                                     ucp_tag_message_h message,
+                                     ucp_tag_recv_callback_t cb);
 
 
 /**

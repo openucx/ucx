@@ -116,7 +116,8 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
 
 ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
                                      size_t count, ucp_datatype_t datatype,
-                                     void *message, ucp_tag_recv_callback_t cb)
+                                     ucp_tag_message_h message,
+                                     ucp_tag_recv_callback_t cb)
 {
     ucp_context_h context = worker->context;
     ucp_recv_desc_t *rdesc = message;

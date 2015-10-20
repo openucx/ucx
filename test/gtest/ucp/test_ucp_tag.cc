@@ -562,17 +562,16 @@ UCS_TEST_F(test_ucp_tag, send_probe) {
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
     ucp_tag_recv_info info;
-    ucs_status_t status;
+    ucp_tag_message_h message;
 
-    status = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
-    EXPECT_EQ(UCS_ERR_NO_MESSAGE, status);
+    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 0, &info);
+    EXPECT_TRUE(message == NULL);
 
     send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
 
     do {
-        status = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
-    } while (status == UCS_ERR_NO_MESSAGE);
-    ASSERT_UCS_OK(status);
+        message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 0, &info);
+    } while (message == NULL);
 
     EXPECT_EQ(sizeof(send_data),   info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
@@ -595,22 +594,22 @@ UCS_TEST_F(test_ucp_tag, send_probe) {
 UCS_TEST_F(test_ucp_tag, send_medium_msg_probe) {
     static const size_t size = 50000;
     ucp_tag_recv_info info;
-    void *message;
+    ucp_tag_message_h message;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    message = ucp_tag_msg_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
-    EXPECT_EQ(UCS_ERR_NO_MESSAGE, UCS_PTR_STATUS(message));
+    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    EXPECT_TRUE(message == NULL);
 
     send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
 
     short_progress_loop();
 
-    message = ucp_tag_msg_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(message));
+    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    ASSERT_TRUE(message != NULL);
     EXPECT_EQ(sendbuf.size(),      info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
 
@@ -632,7 +631,7 @@ UCS_TEST_F(test_ucp_tag, send_medium_msg_probe) {
 UCS_TEST_F(test_ucp_tag, send_medium_msg_probe_truncated) {
     static const size_t size = 50000;
     ucp_tag_recv_info info;
-    void *message;
+    ucp_tag_message_h message;
 
     std::vector<char> sendbuf(size, 0);
 
@@ -642,8 +641,8 @@ UCS_TEST_F(test_ucp_tag, send_medium_msg_probe_truncated) {
 
     short_progress_loop();
 
-    message = ucp_tag_msg_probe_nb(receiver->worker(), 0x1337, 0xffff, &info);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(message));
+    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    ASSERT_TRUE(message != NULL);
     EXPECT_EQ(sendbuf.size(),      info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
 
