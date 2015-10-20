@@ -9,6 +9,8 @@
 
 #include <uct/api/addr.h>
 #include <uct/tl/context.h>
+#include <ucs/arch/bitops.h>
+
 
 static ucs_config_field_t uct_mm_iface_config_table[] = {
     {"", "ALLOC=pd", NULL,

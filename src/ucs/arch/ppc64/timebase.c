@@ -6,6 +6,10 @@
 */
 
 #include <ucs/sys/sys.h>
+#ifdef HAVE_SYS_PLATFORM_PPC_H
+#  include <sys/platform/ppc.h>
+#endif
+
 
 #if defined(__powerpc64__)
 

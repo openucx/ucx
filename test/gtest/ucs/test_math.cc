@@ -6,6 +6,8 @@
 
 #include <ucs/gtest/test.h>
 extern "C" {
+#include <ucs/arch/bitops.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
 }
 

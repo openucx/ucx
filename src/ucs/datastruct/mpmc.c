@@ -7,8 +7,8 @@
 
 #include "mpmc.h"
 
-#include <ucs/sys/math.h>
-#include <ucs/arch/arch.h>
+#include <ucs/arch/atomic.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 

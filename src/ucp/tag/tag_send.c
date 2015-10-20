@@ -12,7 +12,6 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/dt/dt_generic.h>
-#include <ucs/arch/arch.h>
 #include <ucs/datastruct/mpool.inl>
 #include <string.h>
 

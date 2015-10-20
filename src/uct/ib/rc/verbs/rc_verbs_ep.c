@@ -7,6 +7,7 @@
 
 #include "rc_verbs.h"
 
+#include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
 
 

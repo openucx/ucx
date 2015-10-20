@@ -6,6 +6,10 @@
 
 #include "uct_test.h"
 
+extern "C" {
+#include <ucs/arch/atomic.h>
+}
+
 class test_many2one_am : public uct_test {
 public:
     static const uint8_t  AM_ID = 15;

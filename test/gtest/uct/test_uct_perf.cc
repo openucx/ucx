@@ -8,6 +8,9 @@
 #include "uct_test.h"
 
 #include <gtest/base/test_perf.h>
+extern "C" {
+#include <ucs/arch/cpu.h>
+}
 
 
 #define MB   pow(1024.0, -2)

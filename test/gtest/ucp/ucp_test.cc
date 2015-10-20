@@ -6,6 +6,9 @@
 #include "ucp_test.h"
 
 #include <ucs/gtest/test_helpers.h>
+extern "C" {
+#include <ucs/arch/atomic.h>
+}
 
 
 const ucs::ptr_vector<ucp_test::entity>& ucp_test::entities() const {

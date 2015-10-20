@@ -6,7 +6,7 @@
 
 #include "async_int.h"
 
-#include <ucs/sys/math.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/debug/debug.h>
 #include <ucs/datastruct/hash.h>
 

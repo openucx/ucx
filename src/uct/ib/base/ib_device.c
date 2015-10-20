@@ -11,6 +11,7 @@
 #include "ib_device.h"
 
 #include <uct/tl/context.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/async/async.h>

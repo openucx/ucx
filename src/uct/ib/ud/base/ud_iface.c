@@ -6,9 +6,9 @@
 
 #include "ud_iface.h"
 #include "ud_ep.h"
-
 #include "ud_inl.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>

@@ -7,6 +7,7 @@
 #include "ib_iface.h"
 
 #include <uct/tl/context.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/type/component.h>
 #include <ucs/type/class.h>
 #include <ucs/debug/log.h>

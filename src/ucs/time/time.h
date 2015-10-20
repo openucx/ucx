@@ -7,7 +7,7 @@
 #ifndef UCS_TIME_H
 #define UCS_TIME_H
 
-#include <ucs/arch/arch.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/sys/math.h>
 #include <sys/time.h>
 

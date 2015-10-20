@@ -6,7 +6,7 @@
 
 #if defined(__x86_64__)
 
-#include <ucs/arch/arch.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
