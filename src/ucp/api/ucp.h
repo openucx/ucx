@@ -586,6 +586,58 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking probe and return a message.
+ *
+ *  Probe for incoming unexpected message. The function returns immediately and
+ * possibly returns a handle to the message.
+ *
+ * @param [in]  worker      UCP worker.
+ * @param [in]  tag         Message tag to expect.
+ * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
+ *                           against the expected tag.
+ * @param [in]  remove      Whether to remove the probed message from unexpected
+ *                           queue (true), or keep it there (false).
+ * @param [out] info        Filled with details about the received message.
+ *
+ * @return NULL       - No match found.
+ *         otherwise  - A message handle. If remove==1, the handle should be
+ *                      passed to ucp_tag_msg_recv_nb().
+ */
+ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
+                                   ucp_tag_t tag_mask, int remove,
+                                   ucp_tag_recv_info_t *info);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Receive probed message in a non-blocking fashion.
+ *
+ *  Non-blocking probed message receive. The function returns immediately,
+ * however the actual receive may occur later.
+ *
+ * @param [in]  worker      UCP worker.
+ * @param [in]  buffer      Buffer to receive the data to.
+ * @param [in]  count       Number of elements in the buffer.
+ * @param [in]  datatype    Type of elements in the buffer.
+ * @param [in]  message     Handle to probed message.
+ * @param [in]  cb          Callback function which would be called when the
+ *                           data is ready in the receive buffer.
+ *
+ * @return UCS_PTR_IS_ERR(_ptr) - Error during receive.
+ *         otherwise            - A request handle. the handle should be released
+ *                                 by calling ucp_request_release().
+ *
+ * @note This function cannot return UCS_OK/NULL. It always returns a request
+ *       handle or an error.
+ */
+ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
+                                     size_t count, ucp_datatype_t datatype,
+                                     ucp_tag_message_h message,
+                                     ucp_tag_recv_callback_t cb);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Remote put. Returns when local buffer is safe for reuse.
  *
  *  Write a buffer to remote memory.

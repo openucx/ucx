@@ -23,6 +23,7 @@ typedef struct ucp_generic_dt_ops        ucp_generic_dt_ops_t;
 typedef struct ucp_rkey                  *ucp_rkey_h;
 typedef struct ucp_mem                   *ucp_mem_h;
 typedef struct ucp_worker                *ucp_worker_h;
+typedef struct ucp_recv_desc             *ucp_tag_message_h;
 typedef uint64_t                         ucp_tag_t;
 typedef uint64_t                         ucp_datatype_t;
 

@@ -53,11 +53,12 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
 
 
 static inline void ucp_tag_log_match(ucp_tag_t recv_tag, ucp_request_t *req,
-                                     ucp_tag_t exp_tag, ucp_tag_t exp_tag_mask)
+                                     ucp_tag_t exp_tag, ucp_tag_t exp_tag_mask,
+                                     size_t offset, const char *title)
 {
-    ucs_trace_req("matched tag %"PRIx64" to request %p offset %zu "
-                  "with tag %"PRIx64"/%"PRIx64,
-                  recv_tag, req, req->recv.state.offset, exp_tag, exp_tag_mask);
+    ucs_trace_req("matched tag %"PRIx64" to %s request %p offset %zu "
+                  "with tag %"PRIx64"/%"PRIx64, recv_tag, title, req,
+                  offset, exp_tag, exp_tag_mask);
 }
 
 
@@ -71,7 +72,6 @@ ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         if (ucs_unlikely(recv_length + offset > ucp_contig_dt_length(datatype, count))) {
-            ucs_bug("truncated");
             return UCS_ERR_MESSAGE_TRUNCATED;
         }
         memcpy(buffer + offset, recv_data, recv_length);
@@ -82,6 +82,12 @@ ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
          */
         dt_gen = ucp_dt_generic(datatype);
         state  = dt_gen->ops->start_unpack(dt_gen->context, buffer, count);
+
+        if (ucs_unlikely(recv_length + offset > dt_gen->ops->packed_size(state))) {
+            dt_gen->ops->finish(state);
+            return UCS_ERR_MESSAGE_TRUNCATED;
+        }
+
         dt_gen->ops->unpack(state, offset, recv_data, recv_length);
         dt_gen->ops->finish(state);
         return UCS_OK;

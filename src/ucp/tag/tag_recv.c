@@ -29,13 +29,15 @@ ucp_tag_search_unexp(ucp_context_h context, void *buffer, size_t count,
         hdr      = (void*)(rdesc + 1);
         recv_tag = hdr->tag;
         flags    = rdesc->flags;
-        ucs_trace_req("searching for %"PRIx64"/%"PRIx64"/%"PRIx64" offset %zu, checking desc %p %"PRIx64"/%x",
+        ucs_trace_req("searching for %"PRIx64"/%"PRIx64"/%"PRIx64" offset %zu, "
+                      "checking desc %p %"PRIx64"/%x",
                       tag, tag_mask, info->sender_tag, req->recv.state.offset,
                       rdesc, recv_tag, flags);
         if (ucp_tag_recv_is_match(recv_tag, flags, tag, tag_mask,
                                   req->recv.state.offset, info->sender_tag))
         {
-            ucp_tag_log_match(recv_tag, req, tag, tag_mask);
+            ucp_tag_log_match(recv_tag, req, tag, tag_mask,
+                              req->recv.state.offset, "unexpected");
             ucs_queue_del_iter(&context->tag.unexpected, iter);
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 status = ucp_eager_unexp_match(rdesc, recv_tag, flags, buffer, count,
@@ -109,5 +111,70 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
         ucp_worker_progress(worker);
     }
 
+    return req + 1;
+}
+
+ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
+                                     size_t count, ucp_datatype_t datatype,
+                                     ucp_tag_message_h message,
+                                     ucp_tag_recv_callback_t cb)
+{
+    ucp_context_h context = worker->context;
+    ucp_recv_desc_t *rdesc = message;
+    ucs_status_t status;
+    ucp_request_t *req;
+
+    ucs_trace_req("msg_recv_nb buffer %p count %zu message %p", buffer, count,
+                  message);
+
+    req = ucs_mpool_get_inline(&worker->req_mp);
+    if (req == NULL) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+    VALGRIND_MAKE_MEM_DEFINED(req + 1, context->config.request.size);
+
+    /* First, search in unexpected list */
+    req->recv.state.offset = 0;
+    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+        req->recv.nb_info.sender_tag = 0;
+    }
+
+    if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
+        status = ucp_eager_unexp_match(rdesc, ((ucp_tag_hdr_t*)(rdesc + 1))->tag,
+                                       rdesc->flags, buffer, count, datatype,
+                                       &req->recv.state.offset, &req->recv.nb_info);
+        ucs_trace_req("release receive descriptor %p", rdesc);
+        uct_iface_release_am_desc(rdesc);
+    } else if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
+        ucp_rndv_unexp_match(rdesc, req, buffer, count, datatype);
+        status = UCS_INPROGRESS;
+    } else {
+        ucs_mpool_put(req);
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
+    /* Since the message contains only the first fragment, we might want
+     * to receive additional fragments.
+     */
+    if (status == UCS_INPROGRESS) {
+        status = ucp_tag_search_unexp(context, buffer, count, datatype, 0,
+                                      -1, req, &req->recv.nb_info);
+    }
+
+    if (status != UCS_INPROGRESS) {
+        ucs_trace_req("msg_recv_nb returning completed request %p (%p)", req, req + 1);
+        req->flags = 0;
+        ucp_request_complete(req, cb, status, &req->recv.nb_info);
+    } else {
+        ucs_trace_req("msg_recv_nb returning inprogress request %p (%p)", req, req + 1);
+        req->flags         = 0;
+        req->recv.buffer   = buffer;
+        req->recv.count    = count;
+        req->recv.datatype = datatype;
+        req->cb.tag_recv   = cb;
+        req->recv.exp_info = &req->recv.nb_info;
+        ucs_queue_push(&context->tag.expected, &req->recv.queue);
+        ucp_worker_progress(worker);
+    }
     return req + 1;
 }
