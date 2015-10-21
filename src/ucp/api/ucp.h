@@ -83,7 +83,7 @@
  * @ingroup UCP_CONTEXT
  * @brief UCP features
  */
-enum ucp_type {
+enum {
     UCP_FEATURE_TAG   = UCS_BIT(0),  /**< Request tag matching support */
     UCP_FEATURE_RMA   = UCS_BIT(1),  /**< Request remote memory access support */
     UCP_FEATURE_AMO32 = UCS_BIT(2),  /**< Request 32-bit atomic operations support */
@@ -95,7 +95,7 @@ enum ucp_type {
  * @ingroup UCP_DATATYPE
  * @brief Data type classification - used internally
  */
-enum {
+enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous type */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided type */
     UCP_DATATYPE_GENERIC = 7,      /**< Generic type with user-defined pack/unpack routines */
@@ -257,10 +257,10 @@ typedef struct ucp_recv_request {
  * @ingroup UCP_CONTEXT
  * @brief Progress callback. Used to progress user context during blocking operations.
  */
-typedef struct ucp_tag_recv_info {
+struct ucp_tag_recv_info {
     ucp_tag_t                              sender_tag;  /**< Full sender tag */
     size_t                                 length;      /**< How much data was received */
-} ucp_tag_recv_info_t;
+};
 
 
 /**

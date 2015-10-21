@@ -15,6 +15,9 @@
 
 #define UCP_REQUEST_PRIV_LEN             80
 
+/* Forward declarions */
+typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
+
 /**
  * @ingroup UCP_CONTEXT
  * @brief UCP Application Context
@@ -46,7 +49,7 @@ typedef struct ucp_context               *ucp_context_h;
  * @ref ucp_worker_h "worker". It typically provides a description of source,
  * destination, or both. All UCP communication routines address a destination
  * with the endpoint handle. The endpoint handle is associated with only one
- * @ref ucp_context_h "UPC context". UCP provides the @ref ucp_ep_create
+ * @ref ucp_context_h "UCP context". UCP provides the @ref ucp_ep_create
  * "endpoint create" routine to create the endpoint handle and the @ref
  * ucp_ep_destroy "destroy" routine to destroy the endpoint handle.
  */
@@ -134,7 +137,7 @@ typedef struct ucp_recv_desc             *ucp_tag_message_h;
  * @brief UCP Datatype Identifier
  *
  * UCP datatype identifier is a 64bit object used for datatype identification.
- * Predefined UPC identifiers are defined by @ref ucp_type.
+ * Predefined UCP identifiers are defined by @ref ucp_dt_type.
  */
 typedef uint64_t                         ucp_datatype_t;
 
@@ -194,5 +197,5 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  *                        status is UCS_OK.
  */
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
-                                        struct ucp_tag_recv_info *info);
+                                        ucp_tag_recv_info_t *info);
 #endif
