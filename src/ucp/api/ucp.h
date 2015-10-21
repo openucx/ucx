@@ -81,27 +81,38 @@
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief UCP features
+ * @brief UCP configuration features
+ *
+ * The enumeration list describes the features supported by UCP.  An
+ * application can request the features using @ref ucp_params_t "UCP parameters"
+ * during @ref ucp_init "UCP initialization" process.
  */
-enum {
+enum ucp_feature {
     UCP_FEATURE_TAG   = UCS_BIT(0),  /**< Request tag matching support */
-    UCP_FEATURE_RMA   = UCS_BIT(1),  /**< Request remote memory access support */
-    UCP_FEATURE_AMO32 = UCS_BIT(2),  /**< Request 32-bit atomic operations support */
-    UCP_FEATURE_AMO64 = UCS_BIT(3)   /**< Request 64-bit atomic operations support */
+    UCP_FEATURE_RMA   = UCS_BIT(1),  /**< Request remote memory
+                                          access support */
+    UCP_FEATURE_AMO32 = UCS_BIT(2),  /**< Request 32-bit atomic
+                                          operations support */
+    UCP_FEATURE_AMO64 = UCS_BIT(3)   /**< Request 64-bit atomic
+                                          operations support */
 };
 
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Data type classification - used internally
+ * @brief UCP data type classification
+ *
+ * The enumeration list describes the data-types supported by UCP.
  */
 enum ucp_dt_type {
-    UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous type */
-    UCP_DATATYPE_STRIDED = 1,      /**< Strided type */
-    UCP_DATATYPE_GENERIC = 7,      /**< Generic type with user-defined pack/unpack routines */
-
-    UCP_DATATYPE_SHIFT   = 3,      /**< How many bits define the data-type classification */
-    UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT)
+    UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
+    UCP_DATATYPE_STRIDED = 1,      /**< Strided data-type */
+    UCP_DATATYPE_GENERIC = 7,      /**< Generic data-type with
+                                        user-defined pack/unpack routines */
+    UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
+                                        the data-type classification */
+    UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT) /**< Data-type class
+                                                                mask */
 };
 
 
@@ -109,8 +120,8 @@ enum ucp_dt_type {
  * @ingroup UCP_DATATYPE
  * @brief Generate an identifier for contiguous data type.
  *
- * Create an identifier for contiguous data-type, which is defined by the size
- * of the basic element.
+ * This macro creates an identifier for contiguous data-type that is defined by
+ * the size of the basic element.
  *
  * @param [in]  _elem_size    Size of the basic element of the type.
  *
@@ -122,18 +133,29 @@ enum ucp_dt_type {
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Represents a generic data type.
+ * @brief UCP generic data type descriptor
+ *
+ * This structure provides a generic datatype descriptor that
+ * is used for definition of application defined datatypes.
+
+ * Typically, the descriptor is used for an integratoion with data-type
+ * engines implemented within MPI and SHMEM implementations.
+ *
  */
 typedef struct ucp_generic_dt_ops {
 
     /**
+     * @ingroup UCP_DATATYPE
      * @brief Start a packing request.
+     *
+     * The pointer refers to application defined start-to-pack routine.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to pack.
-     * @param [in]  count          Number of elements to pack in the buffer.
+     * @param [in]  count          Number of elements to pack into the buffer.
      *
-     * @return  A custom "state" which would be passed to the pack function later.
+     * @return  A custom state that is passed to the following
+     *          @ref ucp_generic_dt_ops::unpack "pack()" routine.
      */
     void* (*start_pack)(void *context, const void *buffer, size_t count);
 
@@ -141,11 +163,14 @@ typedef struct ucp_generic_dt_ops {
      * @ingroup UCP_DATATYPE
      * @brief Start an unpacking request.
      *
+     * The pointer refers to application defined start-to-unpack routine.
+     *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to unpack to.
      * @param [in]  count          Number of elements to unpack in the buffer.
      *
-     * @return  A custom "state" which would be passed to the unpack function later.
+     * @return  A custom state that is passed later to the following
+     *          @ref ucp_generic_dt_ops::unpack "unpack()" routine.
      */
     void* (*start_unpack)(void *context, void *buffer, size_t count);
 
@@ -153,36 +178,47 @@ typedef struct ucp_generic_dt_ops {
      * @ingroup UCP_DATATYPE
      * @brief Get the total size of packed data.
      *
-     * For packing return is the output size, for unpacking - the maximal input size.
+     * The pointer refers to user defined routine that returns the size of data
+     * in a packed format.
      *
-     * @param [in]  state          State as returned from start_pack().
+     * @param [in]  state          State as returned by
+     *                             @ref ucp_generic_dt_ops::start_pack
+     *                             "start_pack()" routine.
      *
-     * @return Size of data in packed form.
+     * @return  The size of the data in a packed form.
      */
     size_t (*packed_size)(void *state);
 
     /**
      * @ingroup UCP_DATATYPE
-     * @brief Pack some data.
+     * @brief Pack data.
      *
-     * @param [in]  state          State as returned from start_pack().
+     * The pointer refers to application defined pack routine.
+     *
+     * @param [in]  state          State as returned by
+     *                             @ref ucp_generic_dt_ops::start_pack
+     *                             "start_pack()" routine.
      * @param [in]  offset         Virtual offset in the output stream.
-     * @param [in]  dest           Destination to pack data to.
+     * @param [in]  dest           Destination to pack the data to.
      * @param [in]  max_length     Maximal length to pack.
      *
-     * @return How much was actually written to the destination buffer. Must be
-     *         less than or equal to "max_length".
+     * @return The size of the data that was written to the destination buffer.
+     *         Must be less than or equal to @e max_length.
      */
     size_t (*pack) (void *state, size_t offset, void *dest, size_t max_length);
 
     /**
      * @ingroup UCP_DATATYPE
-     * @brief Unpack some data.
+     * @brief Unpack data.
      *
-     * @param [in]  state          State as returned from start_unpack().
+     * The pointer refers to application defined unpack routine.
+     *
+     * @param [in]  state          State as returned by
+     *                             @ref ucp_generic_dt_ops::start_pack
+     *                             "start_pack()" routine.
      * @param [in]  offset         Virtual offset in the input stream.
-     * @param [in]  src            Source to unpack data from.
-     * @param [in]  length         How much to unpack.
+     * @param [in]  src            Source to unpack the data from.
+     * @param [in]  length         Length to unpack.
      *
      * @return UCS_OK or an error if unpacking failed.
      */
@@ -192,7 +228,15 @@ typedef struct ucp_generic_dt_ops {
      * @ingroup UCP_DATATYPE
      * @brief Finish packing/unpacking.
      *
-     * @param [in]  state          State as returned from start_pack()/start_unpack().
+     * The pointer refers to application defined finish routine.
+     *
+     * @param [in]  state          State as returned by
+     *                             @ref ucp_generic_dt_ops::start_pack
+     *                             "start_pack()"
+     *                             and
+     *                             @ref ucp_generic_dt_ops::start_unpack
+     *                             "start_unpack()"
+     *                             routines.
      */
     void (*finish)(void *state);
 } ucp_generic_dt_ops_t;
@@ -201,13 +245,40 @@ typedef struct ucp_generic_dt_ops {
 /**
  * @ingroup UCP_CONFIG
  * @brief Parameters for UCP configuration.
+ *
+ * The structure defines the parameters that are used for
+ * UCP library configuration and @ref ucp_init "initialization".
+ *
+ * @note UCP library implementation uses the @ref ucp_feature "features"
+ * parameter to optimize the library functionality that minimize memory
+ * memory footprint.
  */
 typedef struct ucp_params {
-    uint64_t                    features;        /**< Which UCP features to activate. Using other
-                                                      features would result in undefined behavior. */
-    size_t                      request_size;    /**< How much space to reserve in non-blocking requests. */
-    ucp_request_init_callback_t request_init;    /**< Callback for initializing a request May be NULL. */
-    ucp_request_cleanup_callback_t request_cleanup; /**< Callback for cleaning-up a request. May be NULL. */
+    /** 
+     * UCP @ref ucp_feature "features" that are used for library
+     * initialization.  It is recommend for applications only request 
+     * the features that are required for an optimal functionality 
+     */
+    uint64_t                    features;        
+    /** 
+     * The size of a reserved space in a non-blocking requests. Typically
+     * applications use the this space for caching own structures in order
+     * avoid costly memory allocations, pointer dereferences, and cache misses.
+     * For example, MPI implementation can use this memory for caching MPI
+     * descriptors 
+     */
+    size_t                      request_size;        
+    /** 
+     * Pointer to a routine that is used for the request initialization.  
+     * @e NULL can be used if no such function required. 
+     */
+    ucp_request_init_callback_t request_init;    
+    /** 
+     * Pointer to a routine that is responsible for cleanup the memory
+     * associated with the request.  @e NULL can be used if no such function
+     * required. 
+     */
+    ucp_request_cleanup_callback_t request_cleanup; 
 } ucp_params_t;
 
 
@@ -450,11 +521,11 @@ void ucp_ep_destroy(ucp_ep_h ep);
 /**
  * @ingroup UCP_MEM
  * @brief Map or allocate memory for zero-copy sends and remote access.
- * 
+
  * @param [in]     context    UCP context to map memory on.
  * @param [out]    address_p  If != NULL, memory region to map.
  *                            If == NULL, filled with a pointer to allocated region.
- * @param [in]     length     How many bytes to allocate. 
+ * @param [in]     length     How many bytes to allocate.
  * @param [in]     flags      Allocation flags (currently reserved - set to 0).
  * @param [out]    memh_p     Filled with handle for allocated region.
  */
@@ -480,7 +551,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  * @param [in]  memh          memory region handle.
  * @param [out] rkey_buffer   contains serialized rkey. Caller is responsible to
  *                            release it using ucp_rkey_buffer_release().
- * @param [out] size          length of serialized rkey. 
+ * @param [out] size          length of serialized rkey.
  */
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p);
@@ -520,7 +591,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  * @ingroup UCP_MEM
  * @brief If possible translate remote address into local address which can be
  *        used for direct memory access
- * 
+ *
  * @param [in]  ep              endpoint address
  * @param [in]  remote_addr     address to translate
  * @param [in]  rkey            remote memory key
