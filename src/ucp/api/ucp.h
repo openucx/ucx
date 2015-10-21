@@ -1,5 +1,6 @@
-/**
+/*
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -94,7 +95,7 @@ enum {
  * @ingroup UCP_DATATYPE
  * @brief Data type classification - used internally
  */
-enum {
+enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous type */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided type */
     UCP_DATATYPE_GENERIC = 7,      /**< Generic type with user-defined pack/unpack routines */
@@ -123,7 +124,7 @@ enum {
  * @ingroup UCP_DATATYPE
  * @brief Represents a generic data type.
  */
-struct ucp_generic_dt_ops {
+typedef struct ucp_generic_dt_ops {
 
     /**
      * @brief Start a packing request.
@@ -194,27 +195,27 @@ struct ucp_generic_dt_ops {
      * @param [in]  state          State as returned from start_pack()/start_unpack().
      */
     void (*finish)(void *state);
-};
+} ucp_generic_dt_ops_t;
 
 
 /**
  * @ingroup UCP_CONFIG
  * @brief Parameters for UCP configuration.
  */
-struct ucp_params {
+typedef struct ucp_params {
     uint64_t                    features;        /**< Which UCP features to activate. Using other
                                                       features would result in undefined behavior. */
     size_t                      request_size;    /**< How much space to reserve in non-blocking requests. */
     ucp_request_init_callback_t request_init;    /**< Callback for initializing a request May be NULL. */
     ucp_request_cleanup_callback_t request_cleanup; /**< Callback for cleaning-up a request. May be NULL. */
-};
+} ucp_params_t;
 
 
 /**
  * @ingroup UCP_CONFIG
  * @brief UCP configuration
  *
- * This structure defines the configuration for UCP context.
+ * This structure defines the configuration for @ref ucp_context_h "UCP application context".
  */
 typedef struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices; /**< Array of device names to use */
