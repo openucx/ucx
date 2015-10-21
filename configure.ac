@@ -163,6 +163,43 @@ AC_ARG_ENABLE([debug-data],
 #
 AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
 
+# Configure jemalloc
+#
+
+AC_ARG_ENABLE([jemalloc],
+        AS_HELP_STRING([--enable-jemalloc],
+                       [Compile with jemalloc, libjemalloc will be installed in the same place as UCX. default: YES]),
+        [if test "x$enableval" = xyes; then
+	    jemalloc_enabled=yes
+         else
+	    jemalloc_enabled=no
+	 fi],
+	 [if test -e "$srcdir/external/jemalloc/configure"; then
+	     jemalloc_enabled=yes
+	  else
+	     jemalloc_enabled=no
+	  fi])
+        #[jemalloc_enabled=yes])
+
+AS_IF([test "x$jemalloc_enabled" == xyes],
+          [AS_MESSAGE([compiling jemalloc])
+	      AC_SUBST([BUILD_JEMALLOC], [yes])
+	      AC_SUBST([jemalloc_dir], [external/jemalloc])],
+          [AC_SUBST([BUILD_JEMALLOC], [no])
+	   AC_SUBST([jemalloc_dir], [])]
+  )
+
+#
+# subdir must always be configured to make sure that dist checks work
+#
+
+AS_IF([test -d "$srcdir/external/jemalloc"],
+	    [AC_CONFIG_SUBDIRS([external/jemalloc])
+	     AM_CONDITIONAL([BUILD_JEMALLOC],[test "x$BUILD_JEMALLOC" = "xyes"])],
+	    [AM_CONDITIONAL([BUILD_JEMALLOC],[false])])
+
+#
+
 #
 #Doxygen options
 #

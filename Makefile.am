@@ -47,6 +47,10 @@ EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += doc/uml/uct.dot
 
+if BUILD_JEMALLOC
+SUBDIRS += $(jemalloc_dir)
+endif
+
 include $(srcdir)/doc/doxygen/doxygen.am
 
 .PHONY: docs docs-clean
