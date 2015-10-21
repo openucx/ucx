@@ -233,9 +233,9 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
  * ucs_arbiter_group_schedule() is used to put it back on the arbiter.
  *
  * @param [in]  arbiter    Arbiter object to dispatch work on.
- * @param [in]  per_group  How many elements to dispatch form each group.
+ * @param [in]  per_group  How many elements to dispatch from each group.
  * @param [in]  cb         User-defined callback to be called for each element.
- * @param [in]  cb_arg   Last argument for the callback.
+ * @param [in]  cb_arg     Last argument for the callback.
  */
 static inline void
 ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,

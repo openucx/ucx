@@ -37,6 +37,10 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      " try - Try to allocate memory using huge pages and if it fails, allocate regular pages.\n",
      ucs_offsetof(uct_mm_iface_config_t, hugetlb_mode), UCS_CONFIG_TYPE_TERNARY},
 
+    {"SEND_ATTEMPTS", "64",
+     "Number of sending attempts before giving up (in case of no send recourses)",
+     ucs_offsetof(uct_mm_iface_config_t, send_attempts), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -104,19 +108,20 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_zcopy       = 0;
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
     iface_attr->ep_addr_len            = 0;
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT       |
-                                         UCT_IFACE_FLAG_PUT_BCOPY       |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD32    |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD64    |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD64   |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD32   |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP64   |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP32   |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP64  |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32  |
-                                         UCT_IFACE_FLAG_GET_BCOPY       |
-                                         UCT_IFACE_FLAG_AM_SHORT        |
-                                         UCT_IFACE_FLAG_AM_BCOPY        |
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT        |
+                                         UCT_IFACE_FLAG_PUT_BCOPY        |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD32     |
+                                         UCT_IFACE_FLAG_ATOMIC_ADD64     |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD64    |
+                                         UCT_IFACE_FLAG_ATOMIC_FADD32    |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP64    |
+                                         UCT_IFACE_FLAG_ATOMIC_SWAP32    |
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
+                                         UCT_IFACE_FLAG_GET_BCOPY        |
+                                         UCT_IFACE_FLAG_AM_SHORT         |
+                                         UCT_IFACE_FLAG_AM_BCOPY         |
+                                         UCT_IFACE_FLAG_AM_THREAD_SINGLE |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     return UCS_OK;
@@ -144,8 +149,8 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_atomic_fadd32    = uct_mm_ep_atomic_fadd32,
     .ep_atomic_cswap32   = uct_mm_ep_atomic_cswap32,
     .ep_atomic_swap32    = uct_mm_ep_atomic_swap32,
-    .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
-    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    .ep_pending_add      = uct_mm_ep_pending_add,
+    .ep_pending_purge    = uct_mm_ep_pending_purge,
     .ep_flush            = (void*)uct_mm_flush,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
@@ -248,8 +253,13 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 static void uct_mm_iface_progress(void *arg)
 {
     uct_mm_iface_t *iface = arg;
+    unsigned send_attempts = iface->config.send_attempts;
 
+    /* progress receive */
     uct_mm_iface_poll_fifo(iface);
+
+    /* progress the pending sends (if there are any) */
+    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_mm_ep_process_pending, &send_attempts);
 }
 
 void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
@@ -341,6 +351,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     self->config.fifo_size         = mm_config->fifo_size;
     self->config.fifo_elem_size    = mm_config->super.max_short;
     self->config.seg_size          = mm_config->super.max_bcopy;
+    self->config.send_attempts     = mm_config->send_attempts;
     self->fifo_release_factor_mask = UCS_MASK(ucs_ilog2(ucs_max((int)
                                      (mm_config->fifo_size * mm_config->release_fifo_factor),
                                      1)));
@@ -398,6 +409,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
         }
     }
 
+    ucs_arbiter_init(&self->arbiter);
     // TODO - Move this call to the ep_init function
     uct_worker_progress_register(worker, uct_mm_iface_progress, self);
 
@@ -438,6 +450,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
         ucs_warn("Unable to release shared memory segment: %m");
     }
 
+    ucs_arbiter_cleanup(&self->arbiter);
     uct_worker_progress_unregister(self->super.worker, uct_mm_iface_progress,
                                    self);
 }

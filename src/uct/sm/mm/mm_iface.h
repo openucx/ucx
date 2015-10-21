@@ -13,6 +13,7 @@
 #include <uct/tl/tl_base.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
 
@@ -32,6 +33,8 @@ typedef struct uct_mm_iface_config {
     ucs_ternary_value_t      hugetlb_mode;         /* Enable using huge pages for */
                                                    /* shared memory buffers */
     uct_iface_mpool_config_t mp;
+    unsigned                 send_attempts;        /* How many sending attempts
+                                                    to perform before stopping */
 } uct_mm_iface_config_t;
 
 
@@ -61,11 +64,13 @@ struct uct_mm_iface {
     uct_mm_recv_desc_t      *last_recv_desc;
 
     size_t                  rx_headroom;
+    ucs_arbiter_t           arbiter;
 
     struct {
         unsigned fifo_size;
         unsigned fifo_elem_size;
         unsigned seg_size;       /* size of the receive descriptor (for payload)*/
+        unsigned send_attempts;
     } config;
 };
 

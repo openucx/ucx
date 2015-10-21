@@ -23,6 +23,8 @@ struct uct_mm_ep {
     /* mapped remote memory chunks to which remote descriptors belong to.
      * (after attaching to them) */
     uct_mm_remote_seg_t  *remote_segments_hash[UCT_MM_BASE_ADDRESS_HASH_SIZE];
+
+    ucs_arbiter_group_t  arb_group;
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
@@ -67,6 +69,14 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
                                  void *arg, size_t length,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
+
+ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
+
+void uct_mm_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
+
+ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_elem_t *elem,
+                                                  void *arg);
 
 static inline uint64_t uct_mm_remote_seg_hash(uct_mm_remote_seg_t *seg)
 {
