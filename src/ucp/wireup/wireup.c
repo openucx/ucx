@@ -36,9 +36,9 @@
  *    2. If the selected transport cannot create ep-to-iface connection, select
  *       an "auxiliary" transport to use for wire-up protocol. Then, use a 3-way
  *       handshake protocol (REQ->REP->ACK) to create ep on the remote side and
- *       connect it to local ep. Until this is completed, create a dummy uct_ep
+ *       connect it to local ep. Until this is completed, create a stub uct_ep
  *       whose send functions always return NO_RESOURCE. When the connection is
- *       ready, the dummy ep is replaced by the real uct ep.
+ *       ready, the stub ep is replaced by the real uct ep.
  *
  *       If the selected transport is capable of ep-to-iface connection, simply
  *       create the connected ep.
@@ -71,12 +71,20 @@ static void ucp_wireup_ep_ready_to_send(ucp_ep_h ep)
     ep->config.max_bcopy_get = iface_attr->cap.get.max_bcopy;
 }
 
+static ucp_stub_ep_t * ucp_ep_get_stub_ep(ucp_ep_h ep)
+{
+    ucs_assert(ep->state & UCP_EP_STATE_STUB_EP);
+    return ucs_derived_of(ep->uct_ep, ucp_stub_ep_t);
+}
+
 void ucp_wireup_progress(ucp_ep_h ep)
 {
-    ucp_dummy_ep_t *dummy_ep = ucs_derived_of(ep->uct_ep, ucp_dummy_ep_t);
+    ucp_stub_ep_t *stub_ep = ucp_ep_get_stub_ep(ep);
+    ucs_queue_head_t tmp_pending_queue;
     ucp_worker_h worker = ep->worker;
     uct_pending_req_t *req;
     ucs_status_t status;
+    uct_ep_h uct_ep;
     int dispatch;
 
     ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
@@ -89,50 +97,71 @@ void ucp_wireup_progress(ucp_ep_h ep)
      */
     sched_yield();
     ucs_async_check_miss(&ep->worker->async);
-    if ((ep->state & UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED) &&
-        (ep->state & (UCP_EP_STATE_WIREUP_REPLY_SENT|UCP_EP_STATE_WIREUP_ACK_SENT)) &&
-        (ep->wireup.pending_ops == 0))
+
+    /*
+     * Check that we are ready to switch:
+     * - Remote side must also be connected.
+     * - We should have sent a wireup reply to remote side
+     * - We should have sent all pending wireup operations (so we won't discard them)
+     */
+    if (!(ep->state & UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED) ||
+        !(ep->state & (UCP_EP_STATE_WIREUP_REPLY_SENT|UCP_EP_STATE_WIREUP_ACK_SENT)) ||
+        (stub_ep->pending_count != 0))
     {
-        ucs_memory_cpu_fence();
-        UCS_ASYNC_BLOCK(&worker->async);
+        return;
+    }
 
-        /* Switch to real transport */
-        ep->uct_ep         = ep->wireup.next_ep;
-        ep->wireup.next_ep = &dummy_ep->super; /* let stop_aux destroy dummy ep */
-        ucp_wireup_ep_ready_to_send(ep);
+    ucs_memory_cpu_fence();
+    UCS_ASYNC_BLOCK(&worker->async);
 
-        /* Replay pending requests */
-        dispatch = 1;
-        ucs_queue_for_each_extract(req, &dummy_ep->pending_q, priv, 1) {
+    /* Take out next_ep */
+    uct_ep = stub_ep->next_ep;
+    ucs_assert(uct_ep != NULL);
+    stub_ep->next_ep = NULL;
+    ep->state &= ~UCP_EP_STATE_NEXT_EP;
 
-            /* Remove a reference to the dummy progress function */
-            uct_worker_progress_unregister(ep->worker->uct, ucp_dummy_ep_progress,
-                                           dummy_ep);
+    /* Move stub pending queue to temporary queue and remove references to
+     * the stub progress function
+     */
+    ucs_queue_head_init(&tmp_pending_queue);
+    ucs_queue_for_each_extract(req, &stub_ep->pending_q, priv, 1) {
+        uct_worker_progress_unregister(ep->worker->uct, ucp_stub_ep_progress,
+                                       stub_ep);
+        ucs_queue_push(&tmp_pending_queue, ucp_stub_ep_req_priv(req));
+    }
 
-            /* As long as status is OK, dispatch the callback. Otherwise, add to
-             * the pending queue of the new transport.
-             */
-            if (dispatch) {
-                ucs_trace_data("executing pending request %p func %p", req, req->func);
-                status = req->func(req);
-                dispatch = dispatch && (status == UCS_OK);
-            }
-            if (!dispatch) {
-                ucs_trace_data("queuing pending request %p", req);
-                status = uct_ep_pending_add(ep->uct_ep, req);
-                /* If we could not send before, should be able to add to pending
-                 * TODO retry the func
-                 */
-                ucs_assert_always(status == UCS_OK);
-            }
+    /* Destroy temporary endpoints */
+    stub_ep = NULL;
+    ucp_wireup_stop_aux(ep);
+
+    /* Switch to real transport */
+    ep->uct_ep = uct_ep;
+    ucp_wireup_ep_ready_to_send(ep);
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+
+    /* Replay pending requests */
+    dispatch = 1;
+    ucs_queue_for_each_extract(req, &tmp_pending_queue, priv, 1) {
+
+        /* As long as status is OK, dispatch the callback. Otherwise, add to
+         * the pending queue of the new transport.
+         */
+        if (dispatch) {
+            ucs_trace_data("executing pending request %p func %p", req, req->func);
+            status = req->func(req);
+            dispatch = dispatch && (status == UCS_OK);
         }
-
-        /* Destroy temporary endpoints */
-        ucp_wireup_stop_aux(ep);
-        UCS_ASYNC_UNBLOCK(&worker->async);
+        if (!dispatch) {
+            ucs_trace_data("queuing pending request %p", req);
+            status = uct_ep_pending_add(ep->uct_ep, req);
+            /* If we could not send before, should be able to add to pending
+             * TODO retry the func
+             */
+            ucs_assert_always(status == UCS_OK);
+        }
     }
 }
-
 
 /*
  * UCP address is a serialization of multiple interface addresses.
@@ -257,7 +286,9 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
 
     /* Get auxiliary address length */
     if (flags & UCP_WIREUP_FLAG_AUX_ADDR) {
-        status = uct_iface_query(ep->wireup.aux_ep->iface, &aux_iface_attr);
+        ucs_assert(ep->state & UCP_EP_STATE_AUX_EP);
+        status = uct_iface_query(ucp_ep_get_stub_ep(ep)->aux_ep->iface,
+                                 &aux_iface_attr);
         if (status != UCS_OK) {
             goto err;
         }
@@ -294,7 +325,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
                                            ucp_wireup_msg_get_addr(msg));
         } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
             ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
-            status = uct_ep_get_address(ep->wireup.next_ep,
+            status = uct_ep_get_address(ucp_ep_get_stub_ep(ep)->next_ep,
                                         ucp_wireup_msg_get_addr(msg));
         } else {
             status = UCS_ERR_UNREACHABLE;
@@ -307,7 +338,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t fl
     /* Fill auxiliary address */
     if (flags & UCP_WIREUP_FLAG_AUX_ADDR) {
         ucs_assert(ep->state & UCP_EP_STATE_AUX_EP);
-        status = uct_iface_get_address(ep->wireup.aux_ep->iface,
+        status = uct_iface_get_address(ucp_ep_get_stub_ep(ep)->aux_ep->iface,
                                        ucp_wireup_msg_get_aux_addr(msg));
         if (status != UCS_OK) {
             goto err_free;
@@ -346,10 +377,10 @@ static uct_ep_h ucp_wireup_msg_ep(ucp_ep_h ep)
                            UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED))
     {
         /* If next_ep is fully wired, use it for messages */
-        return ep->wireup.next_ep;
+        return ucp_ep_get_stub_ep(ep)->next_ep;
     } else if (ep->state & UCP_EP_STATE_AUX_EP) {
         /* Otherwise we have no choice but to use the auxiliary */
-        return ep->wireup.aux_ep;
+        return ucp_ep_get_stub_ep(ep)->aux_ep;
     }
 
     ucs_fatal("no valid transport to send wireup message");
@@ -365,7 +396,7 @@ static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
                                 req->send.wireup.dst_rsc_index,
                                 req->send.wireup.dst_aux_rsc_index);
     if (status == UCS_OK) {
-        ucs_atomic_add32(&ep->wireup.pending_ops, -1);
+        ucs_atomic_add32(&ucp_ep_get_stub_ep(ep)->pending_count, -1);
         ucs_mpool_put(req);
     }
     return status;
@@ -396,7 +427,7 @@ static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint32_t flags,
     req->send.wireup.flags             = flags;
     req->send.wireup.dst_rsc_index     = dst_rsc_index;
     req->send.wireup.dst_aux_rsc_index = dst_aux_rsc_index;
-    ucs_atomic_add32(&ep->wireup.pending_ops, 1);
+    ucs_atomic_add32(&ucp_ep_get_stub_ep(ep)->pending_count, 1);
     ucp_ep_add_pending(ep, uct_ep, req);
     return UCS_OK;
 }
@@ -408,72 +439,86 @@ static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, struct sockaddr *aux_addr,
     ucs_status_t status;
 
     /*
-     * Create auxiliary endpoint which would be used to transfer wireup messages.
+     * Until the transport is connected, send operations should return NO_RESOURCE.
+     * Plant a stub endpoint object which will do it.
      */
-    status = uct_ep_create_connected(worker->ifaces[aux_rsc_index],
-                                     aux_addr, &ep->wireup.aux_ep);
+    status = UCS_CLASS_NEW(ucp_stub_ep_t, &ep->uct_ep, ep);
     if (status != UCS_OK) {
         goto err;
     }
 
-    ucs_debug("created connected aux ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
-              ep->wireup.aux_ep, ucp_ep_peer_name(ep),
-              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_rsc_index].tl_rsc));
+    ep->state |= UCP_EP_STATE_STUB_EP;
+    ucs_debug("created stub ep %p to %s", ep->uct_ep, ucp_ep_peer_name(ep));
 
     /*
-     * Until the transport is connected, send operations should return NO_RESOURCE.
-     * Plant a dummy endpoint object which will do it.
+     * Create auxiliary endpoint which would be used to transfer wireup messages.
      */
-    status = UCS_CLASS_NEW(ucp_dummy_ep_t, &ep->uct_ep, ep);
+    status = uct_ep_create_connected(worker->ifaces[aux_rsc_index],
+                                     aux_addr, &ucp_ep_get_stub_ep(ep)->aux_ep);
     if (status != UCS_OK) {
-        goto err_destroy_aux_ep;
+        goto err_destroy_stub_ep;
     }
 
-    ucs_debug("created dummy ep %p to %s", ep->uct_ep, ucp_ep_peer_name(ep));
+    ep->state |= UCP_EP_STATE_AUX_EP;
+    ucs_debug("created connected aux ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
+              ucp_ep_get_stub_ep(ep)->aux_ep, ucp_ep_peer_name(ep),
+              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_rsc_index].tl_rsc));
 
     /*
      * Create endpoint for the transport we need to wire-up.
      */
-    status = uct_ep_create(worker->ifaces[ep->rsc_index], &ep->wireup.next_ep);
+    status = uct_ep_create(worker->ifaces[ep->rsc_index],
+                           &ucp_ep_get_stub_ep(ep)->next_ep);
     if (status != UCS_OK) {
-        goto err_destroy_dummy_ep;
+        goto err_destroy_aux_ep;
     }
 
+    ep->state |= UCP_EP_STATE_NEXT_EP;
     ucs_debug("created next ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
-              ep->wireup.next_ep, ucp_ep_peer_name(ep),
+              ucp_ep_get_stub_ep(ep)->next_ep, ucp_ep_peer_name(ep),
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[ep->rsc_index].tl_rsc));
-
-    ep->state |= UCP_EP_STATE_AUX_EP|UCP_EP_STATE_NEXT_EP;
 
     return UCS_OK;
 
-err_destroy_dummy_ep:
-    uct_ep_destroy(ep->uct_ep);
 err_destroy_aux_ep:
-    uct_ep_destroy(ep->wireup.aux_ep);
+    uct_ep_destroy(ucp_ep_get_stub_ep(ep)->aux_ep);
+err_destroy_stub_ep:
+    uct_ep_destroy(ep->uct_ep);
 err:
+    ep->state &= ~(UCP_EP_STATE_STUB_EP|UCP_EP_STATE_AUX_EP|UCP_EP_STATE_NEXT_EP);
     return status;
 }
 
 static void ucp_wireup_stop_aux(ucp_ep_h ep)
 {
-    uct_ep_h uct_eps_to_destroy[2];
+    uct_ep_h uct_eps_to_destroy[3];
     unsigned i, num_eps;
 
     num_eps = 0;
 
+    ucs_debug("ucp_wireup_stop_aux state=0x%x", ep->state);
+
     if (ep->state & UCP_EP_STATE_NEXT_EP) {
-        uct_eps_to_destroy[num_eps++] = ep->wireup.next_ep;
+        ucs_assert(ucp_ep_get_stub_ep(ep)->next_ep != NULL);
+        uct_eps_to_destroy[num_eps++] = ucp_ep_get_stub_ep(ep)->next_ep;
         ep->state &= ~(UCP_EP_STATE_NEXT_EP|
                        UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED|
                        UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED);
-        ep->wireup.next_ep = NULL;
+        ucp_ep_get_stub_ep(ep)->next_ep = NULL;
     }
 
     if (ep->state & UCP_EP_STATE_AUX_EP) {
-        uct_eps_to_destroy[num_eps++] = ep->wireup.aux_ep;
-        ep->wireup.aux_ep = NULL;
+        ucs_assert(ucp_ep_get_stub_ep(ep)->aux_ep != NULL);
+        uct_eps_to_destroy[num_eps++] = ucp_ep_get_stub_ep(ep)->aux_ep;
+        ucp_ep_get_stub_ep(ep)->aux_ep = NULL;
         ep->state &= ~UCP_EP_STATE_AUX_EP;
+    }
+
+    if (ep->state & UCP_EP_STATE_STUB_EP) {
+        ucs_assert(ucp_ep_get_stub_ep(ep) != NULL);
+        uct_eps_to_destroy[num_eps++] = &ucp_ep_get_stub_ep(ep)->super;
+        ep->uct_ep = NULL;
+        ep->state &= ~UCP_EP_STATE_STUB_EP;
     }
 
     for (i = 0; i < num_eps; ++i) {
@@ -543,14 +588,15 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
         /* Connect next_ep to the address passed in the wireup message */
         if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
-            status = uct_ep_connect_to_ep(ep->wireup.next_ep,
+            ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
+            status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
                                           ucp_wireup_msg_get_addr(msg));
             if (status != UCS_OK) {
                 ucs_debug("failed to connect"); /* TODO send reject */
                 return;
             }
 
-            ucs_debug("connected next ep %p", ep->wireup.next_ep);
+            ucs_debug("connected next ep %p", ucp_ep_get_stub_ep(ep)->next_ep);
             ep->state |= UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED;
         }
 
@@ -601,14 +647,15 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
 
     /* If we have not connected yet, do it now */
     if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
-        status = uct_ep_connect_to_ep(ep->wireup.next_ep,
+        ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
+        status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
                                       ucp_wireup_msg_get_addr(msg));
         if (status != UCS_OK) {
             ucs_error("failed to connect");
             return;
         }
 
-        ucs_debug("connected next ep %p", ep->wireup.next_ep);
+        ucs_debug("connected next ep %p", ucp_ep_get_stub_ep(ep)->next_ep);
         ep->state |= UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED;
     }
 
