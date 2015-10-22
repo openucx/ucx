@@ -9,7 +9,6 @@
 
 #include <ucp/api/ucp_def.h>
 #include <ucs/type/thread_mode.h>
-#include <ucs/datastruct/queue_types.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/math.h>
 #include <stdio.h>
@@ -306,22 +305,6 @@ typedef struct ucp_tag_recv_completion {
     ucp_tag_t             sender_tag;  /**< Full sender tag */
     size_t                rcvd_len;    /**< How much data was received */
 } ucp_tag_recv_completion_t;
-
-
-/**
- * @ingroup UCP_CONTEXT
- * @brief Non-blocking tag-match receive request.
- */
-typedef struct ucp_recv_request {
-    ucs_status_t               status; /**< Current request status */
-    ucp_tag_recv_completion_t  comp;   /**< Completion information. Filled if
-                                            status is != INPROGRESS.*/
-    ucs_queue_elem_t           queue;
-    void                       *buffer;
-    size_t                     length;
-    uint64_t                   tag;
-    uint64_t                   tag_mask;
-} ucp_recv_request_t;
 
 
 /**

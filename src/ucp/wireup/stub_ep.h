@@ -10,6 +10,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
+#include <ucs/datastruct/queue_types.h>
 #include <ucs/type/class.h>
 
 
