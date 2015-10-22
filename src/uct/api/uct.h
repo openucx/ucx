@@ -24,7 +24,15 @@
 #include <sched.h>
 
 /**
+ * @defgroup UCT_API Unified Communication Transport (UCT) API
+ * @{
+ * This section describes UCT API.
+ * @}
+ */
+
+/**
 * @defgroup UCT_RESOURCE   UCT Communication Resource
+* @ingroup UCT_API
 * @{
 * This section describes a concept of the Communication Resource and routines
 * associated with the concept.
@@ -33,6 +41,7 @@
 
 /**
  * @defgroup UCT_CONTEXT    UCT Communication Context
+ * @ingroup UCT_API
  * @{
  * UCT context is a primary concept of UCX design which provides an isolation
  * mechanism, allowing resources associated with the context to separate or
@@ -47,6 +56,7 @@
 
 /**
  * @defgroup UCT_PD    UCT Protection Domain
+ * @ingroup UCT_API
  * @{
  * The protection domain defines memory allocation, registration, key exchange
  * operations.
@@ -55,6 +65,7 @@
 
 /**
  * @defgroup UCT_AM   UCT Active messages
+ * @ingroup UCT_API
  * @{
  * Defines active message functions.
  * @}
@@ -62,6 +73,7 @@
 
 /**
  * @defgroup UCT_RMA  UCT Remote memeory access operations.
+ * @ingroup UCT_API
  * @{
  * Defines remote memory access operairons.
  * @}
@@ -69,6 +81,7 @@
 
 /**
  * @defgroup UCT_AMO   UCT Atomic operations.
+ * @ingroup UCT_API
  * @{
  * Defines atomic operations..
  * @}
