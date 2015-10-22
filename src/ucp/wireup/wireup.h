@@ -15,20 +15,6 @@
 
 
 /**
- * Endpoint wire-up state
- */
-enum {
-    UCP_EP_STATE_READY_TO_SEND            = UCS_BIT(0), /* uct_ep is ready to go */
-    UCP_EP_STATE_AUX_EP                   = UCS_BIT(1), /* aux_ep was created */
-    UCP_EP_STATE_NEXT_EP                  = UCS_BIT(2), /* next_ep was created */
-    UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED  = UCS_BIT(3), /* next_ep connected to remote */
-    UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED = UCS_BIT(4), /* remote also connected to our next_ep */
-    UCP_EP_STATE_WIREUP_REPLY_SENT        = UCS_BIT(5), /* wireup reply message has been sent */
-    UCP_EP_STATE_WIREUP_ACK_SENT          = UCS_BIT(6), /* wireup ack message has been sent */
-};
-
-
-/**
  * Flags in the wireup message
  */
 enum {
@@ -83,7 +69,5 @@ static inline void *ucp_address_iter_start(ucp_address_t *address)
     name_length = *(uint8_t*)(address + sizeof(uint64_t));
     return address + sizeof(uint64_t) + 1 + name_length;
 }
-
-
 
 #endif

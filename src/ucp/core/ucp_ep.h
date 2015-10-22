@@ -20,6 +20,21 @@
 
 
 /**
+ * Endpoint wire-up state
+ */
+enum {
+    UCP_EP_STATE_READY_TO_SEND            = UCS_BIT(0), /* uct_ep is ready to go */
+    UCP_EP_STATE_AUX_EP                   = UCS_BIT(1), /* aux_ep was created */
+    UCP_EP_STATE_NEXT_EP                  = UCS_BIT(2), /* next_ep was created */
+    UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED  = UCS_BIT(3), /* next_ep connected to remote */
+    UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED = UCS_BIT(4), /* remote also connected to our next_ep */
+    UCP_EP_STATE_WIREUP_REPLY_SENT        = UCS_BIT(5), /* wireup reply message has been sent */
+    UCP_EP_STATE_WIREUP_ACK_SENT          = UCS_BIT(6), /* wireup ack message has been sent */
+    UCP_EP_STATE_STUB_EP                  = UCS_BIT(7), /* the current ep is a stub */
+};
+
+
+/**
  * Remote protocol layer endpoint
  */
 typedef struct ucp_ep {
@@ -40,12 +55,6 @@ typedef struct ucp_ep {
     ucp_rsc_index_t               rsc_index;     /* Resource index the endpoint uses */
     ucp_rsc_index_t               dst_pd_index;  /* Destination protection domain index */
     volatile uint32_t             state;         /* Endpoint state */
-
-    struct {
-        uct_ep_h                  aux_ep;        /* Used to wireup the "real" endpoint */
-        uct_ep_h                  next_ep;       /* Next transport being wired up */
-        volatile uint32_t         pending_ops;   /* Number of pending wireup operations */
-    } wireup;
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_PEER_NAME_MAX];
