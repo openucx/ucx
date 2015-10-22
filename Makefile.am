@@ -57,8 +57,8 @@ FORMAT = pdf
 DOT_CLEANFILES =
 
 if HAVE_DOT
-DOCLIST += doc/uml/uct.$(FORMAT)
-DOT_CLEANFILES += doc/uml/uct.$(FORMAT)
+DOCLIST += doc/uml/uml.tag doc/uml/uct.$(FORMAT)
+DOT_CLEANFILES += doc/uml/uml.tag doc/uml/uct.$(FORMAT)
 endif
 
 docs: $(DOCLIST)
@@ -68,6 +68,10 @@ docs-clean:
 	$(RM) $(DOT_CLEANFILES)
 
 doc/doxygen/doxygen-doc/ucx.tag: $(doxygen_doc_files) doxygen-doc
+
+doc/uml/uml.tag:
+	mkdir -p doc/uml
+	echo `date` > $@
 
 .dot.pdf:
 	dot -T pdf -o $@ $<
