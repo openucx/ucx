@@ -415,9 +415,9 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Error check: Make sure there are no too many transports */
-    if (context->num_tls >= UCP_MAX_TLS) {
+    if (context->num_tls >= UCP_MAX_RESOURCES) {
         ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
-                  context->num_tls, UCP_MAX_TLS);
+                  context->num_tls, UCP_MAX_RESOURCES);
         status = UCS_ERR_EXCEEDS_LIMIT;
         goto err_free_context_resources;
     }

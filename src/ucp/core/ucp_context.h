@@ -14,7 +14,7 @@
 #include <ucs/type/component.h>
 
 
-#define UCP_MAX_TLS             16
+#define UCP_MAX_RESOURCES       UINT8_MAX
 #define UCP_MAX_PDS             (sizeof(uint64_t) * 8)
 #define UCP_CONFIG_ENV_PREFIX   "UCX_"
 typedef uint8_t                 ucp_rsc_index_t;
@@ -56,8 +56,8 @@ typedef struct ucp_tl_resource_desc {
  * Transport aliases.
  */
 typedef struct ucp_tl_alias {
-    const char                    *alias;           /* Alias name */
-    const char*                   tls[UCP_MAX_TLS]; /* Transports which are selected by the alias */
+    const char                    *alias;   /* Alias name */
+    const char*                   tls[8];   /* Transports which are selected by the alias */
 } ucp_tl_alias_t;
 
 
