@@ -16,6 +16,12 @@ const ucs::ptr_vector<ucp_test::entity>& ucp_test::entities() const {
 }
 
 void ucp_test::cleanup() {
+    /* disconnect before destroying the entities */
+    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+         iter != entities().end(); ++iter)
+    {
+        (*iter)->disconnect();
+    }
     m_entities.clear();
 }
 
