@@ -15,7 +15,15 @@
 
 
 /**
+ * @defgroup UCP_API Unified Communication Protocol (UCP) API
+ * @{
+ * This section describes UCP API.
+ * @}
+ */
+
+/**
  * @defgroup UCP_CONTEXT UCP Application Context
+ * @ingroup UCP_API
  * @{
  * Application  context is a primary concept of UCP design which
  * provides an isolation mechanism, allowing resources associated
@@ -31,6 +39,7 @@
 
  /**
  * @defgroup UCP_WORKER UCP Worker
+ * @ingroup UCP_API
  * @{
  * UCP Worker routines
  * @}
@@ -39,6 +48,7 @@
 
  /**
  * @defgroup UCP_MEM UCP Memory routines
+ * @ingroup UCP_API
  * @{
  * UCP Memory routines
  * @}
@@ -47,6 +57,7 @@
 
  /**
  * @defgroup UCP_ENDPOINT UCP Endpoint
+ * @ingroup UCP_API
  * @{
  * UCP Endpoint routines
  * @}
@@ -55,6 +66,7 @@
 
  /**
  * @defgroup UCP_COMM UCP Communication routines
+ * @ingroup UCP_API
  * @{
  * UCP Communication routines
  * @}
@@ -63,6 +75,7 @@
 
  /**
  * @defgroup UCP_CONFIG UCP Configuration
+ * @ingroup UCP_API
  * @{
  * This section describes routines for configuration
  * of the UCP network layer
@@ -72,6 +85,7 @@
 
  /**
  * @defgroup UCP_DATATYPE UCP Data type routines
+ * @ingroup UCP_API
  * @{
  * UCP Data type routines
  * @}
@@ -243,63 +257,82 @@ typedef struct ucp_generic_dt_ops {
 
 /**
  * @ingroup UCP_CONFIG
- * @brief Parameters for UCP configuration.
+ * @brief Tuning parameters for UCP library.
  *
  * The structure defines the parameters that are used for
- * UCP library configuration and @ref ucp_init "initialization".
+ * UCP library tuning during UCP library @ref ucp_init "initialization".
  *
  * @note UCP library implementation uses the @ref ucp_feature "features"
  * parameter to optimize the library functionality that minimize memory
- * memory footprint.
+ * footprint. For example, if the application does not require send/receive
+ * semantics UCP library may avoid allocation of expensive resources associated with
+ * send/receive queues.
  */
 typedef struct ucp_params {
-    /** 
+    /**
      * UCP @ref ucp_feature "features" that are used for library
-     * initialization.  It is recommend for applications only request 
-     * the features that are required for an optimal functionality 
+     * initialization.  It is recommend for applications only request
+     * the features that are required for an optimal functionality
      */
-    uint64_t                    features;        
-    /** 
+    uint64_t                    features;
+    /**
      * The size of a reserved space in a non-blocking requests. Typically
      * applications use the this space for caching own structures in order
      * avoid costly memory allocations, pointer dereferences, and cache misses.
      * For example, MPI implementation can use this memory for caching MPI
-     * descriptors 
+     * descriptors
      */
-    size_t                      request_size;        
-    /** 
-     * Pointer to a routine that is used for the request initialization.  
-     * @e NULL can be used if no such function required. 
+    size_t                      request_size;
+    /**
+     * Pointer to a routine that is used for the request initialization.
+     * @e NULL can be used if no such function required.
      */
-    ucp_request_init_callback_t request_init;    
-    /** 
+    ucp_request_init_callback_t request_init;
+    /**
      * Pointer to a routine that is responsible for cleanup the memory
      * associated with the request.  @e NULL can be used if no such function
-     * required. 
+     * required.
      */
-    ucp_request_cleanup_callback_t request_cleanup; 
+    ucp_request_cleanup_callback_t request_cleanup;
 } ucp_params_t;
 
 
 /**
  * @ingroup UCP_CONFIG
- * @brief UCP configuration
+ * @brief UCP configuration descriptor
  *
- * This structure defines the configuration for @ref ucp_context_h "UCP application context".
+ * This descriptor defines the configuration for @ref ucp_context_h
+ * "UCP application context". The configuration is loaded from the run-time
+ * environment (using configuration files of environment variables)
+ * using @ref ucp_config_read "ucp_config_read" routine and can be printed
+ * using @ref ucp_config_print "ucp_config_print" routine. In addition,
+ * application is responsible to release the descriptor using
+ * @ref ucp_config_release "ucp_config_release" routine.
+ *
+ * @todo This structure will be converted to an opaque object that will
+ * be modified through a dedicated function.
  */
 typedef struct ucp_config {
-    UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices; /**< Array of device names to use */
-    UCS_CONFIG_STRING_ARRAY_FIELD(names)   tls;     /**< Array of device names to use */
-    int                                    force_all_devices; /**< Whether to force using all devices */
-    UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;   /**< Array of allocation methods */
-    size_t                                 bcopy_thresh;  /**< Threshold for switching to bcopy protocol */
-    size_t                                 rndv_thresh;  /** Threshold for using rendezvous protocol */
+    /** Array of device names to use */
+    UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices;
+    /** Array of transport names to use */
+    UCS_CONFIG_STRING_ARRAY_FIELD(names)   tls;
+    /** Whether to force using of all available devices */
+    int                                    force_all_devices;
+    /** Array of memory allocation methods */
+    UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
+    /** Threshold for switching UCP to buffered copy(bcopy) protocol */
+    size_t                                 bcopy_thresh;
+    /** Threshold for switching UCP to rendezvous protocol */
+    size_t                                 rndv_thresh;
 } ucp_config_t;
 
 
 /**
  * @ingroup UCP_CONTEXT
  * @brief Completion status of a tag-matched receive.
+ *
+ * @todo This declaration should be removed from public API
  */
 typedef struct ucp_tag_recv_completion {
     ucp_tag_t             sender_tag;  /**< Full sender tag */
@@ -309,26 +342,45 @@ typedef struct ucp_tag_recv_completion {
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Progress callback. Used to progress user context during blocking operations.
+ * @brief UCP receive information descriptor
+ *
+ * The UCP receive information descriptor is allocated by application and filled
+ * in with the information about the received message by @ref ucp_tag_probe_nb
+ * "ucp_tag_probe_nb" routine.
  */
 struct ucp_tag_recv_info {
-    ucp_tag_t                              sender_tag;  /**< Full sender tag */
-    size_t                                 length;      /**< How much data was received */
+    /** Sender tag */
+    ucp_tag_t                              sender_tag;
+    /** The size of the received data */
+    size_t                                 length;
 };
 
 
 /**
  * @ingroup UCP_CONFIG
- * @brief Read UCP configuration.
+ * @brief Read UCP configuration descriptor
  *
- * @param [in]  env_prefix    If non-NULL, search for environment variables
- *                            starting with this UCX_<prefix>_. Otherwise, search
- *                            for environment variables starting with just UCX_.
- * @param [in]  filename      If non-NULL, read configuration from this file. If
- *                            the file does not exist, it will be ignored.
- * @param [out] config_p      Filled with a pointer to configuration.
+ * The routine fetches the information about UCP library configuration from
+ * the run-time environment. Then, the fetched descriptor is used for
+ * UCP library @ref ucp_init "initialization". The Application can print out the
+ * descriptor using @ref ucp_config_print "print" routine. In addition
+ * the application is responsible to @ref ucp_config_release "release" the
+ * descriptor back to UCP library.
  *
- * @return Error code.
+ * @param [in]  env_prefix    If non-NULL, the routine searches for the
+ *                            environment variables that start with
+ *                            @e UCX_<env_prefix>_ prefix.
+ *                            Otherwise, the routine searches for the
+ *                            environment variables that start with
+ *                            @e UCX_ prefix.
+ * @param [in]  filename      If non-NULL, read configuration from the file
+ *                            defined by @e filename. If the file does not
+ *                            exist, it will be ignored and no error reported
+ *                            to the application.
+ * @param [out] config_p      Pointer to configuration descriptor as defined by
+ *                            @ref ucp_config_t "ucp_config_t".
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p);
@@ -336,21 +388,31 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
 
 /**
  * @ingroup UCP_CONFIG
- * @brief Release configuration memory returned from @ref ucp_config_read().
+ * @brief Release configuration descriptor
  *
- * @param [in]  config        Configuration to release.
+ * The routine releases the configuration descriptor that was allocated through
+ * @ref ucp_config_read "ucp_config_read()" routine.
+ *
+ * @param [out] config        Configuration descriptor as defined by
+ *                            @ref ucp_config_t "ucp_config_t".
  */
 void ucp_config_release(ucp_config_t *config);
 
 
 /**
  * @ingroup UCP_CONFIG
- * @brief Print UCP configuration.
+ * @brief Print configuration information
  *
- * @param [in]  config        Configuration to print.
+ * The routine prints the configuration information that is stored in
+ * @ref ucp_config_t "configuration" descriptor.
+ *
+ * @todo Expose ucs_config_print_flags_t
+ *
+ * @param [in]  config        @ref ucp_config_t "Configuration descriptor"
+ *                            to print.
  * @param [in]  stream        Output stream to print the configuration to.
  * @param [in]  title         Configuration title to print.
- * @param [in]  print_flags   Control printing options.
+ * @param [in]  print_flags   Flags that control various printing options.
  */
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags);
@@ -358,12 +420,37 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Initialize global ucp context.
+ * @brief UCP context initialization.
  *
- * @param [in]  config        UCP configuration returned from @ref ucp_config_read().
- * @param [out] context_p     Filled with a ucp context handle.
+ * This routine creates and initializes a @ref ucp_context_t
+ * "UCP application context".
  *
- * @return Error code.
+ * @warning This routine must be called before any other UCP function
+ * call in the application.
+ *
+ * This routine discovers the available network interfaces, and initializes the
+ * network resources required for discovering of the network and memory
+ * related devices.  This routine is responsible for initialization all
+ * information required for a particular application scope, for example, MPI
+ * application, OpenSHMEM application, etc.
+ *
+ * @note
+ * @li Higher level protocols can add additional communication isolation, as
+ * MPI does with it’s communicator object. A single communication context may
+ * be used to support multiple MPI communicators.
+ * @li The context can be used to isolate the communication that corresponds to
+ * different protocols. For example, if MPI and OpenSHMEM are using UCP to
+ * isolate the MPI communication from the OpenSHMEM communication, users should
+ * use different application context for each of the communication libraries.
+ *
+ * @param [in]  config        UCP configuration descriptor allocated through
+ *                            @ref ucp_config_read "ucp_config_read()" routine.
+ * @param [in]  params        User defined @ref ucp_params_t "tunings" for the
+ *                            @ref ucp_context_h "UCP application context".
+ * @param [out] context_p     Initialized @ref ucp_context_h
+ *                            "UCP application context".
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_init(const ucp_params_t *params, const ucp_config_t *config,
                       ucp_context_h *context_p);
@@ -371,9 +458,20 @@ ucs_status_t ucp_init(const ucp_params_t *params, const ucp_config_t *config,
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Destroy global ucp context.
+ * @brief Release UCP application context.
  *
- * @param [in] context_p   Handle to the ucp context.
+ * This routine finalizes and releases the resources associated with a
+ * @ref ucp_context_h "UCP application context".
+ *
+ * @warning An application cannot call any UCP routine
+ * once the UCP application context released.
+ *
+ * The cleanup process releases and shuts down all resources associated    with
+ * the application context. After calling this routine, calling any UCP
+ * routine without calling @ref ucp_init "UCP initialization routine" is invalid.
+ *
+ * @param [in] context_p   Handle to @ref ucp_context_h
+ *                         "UCP application context".
  */
 void ucp_cleanup(ucp_context_h context_p);
 
