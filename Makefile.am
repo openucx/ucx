@@ -26,7 +26,8 @@ SUBDIRS = \
 	src/tools/hook \
 	src/tools/info \
 	src/tools/perf \
-	test/examples
+	test/examples \
+	external
 
 if HAVE_GTEST
 SUBDIRS += test/gtest
@@ -46,10 +47,6 @@ EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += doc/uml/uct.dot
-
-if BUILD_JEMALLOC
-SUBDIRS += $(jemalloc_dir)
-endif
 
 include $(srcdir)/doc/doxygen/doxygen.am
 

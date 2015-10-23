@@ -183,11 +183,8 @@ AC_ARG_ENABLE([jemalloc],
 
 AS_IF([test "x$jemalloc_enabled" == xyes],
           [AS_MESSAGE([compiling jemalloc])
-	      AC_SUBST([BUILD_JEMALLOC], [yes])
-	      AC_SUBST([jemalloc_dir], [external/jemalloc])],
-          [AC_SUBST([BUILD_JEMALLOC], [no])
-	   AC_SUBST([jemalloc_dir], [])]
-  )
+	      AC_SUBST([BUILD_JEMALLOC], [yes])],
+          [AC_SUBST([BUILD_JEMALLOC], [no])])
 
 #
 # subdir must always be configured to make sure that dist checks work
@@ -234,6 +231,7 @@ AC_CONFIG_FILES([
                  src/tools/perf/Makefile
                  test/examples/Makefile
                  test/gtest/Makefile
+		 external/Makefile
                  ])
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
 
