@@ -18,11 +18,11 @@ digraph G {
         ]
 
         ucp_context_h [
-        label = "{ucp_context_h|\l ucp_init()\l ucp_cleanup\l}"
+        label = "{ucp_context_h|\l ucp_init()\l ucp_cleanup()\l}"
         ]
 
         ucp_worker_h [
-        label = "{ucp_worker_h|\l ucp_worker_create()\l ucp_worker_destroy()\l ucp_worker_progress_register()\l ucp_worker_progress_unregister()\l ucp_worker_get_address()\l ucp_worker_release_address()\l ucp_worker_progress()\l}"
+        label = "{ucp_worker_h|\l ucp_worker_create()\l ucp_worker_destroy()\l ucp_worker_get_address()\l ucp_worker_release_address()\l ucp_worker_progress()\l}"
         ]
 
         ucp_address_t [
