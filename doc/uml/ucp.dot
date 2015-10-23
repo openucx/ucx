@@ -1,0 +1,52 @@
+digraph G {
+    fontname = "Bitstream Vera Sans"
+        fontsize = 8
+
+        node [
+        fontname = "Bitstream Vera Sans"
+        fontsize = 8
+        shape = "record"
+        ]
+
+        edge [
+        fontname = "Bitstream Vera Sans"
+        fontsize = 8
+        ]
+
+        ucp_config_t [
+        label = "{ucp_config_t|\l ucp_config_read()\l ucp_config_release()\l ucp_config_print()\l}"
+        ]
+
+        ucp_context_h [
+        label = "{ucp_context_h|\l ucp_init()\l ucp_cleanup()\l}"
+        ]
+
+        ucp_worker_h [
+        label = "{ucp_worker_h|\l ucp_worker_create()\l ucp_worker_destroy()\l ucp_worker_get_address()\l ucp_worker_release_address()\l ucp_worker_progress()\l}"
+        ]
+
+        ucp_address_t [
+        label = "{ucp_address_t|}"
+        ]
+
+        ucp_ep_h [
+        label = "{ucp_ep_h|\l ucp_ep_create()\l ucp_ep_destroy()\l}"
+        ]
+
+        edge [
+        arrowhead = "none"
+        taillabel= "1"
+        headlabel = "0..*"
+        ]
+
+        ucp_config_t  -> ucp_context_h
+        ucp_context_h -> ucp_worker_h
+        ucp_worker_h  -> ucp_ep_h
+
+        edge [
+        arrowhead = "none"
+        taillabel= "1"
+        headlabel = "1"
+        ]
+        ucp_worker_h  -> ucp_address_t
+}
