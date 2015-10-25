@@ -346,6 +346,35 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+static void uct_ib_resource_init(uct_ib_resource_t *res, uct_ib_device_t *dev,
+                                 ucs_thread_mode_t thread_mode)
+{
+    struct ibv_exp_res_domain_init_attr attr;
+    attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL | IBV_EXP_RES_DOMAIN_MSG_MODEL;
+    attr.thread_model = (thread_mode == UCS_THREAD_MODE_SINGLE)     ? IBV_EXP_THREAD_SINGLE :
+                        (thread_mode == UCS_THREAD_MODE_SERIALIZED) ? IBV_EXP_THREAD_UNSAFE :
+                        IBV_EXP_THREAD_SAFE;
+    attr.msg_model    = IBV_EXP_MSG_FORCE_LOW_LATENCY;
+    res->domain = ibv_exp_create_res_domain(dev->ibv_context, &attr);
+}
+
+static void uct_ib_resource_cleanup(uct_ib_resource_t *res, uct_ib_device_t *dev)
+{
+    struct ibv_exp_destroy_res_domain_attr attr;
+    int ret;
+
+    attr.comp_mask = 0;
+    ret = ibv_exp_destroy_res_domain(dev->ibv_context, res->domain, &attr);
+    if (ret != 0) {
+        ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
+        return;
+    }
+
+    res->domain = NULL;
+}
+#endif
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -388,13 +417,33 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err;
     }
 
-    status = uct_ib_iface_init_lmc(self, config);
-    if (status != UCS_OK) {
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+    self->res = uct_worker_tl_data_get(worker, UCT_IB_WORKER_DATA_KEY,
+                                       uct_ib_resource_t, uct_ib_resource_init,
+                                       dev, worker->thread_mode);
+    if (self->res == NULL) {
+        ucs_error("failed to allocate ib resource");
+        status = UCS_ERR_NO_MEMORY;
         goto err;
     }
+    if (self->res->domain == NULL) {
+        ucs_error("ibv_exp_create_res_domain() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_release_res;
+    }
+#endif
 
-    /* TODO comp_channel */
+    status = uct_ib_iface_init_lmc(self, config);
+    if (status != UCS_OK) {
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+        goto err_destroy_res_domain;
+#else
+        goto err;
+#endif
+    }
+
     /* TODO inline scatter for send SQ */
+    /* TODO use resource domain */
     self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len, NULL, NULL, 0);
     if (self->send_cq == NULL) {
         ucs_error("Failed to create send cq: %m");
@@ -406,6 +455,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "128", 1);
     }
 
+    /* TODO comp_channel */
+    /* TODO use resource domain */
     self->recv_cq = ibv_create_cq(dev->ibv_context, config->rx.queue_len,
                                   NULL, NULL, 0);
     ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "64", 1);
@@ -432,6 +483,12 @@ err_destroy_send_cq:
     ibv_destroy_cq(self->send_cq);
 err_free_path_bits:
     ucs_free(self->path_bits);
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+err_destroy_res_domain:
+    uct_ib_resource_cleanup(self->res, dev);
+err_release_res:
+    ucs_free(self->res);
+#endif
 err:
     return status;
 }
@@ -449,6 +506,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
     if (ret != 0) {
         ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
     }
+
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+    uct_worker_tl_data_put(self->res, uct_ib_resource_cleanup,
+                           ucs_derived_of(self->super.pd, uct_ib_device_t));
+#endif
 
     ucs_free(self->path_bits);
 }

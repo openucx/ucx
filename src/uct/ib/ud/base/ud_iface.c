@@ -253,6 +253,11 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
 #if HAVE_VERBS_EXP_H
     qp_init_attr.pd                  = dev->pd;
     qp_init_attr.comp_mask           = IBV_QP_INIT_ATTR_PD;
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+    qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+    qp_init_attr.res_domain          = self->super.res->domain;
+#endif
+
     /* TODO: inline rcv */
 #if 0
     if (mxm_ud_ep_opts(ep)->ud.ib.rx.max_inline > 0) {

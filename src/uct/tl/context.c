@@ -196,12 +196,25 @@ static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
     self->async       = async;
     self->thread_mode = thread_mode;
     ucs_notifier_chain_init(&self->progress_chain);
+    ucs_list_head_init(&self->tl_data);
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_worker_t)
 {
     /* TODO warn if notifier chain is non-empty */
+}
+
+uct_worker_tl_data_t *uct_worker_tl_data_search(uct_worker_t *worker, uint32_t key)
+{
+    uct_worker_tl_data_t *data;
+
+    ucs_list_for_each(data, &worker->tl_data, list) {
+        if (data->key == key) {
+            return data;
+        }
+    }
+    return NULL;
 }
 
 void uct_worker_progress(uct_worker_h worker)

@@ -503,7 +503,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return UCS_ERR_IO_ERROR;
     }
 
-    status = uct_ib_mlx5_get_txwq(self->super.qp, &self->tx.wq); 
+    status = uct_ib_mlx5_get_txwq(self->super.super.super.worker, self->super.qp,
+                                  &self->tx.wq);
     if (status != UCS_OK) {
         return UCS_ERR_IO_ERROR;
     }
@@ -535,6 +536,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
     ucs_trace_func("");
     uct_worker_progress_unregister(self->super.super.super.worker,
                                    uct_ud_mlx5_iface_progress, self);
+    uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
 }
 
 UCS_CLASS_DEFINE(uct_ud_mlx5_iface_t, uct_ud_iface_t);
