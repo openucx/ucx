@@ -141,11 +141,22 @@ struct uct_pd {
 };
 
 
+/**
+ * Trnasport-specific data on a worker
+ */
+typedef struct uct_worker_tl_data {
+    ucs_list_link_t        list;
+    uint32_t               key;
+    uint32_t               refcount;
+} uct_worker_tl_data_t;
+
+
 typedef struct uct_worker uct_worker_t;
 struct uct_worker {
     ucs_async_context_t    *async;
     ucs_notifier_chain_t   progress_chain;
     ucs_thread_mode_t      thread_mode;
+    ucs_list_link_t        tl_data;
 };
 
 
@@ -153,6 +164,36 @@ ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
                                     uct_pd_resource_desc_t **resources_p,
                                     unsigned *num_resources_p);
 
+
+#define uct_worker_tl_data_get(_worker, _key, _type, _init_fn, ...) \
+    ({ \
+        uct_worker_tl_data_t *data = uct_worker_tl_data_search((_worker), (_key)); \
+        if (data == NULL) { \
+            data = ucs_malloc(sizeof(_type), UCS_PP_QUOTE(_type)); \
+            if (data != NULL) { \
+                data->key      = (_key); \
+                data->refcount = 1; \
+                _init_fn(ucs_derived_of(data, _type), ## __VA_ARGS__); \
+                ucs_list_add_tail(&(_worker)->tl_data, &data->list); \
+            } \
+        } else { \
+            ++data->refcount; \
+        } \
+        ucs_derived_of(data, _type); \
+    })
+
+#define uct_worker_tl_data_put(_data, _cleanup_fn, ...) \
+    { \
+        uct_worker_tl_data_t *data = (uct_worker_tl_data_t*)(_data); \
+        if (--data->refcount == 0) { \
+            ucs_list_del(&data->list); \
+            _cleanup_fn((_data), ## __VA_ARGS__); \
+            ucs_free(data); \
+        } \
+    }
+
+
+uct_worker_tl_data_t *uct_worker_tl_data_search(uct_worker_t *worker, uint32_t key);
 
 extern ucs_list_link_t uct_pd_components_list;
 extern ucs_config_field_t uct_pd_config_table[];

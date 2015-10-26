@@ -320,15 +320,20 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
 
 #  if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
     if (dev->dev_attr.exp_atomic_cap == IBV_EXP_ATOMIC_HCA_REPLY_BE) {
-        qp_init_attr.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
+        qp_init_attr.comp_mask      |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
         qp_init_attr.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
     }
 #  endif
 
 #  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
-    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    qp_init_attr.max_inl_recv       = iface->config.rx_inline;
+    qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
+    qp_init_attr.max_inl_recv        = iface->config.rx_inline;
 #  endif
+
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+    qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+    qp_init_attr.res_domain          = iface->super.res->domain;
+#endif
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else

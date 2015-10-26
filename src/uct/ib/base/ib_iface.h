@@ -16,6 +16,9 @@
 #include <ucs/datastruct/mpool.inl>
 
 
+#define UCT_IB_WORKER_DATA_KEY         0x1b1bda7aU
+
+
 /**
  * IB port/path MTU.
  */
@@ -63,6 +66,15 @@ typedef struct uct_ib_iface_config {
 } uct_ib_iface_config_t;
 
 
+/* Blue flame register */
+typedef struct uct_ib_resource {
+    uct_worker_tl_data_t        super;
+#if HAVE_DECL_IBV_EXP_QP_INIT_ATTR_RES_DOMAIN
+    struct ibv_exp_res_domain   *domain;
+#endif
+} uct_ib_resource_t;
+
+
 typedef struct uct_ib_iface {
     uct_base_iface_t        super;
     uint8_t                 *path_bits;
@@ -73,6 +85,7 @@ typedef struct uct_ib_iface {
     uint8_t                 port_num;
     uint8_t                 sl;
 
+    uct_ib_resource_t       *res;
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
     /* TODO comp_channel */

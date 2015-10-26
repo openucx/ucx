@@ -190,8 +190,57 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
     }
 }
 
+static void uct_ib_mlx5_resource_init(uct_ib_mlx5_resource_t *res)
+{
+    ucs_list_head_init(&res->bf_list);
+}
 
-ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
+static void uct_ib_mlx5_resource_cleanup(uct_ib_mlx5_resource_t *res)
+{
+    ucs_assert(ucs_list_is_empty(&res->bf_list));
+}
+
+static uct_ib_mlx5_bf_t* uct_ib_mlx5_get_bf(uct_worker_h worker,
+                                            uintptr_t bf_addr, uint32_t bf_size)
+{
+    uct_ib_mlx5_resource_t *res = uct_worker_tl_data_get(worker,
+                                                         UCT_IB_MLX5_WORKER_DATA_KEY,
+                                                         uct_ib_mlx5_resource_t,
+                                                         uct_ib_mlx5_resource_init);
+    uct_ib_mlx5_bf_t *bf;
+
+    ucs_assert(ucs_is_pow2(bf_size));
+    ucs_list_for_each(bf, &res->bf_list, list) {
+        if ((bf->reg.addr & ~bf->size) == (bf_addr & ~bf_size)) {
+            ucs_assert(bf->size == bf_size);
+            ++bf->refcount;
+            return bf;
+        }
+    }
+
+    bf = ucs_malloc(sizeof(*bf), "mlx5_bf");
+    bf->res      = res;
+    bf->reg.addr = bf_addr;
+    bf->size     = bf_size;
+    bf->refcount = 1;
+    ucs_list_add_tail(&res->bf_list, &bf->list);
+    return bf;
+}
+
+static void uct_ib_mlx5_put_bf(uct_ib_mlx5_bf_t *bf)
+{
+    uct_ib_mlx5_resource_t *res = bf->res;
+
+    if (--bf->refcount == 0) {
+        ucs_list_del(&bf->list);
+        ucs_free(bf);
+    }
+
+    uct_worker_tl_data_put(res, uct_ib_mlx5_resource_cleanup);
+}
+
+ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
+                                  uct_ib_mlx5_txwq_t *wq)
 {
     uct_ib_mlx5_qp_info_t qp_info;
     ucs_status_t status;
@@ -222,8 +271,8 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
     wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
     wq->curr       = wq->qstart;
     wq->sw_pi      = wq->prev_sw_pi = 0;
-    wq->bf_reg     = qp_info.bf.reg;
-    wq->bf_size    = qp_info.bf.size;
+    wq->bf         = uct_ib_mlx5_get_bf(worker, (uintptr_t)qp_info.bf.reg,
+                                        qp_info.bf.size);
     wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not 
@@ -239,6 +288,11 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
     memset(wq->qstart, 0, wq->qend - wq->qstart); 
     return UCS_OK;
 } 
+
+void uct_ib_mlx5_put_txwq(uct_worker_h worker, uct_ib_mlx5_txwq_t *wq)
+{
+    uct_ib_mlx5_put_bf(wq->bf);
+}
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
 {
