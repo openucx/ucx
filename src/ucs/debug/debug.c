@@ -376,22 +376,45 @@ int backtrace_next(backtrace_h bckt, unsigned long *address, char const ** file,
     return 1;
 }
 
-void ucs_debug_print_backtrace(FILE *stream, int strip)
+/*
+ * Filter specific functions from the head of the backtrace.
+ */
+static void ucs_debug_print_backtrace_filter(FILE *stream, int strip, ...)
 {
     backtrace_h bckt;
     unsigned long address;
     const char *file, *function;
+    const char *exclude_function;
     unsigned line;
+    int exclude;
+    va_list ap;
     int i;
 
     bckt = backtrace_create();
 
     fprintf(stream, "==== backtrace ====\n");
-    i = 0;
+    exclude = 1;
+    i       = 0;
     while (backtrace_next(bckt, &address, &file, &function, &line)) {
+
         if (i >= strip) {
-            fprintf(stream, "%2d 0x%016lx %s()  %s:%u\n", i, address,
-                    function ? function : "??", file ? file : "??", line);
+            if (exclude) {
+                va_start(ap, strip);
+                exclude_function = va_arg(ap, const char *);
+                while (exclude_function != NULL) {
+                    if (!strcmp(exclude_function, function)) {
+                        break;
+                    }
+
+                    exclude_function = va_arg(ap, const char *);
+                }
+                va_end(ap);
+                exclude = (exclude_function != NULL);
+            }
+            if (!exclude) {
+                fprintf(stream, "%2d 0x%016lx %s()  %s:%u\n", i, address,
+                        function ? function : "??", file ? file : "??", line);
+            }
         }
         ++i;
     }
@@ -417,7 +440,7 @@ void ucs_debug_get_line_info(const char *filename, unsigned long base, unsigned 
     info->line_number = 0;
 }
 
-void ucs_debug_print_backtrace(FILE *stream, int strip)
+void ucs_debug_print_backtrace_filter(FILE *stream, int strip, ...)
 {
     char **symbols;
     void *addresses[BACKTRACE_MAX];
@@ -428,7 +451,7 @@ void ucs_debug_print_backtrace(FILE *stream, int strip)
     count = backtrace(addresses, BACKTRACE_MAX);
     symbols = backtrace_symbols(addresses, count);
     for (i = strip; i < count; ++i) {
-            fprintf(stream, "   %2d  %s\n", i - strip, symbols[i]);
+        fprintf(stream, "   %2d  %s\n", i - strip, symbols[i]);
     }
     free(symbols);
 
@@ -450,6 +473,10 @@ const char *ucs_debug_get_symbol_name(void *address, char *buffer, size_t max)
 
 #endif /* HAVE_DETAILED_BACKTRACE */
 
+void ucs_debug_print_backtrace(FILE *stream, int strip)
+{
+    ucs_debug_print_backtrace_filter(stream, strip, NULL);
+}
 
 static ucs_status_t ucs_debugger_attach()
 {
@@ -627,7 +654,10 @@ void ucs_handle_error()
         /* Fall thru */
 
     case UCS_HANDLE_ERROR_BACKTRACE:
-        ucs_debug_print_backtrace(stderr, 2);
+        ucs_debug_print_backtrace_filter(stderr, 2,
+                                         "ucs_handle_error",
+                                         "ucs_error_signal_handler",
+                                         NULL);
         break;
 
     default:
