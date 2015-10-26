@@ -27,7 +27,13 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"TLS", "all",
    "Comma-separated list of transports to use. The order is not meaningful.\n"
-   "all - use all the available transports.",
+   "In addition it's possible to use a combination of the following aliases:\n"
+   " - all    : use all the available transports."
+   " - sm/shm : all shared memory transports.\n"
+   " - ugni   : ugni_rdma and ugni_udt.\n"
+   " - rc     : rc and cm."
+   " - rc-x   : rc with accelerated verbs and cm."
+   " - ud-x   : ud with accelerated verbs.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"FORCE_ALL_DEVICES", "no",
@@ -54,6 +60,15 @@ static ucs_config_field_t ucp_config_table[] = {
   {NULL}
 };
 
+static ucp_tl_alias_t ucp_tl_aliases[] = {
+  { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
+  { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
+  { "rc",    { "rc", "cm", NULL } },
+  { "rc-x",  { "rc_mlx5", "cm", NULL } },
+  { "ud-x",  { "ud_mlx5", NULL } },
+  { "ugni",  { "ugni_udt", "ugni_rdma", NULL } },
+  { NULL }
+};
 
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
@@ -95,12 +110,40 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
                                  UCP_CONFIG_ENV_PREFIX, NULL, print_flags);
 }
 
+static int ucp_str_array_search(const char **array, unsigned length,
+                                const char *str)
+{
+    unsigned i;
+
+    for (i = 0; i < length; ++i) {
+        if (!strcmp(array[i], str)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
+{
+    unsigned count;
+    for (count = 0; alias->tls[count] != NULL; ++count);
+    return count;
+}
+
+static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name)
+{
+    const char **names = (const char**)config->tls.names;
+    return (ucp_str_array_search(names, config->tls.count, tl_name) >= 0) ||
+           (ucp_str_array_search(names, config->tls.count, "all"  ) >= 0);
+}
+
 static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
                                    const ucp_config_t *config,
                                    uint64_t *devices_mask_p)
 {
     int device_enabled, tl_enabled;
-    unsigned config_idx;
+    ucp_tl_alias_t *alias;
+    int config_idx;
 
     ucs_assert(config->devices.count > 0);
     if (!strcmp(config->devices.names[0], "all")) {
@@ -113,11 +156,12 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
         device_enabled  = 0;
         *devices_mask_p = 0;
         ucs_assert_always(config->devices.count <= 64); /* Using uint64_t bitmap */
-        for (config_idx = 0; config_idx < config->devices.count; ++config_idx) {
-            if (!strcmp(config->devices.names[config_idx], resource->dev_name)) {
-                device_enabled  = 1;
-               *devices_mask_p |= UCS_MASK(config_idx);
-            }
+        config_idx = ucp_str_array_search((const char**)config->devices.names,
+                                          config->devices.count,
+                                          resource->dev_name);
+        if (config_idx >= 0) {
+            device_enabled  = 1;
+            *devices_mask_p |= UCS_MASK(config_idx);
         }
     }
 
@@ -128,15 +172,24 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
     }
 
     ucs_assert(config->tls.count > 0);
-    if (!strcmp(config->tls.names[0], "all")) {
-        /* if the user's list is 'all', use all the available tls */
+    if (ucp_config_is_tl_enabled(config, resource->tl_name)) {
         tl_enabled = 1;
     } else {
-        /* go over the tls list from the user and compare it against the available resources */
         tl_enabled = 0;
-        for (config_idx = 0; config_idx < config->tls.count; ++config_idx) {
-            if (!strcmp(config->tls.names[config_idx], resource->tl_name)) {
+
+        /* check aliases */
+        for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+
+            /* If an alias is enabled, and the transport is part of this alias,
+             * enable the transport.
+             */
+            if (ucp_config_is_tl_enabled(config, alias->alias) &&
+                (ucp_str_array_search(alias->tls, ucp_tl_alias_count(alias),
+                                     resource->tl_name) >= 0))
+            {
                 tl_enabled = 1;
+                ucs_trace("enabling tl '%s' for alias '%s'", resource->tl_name,
+                          alias->alias);
                 break;
             }
         }
@@ -362,9 +415,9 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Error check: Make sure there are no too many transports */
-    if (context->num_tls >= UCP_MAX_TLS) {
+    if (context->num_tls >= UCP_MAX_RESOURCES) {
         ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
-                  context->num_tls, UCP_MAX_TLS);
+                  context->num_tls, UCP_MAX_RESOURCES);
         status = UCS_ERR_EXCEEDS_LIMIT;
         goto err_free_context_resources;
     }
