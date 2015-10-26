@@ -19,16 +19,17 @@
 #include <netinet/in.h>
 #include <string.h>
 
-#define UCT_IB_MLX5_WQE_SEG_SIZE    16 /* Size of a segment in a WQE */
-#define UCT_IB_MLX5_CQE64_MAX_INL   32 /* Inline scatter size in 64-byte CQE */
-#define UCT_IB_MLX5_CQE128_MAX_INL  64 /* Inline scatter size in 128-byte CQE */
+#define UCT_IB_MLX5_WQE_SEG_SIZE     16 /* Size of a segment in a WQE */
+#define UCT_IB_MLX5_CQE64_MAX_INL    32 /* Inline scatter size in 64-byte CQE */
+#define UCT_IB_MLX5_CQE128_MAX_INL   64 /* Inline scatter size in 128-byte CQE */
 #define UCT_IB_MLX5_CQE64_SIZE_LOG   6
 #define UCT_IB_MLX5_CQE128_SIZE_LOG  7
 #define UCT_IB_MLX5_MAX_BB           4
+#define UCT_IB_MLX5_WORKER_BF_KEY  0x00c1b7e8U
+#define UCT_IB_MLX5_EXTENDED_UD_AV   0x80000000U
+
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
-
-#define UCT_IB_MLX5_EXTENDED_UD_AV 0x80000000
 
 #if HAVE_STRUCT_MLX5_WQE_AV_BASE
 #  define mlx5_av_base(_av)   (&(_av)->base)
@@ -158,19 +159,29 @@ uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq, int cqe_size_log)
 }
 
 
-/* send WQ */
+/* Blue flame register */
+typedef struct uct_ib_mlx5_bf {
+    uct_worker_tl_data_t        super;
+    union {
+        void                    *ptr;
+        uintptr_t               addr;
+    } reg;
+    size_t                      size;
+} uct_ib_mlx5_bf_t;
+
+
+/* Send WQ */
 typedef struct uct_ib_mlx5_txwq {
-    uint16_t       sw_pi;      /* PI for next WQE */
-    uint16_t       prev_sw_pi; /* PI where last WQE *started*  */
-    unsigned       bf_size;
-    void           *bf_reg;
-    void           *curr;
-    uint32_t       *dbrec;
-    void           *qstart;
-    void           *qend;
-    uint16_t       bb_max;
+    uint16_t                    sw_pi;      /* PI for next WQE */
+    uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
+    uct_ib_mlx5_bf_t            *bf;
+    void                        *curr;
+    uint32_t                    *dbrec;
+    void                        *qstart;
+    void                        *qend;
+    uint16_t                    bb_max;
 #if ENABLE_ASSERT
-    uint16_t       hw_ci;
+    uint16_t                    hw_ci;
 #endif
 } uct_ib_mlx5_txwq_t;
 
@@ -178,17 +189,20 @@ typedef struct uct_ib_mlx5_txwq {
 /* receive WQ */
 typedef struct uct_ib_mlx5_rxwq {
     /* producer index. It updated when new receive wqe is posted */
-    uint16_t       rq_wqe_counter; 
+    uint16_t                    rq_wqe_counter;
     /* consumer index. It is better to track it ourselves than to do ntohs() 
      * on the index in the cqe
      */
-    uint16_t       cq_wqe_counter;
-    uint16_t       mask;
-    uint32_t                 *dbrec;
-    struct mlx5_wqe_data_seg *wqes;
+    uint16_t                    cq_wqe_counter;
+    uint16_t                    mask;
+    uint32_t                    *dbrec;
+    struct mlx5_wqe_data_seg    *wqes;
 } uct_ib_mlx5_rxwq_t;
 
-ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq);
+
+ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
+                                  uct_ib_mlx5_txwq_t *wq);
+void uct_ib_mlx5_put_txwq(uct_worker_h worker, uct_ib_mlx5_txwq_t *wq);
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 
@@ -360,7 +374,7 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void *dst, void *src)
 
 
 static UCS_F_ALWAYS_INLINE uint16_t 
-uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, 
+uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
                       struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
 {
     unsigned n;
@@ -382,12 +396,12 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     ucs_memory_bus_store_fence();
 
     /* Set up copy pointers */
-    dst = wq->bf_reg;
+    dst = wq->bf->reg.ptr;
     src = ctrl;
 
     /* BF copy */
     /* TODO support DB without BF */
-    ucs_assert(wqe_size <= wq->bf_size);
+    ucs_assert(wqe_size <= wq->bf->size);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     for (n = 0; n < num_bb; ++n) {
         uct_ib_mlx5_bf_copy_bb(dst, src);
@@ -402,13 +416,13 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     ucs_compiler_fence();
 
     /* Advance queue pointer */
-    ucs_assert(ctrl == wq->curr);
+    ucs_assert_always(ctrl == wq->curr);
     wq->curr       = src;
     wq->prev_sw_pi = wq->sw_pi;
     wq->sw_pi      = sw_pi;
 
     /* Flip BF register */
-    wq->bf_reg = (void*) ((uintptr_t) wq->bf_reg ^ wq->bf_size);
+    wq->bf->reg.addr ^= wq->bf->size;
     return num_bb;
 }
 

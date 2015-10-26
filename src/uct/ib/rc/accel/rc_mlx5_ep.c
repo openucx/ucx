@@ -690,7 +690,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    status = uct_ib_mlx5_get_txwq(self->super.qp, &self->tx.wq);
+    status = uct_ib_mlx5_get_txwq(iface->super.super.super.worker, self->super.qp,
+                                  &self->tx.wq);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");
         return status;
@@ -703,6 +704,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
+                                                uct_rc_mlx5_iface_t);
+    uct_ib_mlx5_put_txwq(iface->super.super.super.worker, &self->tx.wq);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
