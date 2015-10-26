@@ -65,6 +65,9 @@ struct perftest_context {
     ucx_perf_params_t            params;
     const char                   *server_addr;
     int                          port;
+#if HAVE_MPI
+    int                          mpi;
+#endif
     unsigned                     cpu;
     unsigned                     flags;
 
@@ -339,6 +342,9 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                        serialized : One thread can access at a time.\n");
     printf("                        multi      : Multiple threads can access.\n");
     printf("     -T <threads>   Number of threads in the test (1); also implies \"-M multi\".\n");
+#if HAVE_MPI
+    printf("     -P <0|1>       Disable/enable MPI mode (%d)\n", ctx->mpi);
+#endif
     printf("     -h             Show this help message.\n");
     printf("\n");
     printf("  Server options:\n");
@@ -512,9 +518,12 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     ctx->num_batch_files        = 0;
     ctx->port                   = 13337;
     ctx->flags                  = 0;
+#if HAVE_MPI
+    ctx->mpi                    = !isatty(0);
+#endif
 
     optind = 1;
-    while ((c = getopt (argc, argv, "p:b:Nfvc:h" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt (argc, argv, "p:b:Nfvc:P:h" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -537,6 +546,11 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
             ctx->flags |= TEST_FLAG_SET_AFFINITY;
             ctx->cpu = atoi(optarg);
             break;
+        case 'P':
+#if HAVE_MPI
+            ctx->mpi = atoi(optarg);
+            break;
+#endif
         case 'h':
             usage(ctx, __basename(argv[0]));
             return UCS_ERR_CANCELED;
@@ -1127,24 +1141,24 @@ int main(int argc, char **argv)
     int rte = 0;
     int ret;
 
+    /* Parse command line */
+    if (parse_opts(&ctx, argc, argv) != UCS_OK) {
+        ret = -127;
+        goto out;
+    }
+
 #ifdef __COVERITY__
     rte = rand(); /* Shut up deadcode error */
 #endif
 
 #if HAVE_MPI
     /* Don't try MPI when running interactively */
-    if (!isatty(0) && (MPI_Init(&argc, &argv) == 0)) {
+    if (ctx.mpi && (MPI_Init(&argc, &argv) == 0)) {
         rte = 1;
     }
 #elif HAVE_RTE
     rte = 1;
 #endif
-
-    /* Parse command line */
-    if (parse_opts(&ctx, argc, argv) != UCS_OK) {
-        ret = -127;
-        goto out;
-    }
 
     status = check_system(&ctx);
     if (status != UCS_OK) {
