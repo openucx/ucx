@@ -196,6 +196,7 @@ static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
     self->async       = async;
     self->thread_mode = thread_mode;
     ucs_notifier_chain_init(&self->progress_chain);
+    ucs_list_head_init(&self->tl_data);
     return UCS_OK;
 }
 

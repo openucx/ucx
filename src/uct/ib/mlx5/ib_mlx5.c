@@ -190,8 +190,24 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
     }
 }
 
+static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr, size_t size)
+{
+    ucs_assert(ucs_is_pow2(size));
+    return ((bf->reg.addr & ~bf->size) == (addr & ~size));
+}
 
-ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
+static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, size_t size)
+{
+    bf->reg.addr = addr;
+    bf->size     = size;
+}
+
+static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
+{
+}
+
+ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
+                                  uct_ib_mlx5_txwq_t *wq)
 {
     uct_ib_mlx5_qp_info_t qp_info;
     ucs_status_t status;
@@ -222,8 +238,13 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
     wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
     wq->curr       = wq->qstart;
     wq->sw_pi      = wq->prev_sw_pi = 0;
-    wq->bf_reg     = qp_info.bf.reg;
-    wq->bf_size    = qp_info.bf.size;
+    wq->bf         = uct_worker_tl_data_get(worker,
+                                            UCT_IB_MLX5_WORKER_BF_KEY,
+                                            uct_ib_mlx5_bf_t,
+                                            uct_ib_mlx5_bf_cmp,
+                                            uct_ib_mlx5_bf_init,
+                                            (uintptr_t)qp_info.bf.reg,
+                                            qp_info.bf.size);
     wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not 
@@ -239,6 +260,11 @@ ucs_status_t uct_ib_mlx5_get_txwq(struct ibv_qp *qp, uct_ib_mlx5_txwq_t *wq)
     memset(wq->qstart, 0, wq->qend - wq->qstart); 
     return UCS_OK;
 } 
+
+void uct_ib_mlx5_put_txwq(uct_worker_h worker, uct_ib_mlx5_txwq_t *wq)
+{
+    uct_worker_tl_data_put(wq->bf, uct_ib_mlx5_bf_cleanup);
+}
 
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
 {
