@@ -61,6 +61,7 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
     uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rc_iface_t);
+    uct_rc_iface_send_op_t *op;
     int ret;
 
     ucs_debug("destroy rc ep %p", self);
@@ -73,6 +74,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ret = ibv_destroy_qp(self->qp);
     if (ret != 0) {
         ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+    }
+
+    ucs_queue_for_each_extract(op, &self->outstanding, queue, 1) {
+        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
+            ucs_warn("destroying rc ep %p with uncompleted operation %p",
+                     self, op);
+        }
+        op->handler(op);
     }
 }
 

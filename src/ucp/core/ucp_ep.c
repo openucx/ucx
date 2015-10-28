@@ -56,15 +56,8 @@ static ucs_status_t ucp_pending_req_release(uct_pending_req_t *self)
 
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep)
 {
-    ucp_worker_h worker = ep->worker;
-
     ucs_assert_always(uct_ep != NULL);
     uct_ep_pending_purge(uct_ep, ucp_pending_req_release);
-
-    while (uct_ep_flush(uct_ep) != UCS_OK) {
-        uct_worker_progress(worker->uct);
-        ucs_async_check_miss(&worker->async);
-    }
     uct_ep_destroy(uct_ep);
 }
 
