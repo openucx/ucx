@@ -58,8 +58,8 @@ FORMAT = pdf
 DOT_CLEANFILES =
 
 if HAVE_DOT
-DOCLIST += doc/uml/uml.tag doc/uml/uct.$(FORMAT)
-DOT_CLEANFILES += doc/uml/uml.tag doc/uml/uct.$(FORMAT)
+DOCLIST += doc/uml/uml.tag doc/uml/uct.$(FORMAT) doc/uml/ucp.$(FORMAT)
+DOT_CLEANFILES += doc/uml/uml.tag doc/uml/uct.$(FORMAT) doc/uml/ucp.$(FORMAT)
 endif
 
 docs: $(DOCLIST)
