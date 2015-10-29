@@ -11,6 +11,7 @@
  * exposes a public API and can be used as a stand-alone library.
  *
  * \image latex Architecture.pdf "UCX Framework Architecture"
+ * \image html  Architecture.png "UCX Framework Architecture"
  *
  * \subsection UCS
  * UCS is a service layer that provides the necessary functionality for
