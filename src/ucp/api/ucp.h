@@ -115,15 +115,15 @@ enum ucp_feature {
  * @ingroup UCP_DATATYPE
  * @brief UCP data type classification
  *
- * The enumeration list describes the data-types supported by UCP.
+ * The enumeration list describes the datatypes supported by UCP.
  */
 enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
-    UCP_DATATYPE_STRIDED = 1,      /**< Strided data-type */
-    UCP_DATATYPE_GENERIC = 7,      /**< Generic data-type with
+    UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
+    UCP_DATATYPE_GENERIC = 7,      /**< Generic datatype with
                                         user-defined pack/unpack routines */
     UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
-                                        the data-type classification */
+                                        the datatype classification */
     UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT) /**< Data-type class
                                                                 mask */
 };
@@ -133,7 +133,7 @@ enum ucp_dt_type {
  * @ingroup UCP_DATATYPE
  * @brief Generate an identifier for contiguous data type.
  *
- * This macro creates an identifier for contiguous data-type that is defined by
+ * This macro creates an identifier for contiguous datatype that is defined by
  * the size of the basic element.
  *
  * @param [in]  _elem_size    Size of the basic element of the type.
@@ -151,7 +151,7 @@ enum ucp_dt_type {
  * This structure provides a generic datatype descriptor that
  * is used for definition of application defined datatypes.
 
- * Typically, the descriptor is used for an integratoion with data-type
+ * Typically, the descriptor is used for an integratoion with datatype
  * engines implemented within MPI and SHMEM implementations.
  *
  */
@@ -656,37 +656,39 @@ void ucp_ep_destroy(ucp_ep_h ep);
  * This routine maps or/and allocates a user-specified memory segment with @ref
  * ucp_context_h "UCP application context" and the network resources associated
  * with it. If the application specifies NULL as an address for the memory
- * segment, the routine allocates and maps the memory segment.  The network
- * stack associated with an application context can typically send and receive
- * data from the mapped memory without CPU intervention; some devices and
- * associated network stacks require the memory to be mapped to send and
- * receive data. The @ref ucp_mem_h "memory handle" includes all information
- * required to access the memory locally using UCP routines, , while @ref
- * ucp_rkey_h "remote registration handle" provides an information that is
- * necessary for remote memory access.
+ * segment, the routine allocates a mapped memory segment and returns its
+ * address in the @a address_p argument.  The network stack associated with an
+ * application context can typically send and receive data from the mapped
+ * memory without CPU intervention; some devices and associated network stacks
+ * require the memory to be mapped to send and receive data. The @ref ucp_mem_h
+ * "memory handle" includes all information required to access the memory
+ * locally using UCP routines, while @ref ucp_rkey_h 
+ * "remote registration handle" provides an information that is necessary for
+ * remote memory access.
  *
  * @note
  * Another well know terminology for the "map" operation that is typically
- * used in the context of networking is memory "registration". The UCP library
- * registers the memory the available hardware so it can be assessed directly
- * by the hardware.
+ * used in the context of networking is memory "registration" or "pinning". The
+ * UCP library registers the memory the available hardware so it can be
+ * assessed directly by the hardware.
  *
  * Memory mapping assumptions:
  * @li A given memory segment can be mapped by several different communication
  * stacks, if these are compatible.
- * @li The pointer returned may be used with any sub-region of the mapped
- * memory.
+ * @li The @a memh_p handle returned may be used with any sub-region of the
+ * mapped memory.
  * @li If a large segment is registered, and then segmented for subsequent use
  * by a user, then the user is responsible for segmentation and subsequent
  * management.
-
+ *
  * @param [in]     context    Application @ref ucp_context_h "context" to map
  *                            (register) and allocate the memory on.
- * @param [out]    address_p  If the pointer to the address is not NULL,
+ * @param [inout]  address_p  If the pointer to the address is not NULL,
  *                            the routine maps (registers) the memory segment.
  *                            if the pointer is NULL, the library allocates
- *                            mapped (registered) memory segment.
- * @param [in]     length     Length (in bytes) to allocate.
+ *                            mapped (registered) memory segment and returns its
+ *                            address in this argument.
+ * @param [in]     length     Length (in bytes) to allocate or map (register).
  * @param [in]     flags      Allocation flags (currently reserved - set to 0).
  * @param [out]    memh_p     UCP @ref ucp_mem_h "handle" for the allocated
  *                            segment.
@@ -704,8 +706,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
  * This routine unmaps a user specified memory segment, that was previously
  * mapped using the @ref ucp_mem_map "ucp_mem_map()" routine.  The unmap
  * routine will also release the resources associated with the memory
- * @ucp_mem_h "handle".  When the function returns, the @ref ucp_mem_h will be
- * invalid and cannot be used with any UCP routine.
+ * @ucp_mem_h "handle".  When the function returns, the @ref ucp_mem_h 
+ * and associated @ref ucp_rkey_h "remote key" will be invalid and cannot be
+ * used with any UCP routine.
  *
  * @note
  * Another well know terminology for the "unmap" operation that is typically
@@ -846,22 +849,42 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * @ingroup UCP_COMM
  * @brief Non-blocking tagged-send operations
  *
- * Non-blocking tag send. The function returns immediately, however the actual
- * send may be delayed.
+ * This routine sends a messages that is described by the local address @a
+ * buffer, size @a count, and @a datatype object to the destination endpoint
+ * @a ep. Each message is associated with a @a tag value that is used for
+ * message matching on the @ref ucp_tag_recv_nb "receiver".  The routine is
+ * non-blocking and therefor returns immediately, however the actual send
+ * operation may be delayed.  The send operation is considered completed when
+ * it is safe to reuse the source @e buffer.  If the operation is
+ * completed immediately the routine return UCS_OK and the call-back function
+ * @a cb is @b not invoked. If the operation is @b not completed immediately
+ * and no error reported then the UCP library will schedule to invoke the
+ * call-back @a cb whenever the send operation will be completed. In other
+ * words, the completion of a message can be signaled by the return code or
+ * the call-back.
  *
- * @param [in]  ep          Destination endpoint to send to.
- * @param [in]  buffer      Message payload to send.
- * @param [in]  count       Number of elements in the buffer.
- * @param [in]  datatype    Type of elements in the buffer.
- * @param [in]  tag         Message tag to send.
- * @param [in]  cb          Callback function which is called when the
- *                          send is completed (buffer can be reused), in case
- *                          the return value is a request handle.
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag.
+ * @param [in]  cb          Callback function that is invoked whenever the
+ *                          send operation is completed. It is important to note
+ *                          that the call-back is only invoked in a case when 
+ *                          the operation cannot be completed in place.
  *
- * @return NULL/UCS_OK          The send is completed completed in place.
- * @return UCS_PTR_IS_ERR(_ptr) Error during send.
- * @return otherwise            A request handle. the handle should be released
- *                              by calling ucp_request_release().
+ * @return UCS_OK           - The send operation was completed completed 
+ *                          immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
+ * @return otherwise        - Operation was scheduled for send. The request handle
+ *                          is returned to the application in order to track 
+ *                          progress of the message. The application is 
+ *                          responsible to released the handle using 
+ *                          @ref ucp_request_release "ucp_request_release()" 
+ *                          routine.
+ * @todo 
+ * @li Describe the thread safety requirement for the call-back.
+ * @li What happens if the request is released before the call-back is invoked.
  */
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
@@ -870,27 +893,41 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 
 /**
  * @ingroup UCP_COMM
- * @brief Receive tagged message in a non-blocking fashion.
+ * @brief Non-blocking tagged-receive operation.
  *
- *  Non-blocking tag receive. The function returns immediately, however the actual
- * receive may occur later.
+ * This routine receives a messages that is described by the local address @a
+ * buffer, size @a count, and @a datatype object on the @a worker.  The tag
+ * value of the receive message has to match the @a tag and @a tag_mask values,
+ * where the @tag_mask indicates what bits of the tag have to be matched. The
+ * routine is a non-blocking and therefore returns immediately. The receive
+ * operation is considered completed when the message is delivered to the @a
+ * buffer.  In order to notify the application about completion of the receive
+ * operation the UCP library will invoke the call-back @a cb when the received
+ * message is in the receive buffer and ready for application access.  If the
+ * receive operation cannot be stated the routine returns an error.
  *
- * @param [in]  worker      UCP worker.
- * @param [in]  buffer      Buffer to receive the data to.
- * @param [in]  count       Number of elements in the buffer.
- * @param [in]  datatype    Type of elements in the buffer.
- * @param [in]  tag         Message tag to expect.
- * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
- *                           against the expected tag.
- * @param [in]  cb          Callback function which would be called when the
- *                           data is ready in the receive buffer.
- *
- * @return UCS_PTR_IS_ERR(_ptr) - Error during receive.
- *         otherwise            - A request handle. the handle should be released
- *                                 by calling ucp_request_release().
- *
- * @note This function cannot return UCS_OK/NULL. It always returns a request
+ * @note This routine cannot return UCS_OK. It always returns a request
  *       handle or an error.
+ *
+ * @param [in]  worker      UCP worker that is used for the receive operation.
+ * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  count       Number of elements to receive
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag to expect.
+ * @param [in]  tag_mask    Bit mask that indicates the bits that are used for 
+ *                          the matching of the incoming tag
+ *                          against the expected tag.
+ * @param [in]  cb          Callback function that is invoked whenever the
+ *                          receive operation is completed and the data is ready
+ *                          in the receive @a buffer.  
+ *
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise          - Operation was scheduled for receive. The request 
+ *                              handle is returned to the application in order 
+ *                              to track progress of the operation. The 
+ *                              application is responsible to released the 
+ *                              handle using @ref ucp_request_release 
+ *                              "ucp_request_release()" routine.
  */
 ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
@@ -901,20 +938,34 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * @ingroup UCP_COMM
  * @brief Non-blocking probe and return a message.
  *
- *  Probe for incoming unexpected message. The function returns immediately and
- * possibly returns a handle to the message.
+ * This routine probes (checks) if a messages described by the @a tag and
+ * @tag_mask was received (fully or partially) on the @a worker. The tag
+ * value of the received message has to match the @a tag and @a tag_mask
+ * values, where the @tag_mask indicates what bits of the tag have to be
+ * matched. The function returns immediately and if the message is matched it
+ * returns a handle for the message. 
  *
- * @param [in]  worker      UCP worker.
- * @param [in]  tag         Message tag to expect.
- * @param [in]  tag_mask    Mask of which bits to match from the incoming tag
- *                           against the expected tag.
- * @param [in]  remove      Whether to remove the probed message from unexpected
- *                           queue (true), or keep it there (false).
- * @param [out] info        Filled with details about the received message.
+ * @param [in]  worker      UCP worker that is used for the probe operation.
+ * @param [in]  tag         Message tag to probe for.
+ * @param [in]  tag_mask    Bit mask that indicates the bits that are used for 
+ *                          the matching of the incoming tag
+ *                          against the expected tag.
+ * @param [in]  remove      The flag indicates if the matched message has to 
+ *                          be removed from UCP library.
+ *                          If true (1), the message handle is removed from 
+ *                          the UCP library and the application is responsible 
+ *                          to call @ref ucp_tag_msg_recv_nb 
+ *                          "ucp_tag_msg_recv_nb()" in order to receive the data 
+ *                          and release the resources associated with the 
+ *                          message handle. 
+ * @param [out] info        If the matching message is found the descriptor is 
+ *                          filled with the details about the message.
  *
- * @return NULL       - No match found.
- *         otherwise  - A message handle. If remove==1, the handle should be
- *                      passed to ucp_tag_msg_recv_nb().
+ * @return NULL                      - No match found.
+ * @return Message handle (not NULL) - If message is matched the message handle
+ *                                   is returned.
+ *
+ * @todo Clarify release logic for remote == 0.
  */
 ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_t tag_mask, int remove,
@@ -923,25 +974,36 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
 
 /**
  * @ingroup UCP_COMM
- * @brief Receive probed message in a non-blocking fashion.
+ * @brief Non-blocking receive operation for a probed message.
  *
- *  Non-blocking probed message receive. The function returns immediately,
- * however the actual receive may occur later.
+ * This routine receives a messages that is described by the local address @a
+ * buffer, size @a count, @a message handle, and @a datatype object on the @a
+ * worker.  The @message handle can be obtain by calling the @ref
+ * ucp_tag_probe_nb "ucp_tag_probe_nb()" routine.  @ref ucp_tag_msg_recv_nb
+ * "ucp_tag_msg_recv_nb()" routine is a non-blocking and therefore returns
+ * immediately. The receive operation is considered completed when the message
+ * is delivered to the @a buffer.  In order to notify the application about
+ * completion of the receive operation the UCP library will invoke the
+ * call-back @a cb when the received message is in the receive buffer and ready
+ * for application access.  If the receive operation cannot be stated the
+ * routine returns an error.
  *
- * @param [in]  worker      UCP worker.
- * @param [in]  buffer      Buffer to receive the data to.
- * @param [in]  count       Number of elements in the buffer.
- * @param [in]  datatype    Type of elements in the buffer.
- * @param [in]  message     Handle to probed message.
- * @param [in]  cb          Callback function which would be called when the
- *                           data is ready in the receive buffer.
+ * @param [in]  worker      UCP worker that is used for the receive operation.
+ * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  count       Number of elements to receive
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  message     Message handle.
+ * @param [in]  cb          Callback function that is invoked whenever the
+ *                          receive operation is completed and the data is ready
+ *                          in the receive @a buffer.  
  *
- * @return UCS_PTR_IS_ERR(_ptr) - Error during receive.
- *         otherwise            - A request handle. the handle should be released
- *                                 by calling ucp_request_release().
- *
- * @note This function cannot return UCS_OK/NULL. It always returns a request
- *       handle or an error.
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise          - Operation was scheduled for receive. The request 
+ *                              handle is returned to the application in order 
+ *                              to track progress of the operation. The 
+ *                              application is responsible to released the 
+ *                              handle using @ref ucp_request_release 
+ *                              "ucp_request_release()" routine.
  */
 ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
                                      size_t count, ucp_datatype_t datatype,
@@ -1126,9 +1188,9 @@ ucs_status_t ucp_atomic_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
  * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
  * @a rkey. The @a swap value is the value that is used for the swap operation.
  * When the operation completes, the remote value is stored in the
- * local memory @a result, and the operand value (@a swap) is stored in remote memory.
- * The call to the routine returns when the operation is completed and the
- * @a result value is updated.
+ * local memory @a result, and the operand value (@a swap) is stored in remote
+ * memory.  The call to the routine returns when the operation is completed and
+ * the @a result value is updated.
  *
  * @note The remote address must be aligned to 32 bit.
  *
@@ -1157,9 +1219,9 @@ ucs_status_t ucp_atomic_swap32(ucp_ep_h ep, uint32_t swap, uint64_t remote_addr,
  * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
  * @a rkey. The @a swap value is the value that is used for the swap operation.
  * When the operation completes, the remote value is stored in the
- * local memory @a result, and the operand value (@a swap) is stored in remote memory.
- * The call to the routine returns when the operation is completed and the
- * @a result value is updated.
+ * local memory @a result, and the operand value (@a swap) is stored in remote
+ * memory.  The call to the routine returns when the operation is completed and
+ * the @a result value is updated.
  *
  * @note The remote address must be aligned to 64 bit.
  *
@@ -1273,11 +1335,22 @@ void ucp_request_release(void *request);
  * @brief Create a generic datatype.
  *
  * This routine create a generic datatype object.
+ * The generic datatype is described by the @a ops @ref ucp_generic_dt_ops_t
+ * "object" which provides a table of routines defining the operations for
+ * generic datatype manipulation. Typically, generic datatypes are used for
+ * integration with datatype engines provided with MPI implementations (MPICH,
+ * Open MPI, etc).
+ * The application is responsible to release the @a datatype_p  object using 
+ * @ref ucp_dt_destroy "ucp_dt_destroy()" routine.
  *
  * @param [in]  ops          Generic datatype function table as defined by
  *                           @ref ucp_generic_dt_ops_t .
- * @param [in]  context      Application defined context passed to this routine.
+ * @param [in]  context      Application defined context passed to this
+ *                           routine.  The context is passed as a paramenter
+ *                           to the routines in the @a ops table.
  * @param [out] datatype_p   A pointer to datatype object.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
                                    ucp_datatype_t *datatype_p);
