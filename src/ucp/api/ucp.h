@@ -662,7 +662,7 @@ void ucp_ep_destroy(ucp_ep_h ep);
  * memory without CPU intervention; some devices and associated network stacks
  * require the memory to be mapped to send and receive data. The @ref ucp_mem_h
  * "memory handle" includes all information required to access the memory
- * locally using UCP routines, while @ref ucp_rkey_h 
+ * locally using UCP routines, while @ref ucp_rkey_h
  * "remote registration handle" provides an information that is necessary for
  * remote memory access.
  *
@@ -706,7 +706,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
  * This routine unmaps a user specified memory segment, that was previously
  * mapped using the @ref ucp_mem_map "ucp_mem_map()" routine.  The unmap
  * routine will also release the resources associated with the memory
- * @ucp_mem_h "handle".  When the function returns, the @ref ucp_mem_h 
+ * @ucp_mem_h "handle".  When the function returns, the @ref ucp_mem_h
  * and associated @ref ucp_rkey_h "remote key" will be invalid and cannot be
  * used with any UCP routine.
  *
@@ -752,7 +752,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  *
  * @param [in]  context       Application @ref ucp_context_h "context" which was
  *                            used to allocate/map the memory.
- * @paran [in]  memh          @ref ucp_mem_h "Handle" to memory region.
+ * @param [in]  memh          @ref ucp_mem_h "Handle" to memory region.
  * @param [out] rkey_buffer   Memory buffer allocated by the library.
  *                            The buffer contains packed RKEY.
  * @param [out] size          Size (in bytes) of the packed RKEY.
@@ -870,19 +870,19 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * @param [in]  tag         Message tag.
  * @param [in]  cb          Callback function that is invoked whenever the
  *                          send operation is completed. It is important to note
- *                          that the call-back is only invoked in a case when 
+ *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed in place.
  *
- * @return UCS_OK           - The send operation was completed completed 
+ * @return UCS_OK           - The send operation was completed completed
  *                          immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
  * @return otherwise        - Operation was scheduled for send. The request handle
- *                          is returned to the application in order to track 
- *                          progress of the message. The application is 
- *                          responsible to released the handle using 
- *                          @ref ucp_request_release "ucp_request_release()" 
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to released the handle using
+ *                          @ref ucp_request_release "ucp_request_release()"
  *                          routine.
- * @todo 
+ * @todo
  * @li Describe the thread safety requirement for the call-back.
  * @li What happens if the request is released before the call-back is invoked.
  */
@@ -914,19 +914,19 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * @param [in]  count       Number of elements to receive
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  tag         Message tag to expect.
- * @param [in]  tag_mask    Bit mask that indicates the bits that are used for 
+ * @param [in]  tag_mask    Bit mask that indicates the bits that are used for
  *                          the matching of the incoming tag
  *                          against the expected tag.
  * @param [in]  cb          Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
- *                          in the receive @a buffer.  
+ *                          in the receive @a buffer.
  *
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
- * @return otherwise          - Operation was scheduled for receive. The request 
- *                              handle is returned to the application in order 
- *                              to track progress of the operation. The 
- *                              application is responsible to released the 
- *                              handle using @ref ucp_request_release 
+ * @return otherwise          - Operation was scheduled for receive. The request
+ *                              handle is returned to the application in order
+ *                              to track progress of the operation. The
+ *                              application is responsible to released the
+ *                              handle using @ref ucp_request_release
  *                              "ucp_request_release()" routine.
  */
 ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
@@ -943,22 +943,22 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * value of the received message has to match the @a tag and @a tag_mask
  * values, where the @tag_mask indicates what bits of the tag have to be
  * matched. The function returns immediately and if the message is matched it
- * returns a handle for the message. 
+ * returns a handle for the message.
  *
  * @param [in]  worker      UCP worker that is used for the probe operation.
  * @param [in]  tag         Message tag to probe for.
- * @param [in]  tag_mask    Bit mask that indicates the bits that are used for 
+ * @param [in]  tag_mask    Bit mask that indicates the bits that are used for
  *                          the matching of the incoming tag
  *                          against the expected tag.
- * @param [in]  remove      The flag indicates if the matched message has to 
+ * @param [in]  remove      The flag indicates if the matched message has to
  *                          be removed from UCP library.
- *                          If true (1), the message handle is removed from 
- *                          the UCP library and the application is responsible 
- *                          to call @ref ucp_tag_msg_recv_nb 
- *                          "ucp_tag_msg_recv_nb()" in order to receive the data 
- *                          and release the resources associated with the 
- *                          message handle. 
- * @param [out] info        If the matching message is found the descriptor is 
+ *                          If true (1), the message handle is removed from
+ *                          the UCP library and the application is responsible
+ *                          to call @ref ucp_tag_msg_recv_nb
+ *                          "ucp_tag_msg_recv_nb()" in order to receive the data
+ *                          and release the resources associated with the
+ *                          message handle.
+ * @param [out] info        If the matching message is found the descriptor is
  *                          filled with the details about the message.
  *
  * @return NULL                      - No match found.
@@ -995,14 +995,14 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * @param [in]  message     Message handle.
  * @param [in]  cb          Callback function that is invoked whenever the
  *                          receive operation is completed and the data is ready
- *                          in the receive @a buffer.  
+ *                          in the receive @a buffer.
  *
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
- * @return otherwise          - Operation was scheduled for receive. The request 
- *                              handle is returned to the application in order 
- *                              to track progress of the operation. The 
- *                              application is responsible to released the 
- *                              handle using @ref ucp_request_release 
+ * @return otherwise          - Operation was scheduled for receive. The request
+ *                              handle is returned to the application in order
+ *                              to track progress of the operation. The
+ *                              application is responsible to released the
+ *                              handle using @ref ucp_request_release
  *                              "ucp_request_release()" routine.
  */
 ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
@@ -1340,7 +1340,7 @@ void ucp_request_release(void *request);
  * generic datatype manipulation. Typically, generic datatypes are used for
  * integration with datatype engines provided with MPI implementations (MPICH,
  * Open MPI, etc).
- * The application is responsible to release the @a datatype_p  object using 
+ * The application is responsible to release the @a datatype_p  object using
  * @ref ucp_dt_destroy "ucp_dt_destroy()" routine.
  *
  * @param [in]  ops          Generic datatype function table as defined by
