@@ -33,7 +33,7 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "Transport retries",
    ucs_offsetof(uct_rc_iface_config_t, tx.retry_count), UCS_CONFIG_TYPE_UINT},
 
-  {"RNR_TIMEOUT", "1.0s",
+  {"RNR_TIMEOUT", "100ms",
    "RNR timeout",
    ucs_offsetof(uct_rc_iface_config_t,tx. rnr_timeout), UCS_CONFIG_TYPE_TIME},
 

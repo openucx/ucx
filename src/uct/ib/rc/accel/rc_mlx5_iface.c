@@ -73,8 +73,6 @@ static UCS_F_NOINLINE unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *
             iface->rx.free_idx = next_index;
         }
 
-        index = next_index;
-
         if (seg->srq.desc == NULL) {
             UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                      desc, break);
@@ -86,6 +84,8 @@ static UCS_F_NOINLINE unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *
             seg->dptr.addr = htonll((uintptr_t)hdr);
             VALGRIND_MAKE_MEM_NOACCESS(hdr, iface->super.super.config.seg_size);
         }
+
+        index = next_index;
     }
 
     count = index - iface->rx.sw_pi;
