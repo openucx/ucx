@@ -56,7 +56,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of send WQEs for which completion is requested.",
    ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation), UCS_CONFIG_TYPE_UINT},
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, "send",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", 65536, 1024, "send",
                                 ucs_offsetof(uct_ib_iface_config_t, tx.mp),
       "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
       "in RC/DC and could cause deadlock or performance degradation."),
@@ -75,7 +75,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "size than requested with the same hardware resources, it will be used instead.",
    ucs_offsetof(uct_ib_iface_config_t, rx.inl), UCS_CONFIG_TYPE_MEMUNITS},
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", 65536, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
 
   {"GID_INDEX", "0",
