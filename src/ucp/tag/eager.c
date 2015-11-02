@@ -42,8 +42,9 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
                               req->recv.state.offset, "expected");
             recv_len = length - hdr_len;
             status = ucp_tag_process_recv(req->recv.buffer, req->recv.count,
-                                          req->recv.datatype, req->recv.state.offset,
-                                          data + hdr_len, recv_len);
+                                          req->recv.datatype, &req->recv.state,
+                                          data + hdr_len, recv_len,
+                                          flags & UCP_RECV_DESC_FLAG_LAST);
 
             /* First fragment fills the receive information */
             if (flags & UCP_RECV_DESC_FLAG_FIRST) {
@@ -245,6 +246,12 @@ static inline size_t ucp_req_generic_dt_pack(ucp_request_t *req, void *dest,
                          req->send.state.offset, dest, length);
 }
 
+static inline void ucp_req_generic_dt_finish(ucp_request_t *req)
+{
+    ucp_dt_generic_t *dt = ucp_dt_generic(req->send.datatype);
+    return dt->ops->finish(req->send.state.dt.generic.state);
+}
+
 static size_t ucp_tag_pack_eager_only_generic(void *dest, void *arg)
 {
     ucp_eager_hdr_t *hdr = dest;
@@ -341,6 +348,7 @@ ucs_status_t ucp_tag_progress_eager_generic(uct_pending_req_t *self)
             /* Last packet */
             packed_len = uct_ep_am_bcopy(ep->uct_ep, UCP_AM_ID_EAGER_LAST,
                                          ucp_tag_pack_eager_last_generic, req);
+            ucp_req_generic_dt_finish(req);
             goto out_complete;
         }
     }

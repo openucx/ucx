@@ -22,11 +22,20 @@ protected:
         ucp_tag_recv_info_t info;
     };
 
+    struct dt_gen_state {
+        size_t              count;
+        int                 started;
+        uint32_t            magic;
+    };
+
     virtual void init() {
         ucp_test::init();
         sender   = create_entity();
         receiver = create_entity();
         sender->connect(receiver);
+
+        dt_gen_start_count  = 0;
+        dt_gen_finish_count = 0;
     }
 
     virtual void cleanup() {
@@ -115,28 +124,46 @@ protected:
         }
     }
 
+    static void* dt_start(size_t count)
+    {
+        dt_gen_state *dt_state = new dt_gen_state;
+        dt_state->count   = count;
+        dt_state->started = 1;
+        dt_state->magic   = MAGIC;
+        dt_gen_start_count++;
+        return dt_state;
+    }
+
     static void* dt_start_pack(void *context, const void *buffer, size_t count)
     {
-        return (void*)count;
+        return dt_start(count);
     }
 
     static void* dt_start_unpack(void *context, void *buffer, size_t count)
     {
-        return (void*)count;
+        return dt_start(count);
     }
 
     static size_t dt_packed_size(void *state)
     {
-        return ((size_t)state) * sizeof(uint32_t);
+        dt_gen_state *dt_state = (dt_gen_state*)state;
+        return dt_state->count * sizeof(uint32_t);
     }
 
     static size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length)
     {
-        size_t remaining = (size_t)state;
+        dt_gen_state *dt_state = (dt_gen_state*)state;
         uint32_t *p = (uint32_t*)dest;
         uint32_t count;
 
-        count = ucs_min(max_length / sizeof(uint32_t), remaining);
+        EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
+        EXPECT_EQ(1, dt_state->started);
+        EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
+
+        ucs_assert((offset % sizeof(uint32_t)) == 0);
+
+        count = ucs_min(max_length / sizeof(uint32_t),
+                        dt_state->count - (offset / sizeof(uint32_t)));
         for (unsigned i = 0; i < count; ++i) {
             p[i] = (offset / sizeof(uint32_t)) + i;
         }
@@ -146,7 +173,12 @@ protected:
     static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
                                   size_t length)
     {
+        dt_gen_state *dt_state = (dt_gen_state*)state;
         uint32_t count;
+
+        EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
+        EXPECT_EQ(1, dt_state->started);
+        EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
 
         count = length / sizeof(uint32_t);
         for (unsigned i = 0; i < count; ++i) {
@@ -162,10 +194,17 @@ protected:
 
     static void dt_finish(void *state)
     {
+        dt_gen_state *dt_state = (dt_gen_state*)state;
+        --dt_state->started;
+        EXPECT_EQ(0, dt_state->started);
+        dt_gen_finish_count++;
     }
 
+    static const uint32_t MAGIC = 0xd7d7d7d7U;
     static const ucp_datatype_t DATATYPE;
     static ucp_generic_dt_ops test_dt_ops;
+    static int dt_gen_start_count;
+    static int dt_gen_finish_count;
 
 public:
     int    count;
@@ -182,6 +221,9 @@ ucp_generic_dt_ops test_ucp_tag::test_dt_ops = {
     test_ucp_tag::dt_unpack,
     test_ucp_tag::dt_finish
 };
+
+int test_ucp_tag::dt_gen_start_count = 0;
+int test_ucp_tag::dt_gen_finish_count = 0;
 
 
 UCS_TEST_F(test_ucp_tag, send_recv_exp) {
@@ -441,11 +483,17 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp_gentype) {
 
     send_b(NULL, count, dt, 0x111337);
 
+    EXPECT_EQ(1, dt_gen_start_count);
+    EXPECT_EQ(1, dt_gen_finish_count);
+
     status = recv_b(NULL, count, dt, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(count * sizeof(uint32_t), info.length);
     EXPECT_EQ((ucp_tag_t)0x111337,      info.sender_tag);
+
+    EXPECT_EQ(2, dt_gen_start_count);
+    EXPECT_EQ(2, dt_gen_finish_count);
 
     ucp_dt_destroy(dt);
 }
