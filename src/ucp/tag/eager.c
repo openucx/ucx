@@ -368,24 +368,34 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     const ucp_eager_first_hdr_t *eager_first_hdr = data;
     const ucp_eager_hdr_t *eager_hdr             = data;
+    size_t header_len;
+    char *p;
 
     switch (id) {
     case UCP_AM_ID_EAGER_ONLY:
         snprintf(buffer, max, "EGR tag %"PRIx64, eager_hdr->super.tag);
+        header_len = sizeof(*eager_hdr);
         break;
     case UCP_AM_ID_EAGER_FIRST:
         snprintf(buffer, max, "EGR_F tag %"PRIx64" len %zu",
                  eager_first_hdr->super.super.tag, eager_first_hdr->total_len);
+        header_len = sizeof(*eager_first_hdr);
         break;
     case UCP_AM_ID_EAGER_MIDDLE:
         snprintf(buffer, max, "EGR_M tag %"PRIx64, eager_hdr->super.tag);
+        header_len = sizeof(*eager_hdr);
         break;
     case UCP_AM_ID_EAGER_LAST:
         snprintf(buffer, max, "EGR_L tag %"PRIx64, eager_hdr->super.tag);
+        header_len = sizeof(*eager_hdr);
         break;
     default:
-        break;
+        return;
     }
+
+    p = buffer + strlen(buffer);
+    ucp_dump_payload(worker->context, p, buffer + max - p, data + header_len,
+                     length - header_len);
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_ONLY, ucp_eager_only_handler,
