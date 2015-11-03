@@ -58,7 +58,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"LOG_DATA", "0",
-   "How much of packet payload to dump in debug mode (0 - disable).",
+   "How much of packet payload to dump in debug mode (0 - nothing).",
    ucs_offsetof(ucp_config_t, log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}

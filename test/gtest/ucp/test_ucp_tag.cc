@@ -198,6 +198,7 @@ protected:
         --dt_state->started;
         EXPECT_EQ(0, dt_state->started);
         dt_gen_finish_count++;
+        delete dt_state;
     }
 
     static const uint32_t MAGIC = 0xd7d7d7d7U;
