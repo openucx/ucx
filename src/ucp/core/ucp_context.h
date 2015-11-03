@@ -105,6 +105,9 @@ typedef struct ucp_context {
         /* Threshold for switching from to rendezvous protocol */
         size_t                    rndv_thresh;
 
+        /* How much data to dump */
+        size_t                    log_data_size;
+
     } config;
 
 } ucp_context_t;
@@ -129,5 +132,9 @@ typedef struct ucp_am_handler {
 
 
 extern ucp_am_handler_t ucp_am_handlers[];
+
+
+void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
+                      const void *data, size_t length);
 
 #endif

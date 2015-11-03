@@ -64,33 +64,38 @@ static inline void ucp_tag_log_match(ucp_tag_t recv_tag, ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
-                     size_t offset, void *recv_data, size_t recv_length)
+                     ucp_frag_state_t *state, void *recv_data, size_t recv_length,
+                     int last)
 {
     ucp_dt_generic_t *dt_gen;
-    void *state;
+    size_t offset = state->offset;
+    size_t buffer_size;
+    ucs_status_t status;
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (ucs_unlikely(recv_length + offset > ucp_contig_dt_length(datatype, count))) {
+        buffer_size = ucp_contig_dt_length(datatype, count);
+        if (ucs_unlikely(recv_length + offset > buffer_size)) {
             return UCS_ERR_MESSAGE_TRUNCATED;
         }
         memcpy(buffer + offset, recv_data, recv_length);
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:
-        /* TODO allocate state before
-         */
         dt_gen = ucp_dt_generic(datatype);
-        state  = dt_gen->ops->start_unpack(dt_gen->context, buffer, count);
 
-        if (ucs_unlikely(recv_length + offset > dt_gen->ops->packed_size(state))) {
-            dt_gen->ops->finish(state);
-            return UCS_ERR_MESSAGE_TRUNCATED;
+        buffer_size = dt_gen->ops->packed_size(state->dt.generic.state);
+        if (ucs_unlikely(recv_length + offset > buffer_size)) {
+            status = UCS_ERR_MESSAGE_TRUNCATED;
+        } else {
+            dt_gen->ops->unpack(state->dt.generic.state, offset, recv_data, recv_length);
+            status = UCS_OK;
         }
 
-        dt_gen->ops->unpack(state, offset, recv_data, recv_length);
-        dt_gen->ops->finish(state);
-        return UCS_OK;
+        if (last) {
+            dt_gen->ops->finish(state->dt.generic.state);
+        }
+        return status;
 
     default:
         ucs_bug("unexpected datatype");

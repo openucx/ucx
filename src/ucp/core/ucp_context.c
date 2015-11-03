@@ -57,6 +57,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "Threshold for switching from eager to rendezvous protocol",
    ucs_offsetof(ucp_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"LOG_DATA", "0",
+   "Size of packet data that is dumped to the log system in debug mode (0 - nothing).",
+   ucs_offsetof(ucp_config_t, log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {NULL}
 };
 
@@ -452,6 +456,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.request.cleanup = params->request_cleanup;
     context->config.bcopy_thresh    = config->bcopy_thresh;
     context->config.rndv_thresh     = config->rndv_thresh;
+    context->config.log_data_size   = config->log_data_size;
 
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
@@ -563,4 +568,28 @@ void ucp_cleanup(ucp_context_h context)
     ucp_free_resources(context);
     ucp_free_config(context);
     ucs_free(context);
+}
+
+void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
+                      const void *data, size_t length)
+{
+    char *p, *endp;
+    size_t offset;
+
+    if (context->config.log_data_size == 0) {
+        return;
+    }
+
+    p    = buffer;
+    endp = buffer + max;
+
+    strncat(p, " : ", endp - p);
+    p = p + strlen(p);
+
+    offset = 0;
+    while ((offset < length) && (offset < context->config.log_data_size) && (p < endp)) {
+        snprintf(p, endp - p, "%02x", ((const uint8_t*)data)[offset]);
+        p += strlen(p);
+        ++offset;
+    }
 }

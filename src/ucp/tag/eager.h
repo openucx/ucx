@@ -71,7 +71,7 @@ ucp_eager_total_len(ucp_eager_hdr_t *hdr, unsigned flags, unsigned payload_lengt
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
                       void *buffer, size_t count, ucp_datatype_t datatype,
-                      size_t *offset, ucp_tag_recv_info_t *info)
+                      ucp_frag_state_t *state, ucp_tag_recv_info_t *info)
 {
     size_t recv_len, hdr_len;
     ucs_status_t status;
@@ -79,9 +79,10 @@ ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
 
     hdr_len  = ucp_eager_hdr_len(flags);
     recv_len = rdesc->length - hdr_len;
-    status   = ucp_tag_process_recv(buffer, count, datatype, *offset,
-                                    data + hdr_len, recv_len);
-    *offset += recv_len;
+    status   = ucp_tag_process_recv(buffer, count, datatype, state,
+                                    data + hdr_len, recv_len,
+                                    flags & UCP_RECV_DESC_FLAG_LAST);
+    state->offset += recv_len;
 
     if (flags & UCP_RECV_DESC_FLAG_FIRST) {
         info->sender_tag = tag;
@@ -89,7 +90,7 @@ ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
     }
 
     if (flags & UCP_RECV_DESC_FLAG_LAST) {
-        info->length     = *offset;
+        info->length     = state->offset;
         return status;
     }
 

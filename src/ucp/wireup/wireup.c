@@ -533,7 +533,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
 
     if (ep == NULL) {
-        status = ucp_ep_new(worker, msg->src_uuid, "on-demand", "??", &ep);
+        status = ucp_ep_new(worker, msg->src_uuid, "??", "on-demand", &ep);
         if (status != UCS_OK) {
             return;
         }
