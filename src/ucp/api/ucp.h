@@ -161,7 +161,8 @@ typedef struct ucp_generic_dt_ops {
      * @ingroup UCP_DATATYPE
      * @brief Start a packing request.
      *
-     * The pointer refers to application defined start-to-pack routine.
+     * The pointer refers to application defined start-to-pack routine. It will
+     * be called from the send function.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to pack.
@@ -176,7 +177,8 @@ typedef struct ucp_generic_dt_ops {
      * @ingroup UCP_DATATYPE
      * @brief Start an unpacking request.
      *
-     * The pointer refers to application defined start-to-unpack routine.
+     * The pointer refers to application defined start-to-unpack routine. It will
+     * be called from the receive function.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to unpack to.
@@ -298,39 +300,6 @@ typedef struct ucp_params {
 
 
 /**
- * @ingroup UCP_CONFIG
- * @brief UCP configuration descriptor
- *
- * This descriptor defines the configuration for @ref ucp_context_h
- * "UCP application context". The configuration is loaded from the run-time
- * environment (using configuration files of environment variables)
- * using @ref ucp_config_read "ucp_config_read" routine and can be printed
- * using @ref ucp_config_print "ucp_config_print" routine. In addition,
- * application is responsible to release the descriptor using
- * @ref ucp_config_release "ucp_config_release" routine.
- *
- * @todo This structure will be converted to an opaque object that will
- * be modified through a dedicated function.
- */
-typedef struct ucp_config {
-    /** Array of device names to use */
-    UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices;
-    /** Array of transport names to use */
-    UCS_CONFIG_STRING_ARRAY_FIELD(names)   tls;
-    /** Whether to force using of all available devices */
-    int                                    force_all_devices;
-    /** Array of memory allocation methods */
-    UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
-    /** Threshold for switching UCP to buffered copy(bcopy) protocol */
-    size_t                                 bcopy_thresh;
-    /** Threshold for switching UCP to rendezvous protocol */
-    size_t                                 rndv_thresh;
-    /** Size of packet data that is dumped to the log system in debug mode */
-    size_t                                 log_data_size;
-} ucp_config_t;
-
-
-/**
  * @ingroup UCP_CONTEXT
  * @brief Completion status of a tag-matched receive.
  *
@@ -438,7 +407,7 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
  *
  * @note
  * @li Higher level protocols can add additional communication isolation, as
- * MPI does with it’s communicator object. A single communication context may
+ * MPI does with it's communicator object. A single communication context may
  * be used to support multiple MPI communicators.
  * @li The context can be used to isolate the communication that corresponds to
  * different protocols. For example, if MPI and OpenSHMEM are using UCP to
@@ -855,7 +824,7 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * buffer, size @a count, and @a datatype object to the destination endpoint
  * @a ep. Each message is associated with a @a tag value that is used for
  * message matching on the @ref ucp_tag_recv_nb "receiver".  The routine is
- * non-blocking and therefor returns immediately, however the actual send
+ * non-blocking and therefore returns immediately, however the actual send
  * operation may be delayed.  The send operation is considered completed when
  * it is safe to reuse the source @e buffer.  If the operation is
  * completed immediately the routine return UCS_OK and the call-back function
@@ -1354,7 +1323,7 @@ void ucp_request_release(void *request);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
+ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *context,
                                    ucp_datatype_t *datatype_p);
 
 

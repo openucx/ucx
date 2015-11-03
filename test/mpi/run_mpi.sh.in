@@ -167,7 +167,7 @@ run_open_mpi()
 		done
 	fi
 
-	OMPI_ARGS="$OMPI_ARGS -x UCS_HANDLE_ERRORS=freeze"
+	OMPI_ARGS="$OMPI_ARGS -x UCX_HANDLE_ERRORS=freeze"
 	for c in $CONFIG
 	do
 		OMPI_ARGS="$OMPI_ARGS -x $c"

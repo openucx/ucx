@@ -9,7 +9,7 @@
 #include <ucs/debug/memtrack.h>
 
 
-ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
+ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *context,
                                    ucp_datatype_t *datatype_p)
 {
     ucp_dt_generic_t *dt;
@@ -19,7 +19,7 @@ ucs_status_t ucp_dt_create_generic(ucp_generic_dt_ops_t *ops, void *context,
         return UCS_ERR_NO_MEMORY;
     }
 
-    dt->ops      = ops;
+    dt->ops      = *ops;
     dt->context  = context;
     *datatype_p = ((uintptr_t)dt) | UCP_DATATYPE_GENERIC;
     return UCS_OK;

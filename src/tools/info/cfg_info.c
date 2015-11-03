@@ -102,7 +102,7 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
             continue;
         }
 
-        uct_config_print(config, stdout, UCT_CONFIG_ENV_PREFIX, cfg_title, print_flags);
+        uct_config_print(config, stdout, cfg_title, print_flags);
         uct_config_release(config);
     }
 

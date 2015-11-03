@@ -272,13 +272,12 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * @param stream         Output stream to print to.
  * @param opts           User-defined options structure.
  * @param fields         Array of fields which define the options.
- * @param env_prefix     Prefix to add to all environment variables.
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param flags          Flags which control the output.
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
-                                  ucs_config_field_t *fields, const char *env_prefix,
-                                  const char *table_prefix, ucs_config_print_flags_t flags);
+                                  ucs_config_field_t *fields, const char *table_prefix,
+                                  ucs_config_print_flags_t flags);
 
 /**
  * Read a value from options structure.

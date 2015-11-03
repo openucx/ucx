@@ -84,16 +84,16 @@ ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
 
-        buffer_size = dt_gen->ops->packed_size(state->dt.generic.state);
+        buffer_size = dt_gen->ops.packed_size(state->dt.generic.state);
         if (ucs_unlikely(recv_length + offset > buffer_size)) {
             status = UCS_ERR_MESSAGE_TRUNCATED;
         } else {
-            dt_gen->ops->unpack(state->dt.generic.state, offset, recv_data, recv_length);
+            dt_gen->ops.unpack(state->dt.generic.state, offset, recv_data, recv_length);
             status = UCS_OK;
         }
 
         if (last) {
-            dt_gen->ops->finish(state->dt.generic.state);
+            dt_gen->ops.finish(state->dt.generic.state);
         }
         return status;
 

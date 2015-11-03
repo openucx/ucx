@@ -75,8 +75,8 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
     req->recv.state.offset = 0;
     if ((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC) {
         dt_gen = ucp_dt_generic(datatype);
-        req->recv.state.dt.generic.state = dt_gen->ops->start_unpack(dt_gen->context,
-                                                                     buffer, count);
+        req->recv.state.dt.generic.state = dt_gen->ops.start_unpack(dt_gen->context,
+                                                                    buffer, count);
         ucs_debug("req %p buffer %p count %zu dt_gen state=%p", req, buffer, count,
                   req->recv.state.dt.generic.state);
     }

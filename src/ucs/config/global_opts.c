@@ -11,9 +11,6 @@
 #include <sys/signal.h>
 
 
-#define UCS_GLOBAL_OPTS_ENV_PREFIX   "UCS_"
-
-
 ucs_global_opts_t ucs_global_opts = {
     .log_level             = UCS_LOG_LEVEL_WARN,
     .log_file              = "",
@@ -155,7 +152,7 @@ void ucs_global_opts_init()
     ucs_status_t status;
 
     status = ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table,
-                                         UCS_GLOBAL_OPTS_ENV_PREFIX, NULL, 1);
+                                         NULL, NULL, 1);
     if (status != UCS_OK) {
         ucs_fatal("failed to parse global configuration - aborting");
     }
@@ -180,8 +177,6 @@ void ucs_global_opts_release()
 void ucs_global_opts_print(FILE *stream, const char *title,
                            ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title,
-                                 &ucs_global_opts, ucs_global_opts_table,
-                                 UCS_GLOBAL_OPTS_ENV_PREFIX, NULL,
-                                 print_flags);
+    ucs_config_parser_print_opts(stream, title, &ucs_global_opts,
+                                 ucs_global_opts_table, NULL, print_flags);
 }

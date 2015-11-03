@@ -242,14 +242,14 @@ static inline size_t ucp_req_generic_dt_pack(ucp_request_t *req, void *dest,
                                              size_t length)
 {
     ucp_dt_generic_t *dt = ucp_dt_generic(req->send.datatype);
-    return dt->ops->pack(req->send.state.dt.generic.state,
-                         req->send.state.offset, dest, length);
+    return dt->ops.pack(req->send.state.dt.generic.state,
+                        req->send.state.offset, dest, length);
 }
 
 static inline void ucp_req_generic_dt_finish(ucp_request_t *req)
 {
     ucp_dt_generic_t *dt = ucp_dt_generic(req->send.datatype);
-    return dt->ops->finish(req->send.state.dt.generic.state);
+    return dt->ops.finish(req->send.state.dt.generic.state);
 }
 
 static size_t ucp_tag_pack_eager_only_generic(void *dest, void *arg)

@@ -5,8 +5,8 @@
 # See file LICENSE for terms.
 #
 
-UCS_HANDLE_ERRORS ?= freeze
-export UCS_HANDLE_ERRORS
+UCX_HANDLE_ERRORS ?= freeze
+export UCX_HANDLE_ERRORS
 
 GTEST_FILTER        ?= *
 GTEST_EXTRA_ARGS    =
@@ -152,8 +152,8 @@ test: ucx gtest
 #
 test_gdb: ucx gtest
 	echo -e 'r\ninit-if-undefined $$_exitcode=-1\nif $$_exitcode>=0\n\tq\nend' > .gdbcommands
-	$(LAUNCHER) env UCS_HANDLE_ERRORS=none \
-		UCS_GDB_PATH="" \
+	$(LAUNCHER) env UCX_HANDLE_ERRORS=none \
+		UCX_GDB_PATH="" \
 		gdb -x .gdbcommands --args $(GDB_ARGS) \
 			$(abs_builddir)/gtest $(GTEST_ARGS)
 

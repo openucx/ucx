@@ -44,10 +44,10 @@ ucp_tag_send_start_req(ucp_ep_h ep, const void *buffer, size_t count,
 
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
-        state = dt_gen->ops->start_pack(dt_gen->context, buffer, count);
+        state = dt_gen->ops.start_pack(dt_gen->context, buffer, count);
 
         req->send.state.dt.generic.state = state;
-        req->send.length = dt_gen->ops->packed_size(state);
+        req->send.length = dt_gen->ops.packed_size(state);
         if (req->send.length <= rndv_thresh) {
             req->send.uct.func = ucp_tag_progress_eager_generic;
             return UCS_OK;

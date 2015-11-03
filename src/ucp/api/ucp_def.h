@@ -23,7 +23,7 @@ typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
  * @brief UCP Application Context
  *
  * UCP application context (or just a context) is an opaque handle that holds a
- * UCP communication instance’s global information.  It represents a single UCP
+ * UCP communication instance's global information.  It represents a single UCP
  * communication instance.  The communication instance could be an OS process
  * (an application) that uses UCP library.  This global information includes
  * communication resources, endpoints, memory, temporary file storage, and
@@ -39,6 +39,23 @@ typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
  * other application context.
  */
 typedef struct ucp_context               *ucp_context_h;
+
+
+/**
+ * @ingroup UCP_CONFIG
+ * @brief UCP configuration descriptor
+ *
+ * This descriptor defines the configuration for @ref ucp_context_h
+ * "UCP application context". The configuration is loaded from the run-time
+ * environment (using configuration files of environment variables)
+ * using @ref ucp_config_read "ucp_config_read" routine and can be printed
+ * using @ref ucp_config_print "ucp_config_print" routine. In addition,
+ * application is responsible to release the descriptor using
+ * @ref ucp_config_release "ucp_config_release" routine.
+ *
+ * @todo This structure will be modified through a dedicated function.
+ */
+typedef struct ucp_config                ucp_config_t;
 
 
 /**
@@ -198,4 +215,6 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  */
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
                                         ucp_tag_recv_info_t *info);
+
+
 #endif
