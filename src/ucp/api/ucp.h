@@ -325,7 +325,7 @@ typedef struct ucp_config {
     size_t                                 bcopy_thresh;
     /** Threshold for switching UCP to rendezvous protocol */
     size_t                                 rndv_thresh;
-    /** How much of the packet data to dump in debug mode */
+    /** Size of packet data that is dumped to the log system in debug mode */
     size_t                                 log_data_size;
 } ucp_config_t;
 
