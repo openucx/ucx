@@ -162,7 +162,7 @@ typedef struct ucp_generic_dt_ops {
      * @brief Start a packing request.
      *
      * The pointer refers to application defined start-to-pack routine. It will
-     * be called from the send function.
+     * be called from the @ref ucp_tag_send_nb routine.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to pack.
@@ -178,7 +178,7 @@ typedef struct ucp_generic_dt_ops {
      * @brief Start an unpacking request.
      *
      * The pointer refers to application defined start-to-unpack routine. It will
-     * be called from the receive function.
+     * be called from the @ref ucp_tag_recv_nb routine.
      *
      * @param [in]  context        User-defined context.
      * @param [in]  buffer         Buffer to unpack to.
