@@ -67,9 +67,10 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     ucs_status_t status;
     uct_iface_h iface;
 
-    /* Read configuration */
-    status = uct_iface_config_read(resource->tl_rsc.tl_name,
-                                   UCP_CONFIG_ENV_PREFIX, NULL, &iface_config);
+    /* Read configuration
+     * TODO pass env_prefix from context */
+    status = uct_iface_config_read(resource->tl_rsc.tl_name, NULL, NULL,
+                                   &iface_config);
     if (status != UCS_OK) {
         goto out;
     }

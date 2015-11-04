@@ -110,8 +110,8 @@ protected:
      */
     class car_opts {
     public:
-        car_opts(const char *env_prefix, const char *table_prefix = NULL) :
-            m_opts(parse(env_prefix, table_prefix)) {
+        car_opts(const char *table_prefix = NULL) :
+            m_opts(parse(table_prefix)) {
         }
 
         car_opts(const car_opts& orig)
@@ -139,11 +139,11 @@ protected:
         }
     private:
 
-        static car_opts_t parse(const char *env_prefix, const char *table_prefix) {
+        static car_opts_t parse(const char *table_prefix) {
             car_opts_t tmp;
             ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
                                                               car_opts_table,
-                                                              env_prefix,
+                                                              NULL,
                                                               table_prefix,
                                                               0);
             ASSERT_UCS_OK(status);
@@ -172,11 +172,11 @@ UCS_TEST_F(test_config, clone) {
     car_opts *opts_clone_ptr;
 
     {
-        ucs::scoped_setenv env1("UCSTEST_COLOR", "white");
-        car_opts opts("UCSTEST_");
+        ucs::scoped_setenv env1("UCX_COLOR", "white");
+        car_opts opts;
         EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
-        ucs::scoped_setenv env2("UCSTEST_COLOR", "black");
+        ucs::scoped_setenv env2("UCX_COLOR", "black");
         opts_clone_ptr = new car_opts(opts);
     }
 
@@ -185,7 +185,7 @@ UCS_TEST_F(test_config, clone) {
 }
 
 UCS_TEST_F(test_config, set) {
-    car_opts opts("UCSTEST_");
+    car_opts opts;
     EXPECT_EQ((unsigned)COLOR_RED, opts->color);
 
     opts.set("COLOR", "white");
@@ -193,10 +193,10 @@ UCS_TEST_F(test_config, set) {
 }
 
 UCS_TEST_F(test_config, set_with_prefix) {
-    ucs::scoped_setenv env1("UCSTEST_COLOR", "black");
-    ucs::scoped_setenv env2("UCSTEST_CARS_COLOR", "white");
+    ucs::scoped_setenv env1("UCX_COLOR", "black");
+    ucs::scoped_setenv env2("UCX_CARS_COLOR", "white");
 
-    car_opts opts("UCSTEST_", "CARS_");
+    car_opts opts("CARS_");
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 }
 
@@ -212,7 +212,7 @@ UCS_TEST_F(test_config, performance) {
 
     /* Now test the time */
     UCS_TEST_TIME_LIMIT(0.005) {
-        car_opts opts("UCSTEST_");
+        car_opts opts;
     }
 }
 
@@ -221,12 +221,12 @@ UCS_TEST_F(test_config, dump) {
     size_t dump_size;
     char line_buf[1024];
 
-    car_opts opts("UCSTEST_");
+    car_opts opts;
 
     /* Dump configuration to a memory buffer */
     dump_data = NULL;
     FILE *file = open_memstream(&dump_data, &dump_size);
-    ucs_config_parser_print_opts(file, "", *opts, car_opts_table, "UCS_",
+    ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
                                  NULL, UCS_CONFIG_PRINT_CONFIG);
 
     /* Sanity check - all lines begin with UCS_ */
@@ -234,7 +234,7 @@ UCS_TEST_F(test_config, dump) {
     fseek(file, 0, SEEK_SET);
     while (fgets(line_buf, sizeof(line_buf), file)) {
         line_buf[4] = '\0';
-        EXPECT_STREQ("UCS_", line_buf);
+        EXPECT_STREQ("UCX_", line_buf);
         ++num_lines;
     }
     EXPECT_EQ(8u, num_lines);

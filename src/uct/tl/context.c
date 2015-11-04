@@ -228,10 +228,11 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
                                 ucs_async_context_t*, ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
+
 static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                                     ucs_config_field_t *config_table,
-                                    size_t config_size, const char *cfg_prefix,
-                                    const char *env_prefix)
+                                    size_t config_size, const char *env_prefix,
+                                    const char *cfg_prefix)
 {
     uct_config_bundle_t *config_bundle;
     ucs_status_t status;
@@ -308,8 +309,7 @@ ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
     }
 
     status = uct_config_read(&bundle, tlc->iface_config_table,
-                             tlc->iface_config_size, tlc->cfg_prefix,
-                             UCT_CONFIG_ENV_PREFIX);
+                             tlc->iface_config_size, env_prefix, tlc->cfg_prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read iface config");
         return status;
@@ -364,8 +364,7 @@ ucs_status_t uct_pd_config_read(const char *name, const char *env_prefix,
     }
 
     status = uct_config_read(&bundle, pdc->pd_config_table,
-                             pdc->pd_config_size, pdc->cfg_prefix,
-                             UCT_PD_CONFIG_ENV_PREFIX);
+                             pdc->pd_config_size, env_prefix, pdc->cfg_prefix);
     if (status != UCS_OK) {
         ucs_error("Failed to read PD config");
         return status;
@@ -384,13 +383,12 @@ void uct_config_release(void *config)
     ucs_free(bundle);
 }
 
-void uct_config_print(const void *config, FILE *stream, const char *env_prefix,
-                      const char *title, ucs_config_print_flags_t print_flags)
+void uct_config_print(const void *config, FILE *stream, const char *title,
+                      ucs_config_print_flags_t print_flags)
 {
     uct_config_bundle_t *bundle = (uct_config_bundle_t *)config - 1;
     ucs_config_parser_print_opts(stream, title, bundle->data, bundle->table,
-                                 env_prefix, bundle->table_prefix,
-                                 print_flags);
+                                 bundle->table_prefix, print_flags);
 }
 
 ucs_status_t uct_config_modify(void *config, const char *name, const char *value)
@@ -416,7 +414,7 @@ void uct_pd_component_config_print(ucs_config_print_flags_t print_flags)
             ucs_error("Failed to read pd_config for PD component %s", pdc->name);
             continue;
         }
-        uct_config_print(pd_config, stdout, UCT_PD_CONFIG_ENV_PREFIX, cfg_title, print_flags);
+        uct_config_print(pd_config, stdout, cfg_title, print_flags);
         uct_config_release(pd_config);
     }
 }

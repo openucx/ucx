@@ -15,8 +15,8 @@
  * Generic datatype structure.
  */
 typedef struct ucp_dt_generic {
-    ucp_generic_dt_ops_t     *ops;
     void                     *context;
+    ucp_generic_dt_ops_t     ops;
 } ucp_dt_generic_t;
 
 

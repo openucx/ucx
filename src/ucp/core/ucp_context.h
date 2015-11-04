@@ -16,7 +16,6 @@
 
 #define UCP_MAX_RESOURCES       UINT8_MAX
 #define UCP_MAX_PDS             (sizeof(uint64_t) * 8)
-#define UCP_CONFIG_ENV_PREFIX   "UCX_"
 typedef uint8_t                 ucp_rsc_index_t;
 
 
@@ -32,6 +31,24 @@ enum {
     UCP_AM_ID_EAGER_LAST,
 
     UCP_AM_ID_LAST
+};
+
+
+struct ucp_config {
+    /** Array of device names to use */
+    UCS_CONFIG_STRING_ARRAY_FIELD(names)   devices;
+    /** Array of transport names to use */
+    UCS_CONFIG_STRING_ARRAY_FIELD(names)   tls;
+    /** Whether to force using of all available devices */
+    int                                    force_all_devices;
+    /** Array of memory allocation methods */
+    UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
+    /** Threshold for switching UCP to buffered copy(bcopy) protocol */
+    size_t                                 bcopy_thresh;
+    /** Threshold for switching UCP to rendezvous protocol */
+    size_t                                 rndv_thresh;
+    /** Size of packet data that is dumped to the log system in debug mode */
+    size_t                                 log_data_size;
 };
 
 

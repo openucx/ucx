@@ -15,6 +15,7 @@
 #include <ucs/time/time.h>
 
 
+#define UCS_CONFIG_PREFIX      "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
 
 typedef struct ucs_config_array_field {
@@ -890,9 +891,9 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
         goto err;
     }
 
-    /* Use default UCS_ prefix */
-    status = ucs_config_apply_env_vars(opts, fields, env_prefix, table_prefix,
-                                       1, ignore_errors);
+    /* TODO use env_prefix as well */
+    status = ucs_config_apply_env_vars(opts, fields, UCS_CONFIG_PREFIX,
+                                       table_prefix, 1, ignore_errors);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -1091,8 +1092,8 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
 }
 
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
-                                  ucs_config_field_t *fields, const char *env_prefix,
-                                  const char *table_prefix, ucs_config_print_flags_t flags)
+                                  ucs_config_field_t *fields, const char *table_prefix,
+                                  ucs_config_print_flags_t flags)
 {
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");
@@ -1103,8 +1104,8 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
     }
 
     if (flags & UCS_CONFIG_PRINT_CONFIG) {
-        ucs_config_parser_print_opts_recurs(stream, opts, fields, flags, env_prefix,
-                                            table_prefix);
+        ucs_config_parser_print_opts_recurs(stream, opts, fields, flags,
+                                            UCS_CONFIG_PREFIX, table_prefix);
     }
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {

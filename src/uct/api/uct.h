@@ -512,14 +512,11 @@ void uct_config_release(void *config);
  *
  * @param [in]  config        Configuration to print.
  * @param [in]  stream        Output stream to print to.
- * @param [in]  env_prefix    Print variables starting with <env_prefix>.
- *                            This parameter distinguishes between interface/PD
- *                            configuration to print.
  * @param [in]  title         Title to the output.
  * @param [in]  print_flags   Controls how the configuration is printed.
  */
-void uct_config_print(const void *config, FILE *stream, const char *env_prefix,
-                      const char *title, ucs_config_print_flags_t print_flags);
+void uct_config_print(const void *config, FILE *stream, const char *title,
+                      ucs_config_print_flags_t print_flags);
 
 
 /**

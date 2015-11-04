@@ -68,11 +68,12 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "rc",    { "rc", "cm", NULL } },
-  { "rc-x",  { "rc_mlx5", "cm", NULL } },
-  { "ud-x",  { "ud_mlx5", NULL } },
+  { "rc_x",  { "rc_mlx5", "cm", NULL } },
+  { "ud_x",  { "ud_mlx5", NULL } },
   { "ugni",  { "ugni_udt", "ugni_rdma", NULL } },
   { NULL }
 };
+
 
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
@@ -86,8 +87,8 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
         goto err;
     }
 
-    status = ucs_config_parser_fill_opts(config, ucp_config_table,
-                                         UCP_CONFIG_ENV_PREFIX, NULL, 0);
+    status = ucs_config_parser_fill_opts(config, ucp_config_table, env_prefix,
+                                         NULL, 0);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -110,8 +111,8 @@ void ucp_config_release(ucp_config_t *config)
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title, config, ucp_config_table,
-                                 UCP_CONFIG_ENV_PREFIX, NULL, print_flags);
+    ucs_config_parser_print_opts(stream, title, config, ucp_config_table, NULL,
+                                 print_flags);
 }
 
 static int ucp_str_array_search(const char **array, unsigned length,
