@@ -474,29 +474,39 @@ UCS_TEST_F(test_ucp_tag, send_recv_unexp_medium) {
 }
 
 UCS_TEST_F(test_ucp_tag, send_recv_exp_gentype) {
-    static const size_t count = 100000;
-    ucp_datatype_t dt;
-    ucp_tag_recv_info_t info;
-    ucs_status_t status;
+    size_t counts[3];
+    counts[0] = 0;
+    counts[1] = 100;
+    counts[2] = 10000000 / ucs::test_time_multiplier();
 
-    status = ucp_dt_create_generic(&test_dt_ops, this, &dt);
-    ASSERT_UCS_OK(status);
+    for (unsigned i = 0; i < 3; ++i) {
+        size_t count = counts[i];
+        ucp_datatype_t dt;
+        ucp_tag_recv_info_t info;
+        ucs_status_t status;
 
-    send_b(NULL, count, dt, 0x111337);
+        dt_gen_start_count  = 0;
+        dt_gen_finish_count = 0;
 
-    EXPECT_EQ(1, dt_gen_start_count);
-    EXPECT_EQ(1, dt_gen_finish_count);
+        status = ucp_dt_create_generic(&test_dt_ops, this, &dt);
+        ASSERT_UCS_OK(status);
 
-    status = recv_b(NULL, count, dt, 0x1337, 0xffff, &info);
-    ASSERT_UCS_OK(status);
+        send_b(NULL, count, dt, 0x111337);
 
-    EXPECT_EQ(count * sizeof(uint32_t), info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337,      info.sender_tag);
+        EXPECT_EQ(1, dt_gen_start_count);
+        EXPECT_EQ(1, dt_gen_finish_count);
 
-    EXPECT_EQ(2, dt_gen_start_count);
-    EXPECT_EQ(2, dt_gen_finish_count);
+        status = recv_b(NULL, count, dt, 0x1337, 0xffff, &info);
+        ASSERT_UCS_OK(status);
 
-    ucp_dt_destroy(dt);
+        EXPECT_EQ(count * sizeof(uint32_t), info.length);
+        EXPECT_EQ((ucp_tag_t)0x111337,      info.sender_tag);
+
+        EXPECT_EQ(2, dt_gen_start_count);
+        EXPECT_EQ(2, dt_gen_finish_count);
+
+        ucp_dt_destroy(dt);
+    }
 }
 
 UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
