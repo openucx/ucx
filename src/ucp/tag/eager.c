@@ -303,7 +303,8 @@ static size_t ucp_tag_pack_eager_last_generic(void *dest, void *arg)
     max_length     = req->send.length - req->send.state.offset;
     hdr->super.tag = req->send.tag;
     length         = ucp_req_generic_dt_pack(req, hdr + 1, max_length);
-    ucs_assert(length == max_length);
+    ucs_assertv(length == max_length, "length=%zu, max_length=%zu",
+                length, max_length);
     return sizeof(*hdr) + length;
 }
 
@@ -348,7 +349,6 @@ ucs_status_t ucp_tag_progress_eager_generic(uct_pending_req_t *self)
             /* Last packet */
             packed_len = uct_ep_am_bcopy(ep->uct_ep, UCP_AM_ID_EAGER_LAST,
                                          ucp_tag_pack_eager_last_generic, req);
-            ucp_req_generic_dt_finish(req);
             goto out_complete;
         }
     }
@@ -358,6 +358,7 @@ out_complete:
         return packed_len;
     }
 
+    ucp_req_generic_dt_finish(req);
     ucp_request_complete(req, req->cb.send, UCS_OK);
     return UCS_OK;
 }
