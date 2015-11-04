@@ -31,11 +31,60 @@ static ucs_config_field_t uct_posix_pd_config_table[] = {
   {NULL}
 };
 
+static ucs_status_t uct_posix_test_mem(size_t length, int shm_fd)
+{
+    int *buf;
+    int i, iters, chunk_size = 256 * 1024;
+    size_t size_to_write, remaining, single_write, total_write = 0;
+
+    buf = (int*) ucs_malloc(length, "write buffer");
+    memset(buf, 0, length);
+
+    if (length > chunk_size) {
+        iters = length / chunk_size;
+        size_to_write = chunk_size;
+        remaining = length % chunk_size;
+    } else {
+        iters = 1;
+        size_to_write = length;
+        remaining = 0;
+    }
+
+    for (i = 0; i < iters; i++) {
+        single_write = write(shm_fd, buf, size_to_write);
+        if (single_write <= 0) {
+            ucs_error("Failed to write %zu bytes. %m", size_to_write);
+        } else {
+            total_write += single_write;
+        }
+
+    }
+    if (remaining) {
+        single_write = write(shm_fd, buf, remaining);
+        if (single_write <= 0) {
+            ucs_error("Failed to write remaining %zu bytes. %m", remaining);
+        } else {
+            total_write += single_write;
+        }
+    }
+
+    ucs_free(buf);
+
+    if (length != total_write) {
+        ucs_error("Failed to write to the backing file. "
+                  "Not enough memory to write %zu bytes. "
+                  "Please check that /dev/shm or the directory you specified has "
+                  "more available memory.", length);
+        return UCS_ERR_NO_MEMORY;
+    }
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
                 void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
 {
-    ucs_status_t status = UCS_ERR_NO_MEMORY;
+    ucs_status_t status;
     int shm_fd;
     uint64_t uuid;
     char *file_name;
@@ -73,6 +122,13 @@ uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_shm_unlink;
     }
+
+    status = uct_posix_test_mem(*length_p, shm_fd);
+    if (status != UCS_OK) {
+        goto err_shm_unlink;
+    }
+
+    status = UCS_ERR_NO_MEMORY;
 
     /* mmap the shared memory segment that was created by shm_open */
 #ifdef MAP_HUGETLB
