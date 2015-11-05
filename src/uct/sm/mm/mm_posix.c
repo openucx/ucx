@@ -36,7 +36,8 @@ static ucs_status_t uct_posix_test_mem(size_t length, int shm_fd)
     int *buf;
     int chunk_size = 256 * 1024;
     ucs_status_t status = UCS_OK;
-    size_t size_to_write, remaining, single_write, total_write = 0;
+    size_t size_to_write, remaining;
+    ssize_t single_write;
 
     buf = ucs_malloc(chunk_size, "write buffer");
     if (buf == NULL) {
@@ -47,6 +48,7 @@ static ucs_status_t uct_posix_test_mem(size_t length, int shm_fd)
 
     memset(buf, 0, chunk_size);
     if (lseek(shm_fd, 0, SEEK_SET) < 0) {
+        ucs_error("lseek failed. %m");
         status = UCS_ERR_IO_ERROR;
         goto out_free_buf;
     }
@@ -55,21 +57,19 @@ static ucs_status_t uct_posix_test_mem(size_t length, int shm_fd)
     while (remaining > 0) {
         size_to_write = ucs_min(remaining, chunk_size);
         single_write = write(shm_fd, buf, size_to_write);
-        if (single_write < size_to_write) {
+        if (single_write < 0) {
             ucs_error("Failed to write %zu bytes. %m", size_to_write);
-            goto out_check;
-        } else {
-            total_write += single_write;
+            status = UCS_ERR_IO_ERROR;
+            goto out_free_buf;
+        }
+        if (single_write != size_to_write) {
+            ucs_error("Not enough memory to write total of %zu bytes. "
+                      "Please check that /dev/shm or the directory you specified has "
+                      "more available memory.", length);
+            status = UCS_ERR_NO_MEMORY;
+            goto out_free_buf;
         }
         remaining -= size_to_write;
-    }
-
-out_check:
-    if (length != total_write) {
-        ucs_error("Not enough memory to write %zu bytes. "
-                  "Please check that /dev/shm or the directory you specified has "
-                  "more available memory.", length);
-        status = UCS_ERR_NO_MEMORY;
     }
 
 out_free_buf:
@@ -122,6 +122,8 @@ uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
         goto err_shm_unlink;
     }
 
+    /* check is the location of the backing file has enough memory for the needed size
+     * by trying to write there before calling mmap */
     status = uct_posix_test_mem(*length_p, shm_fd);
     if (status != UCS_OK) {
         goto err_shm_unlink;
