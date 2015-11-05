@@ -34,50 +34,49 @@ static ucs_config_field_t uct_posix_pd_config_table[] = {
 static ucs_status_t uct_posix_test_mem(size_t length, int shm_fd)
 {
     int *buf;
-    int i, iters, chunk_size = 256 * 1024;
+    int chunk_size = 256 * 1024;
+    ucs_status_t status = UCS_OK;
     size_t size_to_write, remaining, single_write, total_write = 0;
 
-    buf = (int*) ucs_malloc(length, "write buffer");
-    memset(buf, 0, length);
-
-    if (length > chunk_size) {
-        iters = length / chunk_size;
-        size_to_write = chunk_size;
-        remaining = length % chunk_size;
-    } else {
-        iters = 1;
-        size_to_write = length;
-        remaining = 0;
+    buf = ucs_malloc(chunk_size, "write buffer");
+    if (buf == NULL) {
+        ucs_error("Failed to allocate memory for testing space for backing file.");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
-    for (i = 0; i < iters; i++) {
+    memset(buf, 0, chunk_size);
+    if (lseek(shm_fd, 0, SEEK_SET) < 0) {
+        status = UCS_ERR_IO_ERROR;
+        goto out_free_buf;
+    }
+
+    remaining = length;
+    while (remaining > 0) {
+        size_to_write = ucs_min(remaining, chunk_size);
         single_write = write(shm_fd, buf, size_to_write);
-        if (single_write <= 0) {
+        if (single_write < size_to_write) {
             ucs_error("Failed to write %zu bytes. %m", size_to_write);
+            goto out_check;
         } else {
             total_write += single_write;
         }
-
-    }
-    if (remaining) {
-        single_write = write(shm_fd, buf, remaining);
-        if (single_write <= 0) {
-            ucs_error("Failed to write remaining %zu bytes. %m", remaining);
-        } else {
-            total_write += single_write;
-        }
+        remaining -= size_to_write;
     }
 
-    ucs_free(buf);
-
+out_check:
     if (length != total_write) {
-        ucs_error("Failed to write to the backing file. "
-                  "Not enough memory to write %zu bytes. "
+        ucs_error("Not enough memory to write %zu bytes. "
                   "Please check that /dev/shm or the directory you specified has "
                   "more available memory.", length);
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
     }
-    return UCS_OK;
+
+out_free_buf:
+    ucs_free(buf);
+
+out:
+    return status;
 }
 
 static ucs_status_t
