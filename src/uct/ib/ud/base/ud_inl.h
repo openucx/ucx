@@ -1,36 +1,25 @@
 #include "ud_log.h"
 
+/**
+ * scedule control operation. 
+ */
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_queue_pending(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
+uct_ud_ep_ctl_op_add(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
 {
-    if (ep->tx.pending.ops == UCT_UD_EP_OP_NONE) {
-        ucs_queue_push(&iface->tx.pending_ops, &ep->tx.pending.queue);
-        ep->tx.pending.ops |= UCT_UD_EP_OP_INPROGRESS;
-    }
+    ucs_arbiter_group_push_elem(&ep->tx.pending.group, 
+                                &ep->tx.pending.elem);
     ep->tx.pending.ops |= op;
+    ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 }
 
-
-/* TODO: relay on window check instead. max_psn = psn  */
-static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
-{
-    return ucs_likely(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
-}
-
+/* check iface resources:tx_queue and skbs and return skb */
 static UCS_F_ALWAYS_INLINE 
 uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
                                            uct_ud_ep_t *ep)
 {
     uct_ud_send_skb_t *skb;
 
-    if (!uct_ud_iface_can_tx(iface)) {
-        return NULL;
-    }
-
-    if (ucs_unlikely(ep->tx.psn == ep->tx.max_psn)) {
-        ucs_trace_data("iface=%p ep=%p (%d->%d) tx window full (max_psn=%u)",
-                       iface, ep, ep->ep_id, ep->dest_ep_id,
-                       (unsigned)ep->tx.max_psn);
+    if (ucs_unlikely(!uct_ud_iface_can_tx(iface))) {
         return NULL;
     }
 
@@ -47,16 +36,32 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
     return skb;
 }
 
-/* same as function above but also check that iface is connected */
+/* same as above but also check ep resources: window&connection state */
 static UCS_F_ALWAYS_INLINE uct_ud_send_skb_t *
 uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    if (!uct_ud_ep_is_connected(ep)) {
+    if (ucs_unlikely(!uct_ud_ep_is_connected(ep) || 
+                     uct_ud_ep_no_window(ep))) {
+        ucs_trace_data("iface=%p ep=%p (%d->%d) no ep resources (psn=%u max_psn=%u)",
+                       iface, ep, ep->ep_id, ep->dest_ep_id,
+                       (unsigned)ep->tx.psn,
+                       (unsigned)ep->tx.max_psn);
         return NULL;
     }
 
     return uct_ud_iface_get_tx_skb(iface, ep);
 }
+
+static inline ucs_time_t uct_ud_slow_tick()
+{
+    return ucs_time_from_msec(100);
+}
+
+static inline ucs_time_t uct_ud_fast_tick()
+{
+    return ucs_time_from_usec(1024);
+}
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
@@ -68,11 +73,17 @@ uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     skb->len += length;
     memcpy(data, buffer, length);
     ucs_queue_push(&ep->tx.window, &skb->queue);
+    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
+                   uct_ud_iface_get_async_time(iface) - 
+                   ucs_twheel_get_time(&iface->async.slow_timer) +
+                   uct_ud_slow_tick());
+    ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
 
 #define uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length) \
     uct_ud_iface_complete_tx_inl_nolog(iface, ep, skb, data, buffer, length); \
     uct_ud_ep_log_tx(iface, ep, skb);
+
 
 static UCS_F_ALWAYS_INLINE void 
 uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
@@ -81,6 +92,11 @@ uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
     ucs_queue_push(&ep->tx.window, &skb->queue);
+    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
+                   uct_ud_iface_get_async_time(iface) - 
+                   ucs_twheel_get_time(&iface->async.slow_timer) +
+                   uct_ud_slow_tick());
+    ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
 
 #define uct_ud_iface_complete_tx_skb(iface, ep, skb) \

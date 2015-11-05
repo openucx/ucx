@@ -30,5 +30,10 @@ void uct_ud_log_packet(const char *file, int line, const char *function,
                           UCT_AM_TRACE_TYPE_RECV, _neth, _len); \
     }
 
+#define uct_ud_iface_log_rxdrop(_iface, _ep, _neth, _len) \
+    if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
+        uct_ud_log_packet(__FILE__, __LINE__, __FUNCTION__, _iface, _ep, \
+                          UCT_AM_TRACE_TYPE_RECV_DROP, _neth, _len); \
+    }
 
 #endif 

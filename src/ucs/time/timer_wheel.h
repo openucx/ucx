@@ -75,6 +75,13 @@ static inline void ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
     }
 }
 
+/**
+ * Get current time
+ */
+static inline ucs_time_t ucs_twheel_get_time(ucs_twheel_t *t)
+{
+    return t->now;
+}
 
 /**
  * Add a one shot timer.
