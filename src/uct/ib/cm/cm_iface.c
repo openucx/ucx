@@ -246,12 +246,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 {
     ucs_trace_func("");
 
-    if (self->outstanding > 0) {
-        ucs_warn("waiting for %d in-flight requests to complete", self->outstanding);
-        while (self->outstanding) {
-            sched_yield();
-        }
-    }
     ucs_async_unset_event_handler(self->cmdev->fd);
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
