@@ -1,3 +1,9 @@
+#
+# Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
 SUBDIRS=
 
 if BUILD_JEMALLOC

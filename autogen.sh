@@ -4,7 +4,9 @@ rm -rf autom4te.cache
 mkdir -p config/m4 config/aux external/jemalloc
 
 GIT_FOUND=1
-command git --help 2>&1 > /dev/null || { echo "Git not found, not retrieving external packages"; export GIT_FOUND=0; }
+command git --help 2>&1 > /dev/null || { \
+    echo "Git not found, will not retrieve jemalloc"; \
+    GIT_FOUND=0; }
 
 if [ $GIT_FOUND -eq 1 ]
 then
