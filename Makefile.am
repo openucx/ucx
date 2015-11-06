@@ -9,6 +9,7 @@
 # the right time.
 
 ACLOCAL_AMFLAGS = -I config/m4
+DISTCHECK_CONFIGURE_FLAGS = "--disable-jemalloc"
 
 noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 doxygen_doc_files = $(noinst_HEADERS)
