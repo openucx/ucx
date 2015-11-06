@@ -18,9 +18,6 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
             continue;
         }
 
-        while (uct_iface_flush(worker->ifaces[rsc_index]) != UCS_OK) {
-            uct_worker_progress(worker->uct);
-        }
         uct_iface_close(worker->ifaces[rsc_index]);
     }
 }
