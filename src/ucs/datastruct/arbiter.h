@@ -86,7 +86,7 @@ typedef enum {
     UCS_ARBITER_CB_RESULT_RESCHED_GROUP,/* Keep current element, do not process 
                                            the group anymore during current
                                            dispatch cycle. After dispatch()
-                                           is finished group automagically 
+                                           is finished group automatically
                                            scheduled */
     UCS_ARBITER_CB_RESULT_STOP          /* Stop dispatching work altogether */
 } ucs_arbiter_cb_result_t;

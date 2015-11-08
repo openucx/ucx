@@ -755,7 +755,8 @@ static double ucp_runtime_score_func(ucp_worker_h worker,
     }
 
     if (context->config.features & UCP_FEATURE_TAG) {
-        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_THREAD_SINGLE;
+        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_THREAD_SINGLE |
+                 UCT_IFACE_FLAG_PENDING;
     }
 
     if (context->config.features & UCP_FEATURE_RMA) {

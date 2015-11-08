@@ -133,6 +133,8 @@ enum {
     UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1), /**< Buffered active message */
     UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2), /**< Zero-copy active message */
 
+    UCT_IFACE_FLAG_PENDING        = UCS_BIT(3), /**< Pending operations */
+
     /* PUT capabilities */
     UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4), /**< Short put */
     UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5), /**< Buffered put */

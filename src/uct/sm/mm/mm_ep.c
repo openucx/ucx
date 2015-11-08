@@ -282,6 +282,7 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 
     UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
 
+    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
     /* add the request to the ep's arbiter_group (pending queue) */
     ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
     /* add the ep's group to the arbiter */
@@ -295,7 +296,6 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   void *arg)
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    unsigned *send_attempts = arg;
     ucs_status_t status;
 
     status = req->func(req);
@@ -306,14 +306,9 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
         /* sent successfully. remove from the arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else {
-        if (--(*send_attempts)) {
-            /* couldn't send. keep this request in the arbiter */
-            return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
-        } else {
-            /* couldn't send. reached limit of send attempts.
-             * keep this request in the arbiter and stop trying for now */
-            return UCS_ARBITER_CB_RESULT_STOP;
-        }
+        /* couldn't send. keep this request in the arbiter until the next time
+         * this function is called */
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
     }
 }
 
