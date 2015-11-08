@@ -62,10 +62,6 @@ public:
         return status;
     }
 
-    void cleanup() {
-        uct_test::cleanup();
-    }
-
 protected:
     entity *m_e1, *m_e2;
 };
@@ -76,16 +72,18 @@ UCS_TEST_P(test_uct_pending, pending_op)
     uint64_t test_pending_hdr = 0xabcd;
     ucs_status_t status;
     pending_send_request_t *req;
-    int i, counter = 0;
+    unsigned i, iters, counter = 0;
 
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
+    iters = 100000/ucs::test_time_multiplier();
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, pending_am_handler , &counter);
 
     /* send the data until the resources run out */
-    for (i = 0; i < 100000; i++) {
+    i = 0;
+    while (i < iters) {
         status = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr, &send_data,
                                  sizeof(send_data));
         if (status != UCS_OK) {
@@ -101,22 +99,28 @@ UCS_TEST_P(test_uct_pending, pending_op)
                 status = uct_ep_pending_add(m_e1->ep(0), &req->uct);
                 if (status != UCS_OK) {
                     /* the request wasn't added to the pending data structure
-                     * since it was successfully sent */
+                     * since resources became available. retry sending this message */
                     free(req);
+                } else {
+                    /* the request was added to the pending data structure */
+                    send_data += 1;
+                    i++;
                 }
 
             } else {
                 UCS_TEST_ABORT("Error: " << ucs_status_string(status));
             }
+        } else {
+            send_data += 1;
+            i++;
         }
-        send_data += 1;
     }
 
-    while (counter != 100000) {
+    while (counter != iters) {
         progress();
     }
 
-    ASSERT_EQ(counter, 100000);
+    ASSERT_EQ(counter, iters);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_pending);
