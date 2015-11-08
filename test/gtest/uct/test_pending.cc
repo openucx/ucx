@@ -71,7 +71,6 @@ UCS_TEST_P(test_uct_pending, pending_op)
     uint64_t send_data = 0xdeadbeef;
     uint64_t test_pending_hdr = 0xabcd;
     ucs_status_t status;
-    pending_send_request_t *req;
     unsigned i, iters, counter = 0;
 
     initialize();
@@ -89,7 +88,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
         if (status != UCS_OK) {
             if (status == UCS_ERR_NO_RESOURCE) {
 
-                req = (pending_send_request_t *) malloc(sizeof(*req));
+                pending_send_request_t *req = (pending_send_request_t *) malloc(sizeof(*req));
                 req->buffer   = send_data;
                 req->hdr      = test_pending_hdr;
                 req->length   = sizeof(send_data);
@@ -106,7 +105,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
                     send_data += 1;
                     i++;
                 }
-
+                /* coverity[leaked_storage] */
             } else {
                 UCS_TEST_ABORT("Error: " << ucs_status_string(status));
             }
@@ -116,6 +115,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
         }
     }
 
+    /* coverity[loop_condition] */
     while (counter != iters) {
         progress();
     }
