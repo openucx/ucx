@@ -471,18 +471,29 @@ uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *iface_addr)
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
 {
-#if 0
-    /* TODO: flush code */
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    uct_ud_ep_t *ep;
+    ucs_status_t status;
+    int i, count;
 
     ucs_trace_func("");
-    if (iface->tx.available < iface->config.tx_qp_len) {
-        /* TODO: flush eps */
-        return UCS_ERR_WOULD_BLOCK;
-    }
     uct_ud_enter(iface);
+
+    count = 0;
+    ucs_ptr_array_for_each(ep, i, &iface->eps) {
+        status = uct_ud_ep_flush_do(iface, ep);
+        if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
+            ++count;
+        } else if (status != UCS_OK) {
+            ucs_fatal("flush failed with %d", status);
+            return status;
+        }
+    }
+
     uct_ud_leave(iface);
-#endif
+    if (count != 0) {
+        return UCS_ERR_NO_RESOURCE;
+    }
     return UCS_OK;
 }
 

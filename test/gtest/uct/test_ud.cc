@@ -108,6 +108,17 @@ UCS_TEST_P(test_ud, tx_window1) {
     EXPECT_UCS_OK(tx(m_e1));
 }
 
+/* basic flush */
+/* send packet, flush, wait till flush ended */
+
+UCS_TEST_P(test_ud, ep_flush_basic) {
+    //unsigned i, N=13;
+
+    connect();
+    EXPECT_UCS_OK(tx(m_e1));
+    EXPECT_UCS_OK(tx(m_e1));
+}
+
 #ifdef UCT_UD_EP_DEBUG_HOOKS
 
 /* disable ack req,
