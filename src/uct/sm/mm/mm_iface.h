@@ -13,6 +13,7 @@
 #include <uct/tl/tl_base.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
 
@@ -61,6 +62,7 @@ struct uct_mm_iface {
     uct_mm_recv_desc_t      *last_recv_desc;
 
     size_t                  rx_headroom;
+    ucs_arbiter_t           arbiter;
 
     struct {
         unsigned fifo_size;

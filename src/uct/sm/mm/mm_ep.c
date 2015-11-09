@@ -47,6 +47,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
      * chunks that hold the descriptors for bcopy. */
     sglib_hashed_uct_mm_remote_seg_t_init(self->remote_segments_hash);
 
+    ucs_arbiter_group_init(&self->arb_group);
+
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, remote_iface_addr->id);
 
     return UCS_OK;
@@ -76,6 +78,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     if (status != UCS_OK) {
         ucs_error("error detaching from remote FIFO");
     }
+
+    ucs_arbiter_group_cleanup(&self->arb_group);
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
@@ -269,6 +273,63 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
 
     return uct_mm_ep_am_common_send(UCT_MM_AM_BCOPY, ep, iface, id, 0, 0, NULL,
                                     pack_cb, arg);
+}
+
+ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+
+    UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
+
+    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
+    /* add the request to the ep's arbiter_group (pending queue) */
+    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
+    /* add the ep's group to the arbiter */
+    ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
+
+    return UCS_OK;
+}
+
+ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_elem_t *elem,
+                                                  void *arg)
+{
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    ucs_status_t status;
+
+    status = req->func(req);
+    ucs_trace_data("progress pending request %p returned %s", req,
+                   ucs_status_string(status));
+
+    if (status == UCS_OK) {
+        /* sent successfully. remove from the arbiter */
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else {
+        /* couldn't send. keep this request in the arbiter until the next time
+         * this function is called */
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+}
+
+static ucs_arbiter_cb_result_t uct_mm_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                          ucs_arbiter_elem_t *elem,
+                                                          void *arg)
+{
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_pending_callback_t cb = arg;
+
+    cb(req);
+    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
+void uct_mm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+
+    ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
+                            uct_mm_ep_abriter_purge_cb, cb);
 }
 
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
