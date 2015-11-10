@@ -42,14 +42,14 @@ static void uct_cm_iface_notify(uct_cm_iface_t *iface)
 {
     uct_cm_pending_req_priv_t *priv;
     uct_pending_queue_dispatch(priv, &iface->notify_q,
-                               iface->outstanding < iface->config.max_outstanding);
+                               iface->num_outstanding < iface->config.max_outstanding);
 }
 
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
 
-    if (iface->outstanding == 0) {
+    if (iface->num_outstanding == 0) {
         return UCS_OK;
     }
 
@@ -98,6 +98,26 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     }
 }
 
+struct ib_cm_id *uct_cm_iface_outstanding_pop(uct_cm_iface_t *iface)
+{
+    return iface->outstanding[--iface->num_outstanding];
+}
+
+static void uct_cm_iface_outstanding_remove(uct_cm_iface_t* iface,
+                                            struct ib_cm_id* id)
+{
+    unsigned index;
+
+    for (index = 0; index < iface->num_outstanding; ++index) {
+        if (iface->outstanding[index] == id) {
+            iface->outstanding[index] = uct_cm_iface_outstanding_pop(iface);
+            return;
+        }
+    }
+
+    ucs_fatal("outstanding cm id %p not found", id);
+}
+
 static void uct_cm_iface_event_handler(void *arg)
 {
     uct_cm_iface_t *iface = arg;
@@ -118,6 +138,8 @@ static void uct_cm_iface_event_handler(void *arg)
             return;
         }
 
+        id  = event->cm_id;
+
         /* Handle the event */
         switch (event->event) {
         case IB_CM_SIDR_REQ_ERROR:
@@ -131,8 +153,7 @@ static void uct_cm_iface_event_handler(void *arg)
             break;
         case IB_CM_SIDR_REP_RECEIVED:
             ucs_trace_data("RX: SIDR_REP");
-            ucs_assert(iface->outstanding > 0);
-            ucs_atomic_add32(&iface->outstanding, -1);
+            uct_cm_iface_outstanding_remove(iface, id);
             destroy_id = 1; /* Destroy the ID which was used for sending */
             break;
         default:
@@ -142,7 +163,6 @@ static void uct_cm_iface_event_handler(void *arg)
         }
 
         /* Acknowledge CM event, remember the id, in case we would destroy it */
-        id  = event->cm_id;
         ret = ib_cm_ack_event(event);
         if (ret) {
             ucs_warn("ib_cm_ack_event() failed: %m");
@@ -183,20 +203,34 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
                               0 /* rx_hdr_len */, 1 /* tx_cq_len */,
                               &config->super);
 
+    if (worker->async == NULL) {
+        ucs_error("cm must have async!=NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     self->service_id          = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
                                              (~IB_CM_ASSIGN_SERVICE_ID_MASK));
-    self->outstanding         = 0;
+    self->num_outstanding     = 0;
+
     self->config.timeout_ms   = (int)(config->timeout * 1e3 + 0.5);
     self->config.max_outstanding = config->max_outstanding;
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
-    self->notify_q.head = NULL;
+    self->notify_q.head       = NULL;
     ucs_queue_head_init(&self->notify_q);
+
+    self->outstanding = ucs_calloc(self->config.max_outstanding,
+                                   sizeof(*self->outstanding),
+                                   "cm_outstanding");
+    if (self->outstanding == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     self->cmdev = ib_cm_open_device(uct_ib_iface_device(&self->super)->ibv_context);
     if (self->cmdev == NULL) {
         ucs_error("ib_cm_open_device() failed: %m. Check if ib_ucm.ko module is loaded.");
         status = UCS_ERR_NO_DEVICE;
-        goto err;
+        goto err_free_outstanding;
     }
 
     status = ucs_sys_fcntl_modfl(self->cmdev->fd, O_NONBLOCK, 0);
@@ -238,17 +272,28 @@ err_destroy_id:
     ib_cm_destroy_id(self->listen_id);
 err_close_device:
     ib_cm_close_device(self->cmdev);
+err_free_outstanding:
+    ucs_free(self->outstanding);
 err:
     return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 {
+
     ucs_trace_func("");
 
     ucs_async_unset_event_handler(self->cmdev->fd);
+
+    uct_cm_enter(self);
+    while (self->num_outstanding > 0) {
+        ib_cm_destroy_id(uct_cm_iface_outstanding_pop(self));
+    }
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
+    uct_cm_leave(self);
+
+    ucs_free(self->outstanding);
 }
 
 UCS_CLASS_DEFINE(uct_cm_iface_t, uct_ib_iface_t);
