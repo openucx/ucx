@@ -27,6 +27,7 @@
 #define UCT_IB_MLX5_MAX_BB           4
 #define UCT_IB_MLX5_WORKER_BF_KEY  0x00c1b7e8U
 #define UCT_IB_MLX5_EXTENDED_UD_AV   0x80000000U
+#define UCT_IB_MLX5_BF_REG_SIZE      256
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
@@ -166,7 +167,6 @@ typedef struct uct_ib_mlx5_bf {
         void                    *ptr;
         uintptr_t               addr;
     } reg;
-    size_t                      size;
 } uct_ib_mlx5_bf_t;
 
 
@@ -401,7 +401,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 
     /* BF copy */
     /* TODO support DB without BF */
-    ucs_assert(wqe_size <= wq->bf->size);
+    ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     for (n = 0; n < num_bb; ++n) {
         uct_ib_mlx5_bf_copy_bb(dst, src);
@@ -422,7 +422,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     wq->sw_pi      = sw_pi;
 
     /* Flip BF register */
-    wq->bf->reg.addr ^= wq->bf->size;
+    wq->bf->reg.addr ^= UCT_IB_MLX5_BF_REG_SIZE;
     return num_bb;
 }
 
