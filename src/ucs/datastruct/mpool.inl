@@ -17,7 +17,7 @@ static inline void *ucs_mpool_get_inline(ucs_mpool_t *mp)
     ucs_mpool_elem_t *elem;
     void *obj;
 
-    if (mp->freelist == NULL) {
+    if (ucs_unlikely(mp->freelist == NULL)) {
         return ucs_mpool_get_grow(mp);
     }
 

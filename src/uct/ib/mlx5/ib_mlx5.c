@@ -190,16 +190,14 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
     }
 }
 
-static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr, size_t size)
+static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr)
 {
-    ucs_assert(ucs_is_pow2(size));
-    return ((bf->reg.addr & ~bf->size) == (addr & ~size));
+    return ((bf->reg.addr & ~UCT_IB_MLX5_BF_REG_SIZE) == (addr & ~UCT_IB_MLX5_BF_REG_SIZE));
 }
 
-static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, size_t size)
+static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr)
 {
     bf->reg.addr = addr;
-    bf->size     = size;
 }
 
 static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
@@ -220,7 +218,9 @@ ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
 
     if ((qp_info.bf.size == 0) || !ucs_is_pow2(qp_info.bf.size) ||
         (qp_info.sq.stride != MLX5_SEND_WQE_BB) ||
-        !ucs_is_pow2(qp_info.sq.wqe_cnt)) {
+        (qp_info.bf.size != UCT_IB_MLX5_BF_REG_SIZE) ||
+        !ucs_is_pow2(qp_info.sq.wqe_cnt))
+    {
         ucs_error("mlx5 device parameters not suitable for transport");
         return UCS_ERR_IO_ERROR;
     }
@@ -243,8 +243,7 @@ ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
                                             uct_ib_mlx5_bf_t,
                                             uct_ib_mlx5_bf_cmp,
                                             uct_ib_mlx5_bf_init,
-                                            (uintptr_t)qp_info.bf.reg,
-                                            qp_info.bf.size);
+                                            (uintptr_t)qp_info.bf.reg);
     wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not 

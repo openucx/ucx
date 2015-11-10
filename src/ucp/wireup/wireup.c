@@ -260,7 +260,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 }
 
-static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint32_t flags,
+static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t flags,
                                        ucp_rsc_index_t dst_rsc_index,
                                        ucp_rsc_index_t dst_aux_rsc_index)
 {
@@ -402,7 +402,7 @@ static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
     return status;
 }
 
-static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint32_t flags,
+static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint16_t flags,
                                        ucp_rsc_index_t dst_rsc_index,
                                        ucp_rsc_index_t dst_aux_rsc_index)
 {
