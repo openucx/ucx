@@ -199,9 +199,8 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * @param member  Member inside 'elem' which is the queue link.
  */
 #define ucs_queue_for_each_safe(elem, iter, queue, member) \
-    for (*(queue)->ptail = NULL, \
-            iter = &(queue)->head, \
-            elem = ucs_container_of(*iter, typeof(*elem), member); \
+    for (iter = &(queue)->head, \
+         elem = ucs_container_of(*iter, typeof(*elem), member); \
           iter != (queue)->ptail; \
           iter = (*iter == &elem->member) ? &(*iter)->next : iter, \
             elem = ucs_container_of(*iter, typeof(*elem), member))

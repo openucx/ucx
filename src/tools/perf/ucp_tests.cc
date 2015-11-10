@@ -45,13 +45,13 @@ public:
             return UCS_PTR_STATUS(request);
         }
 
-        do {
+        while (!ucp_request_is_completed(request)) {
             if (is_requestor) {
                 progress_requestor();
             } else {
                 progress_responder();
             }
-        } while (!ucp_request_is_completed(request));
+        }
         ucp_request_release(request);
         return UCS_OK;
     }

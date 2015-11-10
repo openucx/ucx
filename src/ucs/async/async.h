@@ -129,10 +129,10 @@ void __ucs_async_poll_missed(ucs_async_context_t *async);
  */
 static inline int ucs_async_check_miss(ucs_async_context_t *async)
 {
-    if (!ucs_mpmc_queue_is_empty(&async->missed)) {
+    if (ucs_unlikely(!ucs_mpmc_queue_is_empty(&async->missed))) {
         __ucs_async_poll_missed(async);
         return 1;
-    } else if (async->mode == UCS_ASYNC_MODE_POLL) {
+    } else if (ucs_unlikely(async->mode == UCS_ASYNC_MODE_POLL)) {
         ucs_async_poll(async);
         return 1;
     }
