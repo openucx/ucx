@@ -67,9 +67,9 @@ ucp_tag_send_try(ucp_ep_h ep, const void *buffer, size_t count,
 {
     size_t length;
 
-    if ((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG) {
+    if (ucs_likely((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)) {
         length = ucp_contig_dt_length(datatype, count);
-        if (length <= ep->config.max_short_egr) {
+        if (ucs_likely(length <= ep->config.max_short_egr)) {
             return ucp_tag_send_eager_short(ep, tag, buffer, length);
         }
     }
@@ -77,22 +77,15 @@ ucp_tag_send_try(ucp_ep_h ep, const void *buffer, size_t count,
     return UCS_ERR_NO_RESOURCE; /* Fallback to slower progress */
 }
 
-ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
-                                 uintptr_t datatype, ucp_tag_t tag,
-                                 ucp_send_callback_t cb)
+static UCS_F_NOINLINE
+ucs_status_ptr_t ucp_tag_send_slow(ucp_ep_h ep, const void *buffer, size_t count,
+                                   uintptr_t datatype, ucp_tag_t tag,
+                                   ucp_send_callback_t cb)
 {
-    ucs_status_t status;
     ucp_request_t *req;
+    ucs_status_t status;
 
-    ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s", buffer,
-                  count, tag, ucp_ep_peer_name(ep));
-
-    status = ucp_tag_send_try(ep, buffer, count, datatype, tag);
-    if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-        return UCS_STATUS_PTR(status); /* UCS_OK also goes here */
-    }
-
-    req = ucs_mpool_get(&ep->worker->req_mp);
+    req = ucs_mpool_get_inline(&ep->worker->req_mp);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
@@ -116,3 +109,19 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     return req + 1;
 }
 
+ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
+                                 uintptr_t datatype, ucp_tag_t tag,
+                                 ucp_send_callback_t cb)
+{
+    ucs_status_t status;
+
+    ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
+                  buffer, count, tag, ucp_ep_peer_name(ep), cb);
+
+    status = ucp_tag_send_try(ep, buffer, count, datatype, tag);
+    if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+        return UCS_STATUS_PTR(status); /* UCS_OK also goes here */
+    }
+
+    return ucp_tag_send_slow(ep, buffer, count, datatype, tag, cb);
+}
