@@ -373,7 +373,7 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     for (unsigned count = 0; count < 4; ++count) {
         int timer_id;
         status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
-                                     (ucs_notifier_chain_func_t)ucs_empty_function,
+                                     (ucs_async_event_cb_t)ucs_empty_function,
                                      NULL, &async, &timer_id);
         ASSERT_UCS_OK(status);
         timers.push_back(timer_id);
@@ -382,7 +382,7 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     /* 5th timer should fail */
     int timer_id;
     status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
-                                 (ucs_notifier_chain_func_t)ucs_empty_function,
+                                 (ucs_async_event_cb_t)ucs_empty_function,
                                  NULL, &async, &timer_id);
     EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
 
