@@ -36,7 +36,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     ucs_queue_for_each_safe(req, iter, &context->tag.expected, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
         if (ucp_tag_recv_is_match(recv_tag, flags, req->recv.tag, req->recv.tag_mask,
-                                  req->recv.state.offset, req->recv.exp_info->sender_tag))
+                                  req->recv.state.offset, req->recv.info.sender_tag))
         {
             ucp_tag_log_match(recv_tag, req, req->recv.tag, req->recv.tag_mask,
                               req->recv.state.offset, "expected");
@@ -48,19 +48,19 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
 
             /* First fragment fills the receive information */
             if (flags & UCP_RECV_DESC_FLAG_FIRST) {
-                req->recv.exp_info->sender_tag = recv_tag;
+                req->recv.info.sender_tag = recv_tag;
                 if (flags & UCP_RECV_DESC_FLAG_LAST) {
-                    req->recv.exp_info->length = recv_len;
+                    req->recv.info.length = recv_len;
                 } else {
                     ucs_assert(hdr_len == sizeof(*eager_first_hdr));
-                    req->recv.exp_info->length = eager_first_hdr->total_len;
+                    req->recv.info.length = eager_first_hdr->total_len;
                 }
             }
 
             /* Last fragment completes the request */
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 ucs_queue_del_iter(&context->tag.expected, iter);
-                ucp_request_complete(req, req->cb.tag_recv, status, req->recv.exp_info);
+                ucp_request_complete(req, req->cb.tag_recv, status, &req->recv.info);
             } else {
                 req->recv.state.offset += recv_len;
             }

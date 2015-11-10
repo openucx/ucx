@@ -86,7 +86,7 @@ typedef struct ucp_request {
                 struct {
                     ucp_rsc_index_t dst_rsc_index;
                     ucp_rsc_index_t dst_aux_rsc_index;
-                    uint32_t        flags;
+                    uint16_t        flags;
                 } wireup;
             };
 
@@ -102,9 +102,8 @@ typedef struct ucp_request {
             ucp_datatype_t        datatype; /* Receive type */
             ucp_tag_t             tag;      /* Expected tag */
             ucp_tag_t             tag_mask; /* Expected tag mask */
-            ucp_tag_recv_info_t   *exp_info;/* Points to completion info to fill */
+            ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_frag_state_t      state;
-            ucp_tag_recv_info_t   nb_info;  /* Completion info for non-blocking requests */
         } recv;
     };
 } ucp_request_t;

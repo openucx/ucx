@@ -81,7 +81,7 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
                   req->recv.state.dt.generic.state);
     }
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
-        req->recv.nb_info.sender_tag = 0;
+        req->recv.info.sender_tag = 0;
     }
 
     return req;
@@ -105,10 +105,10 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
 
     /* First, search in unexpected list */
     status = ucp_tag_search_unexp(context, buffer, count, datatype, tag,
-                                  tag_mask, req, &req->recv.nb_info);
+                                  tag_mask, req, &req->recv.info);
     if (status != UCS_INPROGRESS) {
         ucs_trace_req("recv_nb returning completed request %p (%p)", req, req + 1);
-        ucp_request_complete(req, cb, status, &req->recv.nb_info);
+        ucp_request_complete(req, cb, status, &req->recv.info);
     } else {
         /* If not found on unexpected, wait until it arrives */
         req->cb.tag_recv   = cb;
@@ -117,7 +117,6 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
         req->recv.datatype = datatype;
         req->recv.tag      = tag;
         req->recv.tag_mask = tag_mask;
-        req->recv.exp_info = &req->recv.nb_info;
         ucs_queue_push(&context->tag.expected, &req->recv.queue);
         ucp_worker_progress(worker);
         ucs_trace_req("recv_nb returning expected request %p (%p)", req, req + 1);
@@ -148,7 +147,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
         status = ucp_eager_unexp_match(rdesc, ((ucp_tag_hdr_t*)(rdesc + 1))->tag,
                                        rdesc->flags, buffer, count, datatype,
-                                       &req->recv.state, &req->recv.nb_info);
+                                       &req->recv.state, &req->recv.info);
         ucs_trace_req("release receive descriptor %p", rdesc);
         uct_iface_release_am_desc(rdesc);
     } else if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
@@ -164,19 +163,18 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
      */
     if (status == UCS_INPROGRESS) {
         status = ucp_tag_search_unexp(context, buffer, count, datatype, 0,
-                                      -1, req, &req->recv.nb_info);
+                                      -1, req, &req->recv.info);
     }
 
     if (status != UCS_INPROGRESS) {
         ucs_trace_req("msg_recv_nb returning completed request %p (%p)", req, req + 1);
-        ucp_request_complete(req, cb, status, &req->recv.nb_info);
+        ucp_request_complete(req, cb, status, &req->recv.info);
     } else {
         ucs_trace_req("msg_recv_nb returning inprogress request %p (%p)", req, req + 1);
         req->recv.buffer   = buffer;
         req->recv.count    = count;
         req->recv.datatype = datatype;
         req->cb.tag_recv   = cb;
-        req->recv.exp_info = &req->recv.nb_info;
         ucs_queue_push(&context->tag.expected, &req->recv.queue);
         ucp_worker_progress(worker);
     }
