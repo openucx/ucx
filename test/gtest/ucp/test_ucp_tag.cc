@@ -78,8 +78,10 @@ protected:
         struct request *req = (struct request *)request;
         ucs_assert(req->completed == false);
         req->status    = status;
-        req->info      = *info;
         req->completed = true;
+        if (status == UCS_OK) {
+            req->info      = *info;
+        }
     }
 
     void wait(request *req)
@@ -715,4 +717,24 @@ UCS_TEST_F(test_ucp_tag, send_medium_msg_probe_truncated) {
     EXPECT_TRUE(my_recv_req->completed);
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, my_recv_req->status);
     request_release(my_recv_req);
+}
+
+UCS_TEST_F(test_ucp_tag, cancel_exp) {
+    uint64_t recv_data = 0;
+    request *req;
+
+    req = (request*)ucp_tag_recv_nb(receiver->worker(), &recv_data, sizeof(recv_data),
+                                    DATATYPE, 1, 1, recv_callback);
+    if (UCS_PTR_IS_ERR(req)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    } else if (req == NULL) {
+        UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+    }
+
+    ucp_request_cancel(receiver->worker(), req);
+    wait(req);
+
+    EXPECT_EQ(UCS_ERR_CANCELED, req->status);
+    EXPECT_EQ(0ul, recv_data);
+    request_release(req);
 }

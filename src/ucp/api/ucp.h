@@ -1302,6 +1302,22 @@ void ucp_request_release(void *request);
 
 
 /**
+ * @ingroup UCP_COMM
+ * @brief Cancel an outstanding communications request.
+ *
+ * @param [in]  worker       UCP worker.
+ * @param [in]  request      Non-blocking request to cancel.
+ *
+ *  A request can either be completed or canceled, but not both. After calling
+ * this function, the request will complete regardless of what the remote side
+ * is doing. If the request is completed successfully, the completion callback
+ * will be called with the status parameter equals to UCS_OK, and in case it's
+ * canceled the status would be UCS_ERR_CANCELED.
+ */
+void ucp_request_cancel(ucp_worker_h worker, void *request);
+
+
+/**
  * @ingroup UCP_DATATYPE
  * @brief Create a generic datatype.
  *
@@ -1317,7 +1333,7 @@ void ucp_request_release(void *request);
  * @param [in]  ops          Generic datatype function table as defined by
  *                           @ref ucp_generic_dt_ops_t .
  * @param [in]  context      Application defined context passed to this
- *                           routine.  The context is passed as a paramenter
+ *                           routine.  The context is passed as a parameter
  *                           to the routines in the @a ops table.
  * @param [out] datatype_p   A pointer to datatype object.
  *

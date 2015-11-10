@@ -22,7 +22,8 @@
 enum {
     UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
-    UCP_REQUEST_FLAG_BLOCKING             = UCS_BIT(2)
+    UCP_REQUEST_FLAG_BLOCKING             = UCS_BIT(2),
+    UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
 };
 
 
