@@ -170,7 +170,9 @@ typedef void (*ucp_user_progress_func_t)(void *arg);
 
 /**
  * @ingroup UCP_CONTEXT
- * Callback to initialize the use request structure.
+ * @brief Request initialization callback.
+ *
+ * This callback routine is responsible for the request initialization.
  *
  * @param [in]  request   Request handle to initialize.
  */
@@ -179,8 +181,10 @@ typedef void (*ucp_request_init_callback_t)(void *request);
 
 /**
  * @ingroup UCP_CONTEXT
- * Callback to cleanup a request structure (called just before memory is
- *  finally released, not every time a request is released).
+ * @brief Request cleanup callback.
+ *
+ * This callback routine is responsible for cleanup of the memory
+ * associated with the request.
  *
  * @param [in]  request   Request handle to cleanup.
  */
@@ -191,11 +195,16 @@ typedef void (*ucp_request_cleanup_callback_t)(void *request);
  * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking sends.
  *
+ * This callback routine is invoked whenever the @ref ucp_tag_send_nb
+ * "send operation" is completed. It is important to note that the call-back is
+ * only invoked in a case when the operation cannot be completed in place.
+ *
  * @param [in]  request   The completed send request.
- * @param [in]  status    Completion status:
- *                           UCS_OK           - completed successfully.
- *                           UCS_ERR_CANCELED - send was canceled.
- *                           otherwise        - error during send.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCX_OK is returned. If send operation was
+ *                        canceled UCS_ERR_CANCELED is returned.
+ *                        Otherwise, an @ref ucs_status_t "error status" is
+ *                        returned.
  */
 typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 
@@ -204,14 +213,20 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking tag receives.
  *
+ * This callback routine is invoked whenever the @ref ucp_tag_recv_nb
+ * "receive operation" is completed and the data is ready in the receive buffer.
+ *
  * @param [in]  request   The completed receive request.
- * @param [in]  status    Completion status.
- *                           UCS_OK             - completed successfully.
- *                           UCS_ERR_TRUNCATRED - data could not fit to buffer.
- *                           UCS_ERR_CANCELED   - receive was canceled.
- *                           otherwise          - error during receive.
- * @param [in]  info      Completion information (tag, length). Valid only id
- *                        status is UCS_OK.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCX_OK is returned. If send operation was
+ *                        canceled UCS_ERR_CANCELED is returned. If the data can
+ *                        not fit into the receive buffer the UCS_ERR_TRUNCATRED
+ *                        error code is returned.
+ *                        Otherwise, an @ref ucs_status_t "error status" is
+ *                        returned.
+ * @param [in]  info      @ref ucp_tag_recv_info_t "Completion information"
+ *                        The @a info descriptor is Valid only if the status is
+ *                        UCS_OK.
  */
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
                                         ucp_tag_recv_info_t *info);
