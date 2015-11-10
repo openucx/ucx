@@ -53,7 +53,7 @@ void ucp_test::short_progress_loop() const {
     }
 }
 
-ucp_test::entity::entity(const ucp_test& test) : m_test(test), m_inprogress(0) {
+ucp_test::entity::entity(const ucp_test& test) {
     ucs::handle<ucp_config_t*> config;
 
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
@@ -67,12 +67,6 @@ ucp_test::entity::entity(const ucp_test& test) : m_test(test), m_inprogress(0) {
 
     UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_worker, ucp_worker_destroy,
                            ucp_worker_create, m_ucph, UCS_THREAD_MODE_MULTI);
-
-    ucp_worker_progress_register(m_worker, progress_cb, this);
-}
-
-ucp_test::entity::~entity() {
-    ucp_worker_progress_unregister(m_worker, progress_cb, this);
 }
 
 void ucp_test::entity::connect(const ucp_test::entity* other) {
@@ -118,25 +112,6 @@ ucp_context_h ucp_test::entity::ucph() const {
 
 void ucp_test::entity::progress()
 {
-    if (ucs_atomic_cswap32(&m_inprogress, 0, 1) != 0) {
-        return;
-    }
-
     ucp_worker_progress(m_worker);
-    m_inprogress = 0;
 }
 
-void ucp_test::entity::progress_cb(void *arg)
-{
-    entity *e = reinterpret_cast<entity*>(arg);
-    e->progress_test();
-}
-
-void ucp_test::entity::progress_test()
-{
-    if (ucs_atomic_cswap32(&m_inprogress, 0, 1) != 0) {
-        return;
-    }
-    m_test.progress();
-    m_inprogress = 0;
-}

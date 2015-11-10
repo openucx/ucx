@@ -23,7 +23,6 @@ public:
     class entity {
     public:
         entity(const ucp_test& test);
-        ~entity();
 
         void connect(const entity* other);
 
@@ -40,15 +39,9 @@ public:
         void progress();
 
     protected:
-        static void progress_cb(void *arg);
-        void progress_test();
-
         ucs::handle<ucp_context_h> m_ucph;
         ucs::handle<ucp_worker_h>  m_worker;
         ucs::handle<ucp_ep_h>      m_ep;
-
-        const ucp_test             &m_test;
-        volatile uint32_t          m_inprogress;
     };
 
     const ucs::ptr_vector<entity>& entities() const;

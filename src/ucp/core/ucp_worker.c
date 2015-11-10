@@ -221,18 +221,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker);
 }
 
-void ucp_worker_progress_register(ucp_worker_h worker,
-                                  ucp_user_progress_func_t func, void *arg)
-{
-    return uct_worker_progress_register(worker->uct, func, arg);
-}
-
-void ucp_worker_progress_unregister(ucp_worker_h worker,
-                                    ucp_user_progress_func_t func, void *arg)
-{
-    uct_worker_progress_unregister(worker->uct, func, arg);
-}
-
 void ucp_worker_progress(ucp_worker_h worker)
 {
     /* worker->inprogress is used only for assertion check.
