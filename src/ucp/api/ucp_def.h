@@ -160,15 +160,6 @@ typedef uint64_t                         ucp_datatype_t;
 
 
 /**
- * @ingroup UCP_WORKER
- * @brief Progress callback. Used to progress user context during blocking operations.
- *
- * @param [in]  arg       User-defined argument.
- */
-typedef void (*ucp_user_progress_func_t)(void *arg);
-
-
-/**
  * @ingroup UCP_CONTEXT
  * @brief Request initialization callback.
  *
