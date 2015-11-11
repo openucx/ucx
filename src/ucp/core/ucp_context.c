@@ -49,7 +49,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which expands to all PD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"BCOPY_THRESH", "1024",
+  {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
