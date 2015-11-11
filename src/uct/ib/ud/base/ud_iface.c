@@ -337,6 +337,13 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (config->super.tx.queue_len <= UCT_UD_TX_MODERATION) {
+        ucs_error("%s ud iface tx queue is too short (%d <= %d)",
+                  dev_name,
+                  config->super.tx.queue_len, UCT_UD_TX_MODERATION);
+        return UCS_ERR_INVALID_PARAM; 
+    }
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
                               UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
@@ -434,8 +441,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                         UCT_IFACE_FLAG_AM_BCOPY | 
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_AM_THREAD_SINGLE;
-                                    /* | UCT_IFACE_FLAG_PUT_SHORT; */
+                                        UCT_IFACE_FLAG_AM_THREAD_SINGLE |
+                                        UCT_IFACE_FLAG_PENDING;
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);

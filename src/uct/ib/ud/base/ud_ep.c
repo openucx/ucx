@@ -405,7 +405,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
             ooo_type != UCS_FRAG_LIST_INSERT_FAIL) {
             ucs_fatal("Out of order is not implemented: got %d", ooo_type);
         }
-        ucs_trace_data("DUP/OOB - schedule ack");
+        ucs_trace_data("DUP/OOB - schedule ack, head_sn=%d sn=%d", 
+                       ep->rx.ooo_pkts.head_sn, neth->psn);
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
         goto out;
     }

@@ -257,11 +257,13 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface)
     struct ibv_wc wc[UCT_IB_MAX_WC];
     int i, ret;
     char *packet;
+    ucs_status_t status;
 
 
     ret = ibv_poll_cq(iface->super.super.recv_cq, UCT_IB_MAX_WC, wc);
     if (ret == 0) {
-        return UCS_ERR_NO_PROGRESS;
+        status = UCS_ERR_NO_PROGRESS;
+        goto out;
     } 
     if (ucs_unlikely(ret < 0)) {
         ucs_fatal("Failed to poll receive CQ");
@@ -284,8 +286,10 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface)
                              (uct_ud_recv_skb_t *)desc); 
     }
     iface->super.rx.available += ret;
+    status = UCS_OK;
+out:
     uct_ud_verbs_iface_post_recv(iface);
-    return UCS_OK;
+    return status;
 }
 
 static void uct_ud_verbs_iface_async_progress(void *arg)
@@ -471,6 +475,12 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
 
     self->super.ops.async_progress = uct_ud_verbs_iface_async_progress;
     self->super.ops.tx_skb         = uct_ud_verbs_ep_tx_ctl_skb;
+
+    if (self->super.config.rx_max_batch < UCT_IB_MAX_WC) {
+        ucs_warn("max batch is too low (%d < %d), performance may be impacted",
+                self->super.config.rx_max_batch,
+                UCT_IB_MAX_WC);
+    }
 
     while (self->super.rx.available >= self->super.config.rx_max_batch) {
         uct_ud_verbs_iface_post_recv(self);
