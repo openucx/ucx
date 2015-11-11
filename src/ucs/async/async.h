@@ -13,7 +13,6 @@
 
 #include <ucs/config/types.h>
 #include <ucs/datastruct/mpmc.h>
-#include <ucs/datastruct/notifier.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
 
@@ -33,6 +32,10 @@ struct ucs_async_context {
     ucs_mpmc_queue_t  missed;        /* Miss queue */
     ucs_time_t        last_wakeup;   /* time of the last wakeup */
 };
+
+
+/* Async event callback */
+typedef void (*ucs_async_event_cb_t)(void *arg);
 
 
 /**
@@ -55,7 +58,7 @@ void ucs_async_global_cleanup();
  *                        If NULL, safety is up to the user.
  */
 ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
-                                         int events, ucs_notifier_chain_func_t cb,
+                                         int events, ucs_async_event_cb_t cb,
                                          void *arg, ucs_async_context_t *async);
 
 
@@ -79,7 +82,7 @@ ucs_status_t ucs_async_unset_event_handler(int event_fd);
  * @param timer_id_p      Filled with timer id.
  */
 ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
-                                 ucs_notifier_chain_func_t cb, void *arg,
+                                 ucs_async_event_cb_t cb, void *arg,
                                  ucs_async_context_t *async, int *timer_id_p);
 
 
