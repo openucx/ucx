@@ -34,8 +34,9 @@ typedef struct uct_cm_iface {
     uint32_t               service_id;  /* Service ID we're listening to */
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
-    volatile uint32_t      outstanding; /* Atomic: number of outstanding sends */
     ucs_queue_head_t       notify_q;    /* Notification queue */
+    uint32_t               num_outstanding; /* number of outstanding sends */
+    struct ib_cm_id        **outstanding;   /* outstanding sends */
 
     struct {
         int                timeout_ms;
@@ -92,5 +93,10 @@ ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
     uct_iface_trace_am(&(_iface)->super.super, _type, (_hdr)->am_id, \
                        (_hdr) + 1, (_hdr)->length, _fmt, ## __VA_ARGS__)
 
+#define uct_cm_enter(_iface) \
+    UCS_ASYNC_BLOCK((_iface)->super.super.worker->async);
+
+#define uct_cm_leave(_iface) \
+    UCS_ASYNC_UNBLOCK((_iface)->super.super.worker->async);
 
 #endif

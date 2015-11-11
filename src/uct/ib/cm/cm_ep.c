@@ -106,16 +106,18 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
 
     UCT_CHECK_AM_ID(am_id);
 
-    if (ucs_atomic_fadd32(&iface->outstanding, 1) >= iface->config.max_outstanding) {
+    uct_cm_enter(iface);
+
+    if (iface->num_outstanding >= iface->config.max_outstanding) {
         status = UCS_ERR_NO_RESOURCE;
-        goto err_dec_outstanding;
+        goto err;
     }
 
     /* Allocate temporary contiguous buffer */
     hdr = ucs_malloc(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, "cm_send_buf");
     if (hdr == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_dec_outstanding;
+        goto err;
     }
 
     payload_len = pack_cb(hdr + 1, arg);
@@ -154,6 +156,9 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
         goto err_destroy_id;
     }
 
+    iface->outstanding[iface->num_outstanding++] = id;
+    uct_cm_leave(iface);
+
     uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_SEND, hdr,
                             "TX: SIDR_REQ [dlid %d svc 0x%"PRIx64"]",
                             ntohs(path.dlid), req.service_id);
@@ -164,8 +169,8 @@ err_destroy_id:
     ib_cm_destroy_id(id);
 err_free:
     ucs_free(hdr);
-err_dec_outstanding:
-    ucs_atomic_add32(&iface->outstanding, -1);
+err:
+    uct_cm_leave(iface);
     return status;
 }
 
