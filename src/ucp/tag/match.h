@@ -25,6 +25,9 @@ typedef struct {
 } UCS_S_PACKED ucp_tag_hdr_t;
 
 
+void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req);
+
+
 static UCS_F_ALWAYS_INLINE
 int ucp_tag_is_match(ucp_tag_t tag, ucp_tag_t exp_tag, ucp_tag_t tag_mask)
 {

@@ -71,7 +71,7 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
 
     VALGRIND_MAKE_MEM_DEFINED(req + 1,  worker->context->config.request.size);
 
-    req->flags             = 0;
+    req->flags             = UCP_REQUEST_FLAG_EXPECTED;
     req->recv.state.offset = 0;
     if ((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC) {
         dt_gen = ucp_dt_generic(datatype);
@@ -179,4 +179,19 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         ucp_worker_progress(worker);
     }
     return req + 1;
+}
+
+void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req)
+{
+    ucs_queue_iter_t iter;
+    ucp_request_t *qreq;
+
+    ucs_queue_for_each_safe(qreq, iter, &context->tag.expected, recv.queue) {
+        if (qreq == req) {
+            ucs_queue_del_iter(&context->tag.expected, iter);
+            return;
+        }
+    }
+
+    ucs_bug("expected request not found");
 }

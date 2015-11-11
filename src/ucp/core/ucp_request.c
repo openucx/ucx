@@ -8,6 +8,7 @@
 #include "ucp_context.h"
 #include "ucp_worker.h"
 
+#include <ucp/tag/match.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/log.h>
 
@@ -27,6 +28,20 @@ void ucp_request_release(void *request)
     if ((req->flags |= UCP_REQUEST_FLAG_RELEASED) & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_data("put %p to mpool", req);
         ucs_mpool_put_inline(req);
+    }
+}
+
+void ucp_request_cancel(ucp_worker_h worker, void *request)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        return;
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_EXPECTED) {
+        ucp_tag_cancel_expected(worker->context, req);
+        ucp_request_complete(req, req->cb.tag_recv, UCS_ERR_CANCELED, NULL);
     }
 }
 

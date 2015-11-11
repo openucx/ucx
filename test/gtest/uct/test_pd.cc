@@ -33,6 +33,9 @@ UCS_TEST_P(test_pd, alloc) {
 
     for (unsigned i = 0; i < 300; ++i) {
         size = orig_size = rand() % 65536;
+        if (size == 0) {
+            continue;
+        }
 
         status = uct_pd_mem_alloc(pd(), &size, &address, "test", &memh);
         if (size == 0) {
