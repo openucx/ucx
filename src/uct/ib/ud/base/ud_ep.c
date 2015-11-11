@@ -83,7 +83,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
    /* TODO: in disconnect ucs_frag_list_cleanup(&self->rx.ooo_pkts); */
-    ucs_assert(self->tx.pending.ops == UCT_UD_EP_OP_NONE);
     ucs_arbiter_group_cleanup(&self->tx.pending.group);
 }
 
