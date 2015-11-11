@@ -226,12 +226,14 @@ AC_CONFIG_FILES([
                  src/uct/Makefile
                  src/uct/api/version.h
                  src/ucp/Makefile
+                 src/ucp/api/ucp_version.h
+                 src/ucp/core/ucp_version.c
                  src/tools/hook/Makefile
                  src/tools/info/Makefile
                  src/tools/perf/Makefile
                  test/examples/Makefile
                  test/gtest/Makefile
-		 external/Makefile
+                 external/Makefile
                  ])
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
 
