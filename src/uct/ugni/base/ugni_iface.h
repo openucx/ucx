@@ -3,6 +3,7 @@
 
 #include <gni_pub.h>
 #include <uct/base/uct_iface.h>
+#include <ucs/datastruct/arbiter.h>
 #include "uct/api/uct.h"
 #include "ugni_ep.h"
 #include "ugni_device.h"
@@ -27,7 +28,7 @@ typedef struct uct_ugni_iface {
     unsigned                outstanding;                 /**< Counter for outstanding packets
                                                               on the interface */
     bool                    activated;                   /**< nic status */
-    /* list of ep */
+    ucs_arbiter_t           arbiter;
 } uct_ugni_iface_t;
 
 UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_pd_h, uct_worker_h, const char *, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t*))

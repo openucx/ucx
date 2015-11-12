@@ -127,7 +127,9 @@ noinst_HEADERS += \
     ugni/rdma/ugni_rdma_iface.h \
     ugni/rdma/ugni_rdma_ep.h \
     ugni/udt/ugni_udt_iface.h \
-    ugni/udt/ugni_udt_ep.h
+    ugni/udt/ugni_udt_ep.h \
+    ugni/smsg/ugni_smsg_iface.h \
+    ugni/smsg/ugni_smsg_ep.h
 
 libuct_la_SOURCES += \
     ugni/base/ugni_pd.c \
@@ -137,7 +139,9 @@ libuct_la_SOURCES += \
     ugni/rdma/ugni_rdma_iface.c \
     ugni/rdma/ugni_rdma_ep.c \
     ugni/udt/ugni_udt_iface.c \
-    ugni/udt/ugni_udt_ep.c
+    ugni/udt/ugni_udt_ep.c \
+    ugni/smsg/ugni_smsg_iface.c	\
+    ugni/smsg/ugni_smsg_ep.c
 endif
 
 if HAVE_CUDA

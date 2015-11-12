@@ -167,6 +167,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     UCT_TEST_IB_TLS, \
     ugni_rdma, \
     ugni_udt, \
+    ugni_smsg, \
     mm, \
     cma, \
     knem, \

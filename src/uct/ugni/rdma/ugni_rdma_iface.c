@@ -109,8 +109,8 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
     .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
-    .ep_pending_add      = (void*)ucs_empty_function_return_success, /* TODO */
-    .ep_pending_purge    = (void*)ucs_empty_function_return_success,
+    .ep_pending_add      = uct_ugni_ep_pending_add,
+    .ep_pending_purge    = uct_ugni_ep_pending_purge,
     /* Not supported on Gemini and we overlaod it for Aries */
     .ep_atomic_swap64    = (void*)uct_empty_function_return_unsupported,
     .ep_atomic_add32     = (void*)uct_empty_function_return_unsupported,

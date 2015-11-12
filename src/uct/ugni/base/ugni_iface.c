@@ -54,9 +54,12 @@ void uct_ugni_progress(void *arg)
     --iface->outstanding;
     --desc->ep->outstanding;
 
-    if (ucs_likely(desc->not_ready_to_free == 0)) {
+    if (ucs_likely(0 == desc->not_ready_to_free)) {
         ucs_mpool_put(desc);
     }
+
+    /* have a go a processing the pending queue */
+    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
     return;
 }
 
@@ -339,13 +342,15 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
   }
 
   UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, pd, worker,
-                            tl_config UCS_STATS_ARG(NULL));
+                             tl_config UCS_STATS_ARG(NULL));
 
   self->dev      = dev;
   self->nic_addr = dev->address;
 
   self->activated = false;
   self->outstanding = 0;
+
+  ucs_arbiter_init(&self->arbiter);
 
   return UCS_OK;
 }

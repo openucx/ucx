@@ -131,6 +131,9 @@ static void uct_ugni_udt_progress(void *arg)
         ep->posted_desc = NULL;
     }
 
+    /* have a go a processing the pending queue */
+    ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_ep_process_pending, NULL);
+
 exit:
     pthread_mutex_unlock(&uct_ugni_global_lock);
 }
@@ -207,8 +210,8 @@ uct_iface_ops_t uct_ugni_udt_iface_ops = {
     .iface_release_am_desc = uct_ugni_udt_iface_release_am_desc,
     .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_udt_ep_t),
     .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_udt_ep_t),
-    .ep_pending_add        = (void*)ucs_empty_function_return_success, /* TODO */
-    .ep_pending_purge      = (void*)ucs_empty_function_return_success,
+    .ep_pending_add        = uct_ugni_ep_pending_add,
+    .ep_pending_purge      = uct_ugni_ep_pending_purge,
     .ep_am_short           = uct_ugni_udt_ep_am_short,
     .ep_am_bcopy           = uct_ugni_udt_ep_am_bcopy,
 };
@@ -228,7 +231,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_pd_h pd, uct_worker_h worke
     ucs_status_t status;
     uct_ugni_udt_desc_t *desc;
     gni_return_t ugni_rc;
-    size_t offset;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
@@ -238,8 +240,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_pd_h pd, uct_worker_h worke
     /* Setting initial configuration */
     self->config.udt_seg_size = GNI_DATAGRAM_MAXSIZE;
     self->config.rx_headroom  = rx_headroom;
-
-    offset = uct_ugni_udt_get_offset(self);
 
     status = ucs_mpool_init(&self->free_desc,
                             0,
