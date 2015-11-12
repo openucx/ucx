@@ -24,4 +24,9 @@
  * issues in the UCX specification.  
  * + UCP API - work in progress 
  * + UCT API - work in progress
+ * 
+ *
+ * \section License 
+ * UCX project follows open source development model and the software is 
+ * licensed under BSD-3 license.
  */

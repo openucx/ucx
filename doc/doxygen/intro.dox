@@ -26,16 +26,13 @@
  * requires significant porting effort to move a new network
  * interface or programming model. 
  *
- * To answer the demand for universal, performance portable,
- * multi-platform, multi-protocol, multi-network, scalable, and open source
- * network library, we introduce a new communication framework.  
- * The design framework is based based on decades of experience in designing
- * high performance network interfaces such as IBM's PAMI, Mellanox's MXM, Portals,
- * and UCCS. (TBD Add references)
+ * To achieve functional and performance portability across
+ * architectures and programming models, we introduce Unified Communication X 
+ * (UCX).  
  * 
  * \section UCX
- * Unified Communication X (UCX), a set of network APIs and their
- * implementations for high throughput computing. UCX comes from the combined
+ * Unified Communication X (UCX) is a set of network APIs and their
+ * implementations for high throughput computing. UCX is a combined
  * effort of national laboratories, industry, and academia to design and
  * implement a high-performing and highly-scalable network stack for next
  * generation applications and systems. UCX design provides the ability to
@@ -46,44 +43,49 @@
  * Partitioned Global Address Space (PGAS) languages, task-based paradigms, and
  * I/O bound applications.
  *
- * The design focuses on support for point-to-point communications
- * (one-sided and two-sided), collective communication, and remote atomic
- * operations. The initial UCX reference implementation is targeted to support
- * current network technologies, such as: 
+ * The initial focus is on supporting semantics such as point-to-point
+ * communications (one-sided and two-sided), collective communication, 
+ * and remote atomic operations required for popular parallel programming models. 
+ * Also, the initial UCX reference implementation 
+ * is targeted to support current network technologies such as: 
  * + Open Fabrics - InfiniBand (Mellanox, Qlogic, IBM), libfabrics, iWARP, RoCE
  * + Cray GEMINI \& ARIES
  * + Shared memory (MMAP, Posix, CMA, KNEM, XPMEM, etc.)
  * + Ethernet (TCP/UDP)
- * + Portals
  *
- * Later, the list could be extend to support additional interconnects.
- * 
- * In order to make the UCX design network and vendor technology agnostic, we
- * designed a flexible API that doesn't dictate any specific hardware design
- * and allows it to follow progress in network technology. In addition, the
- * open source development model and flexible licensing (BSD-3) enables
- * integration of proprietary software and hardware components into the
- * project.
- * 
- * To provide maximal extensibility for programming model developers, the UCX
- * design is optimized for high performance hybrid programming. For instance,
- * hybrid applications that use both SHMEM and MPI programming models will be
+
+ * UCX design goals are focused on performance and scalability, while efficiently supporting
+ * popular and emerging programming models.
+
+ * UCX’s API and design does not impose architectural constraints on the network hardware 
+ * nor require any specific capabilities to the support the programming model functionality.
+ * This is achieved by keeping the API flexible and ability to support the missing 
+ * functionality efficiently in the software. 
+ *
+ *
+ * Extreme scalability is an important design goal for UCX. 
+ * To achieve this, UCX follows these design principles :
+ * + Minimal memory consumption : Design avoids data-structures that scale with the number of 
+ * processing   elements (i.e., order N data structures), and shares resources among multiple 
+ * programming models.
+ * + Low-latency Interfaces: Design provides at least two sets of APIs with one set focused on the performance, 
+ * and the other focused on functionality.
+ * + High bandwidth - With minimal software overhead combined and support for multi-rail and multi-device 
+ *  capabilities, the design provides all the hooks that are necessary for exploiting hardware bandwidth 
+ * capabilities.
+ * + Asynchronous Progress: API provides non-blocking communication interfaces and design supports asynchronous progress 
+ * required for communication and computation overlap
+ * + Resilience - the API exposes communication control hooks required for fault 
+ * tolerant communication library implementation.
+ *
+ * UCX design provides native support for hybrid programming models. The 
+ * design enables resource sharing, optimal memory usage, and progress engine
+ * coordination to efficiently implement hybrid programming models. For example,
+ * hybrid applications that use both OpenSHMEM and MPI programming models will be
  * able to select between a single-shared UCX network context or a stand
  * alone UCX network context for each one of them. Such flexibility,
  * optimized resource sharing, and reduced memory consumption improve network
  * and application performance.
  * 
- * Extreme-Scale scalability is an important goal of the project. To address
- * it, UCX provides resolution for each one of the follow scalability
- * requirements:
- * + Minimal memory consumption - the design avoids order N (the number of processes) data structures usage and provides resource sharing capabilities for communication libraries.
- * + Low-latency  - low-level API minimizes software overhead.
- * + High bandwidth - minimal software overhead combined with multi-rail and multi-device capabilities provide all the hooks that are necessary for exploiting hardware bandwidth capabilities.
- * + Asynchronous - the API provides non-blocking communication interfaces.
- * + Resilience - the API exposes communication control hooks, which are necessary for fault tolerant communication library implementation.
  * 
- * The above UCX design features provide building blocks for an ultimate
- * communication middleware, that enables HPC application interoperability,
- * without compromising
- * performance or scalability. 
  */
