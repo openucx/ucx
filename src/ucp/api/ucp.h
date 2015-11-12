@@ -8,6 +8,7 @@
 #define UCP_H_
 
 #include <ucp/api/ucp_def.h>
+#include <ucp/api/ucp_version.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/math.h>
@@ -391,6 +392,44 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief Get UCP library version.
+ *
+ * This routine returns the UCP library version.
+ *
+ * @param [out] major_version       Filled with library major version.
+ * @param [out] minor_version       Filled with library minor version.
+ * @param [out] release_number      Filled with library release number.
+ */
+void ucp_get_version(unsigned *major_version, unsigned *minor_version,
+                     unsigned *release_number);
+
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Get UCP library version as a string.
+ *
+ * This routine returns the UCP library version as a string which consists of:
+ * "major.minor.release".
+ */
+const char *ucp_get_version_string();
+
+
+/** @cond PRIVATE_INTERFACE */
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief UCP context initialization with particular API version.
+ *
+ *  This is an internal routine used to check compatibility with a particular
+ * API version. @ref ucp_init should be used to create UCP context.
+ */
+ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
+                              const ucp_params_t *params, const ucp_config_t *config,
+                              ucp_context_h *context_p);
+/** @endcond */
+
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP context initialization.
  *
  * This routine creates and initializes a @ref ucp_context_t
@@ -399,11 +438,12 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
  * @warning This routine must be called before any other UCP function
  * call in the application.
  *
- * This routine discovers the available network interfaces, and initializes the
- * network resources required for discovering of the network and memory
- * related devices.  This routine is responsible for initialization all
- * information required for a particular application scope, for example, MPI
- * application, OpenSHMEM application, etc.
+ * This routine checks API version compatibility, then discovers the available
+ * network interfaces, and initializes the network resources required for
+ * discovering of the network and memory related devices.
+ *  This routine is responsible for initialization all information required for
+ * a particular application scope, for example, MPI application, OpenSHMEM
+ * application, etc.
  *
  * @note
  * @li Higher level protocols can add additional communication isolation, as
@@ -423,8 +463,13 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_init(const ucp_params_t *params, const ucp_config_t *config,
-                      ucp_context_h *context_p);
+static inline ucs_status_t ucp_init(const ucp_params_t *params,
+                                    const ucp_config_t *config,
+                                    ucp_context_h *context_p)
+{
+    return ucp_init_version(UCP_API_MAJOR, UCP_API_MINOR, params, config,
+                            context_p);
+}
 
 
 /**

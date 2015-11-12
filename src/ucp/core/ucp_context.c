@@ -525,11 +525,23 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.alloc_methods);
 }
 
-ucs_status_t ucp_init(const ucp_params_t *params, const ucp_config_t *config,
-                      ucp_context_h *context_p)
+ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
+                              const ucp_params_t *params, const ucp_config_t *config,
+                              ucp_context_h *context_p)
 {
+    unsigned major_version, minor_version, release_number;
     ucp_context_t *context;
     ucs_status_t status;
+
+    ucp_get_version(&major_version, &minor_version, &release_number);
+
+    if ((api_major_version != major_version) || (api_minor_version != minor_version)) {
+        ucs_error("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d)",
+                  api_major_version, api_minor_version,
+                  major_version, minor_version, release_number);
+        status = UCS_ERR_NOT_IMPLEMENTED;
+        goto err;
+    }
 
     /* allocate a ucp context */
     context = ucs_calloc(1, sizeof(*context), "ucp context");

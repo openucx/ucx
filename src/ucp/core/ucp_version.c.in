@@ -1,0 +1,18 @@
+/*
+* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* See file LICENSE for terms.
+*/
+
+
+void ucp_get_version(unsigned *major_version, unsigned *minor_version,
+                     unsigned *release_number)
+{
+    *major_version  = @MAJOR_VERSION@;
+    *minor_version  = @MINOR_VERSION@;
+    *release_number = @REV_COUNT@;
+}
+
+const char *ucp_get_version_string()
+{
+	return "@MAJOR_VERSION@.@MINOR_VERSION@.@REV_COUNT@";
+}

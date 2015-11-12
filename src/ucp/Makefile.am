@@ -14,6 +14,7 @@ libucp_ladir       = $(includedir)/ucp
 
 nobase_dist_libucp_la_HEADERS = \
 	api/ucp_def.h \
+	api/ucp_version.h \
 	api/ucp.h
 
 noinst_HEADERS = \
@@ -37,6 +38,7 @@ libucp_la_SOURCES = \
 	core/ucp_mm.c \
 	core/ucp_request.c \
 	core/ucp_rkey.c \
+	core/ucp_version.c \
 	core/ucp_worker.c \
 	dt/dt_contig.c \
 	dt/dt_generic.c \
