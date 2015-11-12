@@ -43,3 +43,16 @@ UCS_TEST_F(test_ucp_version, wrong_api_version) {
 
     ucs_log_pop_handler();
 }
+
+UCS_TEST_F(test_ucp_version, version_string) {
+
+    unsigned major_version, minor_version, release_number;
+
+    ucp_get_version(&major_version, &minor_version, &release_number);
+
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "%d.%d.%d", major_version, minor_version,
+             release_number);
+
+    EXPECT_EQ(std::string(buffer), std::string(ucp_get_version_string()));
+}

@@ -406,6 +406,17 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief Get UCP library version as a string.
+ *
+ * This routine returns the UCP library version as a string which consists of:
+ * "major.minor.release".
+ */
+const char *ucp_get_version_string();
+
+
+/** @cond PRIVATE_INTERFACE */
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP context initialization with particular API version.
  *
  *  This is an internal routine used to check compatibility with a particular
@@ -414,6 +425,7 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p);
+/** @endcond */
 
 
 /**

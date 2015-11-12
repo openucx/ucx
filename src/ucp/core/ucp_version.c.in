@@ -12,3 +12,7 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
     *release_number = @REV_COUNT@;
 }
 
+const char *ucp_get_version_string()
+{
+	return "@MAJOR_VERSION@.@MINOR_VERSION@.@REV_COUNT@";
+}
