@@ -57,7 +57,7 @@
  * UCX design goals are focused on performance and scalability, while efficiently supporting
  * popular and emerging programming models.
 
- * UCX’s API and design does not impose architectural constraints on the network hardware 
+ * UCX’s API and design do not impose architectural constraints on the network hardware 
  * nor require any specific capabilities to the support the programming model functionality.
  * This is achieved by keeping the API flexible and ability to support the missing 
  * functionality efficiently in the software. 
@@ -66,7 +66,7 @@
  * Extreme scalability is an important design goal for UCX. 
  * To achieve this, UCX follows these design principles :
  * + Minimal memory consumption : Design avoids data-structures that scale with the number of 
- * processing   elements (i.e., order N data structures), and shares resources among multiple 
+ * processing   elements (i.e., order N data structures), and share resources among multiple 
  * programming models.
  * + Low-latency Interfaces: Design provides at least two sets of APIs with one set focused on the performance, 
  * and the other focused on functionality.
@@ -84,7 +84,7 @@
  * hybrid applications that use both OpenSHMEM and MPI programming models will be
  * able to select between a single-shared UCX network context or a stand
  * alone UCX network context for each one of them. Such flexibility,
- * optimized resource sharing, and reduced memory consumption improve network
+ * optimized resource sharing, and reduced memory consumption, improve network
  * and application performance.
  * 
  * 

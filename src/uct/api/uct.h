@@ -62,7 +62,7 @@
  * which typically includes memory, transport mechanisms, compute and 
  * network resources. It is an isolation  mechanism that can be employed 
  * by the applications for isolating resources between multiple programming models. 
- * The attributes of the Protection Domain is defined by the structure @ref uct_pd_attr(). 
+ * The attributes of the Protection Domain are defined by the structure @ref uct_pd_attr(). 
  * The communication and memory operations are defined in the context of Protection Domain.
  *
  * @}
@@ -110,7 +110,7 @@ typedef struct uct_pd_resource_desc {
  *
  * Resource descriptor is an object representing the network resource.
  * Resource descriptor could represent a stand-alone communication resource
- * such as a HCA port, network interface, or multiple resources such as
+ * such as an HCA port, network interface, or multiple resources such as
  * multiple network interfaces or communication ports. It could also represent
  * virtual communication resources that are defined over a single physical
  * network interface.
