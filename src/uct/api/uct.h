@@ -43,10 +43,10 @@
  * @defgroup UCT_CONTEXT    UCT Communication Context
  * @ingroup UCT_API
  * @{
- * UCT context is a primary concept of UCX design which provides an isolation
- * mechanism, allowing resources associated with the context to separate or
- * share network communication context across multiple instances of parallel
- * programming models.
+ *
+ * UCT context abstracts all the resources required for network communication.
+ * It is designed to enable either share or isolate resources for multiple 
+ * programming models used by an application.
  *
  * This section provides a detailed description of this concept and
  * routines associated with it.
@@ -58,8 +58,13 @@
  * @defgroup UCT_PD    UCT Protection Domain
  * @ingroup UCT_API
  * @{
- * The protection domain defines memory allocation, registration, key exchange
- * operations.
+ * The Protection Domain abstracts resources required for network communication,
+ * which typically includes memory, transport mechanisms, compute and 
+ * network resources. It is an isolation  mechanism that can be employed 
+ * by the applications for isolating resources between multiple programming models. 
+ * The attributes of the Protection Domain are defined by the structure @ref uct_pd_attr(). 
+ * The communication and memory operations are defined in the context of Protection Domain.
+ *
  * @}
  */
 
@@ -105,7 +110,7 @@ typedef struct uct_pd_resource_desc {
  *
  * Resource descriptor is an object representing the network resource.
  * Resource descriptor could represent a stand-alone communication resource
- * such as a HCA port, network interface, or multiple resources such as
+ * such as an HCA port, network interface, or multiple resources such as
  * multiple network interfaces or communication ports. It could also represent
  * virtual communication resources that are defined over a single physical
  * network interface.
@@ -232,6 +237,10 @@ enum {
 /**
  * @ingroup UCT_PD
  * @brief  Protection domain attributes.
+ *
+ * This structure defines the attributes of a Protection Domain which includes
+ * maximum memory that can be allocated, credentials required for accessing the memory, 
+ * and CPU mask indicating the proximity of CPUs. 
  */
 struct uct_pd_attr {
     struct {
@@ -248,10 +257,11 @@ struct uct_pd_attr {
 
 /**
  * @ingroup UCT_PD
- * @brief Describes a memory allocated by UCT.
- *
- * This structure describes a memory block allocated by UCT layer. The block
- * could be allocated with one of several methods by @ref uct_mem_alloc().
+ * @brief Describes a memory allocated by UCT. 
+ * 
+ * This structure describes the memory block which includes the address, size, and
+ * Protection Domain used for allocation. This structure is passed to interface 
+ * and the memory is allocated by memory allocation functions @ref uct_mem_alloc.
  */
 typedef struct uct_allocated_memory {
     void                     *address; /**< Address of allocated memory */
@@ -265,6 +275,9 @@ typedef struct uct_allocated_memory {
 /**
  * @ingroup UCT_PD
  * @brief Remote key with its type
+ *
+ * This structure describes the credentials (typically key) and information 
+ * required to access the remote memory by the communication interfaces. 
  */
 typedef struct uct_rkey_bundle {
     uct_rkey_t               rkey;    /**< Remote key descriptor, passed to RMA functions */
