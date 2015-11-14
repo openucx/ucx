@@ -9,13 +9,13 @@
  * \section Scope Scope of the Document 
  * This document describes the UCX programming
  * interface.  The programming interface exposes a high performance
- * communication API, which provides basic building blocks for PGAS, Message
- * Passing Interface (MPI), Big-Data, Analytics, File I/O, and storage library developers.
+ * communication API, which provides basic building blocks for programming models such as the Partitioned Global Address Space (PGAS) and the Message
+ * Passing Interface (MPI), for Big-Data, Analytics and File I/O applications, and for storage library developers.
  *
  * \section Audience Audience
  * This manual is intended for programmers who want to
- * develop parallel programming models like OpenSHMEM, MPI, UPC, Chapel, etc.
- * The manual assumes that the reader is familiar with the following:
+ * develop parallel programming models such as OpenSHMEM, MPI, UPC, and Chapel.
+ * We assume that the reader is familiar with the following:
  * + Basic concepts of two-sided, one-sided, atomic, and collective operations
  * + C programming language
  *
