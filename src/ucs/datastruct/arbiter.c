@@ -22,12 +22,10 @@ void ucs_arbiter_group_init(ucs_arbiter_group_t *group)
 
 void ucs_arbiter_cleanup(ucs_arbiter_t *arbiter)
 {
-    ucs_assert(arbiter->current == NULL);
 }
 
 void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group)
 {
-    ucs_assert(group->tail == NULL);
 }
 
 void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
