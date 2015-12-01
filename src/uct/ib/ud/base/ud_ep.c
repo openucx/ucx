@@ -74,6 +74,28 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     return UCS_OK;
 }
 
+static ucs_arbiter_cb_result_t
+uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
+                        void *arg)
+{
+    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), 
+                                       uct_ud_ep_t, tx.pending.group);
+    uct_pending_req_t *req;
+
+    /* we may have pending op on ep */
+    if (&ep->tx.pending.elem == elem) { 
+        /* return ignored by arbiter */
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    /* uct user should not have anything pending */
+    req = ucs_container_of(elem, uct_pending_req_t, priv);
+    ucs_warn("ep=%p removing user pending req=%p", ep, req);
+    
+    /* return ignored by arbiter */
+    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 {
     uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
@@ -83,7 +105,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
    /* TODO: in disconnect ucs_frag_list_cleanup(&self->rx.ooo_pkts); */
-    ucs_assert(self->tx.pending.ops == UCT_UD_EP_OP_NONE);
+
+    ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
+                            uct_ud_ep_pending_cancel_cb, 0);
     ucs_arbiter_group_cleanup(&self->tx.pending.group);
 }
 
@@ -405,7 +429,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
             ooo_type != UCS_FRAG_LIST_INSERT_FAIL) {
             ucs_fatal("Out of order is not implemented: got %d", ooo_type);
         }
-        ucs_trace_data("DUP/OOB - schedule ack");
+        ucs_trace_data("DUP/OOB - schedule ack, head_sn=%d sn=%d", 
+                       ep->rx.ooo_pkts.head_sn, neth->psn);
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
         goto out;
     }
@@ -655,7 +680,7 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
 }
 
 static ucs_arbiter_cb_result_t
-uct_ud_ep_purge_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
+uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
                         void *arg)
 {
     uct_pending_callback_t cb = (uct_pending_callback_t)arg;
@@ -683,7 +708,7 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_callback_t cb)
 
     uct_ud_enter(iface);
     ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->tx.pending.group,
-                            uct_ud_ep_purge_pending, cb);
+                            uct_ud_ep_pending_purge_cb, cb);
     if (uct_ud_ep_ctl_op_isany(ep)) {
         ucs_arbiter_group_push_elem(&ep->tx.pending.group,
                                     &ep->tx.pending.elem);

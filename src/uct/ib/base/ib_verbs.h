@@ -172,6 +172,6 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #endif /* HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE */
 
 
-#define UCT_IB_MAX_WC 32
+#define UCT_IB_MAX_WC 16 
 
 #endif /* UCT_IB_VERBS_H */

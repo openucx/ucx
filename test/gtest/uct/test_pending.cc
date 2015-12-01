@@ -58,34 +58,47 @@ public:
         status = uct_ep_am_short(req->ep, 0, req->hdr, &req->buffer, req->length);
         if (status == UCS_OK) {
             free(req);
+            m_pending--;
         }
         return status;
     }
 
 protected:
     entity *m_e1, *m_e2;
+    static int m_pending;
 };
+
+int test_uct_pending::m_pending = 0;
 
 UCS_TEST_P(test_uct_pending, pending_op)
 {
     uint64_t send_data = 0xdeadbeef;
     uint64_t test_pending_hdr = 0xabcd;
     ucs_status_t status;
-    unsigned i, iters, counter = 0;
+    unsigned i, iters, counter = 0, m_pending = 0;
 
     initialize();
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
-    iters = 100000/ucs::test_time_multiplier();
+    iters = 1000000/ucs::test_time_multiplier();
     /* set a callback for the uct to invoke for receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, pending_am_handler , &counter);
 
     /* send the data until the resources run out */
     i = 0;
     while (i < iters) {
-        status = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr, &send_data,
-                                 sizeof(send_data));
-        if (status != UCS_OK) {
+        if (m_pending == 0) { 
+            /* test data will arrive out of order if we send while there
+             * are pending reqs. It happens because resources may become
+             * available asynchronously.
+             */
+            status = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr, &send_data,
+                    sizeof(send_data));
+        }
+        else {
+            status = UCS_ERR_NO_RESOURCE;
+        }
+        if (status != UCS_OK || m_pending > 0) {
             if (status == UCS_ERR_NO_RESOURCE) {
 
                 pending_send_request_t *req = (pending_send_request_t *) malloc(sizeof(*req));
@@ -104,6 +117,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
                     /* the request was added to the pending data structure */
                     send_data += 1;
                     i++;
+                    m_pending++;
                 }
                 /* coverity[leaked_storage] */
             } else {

@@ -116,6 +116,7 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
     uct_rc_hdr_t *hdr;
     struct ibv_wc wc[UCT_IB_MAX_WC];
     int i, ret;
+    ucs_status_t status;
 
     ret = ibv_poll_cq(iface->super.super.recv_cq, UCT_IB_MAX_WC, wc);
     if (ret > 0) {
@@ -137,13 +138,14 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
         }
 
         iface->super.rx.available += ret;
-        return UCS_OK;
+        status = UCS_OK;
     } else if (ret == 0) {
-        uct_rc_verbs_iface_post_recv(iface, 0);
-        return UCS_ERR_NO_PROGRESS;
+        status = UCS_ERR_NO_PROGRESS;
     } else {
         ucs_fatal("Failed to poll receive CQ");
     }
+    uct_rc_verbs_iface_post_recv(iface, 0);
+    return status;
 }
 
 static void uct_rc_verbs_iface_progress(void *arg)
