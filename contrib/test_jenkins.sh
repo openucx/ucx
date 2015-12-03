@@ -16,6 +16,10 @@ fi
 make_opt="-j$(($(nproc) - 1))"
 ucx_inst=${WORKSPACE}/install
 
+# indicate to coverity which files to exclude from report
+cov_exclude_file_list="external/jemalloc jemalloc"
+
+
 echo Starting on host: $(hostname)
 
 echo "Autogen"
@@ -120,6 +124,13 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     rm -rf $cov_build
     make clean
     cov-build --dir $cov_build make $make_opt all
+
+    set +eE
+    for excl in $cov_exclude_file_list; do
+        cov-manage-emit --dir $cov_build --tu-pattern "file('$excl')" delete
+    done
+    set -eE
+
     cov-analyze --dir $cov_build
     nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
     rc=$(($rc+$nerrors))
