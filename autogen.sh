@@ -8,7 +8,7 @@ command git --help 2>&1 > /dev/null || { \
     echo "Git not found, will not retrieve jemalloc"; \
     GIT_FOUND=0; }
 
-if [ $GIT_FOUND -eq 1 ]
+if [ $GIT_FOUND -eq 1 -a -d .git ]
 then
 git submodule init
 git submodule update
