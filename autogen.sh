@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 rm -rf autom4te.cache
 mkdir -p config/m4 config/aux external/jemalloc
