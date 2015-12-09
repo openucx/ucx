@@ -1301,9 +1301,12 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  * @ingroup UCP_COMM
  * @brief Check if a non-blocking request is completed.
  *
+ * This routine check the state of the request and returns @a true if the
+ * request is in a completed state. Otherwise @a false is returned.
+ *
  * @param [in]  request      Non-blocking request to check.
  *
- * @return Whether the request is completed.
+ * @return @a true if the request was completed and @a false otherwise.
  */
 int ucp_request_is_completed(void *request);
 
@@ -1314,8 +1317,17 @@ int ucp_request_is_completed(void *request);
  *
  * @param [in]  request      Non-blocking request to release.
  *
- * @note If the request is not completed yet, it will actually be released when
- *       completed.
+ * This routine marks and potentially releases back to the library the
+ * non-blocking request. If the request is already completed or
+ * canceled state it is released and the resources associated with the request are
+ * returned back to the library.  If the request in any other stated it is
+ * marked as a "ready to release" and it will be released once it enters
+ * completed and canceled states.
+ *
+ * @todo I think this release semantics is a bit confusing. I would suggest to
+ * remove the "marked" ready to release. Instead, user has to call the release
+ * explicitly once it is completed or released and we should return an error if
+ * the request is not in one of these states.
  */
 void ucp_request_release(void *request);
 
@@ -1327,11 +1339,17 @@ void ucp_request_release(void *request);
  * @param [in]  worker       UCP worker.
  * @param [in]  request      Non-blocking request to cancel.
  *
- *  A request can either be completed or canceled, but not both. After calling
- * this function, the request will complete regardless of what the remote side
- * is doing. If the request is completed successfully, the completion callback
- * will be called with the status parameter equals to UCS_OK, and in case it's
- * canceled the status would be UCS_ERR_CANCELED.
+ * This routine tries to cancels an outstanding communication request.  After
+ * calling this routine, the @a request will be in completed or canceled (but
+ * not both) state regardless of the status of the target endpoint associated
+ * with the communication request.  If the request is completed successfully,
+ * the @ref ucp_send_callback_t "send" or @ref ucp_tag_recv_callback_t
+ * "receive" completion callbacks (based on the type of the request) will be
+ * called with the @a status argument of the callback set to UCS_OK, and in a
+ * case it is canceled the @a status argument is set to UCS_ERR_CANCELED.  It is
+ * important to note that in order to release the request back to the library
+ * the application is responsible to call @ref ucp_request_release
+ * "ucp_request_release()".
  */
 void ucp_request_cancel(ucp_worker_h worker, void *request);
 
