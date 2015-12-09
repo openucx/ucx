@@ -1273,8 +1273,8 @@ int ucp_request_is_completed(void *request);
  * @param [in]  request      Non-blocking request to release.
  *
  * This routine marks and potentially releases back to the library the
- * non-blocking request. If the request is already is already completed or
- * canceled state it is released the resources associated with the request are
+ * non-blocking request. If the request is already completed or
+ * canceled state it is released and the resources associated with the request are
  * returned back to the library.  If the request in any other stated it is
  * marked as a "ready to release" and it will be released once it enters
  * completed and canceled states.
@@ -1305,11 +1305,6 @@ void ucp_request_release(void *request);
  * important to note that in order to release the request back to the library
  * the application is responsible to call @ref ucp_request_release
  * "ucp_request_release()".
- *
- * @note This routine does not undo any memory alternations associated with the
- * communication operations.  This is a local operation that resets the status if
- * the request and removes it from internal queues (e.g matching, pending,
- * posted queues, etc.)
  */
 void ucp_request_cancel(ucp_worker_h worker, void *request);
 
