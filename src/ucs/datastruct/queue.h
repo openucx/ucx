@@ -96,18 +96,27 @@ static inline ucs_queue_elem_t *ucs_queue_pull_non_empty(ucs_queue_head_t *queue
 
 /**
  * Delete an element.
- * After the call, iter points to the next element.
+ * The element must be valid when deleting it.
+ * After the call, iter points to the next element, and the element may be released.
  */
 static inline void ucs_queue_del_iter(ucs_queue_head_t *queue, ucs_queue_iter_t iter)
 {
     if (queue->ptail == &(*iter)->next) {
         queue->ptail = iter; /* deleting the last element */
+        *iter = NULL;        /* make *ptail point to NULL */
+    } else {
+        *iter = (*iter)->next;
     }
-    *iter = (*iter)->next;
 
     /* Sanity check */
     ucs_assertv((queue->head != NULL) || (queue->ptail == &queue->head),
-               "head=%p ptail=%p iter=%p", queue->head, queue->ptail, iter);
+               "head=%p ptail=%p &head=%p iter=%p", queue->head, queue->ptail,
+               &queue->head, iter);
+
+    /* If the queue is empty, head must point to null */
+    ucs_assertv((queue->ptail != &queue->head) || (queue->head == NULL),
+               "head=%p ptail=%p &head=%p iter=%p", queue->head, queue->ptail,
+               &queue->head, iter);
 }
 
 /**

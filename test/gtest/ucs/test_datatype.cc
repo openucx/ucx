@@ -207,6 +207,30 @@ UCS_TEST_F(test_datatype, queue_iter) {
         EXPECT_EQ(1, vec[0]);
         EXPECT_EQ(2, vec[1]);
     }
+
+    /* foreach safe with next pointing to head */
+    {
+        elem_t e1, *elem;
+        ucs_queue_iter_t iter;
+
+        ucs_queue_push(&head, &e1.queue);
+        e1.queue.next = &e1.queue;
+
+        int count1 = 0;
+        ucs_queue_for_each_safe(elem, iter, &head, queue) {
+            EXPECT_EQ(&elem->queue, *iter);
+            ++count1;
+        }
+        EXPECT_EQ(1, count1) << "Too many iterations on single element queue";
+
+        int count2 = 0;
+        ucs_queue_for_each_safe(elem, iter, &head, queue) {
+            EXPECT_EQ(&elem->queue, *iter);
+            ucs_queue_del_iter(&head, iter);
+            ++count2;
+            ASSERT_LE(count2, 2) << "Too many iterations on single element queue";
+        }
+    }
 }
 
 UCS_TEST_F(test_datatype, queue_perf) {
