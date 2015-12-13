@@ -183,19 +183,12 @@ AC_ARG_ENABLE([jemalloc],
 
 AS_IF([test "x$jemalloc_enabled" == xyes],
           [AS_MESSAGE([compiling jemalloc])
-	      AC_SUBST([BUILD_JEMALLOC], [yes])],
-          [AC_SUBST([BUILD_JEMALLOC], [no])])
-
-#
-# subdir must always be configured to make sure that dist checks work
-#
-
-AS_IF([test -d "$srcdir/external/jemalloc"],
-	    [AC_CONFIG_SUBDIRS([external/jemalloc])
-	     AM_CONDITIONAL([BUILD_JEMALLOC],[test "x$BUILD_JEMALLOC" = "xyes"])],
-	    [AM_CONDITIONAL([BUILD_JEMALLOC],[false])])
-
-#
+	      AC_SUBST([BUILD_JEMALLOC], [yes])
+	      AC_CONFIG_SUBDIRS([external/jemalloc])
+	      AM_CONDITIONAL([BUILD_JEMALLOC],[test "x$BUILD_JEMALLOC" = "xyes"])
+	      ],
+          [AC_SUBST([BUILD_JEMALLOC], [no])
+	  AM_CONDITIONAL([BUILD_JEMALLOC],[false])])
 
 #
 #Doxygen options
