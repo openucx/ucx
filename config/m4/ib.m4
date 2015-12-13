@@ -178,7 +178,11 @@ AS_IF([test "x$with_ib" == xyes],
            transports="${transports},ud"])
 
        AS_IF([test "x$with_cm" != xno],
-           [AC_CHECK_LIB([ibcm], [ib_cm_send_req], [], [with_cm=no])
+           [save_LIBS="$LIBS"
+            AC_CHECK_LIB([ibcm], [ib_cm_send_req],
+                         [AC_SUBST(IBCM_LIBS, [-libcm])],
+                         [with_cm=no])
+            LIBS="$save_LIBS"
            ])
        AS_IF([test "x$with_cm" != xno],
            [AC_DEFINE([HAVE_TL_CM], 1, [Connection manager support])
