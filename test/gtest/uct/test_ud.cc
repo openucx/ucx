@@ -33,6 +33,20 @@ public:
         }
         return UCS_OK;
     }
+
+    void validate_flush() {
+        /* 1 packets transmitted, 1 packets received */
+        EXPECT_EQ(2, ep(m_e1)->tx.psn);
+        EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+
+        /* no data transmitted back */
+        EXPECT_EQ(1, ep(m_e2)->tx.psn);
+
+        /* one packet was acked */
+        EXPECT_EQ(0U, ucs_queue_length(&ep(m_e1)->tx.window));
+        EXPECT_EQ(1, ep(m_e1)->tx.acked_psn);
+        EXPECT_EQ(1, ep(m_e2)->rx.acked_psn);
+    }
 };
 
 int test_ud::ack_req_tx_cnt = 0;
@@ -108,6 +122,27 @@ UCS_TEST_P(test_ud, tx_window1) {
     EXPECT_UCS_OK(tx(m_e1));
 }
 
+/* basic flush */
+/* send packet, flush, wait till flush ended */
+
+UCS_TEST_P(test_ud, flush_ep) {
+
+    connect();
+    EXPECT_UCS_OK(tx(m_e1));
+    EXPECT_UCS_OK(ep_flush_b(m_e1));
+
+    validate_flush();
+}
+
+UCS_TEST_P(test_ud, flush_iface) {
+
+    connect();
+    EXPECT_UCS_OK(tx(m_e1));
+    EXPECT_UCS_OK(iface_flush_b(m_e1));
+
+    validate_flush();
+}
+
 #ifdef UCT_UD_EP_DEBUG_HOOKS
 
 /* disable ack req,
@@ -160,6 +195,8 @@ UCS_TEST_P(test_ud, ack_req_single) {
 UCS_TEST_P(test_ud, ack_req_window) {
     unsigned i, N=16;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, N);
     ack_req_tx_cnt = 0;

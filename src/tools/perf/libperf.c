@@ -240,9 +240,12 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
 
 void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
 {
-    while (uct_iface_flush(perf->uct.iface) == UCS_ERR_NO_RESOURCE) {
+    ucs_status_t status;
+
+    do {
+        status = uct_iface_flush(perf->uct.iface);
         uct_worker_progress(perf->uct.worker);
-    }
+    } while(status == UCS_INPROGRESS || status == UCS_ERR_NO_RESOURCE);
 }
 
 static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_f,

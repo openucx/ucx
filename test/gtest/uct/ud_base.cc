@@ -69,6 +69,29 @@ ucs_status_t ud_base_test::tx(entity *e)
     return err;
 }
 
+ucs_status_t ud_base_test::ep_flush_b(entity *e)
+{
+    ucs_status_t status;
+    
+    do {
+        status = uct_ep_flush(e->ep(0));
+    } while (status == UCS_INPROGRESS || status == UCS_ERR_NO_RESOURCE);
+
+    return status;
+}
+
+ucs_status_t ud_base_test::iface_flush_b(entity *e)
+{
+    ucs_status_t status;
+    
+    do {
+        status = uct_iface_flush(e->iface());
+    } while (status == UCS_INPROGRESS || status == UCS_ERR_NO_RESOURCE);
+
+    return status;
+}
+
+
 void ud_base_test::set_tx_win(entity *e, int size) 
 {
     /* force window */
