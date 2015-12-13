@@ -205,7 +205,8 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 {
     uct_ud_send_skb_t *skb = obj;
     struct ibv_mr *mr = memh;
-    skb->lkey = mr->lkey;
+    skb->lkey  = mr->lkey;
+    skb->flags = 0;
 }
 
 static ucs_status_t
@@ -481,7 +482,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
 
     count = 0;
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
-        status = uct_ud_ep_flush_do(iface, ep);
+        status = uct_ud_ep_flush_nolock(iface, ep);
         if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
             ++count;
         } else if (status != UCS_OK) {

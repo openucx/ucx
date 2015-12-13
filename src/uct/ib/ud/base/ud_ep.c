@@ -109,7 +109,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
     ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
                             uct_ud_ep_pending_cancel_cb, 0);
 
-    if (ucs_queue_is_empty(&self->tx.window)) {
+    if (!ucs_queue_is_empty(&self->tx.window)) {
         ucs_debug("ep=%p id=%d conn_id=%d has %d unacked packets", 
                    self, self->ep_id, self->conn_id, 
                    (int)ucs_queue_length(&self->tx.window));
@@ -459,7 +459,7 @@ out:
     ucs_mpool_put(skb);
 }
 
-ucs_status_t uct_ud_ep_flush_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     uct_ud_send_skb_t *skb;
 
@@ -469,7 +469,7 @@ ucs_status_t uct_ud_ep_flush_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
     
     skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t, queue);
-    if (skb->neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
+    if (skb->flags & UCT_UD_SEND_SKB_FLAG_ACK_REQ) {
         /* last packet was already sent with ack request. 
          * either by flush or 
          * Do not send more, let reqular retransmission 
@@ -478,7 +478,7 @@ ucs_status_t uct_ud_ep_flush_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
         return UCS_INPROGRESS;
     }
 
-    skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
+    skb->flags |= UCT_UD_SEND_SKB_FLAG_ACK_REQ;
     uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     return UCS_INPROGRESS;
 }
@@ -490,7 +490,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, 
                                            uct_ud_iface_t);
     uct_ud_enter(iface);
-    status = uct_ud_ep_flush_do(iface, ep);
+    status = uct_ud_ep_flush_nolock(iface, ep);
     uct_ud_leave(iface);
     return status;
 }
@@ -550,6 +550,8 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     memcpy(skb->neth, sent_skb->neth, sent_skb->len);
     skb->neth->ack_psn = ep->rx.acked_psn;
     skb->len = sent_skb->len;
+    /* force ack request on every resend */
+    skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
     ucs_debug("ep(%p): resending rt_psn %u acked_psn %u", ep, ep->tx.rt_psn, ep->tx.acked_psn);
 
     if (ucs_queue_iter_end(&ep->tx.window, ep->tx.rt_pos)) {

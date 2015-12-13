@@ -43,7 +43,7 @@ public:
         EXPECT_EQ(1, ep(m_e2)->tx.psn);
 
         /* one packet was acked */
-        EXPECT_EQ(0, ucs_queue_length(&ep(m_e1)->tx.window));
+        EXPECT_EQ(0U, ucs_queue_length(&ep(m_e1)->tx.window));
         EXPECT_EQ(1, ep(m_e1)->tx.acked_psn);
         EXPECT_EQ(1, ep(m_e2)->rx.acked_psn);
     }
@@ -126,7 +126,6 @@ UCS_TEST_P(test_ud, tx_window1) {
 /* send packet, flush, wait till flush ended */
 
 UCS_TEST_P(test_ud, flush_ep) {
-    //unsigned i, N=13;
 
     connect();
     EXPECT_UCS_OK(tx(m_e1));
@@ -136,7 +135,6 @@ UCS_TEST_P(test_ud, flush_ep) {
 }
 
 UCS_TEST_P(test_ud, flush_iface) {
-    //unsigned i, N=13;
 
     connect();
     EXPECT_UCS_OK(tx(m_e1));

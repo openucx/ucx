@@ -174,7 +174,7 @@ UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep);
 /* internal flush */
-ucs_status_t uct_ud_ep_flush_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
+ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 
@@ -240,7 +240,7 @@ uct_ud_neth_ctl_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn         = ep->tx.psn;
     neth->ack_psn     = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
-    neth->packet_type = (ep->dest_ep_id|UCT_UD_PACKET_FLAG_ACK_REQ);
+    neth->packet_type = ep->dest_ep_id|UCT_UD_PACKET_FLAG_ACK_REQ;
 }
 
 static UCS_F_ALWAYS_INLINE void 
@@ -314,8 +314,8 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_req_ack(uct_ud_ep_t *ep)
     acked_psn = ep->tx.acked_psn;
     psn       = ep->tx.psn;
 
-    return UCT_UD_PSN_COMPARE(psn, ==, ((acked_psn*3 + max_psn)>>2)) ||
-           UCT_UD_PSN_COMPARE(psn+1, ==, max_psn) ||
+    return UCT_UD_PSN_COMPARE(psn, ==, ((acked_psn * 3 + max_psn) >> 2)) ||
+           UCT_UD_PSN_COMPARE(psn + 1, ==, max_psn) ||
            uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ);
 
 }

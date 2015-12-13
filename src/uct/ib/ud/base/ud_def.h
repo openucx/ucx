@@ -109,10 +109,15 @@ typedef struct uct_ud_neth {
     uct_ud_psn_t        ack_psn;
 } UCS_S_PACKED uct_ud_neth_t;
 
+enum {
+    UCT_UD_SEND_SKB_FLAG_ACK_REQ = UCS_BIT(1)
+};
+
 typedef struct uct_ud_send_skb {
     ucs_queue_elem_t        queue;      /* in send window */
     uint32_t                lkey;
-    uint32_t                len;        /* data size */
+    uint16_t                len;        /* data size */
+    uint16_t                flags;
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED uct_ud_send_skb_t;
 
