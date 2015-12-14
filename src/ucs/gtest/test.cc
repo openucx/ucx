@@ -44,7 +44,8 @@ void test_base::modify_config(const std::string& name, const std::string& value)
     ucs_status_t status = ucs_global_opts_set_value(name.c_str(), value.c_str());
     if (status != UCS_OK) {
         GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
-                        << value ;
+                        << value << ", error message: "
+                        << ucs_status_string(status) << "(" << status << ")";
     }
 }
 
