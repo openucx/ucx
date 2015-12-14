@@ -47,6 +47,7 @@ UCS_TEST_F(test_mpool, no_allocs) {
     ucs_mpool_cleanup(&mp, 1);
 }
 
+#if ENABLE_DEBUG_DATA
 UCS_TEST_F(test_mpool, basic) {
     ucs_status_t status;
     ucs_mpool_t mp;
@@ -89,6 +90,7 @@ UCS_TEST_F(test_mpool, basic) {
 
     pop_config();
 }
+#endif
 
 UCS_TEST_F(test_mpool, custom_alloc) {
     ucs_status_t status;
