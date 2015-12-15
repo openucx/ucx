@@ -47,7 +47,6 @@ UCS_TEST_F(test_mpool, no_allocs) {
     ucs_mpool_cleanup(&mp, 1);
 }
 
-#if ENABLE_DEBUG_DATA
 UCS_TEST_F(test_mpool, basic) {
     ucs_status_t status;
     ucs_mpool_t mp;
@@ -62,8 +61,13 @@ UCS_TEST_F(test_mpool, basic) {
     push_config();
 
     for (int mpool_fifo = 0; mpool_fifo <= 1; ++mpool_fifo) {
+#if ENABLE_DEBUG_DATA
         modify_config("MPOOL_FIFO", ucs::to_string(mpool_fifo).c_str());
-
+#else
+        if (mpool_fifo == 1) {
+            continue;
+        }
+#endif
         status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
                                  6, 18, &ops, "test");
         ASSERT_UCS_OK(status);
@@ -90,7 +94,6 @@ UCS_TEST_F(test_mpool, basic) {
 
     pop_config();
 }
-#endif
 
 UCS_TEST_F(test_mpool, custom_alloc) {
     ucs_status_t status;
