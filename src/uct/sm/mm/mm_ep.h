@@ -20,11 +20,14 @@ struct uct_mm_ep {
     uct_mm_fifo_ctl_t    *fifo_ctl;   /* pointer to the destination's ctl struct in the receive fifo */
     void                 *fifo;       /* fifo elements (destination's receive fifo) */
 
+    uint64_t             cached_tail; /* the sender's own copy of the remote FIFO's tail.
+                                         it is not always updated with the actual remote tail value */
+
     /* mapped remote memory chunks to which remote descriptors belong to.
      * (after attaching to them) */
     uct_mm_remote_seg_t  *remote_segments_hash[UCT_MM_BASE_ADDRESS_HASH_SIZE];
 
-    ucs_arbiter_group_t  arb_group;
+    ucs_arbiter_group_t  arb_group;   /* the group that holds this ep's pending operations */
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
