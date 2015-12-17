@@ -195,6 +195,10 @@ ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg);
 
+static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
+{
+    return group->tail == NULL;
+}
 
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
 
@@ -218,7 +222,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
                                               ucs_arbiter_group_t *group)
 {
-    if (ucs_unlikely(group->tail != NULL)) {
+    if (ucs_unlikely(!ucs_arbiter_group_is_empty(group))) {
         ucs_arbiter_group_schedule_nonempty(arbiter, group);
     }
 }

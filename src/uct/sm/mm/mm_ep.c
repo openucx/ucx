@@ -43,6 +43,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     self->mapped_desc.mmid   = remote_iface_addr->id;
     uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl, &self->fifo);
 
+    self->cached_tail = self->fifo_ctl->tail;
+
     /* Initiate the hash which will keep the base_adresses of remote memory
      * chunks that hold the descriptors for bcopy. */
     sglib_hashed_uct_mm_remote_seg_t_init(self->remote_segments_hash);
@@ -178,8 +180,8 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
 
 /* A common mm active message sending function.
  * The first parameter indicates the origin of the call.
- * 1 - perform am short sending
- * 0 - perform am bcopy sending
+ * is_short = 1 - perform AM short sending
+ * is_short = 0 - perform AM bcopy sending
  */
 static UCS_F_ALWAYS_INLINE ssize_t
 uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
@@ -194,9 +196,20 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     UCT_CHECK_AM_ID(am_id);
 
     head = ep->fifo_ctl->head;
-    /* check if there is room in the remote process's receive fifo to write */
-    if (ucs_unlikely((head - ep->fifo_ctl->tail) >= iface->config.fifo_size)) {
-        return UCS_ERR_NO_RESOURCE;
+    /* check if there is room in the remote process's receive FIFO to write */
+    if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
+        if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
+            /* pending isn't empty. don't send now to prevent out-of-order sending */
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            /* pending is empty */
+            /* update the local copy of the tail to its actual value on the remote peer */
+            ucs_memory_cpu_load_fence();
+            ep->cached_tail = ep->fifo_ctl->tail;
+            if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
+                return UCS_ERR_NO_RESOURCE;
+            }
+        }
     }
 
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
@@ -280,6 +293,11 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
+    /* check if resources became available */
+    if (UCT_MM_EP_IS_ABLE_TO_SEND(ep->fifo_ctl->head, ep->cached_tail, iface->config.fifo_size)) {
+        return UCS_ERR_BUSY;
+    }
+
     UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
 
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
@@ -297,6 +315,12 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t status;
+    uct_mm_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_mm_ep_t, arb_group);
+
+    /* update the local tail with its actual value from the remote peer
+     * making sure that the pending sends would use the real tail value */
+    ucs_memory_cpu_load_fence();
+    ep->cached_tail = ep->fifo_ctl->tail;
 
     status = req->func(req);
     ucs_trace_data("progress pending request %p returned %s", req,
