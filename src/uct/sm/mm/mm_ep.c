@@ -198,7 +198,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     head = ep->fifo_ctl->head;
     /* check if there is room in the remote process's receive FIFO to write */
     if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
-        if (ep->arb_group.tail != NULL) {
+        if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
             /* pending isn't empty. don't send now to prevent out-of-order sending */
             return UCS_ERR_NO_RESOURCE;
         } else {
