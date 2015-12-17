@@ -38,6 +38,15 @@ enum {
           (uct_mm_recv_desc_t *) ((_fifo_elem_p)->desc_chunk_base_addr +  \
           (_fifo_elem_p)->desc_offset - (_iface)->rx_headroom) - 1;
 
+
+/* Check if the resources on the remote peer are available for sending to it.
+ * i.e. check if the remote receive FIFO has room in it.
+ * return 1 if can send.
+ * return 0 if can't send.
+ */
+#define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
+          ucs_likely(((_head) - (_tail)) < (_fifo_size))
+
 typedef struct uct_mm_pd_config {
     uct_pd_config_t      super;
     ucs_ternary_value_t  hugetlb_mode;     /* Enable using huge pages */

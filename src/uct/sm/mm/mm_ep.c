@@ -158,16 +158,6 @@ void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm
 
 }
 
-/* Check if the resources on the remote peer are available for sending to is.
- * i.e. check if the remote receive FIFO has room in it.
- * return 1 if can send.
- * return 0 if can't send.
- */
-static inline int uct_mm_ep_is_able_to_send(uint64_t head, uint64_t tail, unsigned fifo_size)
-{
-    return ucs_likely((head - tail) < fifo_size);
-}
-
 static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
 		                                             uct_mm_fifo_element_t **elem)
 {
@@ -207,7 +197,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
 
     head = ep->fifo_ctl->head;
     /* check if there is room in the remote process's receive FIFO to write */
-    if (!uct_mm_ep_is_able_to_send(head, ep->cached_tail, iface->config.fifo_size)) {
+    if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
         if (ep->arb_group.tail != NULL) {
             /* pending isn't empty. don't send now to prevent out-of-order sending */
             return UCS_ERR_NO_RESOURCE;
@@ -216,7 +206,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
             /* update the local copy of the tail to its actual value on the remote peer */
             ucs_memory_cpu_load_fence();
             ep->cached_tail = ep->fifo_ctl->tail;
-            if (!uct_mm_ep_is_able_to_send(head, ep->cached_tail, iface->config.fifo_size)) {
+            if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
                 return UCS_ERR_NO_RESOURCE;
             }
         }
@@ -304,7 +294,7 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     /* check if resources became available */
-    if (uct_mm_ep_is_able_to_send(ep->fifo_ctl->head, ep->cached_tail, iface->config.fifo_size)) {
+    if (UCT_MM_EP_IS_ABLE_TO_SEND(ep->fifo_ctl->head, ep->cached_tail, iface->config.fifo_size)) {
         return UCS_ERR_BUSY;
     }
 
