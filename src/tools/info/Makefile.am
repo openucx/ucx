@@ -34,4 +34,5 @@ noinst_HEADERS = \
 ucx_info_LDADD    = \
     $(abs_top_builddir)/src/uct/libuct.la \
     $(abs_top_builddir)/src/ucp/libucp.la \
-    $(abs_top_builddir)/src/ucs/libucs.la
+    $(abs_top_builddir)/src/ucs/libucs.la \
+    $(abs_top_builddir)/src/ucm/libucm.la

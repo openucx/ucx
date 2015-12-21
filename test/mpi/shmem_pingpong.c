@@ -54,7 +54,7 @@ static void run(void *shared_buffer)
                     (tv_start.tv_sec * 1e6 + tv_start.tv_usec)) / iters / 2;
 
     if (shmem_my_pe() == 0) {
-        printf("%9d   %.3f usec\n", iters, latency_usec);
+        printf("%9ld   %.3f usec\n", iters, latency_usec);
     }
 }
 

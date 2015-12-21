@@ -179,7 +179,6 @@ AC_ARG_ENABLE([jemalloc],
 	  else
 	     jemalloc_enabled=no
 	  fi])
-        #[jemalloc_enabled=yes])
 
 AS_IF([test "x$jemalloc_enabled" == xyes],
           [AS_MESSAGE([compiling jemalloc])
@@ -221,11 +220,12 @@ AC_CONFIG_FILES([
                  src/ucp/Makefile
                  src/ucp/api/ucp_version.h
                  src/ucp/core/ucp_version.c
-                 src/tools/hook/Makefile
+                 src/ucm/Makefile
                  src/tools/info/Makefile
                  src/tools/perf/Makefile
                  test/examples/Makefile
                  test/gtest/Makefile
+                 test/mpi/Makefile
                  external/Makefile
                  ])
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

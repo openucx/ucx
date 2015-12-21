@@ -174,9 +174,8 @@ void ucs_global_opts_release()
     return ucs_config_parser_release_opts(&ucs_global_opts, ucs_global_opts_table);
 }
 
-void ucs_global_opts_print(FILE *stream, const char *title,
-                           ucs_config_print_flags_t print_flags)
+void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title, &ucs_global_opts,
+    ucs_config_parser_print_opts(stream, "Global configuration", &ucs_global_opts,
                                  ucs_global_opts_table, NULL, print_flags);
 }

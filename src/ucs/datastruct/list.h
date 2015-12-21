@@ -19,11 +19,15 @@ typedef struct ucs_list_link {
 } ucs_list_link_t;
 
 
+#define UCS_LIST_INITIALIZER(_prev, _next) \
+    { (_prev), (_next) }
+
+
 /**
  * Declare an empty list
  */
 #define UCS_LIST_HEAD(name) \
-    ucs_list_link_t name = { &(name), &(name) }
+    ucs_list_link_t name = UCS_LIST_INITIALIZER(&(name), &(name))
 
 
 /**

@@ -77,8 +77,6 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     # hack for perftest, no way to override params used in batch
     # todo: fix in perftest
-
-
     sed -s 's,-n [0-9]*,-n 1000,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
     cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
 
@@ -100,18 +98,20 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     done
 
+    echo "Running MPI tests"
+    mpirun -np 1 -mca pml ob1 -mca btl self $AFFINITY ./test/mpi/test_memhooks
+
+    module unload hpcx-gcc
+
     module load intel/ics
-    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst CC=icc
+    ../contrib/configure-devel --prefix=$ucx_inst CC=icc
     make $make_opt clean
     make $make_opt all
     make $make_opt distclean
     module unload intel/ics
 
-    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
+    ../contrib/configure-devel --prefix=$ucx_inst
     make $make_opt all
-
-    module unload hpcx-gcc
-
 
     echo "Running ucx_info"
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b

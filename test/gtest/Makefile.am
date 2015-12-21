@@ -30,6 +30,7 @@ gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
 	$(top_builddir)/src/uct/libuct.la \
+	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
 	$(top_builddir)/src/ucs/libucstest.la \
 	$(top_builddir)/src/tools/perf/libucxperf.la \
@@ -47,6 +48,8 @@ gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
 
 gtest_SOURCES = \
 	base/test_perf.cc \
+	\
+	ucm/malloc_hook.cc \
 	\
 	uct/test_amo.cc \
 	uct/test_amo_add.cc \

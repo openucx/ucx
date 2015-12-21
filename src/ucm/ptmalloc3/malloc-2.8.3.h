@@ -29,6 +29,8 @@
 extern "C" {
 #endif
 
+#define USE_DL_PREFIX 1
+
 #include <stddef.h>   /* for size_t */
 
 #if !ONLY_MSPACES

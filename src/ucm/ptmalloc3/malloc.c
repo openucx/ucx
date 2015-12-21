@@ -481,6 +481,10 @@ MAX_RELEASE_CHECK_RATE   default: 255 unless not HAVE_MMAP
   improvement at the expense of carrying around more memory.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #ifndef WIN32
 #ifdef _WIN32
 #define WIN32 1
@@ -1721,7 +1725,7 @@ static FORCEINLINE int pthread_init_lock (MLOCK_T *sl) {
 static FORCEINLINE int pthread_islocked (MLOCK_T *sl) {
   if(!pthread_try_lock(sl)){
     int ret = (sl->c != 0);
-    pthread_mutex_unlock(sl);
+    pthread_mutex_unlock(&(sl)->l);
     return ret;
   }
   return 0;
@@ -2847,7 +2851,7 @@ static int init_mparams(void) {
       mparams.magic = s;
 #if !ONLY_MSPACES
       /* Set up lock for main malloc area */
-      INITIAL_LOCK(&gm->mutex);
+      (void)INITIAL_LOCK(&gm->mutex);
       gm->mflags = mparams.default_mflags;
 #endif
     }
@@ -4788,7 +4792,7 @@ static mstate init_user_mstate(char* tbase, size_t tsize) {
   mchunkptr msp = align_as_chunk(tbase);
   mstate m = (mstate)(chunk2mem(msp));
   memset(m, 0, msize);
-  INITIAL_LOCK(&m->mutex);
+  (void)INITIAL_LOCK(&m->mutex);
   msp->head = (msize|PINUSE_BIT|CINUSE_BIT);
   m->seg.base = m->least_addr = tbase;
   m->seg.size = m->footprint = m->max_footprint = tsize;
