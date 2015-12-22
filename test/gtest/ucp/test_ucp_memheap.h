@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -27,6 +28,7 @@ public:
 
 protected:
     void test_blocking_xfer(blocking_send_func_t send, size_t alignment);
+    void test_nonblocking_implicit_xfer(blocking_send_func_t send, size_t alignment);
 
     virtual void get_params(ucp_params_t& params) const;
 };

@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -69,7 +70,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 
 
-void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req);
+void ucp_ep_add_pending(uct_ep_h uct_ep, ucp_request_t *req);
 
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

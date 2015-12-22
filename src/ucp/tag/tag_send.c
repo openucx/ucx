@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -37,7 +38,7 @@ ucp_tag_send_start_req(ucp_ep_h ep, const void *buffer, size_t count,
         /* TODO check for zero-copy */
         req->send.length = ucp_contig_dt_length(datatype, count);
         if (req->send.length <= rndv_thresh) {
-            req->send.uct.func = ucp_tag_progress_eager_contig;
+            req->uct.func = ucp_tag_progress_eager_contig;
             return UCS_OK;
         }
         break;
@@ -49,7 +50,7 @@ ucp_tag_send_start_req(ucp_ep_h ep, const void *buffer, size_t count,
         req->send.state.dt.generic.state = state;
         req->send.length = dt_gen->ops.packed_size(state);
         if (req->send.length <= rndv_thresh) {
-            req->send.uct.func = ucp_tag_progress_eager_generic;
+            req->uct.func = ucp_tag_progress_eager_generic;
             return UCS_OK;
         }
         break;
@@ -101,7 +102,8 @@ ucs_status_ptr_t ucp_tag_send_slow(ucp_ep_h ep, const void *buffer, size_t count
     }
 
     if (!(req->flags & UCP_REQUEST_FLAG_COMPLETED)) {
-        ucp_ep_add_pending(ep, ep->uct_ep, req);
+        req->send.ep = ep;
+        ucp_ep_add_pending(ep->uct_ep, req);
         ucp_worker_progress(ep->worker);
     }
 

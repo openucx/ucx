@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -346,6 +347,13 @@ public:
     do { \
         if ((_error) != UCS_OK) { \
             UCS_TEST_ABORT("Error: " << ucs_status_string(_error)  __VA_ARGS__); \
+        } \
+    } while (0)
+
+#define ASSERT_UCS_OK_OR_INPROGRESS(_error) \
+    do { \
+        if ((_error) != UCS_OK && (_error) != UCS_INPROGRESS) { \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_error)); \
         } \
     } while (0)
 

@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -68,6 +69,7 @@ typedef struct ucp_send_state {
  */
 typedef struct ucp_request {
     uint16_t                      flags;   /* Request flags */
+    uct_pending_req_t             uct;     /* Pending request */
 
     union {
         ucp_send_callback_t       send;
@@ -93,8 +95,16 @@ typedef struct ucp_request {
 
             size_t                length;   /* Total length, in bytes */
             ucp_frag_state_t      state;
-            uct_pending_req_t     uct;
         } send;
+
+        struct {
+            ucp_ep_h              ep;
+            const void            *buffer;     /* Put buffer */
+            uint64_t              remote_addr; /* remote address */
+            ucp_rkey_h            rkey;        /* Rkey */
+            size_t                length;      /* Put/Get length, in bytes */
+            ucp_frag_state_t      state;
+        } rma;
 
         struct {
             ucs_queue_elem_t      queue;    /* Expected queue element */
