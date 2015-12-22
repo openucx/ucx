@@ -410,7 +410,10 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
                      ep->ep_id != dest_id)) {
         uct_ud_iface_log_rxdrop(iface, ep, neth, byte_len);
-        /* TODO: in the future just drop the packet */
+        /* TODO: in the future just drop the packet because it is
+         * allowed to do disconnect without flush/barrier. So it
+         * is possible to get packet for the ep that has been destroyed 
+         */
         ucs_fatal("Failed to find ep(%d)", dest_id);
         goto out;
     } 
@@ -694,6 +697,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
             uct_ud_ep_do_pending_ctl(ep, iface);
             return uct_ud_ep_ctl_op_next(ep);
         } 
+        iface->tx.pending_q_len--;
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
     /* try to send ctl messages */
@@ -708,10 +712,25 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
                                            uct_ud_iface_t);
 
     uct_ud_enter(iface);
+
+    /* try to flush pending queue first */
+    uct_ud_iface_progress_pending(iface, 0);
+
+    if (uct_ud_iface_can_tx(iface) &&
+        uct_ud_iface_has_skbs(iface) &&
+        uct_ud_ep_is_connected(ep) &&
+        !uct_ud_ep_no_window(ep)) {
+
+        uct_ud_leave(iface);
+        ucs_debug("can not add pending because ep=%p is able to transmit", ep);
+        return UCS_ERR_BUSY;
+    }
+
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)req->priv);
     ucs_arbiter_group_push_elem(&ep->tx.pending.group, 
                                 (ucs_arbiter_elem_t *)req->priv);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
+    iface->tx.pending_q_len++;
     uct_ud_leave(iface);
     return UCS_OK;
 }
@@ -724,6 +743,7 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), 
                                        uct_ud_ep_t, tx.pending.group);
     uct_pending_req_t *req;
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
 
     if (&ep->tx.pending.elem == elem) { 
         /* return ignored by arbiter */
@@ -731,6 +751,7 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     }
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     cb(req);
+    iface->tx.pending_q_len--;
     
     /* return ignored by arbiter */
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;

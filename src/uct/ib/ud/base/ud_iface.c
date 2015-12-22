@@ -382,6 +382,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     uct_ud_iface_reserve_skbs(self, self->tx.available);
 
     ucs_arbiter_init(&self->tx.pending_q);
+    self->tx.pending_q_len = 0;
+    self->tx.in_pending = 0;
 
     uct_ud_enter(self); 
     status = ucs_async_add_timer(self->super.super.worker->async->mode,
@@ -421,6 +423,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
+    ucs_assert(self->tx.pending_q_len == 0);
     uct_ud_leave(self);
 }
 

@@ -83,6 +83,8 @@ void uct_p2p_test::init() {
 }
 
 void uct_p2p_test::cleanup() {
+
+    flush();
     uct_test::cleanup();
 }
 
