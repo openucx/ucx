@@ -153,7 +153,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     ucs_time_t loop_end_limit;
     unsigned i, counter = 0;
 
-    // TODO enable this test for ud once ooo in it is fixed.
+    /* TODO enable this test for ud once ooo in it is fixed. */
     if (GetParam()->tl_name == "ud" || GetParam()->tl_name == "ud_mlx5") {
         UCS_TEST_SKIP;
     }
@@ -164,7 +164,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     /* set a callback for the uct to invoke when receiving the data */
     uct_iface_set_am_handler(m_e2->iface(), 0, pending_am_handler , &counter);
 
-    loop_end_limit = ucs_get_time() + (ucs_time_from_sec(2) * ucs::test_time_multiplier());
+    loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
     /* send while resources are available. try to add a request to pending */
     do {
         status_send = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr, &send_data,
@@ -181,12 +181,14 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
             status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct);
             if (status_pend == UCS_ERR_BUSY) {
                 free(req);
+            } else {
+                /* coverity[leaked_storage] */
+                break;
             }
-            /* coverity[leaked_storage] */
         } else {
             send_data += 1;
         }
-    } while (((status_send == UCS_OK) || (status_pend == UCS_ERR_BUSY)) && (ucs_get_time() < loop_end_limit));
+    } while (ucs_get_time() < loop_end_limit);
 
     if ((status_send == UCS_OK) || (status_pend == UCS_ERR_BUSY)) {
         /* got here due to reaching the time limit in the above loop.
