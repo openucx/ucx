@@ -312,7 +312,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     ucp_rsc_index_t rsc_index;
     void *rsc_addr;
 
-    UCS_STATIC_ASSERT(address + 1 == (void*)address + 1);
+    UCS_STATIC_ASSERT((ucp_address_t*)0 + 1 == (void*)0 + 1);
 
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(name, UCP_PEER_NAME_MAX, "%s:%d", ucs_get_host_name(),

@@ -100,6 +100,13 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     done
 
+    module load intel/ics
+    ../contrib/configure-devel --with-mpi --prefix=$ucx_inst CC=icc
+    make $make_opt clean
+    make $make_opt all
+    make $make_opt distclean
+    module unload intel/ics
+
     ../contrib/configure-devel --with-mpi --prefix=$ucx_inst
     make $make_opt all
 
