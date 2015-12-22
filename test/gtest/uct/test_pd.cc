@@ -14,7 +14,7 @@ public:
     }
 
 protected:
-    const uct_pd_h pd() {
+    uct_pd_h pd() {
         return ent(0).pd();
     }
 };
