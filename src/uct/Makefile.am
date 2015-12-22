@@ -103,6 +103,7 @@ endif
 endif
 
 if HAVE_TL_CM
+libuct_la_LDFLAGS += $(IBCM_LIBS)
 libuct_la_SOURCES += \
 	ib/cm/cm_iface.c \
 	ib/cm/cm_ep.c
