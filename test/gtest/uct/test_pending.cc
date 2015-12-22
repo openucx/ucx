@@ -63,6 +63,14 @@ public:
         return status;
     }
 
+    void short_progress_loop() {
+        ucs_time_t end_time = ucs_get_time()
+                + ucs_time_from_msec(100.0) * ucs::test_time_multiplier();
+        while (ucs_get_time() < end_time) {
+            progress();
+        }
+    }
+
 protected:
     entity *m_e1, *m_e2;
     static int m_pending;
@@ -135,6 +143,79 @@ UCS_TEST_P(test_uct_pending, pending_op)
     }
 
     ASSERT_EQ(counter, iters);
+}
+
+UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
+{
+    uint64_t send_data = 0xdeadbeef;
+    uint64_t test_pending_hdr = 0xabcd;
+    ucs_status_t status_send, status_pend = UCS_ERR_LAST;
+    ucs_time_t loop_end_limit;
+    unsigned i, counter = 0;
+
+    /* TODO enable this test for ud once ooo in it is fixed. */
+    if (GetParam()->tl_name == "ud" || GetParam()->tl_name == "ud_mlx5") {
+        UCS_TEST_SKIP;
+    }
+
+    initialize();
+    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
+
+    /* set a callback for the uct to invoke when receiving the data */
+    uct_iface_set_am_handler(m_e2->iface(), 0, pending_am_handler , &counter);
+
+    loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
+    /* send while resources are available. try to add a request to pending */
+    do {
+        status_send = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr, &send_data,
+                                      sizeof(send_data));
+        if (status_send == UCS_ERR_NO_RESOURCE) {
+
+            pending_send_request_t *req = (pending_send_request_t *) malloc(sizeof(*req));
+            req->buffer   = send_data;
+            req->hdr      = test_pending_hdr;
+            req->length   = sizeof(send_data);
+            req->ep       = m_e1->ep(0);
+            req->uct.func = pending_send_op;
+
+            status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct);
+            if (status_pend == UCS_ERR_BUSY) {
+                free(req);
+            } else {
+                /* coverity[leaked_storage] */
+                break;
+            }
+        } else {
+            send_data += 1;
+        }
+    } while (ucs_get_time() < loop_end_limit);
+
+    if ((status_send == UCS_OK) || (status_pend == UCS_ERR_BUSY)) {
+        /* got here due to reaching the time limit in the above loop.
+         * couldn't add a request to pending. all sends were successful. */
+        UCS_TEST_MESSAGE << "Can't create out-of-order in the given time.";
+        return;
+    }
+    /* there is one pending request */
+    EXPECT_EQ(UCS_OK, status_pend);
+
+    /* progress the receiver a bit to release resources */
+    for (i = 0; i < 1000; i++) {
+        m_e2->progress();
+    }
+
+    /* send a new message. the transport should make sure that this new message
+     * isn't sent before the one in pending, thus preventing out-of-order in sending. */
+    send_data += 1;
+    do {
+        status_send = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr,
+                                      &send_data, sizeof(send_data));
+        short_progress_loop();
+    } while (status_send == UCS_ERR_NO_RESOURCE);
+
+    /* the receive side checks that the messages were received in order.
+     * check the last message here. (counter was raised by one for next iteration) */
+    EXPECT_EQ(send_data, 0xdeadbeef + counter - 1);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_pending);
