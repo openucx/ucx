@@ -58,6 +58,9 @@ UCS_TEST_P(test_ud_pending, async_progress) {
     req_count = 0;
     connect();
 
+    set_tx_win(m_e1, 2);
+    EXPECT_UCS_OK(tx(m_e1));
+
     for(i = 0; i < N; i++) {
         EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
     }
@@ -74,6 +77,9 @@ UCS_TEST_P(test_ud_pending, sync_progress) {
 
     req_count = 0;
     connect();
+
+    set_tx_win(m_e1, 2);
+    EXPECT_UCS_OK(tx(m_e1));
 
     for(i = 0; i < N; i++) {
         r[i].func = pending_cb;
@@ -92,6 +98,9 @@ UCS_TEST_P(test_ud_pending, err_busy) {
 
     req_count = 0;
     connect();
+
+    set_tx_win(m_e1, 2);
+    EXPECT_UCS_OK(tx(m_e1));
 
     for(i = 0; i < N; i++) {
         r[i].func = pending_cb_busy;

@@ -72,6 +72,8 @@ struct uct_ud_iface {
         /* pool of skbs that are reserved for retransmissions/ctl packects */
         ucs_queue_head_t       res_skbs;
         ucs_arbiter_t          pending_q;
+        int                    pending_q_len;
+        int                    in_pending;
     } tx;
     struct {
         unsigned             tx_qp_len;
@@ -268,8 +270,23 @@ uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
         return;
     }
 
+    iface->tx.in_pending = 1;
     ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
              uct_ud_ep_do_pending, (void *)is_async);
+    iface->tx.in_pending = 0;
 }
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
+{
+    if (ucs_unlikely(iface->tx.pending_q_len > 0 && 
+                     iface->tx.in_pending == 0)) {
+        iface->tx.in_pending = 1;
+        ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
+                             uct_ud_ep_do_pending, (void *)0);
+        iface->tx.in_pending = 0;
+    }
+}
+
 #endif
 

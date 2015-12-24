@@ -138,6 +138,12 @@ void uct_test::progress() const {
     }
 }
 
+void uct_test::flush() const {
+    FOR_EACH_ENTITY(iter) {
+        (*iter)->flush();
+    }
+}
+
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          size_t rx_headroom, uct_pd_config_t *pd_config) {
     ucs_status_t status;

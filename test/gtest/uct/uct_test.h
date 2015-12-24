@@ -151,6 +151,7 @@ protected:
     void check_caps(uint64_t flags);
     const entity& ent(unsigned index) const;
     void progress() const;
+    void flush() const;
     uct_test::entity* create_entity(size_t rx_headroom);
 
     ucs::ptr_vector<entity> m_entities;

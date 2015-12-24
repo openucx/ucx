@@ -161,6 +161,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                     iface->super.config.max_inline, "am_short");
 
     uct_ud_enter(&iface->super);
+    uct_ud_iface_progress_pending_tx(&iface->super);
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         uct_ud_leave(&iface->super);
@@ -207,6 +208,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     size_t length;
 
     uct_ud_enter(&iface->super);
+    uct_ud_iface_progress_pending_tx(&iface->super);
     status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
@@ -236,6 +238,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     uct_ud_send_skb_t *skb;
 
     uct_ud_enter(&iface->super);
+    uct_ud_iface_progress_pending_tx(&iface->super);
     skb = uct_ud_ep_get_tx_skb(&iface->super, &ep->super);
     if (!skb) {
         uct_ud_leave(&iface->super);
