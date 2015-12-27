@@ -623,11 +623,134 @@ static ucs_status_t ucs_error_freeze()
     return UCS_OK;
 }
 
-static void ucs_error_signal_handler(int signo)
+static const char *ucs_signal_cause_common(int si_code)
+{
+    switch (si_code) {
+    case SI_USER      : return "kill(2) or raise(3)";
+    case SI_KERNEL    : return "Sent by the kernel";
+    case SI_QUEUE     : return "sigqueue(2)";
+    case SI_TIMER     : return "POSIX timer expired";
+    case SI_MESGQ     : return "POSIX message queue state changed";
+    case SI_ASYNCIO   : return "AIO completed";
+    case SI_SIGIO     : return "queued SIGIO";
+    case SI_TKILL     : return "tkill(2) or tgkill(2)";
+    default           : return "<unknown si_code>";
+    }
+}
+
+static const char *ucs_signal_cause_ill(int si_code)
+{
+    switch (si_code) {
+    case ILL_ILLOPC   : return "illegal opcode";
+    case ILL_ILLOPN   : return "illegal operand";
+    case ILL_ILLADR   : return "illegal addressing mode";
+    case ILL_ILLTRP   : return "illegal trap";
+    case ILL_PRVOPC   : return "privileged opcode";
+    case ILL_PRVREG   : return "privileged register";
+    case ILL_COPROC   : return "coprocessor error";
+    case ILL_BADSTK   : return "internal stack error";
+    default           : return ucs_signal_cause_common(si_code);
+    }
+}
+
+static const char *ucs_signal_cause_fpe(int si_code)
+{
+    switch (si_code) {
+    case FPE_INTDIV   : return "integer divide by zero";
+    case FPE_INTOVF   : return "integer overflow";
+    case FPE_FLTDIV   : return "floating-point divide by zero";
+    case FPE_FLTOVF   : return "floating-point overflow";
+    case FPE_FLTUND   : return "floating-point underflow";
+    case FPE_FLTRES   : return "floating-point inexact result";
+    case FPE_FLTINV   : return "floating-point invalid operation";
+    case FPE_FLTSUB   : return "subscript out of range";
+    default           : return ucs_signal_cause_common(si_code);
+    }
+}
+
+static const char *ucs_signal_cause_segv(int si_code)
+{
+    switch (si_code) {
+    case SEGV_MAPERR  : return "address not mapped to object";
+    case SEGV_ACCERR  : return "invalid permissions for mapped object";
+    default           : return ucs_signal_cause_common(si_code);
+    }
+}
+
+static const char *ucs_signal_cause_bus(int si_code)
+{
+    switch (si_code) {
+    case BUS_ADRERR   : return "nonexistent physical address";
+    case BUS_OBJERR   : return "object-specific hardware error";
+    default           : return ucs_signal_cause_common(si_code);
+    }
+}
+
+static const char *ucs_signal_cause_trap(int si_code)
+{
+    switch (si_code) {
+    case TRAP_BRKPT   : return "process breakpoint";
+    case TRAP_TRACE   : return "process trace trap";
+    default           : return ucs_signal_cause_common(si_code);
+    }
+}
+
+static const char *ucs_signal_cause_cld(int si_code)
+{
+    switch (si_code) {
+    case CLD_EXITED   : return "child has exited";
+    case CLD_KILLED   : return "child was killed";
+    case CLD_DUMPED   : return "child terminated abnormally";
+    case CLD_TRAPPED  : return "traced child has trapped";
+    case CLD_STOPPED  : return "child has stopped";
+    case CLD_CONTINUED: return "stopped child has continued";
+    default           : return NULL;
+    }
+}
+
+static void ucs_debug_log_signal(int signo, const char *cause, const char *fmt, ...)
+{
+    char buf[256];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+
+    ucs_log_fatal_error("Caught signal %d (%s: %s%s)", signo, strsignal(signo),
+                        cause, buf);
+}
+
+static void ucs_error_signal_handler(int signo, siginfo_t *info, void *context)
 {
     ucs_debug_cleanup();
     ucs_log_flush();
-    ucs_log_fatal_error("Caught signal %d (%s)", signo, strsignal(signo));
+
+    switch (signo) {
+    case SIGILL:
+        ucs_debug_log_signal(signo, ucs_signal_cause_ill(info->si_code), "");
+        break;
+    case SIGTRAP:
+        ucs_debug_log_signal(signo, ucs_signal_cause_trap(info->si_code), "");
+        break;
+    case SIGBUS:
+        ucs_debug_log_signal(signo, ucs_signal_cause_bus(info->si_code), "");
+        break;
+    case SIGFPE:
+        ucs_debug_log_signal(signo, ucs_signal_cause_fpe(info->si_code), "");
+        break;
+    case SIGSEGV:
+        ucs_debug_log_signal(signo, ucs_signal_cause_segv(info->si_code),
+                             " at address %p", info->si_addr);
+        break;
+    case SIGCHLD:
+        ucs_debug_log_signal(signo, ucs_signal_cause_cld(info->si_code), "");
+        break;
+    default:
+        ucs_debug_log_signal(signo, ucs_signal_cause_common(info->si_code), "");
+        break;
+    }
+
     if (signo != SIGINT && signo != SIGTERM) {
         ucs_handle_error();
     }
@@ -674,12 +797,22 @@ static void ucs_debug_signal_handler(int signo)
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
 }
 
-static void ucs_set_signal_handler(__sighandler_t handler)
+static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
 {
+    struct sigaction sigact, old_action;
     int i;
 
+    if (handler == NULL) {
+        sigact.sa_handler   = SIG_DFL;
+        sigact.sa_flags     = 0;
+    } else {
+        sigact.sa_sigaction = handler;
+        sigact.sa_flags     = SA_SIGINFO;
+    }
+    sigemptyset(&sigact.sa_mask);
+
     for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
-        signal(ucs_global_opts.error_signals.signals[i], handler);
+        sigaction(ucs_global_opts.error_signals.signals[i], &sigact, &old_action);
     }
 }
 
@@ -754,7 +887,7 @@ void ucs_debug_init()
 void ucs_debug_cleanup()
 {
     if (ucs_global_opts.handle_errors > UCS_HANDLE_ERROR_NONE) {
-        ucs_set_signal_handler(SIG_DFL);
+        ucs_set_signal_handler(NULL);
     }
     if (ucs_global_opts.debug_signo > 0) {
         signal(ucs_global_opts.debug_signo, SIG_DFL);
