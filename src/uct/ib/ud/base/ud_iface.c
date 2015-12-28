@@ -445,7 +445,6 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                         UCT_IFACE_FLAG_AM_BCOPY | 
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_AM_THREAD_SINGLE |
                                         UCT_IFACE_FLAG_PENDING;
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
