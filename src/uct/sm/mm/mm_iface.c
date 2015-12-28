@@ -79,9 +79,10 @@ void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put(mm_desc);
 }
 
-ucs_status_t uct_mm_flush()
+ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface)
 {
     ucs_memory_cpu_store_fence();
+    UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
 }
 
@@ -131,7 +132,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_get_address   = uct_mm_iface_get_address,
     .iface_is_reachable  = uct_mm_iface_is_reachable,
     .iface_release_am_desc = uct_mm_iface_release_am_desc,
-    .iface_flush         = (void*)uct_mm_flush,
+    .iface_flush         = uct_mm_iface_flush,
     .ep_put_short        = uct_mm_ep_put_short,
     .ep_put_bcopy        = uct_mm_ep_put_bcopy,
     .ep_get_bcopy        = uct_mm_ep_get_bcopy,
@@ -147,7 +148,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_atomic_swap32    = uct_mm_ep_atomic_swap32,
     .ep_pending_add      = uct_mm_ep_pending_add,
     .ep_pending_purge    = uct_mm_ep_pending_purge,
-    .ep_flush            = (void*)uct_mm_flush,
+    .ep_flush            = uct_mm_ep_flush,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
 };

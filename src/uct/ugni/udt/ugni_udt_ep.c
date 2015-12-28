@@ -62,6 +62,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
 
     UCT_CHECK_AM_ID(am_id);
     if (ucs_unlikely(NULL != ep->posted_desc)) {
+        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
         return UCS_ERR_NO_RESOURCE;
     }
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
@@ -78,11 +79,13 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
         memcpy((void*)(hdr + 1), payload, length);
         sheader->length = length + sizeof(header);
         msg_length = sheader->length + sizeof(*sheader);
+        UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, SHORT, sizeof(header) + length);
     } else {
         packed_length = pack_cb((void *)uct_ugni_udt_get_spayload(desc, iface),
                                 arg);
         sheader->length = packed_length;
         msg_length = sheader->length + sizeof(*sheader);
+        UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, BCOPY, packed_length);
     }
 
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,

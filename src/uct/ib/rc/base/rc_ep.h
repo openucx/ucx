@@ -31,10 +31,12 @@ enum {
 #define UCT_RC_CHECK_RES(_iface, _ep) \
     if (!uct_rc_iface_have_tx_cqe_avail(_iface)) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
+        UCT_TL_IFACE_STAT_TX_NO_RES(&(_iface)->super.super); \
         return UCS_ERR_NO_RESOURCE; \
     } \
     if ((_ep)->available <= 0) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_RC_EP_STAT_QP_FULL, 1); \
+        UCT_TL_IFACE_STAT_TX_NO_RES(&(_iface)->super.super); \
         return UCS_ERR_NO_RESOURCE; \
     }
 

@@ -158,6 +158,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                    (void *)fma->desc.remote_addr,
                    fma->desc.remote_mem_hndl.qword1,
                    fma->desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     return uct_ugni_post_fma(iface, ep, fma, UCS_OK);
 }
 
@@ -189,6 +190,7 @@ ssize_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                    (void *)fma->desc.remote_addr,
                    fma->desc.remote_mem_hndl.qword1,
                    fma->desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, BCOPY, length);
     return uct_ugni_post_fma(iface, ep, fma, length);
 }
 
@@ -214,6 +216,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t le
                    (void *)rdma->desc.remote_addr,
                    rdma->desc.remote_mem_hndl.qword1,
                    rdma->desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY, length);
     return uct_ugni_post_rdma(iface, ep, rdma);
 }
 
@@ -248,6 +251,7 @@ ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
 }
 
@@ -270,6 +274,7 @@ ucs_status_t uct_ugni_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -292,6 +297,7 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -324,6 +330,7 @@ ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -345,6 +352,7 @@ ucs_status_t uct_ugni_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_OK);
 }
 
@@ -367,6 +375,7 @@ ucs_status_t uct_ugni_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -389,6 +398,7 @@ ucs_status_t uct_ugni_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -411,6 +421,7 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -525,6 +536,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
                    (void *)fma->super.desc.remote_addr,
                    fma->super.desc.remote_mem_hndl.qword1,
                    fma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, BCOPY, length);
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
@@ -651,6 +663,7 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
                    (void *)rdma->super.desc.remote_addr,
                    rdma->super.desc.remote_mem_hndl.qword1,
                    rdma->super.desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY, length);
     post_result = uct_ugni_post_fma(iface, ep, &(fma->super), UCS_INPROGRESS);
     if(post_result != UCS_OK && post_result != UCS_INPROGRESS){
         ucs_mpool_put(rdma);
@@ -716,6 +729,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                    (void *)rdma->desc.remote_addr,
                    rdma->desc.remote_mem_hndl.qword1,
                    rdma->desc.remote_mem_hndl.qword2);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY, length);
     return uct_ugni_post_rdma(iface, ep, rdma);
 }
 

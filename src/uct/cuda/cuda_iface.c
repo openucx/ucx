@@ -68,7 +68,6 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
 static uct_iface_ops_t uct_cuda_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t),
     .iface_get_address   = uct_cuda_iface_get_address,
-    .iface_flush         = (void*)ucs_empty_function_return_success,
     .iface_query         = uct_cuda_iface_query,
     .iface_is_reachable  = uct_cuda_iface_is_reachable,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ep_t),

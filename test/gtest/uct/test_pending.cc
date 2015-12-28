@@ -62,14 +62,6 @@ public:
         return status;
     }
 
-    void short_progress_loop() {
-        ucs_time_t end_time = ucs_get_time()
-                + ucs_time_from_msec(100.0) * ucs::test_time_multiplier();
-        while (ucs_get_time() < end_time) {
-            progress();
-        }
-    }
-
 protected:
     entity *m_e1, *m_e2;
 };

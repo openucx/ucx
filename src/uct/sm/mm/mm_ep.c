@@ -106,6 +106,7 @@ ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     } else {
         ucs_trace_data("PUT_SHORT [zero-length]");
     }
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     return UCS_OK;
 }
 
@@ -116,6 +117,7 @@ ssize_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 
     length = pack_cb((void *)(rkey + remote_addr), arg);
     uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, BCOPY, length);
     return length;
 }
 
@@ -202,6 +204,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
         if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
             /* pending isn't empty. don't send now to prevent out-of-order sending */
+            UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super);
             return UCS_ERR_NO_RESOURCE;
         } else {
             /* pending is empty */
@@ -209,6 +212,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
             ucs_memory_cpu_load_fence();
             ep->cached_tail = ep->fifo_ctl->tail;
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
+                UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super);
                 return UCS_ERR_NO_RESOURCE;
             }
         }
@@ -217,6 +221,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
     if (status != UCS_OK) {
         ucs_trace_poll("couldn't get an available FIFO element");
+        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super);
         return status;
     }
 
@@ -231,6 +236,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
                            elem + 1, length + sizeof(header), "TX: AM_SHORT");
+        UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(header) + length);
     } else {
         /* AM_BCOPY */
         /* write to the remote descriptor */
@@ -243,6 +249,8 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
 
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, am_id,
                            base_address + elem->desc_offset, length, "TX: AM_BCOPY");
+
+        UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
     }
 
     elem->am_id = am_id;
@@ -364,6 +372,7 @@ ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
     uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
     ucs_atomic_add64(ptr, add);
     uct_mm_trace_data(remote_addr, rkey, "ATOMIC_ADD64 [add %"PRIu64"]", add);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -376,6 +385,7 @@ ucs_status_t uct_mm_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
     uct_mm_trace_data(remote_addr, rkey,
                       "ATOMIC_FADD64 [add %"PRIu64" result %"PRIu64"]",
                       add, *result);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -388,6 +398,7 @@ ucs_status_t uct_mm_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
     uct_mm_trace_data(remote_addr, rkey,
                       "ATOMIC_SWAP64 [swap %"PRIu64" result %"PRIu64"]",
                       swap, *result);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -401,6 +412,7 @@ ucs_status_t uct_mm_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
     uct_mm_trace_data(remote_addr, rkey,
                       "ATOMIC_CSWAP64 [compare %"PRIu64" swap %"PRIu64" result %"PRIu64"]",
                       compare, swap, *result);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -410,6 +422,7 @@ ucs_status_t uct_mm_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
     uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
     ucs_atomic_add32(ptr, add);
     uct_mm_trace_data(remote_addr, rkey, "ATOMIC_ADD32 [add %"PRIu32"]", add);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -422,6 +435,7 @@ ucs_status_t uct_mm_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
     uct_mm_trace_data(remote_addr, rkey,
                       "ATOMIC_FADD32 [add %"PRIu32" result %"PRIu32"]",
                       add, *result);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -434,6 +448,7 @@ ucs_status_t uct_mm_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
     uct_mm_trace_data(remote_addr, rkey,
                       "ATOMIC_SWAP32 [swap %"PRIu32" result %"PRIu32"]",
                       swap, *result);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -447,6 +462,7 @@ ucs_status_t uct_mm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
     uct_mm_trace_data(remote_addr, rkey,
                       "ATOMIC_CSWAP32 [compare %"PRIu32" swap %"PRIu32" result %"PRIu32"]",
                       compare, swap, *result);
+    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -461,5 +477,14 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb
     } else {
         ucs_trace_data("GET_BCOPY [zero-length]");
     }
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, BCOPY, length);
     return UCS_OK;
 }
+
+ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep)
+{
+    ucs_memory_cpu_store_fence();
+    UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_OK;
+}
+

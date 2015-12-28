@@ -152,6 +152,7 @@ protected:
     const entity& ent(unsigned index) const;
     void progress() const;
     void flush() const;
+    virtual void short_progress_loop(double delay_ms=1.0) const;
     uct_test::entity* create_entity(size_t rx_headroom);
 
     ucs::ptr_vector<entity> m_entities;

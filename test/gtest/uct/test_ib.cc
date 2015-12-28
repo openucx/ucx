@@ -124,14 +124,6 @@ public:
         return ret;
     }
 
-    void short_progress_loop() {
-        ucs_time_t end_time = ucs_get_time() +
-                        ucs_time_from_msec(100.0) * ucs::test_time_multiplier();
-        while (ucs_get_time() < end_time) {
-            progress();
-        }
-    }
-
     void cleanup() {
         uct_test::cleanup();
     }
@@ -168,7 +160,7 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
     /* send the data */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
 
-    short_progress_loop();
+    short_progress_loop(100.0);
 
     ASSERT_EQ(sizeof(send_data), recv_buffer->length);
     EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));

@@ -152,6 +152,7 @@ ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
                                  am_hdr+1, buffer, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_ud_leave(&iface->super);
     return UCS_OK;
 }
@@ -181,6 +182,7 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                    skb, arg, skb->len);
 
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_ud_leave(&iface->super);
     return length;
 }
@@ -223,6 +225,7 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     skb->len = iface->tx.sge[0].length;
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
                                  put_hdr+1, buffer, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_ud_leave(&iface->super);
     return UCS_OK;
 }

@@ -20,6 +20,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
     uct_ud_send_skb_t *skb;
 
     if (ucs_unlikely(!uct_ud_iface_can_tx(iface))) {
+        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
         return NULL;
     }
 
@@ -28,6 +29,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         skb = ucs_mpool_get(&iface->tx.mp);
         if (skb == NULL) {
             ucs_trace_data("iface=%p out of tx skbs", iface);
+            UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
             return NULL;
         }
     }
@@ -46,6 +48,7 @@ uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
                        iface, ep, ep->ep_id, ep->dest_ep_id,
                        (unsigned)ep->tx.psn,
                        (unsigned)ep->tx.max_psn);
+        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
         return NULL;
     }
 
