@@ -200,7 +200,6 @@ struct uct_iface_config {
         uct_alloc_method_t  *methods;
         unsigned            count;
     } alloc_methods;
-    UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, signals) lid_path_bits;
 };
 
 

@@ -15,9 +15,6 @@
 #include <ucs/time/time.h>
 
 
-#define UCS_CONFIG_PREFIX      "UCX_"
-#define UCS_CONFIG_ARRAY_MAX   128
-
 typedef struct ucs_config_array_field {
     void      *data;
     unsigned  count;

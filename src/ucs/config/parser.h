@@ -14,6 +14,10 @@
 #include <stdio.h>
 
 
+#define UCS_CONFIG_PREFIX      "UCX_"
+#define UCS_CONFIG_ARRAY_MAX   128
+
+
 /*
  * Configuration varaibles syntax:
  *
