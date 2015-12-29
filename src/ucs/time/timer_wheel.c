@@ -11,7 +11,8 @@
 #include <ucs/sys/math.h>
 
 
-ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution)
+ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution,
+                             ucs_time_t current_time)
 {
     unsigned i;
 
@@ -19,7 +20,7 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution)
     twheel->res_order   = (unsigned) ucs_log2(twheel->res);
     twheel->num_slots   = 1024;
     twheel->current     = 0;
-    twheel->now         = ucs_get_time();
+    twheel->now         = current_time;
     twheel->wheel       = ucs_malloc(sizeof(*twheel->wheel) * twheel->num_slots,
                                      "twheel");
 

@@ -377,7 +377,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                                  self->super.super.worker->async,
                                  &self->async.timer_id);
     ucs_assert_always(status == UCS_OK);
-    status = ucs_twheel_init(&self->async.slow_timer, uct_ud_slow_tick()/4);
+    status = ucs_twheel_init(&self->async.slow_timer, uct_ud_slow_tick() / 4,
+                             uct_ud_iface_get_async_time(self));
     ucs_assert_always(status == UCS_OK);
                         
     return UCS_OK;
