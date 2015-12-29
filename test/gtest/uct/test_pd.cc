@@ -76,6 +76,7 @@ UCS_TEST_P(test_pd, reg) {
         status = uct_pd_mem_reg(pd(), address, size, &memh);
         if (size == 0) {
             EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+            free(address);
             continue;
         }
 
