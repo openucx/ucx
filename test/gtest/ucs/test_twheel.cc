@@ -47,7 +47,8 @@ protected:
 
 void twheel::init()
 {
-    ucs_twheel_init(&m_wheel, ucs_time_from_usec(32) * ucs::test_time_multiplier());
+    ucs_twheel_init(&m_wheel, ucs_time_from_usec(32) * ucs::test_time_multiplier(),
+                    ucs_get_time());
     ::srand(::time(NULL));
 }
 
