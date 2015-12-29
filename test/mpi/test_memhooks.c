@@ -73,6 +73,7 @@ static void* call_mmap_from_loaded_lib(size_t size)
         return MAP_FAILED;
     }
 
+    /* coverity[leaked_storage] - ignore leaked dl */
     return func(size);
 }
 

@@ -114,7 +114,7 @@ UCS_STATIC_INIT {
     mmap(NULL, 0, 0, 0, -1, 0);
     munmap(NULL, 0);
     mremap(NULL, 0, 0, 0);
-    shmat(-1, NULL, 0);
+    shmat(0, NULL, 0);
     shmdt(NULL);
     sbrk(0);
 }

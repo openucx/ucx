@@ -157,8 +157,9 @@ static int ucm_reloc_get_aux_phent()
             return fd;
         }
 
-        data = NULL;
-        size = 0;
+        data  = NULL;
+        size  = 0;
+        nread = 0;
         for (;;) {
             data = realloc(data, size + chunk_size);
             if (data == NULL) {
@@ -172,6 +173,13 @@ static int ucm_reloc_get_aux_phent()
             size += nread;
         }
         close(fd);
+
+        if (nread < 0) {
+            free(data);
+            return nread;
+        } else if (data == NULL) {
+            return -1;
+        }
 
         for (auxv = data; auxv->type != AT_NULL; ++auxv) {
             if (auxv->type == AT_PHENT) {
@@ -188,16 +196,22 @@ static int ucm_reloc_get_aux_phent()
 
 static ucs_status_t
 ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname,
-                      int16_t phnum, int phent, const char *symbol, void *newvalue)
+                     int16_t phnum, int phent, const char *symbol, void *newvalue)
 {
     const ElfW(Phdr) *dphdr;
     ucm_elf_jmprel_t jmprel;
     ucm_elf_symtab_t symtab;
     ucm_elf_strtab_t strtab;
-    size_t page_size;
+    long page_size;
     void **entry;
     void *page;
     int ret;
+
+    page_size = sysconf(_SC_PAGESIZE);
+    if (page_size < 0) {
+        ucm_error("failed to get page size: %m");
+        return UCS_ERR_IO_ERROR;
+    }
 
     dphdr = ucm_reloc_get_phdr_dynamic(phdr, phnum, phent);
 
@@ -210,7 +224,6 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
         return UCS_OK; /* Would be patched later */
     }
 
-    page_size = sysconf(_SC_PAGESIZE);
     page = (void *)((intptr_t)entry & ~(page_size - 1));
     ret = mprotect(page, page_size, PROT_READ|PROT_WRITE);
     if (ret < 0) {

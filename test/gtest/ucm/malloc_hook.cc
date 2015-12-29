@@ -149,6 +149,7 @@ void test_thread::test() {
 
     free(ptr);
     EXPECT_GE(m_unmap_size, large_alloc_size) << "thread " << m_thread_ind;
+    /* coverity[pass_freed_arg] */
     EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_unmap_ranges)) << "thread " << m_thread_ind;
 
     void *s = strdup("test");

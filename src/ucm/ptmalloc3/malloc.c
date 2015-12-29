@@ -3982,6 +3982,7 @@ static int sys_trim(mstate m, size_t pad) {
               !has_segment_link(m, sp)) { /* can't shrink if pinned */
             size_t newsize = sp->size - extra;
             /* Prefer mremap, fall back to munmap */
+            /* coverity[offset_free] */
             if ((CALL_MREMAP(sp->base, sp->size, newsize, 0) != MFAIL) ||
                 (CALL_MUNMAP(sp->base + newsize, extra) == 0)) {
               released = extra;
@@ -4718,6 +4719,7 @@ void* dlmemalign(size_t alignment, size_t bytes) {
 void** dlindependent_calloc(size_t n_elements, size_t elem_size,
                                  void* chunks[]) {
   size_t sz = elem_size; /* serves as 1-element array */
+  /* coverity[callee_ptr_arith] */
   return ialloc(gm, n_elements, &sz, 3, chunks);
 }
 
