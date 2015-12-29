@@ -1,6 +1,5 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -389,7 +388,7 @@ static uct_ep_h ucp_wireup_msg_ep(ucp_ep_h ep)
 
 static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, uct);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep = req->send.ep;
     ucs_status_t status;
 
@@ -423,14 +422,13 @@ static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint16_t flags,
     }
 
     req->flags                         = UCP_REQUEST_FLAG_RELEASED;
-    req->send.ep                       = ep;
     req->cb.send                       = (ucp_send_callback_t)ucs_empty_function;
-    req->uct.func                      = ucp_ep_wireup_op_progress;
+    req->send.uct.func                 = ucp_ep_wireup_op_progress;
     req->send.wireup.flags             = flags;
     req->send.wireup.dst_rsc_index     = dst_rsc_index;
     req->send.wireup.dst_aux_rsc_index = dst_aux_rsc_index;
     ucs_atomic_add32(&ucp_ep_get_stub_ep(ep)->pending_count, 1);
-    ucp_ep_add_pending(uct_ep, req);
+    ucp_ep_add_pending(ep, uct_ep, req);
     return UCS_OK;
 }
 

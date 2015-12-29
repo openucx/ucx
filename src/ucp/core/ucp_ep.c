@@ -1,6 +1,5 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -49,7 +48,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
 static ucs_status_t ucp_pending_req_release(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, uct);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     ucp_request_complete(req, req->cb.send, UCS_ERR_CANCELED)
     return UCS_OK;
@@ -62,22 +61,23 @@ void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep)
     uct_ep_destroy(uct_ep);
 }
 
-void ucp_ep_add_pending(uct_ep_h uct_ep, ucp_request_t *req)
+void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req)
 {
     ucs_status_t status;
 
     ucs_trace_data("add pending request %p uct %p to uct_ep %p", req,
-                   &req->uct, uct_ep);
+                   &req->send.uct, uct_ep);
 
+    req->send.ep = ep;
     for (;;) {
-        status = uct_ep_pending_add(uct_ep, &req->uct);
+        status = uct_ep_pending_add(uct_ep, &req->send.uct);
         if (status != UCS_ERR_BUSY) {
             ucs_assert(status == UCS_OK);
             return; /* Added to pending */
         }
 
         /* Forced progress */
-        status = req->uct.func(&req->uct);
+        status = req->send.uct.func(&req->send.uct);
         if (status == UCS_OK) {
             return; /* Completed the operation */
         }

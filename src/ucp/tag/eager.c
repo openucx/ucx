@@ -1,6 +1,5 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
- * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -169,7 +168,7 @@ static size_t ucp_tag_pack_eager_last_contig(void *dest, void *arg)
     memcpy(hdr + 1, req->send.buffer + req->send.state.offset, length);
     return sizeof(*hdr) + length;
 }
-    
+
 ucs_status_t ucp_tag_send_eager_only_contig(ucp_ep_t *ep, ucp_tag_t tag,
                                             const void *buffer, size_t length)
 {
@@ -180,7 +179,7 @@ ucs_status_t ucp_tag_send_eager_only_contig(ucp_ep_t *ep, ucp_tag_t tag,
 
 ucs_status_t ucp_tag_progress_eager_contig(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, uct);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
     size_t max_bcopy_egr = ep->config.max_bcopy_egr;
     size_t length, offset;
@@ -311,7 +310,7 @@ static size_t ucp_tag_pack_eager_last_generic(void *dest, void *arg)
 
 ucs_status_t ucp_tag_progress_eager_generic(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, uct);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
     size_t max_bcopy_egr = ep->config.max_bcopy_egr;
     size_t length, offset;

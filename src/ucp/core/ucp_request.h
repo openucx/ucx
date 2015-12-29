@@ -53,6 +53,17 @@ enum {
         } \
     }
 
+/*
+ * - Mark the request as completed
+ * - Otherwise - the request might be released - if so, return it to mpool.
+ */
+#define ucp_request_rma_complete(_req) \
+    { \
+        ucs_trace_data("completing RMA request %p flags 0x%x", _req, (_req)->flags); \
+        if (((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) { \
+            ucs_mpool_put(_req); \
+        } \
+    }
 
 typedef struct ucp_send_state {
     size_t                        offset;
@@ -69,7 +80,6 @@ typedef struct ucp_send_state {
  */
 typedef struct ucp_request {
     uint16_t                      flags;   /* Request flags */
-    uct_pending_req_t             uct;     /* Pending request */
 
     union {
         ucp_send_callback_t       send;
@@ -82,6 +92,7 @@ typedef struct ucp_request {
             const void            *buffer;  /* Send buffer */
             size_t                count;    /* Send length */
             ucp_datatype_t        datatype; /* Send type */
+            uct_pending_req_t     uct;      /* Pending request */
 
             union {
                 ucp_tag_t         tag;      /* Tagged send */
@@ -91,20 +102,16 @@ typedef struct ucp_request {
                     ucp_rsc_index_t dst_aux_rsc_index;
                     uint16_t        flags;
                 } wireup;
+
+                struct {
+                    uint64_t      remote_addr; /* remote address */
+                    ucp_rkey_h    rkey;        /* Rkey */
+                } rma;
             };
 
             size_t                length;   /* Total length, in bytes */
             ucp_frag_state_t      state;
         } send;
-
-        struct {
-            ucp_ep_h              ep;
-            const void            *buffer;     /* Put buffer */
-            uint64_t              remote_addr; /* remote address */
-            ucp_rkey_h            rkey;        /* Rkey */
-            size_t                length;      /* Put/Get length, in bytes */
-            ucp_frag_state_t      state;
-        } rma;
 
         struct {
             ucs_queue_elem_t      queue;    /* Expected queue element */
