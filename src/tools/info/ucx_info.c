@@ -15,6 +15,7 @@ static void usage() {
     printf("Usage: ucx_info [options]\n");
     printf("Options are:\n");
     printf("  -v         Version\n");
+    printf("  -s         System\n");
     printf("  -d         Devices\n");
     printf("  -c         Configuration\n");
     printf("  -a         Show also hidden configuration\n");
