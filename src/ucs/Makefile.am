@@ -41,6 +41,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/mpool.inl \
 	datastruct/notifier.h \
+	datastruct/pgtable.h \
 	datastruct/ptr_array.h \
 	datastruct/queue_types.h \
 	datastruct/queue.h \
@@ -86,6 +87,7 @@ libucs_la_SOURCES = \
 	datastruct/notifier.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
+	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
 	debug/debug.c \
 	debug/instrument.c \
