@@ -88,6 +88,7 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
         }
         break;
     default:
+        ucm_warn("Got unknown event %d", event_type);
         break;
     }
 }

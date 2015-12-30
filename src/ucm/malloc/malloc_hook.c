@@ -204,7 +204,8 @@ void *ucm_realloc(void *oldptr, size_t size, const void *caller)
      * with the new heap, and copy out the data. Then, release the old pointer.
      */
     newptr = dlmalloc(size);
-    memcpy(newptr, oldptr, ucm_malloc_hook_state.usable_size(oldptr));
+    memcpy(newptr, oldptr,
+           ucs_min(size, ucm_malloc_hook_state.usable_size(oldptr)));
     ucm_release_foreign_block(oldptr);
 
 out:

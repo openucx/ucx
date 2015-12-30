@@ -19,8 +19,8 @@ BEGIN_C_DECLS
 #include <stddef.h>
 
 
-/*
- * Memory event types
+/**
+ * @brief Memory event types
  */
 typedef enum ucm_event_type {
     /* Native events */
@@ -37,6 +37,9 @@ typedef enum ucm_event_type {
 } ucm_event_type_t;
 
 
+/**
+ * @brief Memory event parameters and result.
+ */
 typedef union ucm_event {
     /*
      * UCM_EVENT_MMAP
@@ -123,7 +126,9 @@ typedef union ucm_event {
 
 
 /**
- * Memory event callback.
+ * @brief Memory event callback.
+ *
+ *  This type describes a callback which handles memory events in the current process.
  *
  * @param [in]     event_type  Type of the event being fired. see @ref ucm_event_type_t.
  * @param [inout]  event       Event information. This structure can be updated by
@@ -159,7 +164,7 @@ typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
 
 
 /**
- * Install a handler for memory events.
+ * @brief Install a handler for memory events.
  *
  * @param [in]  events     Bit-mask of events to handle.
  * @param [in]  priority   Priority value which defines the order in which event
@@ -168,13 +173,15 @@ typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
  *                           >= 0 - called after the original implementation.
  * @param [in]  cb         Event-handling callback.
  * @param [in]  arg        User-defined argument for the callback.
+ *
+ * @return Status code.
  */
 ucs_status_t ucm_set_event_handler(int events, int priority,
                                    ucm_event_callback_t cb, void *arg);
 
 
 /**
- * Remove a handler for memory events.
+ * @brief Remove a handler for memory events.
  *
  * @param [in]  events     Which events to remove. The handler is removed
  *                          completely when all its events are removed.
@@ -188,6 +195,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg);
  * Invoke the original implementation of several functions which are intercepted
  * by this library. These will not trigger event callbacks.
  */
+
 void *ucm_orig_mmap(void *addr, size_t length, int prot, int flags, int fd,
                     off_t offset);
 int ucm_orig_munmap(void *addr, size_t length);
