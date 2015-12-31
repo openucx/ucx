@@ -35,7 +35,6 @@ struct uct_pd_component {
     const char             *cfg_prefix;        /**< Prefix for configuration environment vars */
     ucs_config_field_t     *pd_config_table;   /**< Defines PD configuration options */
     size_t                 pd_config_size;     /**< PD configuration structure size */
-    size_t                 rkey_buf_size;
     ucs_list_link_t        tl_list;            /* List of uct_pd_registered_tl_t */
     ucs_list_link_t        list;
 };
@@ -66,7 +65,6 @@ typedef struct uct_pd_registered_tl {
  * @param _query         Function to query PD resources.
  * @param _open          Function to open a PD.
  * @param _priv          Custom private data.
- * @param _rkey_buf_size Size of buffer needed for packed rkey.
  * @param _rkey_unpack   Function to unpack a remote key buffer to handle.
  * @param _rkey_release  Function to release a remote key handle.
  * @param _cfg_prefix    Prefix for configuration environment vars.
@@ -74,7 +72,7 @@ typedef struct uct_pd_registered_tl {
  * @param _cfg_struct    PDC configuration structure.
  */
 #define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, _priv, \
-                                _rkey_buf_size, _rkey_unpack, _rkey_release, \
+                                _rkey_unpack, _rkey_release, \
                                 _cfg_prefix, _cfg_table, _cfg_struct) \
     \
     uct_pd_component_t _pdc = { \
@@ -87,7 +85,6 @@ typedef struct uct_pd_registered_tl {
         .rkey_unpack     = _rkey_unpack, \
         .rkey_release    = _rkey_release, \
         .name            = _name, \
-        .rkey_buf_size   = _rkey_buf_size, \
         .tl_list         = { &_pdc.tl_list, &_pdc.tl_list } \
     }; \
     UCS_STATIC_INIT { \

@@ -465,8 +465,8 @@ ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 
     /* PD component name + data */
     memcpy(pd_attr->component_name, pd->component->name, UCT_PD_COMPONENT_NAME_MAX);
-    pd_attr->rkey_packed_size = UCT_PD_COMPONENT_NAME_MAX +
-                                pd->component->rkey_buf_size;
+    pd_attr->rkey_packed_size += UCT_PD_COMPONENT_NAME_MAX;
+
     return UCS_OK;
 }
 

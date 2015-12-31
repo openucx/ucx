@@ -92,6 +92,10 @@
  */
 const char *ucs_get_host_name();
 
+/**
+ * @return user name.
+ */
+const char *ucs_get_user_name();
 
 /**
  * Expand a partial path to full path.

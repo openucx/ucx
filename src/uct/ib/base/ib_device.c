@@ -99,9 +99,10 @@ static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
 {
     uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
 
-    pd_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.flags     = UCT_PD_FLAG_REG;
+    pd_attr->cap.max_alloc    = ULONG_MAX; /* TODO query device */
+    pd_attr->cap.max_reg      = ULONG_MAX; /* TODO query device */
+    pd_attr->cap.flags        = UCT_PD_FLAG_REG;
+    pd_attr->rkey_packed_size = sizeof(uint32_t);
 
     if (IBV_EXP_HAVE_CONTIG_PAGES(&dev->dev_attr)) {
         pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
@@ -740,6 +741,6 @@ out:
 
 UCT_PD_COMPONENT_DEFINE(uct_ib_pd, UCT_IB_PD_PREFIX,
                         uct_ib_query_pd_resources, uct_ib_pd_open, NULL,
-                        sizeof(uint32_t), uct_ib_rkey_unpack,
+                        uct_ib_rkey_unpack,
                         (void*)ucs_empty_function_return_success /* release */,
                         "IB_", uct_ib_pd_config_table, uct_ib_pd_config_t);

@@ -292,8 +292,8 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
 
     status = uct_mm_pd_mapper_ops(pd)->alloc(pd, &size_to_alloc, config->hugetlb_mode,
-                                             &iface->shared_mem, &iface->fifo_mm_id
-                                             UCS_MEMTRACK_NAME("mm fifo"));
+                                             &iface->shared_mem, &iface->fifo_mm_id,
+                                             &iface->path UCS_MEMTRACK_NAME("mm fifo"));
     if (status != UCS_OK) {
         ucs_error("Failed to allocate memory for the receive FIFO in mm. size: %zu : %m",
                    size_to_alloc);
@@ -417,7 +417,7 @@ destroy_recv_mpool:
     ucs_mpool_cleanup(&self->recv_desc_mp, 1);
 err_free_fifo:
     uct_mm_pd_mapper_ops(pd)->free(self->shared_mem, self->fifo_mm_id,
-                                   UCT_MM_GET_FIFO_SIZE(self));
+                                   UCT_MM_GET_FIFO_SIZE(self), self->path);
 err:
     return status;
 }
@@ -439,7 +439,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     /* release the memory allocated for the FIFO */
     status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem,
                                                         self->fifo_mm_id,
-                                                        size_to_free);
+                                                        size_to_free, self->path);
     if (status != UCS_OK) {
         ucs_warn("Unable to release shared memory segment: %m");
     }
