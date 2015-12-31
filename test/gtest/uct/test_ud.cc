@@ -21,6 +21,14 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t drop_crep(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
+            return UCS_ERR_BUSY;
+        }
+        return UCS_OK;
+    }
+
     static int ack_req_tx_cnt;
 
     static uct_ud_psn_t tx_ack_psn;
@@ -46,6 +54,15 @@ public:
         EXPECT_EQ(0U, ucs_queue_length(&ep(m_e1)->tx.window));
         EXPECT_EQ(1, ep(m_e1)->tx.acked_psn);
         EXPECT_EQ(1, ep(m_e2)->rx.acked_psn);
+    }
+
+    void check_connection() {
+        /* make sure that connection is good */
+        EXPECT_UCS_OK(tx(m_e1));
+        EXPECT_UCS_OK(tx(m_e1));
+        flush();
+        EXPECT_EQ(4, ep(m_e1, 0)->tx.psn);
+        EXPECT_EQ(3, ep(m_e1)->tx.acked_psn);
     }
 };
 
@@ -214,6 +231,35 @@ UCS_TEST_P(test_ud, ack_req_window) {
     EXPECT_EQ(N/4, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
 }
+
+/* simulate retransmission of the CREQ packet */
+UCS_TEST_P(test_ud, creq_drop) {
+    m_e1->connect_to_iface(0, *m_e2);
+    /* setup filter to drop crep */
+    ep(m_e1, 0)->rx.rx_hook = drop_crep;
+    short_progress_loop();
+    /* remove filter. Go to sleep. CREQ will be retransmitted */
+    ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
+    twait(500);
+
+    /* CREQ resend and connection shall be fully functional */
+    EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
+    EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
+
+    EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
+    
+    check_connection();
+}
+
+UCS_TEST_P(test_ud, creq_flush) {
+    m_e1->connect_to_iface(0, *m_e2);
+    /* setup filter to drop crep */
+    ep(m_e1, 0)->rx.rx_hook = drop_crep;
+    short_progress_loop();
+    /* do flush while ep is not yet connected - should work */
+    flush();
+}
 #endif
 
 UCS_TEST_P(test_ud, connect_iface_single) {
@@ -224,7 +270,9 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
 
     EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
+
+    check_connection();
 }
 
 UCS_TEST_P(test_ud, connect_iface_2to1) {
@@ -236,12 +284,12 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     EXPECT_EQ(0U, ep(m_e1,0)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1,0)->conn_id);
     EXPECT_EQ(2, ep(m_e1,0)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 
     EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
     EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
     EXPECT_EQ(2, ep(m_e1,1)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
 }
 
 UCS_TEST_P(test_ud, connect_iface_seq) {
@@ -251,7 +299,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1)->conn_id);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
+    EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
@@ -260,7 +308,10 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     EXPECT_EQ(0U, ep(m_e2)->ep_id);
     EXPECT_EQ(0U, ep(m_e2)->conn_id);
     EXPECT_EQ(1, ep(m_e2)->tx.psn);
-    EXPECT_EQ(ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts), 1);
+    /* one becase creq sets initial psn */
+    EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+
+    check_connection();
 }
 
 UCS_TEST_P(test_ud, connect_iface_sim) {

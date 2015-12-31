@@ -410,11 +410,11 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
                      ep->ep_id != dest_id)) {
         uct_ud_iface_log_rxdrop(iface, ep, neth, byte_len);
-        /* TODO: in the future just drop the packet because it is
+        /* Drop the packet because it is
          * allowed to do disconnect without flush/barrier. So it
          * is possible to get packet for the ep that has been destroyed 
          */
-        ucs_fatal("Failed to find ep(%d)", dest_id);
+        ucs_debug("Failed to find ep(%d)", dest_id);
         goto out;
     } 
 
@@ -428,8 +428,14 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
     }
 
-    if (ucs_unlikely(!is_am && (byte_len == sizeof(*neth)))) {
-        goto out;
+    if (ucs_unlikely(!is_am)) {
+        if ((byte_len == sizeof(*neth))) {
+            goto out;
+        }
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
+            uct_ud_ep_rx_ctl(iface, ep, (uct_ud_ctl_hdr_t *)(neth + 1));
+            goto out;
+        }
     }
 
     ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->ooo_elem, neth->psn);
@@ -444,12 +450,9 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         goto out;
     }
     
-    if (ucs_unlikely(!is_am && (neth->packet_type & UCT_UD_PACKET_FLAG_CTL))) {
-        uct_ud_ep_rx_ctl(iface, ep, (uct_ud_ctl_hdr_t *)(neth + 1));
-        goto out;
-    }
 
     if (ucs_unlikely(!is_am && (neth->packet_type & UCT_UD_PACKET_FLAG_PUT))) {
+        /* TODO: remove once ucp implements put */
         uct_ud_ep_rx_put(neth, byte_len);
         goto out;
     }
@@ -465,6 +468,10 @@ out:
 ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     uct_ud_send_skb_t *skb;
+
+    if (ucs_unlikely(!uct_ud_ep_is_connected(ep))) {
+        return UCS_OK;
+    }
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
