@@ -10,7 +10,7 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
-#include <uct/tl/tl_log.h>
+#include <uct/base/uct_log.h>
 #include <infiniband/arch.h>
 
 

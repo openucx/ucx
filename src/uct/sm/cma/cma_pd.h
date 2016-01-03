@@ -11,7 +11,7 @@
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
 
 #include <sys/types.h>
 #include <unistd.h>

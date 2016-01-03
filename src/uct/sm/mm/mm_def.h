@@ -6,10 +6,11 @@
 #ifndef UCT_MM_H
 #define UCT_MM_H
 
+#include <uct/base/uct_pd.h>
 #include <ucs/sys/math.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/api/uct_def.h>
-#include <uct/tl/context.h>
+
 
 typedef struct uct_mm_ep                uct_mm_ep_t;
 typedef struct uct_mm_iface             uct_mm_iface_t;

@@ -10,7 +10,7 @@
 #include "ib_verbs.h"
 #include "ib_iface.h"
 
-#include <uct/tl/tl_log.h>
+#include <uct/base/uct_log.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 

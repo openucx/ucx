@@ -9,7 +9,7 @@
 
 #include "ib_mlx5.h"
 
-#include <uct/tl/tl_log.h>
+#include <uct/base/uct_log.h>
 
 
 void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe);

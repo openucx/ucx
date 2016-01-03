@@ -8,9 +8,9 @@
 #define UCT_SYSV_EP_H
 
 #include <uct/api/uct.h>
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
+#include <ucs/type/class.h>
 
-#include "ucs/type/class.h"
 
 typedef struct uct_cuda_ep_addr {
     int                ep_id;

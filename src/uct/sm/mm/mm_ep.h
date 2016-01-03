@@ -8,9 +8,10 @@
 #define UCT_MM_EP_H
 
 #include "mm_iface.h"
-#include <uct/tl/tl_log.h>
+
 #include <ucs/datastruct/sglib.h>
 #include <ucs/datastruct/sglib_wrapper.h>
+
 
 struct uct_mm_ep {
     uct_base_ep_t       super;

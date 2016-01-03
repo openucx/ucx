@@ -7,10 +7,9 @@
 #ifndef UCT_CUDA_CONTEXT_H
 #define UCT_CUDA_CONTEXT_H
 
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
 
 #define UCT_CUDA_PD_NAME           "gpu"
-
 
 extern uct_pd_component_t uct_cuda_pd;
 

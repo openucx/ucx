@@ -7,7 +7,8 @@
 #ifndef UCT_CUDA_IFACE_H
 #define UCT_CUDA_IFACE_H
 
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
+
 
 #define UCT_CUDA_TL_NAME    "cuda"
 #define UCT_CUDA_DEV_NAME   "gpu0"

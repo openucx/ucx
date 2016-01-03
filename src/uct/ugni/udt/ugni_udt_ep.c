@@ -6,7 +6,7 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
-#include <uct/tl/tl_log.h>
+#include <uct/base/uct_log.h>
 
 #include "ugni_udt_ep.h"
 #include "ugni_udt_iface.h"

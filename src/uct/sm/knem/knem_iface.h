@@ -7,8 +7,10 @@
 #ifndef UCT_KNEM_IFACE_H
 #define UCT_KNEM_IFACE_H
 
-#include <uct/tl/tl_base.h>
 #include "knem_pd.h"
+
+#include <uct/base/uct_iface.h>
+
 
 #define UCT_KNEM_TL_NAME "knem"
 

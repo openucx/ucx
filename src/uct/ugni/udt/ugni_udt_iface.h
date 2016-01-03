@@ -13,7 +13,7 @@
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_udt_ep.h"
 
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_pd.h>
 
 typedef void uct_ugni_udt_desc_t;
 

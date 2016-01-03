@@ -8,11 +8,12 @@
 #ifndef UCT_MM_PD_H_
 #define UCT_MM_PD_H_
 
+#include "mm_def.h"
+
+#include <uct/base/uct_pd.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
-#include <uct/tl/context.h>
-#include "mm_def.h"
 
 
 /* Shared memory ID */

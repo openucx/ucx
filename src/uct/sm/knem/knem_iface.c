@@ -9,7 +9,8 @@
 #include "knem_ep.h"
 
 #include <uct/api/addr.h>
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
+
 
 UCT_PD_REGISTER_TL(&uct_knem_pd_component, &uct_knem_tl);
 
