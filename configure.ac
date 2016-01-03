@@ -67,7 +67,9 @@ AC_PROG_LIBTOOL
 AC_HEADER_STDC
 LT_LIB_M
 
+m4_include([config/m4/pkg.m4])
 PKG_PROG_PKG_CONFIG
+
 
 #
 # Save config flags for version dump tool
