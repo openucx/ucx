@@ -11,7 +11,6 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 
-#include <gtest/gtest.h>
 #include <dlfcn.h>
 
 extern "C" {

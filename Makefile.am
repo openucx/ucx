@@ -58,6 +58,11 @@ DOCLIST = doc/doxygen/doxygen-doc/ucx.tag
 FORMAT = pdf
 DOT_CLEANFILES =
 
+if HAVE_GTEST
+gtest:
+	@make -C test/gtest test
+endif
+
 if HAVE_DOT
 DOCLIST += doc/uml/uml.tag doc/uml/uct.$(FORMAT) doc/uml/ucp.$(FORMAT)
 DOT_CLEANFILES += doc/uml/uml.tag doc/uml/uct.$(FORMAT) doc/uml/ucp.$(FORMAT)

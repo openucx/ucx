@@ -53,6 +53,7 @@ nobase_dist_libucs_la_HEADERS = \
 	debug/memtrack.h \
 	gtest/test.h \
 	gtest/test_helpers.h \
+	gtest/tap.h \
 	stats/libstats.h \
 	stats/stats.h \
 	sys/compiler.h \

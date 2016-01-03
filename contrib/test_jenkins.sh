@@ -116,12 +116,21 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     echo "Running ucx_info"
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
 
+    export GTEST_RANDOM_SEED=0
+    export GTEST_SHUFFLE=1
+    export GTEST_TAP=2
+
+    export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+    mkdir -p $GTEST_REPORT_DIR
+
     echo "Running unit tests"
     $AFFINITY $TIMEOUT make -C test/gtest test UCS_HANDLE_ERRORS=bt
+    (cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
     echo "Running valgrind tests"
     module load tools/valgrind-latest
     $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml" test_valgrind
+    (cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
     module unload tools/valgrind-latest
 
     echo "Build with coverity"

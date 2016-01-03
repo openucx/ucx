@@ -4,7 +4,6 @@
 * See file LICENSE for terms.
 */
 
-#include <gtest/gtest.h>
 extern "C" {
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -13,6 +12,7 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 #include "test_helpers.h"
+#include "tap.h"
 
 static int ucs_gtest_random_seed = -1;
 
@@ -44,6 +44,19 @@ static void modify_config_for_valgrind(const char *name, const char *value)
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
+
+    char *str = getenv("GTEST_TAP");
+    /* Append TAP Listener */
+    if (str) {
+        if (0 < strtol(str, NULL, 0)) {
+            testing::TestEventListeners& listeners = testing::UnitTest::GetInstance()->listeners();
+            if (1 == strtol(str, NULL, 0)) {
+                delete listeners.Release(listeners.default_result_printer());
+            }
+            listeners.Append(new tap::TapListener());
+        }
+    }
+
     parse_test_opts(argc, argv);
     if (ucs_gtest_random_seed == -1) {
         ucs_gtest_random_seed = time(NULL) % 32768;
