@@ -9,7 +9,7 @@
 
 #include "rc_def.h"
 
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/queue.h>

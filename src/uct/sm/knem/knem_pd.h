@@ -11,7 +11,7 @@
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
 
 extern uct_pd_component_t uct_knem_pd_component;
 ucs_status_t uct_knem_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);

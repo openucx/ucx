@@ -4,10 +4,10 @@
 * See file LICENSE for terms.
 */
 
-#ifndef UCT_TL_LOG_H_
-#define UCT_TL_LOG_H_
+#ifndef UCT_LOG_H_
+#define UCT_LOG_H_
 
-#include "tl_base.h"
+#include "uct_iface.h"
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>

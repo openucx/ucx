@@ -12,7 +12,7 @@
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_rdma_ep.h"
 
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
 
 #define UCT_UGNI_MAX_FMA     (2048)
 #define UCT_UGNI_MAX_RDMA    (512*1024*1024);

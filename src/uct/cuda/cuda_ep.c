@@ -4,12 +4,12 @@
  * See file LICENSE for terms.
  */
 
-#include <ucs/debug/memtrack.h>
-#include <ucs/type/class.h>
-#include <uct/tl/tl_log.h>
-
 #include "cuda_ep.h"
 #include "cuda_iface.h"
+
+#include <uct/base/uct_log.h>
+#include <ucs/debug/memtrack.h>
+#include <ucs/type/class.h>
 
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ep_t, uct_iface_t *tl_iface,

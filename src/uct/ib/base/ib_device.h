@@ -10,7 +10,7 @@
 #include "ib_verbs.h"
 
 #include <uct/api/uct.h>
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
 #include <ucs/stats/stats.h>
 #include <ucs/type/status.h>
 

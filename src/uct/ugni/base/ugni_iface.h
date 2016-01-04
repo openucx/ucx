@@ -2,7 +2,7 @@
 #define UCT_UGNI_IFACE
 
 #include <gni_pub.h>
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
 #include "uct/api/uct.h"
 #include "ugni_ep.h"
 #include "ugni_device.h"

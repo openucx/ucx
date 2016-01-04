@@ -10,7 +10,7 @@
 
 #include "ugni_device.h"
 
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>

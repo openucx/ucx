@@ -6,7 +6,7 @@
 
 #include <pmi.h>
 #include "ucs/type/class.h"
-#include "uct/tl/context.h"
+#include "uct/base/uct_pd.h"
 
 #include <ucs/arch/cpu.h>
 #include <uct/ugni/base/ugni_iface.h>

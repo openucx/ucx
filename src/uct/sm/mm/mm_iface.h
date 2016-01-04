@@ -10,7 +10,7 @@
 #include "mm_def.h"
 #include "mm_pd.h"
 
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/arbiter.h>

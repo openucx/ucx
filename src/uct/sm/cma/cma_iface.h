@@ -7,7 +7,7 @@
 #ifndef UCT_CMA_IFACE_H
 #define UCT_CMA_IFACE_H
 
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
 
 #define UCT_CMA_TL_NAME "cma"
 

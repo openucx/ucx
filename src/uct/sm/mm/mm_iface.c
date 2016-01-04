@@ -8,7 +8,6 @@
 #include "mm_ep.h"
 
 #include <uct/api/addr.h>
-#include <uct/tl/context.h>
 #include <ucs/arch/bitops.h>
 
 

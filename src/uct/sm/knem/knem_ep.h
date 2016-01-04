@@ -8,7 +8,7 @@
 #define UCT_KNEM_EP_H
 
 #include "knem_iface.h"
-#include <uct/tl/tl_log.h>
+
 
 typedef struct uct_knem_ep {
     uct_base_ep_t super;

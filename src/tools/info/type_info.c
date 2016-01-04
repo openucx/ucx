@@ -15,8 +15,8 @@
 #include <ucs/time/timerq.h>
 #include <ucs/time/timer_wheel.h>
 #include <ucs/type/class.h>
-#include <uct/tl/context.h>
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_pd.h>
+#include <uct/base/uct_iface.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_mm.h>

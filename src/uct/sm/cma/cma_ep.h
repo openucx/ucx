@@ -9,7 +9,7 @@
 
 #include "cma_iface.h"
 
-#include <uct/tl/tl_log.h>
+#include <uct/base/uct_log.h>
 
 
 typedef struct uct_cma_ep {

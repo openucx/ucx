@@ -3,7 +3,7 @@
 
 #include <gni_pub.h>
 #include <uct/api/uct.h>
-#include <uct/tl/tl_base.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/sglib_wrapper.h>
 

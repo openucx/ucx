@@ -8,7 +8,7 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/base/ib_device.h>
-#include <uct/tl/context.h>
+#include <uct/base/uct_pd.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 
