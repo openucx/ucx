@@ -19,10 +19,13 @@ unsigned test_base::m_total_warnings = 0;
 test_base::test_base() : m_state(NEW),
                 m_initialized(false),
                 m_num_valgrind_errors_before(0),
-                m_num_warnings_before(0) {
+                m_num_warnings_before(0)
+{
+    push_config();
 }
 
 test_base::~test_base() {
+    pop_config();
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == ABORTED,
