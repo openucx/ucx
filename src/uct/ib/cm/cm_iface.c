@@ -313,7 +313,7 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_bcopy      = mtu;
     iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = 0;
-    iface_attr->cap.flags             = /* UCT_IFACE_FLAG_AM_BCOPY | enable only in case of emergency */
+    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_BCOPY | /* enable only in case of emergency */
                                         UCT_IFACE_FLAG_PENDING |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     return UCS_OK;
