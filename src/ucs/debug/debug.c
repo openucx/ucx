@@ -865,6 +865,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "ucs_error_signal_handler") ||
            !strcmp(symbol, "ucs_debug_backtrace_create") ||
            !strcmp(symbol, "ucs_debug_show_innermost_source_file") ||
+           !strcmp(symbol, "__ucs_abort") ||
            (address == ucs_debug_signal_restorer);
 }
 
