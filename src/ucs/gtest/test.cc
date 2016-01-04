@@ -62,6 +62,7 @@ void test_base::pop_config()
 {
     ucs_global_opts_release();
     ucs_global_opts = m_config_stack.back();
+    m_config_stack.pop_back();
 }
 
 ucs_log_func_rc_t
