@@ -79,7 +79,6 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 
 static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
 {
-
     ucs_status_t status;
     ssize_t packed_len;
 
@@ -101,10 +100,9 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
             /* We don't do it right now, but in future we have to add
              * an option to use zcopy
              */
-            size_t frag_length;
             ucp_memcpy_pack_context_t pack_ctx;
             pack_ctx.src    = req->send.buffer;
-            pack_ctx.length = frag_length =
+            pack_ctx.length =
                 ucs_min(req->send.length, ep->config.max_bcopy_put);
             packed_len = uct_ep_put_bcopy(ep->uct_ep,
                                           ucp_memcpy_pack,
@@ -117,7 +115,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
         if (ucs_likely(status == UCS_OK || status == UCS_INPROGRESS)) {
             req->send.length -= packed_len;
             if (req->send.length == 0) {
-                ucp_request_rma_complete(req);
+                ucp_request_complete(req, void);
                 break;
             }
 
@@ -151,7 +149,6 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
 {
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t frag_length;
     ssize_t packed_len;
     ucp_request_t *req;
 
@@ -190,7 +187,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                 /* TBD: Use z-copy */
                 ucp_memcpy_pack_context_t pack_ctx;
                 pack_ctx.src    = buffer;
-                pack_ctx.length = frag_length =
+                pack_ctx.length =
                     ucs_min(length, ep->config.max_bcopy_put);
                 packed_len = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
                                               remote_addr, uct_rkey);
@@ -307,7 +304,7 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
             req->send.rma.remote_addr += frag_length;
             if (req->send.length == 0) {
                 /* Get was posted */
-                ucp_request_rma_complete(req);
+                ucp_request_complete(req, void);
                 status = UCS_OK;
                 break;
             }

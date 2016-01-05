@@ -53,18 +53,6 @@ enum {
         } \
     }
 
-/*
- * - Mark the request as completed
- * - Otherwise - the request might be released - if so, return it to mpool.
- */
-#define ucp_request_rma_complete(_req) \
-    { \
-        ucs_trace_data("completing RMA request %p flags 0x%x", _req, (_req)->flags); \
-        if (((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) { \
-            ucs_mpool_put(_req); \
-        } \
-    }
-
 typedef struct ucp_send_state {
     size_t                        offset;
     union {
@@ -92,7 +80,6 @@ typedef struct ucp_request {
             const void            *buffer;  /* Send buffer */
             size_t                count;    /* Send length */
             ucp_datatype_t        datatype; /* Send type */
-            uct_pending_req_t     uct;      /* Pending request */
 
             union {
                 ucp_tag_t         tag;      /* Tagged send */
@@ -111,6 +98,7 @@ typedef struct ucp_request {
 
             size_t                length;   /* Total length, in bytes */
             ucp_frag_state_t      state;
+            uct_pending_req_t     uct;      /* Pending request */
         } send;
 
         struct {
