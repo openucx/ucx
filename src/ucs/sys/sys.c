@@ -534,7 +534,7 @@ ucs_status_t ucs_sysv_free(void *address)
     return UCS_OK;
 }
 
-unsigned ucs_get_mem_prot(void *address, size_t length)
+int ucs_get_mem_prot(unsigned long start, unsigned long end)
 {
     static int maps_fd = -1;
     char buffer[1024];
@@ -585,12 +585,12 @@ unsigned ucs_get_mem_prot(void *address, size_t length)
             }
 
             /* Address will not appear on the list */
-            if ((uintptr_t)address < start_addr) {
+            if (start < start_addr) {
                 goto out;
             }
 
             /* Start address falls within current VMA */
-            if ((uintptr_t)address < end_addr) {
+            if (start < end_addr) {
                 ucs_trace_data("existing mapping: start=0x%08lx end=0x%08lx prot=%u",
                                start_addr, end_addr, prot_flags);
 
@@ -605,12 +605,12 @@ unsigned ucs_get_mem_prot(void *address, size_t length)
                 }
 
                 /* Finished going over entire memory region */
-                if ((uintptr_t)(address + length) <= end_addr) {
+                if (end <= end_addr) {
                     return prot_flags;
                 }
 
                 /* Start from the end of current VMA */
-                address = (void*)end_addr;
+                start = end_addr;
             }
 
             ptr = newline + 1;
