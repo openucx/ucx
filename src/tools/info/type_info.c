@@ -11,6 +11,7 @@
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/frag_list.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/time/timerq.h>
 #include <ucs/time/timer_wheel.h>
@@ -103,6 +104,10 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_arbiter_t);
         PRINT_SIZE(ucs_arbiter_group_t);
         PRINT_SIZE(ucs_arbiter_elem_t);
+        PRINT_SIZE(ucs_pgtable_t);
+        PRINT_SIZE(ucs_pgt_entry_t);
+        PRINT_SIZE(ucs_pgt_dir_t);
+        PRINT_SIZE(ucs_pgt_region_t);
 
         printf("\nUCT:\n");
         PRINT_SIZE(uct_am_handler_t);

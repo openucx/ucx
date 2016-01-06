@@ -45,6 +45,10 @@
                                                  UCS_PGT_ENTRY_MIN_ALIGN : sizeof(long))
 
 
+#define UCS_PGT_REGION_FMT            "%p [0x%lx..0x%lx]"
+#define UCS_PGT_REGION_ARG(_region)   (_region), (_region)->start, (_region)->end
+
+
 /* Define the address type */
 typedef unsigned long              ucs_pgt_addr_t;
 
