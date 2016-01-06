@@ -342,10 +342,10 @@ public:
 
 /* UCS error check */
 #define EXPECT_UCS_OK(_error)  EXPECT_EQ(UCS_OK, _error) << "Error: " << ucs_status_string(_error)
-#define ASSERT_UCS_OK(_error) \
+#define ASSERT_UCS_OK(_error, ...) \
     do { \
         if ((_error) != UCS_OK) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_error)); \
+            UCS_TEST_ABORT("Error: " << ucs_status_string(_error)  __VA_ARGS__); \
         } \
     } while (0)
 

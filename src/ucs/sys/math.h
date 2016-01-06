@@ -33,20 +33,26 @@
     _a > _b ? _a : _b;   \
 })
 
+#define ucs_is_pow2_or_zero(_n) \
+    !((_n) & ((_n) - 1))
+
 #define ucs_is_pow2(_n) \
-    ( ((_n) > 0) && !((_n) & ((_n) - 1)) )
+    (((_n) > 0) && ucs_is_pow2_or_zero(_n))
 
 #define ucs_padding(_n, _alignment) \
     ( ((_alignment) - (_n) % (_alignment)) % (_alignment) )
 
+#define ucs_align_down(_n, _alignment) \
+    ( (_n) - ((_n) % (_alignment)) )
+
 #define ucs_align_up(_n, _alignment) \
     ( (_n) + ucs_padding(_n, _alignment) )
 
-#define ucs_align_up_pow2(_n, _alignment) \
-    ( ((_n) + (_alignment) - 1) & ~((_alignment) - 1) )
+#define ucs_align_down_pow2(_n, _alignment) \
+    ( (_n) & ~((_alignment) - 1) )
 
-#define ucs_align_down(_n, _alignment) \
-    ( (_n) - ((_n) % (_alignment)) )
+#define ucs_align_up_pow2(_n, _alignment) \
+    ucs_align_down_pow2((_n) + (_alignment) - 1, _alignment)
 
 #define ucs_roundup_pow2(n) \
     ({ \
