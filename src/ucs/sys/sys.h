@@ -249,11 +249,11 @@ ucs_status_t ucs_sysv_free(void *address);
  * of them is returned. If any part of the region is not mapped, PROT_NONE will
  * be returned.
  *
- * @param address Region start.
- * @param length  Region length.
+ * @param start Region start.
+ * @param end   Region end.
  * @return Memory protection flags (PROT_xxx).
  */
-unsigned ucs_get_mem_prot(void *address, size_t length);
+int ucs_get_mem_prot(unsigned long start, unsigned long end);
 
 
 /**
