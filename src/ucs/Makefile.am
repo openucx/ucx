@@ -10,8 +10,10 @@ lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
 libucs_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
-libucs_la_LIBADD   = $(LIBM)
 libucs_ladir       = $(includedir)/ucs
+libucs_la_LIBADD   = \
+	$(LIBM) \
+	$(top_builddir)/src/ucm/libucm.la
 
 nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/bitops.h \
@@ -60,6 +62,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/compiler.h \
 	sys/math.h \
 	sys/preprocessor.h \
+	sys/rcache.h \
 	sys/sys.h \
 	time/time.h \
 	time/timerq.h \
@@ -97,6 +100,7 @@ libucs_la_SOURCES = \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \
+	sys/rcache.c \
 	sys/sys.c \
 	time/time.c \
 	time/timer_wheel.c \

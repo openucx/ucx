@@ -7,6 +7,7 @@
 #ifndef UCS_TYPES_STATUS_H_
 #define UCS_TYPES_STATUS_H_
 
+#include <ucs/sys/compiler.h>
 
 /**
  * Status codes
@@ -42,7 +43,7 @@ typedef enum {
     UCS_ERR_EXCEEDS_LIMIT          = -21,
     UCS_ERR_UNSUPPORTED            = -22,
     UCS_ERR_LAST                   = -100
-} ucs_status_t;
+} UCS_S_PACKED ucs_status_t ;
 
 
 /**
