@@ -40,7 +40,7 @@ uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
             ucs_warn("iface (%p) peer (qpn=%d lid=%d) cleanup with %d endpoints still active",
                      iface, peer->dest_iface.qp_num, peer->dest_iface.lid, 
                      (int)ucs_list_length(&peer->ep_list));
-            return;
+            continue;
         }
         ucs_list_del(&ep->cep_list);
         uct_ep_t *ep_h = &ep->super.super;

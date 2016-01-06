@@ -361,6 +361,82 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     /* psns are not checked because it really depends on scheduling */
 }
 
+
+UCS_TEST_P(test_ud, ep_destroy_simple) {
+    uct_ep_h ep;
+    ucs_status_t status;
+    uct_ud_ep_t *ud_ep1, *ud_ep2;
+
+    status = uct_ep_create(m_e1->iface(), &ep);
+    EXPECT_UCS_OK(status);
+    ud_ep1 = ucs_derived_of(ep, uct_ud_ep_t);
+    uct_ep_destroy(ep);
+
+    status = uct_ep_create(m_e1->iface(), &ep);
+    EXPECT_UCS_OK(status);
+    ud_ep2 = ucs_derived_of(ep, uct_ud_ep_t);
+    uct_ep_destroy(ep);
+
+    EXPECT_EQ(0U, ud_ep1->ep_id);
+    EXPECT_EQ(1U, ud_ep2->ep_id);
+}
+
+UCS_TEST_P(test_ud, ep_destroy_flush) {
+    uct_ep_h ep;
+    ucs_status_t status;
+    uct_ud_ep_t *ud_ep1;
+
+    connect();
+    EXPECT_UCS_OK(tx(m_e1));
+    short_progress_loop();
+    uct_ep_destroy(m_e1->ep(0));
+    /* ep destroy should try to flush outstanding packets */
+    short_progress_loop();
+    validate_flush();
+
+    /* next created ep must not reuse old id */
+    status = uct_ep_create(m_e1->iface(), &ep);
+    EXPECT_UCS_OK(status);
+    ud_ep1 = ucs_derived_of(ep, uct_ud_ep_t);
+    EXPECT_EQ(1U, ud_ep1->ep_id);
+    uct_ep_destroy(ep);
+}
+
+UCS_TEST_P(test_ud, ep_destroy_passive) {
+    connect();
+    uct_ep_destroy(m_e2->ep(0));
+    /* destroyed ep must still accept data */
+    EXPECT_UCS_OK(tx(m_e1));
+    EXPECT_UCS_OK(ep_flush_b(m_e1));
+
+    validate_flush();
+}
+
+UCS_TEST_P(test_ud, ep_destroy_creq) {
+    uct_ep_h ep;
+    ucs_status_t status;
+    uct_ud_ep_t *ud_ep;
+
+    /* single connect */
+    m_e1->connect_to_iface(0, *m_e2);
+    short_progress_loop();
+
+    uct_ep_destroy(m_e1->ep(0));
+
+    /* check that ep id are not reused on both sides */
+    status = uct_ep_create(m_e1->iface(), &ep);
+    EXPECT_UCS_OK(status);
+    ud_ep = ucs_derived_of(ep, uct_ud_ep_t);
+    uct_ep_destroy(ep);
+    EXPECT_EQ(1U, ud_ep->ep_id);
+
+    status = uct_ep_create(m_e2->iface(), &ep);
+    EXPECT_UCS_OK(status);
+    ud_ep = ucs_derived_of(ep, uct_ud_ep_t);
+    uct_ep_destroy(ep);
+    EXPECT_EQ(1U, ud_ep->ep_id);
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud)
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud_mlx5)
 

@@ -16,6 +16,7 @@
 
 typedef struct {
     uct_ud_ep_t          super;
+    uint32_t             dest_qpn;
     struct ibv_ah       *ah;
 } uct_ud_verbs_ep_t;
 
