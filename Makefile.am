@@ -26,8 +26,8 @@ perftest_dir = $(pkgdatadir)/perftest
 dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
 
 SUBDIRS = \
-	src/ucs \
 	src/ucm \
+	src/ucs \
 	src/uct \
 	src/ucp \
 	src/tools/info \
