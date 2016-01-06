@@ -156,7 +156,7 @@ typedef union ucm_event {
  *       anything which may trigger or wait for memory allocation, because it
  *       may lead to deadlock or infinite recursion.
  *
- * TODO describe use cases
+ * @todo describe use cases
  *
  */
 typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
@@ -191,19 +191,43 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
 void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg);
 
 
-/*
- * Invoke the original implementation of several functions which are intercepted
- * by this library. These will not trigger event callbacks.
+/**
+ * @brief Call the original implementation of @ref mmap without triggering events.
  */
-
 void *ucm_orig_mmap(void *addr, size_t length, int prot, int flags, int fd,
                     off_t offset);
+
+
+/**
+ * @brief Call the original implementation of @ref munmap without triggering events.
+ */
 int ucm_orig_munmap(void *addr, size_t length);
+
+
+/**
+ * @brief Call the original implementation of @ref mremap without triggering events.
+ */
 void *ucm_orig_mremap(void *old_address, size_t old_size, size_t new_size,
                       int flags);
+
+
+/**
+ * @brief Call the original implementation of @ref shmat without triggering events.
+ */
 void *ucm_orig_shmat(int shmid, const void *shmaddr, int shmflg);
+
+
+/**
+ * @brief Call the original implementation of @ref shmdt without triggering events.
+ */
 int ucm_orig_shmdt(const void *shmaddr);
+
+
+/**
+ * @brief Call the original implementation of @ref sbrk without triggering events.
+ */
 void *ucm_orig_sbrk(intptr_t increment);
+
 
 END_C_DECLS
 
