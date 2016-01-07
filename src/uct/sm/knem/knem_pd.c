@@ -208,6 +208,6 @@ static ucs_status_t uct_knem_pd_open(const char *pd_name, const uct_pd_config_t 
 
 UCT_PD_COMPONENT_DEFINE(uct_knem_pd_component, "knem",
                         uct_knem_query_pd_resources, uct_knem_pd_open, 0,
-                        sizeof(uct_knem_key_t), uct_knem_rkey_unpack,
+                        uct_knem_rkey_unpack,
                         uct_knem_rkey_release, "KNEM_", uct_pd_config_table,
                         uct_pd_config_t)

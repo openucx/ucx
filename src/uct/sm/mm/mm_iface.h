@@ -63,11 +63,12 @@ struct uct_mm_iface {
 
     size_t                  rx_headroom;
     ucs_arbiter_t           arbiter;
+    const char              *path;            /* path to the backing file (for 'posix') */
 
     struct {
         unsigned fifo_size;
         unsigned fifo_elem_size;
-        unsigned seg_size;       /* size of the receive descriptor (for payload)*/
+        unsigned seg_size;                    /* size of the receive descriptor (for payload)*/
     } config;
 };
 

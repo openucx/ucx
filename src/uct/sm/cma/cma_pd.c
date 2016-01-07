@@ -72,7 +72,7 @@ static ucs_status_t uct_cma_pd_open(const char *pd_name, const uct_pd_config_t *
 
 UCT_PD_COMPONENT_DEFINE(uct_cma_pd_component, "cma",
         uct_cma_query_pd_resources, uct_cma_pd_open, NULL,
-        0, ucs_empty_function_return_success,
+        ucs_empty_function_return_success,
         ucs_empty_function_return_success, "CMA_", uct_pd_config_table,
         uct_pd_config_t)
 

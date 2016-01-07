@@ -39,20 +39,25 @@ typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*query)();
 
+    size_t       (*get_path_size)(uct_pd_h pd);
+
     ucs_status_t (*reg)(void *address, size_t size, 
                         uct_mm_id_t *mmid_p);
 
     ucs_status_t (*dereg)(uct_mm_id_t mm_id);
 
     ucs_status_t (*alloc)(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
-                          void **address_p, uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG);
+                          void **address_p, uct_mm_id_t *mmid_p, const char **path_p
+                          UCS_MEMTRACK_ARG);
 
-    ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length, 
-                           void *remote_address, void **address, uint64_t *cookie);
+    ucs_status_t (*attach)(uct_mm_id_t mmid, size_t length,
+                           void *remote_address, void **address, uint64_t *cookie,
+                           const char *path);
 
     ucs_status_t (*detach)(uct_mm_remote_seg_t *mm_desc);
 
-    ucs_status_t (*free)(void *address, uct_mm_id_t mm_id, size_t length);
+    ucs_status_t (*free)(void *address, uct_mm_id_t mm_id, size_t length,
+                         const char *path);
 
 } uct_mm_mapper_ops_t;
 
@@ -98,7 +103,7 @@ typedef struct uct_mm_mapper_ops {
     \
     UCT_PD_COMPONENT_DEFINE(_var, _name, \
                             _var##_query_pd_resources, _var##_pd_open, _ops, \
-                            sizeof(uct_mm_packed_rkey_t), uct_mm_rkey_unpack, \
+                            uct_mm_rkey_unpack, \
                             uct_mm_rkey_release, _cfg_prefix, _prefix##_pd_config_table, \
                             _prefix##_pd_config_t)
 
@@ -107,9 +112,10 @@ typedef struct uct_mm_mapper_ops {
  * Local memory segment structure.
  */
 typedef struct uct_mm_seg {
-    uct_mm_id_t      mmid;         /* Shared memory ID */
-    void             *address;     /* Virtual address */
-    size_t           length;       /* Size of the memory */
+    uct_mm_id_t      mmid;      /* Shared memory ID */
+    void             *address;  /* Virtual address */
+    size_t           length;    /* Size of the memory */
+    const char      *path;      /* path to the backing file when using posix */
 } uct_mm_seg_t;
 
 
@@ -120,6 +126,7 @@ typedef struct uct_mm_packed_rkey {
     uct_mm_id_t      mmid;         /* Shared memory ID */
     uintptr_t        owner_ptr;    /* VA of in allocating process */
     size_t           length;       /* Size of the memory */
+    char             path[0];      /* path to the backing file when using posix */
 } uct_mm_packed_rkey_t;
 
 

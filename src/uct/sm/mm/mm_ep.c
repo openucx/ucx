@@ -32,7 +32,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
                                                       size_to_attach,
                                                       (void *)remote_iface_addr->vaddr,
                                                       &self->mapped_desc.address,
-                                                      &self->mapped_desc.cookie);
+                                                      &self->mapped_desc.cookie,
+                                                      iface->path);
     if (status != UCS_OK) {
         ucs_error("failed to connect to remote peer with mm. remote mm_id: %zu",
                    remote_iface_addr->id);
@@ -141,7 +142,8 @@ void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm
                                                                elem->desc_mpool_size,
                                                                elem->desc_chunk_base_addr,
                                                                &remote_seg->address,
-                                                               &remote_seg->cookie);
+                                                               &remote_seg->cookie,
+                                                               iface->path);
         if (status != UCS_OK) {
             ucs_fatal("Failed to attach to remote mmid:%zu. %s ",
                       elem->desc_mmid, ucs_status_string(status));

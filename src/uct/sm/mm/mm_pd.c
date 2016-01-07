@@ -28,14 +28,15 @@ ucs_status_t uct_mm_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
     ucs_status_t status;
     uct_mm_seg_t *seg;
 
-    seg = ucs_malloc(sizeof(*seg), "mm_seg");
+    seg = ucs_calloc(1, sizeof(*seg), "mm_seg");
     if (NULL == seg) {
         ucs_error("Failed to allocate memory for mm segment");
         return UCS_ERR_NO_MEMORY;
     }
 
     status = uct_mm_pd_mapper_ops(pd)->alloc(pd, length_p, UCS_TRY, &seg->address,
-                                             &seg->mmid UCS_MEMTRACK_VAL);
+                                             &seg->mmid, &seg->path
+                                             UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_free(seg);
         return status;
@@ -55,7 +56,8 @@ ucs_status_t uct_mm_mem_free(uct_pd_h pd, uct_mem_h memh)
     uct_mm_seg_t *seg = memh;
     ucs_status_t status;
 
-    status = uct_mm_pd_mapper_ops(pd)->free(seg->address, seg->mmid, seg->length);
+    status = uct_mm_pd_mapper_ops(pd)->free(seg->address, seg->mmid, seg->length,
+                                            seg->path);
     if (status != UCS_OK) {
         return status;
     }
@@ -115,8 +117,10 @@ ucs_status_t uct_mm_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     if (uct_mm_pd_mapper_ops(pd)->reg != NULL) {
         pd_attr->cap.flags |= UCT_PD_FLAG_REG;
     }
-    pd_attr->cap.max_alloc = ULONG_MAX;
-    pd_attr->cap.max_reg   = 0;
+    pd_attr->cap.max_alloc    = ULONG_MAX;
+    pd_attr->cap.max_reg      = 0;
+    pd_attr->rkey_packed_size = sizeof(uct_mm_packed_rkey_t) +
+                                uct_mm_pd_mapper_ops(pd)->get_path_size(pd);
     memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
     return UCS_OK;
 }
@@ -129,6 +133,11 @@ ucs_status_t uct_mm_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer)
     rkey->mmid      = seg->mmid;
     rkey->owner_ptr = (uintptr_t)seg->address;
     rkey->length    = seg->length;
+
+    if (seg->path != NULL) {
+        strcpy(rkey->path, seg->path);
+    }
+
     ucs_trace("packed rkey: mmid %"PRIu64" owner_ptr %"PRIxPTR,
               rkey->mmid, rkey->owner_ptr);
     return UCS_OK;
@@ -150,10 +159,11 @@ ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer
         return UCS_ERR_NO_RESOURCE;
     }
 
-    status = uct_mm_pdc_mapper_ops(pdc)->attach(rkey->mmid, rkey->length, 
+    status = uct_mm_pdc_mapper_ops(pdc)->attach(rkey->mmid, rkey->length,
                                                 (void *)rkey->owner_ptr, 
                                                 &mm_desc->address,
-                                                &mm_desc->cookie);
+                                                &mm_desc->cookie,
+                                                rkey->path);
     if (status != UCS_OK) {
         ucs_free(mm_desc);
         return status;

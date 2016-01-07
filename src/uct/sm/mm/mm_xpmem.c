@@ -31,6 +31,11 @@ static ucs_status_t uct_xpmem_query()
     return UCS_OK;
 }
 
+static size_t uct_xpmem_get_path_size(uct_pd_h pd)
+{
+    return 0;
+}
+
 static ucs_status_t uct_xmpem_reg(void *address, size_t size, 
                                   uct_mm_id_t *mmid_p)
 {
@@ -75,7 +80,7 @@ static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 
 static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length, 
                                      void *remote_address, void **local_address,
-                                     uint64_t *cookie)
+                                     uint64_t *cookie, const char *path)
 {
     xpmem_segid_t segid = (xpmem_segid_t)mmid;
     xpmem_apid_t apid;
@@ -137,7 +142,8 @@ static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
 
 static ucs_status_t uct_xpmem_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t
                                     hugetlb, void **address_p,
-                                    uct_mm_id_t *mmid_p UCS_MEMTRACK_ARG)
+                                    uct_mm_id_t *mmid_p, const char **path_p
+                                    UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
     const size_t page_size = ucs_get_page_size();
@@ -165,7 +171,8 @@ err:
     return status;
 }
 
-static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id, size_t length)
+static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id, size_t length,
+                                   const char *path)
 {
     ucs_status_t status = uct_xpmem_dereg(mm_id);
 
@@ -180,6 +187,7 @@ static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id, size_t leng
 
 static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
     .query   = uct_xpmem_query,
+    .get_path_size = uct_xpmem_get_path_size,
     .reg     = uct_xmpem_reg,
     .dereg   = uct_xpmem_dereg,
     .alloc   = uct_xpmem_alloc,
