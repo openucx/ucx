@@ -43,7 +43,7 @@
 
 typedef struct uct_ib_mlx5_qp_info {
     uint32_t           qpn;           /* QP number */
-    uint32_t           *dbrec;        /* QP doorbell record in RAM */
+    volatile uint32_t  *dbrec;        /* QP doorbell record in RAM */
 
     struct {
             void       *buf;          /* Work queue buffer */
@@ -60,7 +60,7 @@ typedef struct uct_ib_mlx5_qp_info {
 
 typedef struct uct_ib_mlx5_srq_info {
     void               *buf;          /* SRQ queue buffer */
-    uint32_t           *dbrec;        /* SRQ doorbell record in RAM */
+    volatile uint32_t  *dbrec;        /* SRQ doorbell record in RAM */
     unsigned           stride;        /* Size of each WQE */
     unsigned           head;
     unsigned           tail;
@@ -176,7 +176,7 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
     uct_ib_mlx5_bf_t            *bf;
     void                        *curr;
-    uint32_t                    *dbrec;
+    volatile uint32_t           *dbrec;
     void                        *qstart;
     void                        *qend;
     uint16_t                    bb_max;
@@ -195,7 +195,7 @@ typedef struct uct_ib_mlx5_rxwq {
      */
     uint16_t                    cq_wqe_counter;
     uint16_t                    mask;
-    uint32_t                    *dbrec;
+    volatile uint32_t           *dbrec;
     struct mlx5_wqe_data_seg    *wqes;
 } uct_ib_mlx5_rxwq_t;
 

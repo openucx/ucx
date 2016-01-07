@@ -84,7 +84,7 @@ typedef struct {
     struct {
         uct_ib_mlx5_cq_t   cq;
         void               *buf;
-        uint32_t           *db;
+        volatile uint32_t  *db;
         uint16_t           free_idx;   /* what is completed contiguously */
         uint16_t           ready_idx;  /* what is ready to be posted to hw */
         uint16_t           sw_pi;      /* what is posted to hw */
