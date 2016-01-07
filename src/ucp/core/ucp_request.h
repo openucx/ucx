@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -52,7 +53,6 @@ enum {
         } \
     }
 
-
 typedef struct ucp_send_state {
     size_t                        offset;
     union {
@@ -89,11 +89,16 @@ typedef struct ucp_request {
                     ucp_rsc_index_t dst_aux_rsc_index;
                     uint16_t        flags;
                 } wireup;
+
+                struct {
+                    uint64_t      remote_addr; /* remote address */
+                    ucp_rkey_h    rkey;        /* Rkey */
+                } rma;
             };
 
             size_t                length;   /* Total length, in bytes */
             ucp_frag_state_t      state;
-            uct_pending_req_t     uct;
+            uct_pending_req_t     uct;      /* Pending request */
         } send;
 
         struct {

@@ -1024,6 +1024,34 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
 ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
                      uint64_t remote_addr, ucp_rkey_h rkey);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking implicit remote memory put operation.
+ *
+ * This routine initiates a storage of contiguous block of data that is
+ * described by the local address @a buffer in the remote contiguous memory
+ * region described by @a remote_addr address and the @ref ucp_rkey_h "memory
+ * handle" @a rkey.  The routine returns immediately and @b does @b not
+ * guarantee re-usability of the source address @e buffer. If the operation is
+ * completed immediately the routine return UCS_OK, otherwise UCS_INPROGRESS
+ * or an error is returned to user.
+ *
+ * @note A user can use @ref ucp_worker_flush "ucp_worker_flush()"
+ * in order to guarantee re-usability of the source address @e buffer.
+ *
+ * @param [in]  ep           Remote endpoint handle.
+ * @param [in]  buffer       Pointer to the local source address.
+ * @param [in]  length       Length of the data (in bytes) stored under the
+ *                           source address.
+ * @param [in]  remote_addr  Pointer to the destination remote address
+ *                           to write to.
+ * @param [in]  rkey         Remote memory key associated with the
+ *                           remote address.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
+                         uint64_t remote_addr, ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_COMM
@@ -1033,7 +1061,9 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
  * address @a remote_addr and the @ref ucp_rkey_h "memory handle" @a rkey in
  * the local contiguous memory region described by @a buffer address.  The
  * routine returns when remote data is loaded and stored under the local address
- * @e buffer.
+ * @e buffer. If the operation is completed immediately the routine return UCS_OK,
+ * otherwise UCS_INPROGRESS or an error is returned to user.
+
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
@@ -1049,6 +1079,33 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
                      uint64_t remote_addr, ucp_rkey_h rkey);
 
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking implicit remote memory get operation.
+ *
+ * This routine initiate a load of contiguous block of data that is described
+ * by the remote address @a remote_addr and the @ref ucp_rkey_h "memory handle"
+ * @a rkey in the local contiguous memory region described by @a buffer
+ * address.  The routine returns immediately and @b does @b not guarantee that
+ * remote data is loaded and stored under the local address @e buffer.
+ *
+ * @note A user can use @ref ucp_worker_flush "ucp_worker_flush()" in order
+ * guarantee that remote data is loaded and stored under the local address
+ * @e buffer.
+
+ * @param [in]  ep           Remote endpoint handle.
+ * @param [in]  buffer       Pointer to the local source address.
+ * @param [in]  length       Length of the data (in bytes) stored under the
+ *                           source address.
+ * @param [in]  remote_addr  Pointer to the destination remote address
+ *                           to write to.
+ * @param [in]  rkey         Remote memory key associated with the
+ *                           remote address.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
+                         uint64_t remote_addr, ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_COMM

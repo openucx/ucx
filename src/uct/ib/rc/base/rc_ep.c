@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -195,7 +196,9 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
 
     VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
     desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
-    uct_invoke_completion(desc->super.user_comp);
+    if (desc->super.user_comp) {
+        uct_invoke_completion(desc->super.user_comp);
+    }
     ucs_mpool_put(desc);
 }
 
