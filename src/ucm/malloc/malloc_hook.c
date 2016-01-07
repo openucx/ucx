@@ -15,7 +15,7 @@
 #include <ucm/mmap/mmap.h>
 #include <ucm/ptmalloc3/malloc-2.8.3.h>
 #include <ucm/util/log.h>
-#include "../util/reloc.h"
+#include <ucm/util/reloc.h>
 #include <ucm/util/ucm_config.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/component.h>
@@ -64,6 +64,12 @@ typedef struct ucm_malloc_hook_state {
     void                 **ptrs;
     unsigned             num_ptrs;
     unsigned             max_ptrs;
+
+    /**
+     * Save the environment strings we've allocated
+     */
+    char                 **env_strs;
+    unsigned             num_env_strs;
 } ucm_malloc_hook_state_t;
 
 
@@ -80,7 +86,9 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .heap_end         = (void*)-1,
     .ptrs             = NULL,
     .num_ptrs         = 0,
-    .max_ptrs         = 0
+    .max_ptrs         = 0,
+    .env_strs         = NULL,
+    .num_env_strs     = 0
 };
 
 
@@ -136,46 +144,48 @@ static int ucm_malloc_is_address_in_heap(void *ptr)
     return in_heap;
 }
 
-static int ucm_malloc_address_remove_if_mapped(void *ptr, const char *caller)
+static int ucm_malloc_address_remove_if_managed(void *ptr, const char *caller)
 {
-    int is_mapped;
+    int is_managed;
 
     if (ucm_malloc_is_address_in_heap(ptr)) {
-        is_mapped = 1;
+        is_managed = 1;
     } else {
-        is_mapped = ucm_malloc_mmaped_ptr_remove_if_exists(ptr);
+        is_managed = ucm_malloc_mmaped_ptr_remove_if_exists(ptr);
     }
 
-    ucm_trace("%s: %p is%s ours (heap [%p..%p])",  caller, ptr,
-              is_mapped ? "" : " not",
+    ucm_trace("%s(ptr=%p) - %s (heap [%p..%p])", caller, ptr,
+              is_managed ? "ours" : "foreign",
               ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
-    return is_mapped;
+    return is_managed;
 }
 
-static void ucm_malloc_allocated(void *ptr, const char *caller)
+static void ucm_malloc_allocated(void *ptr, size_t size, const char *caller)
 {
+    VALGRIND_MALLOCLIKE_BLOCK(ptr, size, 0, 0);
     if (ucm_malloc_is_address_in_heap(ptr)) {
-        ucm_trace("%s: %p in heap [%p..%p]", caller, ptr,
+        ucm_trace("%s(size=%zu)=%p, in heap [%p..%p]", caller, size, ptr,
                   ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
     } else {
-        ucm_trace("%s: %p is mmapped", caller, ptr);
+        ucm_trace("%s(size=%zu)=%p, mmap'ed", caller, size, ptr);
         ucm_malloc_mmaped_ptr_add(ptr);
     }
 }
 
-static void ucm_release_foreign_block(void *ptr)
+static void ucm_release_foreign_block(void *ptr, const char *caller)
 {
 #if !NVALGRIND
     if (RUNNING_ON_VALGRIND) {
         /* We want to keep valgrind happy and release foreign memory as well.
          * Otherwise, it's safer to do nothing.
          */
+        ucm_trace("%s: release foreign block %p", caller, ptr);
         ucm_malloc_hook_state.free(ptr);
     }
 #endif
 }
 
-void *ucm_malloc(size_t size, const void *caller)
+static void *ucm_malloc(size_t size, const void *caller)
 {
     void *ptr;
 
@@ -185,54 +195,188 @@ void *ucm_malloc(size_t size, const void *caller)
     } else {
         ptr = dlmalloc(size);
     }
-    ucm_malloc_allocated(ptr, "malloc");
+    ucm_malloc_allocated(ptr, size, "malloc");
     return ptr;
 }
 
-void *ucm_realloc(void *oldptr, size_t size, const void *caller)
+static inline void ucm_mem_free(void *ptr, size_t size)
+{
+    VALGRIND_FREELIKE_BLOCK(ptr, 0);
+    VALGRIND_MAKE_MEM_UNDEFINED(ptr, size); /* Make memory accessible to ptmalloc3 */
+    dlfree(ptr);
+}
+
+static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
 {
     void *newptr;
+    size_t oldsz;
+    int foreign;
 
     ucm_malloc_hook_state.hook_called = 1;
 
-    if ((oldptr == NULL) || ucm_malloc_address_remove_if_mapped(oldptr, "realloc")) {
+    foreign = (oldptr != NULL) &&
+              !ucm_malloc_address_remove_if_managed(oldptr, "realloc");
+    if ((oldptr != NULL) && (RUNNING_ON_VALGRIND || foreign)) {
+        /*  If pointer was created by original malloc(), allocate the new pointer
+         * with the new heap, and copy out the data. Then, release the old pointer.
+         *  We do the same if we are running with valgrind, so we could use client
+         * requests properly.
+         */
+        newptr = dlmalloc(size);
+        ucm_malloc_allocated(newptr, size, "realloc");
+
+        oldsz = ucm_malloc_hook_state.usable_size(oldptr);
+        memcpy(newptr, oldptr, ucs_min(size, oldsz));
+
+        if (foreign) {
+            ucm_release_foreign_block(oldptr, "realloc");
+        } else{
+            ucm_mem_free(oldptr, oldsz);
+        }
+    } else {
         newptr = dlrealloc(oldptr, size);
-        goto out;
+        ucm_malloc_allocated(newptr, size, "realloc");
     }
-
-    /* If pointer was created by original malloc(), allocate the new pointer
-     * with the new heap, and copy out the data. Then, release the old pointer.
-     */
-    newptr = dlmalloc(size);
-    memcpy(newptr, oldptr,
-           ucs_min(size, ucm_malloc_hook_state.usable_size(oldptr)));
-    ucm_release_foreign_block(oldptr);
-
-out:
-    ucm_malloc_allocated(newptr, "realloc");
     return newptr;
 }
 
-void ucm_free(void *ptr, const void *caller)
+static void ucm_free(void *ptr, const void *caller)
 {
     ucm_malloc_hook_state.hook_called = 1;
 
-    if ((ptr == NULL) || ucm_malloc_address_remove_if_mapped(ptr, "free")) {
-        dlfree(ptr);
-        return;
+    if (ptr == NULL) {
+        /* Ignore */
+    } else if (ucm_malloc_address_remove_if_managed(ptr, "free")) {
+        ucm_mem_free(ptr, dlmalloc_usable_size(ptr));
+    } else {
+        ucm_release_foreign_block(ptr, "free");
     }
-
-    ucm_release_foreign_block(ptr);
 }
 
-void *ucm_memalign(size_t alignment, size_t size, const void *caller)
+static void *ucm_memalign(size_t alignment, size_t size, const void *caller)
 {
     void *ptr;
 
     ucm_malloc_hook_state.hook_called = 1;
     ptr = dlmemalign(ucs_max(alignment, ucm_global_config.alloc_alignment), size);
-    ucm_malloc_allocated(ptr, "memalign");
+    ucm_malloc_allocated(ptr, size, "memalign");
     return ptr;
+}
+
+static void* ucm_calloc(size_t nmemb, size_t size)
+{
+    void *ptr = ucm_malloc(nmemb * size, NULL);
+    if (ptr != NULL) {
+        memset(ptr, 0, nmemb * size);
+    }
+    return ptr;
+}
+
+static void* ucm_valloc(size_t size)
+{
+    return ucm_malloc(size, NULL);
+}
+
+static int ucm_posix_memalign(void **memptr, size_t alignment, size_t size)
+{
+    void *ptr;
+
+    if (!ucs_is_pow2(alignment)) {
+        return EINVAL;
+    }
+
+    ptr = ucm_memalign(alignment, size, NULL);
+    if (ptr == NULL) {
+        return ENOMEM;
+    }
+
+    *memptr = ptr;
+    return 0;
+}
+
+/*
+ * We remember the string we pass to putenv() so we would be able to release them
+ * during library destructor (and thus avoid leaks). Also, if a variable is replaced,
+ * we release the old string.
+ *
+ * This function is **not** thread safe, since setenv() is not thread safe anyway.
+ */
+static int ucm_add_to_environ(char *env_str)
+{
+    char *saved_env_str;
+    unsigned index;
+    size_t len;
+    char *p;
+
+    /* Get name length */
+    p = strchr(env_str, '=');
+    if (p == NULL) {
+        len = strlen(env_str); /* Compare whole string */
+    } else {
+        len = p + 1 - env_str; /* Compare up to and including the '=' character */
+    }
+
+    /* Check if we already have variable with same name */
+    index = 0;
+    while (index < ucm_malloc_hook_state.num_env_strs) {
+        saved_env_str = ucm_malloc_hook_state.env_strs[index];
+        if ((strlen(saved_env_str) >= len) && !strncmp(env_str, saved_env_str, len)) {
+            ucm_trace("replace `%s' with `%s'", saved_env_str, env_str);
+            ucm_free(saved_env_str, NULL);
+            goto out_insert;
+        }
+        ++index;
+    }
+
+    /* Not found - enlarge array by one */
+    index = ucm_malloc_hook_state.num_env_strs;
+    ++ucm_malloc_hook_state.num_env_strs;
+    ucm_malloc_hook_state.env_strs =
+                    ucm_realloc(ucm_malloc_hook_state.env_strs,
+                                sizeof(char*) * ucm_malloc_hook_state.num_env_strs,
+                                NULL);
+
+out_insert:
+    ucm_malloc_hook_state.env_strs[index] = env_str;
+    return 0;
+}
+
+/*
+ * We need to replace setenv() because glibc keeps a search tree of environment
+ * strings and releases it with *original* free() (in __tdestroy).
+ * If we always use putenv() instead of setenv() this search tree will not be used.
+ */
+static int ucm_setenv(const char *name, const char *value, int overwrite)
+{
+    char *curr_value;
+    char *env_str;
+    int ret;
+
+    curr_value = getenv(name);
+    if ((curr_value != NULL) && !overwrite) {
+        return 0;
+    }
+
+    env_str = ucm_malloc(strlen(name) + 1 + strlen(value) + 1, NULL);
+    if (env_str == NULL) {
+        errno = ENOMEM;
+        ret = -1;
+        goto err;
+    }
+
+    sprintf(env_str, "%s=%s", name, value);
+    ret = putenv(env_str);
+    if (ret != 0) {
+        goto err_free;
+    }
+
+    ucm_add_to_environ(env_str);
+    return 0;
+
+err_free:
+    ucm_free(env_str, NULL);
+err:
+    return ret;
 }
 
 static void ucm_malloc_sbrk(ucm_event_type_t event_type,
@@ -282,6 +426,8 @@ static void ucm_malloc_test(int events)
     void *p[small_alloc_count];
     int out_events;
     int i;
+
+    ucm_debug("testing malloc...");
 
     /* Install a temporary event handler which will add the supported event
      * type to out_events bitmap.
@@ -379,7 +525,7 @@ ucs_status_t ucm_malloc_install(int events)
      * have a way to call the original free(), also these hooks don't work with
      * valgrind anyway.
      */
-    if (ucm_global_config.enable_malloc_hooks && !RUNNING_ON_VALGRIND) {
+    if (ucm_global_config.enable_malloc_hooks) {
         /* Install using malloc hooks.
          * TODO detect glibc support in configure-time.
          */
@@ -409,12 +555,20 @@ ucs_status_t ucm_malloc_install(int events)
         static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(realloc);
         static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(malloc);
         static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(memalign);
+        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(calloc);
+        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(valloc);
+        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(posix_memalign);
+        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(setenv);
 
         ucm_debug("installing malloc hooks");
         ucm_reloc_modify(&free_patch);
         ucm_reloc_modify(&realloc_patch);
         ucm_reloc_modify(&malloc_patch);
         ucm_reloc_modify(&memalign_patch);
+        ucm_reloc_modify(&calloc_patch);
+        ucm_reloc_modify(&valloc_patch);
+        ucm_reloc_modify(&posix_memalign_patch);
+        ucm_reloc_modify(&setenv_patch);
         ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
     }
 
@@ -436,4 +590,15 @@ out_succ:
 
 UCS_STATIC_INIT {
     ucs_spinlock_init(&ucm_malloc_hook_state.lock);
+}
+
+static void UCS_F_DTOR ucm_clear_env()
+{
+    unsigned i;
+
+    clearenv();
+    for (i = 0; i < ucm_malloc_hook_state.num_env_strs; ++i) {
+        ucm_free(ucm_malloc_hook_state.env_strs[i], NULL);
+    }
+    ucm_free(ucm_malloc_hook_state.env_strs, NULL);
 }

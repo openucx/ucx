@@ -169,6 +169,12 @@ void test_thread::test() {
     void *s = strdup("test");
     free(s);
 
+    /* Test setenv */
+    pthread_mutex_lock(&lock);
+    setenv("TEST", "VALUE", 1);
+    EXPECT_EQ(std::string("VALUE"), getenv("TEST"));
+    pthread_mutex_unlock(&lock);
+
     /* Test realloc */
     ptr_r = realloc(ptr_r, small_alloc_size / 2);
     free(ptr_r);
