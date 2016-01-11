@@ -82,7 +82,7 @@ protected:
         EXPECT_EQ(uint32_t(MAGIC), region->magic);
         region->magic = 0;
         uint32_t prev = ucs_atomic_fadd32(&m_reg_count, -1);
-        EXPECT_GT(prev, 0);
+        EXPECT_GT(prev, 0u);
     }
 
     virtual void dump_region(region *region, char *buf, size_t max)

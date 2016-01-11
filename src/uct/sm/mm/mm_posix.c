@@ -234,7 +234,7 @@ uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
                 UCS_MEMTRACK_ARG)
 {
     ucs_status_t status;
-    int shm_fd;
+    int shm_fd = -1;
     uint64_t uuid;
     char *file_name;
     uct_mm_pd_t *mm_pd = ucs_derived_of(pd, uct_mm_pd_t);

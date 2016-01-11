@@ -333,10 +333,10 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     ucp_context_h context = worker->context;
     char name[UCP_PEER_NAME_MAX];
     ucp_address_t *address;
-    size_t address_length, rsc_addr_length;
+    size_t address_length, rsc_addr_length = 0;
     ucs_status_t status;
-    ucp_rsc_index_t rsc_index;
-    void *rsc_addr;
+    ucp_rsc_index_t rsc_index = -1;
+    void *rsc_addr = NULL;
 
     UCS_STATIC_ASSERT((ucp_address_t*)0 + 1 == (void*)0 + 1);
 
