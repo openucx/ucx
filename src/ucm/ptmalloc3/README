@@ -14,6 +14,15 @@ like to thank David Baraff of Pixar for his support and Doug Lea
 (dl@cs.oswego.edu) for the great original malloc implementation.
 
 
+UCX changes from original version
+=================================
+ o Remove most of the files (tests, ptmalloc3.c, makefile, headers...)
+ o when using INITIAL_LOCK, cast the return value to (void), some compilers 
+   complain about ignored return value.
+ o Fix compilation error on ppc64 - fix argument passed to pthread_mutex_unlock.
+ o Set compilation flags - see Makefile.am
+
+
 Introduction
 ============
 

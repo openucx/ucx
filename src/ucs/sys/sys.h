@@ -62,6 +62,8 @@
 #  define VALGRIND_DESTROY_MEMPOOL(p)
 #  define VALGRIND_MEMPOOL_ALLOC(n,p,x)
 #  define VALGRIND_MEMPOOL_FREE(n,p)
+#  define VALGRIND_MALLOCLIKE_BLOCK(p,s,r,z)
+#  define VALGRIND_FREELIKE_BLOCK(p,r)
 #  define VALGRIND_COUNT_ERRORS              0
 #  define VALGRIND_COUNT_LEAKS(a,b,c,d)      { a = b = c = d = 0; }
 #  define RUNNING_ON_VALGRIND                0

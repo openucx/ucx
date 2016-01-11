@@ -22,9 +22,9 @@ dist_doc__DATA = README
 
 SUBDIRS = \
 	src/ucs \
+	src/ucm \
 	src/uct \
 	src/ucp \
-	src/tools/hook \
 	src/tools/info \
 	src/tools/perf \
 	test/examples \
@@ -32,6 +32,10 @@ SUBDIRS = \
 
 if HAVE_GTEST
 SUBDIRS += test/gtest
+endif
+
+if HAVE_MPI
+SUBDIRS += test/mpi
 endif
 
 EXTRA_DIST =

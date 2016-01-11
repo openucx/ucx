@@ -8,6 +8,7 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>
+#include <ucm/util/ucm_config.h>
 #include <getopt.h>
 
 
@@ -94,9 +95,10 @@ int main(int argc, char **argv)
     }
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
-        ucs_global_opts_print(stdout, "global configuration", print_flags);
+        ucs_global_opts_print(stdout, print_flags);
         print_ucp_config(print_flags);
         print_uct_config(print_flags, tl_name);
+        ucm_config_print(stdout, print_flags);
     }
 
     if (print_opts & PRINT_DEVICES) {

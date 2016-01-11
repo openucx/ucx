@@ -87,7 +87,6 @@ void ucs_global_opts_init();
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value);
 ucs_status_t ucs_global_opts_clone(void *dst);
 void ucs_global_opts_release();
-void ucs_global_opts_print(FILE *stream, const char *title,
-                           ucs_config_print_flags_t print_flags);
+void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags);
 
 #endif
