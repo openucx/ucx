@@ -799,7 +799,7 @@ void  uct_ud_ep_disconnect(uct_ep_h ep)
 
     ucs_trace_func("");
     /* cancel user pending */
-    uct_ud_ep_pending_purge(ep, 0);
+    uct_ud_ep_pending_purge(ep, NULL);
 
     /* scedule flush */
     uct_ud_ep_flush(ep);
