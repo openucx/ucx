@@ -9,7 +9,7 @@
 #define UCS_TEST_HELPERS_H
 
 #include <ucs/sys/preprocessor.h>
-#include <gtest/gtest.h>
+#include <ucs/gtest/gtest.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>

@@ -56,6 +56,7 @@ nobase_dist_libucs_la_HEADERS = \
 	debug/memtrack.h \
 	gtest/test.h \
 	gtest/test_helpers.h \
+	gtest/gtest.h \
 	gtest/tap.h \
 	stats/libstats.h \
 	stats/stats.h \
@@ -133,6 +134,7 @@ libucstest_la_LIBADD   = libucs.la
 libucstest_ladir       = $(includedir)
 
 libucstest_la_SOURCES  = \
+	gtest/gtest-all.cc \
 	gtest/main.cc \
 	gtest/test_helpers.cc \
 	gtest/test.cc
