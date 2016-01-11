@@ -76,7 +76,6 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 
 
 ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
-                                         uint64_t latency, size_t bandwidth,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p)
 {
@@ -99,8 +98,7 @@ ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
     }
 
     for (i = 0; i < job_info.num_devices; i++) {
-        uct_ugni_device_get_resource(tl_name, latency, bandwidth,
-                                     &devs[i], &resources[i]);
+        uct_ugni_device_get_resource(tl_name, &devs[i], &resources[i]);
     }
 
 error:

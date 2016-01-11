@@ -33,8 +33,6 @@ static ucs_status_t uct_ugni_rdma_query_tl_resources(uct_pd_h pd,
                                                      unsigned *num_resources_p)
 {
     return uct_ugni_query_tl_resources(pd, UCT_UGNI_RDMA_TL_NAME,
-                                       900, /* nano sec*/
-                                       (6911 * pow(1024,2)), /* bytes */
                                        resource_p, num_resources_p);
 }
 
@@ -68,7 +66,9 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_ATOMIC_ADD32 |
                                          UCT_IFACE_FLAG_ATOMIC_SWAP32;
     }
-
+    iface_attr->overhead               = 80e-9; /* 80 ns */
+    iface_attr->latency                = 900e-9; /* 900 ns */
+    iface_attr->bandwidth              = 6911 * pow(1024,2); /* bytes */
     return UCS_OK;
 }
 

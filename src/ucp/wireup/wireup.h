@@ -30,8 +30,6 @@ enum {
  * Calculates a score of specific wireup.
  */
 typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
-                                              uct_tl_resource_desc_t *resource,
-                                              uct_iface_h iface,
                                               uct_iface_attr_t *iface_attr);
 
 

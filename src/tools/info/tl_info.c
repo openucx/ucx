@@ -78,8 +78,6 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
     }
 
     printf("#   Device: %s\n", resource->dev_name);
-    printf("#      speed:         %.2f MB/sec\n", resource->bandwidth / 1024.0 / 1024.0);
-    printf("#      latency:       %.3f microsec\n", resource->latency * 1e-3);
 
     status = uct_iface_open(pd, worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
@@ -96,6 +94,10 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
     if (status != UCS_OK) {
         printf("#   < failed to query interface >\n");
     } else {
+        printf("#           bandwidth:     %.2f MB/sec\n", iface_attr.bandwidth / (1024 * 1024));
+        printf("#           latency:       %.0f nsec\n", iface_attr.latency * 1e9);
+        printf("#           overhead:      %.0f nsec\n", iface_attr.overhead * 1e9);
+
         PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
         PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
         PRINT_CAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_zcopy);

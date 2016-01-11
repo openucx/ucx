@@ -275,6 +275,10 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                              UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
                              UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                              UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
+
+    /* Software overhead */
+    iface_attr->overhead = 40e-9;
+
     return UCS_OK;
 }
 
@@ -447,8 +451,6 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_pd_h pd,
     return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
                                             "rc_mlx5",
                                             UCT_IB_DEVICE_FLAG_MLX5_PRM,
-                                            ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
-                                            40,
                                             resources_p, num_resources_p);
 }
 

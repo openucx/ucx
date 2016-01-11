@@ -63,7 +63,10 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    memset(&iface_attr->cap, 0, sizeof(iface_attr->cap));
+    uct_ib_iface_query(&iface->super,
+                       ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
+                       iface_attr);
+
     iface_attr->iface_addr_len      = sizeof(uct_sockaddr_ib_subnet_t);
     iface_attr->ep_addr_len         = sizeof(uct_sockaddr_ib_t);
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
@@ -169,7 +172,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
                               rx_priv_len, sizeof(uct_rc_hdr_t), config->tx.cq_len,
-                              &config->super);
+                              SIZE_MAX, &config->super);
 
     self->tx.cq_available           = config->tx.cq_len - 1; /* Reserve one for error */
     self->tx.next_op                = 0;

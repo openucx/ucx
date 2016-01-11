@@ -725,10 +725,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     return UCS_OK;
 }
 
-static double ucp_aux_score_func(ucp_worker_h worker,
-                                 uct_tl_resource_desc_t *resource,
-                                 uct_iface_h iface,
-                                 uct_iface_attr_t *iface_attr)
+static double ucp_aux_score_func(ucp_worker_h worker, uct_iface_attr_t *iface_attr)
 {
     if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) || /* Need to use it for wireup messages */
         !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) || /* Should connect immediately */
@@ -738,14 +735,11 @@ static double ucp_aux_score_func(ucp_worker_h worker,
         return 0.0;
     }
 
-    return (1e6 / resource->latency) +
+    return (1e-3 / iface_attr->latency) +
            (1e3 * ucs_max(iface_attr->cap.am.max_bcopy, iface_attr->cap.am.max_short));
 }
 
-static double ucp_runtime_score_func(ucp_worker_h worker,
-                                     uct_tl_resource_desc_t *resource,
-                                     uct_iface_h iface,
-                                     uct_iface_attr_t *iface_attr)
+static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *iface_attr)
 {
     ucp_context_t *context = worker->context;
     uint64_t flags;
@@ -778,14 +772,11 @@ static double ucp_runtime_score_func(ucp_worker_h worker,
                  UCT_IFACE_FLAG_ATOMIC_SWAP64 | UCT_IFACE_FLAG_ATOMIC_CSWAP64;
     }
 
-    ucs_trace("required transport flags for runtime: 0x%"PRIx64", "
-              UCT_TL_RESOURCE_DESC_FMT" actual flags: 0x%"PRIx64,
-              flags, UCT_TL_RESOURCE_DESC_ARG(resource), iface_attr->cap.flags);
     if (!ucs_test_all_flags(iface_attr->cap.flags, flags)) {
         return 0.0;
     }
 
-    return (1e6 / resource->latency);
+    return 1e-3 / iface_attr->latency;
 }
 
 static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *address,
@@ -839,7 +830,7 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
 
             *reachable_pds |= UCS_BIT(pd_index);
 
-            score = score_func(worker, resource, iface, iface_attr);
+            score = score_func(worker, iface_attr);
             ucs_trace("%s " UCT_TL_RESOURCE_DESC_FMT " [%d->%d] score %.2f",
                       title, UCT_TL_RESOURCE_DESC_ARG(resource), src_rsc_index,
                       dst_rsc_index, score);

@@ -201,6 +201,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, pd, worker,
                               dev_name, rx_headroom, 0 /* rx_priv_len */,
                               0 /* rx_hdr_len */, 1 /* tx_cq_len */,
+                              IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
                               &config->super);
 
     if (worker->async == NULL) {
@@ -304,12 +305,15 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_iface_t, uct_iface_t);
 static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
                                        uct_iface_attr_t *iface_attr)
 {
+    uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
     size_t mtu;
+
+    uct_ib_iface_query(&iface->super, 32 /* TODO */, iface_attr);
+    iface_attr->overhead = 1200e-9;
 
     mtu = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE - sizeof(uct_cm_hdr_t),
                   UINT8_MAX);
 
-    memset(iface_attr, 0, sizeof(*iface_attr));
     iface_attr->cap.am.max_bcopy      = mtu;
     iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = 0;
@@ -351,10 +355,7 @@ static ucs_status_t uct_cm_query_resources(uct_pd_h pd,
                                            unsigned *num_resources_p)
 {
     return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
-                                            "cm",
-                                            0, /* TODO require IB link layer? */
-                                            512, /* TODO */
-                                            800,
+                                            "cm", 0, /* TODO require IB link layer? */
                                             resources_p, num_resources_p);
 }
 

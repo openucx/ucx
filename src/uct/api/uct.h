@@ -130,13 +130,12 @@ typedef enum {
 typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
-    uint64_t                 latency;      /**< Latency, nanoseconds */
-    size_t                   bandwidth;    /**< Bandwidth, bytes/second */
     uct_device_type_t        dev_type;     /**< Device type. To which UCT group it belongs to */
 } uct_tl_resource_desc_t;
 
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
 #define UCT_TL_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
+
 
 /**
  * @ingroup UCT_RESOURCE
@@ -248,6 +247,15 @@ struct uct_iface_attr {
 
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
+
+    /*
+     * The following fields define expected performance of the communication
+     * interface, this would usually be a combination of device and system
+     * characteristics and determined at run time.
+     */
+    double                   overhead;     /**< Message overhead, seconds */
+    double                   latency;      /**< Latency, seconds */
+    double                   bandwidth;    /**< Maximal bandwidth, bytes/second */
 };
 
 

@@ -86,7 +86,7 @@ typedef struct uct_ib_iface {
 
 } uct_ib_iface_t;
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h, const char*,
-                  unsigned, unsigned, unsigned, unsigned, uct_ib_iface_config_t*)
+                  unsigned, unsigned, unsigned, unsigned, size_t, uct_ib_iface_config_t*)
 
 
 /*
@@ -169,6 +169,12 @@ ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
                                              struct sockaddr *addr);
 
 int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr);
+
+/*
+ * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
+ */
+ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
+                                uct_iface_attr_t *iface_attr);
 
 
 static inline uct_ib_pd_t* uct_ib_iface_pd(uct_ib_iface_t *iface)

@@ -73,14 +73,11 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
  * @param dev              IB device.
  * @param tl_name          Transport name.
  * @param flags            Transport requirements from IB device (see UCT_IB_RESOURCE_FLAG_xx)
- * @param tl_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
- * @param tl_overhead_ns   How much overhead the transport adds to latency.
  * @param resources_p      Filled with a pointer to an array of resources.
  * @param num_resources_p  Filled with the number of resources.
  */
 ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
                                               const char *tl_name, unsigned flags,
-                                              size_t tl_hdr_len, uint64_t tl_overhead_ns,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 

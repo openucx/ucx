@@ -7,6 +7,7 @@
 #include "ib_iface.h"
 
 #include <uct/base/uct_pd.h>
+#include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/type/component.h>
 #include <ucs/type/class.h>
@@ -350,11 +351,12 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
  * @param rx_hdr_len    Length of transport network header.
+ * @param mss           Maximal segment size (transport limit).
  */
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
-                    uct_ib_iface_config_t *config)
+                    size_t mss, uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = &ucs_derived_of(pd, uct_ib_pd_t)->dev;
     ucs_status_t status;
@@ -412,11 +414,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     if (self->recv_cq == NULL) {
         ucs_error("Failed to create recv cq: %m");
+        status = UCS_ERR_IO_ERROR;
         goto err_destroy_send_cq;
     }
 
     if (!uct_ib_device_is_port_ib(dev, self->port_num)) {
         ucs_error("Unsupported link layer");
+        status = UCS_ERR_UNSUPPORTED;
         goto err_destroy_recv_cq;
     }
 
@@ -492,4 +496,87 @@ struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
     ah_attr.is_global = 0;
     ah_attr.dlid      = dlid;
     return ibv_create_ah(ib_pd->pd, &ah_attr);
+}
+
+ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
+                                uct_iface_attr_t *iface_attr)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    static const unsigned ib_port_widths[] = {
+        [0] = 1,
+        [1] = 4,
+        [2] = 8,
+        [3] = 12
+    };
+    uint8_t active_width, active_speed, active_mtu;
+    double encoding, signal_rate, wire_speed;
+    size_t mtu, width, extra_pkt_len;
+
+    if (!uct_ib_device_is_port_ib(dev, iface->port_num)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    active_width = uct_ib_iface_port_attr(iface)->active_width;
+    active_speed = uct_ib_iface_port_attr(iface)->active_speed;
+    active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
+
+    /* Get active width */
+    if (!ucs_is_pow2(active_width) ||
+        (active_width < 1) || (ucs_ilog2(active_width) > 3))
+    {
+        ucs_error("Invalid active_width on %s:%d: %d",
+                  uct_ib_device_name(dev), iface->port_num, active_width);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    memset(iface_attr, 0, sizeof(*iface_attr));
+
+    switch (active_speed) {
+    case 1: /* SDR */
+        iface_attr->latency = 5000e-9;
+        signal_rate         = 2.5e9;
+        encoding            = 8.0/10.0;
+        break;
+    case 2: /* DDR */
+        iface_attr->latency = 2500e-9;
+        signal_rate         = 5.0e9;
+        encoding            = 8.0/10.0;
+        break;
+    case 4: /* QDR */
+        iface_attr->latency = 1300e-9;
+        signal_rate         = 10.0e9;
+        encoding            = 8.0/10.0;
+        break;
+    case 8: /* FDR10 */
+        iface_attr->latency = 700e-9;
+        signal_rate         = 10.3125e9;
+        encoding            = 64.0/66.0;
+        break;
+    case 16: /* FDR */
+        iface_attr->latency = 700e-9;
+        signal_rate         = 14.0625e9;
+        encoding            = 64.0/66.0;
+        break;
+    case 32: /* EDR */
+        iface_attr->latency = 600e-9;
+        signal_rate         = 25.78125e9;
+        encoding            = 64.0/66.0;
+        break;
+    default:
+        ucs_error("Invalid active_speed on %s:%d: %d",
+                  uct_ib_device_name(dev), iface->port_num, active_speed);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Wire speed calculation: Width * SignalRate * Encoding */
+    width                 = ib_port_widths[ucs_ilog2(active_width)];
+    wire_speed            = (width * signal_rate * encoding) / 8.0;
+
+    /* Calculate packet overhead  */
+    mtu                   = ucs_min(uct_ib_mtu_value(active_mtu),
+                                    iface->config.seg_size);
+    extra_pkt_len         = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + xport_hdr_len +
+                            UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+    iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);
+    return UCS_OK;
 }
