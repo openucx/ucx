@@ -25,6 +25,15 @@ static ucs_config_field_t uct_ib_pd_config_table[] = {
   {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
    ucs_offsetof(uct_ib_pd_config_t, rcache.event_prio), UCS_CONFIG_TYPE_UINT},
 
+  {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
+   ucs_offsetof(uct_ib_pd_config_t, rcache.overhead), UCS_CONFIG_TYPE_TIME},
+
+  {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
+   ucs_offsetof(uct_ib_pd_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
+
+  {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
+   ucs_offsetof(uct_ib_pd_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+
   {NULL}
 };
 
@@ -52,6 +61,7 @@ static ucs_status_t uct_ib_pd_query(uct_pd_h uct_pd, uct_pd_attr_t *pd_attr)
         pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
     }
 
+    pd_attr->reg_cost      = pd->reg_cost;
     pd_attr->local_cpus    = pd->dev.local_cpus;
     return UCS_OK;
 }
@@ -404,6 +414,7 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
     }
 
     pd->rcache   = NULL;
+    pd->reg_cost = pd_config->uc_reg_cost;
 
     if (pd_config->rcache.enable != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
@@ -414,6 +425,8 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
                                    UCS_STATS_ARG(pd->stats), &pd->rcache);
         if (status == UCS_OK) {
             pd->super.ops         = &uct_ib_pd_rcache_ops;
+            pd->reg_cost.overhead = pd_config->rcache.overhead;
+            pd->reg_cost.growth   = 0; /* It's close enough to 0 */
         } else {
             ucs_assert(pd->rcache == NULL);
             if (pd_config->rcache.enable == UCS_YES) {

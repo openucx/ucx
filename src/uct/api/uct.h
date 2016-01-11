@@ -205,6 +205,20 @@ typedef enum {
 } uct_alloc_method_t;
 
 
+/*
+ * @ingroup UCT_RESOURCE
+ * @brief Linear growth specification: f(x) = overhead + growth * x
+ *
+ *  This structure specifies a linear function which is used as basis for time
+ * estimation of various UCT operations. This information can be used to select
+ * the best performing combination of UCT operations.
+ */
+typedef struct uct_linear_growth {
+    double                   overhead;  /**< Constant overhead factor */
+    double                   growth;    /**< Growth rate factor */
+} uct_linear_growth_t;
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface attributes: capabilities and limitations.
@@ -257,10 +271,14 @@ enum {
  */
 struct uct_pd_attr {
     struct {
-        size_t               max_alloc;     /**< Maximal allocation size */
-        size_t               max_reg;       /**< Maximal registration size */
-        uint64_t             flags;         /**< UCT_PD_FLAG_xx */
+        size_t               max_alloc; /**< Maximal allocation size */
+        size_t               max_reg;   /**< Maximal registration size */
+        uint64_t             flags;     /**< UCT_PD_FLAG_xx */
     } cap;
+
+    uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
+                                             (time,seconds) as a linear function
+                                             of the buffer size. */
 
     char                     component_name[UCT_PD_COMPONENT_NAME_MAX]; /**< PD component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */

@@ -48,6 +48,8 @@ static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     pd_attr->cap.flags         = UCT_PD_FLAG_REG;
     pd_attr->cap.max_alloc     = 0;
     pd_attr->cap.max_reg       = ULONG_MAX;
+    pd_attr->reg_cost.overhead = 1000.0e-9;
+    pd_attr->reg_cost.growth   = 0.007e-9;
     memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
     return UCS_OK;
 }
