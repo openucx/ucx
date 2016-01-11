@@ -16,8 +16,10 @@ namespace ucs {
 
 unsigned test_base::m_total_warnings = 0;
 
-test_base::test_base() : m_state(NEW),
+test_base::test_base() :
+                m_state(NEW),
                 m_initialized(false),
+                m_num_threads(1),
                 m_num_valgrind_errors_before(0),
                 m_num_warnings_before(0)
 {
@@ -30,6 +32,18 @@ test_base::~test_base() {
                        m_state == SKIPPED ||
                        m_state == ABORTED,
                        "state=%d", m_state);
+}
+
+void test_base::set_num_threads(unsigned num_threads) {
+    if (m_state != NEW) {
+        GTEST_FAIL() << "Cannot modify number of threads after test is started, "
+                     << "it must be done in the constructor.";
+    }
+    m_num_threads = num_threads;
+}
+
+unsigned test_base::num_threads() const {
+    return m_num_threads;
 }
 
 void test_base::set_config(const std::string& config_str)
@@ -117,10 +131,36 @@ void test_base::TearDownProxy() {
     }
 }
 
+void test_base::run()
+{
+    if (num_threads() == 1) {
+        test_body();
+    } else {
+        pthread_t threads[num_threads()];
+        pthread_barrier_init(&m_barrier, NULL, num_threads());
+        for (unsigned i = 0; i < num_threads(); ++i) {
+            pthread_create(&threads[i], NULL, thread_func, reinterpret_cast<void*>(this));
+        }
+        for (unsigned i = 0; i < num_threads(); ++i) {
+            void *retval;
+            pthread_join(threads[i], &retval);
+        }
+        pthread_barrier_destroy(&m_barrier);
+    }
+}
+
+void *test_base::thread_func(void *arg)
+{
+    test_base *self = reinterpret_cast<test_base*>(arg);
+    self->barrier(); /* Let all threads start in the same time */
+    self->test_body();
+    return NULL;
+}
+
 void test_base::TestBodyProxy() {
     if (m_state == RUNNING) {
         try {
-            test_body();
+            run();
             m_state = FINISHED;
         } catch (test_skip_exception& e) {
             skipped(e);
@@ -146,6 +186,18 @@ void test_base::init() {
 }
 
 void test_base::cleanup() {
+}
+
+bool test_base::barrier() {
+    int ret = pthread_barrier_wait(&m_barrier);
+    if (ret == 0) {
+        return false;
+    } else if (ret == PTHREAD_BARRIER_SERIAL_THREAD) {
+        return true;
+    } else {
+        UCS_TEST_ABORT("pthread_barrier_wait() failed");
+    }
+
 }
 
 }

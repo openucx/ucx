@@ -29,6 +29,8 @@ protected:
     test_base();
     virtual ~test_base();
 
+    void set_num_threads(unsigned num_threads);
+    unsigned num_threads() const;
     virtual void set_config(const std::string& config_str);
     virtual void modify_config(const std::string& name, const std::string& value);
     virtual void push_config();
@@ -53,12 +55,14 @@ protected:
 
     virtual void cleanup();
     virtual void init();
+    bool barrier();
 
     virtual void test_body() = 0;
 
-    config_stack_t       m_config_stack;
     state_t              m_state;
     bool                 m_initialized;
+    unsigned             m_num_threads;
+    config_stack_t       m_config_stack;
     int                  m_num_valgrind_errors_before;
     unsigned             m_num_warnings_before;
 
@@ -66,6 +70,10 @@ protected:
 
 private:
     void skipped(const test_skip_exception& e);
+    void run();
+    static void *thread_func(void *arg);
+
+    pthread_barrier_t    m_barrier;
 };
 
 #define UCS_TEST_BASE_IMPL \
@@ -96,10 +104,11 @@ public:
 /*
  * Helper macro
  */
-#define UCS_TEST_(test_case_name, test_name, parent_class, parent_id, ...)\
+#define UCS_TEST_(test_case_name, test_name, parent_class, parent_id, num_threads, ...)\
 class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
  public:\
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {\
+     set_num_threads(num_threads); \
      UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__) \
   } \
  private:\
@@ -112,7 +121,9 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
 ::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)\
   ::test_info_ =\
     ::testing::internal::MakeAndRegisterTestInfo(\
-        #test_case_name, #test_name, "", "", \
+        #test_case_name, \
+        (num_threads == 1) ? #test_name : #test_name "/mt-" #num_threads, \
+        "", "", \
         (parent_id), \
         parent_class::SetUpTestCase, \
         parent_class::TearDownTestCase, \
@@ -126,7 +137,15 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  */
 #define UCS_TEST_F(test_fixture, test_name, ...)\
   UCS_TEST_(test_fixture, test_name, test_fixture, \
-            ::testing::internal::GetTypeId<test_fixture>(), __VA_ARGS__)
+            ::testing::internal::GetTypeId<test_fixture>(), 1, __VA_ARGS__)
+
+
+/*
+ * Define test fixture with multiple threads
+ */
+#define UCS_MT_TEST_F(test_fixture, test_name, num_threads, ...)\
+  UCS_TEST_(test_fixture, test_name, test_fixture, \
+            ::testing::internal::GetTypeId<test_fixture>(), num_threads, __VA_ARGS__)
 
 
 /*
