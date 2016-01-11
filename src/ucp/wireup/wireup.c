@@ -496,7 +496,8 @@ static void ucp_wireup_stop_aux(ucp_ep_h ep)
 
     num_eps = 0;
 
-    ucs_debug("ucp_wireup_stop_aux state=0x%x", ep->state);
+    ucs_debug("%p: ucp_wireup_stop_aux state=0x%x", ep,
+              ep->state);
 
     if (ep->state & UCP_EP_STATE_NEXT_EP) {
         ucs_assert(ucp_ep_get_stub_ep(ep)->next_ep != NULL);

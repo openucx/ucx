@@ -42,6 +42,30 @@ static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
     return UCS_OK;
 }
 
+static ucs_status_t ucp_stub_am_handler(void *arg, void *data, size_t length, void *desc)
+{
+    ucp_worker_h worker = arg;
+    ucs_trace("worker %p: drop message", worker);
+    return UCS_OK;
+}
+
+static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    ucp_rsc_index_t tl_id;
+    unsigned am_id;
+
+    ucs_debug("worker %p: remove active message handlers", worker);
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+            if (context->config.features & ucp_am_handlers[am_id].features) {
+                (void)uct_iface_set_am_handler(worker->ifaces[tl_id], am_id,
+                                               ucp_stub_am_handler, worker);
+            }
+        }
+    }
+}
+
 static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
                                  uint8_t id, const void *data, size_t length,
                                  char *buffer, size_t max)
@@ -201,6 +225,7 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     struct sglib_hashed_ucp_ep_t_iterator iter;
     ucp_ep_h ep;
 
+    ucs_debug("worker %p: destroy all endpoints", worker);
     for (ep = sglib_hashed_ucp_ep_t_it_init(&iter, worker->ep_hash); ep != NULL;
          ep = sglib_hashed_ucp_ep_t_it_next(&iter))
     {
@@ -211,6 +236,7 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_trace_func("worker=%p", worker);
+    ucp_worker_remove_am_handlers(worker);
     ucp_worker_destroy_eps(worker);
     ucp_worker_close_ifaces(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
