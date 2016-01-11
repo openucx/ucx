@@ -80,6 +80,7 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 {
     uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), 
                                        uct_ud_ep_t, tx.pending.group);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_pending_req_t *req;
 
     /* we may have pending op on ep */
@@ -91,6 +92,7 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     /* uct user should not have anything pending */
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_warn("ep=%p removing user pending req=%p", ep, req);
+    iface->tx.pending_q_len--;
     
     /* return ignored by arbiter */
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -140,13 +142,12 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
-                                        const uct_sockaddr_ib_t *if_addr)
+static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
+                                               const uct_sockaddr_ib_t *if_addr)
 {   
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
 
-    ep->dest_qpn = if_addr->qp_num;
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d slid=%d qpn=%d ep_id=%u ep=%p connected to IFACE dlid=%d qpn=%d", 
@@ -160,7 +161,7 @@ ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
+static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
 
@@ -236,8 +237,6 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     ucs_trace_func("");
 
     ep->dest_ep_id = ib_addr->id;
-    ep->dest_qpn   = ib_addr->qp_num;
-
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d slid=%d qpn=%d ep=%u connected to dlid=%d qpn=%d ep=%u", 
@@ -246,7 +245,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, 
-              ib_addr->lid, ep->dest_qpn, ep->dest_ep_id);
+              ib_addr->lid, ib_addr->qp_num, ep->dest_ep_id);
 
     return UCS_OK;
 }
@@ -757,7 +756,11 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
     req = ucs_container_of(elem, uct_pending_req_t, priv);
-    cb(req);
+    if (cb) {
+        cb(req);
+    } else {
+        ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+    }
     iface->tx.pending_q_len--;
     
     /* return ignored by arbiter */
@@ -782,4 +785,24 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_callback_t cb)
     uct_ud_leave(iface);
 }
 
+void  uct_ud_ep_disconnect(uct_ep_h ep)
+{
+    /*
+     * At the moment scedule flush and keep ep
+     * until interface is destroyed. User should not send any
+     * new data
+     * In the future consider doin full fledged disconnect
+     * protocol. Kind of TCP (FIN/ACK). Doing this will save memory
+     * on the other hand active ep will need more memory to keep its state
+     * and such protocol will add extra complexity
+     */
 
+    ucs_trace_func("");
+    /* cancel user pending */
+    uct_ud_ep_pending_purge(ep, NULL);
+
+    /* scedule flush */
+    uct_ud_ep_flush(ep);
+
+    /* TODO: at leat in debug mode keep and check ep state  */
+}

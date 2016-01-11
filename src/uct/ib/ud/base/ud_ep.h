@@ -144,7 +144,6 @@ struct uct_ud_ep {
     uct_base_ep_t           super;
     uint32_t                ep_id;
     uint32_t                dest_ep_id;
-    uint32_t                dest_qpn;
     struct {
          uct_ud_psn_t           psn;          /* Next PSN to send */
          uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent - (ack_psn + window) (from incoming packet) */
@@ -181,14 +180,11 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr);
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, 
                                      const struct sockaddr *addr);
 
-ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
-                                        const uct_sockaddr_ib_t *addr);
-
-ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep);
-
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n);
 
 void         uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
+
+void         uct_ud_ep_disconnect(uct_ep_h ep);
 
 
 /* helper function to create/destroy new connected ep */

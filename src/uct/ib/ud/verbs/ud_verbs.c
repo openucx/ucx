@@ -50,7 +50,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
 
 UCS_CLASS_DEFINE(uct_ud_verbs_ep_t, uct_ud_ep_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_ep_t, uct_ep_t, uct_iface_h);
-static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_ep_t, uct_ep_t);
+UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_ep_t, uct_ep_t);
 
 static inline void 
 uct_ud_verbs_iface_fill_tx_wr(uct_ud_verbs_iface_t *iface,
@@ -64,7 +64,7 @@ uct_ud_verbs_iface_fill_tx_wr(uct_ud_verbs_iface_t *iface,
         wr->send_flags       = flags;
         ++iface->super.tx.unsignaled;
     }
-    wr->wr.ud.remote_qpn = ep->super.dest_qpn;
+    wr->wr.ud.remote_qpn = ep->dest_qpn;
     wr->wr.ud.ah         = ep->ah;
 }
     
@@ -364,6 +364,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h,
         goto err;
     }
     ep->ah = ah;
+    ep->dest_qpn = if_addr->qp_num;
 
     ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
@@ -392,8 +393,8 @@ ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     if (status != UCS_OK) {
         return status;
     }
-
     ucs_assert_always(ep->ah == NULL);
+    ep->dest_qpn = if_addr->qp_num;
     ah = uct_ib_create_ah(iface, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
@@ -415,7 +416,7 @@ uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_query         = uct_ud_verbs_iface_query,
 
     .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
+    .ep_destroy          = uct_ud_ep_disconnect,
     .ep_get_address      = uct_ud_ep_get_address,
 
     .ep_create_connected = uct_ud_verbs_ep_create_connected,
@@ -513,12 +514,14 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     return UCS_OK;
 }
 
-
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 {
     ucs_trace_func("");
+    uct_ud_enter(&self->super);
     uct_worker_progress_unregister(self->super.super.super.worker,
                                    uct_ud_verbs_iface_progress, self);
+    UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_verbs_ep_t);
+    uct_ud_leave(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_iface_t, uct_ud_iface_t);

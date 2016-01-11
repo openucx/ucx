@@ -74,6 +74,7 @@ ucs_status_t ud_base_test::ep_flush_b(entity *e)
     ucs_status_t status;
     
     do {
+        short_progress_loop();
         status = uct_ep_flush(e->ep(0));
     } while (status == UCS_INPROGRESS || status == UCS_ERR_NO_RESOURCE);
 
@@ -85,6 +86,7 @@ ucs_status_t ud_base_test::iface_flush_b(entity *e)
     ucs_status_t status;
     
     do {
+        short_progress_loop();
         status = uct_iface_flush(e->iface());
     } while (status == UCS_INPROGRESS || status == UCS_ERR_NO_RESOURCE);
 

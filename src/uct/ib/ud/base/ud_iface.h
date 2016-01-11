@@ -288,5 +288,17 @@ uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
     }
 }
 
+/* Go over all active eps and remove them. Do it this way because class destructors are not
+ * virtual 
+ */
+#define UCT_UD_IFACE_DELETE_EPS(_iface, _ep_type_t) \
+    { \
+        int _i; \
+        _ep_type_t *_ep; \
+        ucs_ptr_array_for_each(_ep, _i, &(_iface)->eps) { \
+            UCS_CLASS_DELETE(_ep_type_t, _ep); \
+        } \
+    }
+
 #endif
 
