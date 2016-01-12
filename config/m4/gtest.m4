@@ -14,9 +14,9 @@ dnl Provide a flag to enable or disable Google Test usage.
 AC_ARG_ENABLE([gtest],
   [AS_HELP_STRING([--enable-gtest],
                   [Enable tests using the Google C++ Testing Framework.
-                  (Default is enabled.)])],
+                  (Default is disabled.)])],
   [enable_gtest=$enableval],
-  [enable_gtest=yes])
+  [enable_gtest=no])
 AC_MSG_CHECKING([for using Google C++ Testing Framework])
 AC_MSG_RESULT([$enable_gtest])
 AM_CONDITIONAL([HAVE_GTEST],[test "x$enable_gtest" = "xyes"])
