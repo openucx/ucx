@@ -5,7 +5,7 @@
 
 #include "ucp_test.h"
 
-#include <ucs/gtest/test_helpers.h>
+#include <common/test_helpers.h>
 extern "C" {
 #include <ucs/arch/atomic.h>
 }

@@ -7,7 +7,7 @@
 #ifndef TEST_PERF_H_
 #define TEST_PERF_H_
 
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 
 #include <tools/perf/libperf.h>
 

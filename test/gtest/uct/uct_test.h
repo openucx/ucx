@@ -13,7 +13,7 @@ extern "C" {
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
 }
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 #include <vector>
 
 

@@ -7,7 +7,7 @@
 extern "C" {
 #include <uct/api/uct.h>
 }
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 
 class test_mem : public testing::TestWithParam<uct_alloc_method_t>,
 public ucs::test_base {

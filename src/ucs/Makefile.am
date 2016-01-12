@@ -54,10 +54,6 @@ nobase_dist_libucs_la_HEADERS = \
 	debug/instrument.h \
 	debug/log.h \
 	debug/memtrack.h \
-	gtest/test.h \
-	gtest/test_helpers.h \
-	gtest/gtest.h \
-	gtest/tap.h \
 	stats/libstats.h \
 	stats/stats.h \
 	sys/compiler.h \
@@ -119,25 +115,6 @@ libucs_la_SOURCES += \
 bin_PROGRAMS            += ucs_stats_parser
 ucs_stats_parser_LDADD   = libucs.la
 ucs_stats_parser_SOURCES = stats/stats_parser.c
-endif
-
-if HAVE_GTEST
-lib_LTLIBRARIES       += libucstest.la
-libucstest_la_LDFLAGS  = -ldl -version-info \
-			$(SOVERSION) \
-			$(GTEST_LDFLAGS)
-libucstest_la_CPPFLAGS = -I$(top_builddir) -I$(abs_top_srcdir)/src \
-			 $(GTEST_CPPFLAGS)
-libucstest_la_CXXFLAGS = $(GTEST_CXXFLAGS)
-libucstest_la_LIBADD   = libucs.la
-			$(GTEST_LIBS)
-libucstest_ladir       = $(includedir)
-
-libucstest_la_SOURCES  = \
-	gtest/gtest-all.cc \
-	gtest/main.cc \
-	gtest/test_helpers.cc \
-	gtest/test.cc
 endif
 
 

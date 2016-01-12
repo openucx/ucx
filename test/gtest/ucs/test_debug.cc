@@ -4,7 +4,7 @@
 * See file LICENSE for terms.
 */
 
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 extern "C" {
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
