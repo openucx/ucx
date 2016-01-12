@@ -2,9 +2,10 @@
 
 rc=0
 
+WORKSPACE=${WORKSPACE:=$PWD}
+
 if [ -z "$BUILD_NUMBER" ]; then
     echo Running interactive
-    WORKSPACE=$PWD
     BUILD_NUMBER=1
     WS_URL=file://$WORKSPACE
     JENKINS_RUN_TESTS=yes
@@ -21,6 +22,8 @@ cov_exclude_file_list="external/jemalloc jemalloc"
 
 
 echo Starting on host: $(hostname)
+
+cd ${WORKSPACE}
 
 echo "Autogen"
 ./autogen.sh
