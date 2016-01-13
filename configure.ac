@@ -1,6 +1,8 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# Copyright (C) The University of Tennessee and The University 
+#               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
@@ -85,10 +87,40 @@ m4_ifdef([AS_VAR_APPEND],
 [m4_define([ucx_AS_VAR_APPEND],
 [AS_VAR_SET([$1], [AS_VAR_GET([$1])$2])])])
 
-
 #
 # Configure modules
 #
+m4_include([config/m4/ax_prog_doxygen.m4])
+m4_include([config/m4/graphviz.m4])
+AC_ARG_WITH([docs_only],
+        AS_HELP_STRING([--with-docs-only],
+                       [Compile only the docs and not the rest of UCX. [default=NO]]),
+        ,[:],[with_docs_only=no])
+AS_IF([test "x$with_docs_only" == xyes],
+          [AS_MESSAGE([dxonly])
+           AM_CONDITIONAL([DOCS_ONLY], [true])
+           AM_CONDITIONAL([HAVE_GTEST], [false])
+           AM_CONDITIONAL([HAVE_STATS], [false])
+           AM_CONDITIONAL([HAVE_TUNING], [false])
+           AM_CONDITIONAL([HAVE_MEMTRACK], [false])
+           AM_CONDITIONAL([HAVE_IB], [false])
+           AM_CONDITIONAL([HAVE_MLX5_HW], [false])
+           AM_CONDITIONAL([HAVE_TL_RC], [false])
+           AM_CONDITIONAL([HAVE_TL_DC], [false])
+           AM_CONDITIONAL([HAVE_TL_UD], [false])
+           AM_CONDITIONAL([HAVE_TL_CM], [false])
+           AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
+           AM_CONDITIONAL([HAVE_CUDA], [false])
+           AM_CONDITIONAL([HAVE_XPMEM], [false])
+           AM_CONDITIONAL([HAVE_CMA], [false])
+           AM_CONDITIONAL([HAVE_KNEM], [false])
+           AM_CONDITIONAL([HAVE_MPI], [false])
+           AM_CONDITIONAL([HAVE_MPIRUN], [false])
+           AM_CONDITIONAL([HAVE_MPICC], [false])
+           AM_CONDITIONAL([BUILD_JEMALLOC],[false])
+          ],
+          [
+           AM_CONDITIONAL([DOCS_ONLY], [false])
 m4_include([config/m4/compiler.m4])
 m4_include([config/m4/sysdep.m4])
 m4_include([config/m4/ucs.m4])
@@ -96,9 +128,7 @@ m4_include([config/m4/ib.m4])
 m4_include([config/m4/cray_ugni.m4])
 m4_include([config/m4/mpi.m4])
 m4_include([config/m4/rte.m4])
-m4_include([config/m4/ax_prog_doxygen.m4])
 m4_include([config/m4/cuda.m4])
-m4_include([config/m4/graphviz.m4])
 m4_include([config/m4/cma.m4])
 m4_include([config/m4/knem.m4])
 m4_include([config/m4/xpmem.m4])
@@ -109,12 +139,12 @@ m4_include([config/m4/xpmem.m4])
 # This option may affect perofrmance so it is off by default.
 #
 AC_ARG_ENABLE([frame-pointer],
-	AS_HELP_STRING([--enable-frame-pointer], 
+	AS_HELP_STRING([--enable-frame-pointer],
 	               [Compile with frame pointer, useful for profiling, default: NO]),
 	[],
 	[enable_frame_pointer=no])
-	
-AS_IF([test "x$enable_frame_pointer" == xyes], 
+
+AS_IF([test "x$enable_frame_pointer" == xyes],
 	  [AS_MESSAGE([compiling with frame pointer])
 	   CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
 	  [:]
@@ -125,12 +155,12 @@ AS_IF([test "x$enable_frame_pointer" == xyes],
 # Enable fault injection code
 #
 AC_ARG_ENABLE([fault-injection],
-	AS_HELP_STRING([--enable-fault-injection], 
+	AS_HELP_STRING([--enable-fault-injection],
 	               [Enable fault injection code, default: NO]),
 	[],
 	[enable_fault_injection=no])
-	
-AS_IF([test "x$enable_fault_injection" == xyes], 
+
+AS_IF([test "x$enable_fault_injection" == xyes],
 	  [AS_MESSAGE([enabling with fault injection code])
 	   AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
 	  [:]
@@ -141,7 +171,7 @@ AS_IF([test "x$enable_fault_injection" == xyes],
 # Disable checking user parameters
 #
 AC_ARG_ENABLE([params-check],
-	AS_HELP_STRING([--disable-params-check], 
+	AS_HELP_STRING([--disable-params-check],
 	               [Disable checking user parameters passed to API, default: NO]),
 	[AC_DEFINE([ENABLE_PARAMS_CHECK], [0])],
 	[AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])])
@@ -191,6 +221,7 @@ AS_IF([test "x$jemalloc_enabled" == xyes],
           [AC_SUBST([BUILD_JEMALLOC], [no])
 	  AM_CONDITIONAL([BUILD_JEMALLOC],[false])])
 
+]) # Docs only
 #
 #Doxygen options
 #
@@ -208,8 +239,11 @@ AC_MSG_NOTICE([Supported transports: $transports])
 #
 # Final output
 #
+AC_CONFIG_FILES([Makefile
+                 src/uct/api/version.h
+                 ])
+AS_IF([test "x$with_docs_only" == xyes], [], [
 AC_CONFIG_FILES([
-				 Makefile
                  ucx.spec
                  ucx.pc
                  debian/rules
@@ -218,7 +252,6 @@ AC_CONFIG_FILES([
                  debian/ucx.postinst
                  src/ucs/Makefile
                  src/uct/Makefile
-                 src/uct/api/version.h
                  src/ucp/Makefile
                  src/ucp/api/ucp_version.h
                  src/ucp/core/ucp_version.c
@@ -230,6 +263,8 @@ AC_CONFIG_FILES([
                  test/mpi/Makefile
                  external/Makefile
                  ])
+
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
+])
 
 AC_OUTPUT

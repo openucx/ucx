@@ -1,6 +1,8 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# Copyright (C) The University of Tennessee and The University 
+#               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -8,17 +10,20 @@
 # Build . before src so that our all-local and clean-local hooks kicks in at
 # the right time.
 
+EXTRA_DIST =
 ACLOCAL_AMFLAGS = -I config/m4
 DISTCHECK_CONFIGURE_FLAGS = "--disable-jemalloc"
 
 noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
 doxygen_doc_files = $(noinst_HEADERS)
 
-perftest_dir = $(pkgdatadir)/perftest
 doc_dir = $(pkgdatadir)/doc
 
-dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
 dist_doc__DATA = README
+
+if !DOCS_ONLY
+perftest_dir = $(pkgdatadir)/perftest
+dist_perftest__DATA = contrib/ucx_perftest_config/msg_pow2 contrib/ucx_perftest_config/README contrib/ucx_perftest_config/test_types contrib/ucx_perftest_config/transports
 
 SUBDIRS = \
 	src/ucs \
@@ -38,7 +43,6 @@ if HAVE_MPI
 SUBDIRS += test/mpi
 endif
 
-EXTRA_DIST =
 EXTRA_DIST += config/m4/gtest.m4
 EXTRA_DIST += config/m4/ucs.m4
 EXTRA_DIST += config/m4/ib.m4
@@ -51,6 +55,7 @@ EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
 EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
+endif #!DOCS_ONLY
 EXTRA_DIST += doc/uml/uct.dot
 
 include $(srcdir)/doc/doxygen/doxygen.am
