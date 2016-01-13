@@ -18,7 +18,8 @@ ptmalloc_cppflags = \
 	-DUSE_TSD_DATA_HACK \
 	-DUSE_LOCKS=1 \
 	-DONLY_MSPACES=0 \
-	-DUSE_DL_PREFIX=1
+	-DUSE_DL_PREFIX=1 \
+	-DMALLINFO_FIELD_TYPE=int
 
 libucm_la_CPPFLAGS = \
     -I$(abs_top_srcdir)/src \

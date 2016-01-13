@@ -4,13 +4,17 @@
  * See file LICENSE for terms.
  */
 
+#define __STDC_LIMIT_MACROS
+
 #include <ucm/api/ucm.h>
 
+#include <ucs/arch/atomic.h>
 #include <ucs/type/status.h>
 #include <ucs/gtest/test.h>
 #include <ucs/gtest/test_helpers.h>
 #include <pthread.h>
 #include <sstream>
+#include <stdint.h>
 
 extern "C" {
 #include <ucs/sys/sys.h>
@@ -18,13 +22,46 @@ extern "C" {
 }
 
 class malloc_hook : public ucs::test {
+protected:
+    virtual void init() {
+        size_t free_space, min_free_space, prev_free_space, alloc_size;
+        struct mallinfo mi;
+
+        malloc_trim(0);
+
+        /* Take up free space so we would definitely get mmap events */
+        min_free_space  = 0;
+        prev_free_space = SIZE_MAX;
+        alloc_size      = 0;
+        do {
+            mi = mallinfo();
+            m_pts.push_back(malloc(small_alloc_size));
+            alloc_size += small_alloc_size;
+            free_space = mi.fsmblks + mi.fordblks;
+            if (free_space > prev_free_space) {
+                /* If the heap grew, the minimal size is the previous one */
+                min_free_space = prev_free_space;
+            }
+            prev_free_space = free_space;
+        } while (free_space >= min_free_space + (small_alloc_count * small_alloc_size));
+        UCS_TEST_MESSAGE << "Reduced heap free space to minimum: " << free_space <<
+                            " after allocating " << alloc_size << " bytes";
+    }
+
+public:
+    static int          small_alloc_count;
+    static const size_t small_alloc_size  = 10000;
+    ucs::ptr_vector<void> m_pts;
 };
+
+int malloc_hook::small_alloc_count = 1000 / ucs::test_time_multiplier();
 
 class test_thread {
 public:
-    test_thread(const std::string& name, int num_threads, pthread_barrier_t *barrier) :
+    test_thread(const std::string& name, int num_threads, pthread_barrier_t *barrier,
+                malloc_hook *test) :
         m_name(name), m_num_threads(num_threads), m_barrier(barrier),
-        m_map_size(0), m_unmap_size(0)
+        m_map_size(0), m_unmap_size(0), m_test(test)
     {
         pthread_create(&m_thread, NULL, thread_func, reinterpret_cast<void*>(this));
     }
@@ -68,7 +105,6 @@ private:
 
     static pthread_mutex_t   lock;
     static pthread_barrier_t barrier;
-    static bool              first_run;
 
     std::string        m_name;
     int                m_num_threads;
@@ -78,10 +114,10 @@ private:
     size_t             m_unmap_size;
     std::vector<range> m_map_ranges;
     std::vector<range> m_unmap_ranges;
+    malloc_hook        *m_test;
 };
 
 pthread_mutex_t test_thread::lock = PTHREAD_MUTEX_INITIALIZER;
-bool            test_thread::first_run = true;
 
 void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
 {
@@ -103,24 +139,25 @@ void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
 
 void test_thread::test() {
     static const size_t large_alloc_size = 40 * 1024 * 1024;
-    static const size_t small_alloc_size = 10000;
-    static const int small_alloc_count = 200 / ucs::test_time_multiplier();
     ucs_status_t result;
     ucs::ptr_vector<void> old_ptrs;
     ucs::ptr_vector<void> new_ptrs;
     void *ptr_r;
     size_t small_map_size;
     int num_ptrs_in_range;
+    static volatile uint32_t total_ptrs_in_range = 0;
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
-        old_ptrs.push_back(malloc(small_alloc_size));
+        old_ptrs.push_back(malloc(m_test->small_alloc_size));
     }
 
-    ptr_r = malloc(small_alloc_size);
+    ptr_r = malloc(m_test->small_alloc_size);
 
-    m_map_ranges.reserve  ((small_alloc_count * 8 + 10) * m_num_threads);
-    m_unmap_ranges.reserve((small_alloc_count * 8 + 10) * m_num_threads);
+    m_map_ranges.reserve  ((m_test->small_alloc_count * 8 + 10) * m_num_threads);
+    m_unmap_ranges.reserve((m_test->small_alloc_count * 8 + 10) * m_num_threads);
+
+    total_ptrs_in_range = 0;
 
     pthread_barrier_wait(m_barrier);
 
@@ -131,29 +168,30 @@ void test_thread::test() {
     ASSERT_UCS_OK(result);
 
     /* Allocate small pointers with new heap manager */
-    for (int i = 0; i < small_alloc_count; ++i) {
-        new_ptrs.push_back(malloc(small_alloc_size));
+    for (int i = 0; i < m_test->small_alloc_count; ++i) {
+        new_ptrs.push_back(malloc(m_test->small_alloc_size));
     }
     small_map_size = m_map_size;
 
     /* If this test runs more than once, then sbrk may not really allocate new
      * memory
      */
-    if (first_run) {
-        EXPECT_GT(m_map_size, 0lu) << m_name;
+    EXPECT_GT(m_map_size, 0lu) << m_name;
 
-        num_ptrs_in_range = 0;
-        for (ucs::ptr_vector<void>::const_iterator iter = new_ptrs.begin();
-                        iter != new_ptrs.end(); ++iter)
-        {
-            if (is_ptr_in_range(*iter, small_alloc_size, m_map_ranges)) {
-                ++num_ptrs_in_range;
-            }
+    num_ptrs_in_range = 0;
+    for (ucs::ptr_vector<void>::const_iterator iter = new_ptrs.begin();
+                    iter != new_ptrs.end(); ++iter)
+    {
+        if (is_ptr_in_range(*iter, m_test->small_alloc_size, m_map_ranges)) {
+            ++num_ptrs_in_range;
         }
-
-        /* Need at least one ptr in the mapped ranges */
-        EXPECT_GT(num_ptrs_in_range, 0) << m_name;
     }
+
+    /* Need at least one ptr in the mapped ranges in one the threads */
+    ucs_atomic_add32(&total_ptrs_in_range, num_ptrs_in_range);
+    pthread_barrier_wait(m_barrier);
+
+    EXPECT_GT(total_ptrs_in_range, 0u);
 
     /* Allocate large chunk */
     void *ptr = malloc(large_alloc_size);
@@ -175,8 +213,11 @@ void test_thread::test() {
     EXPECT_EQ(std::string("VALUE"), getenv("TEST"));
     pthread_mutex_unlock(&lock);
 
+    /* Test username */
+    ucs_get_user_name();
+
     /* Test realloc */
-    ptr_r = realloc(ptr_r, small_alloc_size / 2);
+    ptr_r = realloc(ptr_r, m_test->small_alloc_size / 2);
     free(ptr_r);
 
     /* Release old pointers (should not crash) */
@@ -204,7 +245,6 @@ void test_thread::test() {
     free(ptr);
 
     pthread_mutex_lock(&lock);
-    first_run = false;
     UCS_TEST_MESSAGE << m_name
                      << ": small mapped: " << small_map_size
                      <<  ", total mapped: " << m_map_size
@@ -217,8 +257,17 @@ void test_thread::test() {
                             reinterpret_cast<void*>(this));
 }
 
-UCS_TEST_F(malloc_hook, threads) {
-    static const int num_threads = 10;
+UCS_TEST_F(malloc_hook, single_thread) {
+    pthread_barrier_t barrier;
+    pthread_barrier_init(&barrier, NULL, 1);
+    {
+        test_thread thread("single-thread", 1, &barrier, this);
+    }
+    pthread_barrier_destroy(&barrier);
+}
+
+UCS_TEST_F(malloc_hook, multi_threads) {
+    static const int num_threads = 8;
     ucs::ptr_vector<test_thread> threads;
     pthread_barrier_t barrier;
 
@@ -226,7 +275,7 @@ UCS_TEST_F(malloc_hook, threads) {
     for (int i = 0; i < num_threads; ++i) {
         std::stringstream ss;
         ss << "thread " << i << "/" << num_threads;
-        threads.push_back(new test_thread(ss.str(), num_threads, &barrier));
+        threads.push_back(new test_thread(ss.str(), num_threads, &barrier, this));
     }
 
     threads.clear();
@@ -234,7 +283,7 @@ UCS_TEST_F(malloc_hook, threads) {
 }
 
 UCS_TEST_F(malloc_hook, fork) {
-    static const int num_processes = 10;
+    static const int num_processes = 4;
     pthread_barrier_t barrier;
     std::vector<pid_t> pids;
     pid_t pid;
@@ -246,7 +295,7 @@ UCS_TEST_F(malloc_hook, fork) {
             {
                 std::stringstream ss;
                 ss << "process " << i << "/" << num_processes;
-                test_thread thread(ss.str(), 1, &barrier);
+                test_thread thread(ss.str(), 1, &barrier, this);
             }
             pthread_barrier_destroy(&barrier);
             exit(HasFailure() ? 1 : 0);
