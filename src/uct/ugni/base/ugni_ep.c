@@ -1,15 +1,84 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* See file LICENSE for terms.
-*/
+ * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
 #include <uct/ugni/base/ugni_ep.h>
 #include <uct/ugni/base/ugni_iface.h>
 
-SGLIB_DEFINE_LIST_PROTOTYPES(uct_ugni_ep_t, uct_ugni_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ugni_ep_t, uct_ugni_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
+
+ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n){
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+
+    UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
+
+    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
+    ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
+    ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
+
+    return UCS_OK;
+}
+
+ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                    ucs_arbiter_elem_t *elem,
+                                                    void *arg){
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    ucs_status_t rc;
+
+    rc = req->func(req);
+    ucs_trace_data("progress pending request %p returned %s", req,
+                   ucs_status_string(rc));
+
+
+    if (UCS_OK == rc) {
+        /* sent successfully. remove from the arbiter */
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else {
+        /* couldn't send. keep this request in the arbiter until the next time
+         * this function is called */
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+}
+
+static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                            ucs_arbiter_elem_t *elem,
+                                                            void *arg){
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_pending_callback_t cb = arg;
+
+    cb(req);
+    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
+void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb){
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+
+    ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
+                            uct_ugni_ep_abriter_purge_cb, cb);
+}
+
+ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface, const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep){
+    gni_return_t ugni_rc;
+
+    ugni_rc = GNI_EpBind(ep->ep, iface_addr->nic_addr, iface_addr->domain_id);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        (void)GNI_EpDestroy(ep->ep);
+        ucs_error("GNI_EpBind failed, Error status: %s %d",
+                  gni_err_str[ugni_rc], ugni_rc);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    ucs_debug("Binding ep %p to address (%d %d)", ep, iface_addr->nic_addr,
+              iface_addr->domain_id);
+
+    ep->outstanding = 0;
+
+    return UCS_OK;
+}
 
 /* Endpoint definition */
 UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
@@ -17,9 +86,10 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
+    ucs_status_t rc = UCS_OK;
     gni_return_t ugni_rc;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
     ugni_rc = GNI_EpCreate(iface->nic_handle, iface->local_cq, &self->ep);
     if (GNI_RC_SUCCESS != ugni_rc) {
@@ -28,21 +98,19 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
         return UCS_ERR_NO_DEVICE;
     }
 
-    ugni_rc = GNI_EpBind(self->ep, iface_addr->nic_addr, iface_addr->domain_id);
-    if (GNI_RC_SUCCESS != ugni_rc) {
-        (void)GNI_EpDestroy(self->ep);
-        ucs_error("GNI_EpBind failed, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
-        return UCS_ERR_UNREACHABLE;
+    if(NULL != addr){
+        rc = ugni_connect_ep(iface, iface_addr, self);
     }
 
-    ucs_debug("Binding ep %p to address (%d %d)", self, iface_addr->nic_addr,
-              iface_addr->domain_id);
+    ucs_arbiter_group_init(&self->arb_group);
 
-    self->outstanding = 0;
-    self->hash_key = (uintptr_t)&self->ep;
+    uint32_t *big_hash;
+    big_hash = (void *)&self->ep;
+
+    self->hash_key = big_hash[0];
     sglib_hashed_uct_ugni_ep_t_add(iface->eps, self);
-    return UCS_OK;
+
+    return rc;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
