@@ -554,8 +554,10 @@ static void uct_ud_iface_timer(void *arg)
     uct_ud_iface_t *iface = (uct_ud_iface_t *)arg;
     ucs_time_t now;
 
+    uct_ud_enter(iface);
     now = uct_ud_iface_get_async_time(iface);
     ucs_trace_async("iface(%p) slow_timer_sweep: now %llu", iface, now);
     ucs_twheel_sweep(&iface->async.slow_timer, now);
     iface->ops.async_progress(arg);
+    uct_ud_leave(iface);
 }
