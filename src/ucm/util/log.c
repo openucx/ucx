@@ -110,7 +110,7 @@ out:
 static void ucm_log_vsnprintf(char *buf, size_t max, const char *fmt, va_list ap)
 {
     const char *pf;
-    char *pb, *endb;
+    char *pb, *endb, *ps;
     union {
         char          *s;
         long          d;
@@ -147,9 +147,11 @@ static void ucm_log_vsnprintf(char *buf, size_t max, const char *fmt, va_list ap
 
             /* Error message */
             case 'm':
-                if (strerror_r(eno, pb, endb - pb) == 0) {
-                    pb += strlen(pb);
+                ps = strerror_r(eno, pb, endb - pb);
+                if (ps != pb) {
+                    strncpy(pb, ps, endb - pb);
                 }
+                pb += strlen(pb);
                 goto done;
 
             /* String */

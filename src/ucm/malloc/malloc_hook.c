@@ -590,6 +590,11 @@ out_succ:
 
 UCS_STATIC_INIT {
     ucs_spinlock_init(&ucm_malloc_hook_state.lock);
+
+    /* Trigger NSS initialization before we install malloc hooks.
+     * This is needed because NSS could allocate strings with our malloc(), but
+     * release them with the original free(). */
+    (void)getlogin();
 }
 
 static void UCS_F_DTOR ucm_clear_env()

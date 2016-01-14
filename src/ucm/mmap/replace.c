@@ -14,48 +14,45 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/component.h>
-#include <ucs/type/spinlock.h>
 #include <dlfcn.h>
 
 
 #define MAP_FAILED ((void*)-1)
 
+static __thread int ucm_mmap_reentry = 0;
+
 /**
  * Define a replacement function to a memory-mapping function call, which calls
  * the event handler, and if event handler returns error code - calls the original
  * function.
- *
- * The value of previous function pointer is global and protected by a spinlock.
  */
 #define UCM_REPLACE_MM_FUNC(_name, _event_type, _rettype, _fail_val, ...) \
-    \
-    static ucs_spinlock_t ucm_##_name##_lock; \
     \
     /* Call the original function using dlsym(RTLD_NEXT) */ \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
         typedef _rettype (*func_ptr_t) (__VA_ARGS__); \
         static func_ptr_t orig_func_ptr = NULL; \
-        ucs_spinlock_t *lock = &ucm_##_name##_lock; \
-        \
-        if (ucs_unlikely(ucs_spin_is_owner(lock, pthread_self()))) { \
-            /* fail on re-entry */ \
-            return _fail_val; \
-        } \
         \
         if (ucs_unlikely(orig_func_ptr == NULL)) { \
-            ucs_spin_lock(lock); \
             orig_func_ptr = (func_ptr_t)dlsym(RTLD_NEXT, UCS_PP_QUOTE(_name)); \
-            ucs_spin_unlock(lock); \
         } \
-        \
         return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     } \
     \
     /* Define a symbol which goes to the replacement - in case we are loaded first */ \
     _rettype _name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        return ucm_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        _rettype ret; \
+        \
+        if (ucm_mmap_reentry) { \
+            return _fail_val; /* fail on re-entry - avoid recursive events */ \
+        } \
+        \
+        ucm_mmap_reentry = 1; \
+        ret = ucm_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
+        ucm_mmap_reentry = 0; \
+        return ret; \
     }
 
 /*
@@ -105,12 +102,6 @@ UCS_STATIC_INIT {
      * When library is loaded, invoke these to initialize the pointers to
      * original functions.
      */
-    ucs_spinlock_init(&ucm_mmap_lock);
-    ucs_spinlock_init(&ucm_munmap_lock);
-    ucs_spinlock_init(&ucm_mremap_lock);
-    ucs_spinlock_init(&ucm_shmat_lock);
-    ucs_spinlock_init(&ucm_shmdt_lock);
-    ucs_spinlock_init(&ucm_sbrk_lock);
     mmap(NULL, 0, 0, 0, -1, 0);
     munmap(NULL, 0);
     mremap(NULL, 0, 0, 0);
