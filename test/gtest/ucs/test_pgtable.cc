@@ -203,7 +203,8 @@ UCS_TEST_F(test_pgtable, multi_search) {
         /* Search in page table */
         search_result_t result = search(from, to);
         UCS_TEST_MESSAGE << "found " << result.size() << "/" << num_in_range <<
-                            " regions in the range 0x" << std::hex << from << "..0x" << to;
+                            " regions in the range 0x" << std::hex << from <<
+                            "..0x" << to << std::dec;
         EXPECT_EQ(num_in_range, result.size());
 
         purge();
