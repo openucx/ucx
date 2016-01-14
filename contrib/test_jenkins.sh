@@ -14,7 +14,7 @@ else
     WS_URL=$JOB_URL/ws
 fi
 
-make_opt="-j$(($(nproc) - 1))"
+make_opt="-j$(($(nproc) / 2 + 1))"
 ucx_inst=${WORKSPACE}/install
 
 # indicate to coverity which files to exclude from report
