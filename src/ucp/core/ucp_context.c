@@ -70,7 +70,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "rc",    { "rc", "ud", NULL } },
   { "rc_x",  { "rc_mlx5", "ud", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
-  { "ugni",  { "ugni_udt", "ugni_rdma", NULL } },
+  { "ugni",  { "ugni_smsg", "ugni_udt", "ugni_rdma", NULL } },
   { NULL }
 };
 
