@@ -13,9 +13,6 @@
 #include <string.h>
 
 
-#define UCS_PGT_REGION_FMT            "%p [0x%lx..0x%lx]"
-#define UCS_PGT_REGION_ARG(_region)   (_region), (_region)->start, (_region)->end
-
 #define ucs_pgt_entry_clear(_pte) \
     { (_pte)->value = 0; }
 
@@ -130,7 +127,7 @@ void ucs_pgtable_dump(const ucs_pgtable_t *pgtable, ucs_log_level_t log_level)
 
 static void ucs_pgtable_trace(ucs_pgtable_t *pgtable, const char *message)
 {
-    ucs_pgtable_log(pgtable, UCS_LOG_LEVEL_TRACE, message);
+    ucs_pgtable_log(pgtable, UCS_LOG_LEVEL_TRACE_DATA, message);
 }
 
 static void ucs_pgtable_reset(ucs_pgtable_t *pgtable)
@@ -259,8 +256,8 @@ ucs_pgtable_insert_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
 
     ucs_pgtable_check_page(address, order);
 
-    ucs_trace("insert page 0x%lx order %u, for region " UCS_PGT_REGION_FMT,
-              address, order, UCS_PGT_REGION_ARG(region));
+    ucs_trace_data("insert page 0x%lx order %u, for region " UCS_PGT_REGION_FMT,
+                   address, order, UCS_PGT_REGION_ARG(region));
 
     /* Make root map addresses which include our interval */
     while (pgtable->shift < order) {
@@ -269,8 +266,6 @@ ucs_pgtable_insert_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
 
     if (ucs_pgt_entry_present(&pgtable->root)) {
         while ((address & pgtable->mask) != pgtable->base) {
-            ucs_trace("expand because address&mask (0x%lx,0x%lx) != base (0x%lx)",
-                      address, pgtable->mask, pgtable->base);
             ucs_pgtable_expand(pgtable);
         }
     } else {
@@ -390,7 +385,7 @@ ucs_status_t ucs_pgtable_insert(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
     ucs_status_t status;
     unsigned order;
 
-    ucs_trace("add region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
+    ucs_trace_data("add region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
 
     if ((address >= end) || !ucs_pgt_is_addr_aligned(address) ||
         !ucs_pgt_is_addr_aligned(end))
@@ -431,7 +426,7 @@ ucs_status_t ucs_pgtable_remove(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
     ucs_status_t status;
     unsigned order;
 
-    ucs_trace("remove region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
+    ucs_trace_data("remove region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
 
     if ((address >= end) || !ucs_pgt_is_addr_aligned(address) ||
         !ucs_pgt_is_addr_aligned(end))
@@ -464,7 +459,7 @@ ucs_pgt_region_t *ucs_pgtable_lookup(const ucs_pgtable_t *pgtable,
     ucs_pgt_dir_t *dir;
     unsigned shift;
 
-    ucs_trace("lookup address 0x%lx", address);
+    ucs_trace_func("pgtable=%p address=0x%lx", pgtable, address);
 
     /* Check if the address is mapped by the page table */
     if ((address & pgtable->mask) != pgtable->base) {

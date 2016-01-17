@@ -15,6 +15,10 @@ extern "C" {
 #include <set>
 
 class test_sys : public ucs::test {
+protected:
+    static int get_mem_prot(void *address, size_t size) {
+        return ucs_get_mem_prot((uintptr_t)address, (uintptr_t)address + size);
+    }
 };
 
 UCS_TEST_F(test_sys, uuid) {
@@ -56,12 +60,12 @@ UCS_TEST_F(test_sys, spinlock) {
 UCS_TEST_F(test_sys, get_mem_prot) {
     int x;
 
-    ASSERT_TRUE( ucs_get_mem_prot(&x, sizeof(x)) & PROT_READ );
-    ASSERT_TRUE( ucs_get_mem_prot(&x, sizeof(x)) & PROT_WRITE );
-    ASSERT_TRUE( ucs_get_mem_prot((void*)&ucs_get_mem_prot, 1) & PROT_EXEC );
+    ASSERT_TRUE( get_mem_prot(&x, sizeof(x)) & PROT_READ );
+    ASSERT_TRUE( get_mem_prot(&x, sizeof(x)) & PROT_WRITE );
+    ASSERT_TRUE( get_mem_prot((void*)&get_mem_prot, 1) & PROT_EXEC );
 
     ucs_time_t start_time = ucs_get_time();
-    ucs_get_mem_prot(&x, sizeof(x));
+    get_mem_prot(&x, sizeof(x));
     ucs_time_t duration = ucs_get_time() - start_time;
     UCS_TEST_MESSAGE << "Time: " << ucs_time_to_usec(duration) << " us";
 }

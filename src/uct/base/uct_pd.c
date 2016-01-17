@@ -297,7 +297,7 @@ ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
                                    const char *filename,
                                    uct_iface_config_t **config_p)
 {
-    uct_config_bundle_t *bundle;
+    uct_config_bundle_t *bundle = NULL;
     uct_tl_component_t *tlc;
     ucs_status_t status;
 
@@ -350,7 +350,7 @@ ucs_status_t uct_pd_config_read(const char *name, const char *env_prefix,
                                 const char *filename,
                                 uct_pd_config_t **config_p)
 {
-    uct_config_bundle_t *bundle;
+    uct_config_bundle_t *bundle = NULL;
     uct_pd_component_t *pdc;
     ucs_status_t status;
 
