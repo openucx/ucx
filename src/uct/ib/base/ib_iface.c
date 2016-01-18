@@ -393,7 +393,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err;
     }
 
-    /* TODO comp_channel */
     /* TODO inline scatter for send SQ */
     self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len, NULL, NULL, 0);
     if (self->send_cq == NULL) {
@@ -420,6 +419,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err_destroy_recv_cq;
     }
 
+    ucs_list_head_init(&self->comps_head);
+
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
@@ -439,6 +440,13 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
+
+    while (!ucs_list_is_empty(&self->comps_head))
+    {
+        uct_ib_iface_close_fd(&self->super.super,
+                ucs_list_head(&self->comps_head,
+                        uct_ib_iface_comp_t, list)->comp_channel->fd);
+    }
 
     ret = ibv_destroy_cq(self->recv_cq);
     if (ret != 0) {
@@ -493,4 +501,64 @@ struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
     ah_attr.dlid = dlid;
 
     return ibv_create_ah(dev->pd, &ah_attr);
+}
+
+int uct_ib_iface_open_fd(uct_iface_t *tl_iface)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    uct_ib_iface_comp_t *comp = ucs_malloc(sizeof(*comp),
+            "completion channel");
+    if (comp == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    comp->comp_channel = ibv_create_comp_channel(dev->ibv_context);
+    if (comp->comp_channel == NULL)
+    {
+        ucs_free(comp);
+        return -1;
+    }
+
+    ucs_list_add_tail(&iface->comps_head, &comp->list);
+    return comp->comp_channel->fd;
+}
+
+ucs_status_t uct_ib_iface_drain_fd(uct_iface_t *tl_iface, int comp_fd)
+{
+    struct ibv_cq *cq;
+    void *cq_context;
+
+    uct_ib_iface_comp_t *comp;
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    ucs_list_for_each(comp, &iface->comps_head, list)
+    {
+        if (comp->comp_channel->fd == comp_fd)
+        {
+            while (ibv_get_cq_event(comp->comp_channel, &cq, &cq_context) == 0) {
+                ibv_ack_cq_events(cq, 1);
+            }
+
+            return UCS_OK;
+        }
+    }
+
+    return UCS_ERR_INVALID_PARAM;
+}
+
+void uct_ib_iface_close_fd(uct_iface_t *tl_iface, int comp_fd)
+{
+    uct_ib_iface_comp_t *comp;
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    ucs_list_for_each(comp, &iface->comps_head, list)
+    {
+        if (comp->comp_channel->fd == comp_fd)
+        {
+            ucs_list_del(&comp->list);
+            ibv_destroy_comp_channel(comp->comp_channel);
+            ucs_free(comp);
+            return;
+        }
+    }
 }

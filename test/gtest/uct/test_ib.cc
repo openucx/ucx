@@ -5,6 +5,7 @@
 */
 
 extern "C" {
+#include <poll.h>
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 }
@@ -173,6 +174,49 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
     ASSERT_EQ(sizeof(send_data), recv_buffer->length);
     EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
 
+    free(recv_buffer);
+}
+
+UCS_TEST_P(test_uct_ib, interrupt_notification)
+{
+    uint64_t send_data   = 0xdeadbeef;
+    uint64_t test_ib_hdr = 0xbeef;
+    recv_desc_t *recv_buffer;
+    struct pollfd polled;
+    int spare_fd;
+
+    initialize();
+    check_caps(UCT_IFACE_FLAG_INTERRUPT_NOTIFICATION);
+
+    /* create the file descriptor and make sure it's NOT signaled */
+    polled.events = POLLIN;
+    polled.fd = uct_iface_open_fd(m_e2->iface());
+    spare_fd = uct_iface_open_fd(m_e2->iface());
+    ASSERT_GT(polled.fd, 0);
+    ASSERT_EQ(poll(&polled, 1, 0), 0);
+
+    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
+    recv_buffer->length = 0; /* Initialize length to 0 */
+
+    /* set a callback for the uct to invoke for receiving the data */
+    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer);
+
+    /* send the data */
+    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+
+    /* make sure the file descriptor IS signaled */
+    ASSERT_EQ(poll(&polled, 1, 0), 1);
+    ASSERT_EQ(polled.revents, POLLIN);
+    ASSERT_EQ(uct_iface_drain_fd(m_e2->iface(), polled.fd), UCS_OK);
+    ASSERT_EQ(uct_iface_drain_fd(m_e2->iface(), polled.fd), UCS_OK);
+    ASSERT_EQ(poll(&polled, 1, 0), 0);
+
+    short_progress_loop();
+
+    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
+    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
+
+    uct_iface_close_fd(m_e2->iface(), polled.fd); // spare_fd left for auto-cleanup
     free(recv_buffer);
 }
 
