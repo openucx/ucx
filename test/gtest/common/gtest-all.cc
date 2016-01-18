@@ -5028,7 +5028,7 @@ class ScopedPrematureExitFile {
 
   ~ScopedPrematureExitFile() {
     if (premature_exit_filepath_ != NULL && *premature_exit_filepath_ != '\0') {
-      remove(premature_exit_filepath_);
+      (void)remove(premature_exit_filepath_);
     }
   }
 
@@ -5312,7 +5312,8 @@ void UnitTest::AddTestPartResult(
 #endif  // GTEST_OS_WINDOWS
     } else if (GTEST_FLAG(throw_on_failure)) {
 #if GTEST_HAS_EXCEPTIONS
-      throw internal::GoogleTestFailureException(result);
+      // coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
+      //throw internal::GoogleTestFailureException(result);
 #else
       // We cannot call abort() as it generates a pop-up in debug mode
       // that cannot be suppressed in VC 7.1 or below.
@@ -8766,6 +8767,7 @@ class CapturedStream {
     char name_template[] = "/tmp/captured_stream.XXXXXX";
 #  endif  // GTEST_OS_LINUX_ANDROID
     const int captured_fd = mkstemp(name_template);
+    GTEST_CHECK_(captured_fd != -1) << "Unable to open temporary file";
     filename_ = name_template;
 # endif  // GTEST_OS_WINDOWS
     fflush(NULL);
@@ -8774,7 +8776,11 @@ class CapturedStream {
   }
 
   ~CapturedStream() {
-    remove(filename_.c_str());
+    (void) remove(filename_.c_str());
+    if (uncaptured_fd_!= -1) {
+      close(uncaptured_fd_);
+      uncaptured_fd_ = -1;
+    }
   }
 
   std::string GetCapturedString() {
@@ -8809,8 +8815,10 @@ class CapturedStream {
 
 // Returns the size (in bytes) of a file.
 size_t CapturedStream::GetFileSize(FILE* file) {
-  fseek(file, 0, SEEK_END);
-  return static_cast<size_t>(ftell(file));
+  (void) fseek(file, 0, SEEK_END);
+  long size = ftell(file);
+  GTEST_CHECK_(size >= 0) << "Unable to get file size";
+  return static_cast<size_t>(size);
 }
 
 // Reads the entire content of a file as a string.
