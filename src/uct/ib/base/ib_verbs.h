@@ -96,17 +96,6 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 #  define IBV_EXP_ACCESS_ALLOCATE_MR                0
 #  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          0
 
-struct ibv_exp_reg_mr_in {
-    void    *dummy1, *dummy2;
-    size_t   dymmu3, dummy4;
-    uint32_t dummy5, dummy6;
-};
-
-static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
-{
-    return NULL;
-}
-
 #endif /* HAVE_DECL_IBV_ACCESS_ALLOCATE_MR */
 
 
