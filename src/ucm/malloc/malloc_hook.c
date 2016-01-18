@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "malloc_hook.h"
 
 #include <malloc.h>
@@ -94,24 +98,37 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
 
 static void ucm_malloc_mmaped_ptr_add(void *ptr)
 {
+    unsigned new_max_ptrs;
+    void **buf;
+
     ucs_spin_lock(&ucm_malloc_hook_state.lock);
 
     if (ucm_malloc_hook_state.num_ptrs == ucm_malloc_hook_state.max_ptrs) {
         /* Enlarge the array if needed */
         if (ucm_malloc_hook_state.max_ptrs == 0) {
-            ucm_malloc_hook_state.max_ptrs = 256;
+            new_max_ptrs = sysconf(_SC_PAGESIZE) / sizeof(void*);
+            /* coverity[suspicious_sizeof] */
+            buf = ucm_orig_mmap(NULL, new_max_ptrs * sizeof(void*),
+                                PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS,
+                                -1, 0);
         } else {
-            ucm_malloc_hook_state.max_ptrs *= 2;
+            new_max_ptrs = ucm_malloc_hook_state.max_ptrs * 2;
+            buf = ucm_orig_mremap(ucm_malloc_hook_state.ptrs,
+                                  ucm_malloc_hook_state.max_ptrs * sizeof(void*),
+                                  new_max_ptrs * sizeof(void*), MREMAP_MAYMOVE);
+        }
+        if (buf == MAP_FAILED) {
+            ucm_error("failed to allocated memory for mmap pointers: %m")
+            goto out_unlock;
         }
 
-        ucm_malloc_hook_state.ptrs =
-                        dlrealloc(ucm_malloc_hook_state.ptrs,
-                                  ucm_malloc_hook_state.max_ptrs * sizeof(void*));
+        ucm_malloc_hook_state.ptrs     = buf;
+        ucm_malloc_hook_state.max_ptrs = new_max_ptrs;
     }
 
     ucm_malloc_hook_state.ptrs[ucm_malloc_hook_state.num_ptrs] = ptr;
     ++ucm_malloc_hook_state.num_ptrs;
-
+out_unlock:
     ucs_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
@@ -388,7 +405,7 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
     if (ucm_malloc_hook_state.heap_start == (void*)-1) {
         ucm_malloc_hook_state.heap_start = event->sbrk.result - event->sbrk.increment;
     }
-    ucm_malloc_hook_state.heap_end = event->sbrk.result;
+    ucm_malloc_hook_state.heap_end = ucm_orig_sbrk(0);
 
     ucm_debug("sbrk(%+ld)=%p - adjusting heap to [%p..%p]",
               event->sbrk.increment, event->sbrk.result,
