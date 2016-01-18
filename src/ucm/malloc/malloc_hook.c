@@ -208,9 +208,9 @@ static void *ucm_malloc(size_t size, const void *caller)
 
     ucm_malloc_hook_state.hook_called = 1;
     if (ucm_global_config.alloc_alignment > 1) {
-        ptr = dlmemalign(ucm_global_config.alloc_alignment, size);
+        ptr = ucm_dlmemalign(ucm_global_config.alloc_alignment, size);
     } else {
-        ptr = dlmalloc(size);
+        ptr = ucm_dlmalloc(size);
     }
     ucm_malloc_allocated(ptr, size, "malloc");
     return ptr;
@@ -220,7 +220,7 @@ static inline void ucm_mem_free(void *ptr, size_t size)
 {
     VALGRIND_FREELIKE_BLOCK(ptr, 0);
     VALGRIND_MAKE_MEM_UNDEFINED(ptr, size); /* Make memory accessible to ptmalloc3 */
-    dlfree(ptr);
+    ucm_dlfree(ptr);
 }
 
 static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
@@ -239,7 +239,7 @@ static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
          *  We do the same if we are running with valgrind, so we could use client
          * requests properly.
          */
-        newptr = dlmalloc(size);
+        newptr = ucm_dlmalloc(size);
         ucm_malloc_allocated(newptr, size, "realloc");
 
         oldsz = ucm_malloc_hook_state.usable_size(oldptr);
@@ -251,7 +251,7 @@ static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
             ucm_mem_free(oldptr, oldsz);
         }
     } else {
-        newptr = dlrealloc(oldptr, size);
+        newptr = ucm_dlrealloc(oldptr, size);
         ucm_malloc_allocated(newptr, size, "realloc");
     }
     return newptr;
@@ -264,7 +264,7 @@ static void ucm_free(void *ptr, const void *caller)
     if (ptr == NULL) {
         /* Ignore */
     } else if (ucm_malloc_address_remove_if_managed(ptr, "free")) {
-        ucm_mem_free(ptr, dlmalloc_usable_size(ptr));
+        ucm_mem_free(ptr, ucm_dlmalloc_usable_size(ptr));
     } else {
         ucm_release_foreign_block(ptr, "free");
     }
@@ -275,7 +275,7 @@ static void *ucm_memalign(size_t alignment, size_t size, const void *caller)
     void *ptr;
 
     ucm_malloc_hook_state.hook_called = 1;
-    ptr = dlmemalign(ucs_max(alignment, ucm_global_config.alloc_alignment), size);
+    ptr = ucm_dlmemalign(ucs_max(alignment, ucm_global_config.alloc_alignment), size);
     ucm_malloc_allocated(ptr, size, "memalign");
     return ptr;
 }
@@ -470,7 +470,7 @@ static void ucm_malloc_test(int events)
     free(p[0]);
 
     if (ucm_malloc_hook_state.hook_called) {
-        dlmalloc_trim(0);
+        ucm_dlmalloc_trim(0);
     }
 
     ucm_event_handler_remove(&handler);
@@ -485,7 +485,7 @@ static void ucm_malloc_test(int events)
 static void ucm_malloc_install_optional_symbols()
 {
     #define UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(_name) \
-        ucm_reloc_patch_t _name##_patch = { #_name, dl##_name }
+        ucm_reloc_patch_t _name##_patch = { #_name, ucm_dl##_name }
     static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(mallopt);
     static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(mallinfo);
     static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_stats);

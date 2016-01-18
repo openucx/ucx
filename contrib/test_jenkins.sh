@@ -102,7 +102,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     done
 
     echo "Running MPI tests"
-    mpirun -np 1 -mca pml ob1 -mca btl self $AFFINITY ./test/mpi/test_memhooks
+    mpirun -np 1 -mca pml ob1 -mca coll ^hcoll,ml -mca btl self $AFFINITY ./test/mpi/test_memhooks
 
     module unload hpcx-gcc
 
