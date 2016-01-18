@@ -29,29 +29,28 @@
 extern "C" {
 #endif
 
-#define USE_DL_PREFIX 1
-
+#include <ucs/sys/preprocessor.h>
 #include <stddef.h>   /* for size_t */
 
 #if !ONLY_MSPACES
 
-#ifndef USE_DL_PREFIX
-#define dlcalloc               calloc
-#define dlfree                 free
-#define dlmalloc               malloc
-#define dlmemalign             memalign
-#define dlrealloc              realloc
-#define dlvalloc               valloc
-#define dlpvalloc              pvalloc
-#define dlmallinfo             mallinfo
-#define dlmallopt              mallopt
-#define dlmalloc_trim          malloc_trim
-#define dlmalloc_stats         malloc_stats
-#define dlmalloc_usable_size   malloc_usable_size
-#define dlmalloc_footprint     malloc_footprint
-#define dlindependent_calloc   independent_calloc
-#define dlindependent_comalloc independent_comalloc
-#endif /* USE_DL_PREFIX */
+#ifdef PTMALLOC_PREFIX
+#define dlcalloc               UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, calloc)
+#define dlfree                 UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, free)
+#define dlmalloc               UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc)
+#define dlmemalign             UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, memalign)
+#define dlrealloc              UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, realloc)
+#define dlvalloc               UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, valloc)
+#define dlpvalloc              UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, pvalloc)
+#define dlmallinfo             UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, mallinfo)
+#define dlmallopt              UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, mallopt)
+#define dlmalloc_trim          UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_trim)
+#define dlmalloc_stats         UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_stats)
+#define dlmalloc_usable_size   UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_usable_size)
+#define dlmalloc_footprint     UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_footprint)
+#define dlindependent_calloc   UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, independent_calloc)
+#define dlindependent_comalloc UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, independent_comalloc)
+#endif /* PTMALLOC_PREFIX */
 
 
 /*
