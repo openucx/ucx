@@ -89,6 +89,8 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
                               ucs_status_string(status));
                     return status;
                 }
+
+                ucs_assert(memh != UCT_INVALID_MEM_HANDLE);
                 mem->pd   = pd;
                 mem->memh = memh;
                 goto allocated;
@@ -220,6 +222,7 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length,
             goto err_free;
         }
 
+        ucs_assert(mem->memh != UCT_INVALID_MEM_HANDLE);
         mem->pd = iface->pd;
     }
 

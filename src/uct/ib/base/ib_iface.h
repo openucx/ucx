@@ -7,7 +7,7 @@
 #ifndef UCT_IB_IFACE_H
 #define UCT_IB_IFACE_H
 
-#include "ib_device.h"
+#include "ib_pd.h"
 
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
@@ -171,9 +171,14 @@ ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
 int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr);
 
 
-static inline uct_ib_device_t * uct_ib_iface_device(uct_ib_iface_t *iface)
+static inline uct_ib_pd_t* uct_ib_iface_pd(uct_ib_iface_t *iface)
 {
-    return ucs_derived_of(iface->super.pd, uct_ib_device_t);
+    return ucs_derived_of(iface->super.pd, uct_ib_pd_t);
+}
+
+static inline uct_ib_device_t* uct_ib_iface_device(uct_ib_iface_t *iface)
+{
+    return &uct_ib_iface_pd(iface)->dev;
 }
 
 static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)

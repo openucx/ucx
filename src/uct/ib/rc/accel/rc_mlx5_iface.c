@@ -444,7 +444,7 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_pd_h pd,
                                                 uct_tl_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p)
 {
-    return uct_ib_device_query_tl_resources(ucs_derived_of(pd, uct_ib_device_t),
+    return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
                                             "rc_mlx5",
                                             UCT_IB_DEVICE_FLAG_MLX5_PRM,
                                             ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
@@ -459,4 +459,4 @@ UCT_TL_COMPONENT_DEFINE(uct_rc_mlx5_tl,
                         "RC_MLX5_",
                         uct_rc_mlx5_iface_config_table,
                         uct_rc_mlx5_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_rc_mlx5_tl);
+UCT_PD_REGISTER_TL(&uct_ib_pdc, &uct_rc_mlx5_tl);

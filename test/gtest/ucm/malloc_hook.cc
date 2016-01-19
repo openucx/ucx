@@ -271,6 +271,8 @@ UCS_TEST_F(malloc_hook, multi_threads) {
     ucs::ptr_vector<test_thread> threads;
     pthread_barrier_t barrier;
 
+    malloc_trim(0);
+
     pthread_barrier_init(&barrier, NULL, num_threads);
     for (int i = 0; i < num_threads; ++i) {
         std::stringstream ss;

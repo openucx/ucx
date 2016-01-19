@@ -361,7 +361,7 @@ static ucs_status_t uct_rc_verbs_query_resources(uct_pd_h pd,
                                                  uct_tl_resource_desc_t **resources_p,
                                                  unsigned *num_resources_p)
 {
-    return uct_ib_device_query_tl_resources(ucs_derived_of(pd, uct_ib_device_t),
+    return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
                                             "rc",
                                             0,
                                             ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
@@ -376,4 +376,4 @@ UCT_TL_COMPONENT_DEFINE(uct_rc_verbs_tl,
                         "RC_VERBS_",
                         uct_rc_verbs_iface_config_table,
                         uct_rc_verbs_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_rc_verbs_tl);
+UCT_PD_REGISTER_TL(&uct_ib_pdc, &uct_rc_verbs_tl);

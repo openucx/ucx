@@ -142,6 +142,7 @@ ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
         tmp = ucs_realloc(resources,
                           sizeof(*resources) * (num_resources + num_tl_resources),
                           "pd_resources");
+        ucs_debug("pd_resources=%p (realloc of %p)", tmp, resources);
         if (tmp == NULL) {
             ucs_free(tl_resources);
             status = UCS_ERR_NO_MEMORY;

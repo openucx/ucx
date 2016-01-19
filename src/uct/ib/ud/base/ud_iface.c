@@ -215,10 +215,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
     /* TODO: exp attrs autoconf */
     struct ibv_exp_qp_init_attr qp_init_attr;
     struct ibv_qp_attr qp_attr;
-    uct_ib_device_t *dev;
     int ret;
-
-    dev = uct_ib_iface_device(&self->super);
 
     /* Create QP */
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
@@ -238,7 +235,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
                                                UCT_UD_MIN_INLINE);
 
 #if HAVE_VERBS_EXP_H
-    qp_init_attr.pd                  = dev->pd;
+    qp_init_attr.pd                  = uct_ib_iface_pd(&self->super)->pd;
     qp_init_attr.comp_mask           = IBV_QP_INIT_ATTR_PD;
     /* TODO: inline rcv */
 #if 0
@@ -247,9 +244,10 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
         qp_init_attr.max_inl_recv    = mxm_ud_ep_opts(ep)->ud.ib.rx.max_inline;
     }
 #endif
-    self->qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
+    self->qp = ibv_exp_create_qp(uct_ib_iface_device(&self->super)->ibv_context,
+                                 &qp_init_attr);
 #else
-    self->qp = ibv_exp_create_qp(dev->pd, &qp_init_attr);
+    self->qp = ibv_exp_create_qp(uct_ib_iface_pd(&self->super)->pd, &qp_init_attr);
 #endif
     if (self->qp == NULL) {
         ucs_error("Failed to create qp: %m [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",

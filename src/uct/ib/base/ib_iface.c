@@ -356,7 +356,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                     unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
                     uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
+    uct_ib_device_t *dev = &ucs_derived_of(pd, uct_ib_pd_t)->dev;
     ucs_status_t status;
     uint8_t port_num;
 
@@ -483,14 +483,13 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 
 struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
 {
+    uct_ib_pd_t *ib_pd = ucs_derived_of(iface->super.pd, uct_ib_pd_t);
     struct ibv_ah_attr ah_attr;
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
     memset(&ah_attr, 0, sizeof(ah_attr));
-    ah_attr.port_num = iface->port_num;
-    ah_attr.sl = iface->sl; 
+    ah_attr.port_num  = iface->port_num;
+    ah_attr.sl        = iface->sl;
     ah_attr.is_global = 0;
-    ah_attr.dlid = dlid;
-
-    return ibv_create_ah(dev->pd, &ah_attr);
+    ah_attr.dlid      = dlid;
+    return ibv_create_ah(ib_pd->pd, &ah_attr);
 }
