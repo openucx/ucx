@@ -86,7 +86,7 @@ protected:
     static bool is_overlap(const ucs_pgt_region_t *region, ucs_pgt_addr_t from,
                            ucs_pgt_addr_t to)
     {
-        return ucs_max(from, region->start) < ucs_min(to, region->end);
+        return ucs_max(from, region->start) <= ucs_min(to, region->end);
     }
 
     static unsigned count_overlap(const ucs::ptr_vector<ucs_pgt_region_t>& regions,
