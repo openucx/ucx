@@ -43,7 +43,8 @@ static void modify_config_for_valgrind(const char *name, const char *value)
 }
 
 int main(int argc, char **argv) {
-    ::testing::InitGoogleTest(&argc, argv);
+	// coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
+	::testing::InitGoogleTest(&argc, argv);
 
     char *str = getenv("GTEST_TAP");
     /* Append TAP Listener */

@@ -8,7 +8,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 }
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 #include "uct_test.h"
 
 class test_uct_pending : public uct_test {

@@ -9,7 +9,7 @@
 extern "C" {
 #include <ucp/api/ucp.h>
 }
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 
 
 /**
