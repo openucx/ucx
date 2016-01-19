@@ -258,6 +258,7 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void 
     }
 }
 
+/* called with lock held */
 static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
 {
     ucm_reloc_dl_iter_context_t ctx = {
@@ -280,26 +281,15 @@ static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
     return ctx.status;
 }
 
-ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
-{
-    ucs_status_t status;
-
-    /* Take lock first to handle a possible race where dlopen() is called
-     * from another thread and we may end up not patching it.
-     */
-    pthread_mutex_lock(&ucm_reloc_patch_list_lock);
-    status = ucm_reloc_apply_patch(patch);
-    if (status == UCS_OK) {
-        ucs_list_add_tail(&ucm_reloc_patch_list, &patch->list);
-    }
-    pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
-    return status;
-}
-
 static void *ucm_dlopen(const char *filename, int flag)
 {
     ucm_reloc_patch_t *patch;
     void *handle;
+
+    if (ucm_reloc_orig_dlopen == NULL) {
+        ucm_error("ucm_reloc_orig_dlopen is NULL");
+        return NULL;
+    }
 
     handle = ucm_reloc_orig_dlopen(filename, flag);
     if (handle != NULL) {
@@ -325,7 +315,49 @@ static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
     .value  = ucm_dlopen
 };
 
-UCS_STATIC_INIT {
+/* called with lock held */
+static ucs_status_t ucm_reloc_install_dlopen()
+{
+    static int installed = 0;
+    ucs_status_t status;
+
+    if (installed) {
+        return UCS_OK;
+    }
+
     ucm_reloc_orig_dlopen = dlsym(RTLD_NEXT, ucm_reloc_dlopen_patch.symbol);
-    ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch);
+    status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    installed = 1;
+    return UCS_OK;
 }
+
+ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
+{
+    ucs_status_t status;
+
+    /* Take lock first to handle a possible race where dlopen() is called
+     * from another thread and we may end up not patching it.
+     */
+    pthread_mutex_lock(&ucm_reloc_patch_list_lock);
+
+    status = ucm_reloc_install_dlopen();
+    if (status != UCS_OK) {
+        goto out_unlock;
+    }
+
+    status = ucm_reloc_apply_patch(patch);
+    if (status != UCS_OK) {
+        goto out_unlock;
+    }
+
+    ucs_list_add_tail(&ucm_reloc_patch_list, &patch->list);
+
+out_unlock:
+    pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
+    return status;
+}
+
