@@ -30,8 +30,13 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_flush)(uct_iface_h iface);
 
-
     void         (*iface_release_am_desc)(uct_iface_h iface, void *desc);
+
+    int          (*iface_open_fd)(uct_iface_h iface);
+
+    ucs_status_t (*iface_drain_fd)(uct_iface_h iface, int comp_fd);
+
+    void         (*iface_close_fd)(uct_iface_h iface, int comp_fd);
 
     /* Connection establishment */
 

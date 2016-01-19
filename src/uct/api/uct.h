@@ -175,6 +175,8 @@ enum {
     /* Thread safety */
     UCT_IFACE_FLAG_AM_THREAD_SINGLE = UCS_BIT(44), /**< Active messages callback is invoked only from main thread */
 
+    /* Interrupt notification */
+    UCT_IFACE_FLAG_INTERRUPT_NOTIFICATION = UCS_BIT(47), /**< Interrupt notification supported */
 };
 
 
@@ -614,6 +616,50 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr);
  * @return Nonzero if reachable, 0 if not.
  */
 int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Open a completion file descriptor for polling.
+ *
+ * @param [in] iface       Handle to an open communication interface.
+ *
+ * @return valid OS file-descriptor if successful, -1 otherwise.
+ */
+UCT_INLINE_API int uct_iface_open_fd(uct_iface_h iface)
+{
+    return iface->ops.iface_open_fd(iface);
+}
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Relaxes a signaled completion file descriptor.
+ *
+ * @param [in] iface       Handle to an open communication interface.
+ * @param [in] comp_fd     Completion file descriptor.
+ *
+ * @return Error code.
+ */
+UCT_INLINE_API ucs_status_t uct_iface_drain_fd(uct_iface_h iface, int comp_fd)
+{
+    return iface->ops.iface_drain_fd(iface, comp_fd);
+}
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Closes a completion file descriptor.
+ *
+ * @param [in] iface       Handle to an open communication interface.
+ * @param [in] comp_fd     Completion file descriptor.
+ *
+ * @return Error code.
+ */
+UCT_INLINE_API void uct_iface_close_fd(uct_iface_h iface, int comp_fd)
+{
+    return iface->ops.iface_close_fd(iface, comp_fd);
+}
 
 
 /**
