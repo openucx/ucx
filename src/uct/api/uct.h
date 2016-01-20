@@ -106,6 +106,18 @@ typedef struct uct_pd_resource_desc {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief  List of UCX device types.
+ */
+typedef enum {
+    UCT_NET_DEVICE,     /**< Network devices */
+    UCT_SHM_DEVICE,     /**< Shared memory devices */
+    UCT_ACC_DEVICE,     /**< Acceleration devices */
+    UCT_DEVICE_TYPE_LAST
+} uct_device_type_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Communication resource descriptor.
  *
  * Resource descriptor is an object representing the network resource.
@@ -120,6 +132,7 @@ typedef struct uct_tl_resource_desc {
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
     uint64_t                 latency;      /**< Latency, nanoseconds */
     size_t                   bandwidth;    /**< Bandwidth, bytes/second */
+    uct_device_type_t        dev_type;     /**< Device type. To which UCT group it belongs to */
 } uct_tl_resource_desc_t;
 
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
