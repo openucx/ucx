@@ -411,7 +411,7 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
  * This routine returns the UCP library version as a string which consists of:
  * "major.minor.release".
  */
-const char *ucp_get_version_string();
+const char *ucp_get_version_string(void);
 
 
 /** @cond PRIVATE_INTERFACE */
