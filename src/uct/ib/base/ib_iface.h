@@ -77,7 +77,7 @@ typedef struct uct_ib_iface {
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
-    /* TODO comp_channel */
+    struct ibv_comp_channel *comp_channel;
 
     struct {
         unsigned            rx_payload_offset;   /* offset from desc to payload */
@@ -218,5 +218,18 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
 
 struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid);
+
+ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
+                                      uct_wakeup_h wakeup);
+
+ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p);
+
+ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup);
+
+ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup);
+
+ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup);
+
+void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup);
 
 #endif

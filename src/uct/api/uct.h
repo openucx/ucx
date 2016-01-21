@@ -198,6 +198,9 @@ enum {
                                                         The callback can be invoked from any progress context
                                                         and it may also be invoked when uct_worker_progress() 
                                                         is called. */
+
+    /* Event notification */
+    UCT_IFACE_FLAG_WAKEUP = UCS_BIT(46), /**< Event notification supported */
 };
 
 
@@ -213,6 +216,17 @@ typedef enum {
     UCT_ALLOC_METHOD_LAST,
     UCT_ALLOC_METHOD_DEFAULT = UCT_ALLOC_METHOD_LAST /**< Use default method */
 } uct_alloc_method_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief  Wakeup event types.
+ */
+enum uct_wakeup_event_types {
+    UCT_WAKEUP_TX_COMPLETION   = UCS_BIT(0),
+    UCT_WAKEUP_RX_AM           = UCS_BIT(1),
+    UCT_WAKEUP_RX_SIGNALED_AM  = UCS_BIT(2),
+};
 
 
 /*
@@ -681,6 +695,75 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
  * @return Nonzero if reachable, 0 if not.
  */
 int uct_iface_is_reachable(uct_iface_h iface, const uct_device_addr_t *addr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Create an event handle for interrupt notification.
+ *
+ * @param [in]  iface       Handle to an open communication interface.
+ * @param [in]  events      Requested event mask out of @ref uct_event_types.
+ * @param [out] wakeup_p    Location to write the notification event handle.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_wakeup_open(uct_iface_h iface, unsigned events,
+                             uct_wakeup_h *wakeup_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Close the notification event handle.
+ *
+ * @param [in] wakeup      Handle to the notification event.
+ *
+ */
+void uct_wakeup_close(uct_wakeup_h wakeup);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Obtain a notification file descriptor for polling.
+ *
+ * @param [in]  wakeup     Handle to the notification event.
+ * @param [out] fd         Location to write the notification file descriptor.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_wakeup_efd_get(uct_wakeup_h wakeup, int *fd_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Request the next notification on the event.
+ *
+ * @param [in] wakeup      Handle to the notification event.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_wakeup_efd_arm(uct_wakeup_h wakeup);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Wait for the next notification.
+ *
+ * @param [in] wakeup      Handle to the notification event.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_wakeup_wait(uct_wakeup_h wakeup);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Cause the next notification.
+ *
+ * @param [in] wakeup      Handle to the notification event.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
 
 
 /**

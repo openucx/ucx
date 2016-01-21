@@ -454,6 +454,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     ucs_trace_func("");
     uct_ud_iface_query(iface, iface_attr);
+    iface_attr->cap.flags &= ~UCT_IFACE_FLAG_WAKEUP;
 
     return UCS_OK;
 }

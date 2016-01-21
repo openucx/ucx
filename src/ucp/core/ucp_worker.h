@@ -14,6 +14,14 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/async/async.h>
 
+/**
+ * UCP worker wake-up context.
+ */
+typedef struct ucp_worker_wakeup {
+    int                           wakeup_efd;     /* Allocated (on-demand) epoll fd for wakeup */
+    int                           wakeup_pipe[2]; /* Pipe to support signal() calls */
+    uct_wakeup_h                  *iface_wakeups; /* Array of interface wake-up handles */
+} ucp_worker_wakeup_t;
 
 /**
  * UCP worker (thread context).
@@ -24,6 +32,7 @@ typedef struct ucp_worker {
     uint64_t                      uuid;          /* Unique ID for wireup */
     uct_worker_h                  uct;           /* UCT worker handle */
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
+    ucp_worker_wakeup_t           wakeup;        /* Wakeup-related context */
 
 #if ENABLE_ASSERT
     int                           inprogress;

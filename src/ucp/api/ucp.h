@@ -57,6 +57,15 @@
 
 
  /**
+ * @defgroup UCP_WAKEUP UCP Wake-up routines
+ * @ingroup UCP_API
+ * @{
+ * UCP Wake-up routines
+ * @}
+ */
+
+
+ /**
  * @defgroup UCP_ENDPOINT UCP Endpoint
  * @ingroup UCP_API
  * @{
@@ -102,13 +111,15 @@
  * during @ref ucp_init "UCP initialization" process.
  */
 enum ucp_feature {
-    UCP_FEATURE_TAG   = UCS_BIT(0),  /**< Request tag matching support */
-    UCP_FEATURE_RMA   = UCS_BIT(1),  /**< Request remote memory
-                                          access support */
-    UCP_FEATURE_AMO32 = UCS_BIT(2),  /**< Request 32-bit atomic
-                                          operations support */
-    UCP_FEATURE_AMO64 = UCS_BIT(3)   /**< Request 64-bit atomic
-                                          operations support */
+    UCP_FEATURE_TAG    = UCS_BIT(0),  /**< Request tag matching support */
+    UCP_FEATURE_RMA    = UCS_BIT(1),  /**< Request remote memory
+                                           access support */
+    UCP_FEATURE_AMO32  = UCS_BIT(2),  /**< Request 32-bit atomic
+                                           operations support */
+    UCP_FEATURE_AMO64  = UCS_BIT(3),  /**< Request 64-bit atomic
+                                           operations support */
+    UCP_FEATURE_WAKEUP = UCS_BIT(4)   /**< Request interrupt notification
+                                           support */
 };
 
 
@@ -628,6 +639,108 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
  * @param [in]  worker    Worker to progress.
  */
 void ucp_worker_progress(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WAKEUP
+ * @brief Obtain an event file descriptor for event notification.
+ *
+ * This routine returns a valid file descriptor for polling functions.
+ * The file descriptor will get signaled when an event occurs, as part of the
+ * wake-up mechanism. Signaling means a call to poll() or select() with this
+ * file descriptor will return at this point, with this descriptor marked as the
+ * reason (or one of the resons) the function has returned. The user is
+ * responsible to release the file descriptor by invoking close().
+ *
+ * The wake-up mechanism exists to allow for the user process to register for
+ * notifications on events of the underlying interfaces, and wait until such
+ * occur. This is an alternative to repeated polling for request completion.
+ * The goal is to allow for waiting while consuming minimal resources from the
+ * system. This is recommended for cases where traffic is infrequent, and
+ * latency can be traded for lower resource consumption while waiting for it.
+ *
+ * There are two alternative ways to use the wakeup mechanism: the first is the
+ * file descriptor obtained per worker (this function) and the second is the
+ * @ref ucp_worker_wait function for waiting on the next event internally.
+ *
+ * @param [in]  worker    Worker of notified events.
+ * @param [out] fd        File descriptor.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd_p);
+
+
+/**
+ * @ingroup UCP_WAKEUP
+ * @brief Wait for an event of the worker.
+ *
+ * This routine waits (blocking) until an event has happened, as part of the
+ * wake-up mechanism.
+ *
+ * There are two alternative ways to use the wakeup mechanism: the first is the
+ * file descriptor obtained per worker using @ref ucp_worker_get_efd and the
+ * second is waiting on the next event internally (this function).
+ *
+ * @note During the blocking call the wake-up mechanism relies on other means of
+ * notification and may not progress some of the requests as it would when
+ * calling @ref ucp_worker_progress (which is not invoked in that duration).
+ *
+ * @param [in]  worker    Worker to wait for events on.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_wait(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WAKEUP
+ * @brief Turn on event notification for the next event.
+ *
+ * This routine needs to be called before waiting on each notification on this
+ * worker, so will typically be called once the processing of the previous event
+ * is over, as part of the wake-up mechanism.
+ *
+ * The worker must be armed before waiting on an event (must be re-armed after
+ * it has been signaled for re-use) with @ref ucp_worker_arm.
+ * The events triggering a signal of the file descriptor from
+ * @ref ucp_worker_get_efd , or the return of a call to @ref ucp_worker_wait -
+ * depend on the interfaces used by the worker and are defined in the transport
+ * layer, and typically represent a request completion or newly available
+ * resources. It can also be triggered by calling @ref ucp_worker_signal .
+ *
+ * @code
+ * status = @ref ucp_worker_get_efd (worker, &fd);
+ * while (1) {
+ *     @ref ucp_worker_arm (worker);
+ *     @ref ucp_worker_wait (worker);
+ *     <handle event>
+ * }
+ *
+ * - In this example, @ref ucp_worker_wait can be replaced with poll() on fd.
+ * @endcode
+ *
+ * @param [in]  worker    Worker of notified events.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_arm(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WAKEUP
+ * @brief Cause an event of the worker.
+ *
+ * This routine signals that the event has happened, as part of the wake-up
+ * mechanism. This function causes a blocking call to @ref ucp_worker_wait or
+ * waiting on a file descriptor from @ref ucp_worker_get_efd to return, even
+ * if no event from the underlying interfaces has taken place.
+ *
+ * @param [in]  worker    Worker to wait for events on.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_signal(ucp_worker_h worker);
 
 
 /**

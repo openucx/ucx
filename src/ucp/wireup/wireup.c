@@ -248,6 +248,13 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
         }
     }
 
+    if (context->config.features & UCP_FEATURE_WAKEUP) {
+        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_WAKEUP)) {
+            strncpy(reason, "wakeup", max);
+            return 0.0;
+        }
+    }
+
     return 1e-3 / (iface_attr->latency + (iface_attr->overhead * 2));
 }
 
