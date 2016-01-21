@@ -266,10 +266,6 @@ static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch)
         .status   = UCS_OK
     };
 
-    if (!ucm_global_config.enable_reloc_hooks) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     /* Avoid locks here because we don't modify ELF data structures.
      * Worst case the same symbol will be written more than once.
      */

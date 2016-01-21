@@ -28,7 +28,7 @@
 #include <ucs/sys/sys.h>
 
 #include <string.h>
-
+#include <netdb.h>
 
 
 /* Flags for install_state */
@@ -407,7 +407,7 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
     }
     ucm_malloc_hook_state.heap_end = ucm_orig_sbrk(0);
 
-    ucm_debug("sbrk(%+ld)=%p - adjusting heap to [%p..%p]",
+    ucm_trace("sbrk(%+ld)=%p - adjusting heap to [%p..%p]",
               event->sbrk.increment, event->sbrk.result,
               ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
 
@@ -482,6 +482,19 @@ static void ucm_malloc_test(int events)
               ucm_malloc_hook_state.hook_called ? "" : " not");
 }
 
+static void ucm_malloc_populate_glibc_cache()
+{
+    char hostname[NAME_MAX];
+
+    /* Trigger NSS initialization before we install malloc hooks.
+     * This is needed because NSS could allocate strings with our malloc(), but
+     * release them with the original free(). */
+    (void)getlogin();
+    (void)gethostbyname("localhost");
+    (void)gethostname(hostname, sizeof(hostname));
+    (void)gethostbyname(hostname);
+}
+
 static void ucm_malloc_install_optional_symbols()
 {
     #define UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(_name) \
@@ -491,10 +504,6 @@ static void ucm_malloc_install_optional_symbols()
     static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_stats);
     static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_trim);
     static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_usable_size);
-
-    if (!ucm_global_config.enable_reloc_hooks) {
-        return;
-    }
 
     if (ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS) {
         return;
@@ -560,33 +569,38 @@ ucs_status_t ucm_malloc_install(int events)
         if (ucm_malloc_hook_state.hook_called) {
             goto out_install_opt_syms;
         }
+    } else {
+        ucm_debug("using malloc hooks is disabled by configuration");
     }
 
     /* Install using malloc symbols */
-    if (ucm_global_config.enable_reloc_hooks &&
-        !(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_MALL_SYMS))
-    {
-        #define UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(_name) \
-            ucm_reloc_patch_t _name##_patch = { #_name, ucm_##_name }
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(free);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(realloc);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(malloc);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(memalign);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(calloc);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(valloc);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(posix_memalign);
-        static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(setenv);
+    if (ucm_global_config.enable_malloc_reloc) {
+        if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_MALL_SYMS)) {
+            #define UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(_name) \
+                ucm_reloc_patch_t _name##_patch = { #_name, ucm_##_name }
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(free);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(realloc);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(malloc);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(memalign);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(calloc);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(valloc);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(posix_memalign);
+            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(setenv);
 
-        ucm_debug("installing malloc hooks");
-        ucm_reloc_modify(&free_patch);
-        ucm_reloc_modify(&realloc_patch);
-        ucm_reloc_modify(&malloc_patch);
-        ucm_reloc_modify(&memalign_patch);
-        ucm_reloc_modify(&calloc_patch);
-        ucm_reloc_modify(&valloc_patch);
-        ucm_reloc_modify(&posix_memalign_patch);
-        ucm_reloc_modify(&setenv_patch);
-        ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
+            ucm_debug("installing malloc relocations");
+            ucm_malloc_populate_glibc_cache();
+            ucm_reloc_modify(&free_patch);
+            ucm_reloc_modify(&realloc_patch);
+            ucm_reloc_modify(&malloc_patch);
+            ucm_reloc_modify(&memalign_patch);
+            ucm_reloc_modify(&calloc_patch);
+            ucm_reloc_modify(&valloc_patch);
+            ucm_reloc_modify(&posix_memalign_patch);
+            ucm_reloc_modify(&setenv_patch);
+            ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
+        }
+    } else {
+        ucm_debug("installing malloc relocations is disabled by configuration");
     }
 
     /* Just installed the symbols, test again */
@@ -595,23 +609,20 @@ ucs_status_t ucm_malloc_install(int events)
         goto out_install_opt_syms;
     }
 
-    return UCS_ERR_UNSUPPORTED;
+    status = UCS_ERR_UNSUPPORTED;
+    goto out_unlock;
 
 out_install_opt_syms:
     ucm_malloc_install_optional_symbols();
 out_succ:
     status = UCS_OK;
+out_unlock:
     pthread_mutex_unlock(&ucm_malloc_hook_state.install_mutex);
     return status;
 }
 
 UCS_STATIC_INIT {
     ucs_spinlock_init(&ucm_malloc_hook_state.lock);
-
-    /* Trigger NSS initialization before we install malloc hooks.
-     * This is needed because NSS could allocate strings with our malloc(), but
-     * release them with the original free(). */
-    (void)getlogin();
 }
 
 static void UCS_F_DTOR ucm_clear_env()

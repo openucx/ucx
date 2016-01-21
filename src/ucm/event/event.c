@@ -145,7 +145,7 @@ void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 {
     ucm_event_t event;
 
-    ucm_debug("ucm_mmap(addr=%p length=%lu prot=0x%x flags=0x%x fd=%d offset=%ld)",
+    ucm_trace("ucm_mmap(addr=%p length=%lu prot=0x%x flags=0x%x fd=%d offset=%ld)",
               addr, length, prot, flags, fd, offset);
 
     ucm_event_enter();
@@ -176,7 +176,7 @@ int ucm_munmap(void *addr, size_t length)
 
     ucm_event_enter();
 
-    ucm_debug("ucm_munmap(addr=%p length=%lu)", addr, length);
+    ucm_trace("ucm_munmap(addr=%p length=%lu)", addr, length);
 
     event.vm_unmapped.address = addr;
     event.vm_unmapped.size    = length;
@@ -198,7 +198,7 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
 
     ucm_event_enter();
 
-    ucm_debug("ucm_mremap(old_address=%p old_size=%lu new_size=%ld flags=0x%x)",
+    ucm_trace("ucm_mremap(old_address=%p old_size=%lu new_size=%ld flags=0x%x)",
               old_address, old_size, new_size, flags);
 
     event.vm_unmapped.address = old_address;
@@ -230,7 +230,7 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 
     ucm_event_enter();
 
-    ucm_debug("ucm_shmat(shmid=%d shmaddr=%p shmflg=0x%x)",
+    ucm_trace("ucm_shmat(shmid=%d shmaddr=%p shmflg=0x%x)",
               shmid, shmaddr, shmflg);
 
     size = ucm_shm_size(shmid);
@@ -278,7 +278,7 @@ void *ucm_sbrk(intptr_t increment)
 
     ucm_event_enter();
 
-    ucm_debug("ucm_sbrk(increment=%+ld)", increment);
+    ucm_trace("ucm_sbrk(increment=%+ld)", increment);
 
     if (increment < 0) {
         event.vm_unmapped.address = ucm_orig_sbrk(0) + increment;
