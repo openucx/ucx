@@ -8,7 +8,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 }
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 
 class test_pd : public testing::TestWithParam<std::string>,
                 public ucs::test_base

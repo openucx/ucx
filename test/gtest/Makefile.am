@@ -5,6 +5,7 @@
 # See file LICENSE for terms.
 #
 
+
 UCX_HANDLE_ERRORS ?= freeze
 export UCX_HANDLE_ERRORS
 
@@ -32,7 +33,6 @@ gtest_LDADD = \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
-	$(top_builddir)/src/ucs/libucstest.la \
 	$(top_builddir)/src/tools/perf/libucxperf.la \
 	$(GTEST_LIBS)
 
@@ -47,6 +47,11 @@ gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
 
 gtest_SOURCES = \
+	common/gtest-all.cc \
+	common/main.cc \
+	common/test_helpers.cc \
+	common/test.cc \
+	\
 	base/test_perf.cc \
 	\
 	ucm/malloc_hook.cc \
@@ -112,6 +117,11 @@ endif
 endif
 
 noinst_HEADERS = \
+	common/gtest.h \
+	common/test.h \
+	common/test_helpers.h \
+	common/tap.h \
+	\
 	base/test_perf.h \
 	\
 	uct/test_amo.h \

@@ -9,7 +9,7 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 #include "uct_p2p_test.h"
-#include <ucs/gtest/test.h>
+#include <common/test.h>
 #include "uct_test.h"
 
 class test_uct_mm : public uct_test {

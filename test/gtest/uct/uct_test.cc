@@ -6,7 +6,7 @@
 
 #include "uct_test.h"
 
-#include <ucs/gtest/test_helpers.h>
+#include <common/test_helpers.h>
 #include <algorithm>
 #include <malloc.h>
 
