@@ -7,6 +7,7 @@
 #include "global_opts.h"
 
 #include <ucs/config/parser.h>
+#include <ucs/debug/instrument.h>
 #include <ucs/debug/log.h>
 #include <sys/signal.h>
 
@@ -30,6 +31,7 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_trigger         = "exit",
     .memtrack_dest         = "",
     .instrument_file       = "",
+    .instrument_types      = 0,
     .instrument_max_size   = 1048576,
 };
 
@@ -39,6 +41,12 @@ static const char *handle_error_modes[] = {
     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
     [UCS_HANDLE_ERROR_LAST]      = NULL
+};
+
+const char *ucs_instrumentation_type_names[] = {
+    [UCS_INSTRUMENT_TYPE_IB_TX] = "ib-tx",
+    [UCS_INSTRUMENT_TYPE_IB_RX] = "ib-rx",
+    [UCS_INSTRUMENT_TYPE_LAST]  = NULL
 };
 
 static UCS_CONFIG_DEFINE_ARRAY(signo,
@@ -130,11 +138,19 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #endif
 
 #if HAVE_INSTRUMENTATION
- {"INSTRUMENT", "",
+ {"INSTRUMENT_FILE", "",
   "File name to dump instrumentation records to.\n"
   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.\n",
   ucs_offsetof(ucs_global_opts_t, instrument_file),
   UCS_CONFIG_TYPE_STRING},
+
+ {"INSTRUMENT_TYPES", "ib-tx,ib-rx",
+  "Comma-separated list of intrumentation types to record. "
+  "The order is not meaningful.\n"
+  " - ib-tx  : Infiniband send requests."
+  " - ib-rx  : Infiniband recv requests.\n",
+  ucs_offsetof(ucs_global_opts_t, instrument_types),
+  UCS_CONFIG_TYPE_BITMAP(ucs_instrumentation_type_names)},
 
  {"INSTRUMENT_SIZE", "1048576",
   "Maximal size of instrumentation data. New records will replace old records.",

@@ -10,6 +10,7 @@
 #include "rc_iface.h"
 
 #include <uct/api/uct.h>
+#include <uct/ib/base/ib_instr.h>
 
 
 enum {
@@ -90,6 +91,7 @@ uct_rc_ep_add_send_op(uct_rc_ep_t *ep, uct_rc_iface_send_op_t *op, uint16_t sn)
     ucs_assert(op != NULL);
     op->sn = sn;
     ucs_queue_push(&ep->outstanding, &op->queue);
+    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -120,6 +122,7 @@ static inline void uct_rc_ep_process_tx_completion(uct_rc_iface_t *iface,
 
     ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
     ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t

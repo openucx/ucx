@@ -36,6 +36,7 @@ libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS)
 noinst_HEADERS += \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \
+	ib/base/ib_instr.h \
 	ib/base/ib_log.h \
 	ib/base/ib_pd.h \
 	ib/base/ib_verbs.h

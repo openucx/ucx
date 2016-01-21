@@ -44,6 +44,8 @@ uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
         return 0;
     }
 
+    UCT_IB_INSTRUMENT_RECORD_RECV_WR_LEN("uct_rc_verbs_iface_post_recv_always",
+                                         &wrs[0].ibwr);
     ret = ibv_post_srq_recv(iface->super.rx.srq, &wrs[0].ibwr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
@@ -133,6 +135,9 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
             hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
             VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
 
+            UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_RX,
+                                  "uct_rc_verbs_iface_poll_rx",
+                                  wc[i].wr_id, wc[i].status);
             uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_RC, &wc[i],
                                        hdr, uct_rc_ep_am_packet_dump);
             uct_ib_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
