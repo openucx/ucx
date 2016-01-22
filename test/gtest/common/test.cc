@@ -166,6 +166,18 @@ void test_base::TestBodyProxy() {
             skipped(e);
         } catch (test_abort_exception&) {
             m_state = ABORTED;
+        } catch (exit_exception& e) {
+            if (RUNNING_ON_VALGRIND) {
+                /* When running with valgrind, exec true/false instead of just
+                 * exiting, to avoid warnings about memory leaks of objects
+                 * allocated inside gtest run loop.
+                 */
+                const char *program = e.failed() ? "false" : "true";
+                execlp(program, program, NULL);
+            }
+
+            /* If not running on valgrind / execp failed, use exit() */
+            exit(e.failed() ? 1 : 0);
         }
     } else if (m_state == SKIPPED) {
     } else if (m_state == ABORTED) {

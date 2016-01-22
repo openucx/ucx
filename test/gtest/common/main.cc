@@ -11,6 +11,7 @@ extern "C" {
 #include <ucs/config/parser.h>
 #include <ucs/sys/sys.h>
 }
+#include <ucm/api/ucm.h>
 #include "test_helpers.h"
 #include "tap.h"
 
@@ -71,6 +72,8 @@ int main(int argc, char **argv) {
         modify_config_for_valgrind("IB_TX_QUEUE_LEN", "128");
         modify_config_for_valgrind("IB_TX_BUFS_GROW", "64");
         modify_config_for_valgrind("RC_TX_CQ_LEN", "256");
+        ucm_config_modify("MALLOC_RELOC", "y"); /* Test reloc hooks with valgrind,
+                                                   though it's generally unsafe. */
     }
     return RUN_ALL_TESTS();
 }

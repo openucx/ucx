@@ -234,6 +234,7 @@ UCS_MT_TEST_F(test_rcache, get_unmapped, 6) {
         ucs_debug("physical address not changed (0x%lx)", pa);
     }
     put(region);
+    free(ptr);
 }
 
 UCS_MT_TEST_F(test_rcache, merge, 6) {

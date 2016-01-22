@@ -31,18 +31,25 @@ static void* set_hooks()
     const char *func_name   = "ucm_set_event_handler";
     ucs_status_t (*func)(int events, int priority,
                          ucm_event_callback_t cb, void *arg);
+    char *error;
     void *dl;
+
+    dlerror();
 
     /* Load UCM dynamically, to simulate what an MPI could be doing */
     dl = dlopen(libucm_path, RTLD_LAZY);
     if (dl == NULL) {
-        fprintf(stderr, "Failed to load '%s': %m\n", libucm_path);
+        error = dlerror();
+        error = error ? error : "unknown error";
+        fprintf(stderr, "Failed to load '%s': %s\n", libucm_path, error);
         return NULL;
     }
 
     func = dlsym(dl, func_name);
     if (func == NULL) {
-        fprintf(stderr, "Failed to resolve symbol '%s': %m\n", func_name);
+        error = dlerror();
+        error = error ? error : "unknown error";
+        fprintf(stderr, "Failed to resolve symbol '%s': %s\n", func_name, error);
         dlclose(dl);
         return NULL;
     }
