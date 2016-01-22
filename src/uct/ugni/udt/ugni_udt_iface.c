@@ -132,10 +132,10 @@ static void uct_ugni_udt_progress(void *arg)
     }
 
     /* have a go a processing the pending queue */
-    ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_ep_process_pending, NULL);
 
 exit:
     pthread_mutex_unlock(&uct_ugni_global_lock);
+    ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_ep_process_pending, NULL);
 }
 
 static void uct_ugni_udt_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
