@@ -10,9 +10,7 @@
 #include "ib_verbs.h"
 
 #include <uct/api/uct.h>
-#include <uct/base/uct_pd.h>
 #include <ucs/stats/stats.h>
-#include <ucs/type/status.h>
 
 
 #define UCT_IB_QPN_ORDER            24  /* How many bits can be an IB QP number */
@@ -31,14 +29,15 @@
 #define UCT_IB_MAX_MESSAGE_SIZE     (2 << 30) /* Maximal IB message size */
 #define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
+#define UCT_IB_DEV_MAX_PORTS        2
 #define UCT_IB_QKEY                 0x1ee7a330
 
+
 enum {
-    UCT_IB_DEVICE_STAT_MEM_ALLOC,
-    UCT_IB_DEVICE_STAT_MEM_REG,
     UCT_IB_DEVICE_STAT_ASYNC_EVENT,
     UCT_IB_DEVICE_STAT_LAST
 };
+
 
 enum {
     UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
@@ -47,28 +46,25 @@ enum {
 };
 
 
-
-typedef struct uct_ib_device uct_ib_device_t;
-struct uct_ib_device {
-    uct_pd_t                    super;
+/**
+ * IB device (corresponds to HCA)
+ */
+typedef struct uct_ib_device {
     struct ibv_context          *ibv_context;    /* Verbs context */
-    struct ibv_pd               *pd;             /* Protection domain */
     struct ibv_exp_device_attr  dev_attr;        /* Cached device attributes */
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
     cpu_set_t                   local_cpus;      /* CPUs local to device */
     UCS_STATS_NODE_DECLARE(stats);
-
-    struct ibv_exp_port_attr    port_attr[0];    /* Cached port attributes */
-};
-
-
-extern uct_pd_component_t uct_ib_pd;
+    struct ibv_exp_port_attr    port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
+} uct_ib_device_t;
 
 
-typedef struct uct_ib_pd_config {
-    uct_pd_config_t      super;
-} uct_ib_pd_config_t;
+/**
+ * Check if a port on a device is active and supports the given flags.
+ */
+ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
+                                      unsigned flags);
 
 
 /*
@@ -88,7 +84,18 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
+
+ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_device
+                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
+
+void uct_ib_device_cleanup(uct_ib_device_t *dev);
+
+
+/**
+ * @return device name.
+ */
 const char *uct_ib_device_name(uct_ib_device_t *dev);
+
 
 /**
  * @return 1 if the port is InfiniBand, 0 if the port is Ethernet.
@@ -108,7 +115,8 @@ uint8_t uct_ib_to_fabric_time(double time);
 size_t uct_ib_mtu_value(enum ibv_mtu mtu);
 
 
-static inline struct ibv_exp_port_attr* uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
+static inline struct ibv_exp_port_attr*
+uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {
     return &dev->port_attr[port_num - dev->first_port];
 }

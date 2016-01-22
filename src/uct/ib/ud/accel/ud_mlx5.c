@@ -590,7 +590,7 @@ uct_ud_mlx5_query_resources(uct_pd_h pd,
 {
     ucs_trace_func("");
     /* TODO take transport overhead into account */
-    return uct_ib_device_query_tl_resources(ucs_derived_of(pd, uct_ib_device_t),
+    return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
                                             "ud_mlx5",
                                             UCT_IB_DEVICE_FLAG_MLX5_PRM,
                                             UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
@@ -605,6 +605,4 @@ UCT_TL_COMPONENT_DEFINE(uct_ud_mlx5_tl,
                         "UD_MLX5_",
                         uct_ud_iface_config_table,
                         uct_ud_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_ud_mlx5_tl);
-
-
+UCT_PD_REGISTER_TL(&uct_ib_pdc, &uct_ud_mlx5_tl);

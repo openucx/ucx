@@ -228,8 +228,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
     srq_init_attr.attr.srq_limit = 0;
     srq_init_attr.srq_context    = self;
-    self->rx.srq = ibv_create_srq(uct_ib_iface_device(&self->super)->pd,
-                                  &srq_init_attr);
+    self->rx.srq = ibv_create_srq(uct_ib_iface_pd(&self->super)->pd, &srq_init_attr);
     if (self->rx.srq == NULL) {
         ucs_error("failed to create SRQ: %m");
         status = UCS_ERR_IO_ERROR;
@@ -293,7 +292,7 @@ UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    uct_ib_device_t *dev UCS_V_UNUSED = uct_ib_iface_device(&iface->super);
     struct ibv_exp_qp_init_attr qp_init_attr;
     struct ibv_qp *qp;
     int inline_recv = 0;
@@ -312,7 +311,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     qp_init_attr.sq_sig_all          = 0;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    qp_init_attr.pd                  = dev->pd;
+    qp_init_attr.pd                  = uct_ib_iface_pd(&iface->super)->pd;
 
 #  if HAVE_IB_EXT_ATOMICS
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
@@ -333,7 +332,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
-    qp = ibv_create_qp(dev->pd, &qp_init_attr);
+    qp = ibv_create_qp(uct_ib_iface_pd(&iface->super)->pd, &qp_init_attr);
 #endif
     if (qp == NULL) {
         ucs_error("failed to create qp: %m");

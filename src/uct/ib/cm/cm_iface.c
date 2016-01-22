@@ -350,7 +350,7 @@ static ucs_status_t uct_cm_query_resources(uct_pd_h pd,
                                            uct_tl_resource_desc_t **resources_p,
                                            unsigned *num_resources_p)
 {
-    return uct_ib_device_query_tl_resources(ucs_derived_of(pd, uct_ib_device_t),
+    return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
                                             "cm",
                                             0, /* TODO require IB link layer? */
                                             512, /* TODO */
@@ -365,4 +365,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cm_tl,
                         "CM_",
                         uct_cm_iface_config_table,
                         uct_cm_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_ib_pd, &uct_cm_tl);
+UCT_PD_REGISTER_TL(&uct_ib_pdc, &uct_cm_tl);

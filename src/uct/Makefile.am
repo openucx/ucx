@@ -37,12 +37,14 @@ noinst_HEADERS += \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \
 	ib/base/ib_log.h \
+	ib/base/ib_pd.h \
 	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \
 	ib/base/ib_device.c \
 	ib/base/ib_iface.c \
-	ib/base/ib_log.c
+	ib/base/ib_log.c \
+	ib/base/ib_pd.c
 
 if HAVE_MLX5_HW
 libuct_la_SOURCES += \

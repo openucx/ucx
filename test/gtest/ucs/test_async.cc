@@ -517,7 +517,7 @@ UCS_TEST_P(test_async_timer_mt, multithread) {
 
     for (unsigned i = 0; i < NUM_THREADS; ++i) {
         int count = thread_count(i);
-        EXPECT_GE(count, (int)(COUNT * 0.25));
+        EXPECT_GE(count, (int)(COUNT * 0.10));
     }
 }
 

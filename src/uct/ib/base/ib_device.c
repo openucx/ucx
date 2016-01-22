@@ -4,13 +4,8 @@
 * See file LICENSE for terms.
 */
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
 #include "ib_device.h"
 
-#include <uct/base/uct_pd.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
@@ -21,26 +16,11 @@
 #include <sched.h>
 
 
-#define UCT_IB_PD_PREFIX         "ib"
-#define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
-                                  IBV_ACCESS_REMOTE_WRITE | \
-                                  IBV_ACCESS_REMOTE_READ | \
-                                  IBV_ACCESS_REMOTE_ATOMIC)
-
-static ucs_config_field_t uct_ib_pd_config_table[] = {
-  {"", "", NULL,
-   ucs_offsetof(uct_ib_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_pd_config_table)},
-
-  {NULL}
-};
-
 #if ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_DEVICE_STAT_LAST,
     .counter_names = {
-        [UCT_IB_DEVICE_STAT_MEM_ALLOC]   = "mem_alloc",
-        [UCT_IB_DEVICE_STAT_MEM_REG]     = "mem_reg",
         [UCT_IB_DEVICE_STAT_ASYNC_EVENT] = "async_event"
     }
 };
@@ -82,141 +62,6 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
         }
     }
 }
-
-static void uct_ib_pd_close(uct_pd_h pd)
-{
-    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
-
-    ucs_debug("closing ib device %s", uct_ib_device_name(dev));
-    ucs_async_unset_event_handler(dev->ibv_context->async_fd);
-    UCS_STATS_NODE_FREE(dev->stats);
-    ibv_dealloc_pd(dev->pd);
-    ibv_close_device(dev->ibv_context);
-    ucs_free(dev);
-}
-
-static ucs_status_t uct_ib_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
-{
-    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
-
-    pd_attr->cap.max_alloc    = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.max_reg      = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.flags        = UCT_PD_FLAG_REG;
-    pd_attr->rkey_packed_size = sizeof(uint32_t);
-
-    if (IBV_EXP_HAVE_CONTIG_PAGES(&dev->dev_attr)) {
-        pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
-    }
-
-    pd_attr->local_cpus    = dev->local_cpus;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
-{
-    int ret;
-
-    ret = ibv_dereg_mr(mr);
-    if (ret != 0) {
-        ucs_error("ibv_dereg_mr() failed: %m");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
-                                     uct_mem_h *memh_p UCS_MEMTRACK_ARG)
-{
-    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
-    struct ibv_exp_reg_mr_in in = {
-        dev->pd,
-        NULL,
-        ucs_memtrack_adjust_alloc_size(*length_p),
-        UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
-        0
-    };
-    struct ibv_mr *mr;
-
-    mr = ibv_exp_reg_mr(&in);
-    if (mr == NULL) {
-        ucs_error("ibv_exp_reg_mr(in={NULL, length=%Zu, flags=0x%lx}) failed: %m",
-                  ucs_memtrack_adjust_alloc_size(*length_p),
-                  (unsigned long)(UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_ALLOC, +1);
-    *address_p = mr->addr;
-    *length_p  = mr->length;
-    ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
-    *memh_p = mr;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_mem_free(uct_pd_h pd, uct_mem_h memh)
-{
-    struct ibv_mr *mr = memh;
-    void UCS_V_UNUSED *address = mr->addr;
-
-    ucs_memtrack_releasing(&address);
-    return uct_ib_dereg_mr(mr);
-}
-
-static ucs_status_t uct_ib_mem_reg(uct_pd_h pd, void *address, size_t length,
-                                   uct_mem_h *memh_p)
-{
-    uct_ib_device_t *dev = ucs_derived_of(pd, uct_ib_device_t);
-    struct ibv_mr *mr;
-
-    mr = ibv_reg_mr(dev->pd, address, length, UCT_IB_MEM_ACCESS_FLAGS);
-    if (mr == NULL) {
-        ucs_error("ibv_reg_mr(address=%p, length=%zu, flags=0x%x) failed: %m",
-                  address, length, UCT_IB_MEM_ACCESS_FLAGS);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_MEM_REG, +1);
-    *memh_p = mr;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_mem_dereg(uct_pd_h pd, uct_mem_h memh)
-{
-    struct ibv_mr *mr = memh;
-    return uct_ib_dereg_mr(mr);
-}
-
-static ucs_status_t uct_ib_mkey_pack(uct_pd_h pd, uct_mem_h memh,
-                                     void *rkey_buffer)
-{
-    struct ibv_mr *mr = memh;
-    *(uint32_t*)rkey_buffer = mr->rkey;
-    ucs_trace("packed rkey: 0x%x", mr->rkey);
-    return UCS_OK;
-}
-
-static ucs_status_t uct_ib_rkey_unpack(uct_pd_component_t *pdc,
-                                       const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                       void **handle_p)
-{
-    uint32_t ib_rkey = *(const uint32_t*)rkey_buffer;
-
-    *rkey_p   = ib_rkey;
-    *handle_p = NULL;
-    ucs_trace("unpacked rkey: 0x%x", ib_rkey);
-    return UCS_OK;
-}
-
-uct_pd_ops_t uct_ib_pd_ops = {
-    .close        = uct_ib_pd_close,
-    .query        = uct_ib_pd_query,
-    .mem_alloc    = uct_ib_mem_alloc,
-    .mem_free     = uct_ib_mem_free,
-    .mem_reg      = uct_ib_mem_reg,
-    .mem_dereg    = uct_ib_mem_dereg,
-    .mkey_pack    = uct_ib_mkey_pack,
-};
 
 static void uct_ib_async_event_handler(void *arg)
 {
@@ -287,14 +132,11 @@ static void uct_ib_async_event_handler(void *arg)
     ibv_ack_async_event(&event);
 }
 
-static ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device,
-                                         uct_ib_device_t **dev_p)
+ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_device
+                                UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
-    struct ibv_context *ibv_context;
-    struct ibv_exp_device_attr dev_attr;
-    uct_ib_device_t *dev;
     ucs_status_t status;
-    uint8_t first_port, num_ports, i;
+    uint8_t i;
     int ret;
 
     setenv("MLX5_TOTAL_UUARS",       "64", 1);
@@ -308,16 +150,16 @@ static ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device,
     }
 
     /* Open verbs context */
-    ibv_context = ibv_open_device(ibv_device);
-    if (ibv_context == NULL) {
+    dev->ibv_context = ibv_open_device(ibv_device);
+    if (dev->ibv_context == NULL) {
         ucs_error("Failed to open %s: %m", ibv_get_device_name(ibv_device));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
 
     /* Read device properties */
-    IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev_attr);
-    ret = ibv_exp_query_device(ibv_context, &dev_attr);
+    IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
+    ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
     if (ret != 0) {
         ucs_error("ibv_query_device() returned %d: %m", ret);
         status = UCS_ERR_IO_ERROR;
@@ -327,30 +169,23 @@ static ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device,
     /* Check device type*/
     switch (ibv_device->node_type) {
     case IBV_NODE_SWITCH:
-        first_port = 0;
-        num_ports  = 1;
+        dev->first_port = 0;
+        dev->num_ports  = 1;
         break;
     case IBV_NODE_CA:
     default:
-        first_port = 1;
-        num_ports  = dev_attr.phys_port_cnt;
+        dev->first_port = 1;
+        dev->num_ports  = dev->dev_attr.phys_port_cnt;
         break;
     }
 
-    /* Allocate device */
-    dev = ucs_malloc(sizeof(*dev) + sizeof(*dev->port_attr) * num_ports,
-                     "ib device");
-    if (dev == NULL) {
-        status = UCS_ERR_NO_MEMORY;
+    if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
+        ucs_error("%s has %d ports, but only up to %d are supported",
+                  ibv_get_device_name(ibv_device), dev->num_ports,
+                  UCT_IB_DEV_MAX_PORTS);
+        status = UCS_ERR_UNSUPPORTED;
         goto err_free_context;
     }
-
-    /* Save device information */
-    dev->super.ops     = &uct_ib_pd_ops;
-    dev->ibv_context   = ibv_context;
-    dev->dev_attr      = dev_attr;
-    dev->first_port    = first_port;
-    dev->num_ports     = num_ports;
 
     /* Get device locality */
     uct_ib_device_get_affinity(ibv_get_device_name(ibv_device), &dev->local_cpus);
@@ -363,22 +198,14 @@ static ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device,
         if (ret != 0) {
             ucs_error("ibv_query_port() returned %d: %m", ret);
             status = UCS_ERR_IO_ERROR;
-            goto err_free_device;
+            goto err_free_context;
         }
     }
 
-    /* Allocate protection domain */
-    dev->pd = ibv_alloc_pd(dev->ibv_context);
-    if (dev->pd == NULL) {
-        ucs_error("ibv_alloc_pd() failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_free_device;
-    }
-
-    status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class, NULL,
-                                  "%s-%p", uct_ib_device_name(dev), dev);
+    status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
+                                  stats_parent, "device");
     if (status != UCS_OK) {
-        goto err_destroy_pd;
+        goto err_free_context;
     }
 
     status = ucs_sys_fcntl_modfl(dev->ibv_context->async_fd, O_NONBLOCK, 0);
@@ -396,27 +223,30 @@ static ucs_status_t uct_ib_device_create(struct ibv_device *ibv_device,
         goto err_release_stats;
     }
 
-    ucs_debug("created device '%s' (%s) with %d ports", uct_ib_device_name(dev),
+    ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
-
-    *dev_p = dev;
     return UCS_OK;
 
 err_release_stats:
     UCS_STATS_NODE_FREE(dev->stats);
-err_destroy_pd:
-    ibv_dealloc_pd(dev->pd);
-err_free_device:
-    ucs_free(dev);
 err_free_context:
-    ibv_close_device(ibv_context);
+    ibv_close_device(dev->ibv_context);
 err:
     return status;
 }
 
-static ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
-                                             unsigned flags)
+void uct_ib_device_cleanup(uct_ib_device_t *dev)
+{
+    ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
+
+    ucs_async_unset_event_handler(dev->ibv_context->async_fd);
+    UCS_STATS_NODE_FREE(dev->stats);
+    ibv_close_device(dev->ibv_context);
+}
+
+ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
+                                      unsigned flags)
 {
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
@@ -614,6 +444,8 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
         goto err;
     }
 
+    ucs_debug("resources=%p (calloc)", resources);
+
     /* Second pass: fill port information */
     num_resources = 0;
     for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;
@@ -660,87 +492,3 @@ err_free:
 err:
     return status;
 }
-
-static void uct_ib_make_pd_name(char pd_name[UCT_PD_NAME_MAX], struct ibv_device *device)
-{
-    snprintf(pd_name, UCT_PD_NAME_MAX, "%s/%s", UCT_IB_PD_PREFIX, device->name);
-}
-
-static ucs_status_t uct_ib_query_pd_resources(uct_pd_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
-{
-    uct_pd_resource_desc_t *resources;
-    struct ibv_device **device_list;
-    ucs_status_t status;
-    int i, num_devices;
-
-    /* Get device list from driver */
-    device_list = ibv_get_device_list(&num_devices);
-    if (device_list == NULL) {
-        ucs_debug("Failed to get IB device list, assuming no devices are present");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-
-    resources = ucs_calloc(num_devices, sizeof(*resources), "ib resources");
-    if (resources == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out_free_device_list;
-    }
-
-    for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_pd_name(resources[i].pd_name, device_list[i]);
-    }
-
-    *resources_p     = resources;
-    *num_resources_p = num_devices;
-    status = UCS_OK;
-
-out_free_device_list:
-    ibv_free_device_list(device_list);
-out:
-    return status;
-}
-
-static ucs_status_t uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
-                                   uct_pd_h *pd_p)
-{
-    char tmp_pd_name[UCT_PD_NAME_MAX];
-    struct ibv_device **device_list;
-    uct_ib_device_t *dev = NULL;
-    ucs_status_t status;
-    int i, num_devices;
-
-    /* Get device list from driver */
-    device_list = ibv_get_device_list(&num_devices);
-    if (device_list == NULL) {
-        ucs_debug("Failed to get IB device list, assuming no devices are present");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-
-    for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_pd_name(tmp_pd_name, device_list[i]);
-        if (!strcmp(tmp_pd_name, pd_name)) {
-            status = uct_ib_device_create(device_list[i], &dev);
-            if (status == UCS_OK) {
-                dev->super.component = &uct_ib_pd;
-                *pd_p = &dev->super;
-            }
-            goto out_free_dev_list;
-        }
-    }
-
-    status = UCS_ERR_NO_DEVICE;
-
-out_free_dev_list:
-    ibv_free_device_list(device_list);
-out:
-    return status;
-}
-
-UCT_PD_COMPONENT_DEFINE(uct_ib_pd, UCT_IB_PD_PREFIX,
-                        uct_ib_query_pd_resources, uct_ib_pd_open, NULL,
-                        uct_ib_rkey_unpack,
-                        (void*)ucs_empty_function_return_success /* release */,
-                        "IB_", uct_ib_pd_config_table, uct_ib_pd_config_t);

@@ -138,6 +138,8 @@ void print_type_info(const char * tl_name)
 #if HAVE_IB
         printf("\nIB:\n");
         PRINT_SIZE(uct_ib_device_t);
+        PRINT_SIZE(uct_ib_pd_t);
+        PRINT_SIZE(uct_ib_rcache_region_t);
         PRINT_SIZE(uct_ib_iface_t);
         PRINT_SIZE(uct_ib_iface_config_t);
         PRINT_SIZE(uct_ib_iface_recv_desc_t);
