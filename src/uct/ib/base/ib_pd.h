@@ -14,6 +14,9 @@
 #include <ucs/sys/rcache.h>
 
 
+/**
+ * IB PD statistics counters
+ */
 enum {
     UCT_IB_PD_STAT_MEM_ALLOC,
     UCT_IB_PD_STAT_MEM_REG,

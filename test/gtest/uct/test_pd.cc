@@ -207,7 +207,7 @@ UCS_TEST_P(test_pd, reg_perf) {
     UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _test_case, \
                    knem, \
                    cma, \
-                   posiz, \
+                   posix, \
                    sysv, \
                    xpmem, \
                    cuda, \
