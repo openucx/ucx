@@ -140,13 +140,13 @@ static void * ucm_reloc_get_got_entry(ElfW(Addr) base, const char *symbol,
 
 static int ucm_reloc_get_aux_phent()
 {
-    static const size_t chunk_size = 1024;
+#define UCM_RELOC_AUXV_BUF_LEN 16
     static const char *proc_auxv_filename = "/proc/self/auxv";
     static int phent = 0;
-    const ucm_auxv_t *auxv;
+    ucm_auxv_t buffer[UCM_RELOC_AUXV_BUF_LEN];
+    ucm_auxv_t *auxv;
+    unsigned count;
     ssize_t nread;
-    size_t size;
-    void *data;
     int fd;
 
     /* Can avoid lock here - worst case we'll read the file more than once */
@@ -157,39 +157,28 @@ static int ucm_reloc_get_aux_phent()
             return fd;
         }
 
-        data  = NULL;
-        size  = 0;
-        nread = 0;
-        for (;;) {
-            data = realloc(data, size + chunk_size);
-            if (data == NULL) {
-                break;
-            }
-            nread = read(fd, data + size, chunk_size);
-            if (nread <= 0) {
+        /* Use small buffer on the stack, avoid using malloc() */
+        do {
+            nread = read(fd, buffer, sizeof(buffer));
+            if (nread < 0) {
+                ucm_error("failed to read %lu bytes from %s (ret=%ld): %m",
+                          sizeof(buffer), proc_auxv_filename, nread);
                 break;
             }
 
-            size += nread;
-        }
+            count = nread / sizeof(buffer[0]);
+            for (auxv = buffer; (auxv < buffer + count) && (auxv->type != AT_NULL);
+                            ++auxv)
+            {
+                if (auxv->type == AT_PHENT) {
+                    phent = auxv->value;
+                    ucm_debug("read phent from %s: %d", proc_auxv_filename, phent);
+                    break;
+                }
+            }
+        } while ((count > 0) && (phent == 0));
+
         close(fd);
-
-        if (nread < 0) {
-            free(data);
-            return nread;
-        } else if (data == NULL) {
-            return -1;
-        }
-
-        for (auxv = data; auxv->type != AT_NULL; ++auxv) {
-            if (auxv->type == AT_PHENT) {
-                phent = auxv->value;
-                ucm_debug("read phent from %s: %d", proc_auxv_filename, phent);
-                break;
-            }
-        }
-
-        free(data);
     }
     return phent;
 }
