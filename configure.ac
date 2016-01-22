@@ -96,132 +96,107 @@ AC_ARG_WITH([docs_only],
         AS_HELP_STRING([--with-docs-only],
                        [Compile only the docs and not the rest of UCX. [default=NO]]),
         ,[:],[with_docs_only=no])
+
 AS_IF([test "x$with_docs_only" == xyes],
-          [AS_MESSAGE([dxonly])
-           AM_CONDITIONAL([DOCS_ONLY], [true])
-           AM_CONDITIONAL([HAVE_GTEST], [false])
-           AM_CONDITIONAL([HAVE_STATS], [false])
-           AM_CONDITIONAL([HAVE_TUNING], [false])
-           AM_CONDITIONAL([HAVE_MEMTRACK], [false])
-           AM_CONDITIONAL([HAVE_IB], [false])
-           AM_CONDITIONAL([HAVE_MLX5_HW], [false])
-           AM_CONDITIONAL([HAVE_TL_RC], [false])
-           AM_CONDITIONAL([HAVE_TL_DC], [false])
-           AM_CONDITIONAL([HAVE_TL_UD], [false])
-           AM_CONDITIONAL([HAVE_TL_CM], [false])
-           AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
-           AM_CONDITIONAL([HAVE_CUDA], [false])
-           AM_CONDITIONAL([HAVE_XPMEM], [false])
-           AM_CONDITIONAL([HAVE_CMA], [false])
-           AM_CONDITIONAL([HAVE_KNEM], [false])
-           AM_CONDITIONAL([HAVE_MPI], [false])
-           AM_CONDITIONAL([HAVE_MPIRUN], [false])
-           AM_CONDITIONAL([HAVE_MPICC], [false])
-           AM_CONDITIONAL([BUILD_JEMALLOC],[false])
-          ],
-          [
-           AM_CONDITIONAL([DOCS_ONLY], [false])
-m4_include([config/m4/compiler.m4])
-m4_include([config/m4/sysdep.m4])
-m4_include([config/m4/ucs.m4])
-m4_include([config/m4/ib.m4])
-m4_include([config/m4/cray_ugni.m4])
-m4_include([config/m4/mpi.m4])
-m4_include([config/m4/rte.m4])
-m4_include([config/m4/cuda.m4])
-m4_include([config/m4/cma.m4])
-m4_include([config/m4/knem.m4])
-m4_include([config/m4/xpmem.m4])
-
-#
-# Compile code with frame pointer. Optimizations usually omit the frame pointer,
-# but if we are profiling the code with callgraph we need it.
-# This option may affect perofrmance so it is off by default.
-#
-AC_ARG_ENABLE([frame-pointer],
-	AS_HELP_STRING([--enable-frame-pointer],
-	               [Compile with frame pointer, useful for profiling, default: NO]),
-	[],
-	[enable_frame_pointer=no])
-
-AS_IF([test "x$enable_frame_pointer" == xyes],
-	  [AS_MESSAGE([compiling with frame pointer])
-	   CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
-	  [:]
-  )
-
-
-#
-# Enable fault injection code
-#
-AC_ARG_ENABLE([fault-injection],
-	AS_HELP_STRING([--enable-fault-injection],
-	               [Enable fault injection code, default: NO]),
-	[],
-	[enable_fault_injection=no])
-
-AS_IF([test "x$enable_fault_injection" == xyes],
-	  [AS_MESSAGE([enabling with fault injection code])
-	   AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
-	  [:]
-  )
-
-
-#
-# Disable checking user parameters
-#
-AC_ARG_ENABLE([params-check],
-	AS_HELP_STRING([--disable-params-check],
-	               [Disable checking user parameters passed to API, default: NO]),
-	[AC_DEFINE([ENABLE_PARAMS_CHECK], [0])],
-	[AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])])
-
-
-#
-# Enable collecting data to ease debugging
-#
-AC_ARG_ENABLE([debug-data],
-	AS_HELP_STRING([--enable-debug-data],
-	               [Enable collecting data to ease debugging, default: NO]),
-    [
-     AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
-     AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1], [Enable packet header inspection/rewriting in UCT/UD])
+    [AS_MESSAGE([dxonly])
+     AM_CONDITIONAL([DOCS_ONLY], [true])
+     AM_CONDITIONAL([HAVE_GTEST], [false])
+     AM_CONDITIONAL([HAVE_STATS], [false])
+     AM_CONDITIONAL([HAVE_TUNING], [false])
+     AM_CONDITIONAL([HAVE_MEMTRACK], [false])
+     AM_CONDITIONAL([HAVE_IB], [false])
+     AM_CONDITIONAL([HAVE_MLX5_HW], [false])
+     AM_CONDITIONAL([HAVE_TL_RC], [false])
+     AM_CONDITIONAL([HAVE_TL_DC], [false])
+     AM_CONDITIONAL([HAVE_TL_UD], [false])
+     AM_CONDITIONAL([HAVE_TL_CM], [false])
+     AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
+     AM_CONDITIONAL([HAVE_CUDA], [false])
+     AM_CONDITIONAL([HAVE_XPMEM], [false])
+     AM_CONDITIONAL([HAVE_CMA], [false])
+     AM_CONDITIONAL([HAVE_KNEM], [false])
+     AM_CONDITIONAL([HAVE_MPI], [false])
+     AM_CONDITIONAL([HAVE_MPIRUN], [false])
+     AM_CONDITIONAL([HAVE_MPICC], [false])
     ],
-	[AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
+    [
+     AM_CONDITIONAL([DOCS_ONLY], [false])
+     m4_include([config/m4/compiler.m4])
+     m4_include([config/m4/sysdep.m4])
+     m4_include([config/m4/ucs.m4])
+     m4_include([config/m4/ib.m4])
+     m4_include([config/m4/cray_ugni.m4])
+     m4_include([config/m4/mpi.m4])
+     m4_include([config/m4/rte.m4])
+     m4_include([config/m4/cuda.m4])
+     m4_include([config/m4/cma.m4])
+     m4_include([config/m4/knem.m4])
+     m4_include([config/m4/xpmem.m4])
+
+     #
+     # Compile code with frame pointer. Optimizations usually omit the frame pointer,
+     # but if we are profiling the code with callgraph we need it.
+     # This option may affect perofrmance so it is off by default.
+     #
+     AC_ARG_ENABLE([frame-pointer],
+         AS_HELP_STRING([--enable-frame-pointer],
+                        [Compile with frame pointer, useful for profiling, default: NO]),
+         [],
+         [enable_frame_pointer=no])
+
+     AS_IF([test "x$enable_frame_pointer" == xyes],
+         [AS_MESSAGE([compiling with frame pointer])
+          CFLAGS="$CFLAGS -fno-omit-frame-pointer"],
+         [:])
 
 
-#
-# Path for valgrind-enabled libraries
-#
-AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
+     #
+     # Enable fault injection code
+     #
+     AC_ARG_ENABLE([fault-injection],
+         AS_HELP_STRING([--enable-fault-injection],
+                        [Enable fault injection code, default: NO]),
+         [],
+         [enable_fault_injection=no])
+     AS_IF([test "x$enable_fault_injection" == xyes],
+        [AS_MESSAGE([enabling with fault injection code])
+         AC_DEFINE([ENABLE_FAULT_INJECTION], [1], [Enable fault injection code])],
+        [:]
+       )
 
-# Configure jemalloc
-#
 
-AC_ARG_ENABLE([jemalloc],
-        AS_HELP_STRING([--enable-jemalloc],
-                       [Compile with jemalloc, libjemalloc will be installed in the same place as UCX. default: YES]),
-        [if test "x$enableval" = xyes; then
-	    jemalloc_enabled=yes
-         else
-	    jemalloc_enabled=no
-	 fi],
-	 [if test -e "$srcdir/external/jemalloc/configure"; then
-	     jemalloc_enabled=yes
-	  else
-	     jemalloc_enabled=no
-	  fi])
+     #
+     # Disable checking user parameters
+     #
+     AC_ARG_ENABLE([params-check],
+         AS_HELP_STRING([--disable-params-check],
+                        [Disable checking user parameters passed to API, default: NO]),
+         [AC_DEFINE([ENABLE_PARAMS_CHECK], [0])],
+         [AC_DEFINE([ENABLE_PARAMS_CHECK], [1], [Enable checking user parameters])])
 
-AS_IF([test "x$jemalloc_enabled" == xyes],
-          [AS_MESSAGE([compiling jemalloc])
-	      AC_SUBST([BUILD_JEMALLOC], [yes])
-	      AC_CONFIG_SUBDIRS([external/jemalloc])
-	      AM_CONDITIONAL([BUILD_JEMALLOC],[test "x$BUILD_JEMALLOC" = "xyes"])
-	      ],
-          [AC_SUBST([BUILD_JEMALLOC], [no])
-	  AM_CONDITIONAL([BUILD_JEMALLOC],[false])])
 
-]) # Docs only
+     #
+     # Enable collecting data to ease debugging
+     #
+     AC_ARG_ENABLE([debug-data],
+                   AS_HELP_STRING([--enable-debug-data],
+                                  [Enable collecting data to ease debugging, default: NO]),
+         [
+          AC_DEFINE([ENABLE_DEBUG_DATA], [1], [Enable collecting data])
+          AC_DEFINE([UCT_UD_EP_DEBUG_HOOKS], [1], 
+                    [Enable packet header inspection/rewriting in UCT/UD])
+         ],
+         [AC_DEFINE([ENABLE_DEBUG_DATA], [0])])
+
+
+     #
+     # Path for valgrind-enabled libraries
+     #
+     AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])
+
+    ]) # Docs only
+
+
 #
 #Doxygen options
 #
@@ -261,7 +236,6 @@ AC_CONFIG_FILES([
                  test/examples/Makefile
                  test/gtest/Makefile
                  test/mpi/Makefile
-                 external/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

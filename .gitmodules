@@ -1,3 +1,0 @@
-[submodule "external/jemalloc"]
-	path = external/jemalloc
-	url = git@github.com:jemalloc/jemalloc.git
