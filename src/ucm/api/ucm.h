@@ -12,11 +12,13 @@
 
 BEGIN_C_DECLS
 
+#include <ucs/config/types.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
 
 #include <sys/types.h>
 #include <stddef.h>
+#include <stdio.h>
 
 
 /**
@@ -161,6 +163,27 @@ typedef union ucm_event {
  */
 typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
                                      ucm_event_t *event, void *arg);
+
+
+
+/**
+ * @brief Print UCM global configuration to a stream.
+ *
+ * @param [in]  stream        Output stream to print to.
+ * @param [in]  print_flags   Controls how the configuration is printed.
+ */
+void ucm_config_print(FILE *stream, ucs_config_print_flags_t print_flags);
+
+
+/**
+ * @brief Modify UCM global configuration.
+ *
+ * @param [in]  name          Configuration variable name.
+ * @param [in]  value         Value to set.
+ *
+ * @return Error code.
+ */
+ucs_status_t ucm_config_modify(const char *name, const char *value);
 
 
 /**

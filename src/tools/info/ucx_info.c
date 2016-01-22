@@ -8,7 +8,7 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>
-#include <ucm/util/ucm_config.h>
+#include <ucm/api/ucm.h>
 #include <getopt.h>
 
 

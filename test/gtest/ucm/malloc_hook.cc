@@ -300,7 +300,7 @@ UCS_TEST_F(malloc_hook, fork) {
                 test_thread thread(ss.str(), 1, &barrier, this);
             }
             pthread_barrier_destroy(&barrier);
-            exit(HasFailure() ? 1 : 0);
+            throw ucs::exit_exception(HasFailure());
         }
         pids.push_back(pid);
     }

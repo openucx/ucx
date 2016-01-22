@@ -105,7 +105,8 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     ucm_mmap_func_t *entry;
     ucs_status_t status;
 
-    if (!ucm_global_config.enable_reloc_hooks) {
+    if (!ucm_global_config.enable_mmap_reloc) {
+        ucm_debug("installing mmap relocations is disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
     }
 

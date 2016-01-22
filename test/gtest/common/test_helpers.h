@@ -23,6 +23,23 @@ class test_abort_exception : public std::exception {
 };
 
 
+class exit_exception : public std::exception {
+public:
+    exit_exception(bool failed) : m_failed(failed) {
+    }
+
+    virtual ~exit_exception() throw() {
+    }
+
+    bool failed() const {
+        return m_failed;
+    }
+
+private:
+    const bool m_failed;
+}
+;
+
 class test_skip_exception : public std::exception {
 public:
     test_skip_exception(const std::string& reason = "") : m_reason(reason) {
@@ -37,6 +54,7 @@ public:
 private:
     const std::string m_reason;
 };
+
 
 /**
  * @return Time multiplier for performance tests.

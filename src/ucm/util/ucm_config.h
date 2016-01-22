@@ -15,14 +15,13 @@
 typedef struct ucm_config {
     ucs_log_level_t log_level;
     int             enable_events;
+    int             enable_mmap_reloc;
     int             enable_malloc_hooks;
-    int             enable_reloc_hooks;
+    int             enable_malloc_reloc;
     size_t          alloc_alignment;
 } ucm_config_t;
 
 
 extern ucm_config_t ucm_global_config;
-
-void ucm_config_print(FILE *stream, ucs_config_print_flags_t print_flags);
 
 #endif
