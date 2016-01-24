@@ -101,7 +101,7 @@ static ucs_status_t uct_knem_query_tl_resources(uct_pd_h pd,
                       pd->component->name);
     resource->latency    =  10;
     resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
-    resource->dev_type   = UCT_SHM_DEVICE;
+    resource->dev_type   = UCT_DEVICE_TYPE_SHM;
 
     *num_resources_p = 1;
     *resource_p      = resource;

@@ -35,14 +35,12 @@ enum {
 
 
 struct ucp_config {
-    /** Array of network device names to use */
-    str_names_array_t net_devices;
-    /** Array of shared-memory device names to use */
-    str_names_array_t shm_devices;
-    /** Array of acceleration device names to use */
-    str_names_array_t acc_devices;
+    /** Array of device lists names to use.
+     *  This array holds three lists - network devices, shared memory devices
+     *  and acceleration devices */
+    str_names_array_t                      devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
-    str_names_array_t tls;
+    str_names_array_t                      tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */

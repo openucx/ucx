@@ -23,17 +23,17 @@ static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", "all",
    "Specifies which network device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, net_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"SHM_DEVICES", "all",
    "Specifies which shared memory device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, shm_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"ACC_DEVICES", "all",
    "Specifies which acceleration device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, acc_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"TLS", "all",
    "Comma-separated list of transports to use. The order is not meaningful.\n"
@@ -147,16 +147,16 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
-                                          str_names_array_t device_list,
-                                          int *masks, int index)
+                                          const str_names_array_t *devices,
+                                          uint64_t *masks, int index)
 {
     int device_enabled, config_idx;
 
-    if (device_list.count == 0) {
+    if (devices[index].count == 0) {
         return 0;
     }
 
-    if (!strcmp(device_list.names[0], "all")) {
+    if (!strcmp(devices[index].names[0], "all")) {
         /* if the user's list is 'all', use all the available resources */
         device_enabled  = 1;
         masks[index] = -1;      /* using all available devices. can satisfy 'all' */
@@ -164,9 +164,9 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
         /* go over the device list from the user and check (against the available resources)
          * which can be satisfied */
         device_enabled  = 0;
-        ucs_assert_always(device_list.count <= 64); /* Using uint64_t bitmap */
-        config_idx = ucp_str_array_search((const char**)device_list.names,
-                                          device_list.count,
+        ucs_assert_always(devices[index].count <= 64); /* Using uint64_t bitmap */
+        config_idx = ucp_str_array_search((const char**)devices[index].names,
+                                          devices[index].count,
                                           resource->dev_name);
         if (config_idx >= 0) {
             device_enabled  = 1;
@@ -187,29 +187,14 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
 
 static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
                                    const ucp_config_t *config,
-                                   int *masks)
+                                   uint64_t *masks)
 {
     int device_enabled, tl_enabled;
     ucp_tl_alias_t *alias;
 
     /* Find the enabled devices */
-    switch (resource->dev_type) {
-    case UCT_NET_DEVICE:
-        device_enabled = ucp_is_resource_in_device_list(resource, config->net_devices,
-                                                        masks, UCT_NET_DEVICE);
-        break;
-    case UCT_SHM_DEVICE:
-        device_enabled = ucp_is_resource_in_device_list(resource, config->shm_devices,
-                                                        masks, UCT_SHM_DEVICE);
-        break;
-    case UCT_ACC_DEVICE:
-        device_enabled = ucp_is_resource_in_device_list(resource, config->acc_devices,
-                                                        masks, UCT_ACC_DEVICE);
-        break;
-    default:
-        ucs_error("Invalid device type: %d", resource->dev_type);
-        device_enabled = 0;
-    };
+    device_enabled = ucp_is_resource_in_device_list(resource, config->devices,
+                                                    masks, resource->dev_type);
 
     /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
@@ -246,7 +231,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
                                          uct_pd_h pd, ucp_rsc_index_t pd_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
-                                         int *masks)
+                                         uint64_t *masks)
 {
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
@@ -298,17 +283,16 @@ err:
     return status;
 }
 
-static void ucp_check_unavailable_devices(str_names_array_t device_list, int *masks,
-                                     int index)
+static void ucp_check_unavailable_devices(const str_names_array_t *devices, uint64_t *masks)
 {
-    int i;
+    int dev_type_idx, i;
 
-    if (masks[index] != -1) {
-        for (i = 0; i < device_list.count; i++) {
-            if (!(masks[index] & 1)) {
-                ucs_info("Device %s is not available", device_list.names[i]);
+    /* Go over the devices lists and check which devices were marked as unavailable */
+    for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; dev_type_idx++) {
+        for (i = 0; i < devices[dev_type_idx].count; i++) {
+            if (!(masks[dev_type_idx] & UCS_BIT(i))) {
+                ucs_info("Device %s is not available", devices[dev_type_idx].names[i]);
             }
-            masks[index] >>= 1;
         }
     }
 }
@@ -339,12 +323,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     unsigned pd_index;
     uct_pd_h pd;
     uct_pd_config_t *pd_config;
-    int masks[UCT_DEVICE_TYPE_LAST] = {0};
+    uint64_t masks[UCT_DEVICE_TYPE_LAST] = {0};
 
     /* if we got here then num_resources > 0.
      * if the user's device list is empty, there is no match */
-    if ((0 == config->net_devices.count) && (0 == config->shm_devices.count) &&
-        (0 == config->acc_devices.count)) {
+    if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
+        (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
+        (0 == config->devices[UCT_DEVICE_TYPE_ACC].count)) {
         ucs_error("The device lists are empty. Please specify the devices you would like to use "
                   "or omit the UCX_*_DEVICES so that the default will be used.");
         status = UCS_ERR_NO_ELEM;
@@ -460,9 +445,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     /* Notify the user if there are devices from the command line that are not available */
-    ucp_check_unavailable_devices(config->net_devices, masks, UCT_NET_DEVICE);
-    ucp_check_unavailable_devices(config->shm_devices, masks, UCT_SHM_DEVICE);
-    ucp_check_unavailable_devices(config->acc_devices, masks, UCT_ACC_DEVICE);
+    ucp_check_unavailable_devices(config->devices, masks);
 
     /* Error check: Make sure there are not too many transports */
     if (context->num_tls >= UCP_MAX_RESOURCES) {

@@ -109,9 +109,9 @@ typedef struct uct_pd_resource_desc {
  * @brief  List of UCX device types.
  */
 typedef enum {
-    UCT_NET_DEVICE,     /**< Network devices */
-    UCT_SHM_DEVICE,     /**< Shared memory devices */
-    UCT_ACC_DEVICE,     /**< Acceleration devices */
+    UCT_DEVICE_TYPE_NET,     /**< Network devices */
+    UCT_DEVICE_TYPE_SHM,     /**< Shared memory devices */
+    UCT_DEVICE_TYPE_ACC,     /**< Acceleration devices */
     UCT_DEVICE_TYPE_LAST
 } uct_device_type_t;
 
