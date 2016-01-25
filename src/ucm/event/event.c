@@ -15,6 +15,7 @@
 #include <ucm/malloc/malloc_hook.h>
 #include <ucm/util/ucm_config.h>
 #include <ucm/util/log.h>
+#include <ucm/util/sys.h>
 #include <ucs/arch/cpu.h>
 
 #include <sys/mman.h>
@@ -260,7 +261,7 @@ int ucm_shmdt(const void *shmaddr)
     ucm_debug("ucm_shmdt(shmaddr=%p)", shmaddr);
 
     event.vm_unmapped.address = (void*)shmaddr;
-    event.vm_unmapped.size    = 0; /* TODO */
+    event.vm_unmapped.size    = ucm_get_shm_seg_size(shmaddr);
     ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
 
     event.shmdt.result  = -1;

@@ -46,6 +46,7 @@ noinst_HEADERS = \
 	util/ucm_config.h \
 	util/log.h \
 	util/reloc.h \
+	util/sys.h \
 	ptmalloc3/malloc-2.8.3.h \
 	$(ptmalloc3_sysdep_headers)
 
@@ -57,5 +58,6 @@ libucm_la_SOURCES = \
 	ptmalloc3/malloc.c \
 	util/ucm_config.c \
 	util/log.c \
-	util/reloc.c
+	util/reloc.c \
+	util/sys.c
 	

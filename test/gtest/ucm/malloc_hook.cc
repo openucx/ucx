@@ -244,6 +244,20 @@ void test_thread::test() {
     }
     free(ptr);
 
+    /* shmat/shmdt */
+    size_t shm_seg_size = ucs_get_page_size() * 2;
+    int shmid = shmget(IPC_PRIVATE, shm_seg_size, IPC_CREAT | SHM_R | SHM_W);
+    EXPECT_NE(-1, shmid) << strerror(errno);
+
+    ptr = shmat(shmid, NULL, 0);
+    EXPECT_NE(MAP_FAILED, ptr) << strerror(errno);
+
+    shmdt(ptr);
+    shmctl(shmid, IPC_RMID, NULL);
+
+    EXPECT_TRUE(is_ptr_in_range(ptr, shm_seg_size, m_unmap_ranges));
+
+    /* Print results */
     pthread_mutex_lock(&lock);
     UCS_TEST_MESSAGE << m_name
                      << ": small mapped: " << small_map_size
