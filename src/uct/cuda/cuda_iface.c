@@ -121,6 +121,7 @@ static ucs_status_t uct_cuda_query_tl_resources(uct_pd_h pd,
                       UCT_CUDA_DEV_NAME);
     resource->latency    = 1; /* FIXME temp value */
     resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
+    resource->dev_type   = UCT_DEVICE_TYPE_ACC;
 
     *num_resources_p = 1;
     *resource_p      = resource;

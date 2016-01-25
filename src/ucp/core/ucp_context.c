@@ -20,27 +20,31 @@ ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
 
 static ucs_config_field_t ucp_config_table[] = {
-  {"DEVICES", "all",
-   "Specifies which device(s) to use. The order is not meaningful.\n"
+  {"NET_DEVICES", "all",
+   "Specifies which network device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
-   ucs_offsetof(ucp_config_t, devices), UCS_CONFIG_TYPE_STRING_ARRAY},
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"SHM_DEVICES", "all",
+   "Specifies which shared memory device(s) to use. The order is not meaningful.\n"
+   "\"all\" would use all available devices.",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"ACC_DEVICES", "all",
+   "Specifies which acceleration device(s) to use. The order is not meaningful.\n"
+   "\"all\" would use all available devices.",
+   ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"TLS", "all",
    "Comma-separated list of transports to use. The order is not meaningful.\n"
    "In addition it's possible to use a combination of the following aliases:\n"
-   " - all    : use all the available transports."
+   " - all    : use all the available transports.\n"
    " - sm/shm : all shared memory transports.\n"
    " - ugni   : ugni_rdma and ugni_udt.\n"
-   " - rc     : rc and cm."
-   " - rc-x   : rc with accelerated verbs and cm."
+   " - rc     : rc and cm.\n"
+   " - rc-x   : rc with accelerated verbs and cm.\n"
    " - ud-x   : ud with accelerated verbs.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
-
-  {"FORCE_ALL_DEVICES", "no",
-   "Device selection policy.\n"
-   "yes - force using of all the devices from the device list.\n"
-   "no  - try using the available devices from the device list.",
-   ucs_offsetof(ucp_config_t, force_all_devices), UCS_CONFIG_TYPE_BOOL},
 
   {"ALLOC_PRIO", "pd:sysv,pd:posix,huge,pd:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
@@ -142,40 +146,57 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
            (ucp_str_array_search(names, config->tls.count, "all"  ) >= 0);
 }
 
-static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
-                                   const ucp_config_t *config,
-                                   uint64_t *devices_mask_p)
+static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
+                                          const str_names_array_t *devices,
+                                          uint64_t *masks, int index)
 {
-    int device_enabled, tl_enabled;
-    ucp_tl_alias_t *alias;
-    int config_idx;
+    int device_enabled, config_idx;
 
-    ucs_assert(config->devices.count > 0);
-    if (!strcmp(config->devices.names[0], "all")) {
+    if (devices[index].count == 0) {
+        return 0;
+    }
+
+    if (!strcmp(devices[index].names[0], "all")) {
         /* if the user's list is 'all', use all the available resources */
         device_enabled  = 1;
-        *devices_mask_p = 1;
+        masks[index] = -1;      /* using all available devices. can satisfy 'all' */
     } else {
         /* go over the device list from the user and check (against the available resources)
          * which can be satisfied */
         device_enabled  = 0;
-        *devices_mask_p = 0;
-        ucs_assert_always(config->devices.count <= 64); /* Using uint64_t bitmap */
-        config_idx = ucp_str_array_search((const char**)config->devices.names,
-                                          config->devices.count,
+        ucs_assert_always(devices[index].count <= 64); /* Using uint64_t bitmap */
+        config_idx = ucp_str_array_search((const char**)devices[index].names,
+                                          devices[index].count,
                                           resource->dev_name);
         if (config_idx >= 0) {
             device_enabled  = 1;
-            *devices_mask_p |= UCS_MASK(config_idx);
+            masks[index] |= UCS_BIT(config_idx);
         }
     }
 
     /* Disable the posix mmap and xpmem 'devices'. ONLY for now - use sysv for mm .
      * This will be removed after multi-rail is supported */
-    if (!strcmp(resource->dev_name,"posix") || !strcmp(resource->dev_name, "xpmem")) {
+    if ((!strcmp(resource->dev_name,"posix") || !strcmp(resource->dev_name, "xpmem")) &&
+        (device_enabled)) {
         device_enabled  = 0;
+        ucs_info("posix and xpmem are currently unavailable");
     }
 
+    return device_enabled;
+}
+
+static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
+                                   const ucp_config_t *config,
+                                   uint64_t *masks)
+{
+    int device_enabled, tl_enabled;
+    ucp_tl_alias_t *alias;
+
+    /* Find the enabled devices */
+    device_enabled = ucp_is_resource_in_device_list(resource, config->devices,
+                                                    masks, resource->dev_type);
+
+    /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
     if (ucp_config_is_tl_enabled(config, resource->tl_name)) {
         tl_enabled = 1;
@@ -209,9 +230,9 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
 static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
                                          uct_pd_h pd, ucp_rsc_index_t pd_index,
                                          const ucp_config_t *config,
-                                         unsigned *num_resources_p)
+                                         unsigned *num_resources_p,
+                                         uint64_t *masks)
 {
-    uint64_t used_devices_mask, mask, config_devices_mask;
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
     unsigned num_resources;
@@ -241,28 +262,15 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
         goto err_free_resources;
     }
 
-    /* mask of all devices from configuration which were used */
-    used_devices_mask = 0;
-
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_resources; ++i) {
-        if (ucp_is_resource_enabled(&tl_resources[i], config, &mask)) {
+        if (ucp_is_resource_enabled(&tl_resources[i], config, masks)) {
             context->tl_rscs[context->num_tls].tl_rsc   = tl_resources[i];
             context->tl_rscs[context->num_tls].pd_index = pd_index;
             ++context->num_tls;
-            used_devices_mask |= mask;
             ++(*num_resources_p);
         }
-    }
-
-    /* if all devices should be used, check that */
-    config_devices_mask = UCS_MASK_SAFE(config->devices.count);
-    if (config->force_all_devices && (used_devices_mask != config_devices_mask)) {
-        i = ucs_ffs64(used_devices_mask ^ config_devices_mask);
-        ucs_error("device %s is not available", config->devices.names[i]);
-        status = UCS_ERR_NO_DEVICE;
-        goto err_free_resources;
     }
 
 out_free_resources:
@@ -273,6 +281,20 @@ err_free_resources:
     uct_release_tl_resource_list(tl_resources);
 err:
     return status;
+}
+
+static void ucp_check_unavailable_devices(const str_names_array_t *devices, uint64_t *masks)
+{
+    int dev_type_idx, i;
+
+    /* Go over the devices lists and check which devices were marked as unavailable */
+    for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; dev_type_idx++) {
+        for (i = 0; i < devices[dev_type_idx].count; i++) {
+            if (!(masks[dev_type_idx] & UCS_BIT(i))) {
+                ucs_info("Device %s is not available", devices[dev_type_idx].names[i]);
+            }
+        }
+    }
 }
 
 static void ucp_free_resources(ucp_context_t *context)
@@ -301,12 +323,15 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     unsigned pd_index;
     uct_pd_h pd;
     uct_pd_config_t *pd_config;
+    uint64_t masks[UCT_DEVICE_TYPE_LAST] = {0};
 
     /* if we got here then num_resources > 0.
      * if the user's device list is empty, there is no match */
-    if (0 == config->devices.count) {
-        ucs_error("The device list is empty. Please specify the devices you would like to use "
-                  "or omit the UCX_DEVICES so that the default will be used.");
+    if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
+        (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
+        (0 == config->devices[UCT_DEVICE_TYPE_ACC].count)) {
+        ucs_error("The device lists are empty. Please specify the devices you would like to use "
+                  "or omit the UCX_*_DEVICES so that the default will be used.");
         status = UCS_ERR_NO_ELEM;
         goto err;
     }
@@ -396,7 +421,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
 
         /* Add communication resources of each PD */
         status = ucp_add_tl_resources(context, pd, pd_index, config,
-                                      &num_tl_resources);
+                                      &num_tl_resources, masks);
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }
@@ -419,7 +444,10 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_free_context_resources;
     }
 
-    /* Error check: Make sure there are no too many transports */
+    /* Notify the user if there are devices from the command line that are not available */
+    ucp_check_unavailable_devices(config->devices, masks);
+
+    /* Error check: Make sure there are not too many transports */
     if (context->num_tls >= UCP_MAX_RESOURCES) {
         ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
                   context->num_tls, UCP_MAX_RESOURCES);

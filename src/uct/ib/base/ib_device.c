@@ -404,6 +404,7 @@ uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
 
     resource->latency   += tl_overhead_ns;
     resource->bandwidth = (long)((wire_speed * mtu) / (mtu + extra_pkt_len) + 0.5);
+    resource->dev_type  = UCT_DEVICE_TYPE_NET;
     return UCS_OK;
 }
 
