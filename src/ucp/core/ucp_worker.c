@@ -32,7 +32,8 @@ static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
     for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
         if (context->config.features & ucp_am_handlers[am_id].features) {
             status = uct_iface_set_am_handler(iface, am_id, ucp_am_handlers[am_id].cb,
-                                              worker, 0);
+                                              worker, 
+                                              ucp_am_handlers[am_id].flags);
             if (status != UCS_OK) {
                 return status;
             }
