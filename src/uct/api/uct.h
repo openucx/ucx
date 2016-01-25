@@ -636,9 +636,15 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
+ * @param [in]  flags    Required capability flags
  */
+enum {
+    UCT_AM_CB_FLAG_MT_SAFE = UCS_BIT(1), /* callback can be safely called
+                                            from async threead */
+};
+
 ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
-                                      uct_am_callback_t cb, void *arg);
+                                      uct_am_callback_t cb, void *arg, uint32_t flags);
 
 
 /**

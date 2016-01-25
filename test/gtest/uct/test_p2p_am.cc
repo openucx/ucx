@@ -137,7 +137,7 @@ public:
         m_send_tracer.count = 0;
         m_recv_tracer.count = 0;
 
-        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, 0);
         ASSERT_UCS_OK(status);
 
         mapped_buffer sendbuf(length, SEED1, sender());
@@ -150,7 +150,7 @@ public:
             short_progress_loop();
         }
 
-        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
         ASSERT_UCS_OK(status);
 
         check_backlog();

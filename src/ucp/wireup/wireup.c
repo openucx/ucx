@@ -757,8 +757,7 @@ static double ucp_runtime_score_func(ucp_worker_h worker,
     }
 
     if (context->config.features & UCP_FEATURE_TAG) {
-        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_THREAD_SINGLE |
-                 UCT_IFACE_FLAG_PENDING;
+        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING;
     }
 
     if (context->config.features & UCP_FEATURE_RMA) {
@@ -869,7 +868,7 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
 ucs_status_t ucp_wireup_set_am_handlers(ucp_worker_h worker, uct_iface_h iface)
 {
     return uct_iface_set_am_handler(iface, UCP_AM_ID_WIREUP,
-                                    ucp_wireup_msg_handler, worker);
+                                    ucp_wireup_msg_handler, worker, UCT_AM_CB_FLAG_MT_SAFE);
 }
 
 ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address)
