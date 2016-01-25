@@ -403,7 +403,7 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
 
     /* Copy return value from call. We assume the event handler uses a lock. */
     if (ucm_malloc_hook_state.heap_start == (void*)-1) {
-        ucm_malloc_hook_state.heap_start = event->sbrk.result - event->sbrk.increment;
+        ucm_malloc_hook_state.heap_start = event->sbrk.result; /* sbrk() returns the previous break */
     }
     ucm_malloc_hook_state.heap_end = ucm_orig_sbrk(0);
 

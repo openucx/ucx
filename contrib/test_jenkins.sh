@@ -95,14 +95,14 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         fi
 
         echo Running ucx_perf kit on $hca
-        mpirun -np 2 $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
+        mpirun -np 2 -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
 
         # todo: add csv generation
 
     done
 
     echo "Running MPI tests"
-    mpirun -np 1 -mca pml ob1 -mca coll ^hcoll,ml -mca btl self $AFFINITY ./test/mpi/test_memhooks
+    mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks
 
     module unload hpcx-gcc
 
