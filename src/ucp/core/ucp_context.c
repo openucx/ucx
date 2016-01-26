@@ -40,9 +40,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "In addition it's possible to use a combination of the following aliases:\n"
    " - all    : use all the available transports.\n"
    " - sm/shm : all shared memory transports.\n"
+   " - mm     : shared memory transports - only memory mappers.\n"
    " - ugni   : ugni_rdma and ugni_udt.\n"
-   " - rc     : rc and cm.\n"
-   " - rc-x   : rc with accelerated verbs and cm.\n"
+   " - rc     : rc and ud.\n"
+   " - rc-x   : rc with accelerated verbs and ud.\n"
    " - ud-x   : ud with accelerated verbs.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
