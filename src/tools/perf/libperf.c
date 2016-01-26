@@ -551,7 +551,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
     rte_call(perf, barrier);
 
-    uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, 0);
+    uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_AM_CB_FLAG_DEFAULT);
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);

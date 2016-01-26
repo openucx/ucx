@@ -973,6 +973,6 @@ void ucp_address_peer_name(ucp_address_t *address, char *name)
 }
 
 UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, 
-              ucp_wireup_msg_dump, UCT_AM_CB_FLAG_MT_SAFE);
+              ucp_wireup_msg_dump, UCT_AM_CB_FLAG_THREAD_SAFE);
 
 

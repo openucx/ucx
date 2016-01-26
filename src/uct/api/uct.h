@@ -628,8 +628,11 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @brief  List of capabilities of active message callback
  */
 enum {
-    UCT_AM_CB_FLAG_MT_SAFE = UCS_BIT(1), /* callback can be safely called
-                                            from async threead */
+    UCT_AM_CB_FLAG_DEFAULT     = 0,          /**< callback is always invoked from the thread 
+                                                  that called uct_iface_progress() */
+    UCT_AM_CB_FLAG_THREAD_SAFE = UCS_BIT(1), /**< callback may be invoked from any
+                                                  thread. For example it may be called
+                                                  from transport async progress thread */ 
 };
 
 /**
