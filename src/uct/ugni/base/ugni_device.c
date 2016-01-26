@@ -25,7 +25,7 @@ void uct_ugni_device_get_resource(const char *tl_name,
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s", dev->fname);
     resource->latency    = latency;
     resource->bandwidth  = bandwidth;
-    resource->dev_type   = UCT_NET_DEVICE;
+    resource->dev_type   = UCT_DEVICE_TYPE_NET;
 }
 
 static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
