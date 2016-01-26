@@ -31,12 +31,12 @@ public:
 
         ucs_status_t status;
         status = uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID,
-                                          am_hander, m_perf.recv_buffer);
+                                          am_hander, m_perf.recv_buffer, UCT_AM_CB_FLAG_DEFAULT);
         ucs_assert_always(status == UCS_OK);
     }
 
     ~uct_perf_test_runner() {
-        uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL);
+        uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_AM_CB_FLAG_DEFAULT);
     }
 
     void UCS_F_ALWAYS_INLINE progress_responder() {

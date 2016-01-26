@@ -134,17 +134,19 @@ typedef struct ucp_am_handler {
     uint64_t                      features;
     uct_am_callback_t             cb;
     ucp_am_tracer_t               tracer;
+    uint32_t                      flags;
 } ucp_am_handler_t;
 
 
 /*
  * Define UCP active message handler.
  */
-#define UCP_DEFINE_AM(_features, _id, _cb, _tracer) \
+#define UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags) \
     UCS_STATIC_INIT { \
         ucp_am_handlers[_id].features = _features; \
         ucp_am_handlers[_id].cb       = _cb; \
         ucp_am_handlers[_id].tracer   = _tracer; \
+        ucp_am_handlers[_id].flags    = _flags; \
     }
 
 

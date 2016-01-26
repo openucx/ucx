@@ -637,6 +637,16 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length,
 
 void uct_iface_mem_free(const uct_allocated_memory_t *mem);
 
+/* @ingroup UCT_AM
+ * @brief  List of capabilities of active message callback
+ */
+enum {
+    UCT_AM_CB_FLAG_DEFAULT     = 0,          /**< callback is always invoked from the thread 
+                                                  that called uct_iface_progress() */
+    UCT_AM_CB_FLAG_THREAD_SAFE = UCS_BIT(1), /**< callback may be invoked from any
+                                                  thread. For example it may be called
+                                                  from transport async progress thread */ 
+};
 
 /**
  * @ingroup UCT_AM
@@ -649,9 +659,10 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
+ * @param [in]  flags    Required active message callback capabilities 
  */
 ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
-                                      uct_am_callback_t cb, void *arg);
+                                      uct_am_callback_t cb, void *arg, uint32_t flags);
 
 
 /**

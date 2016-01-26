@@ -277,7 +277,7 @@ int main(int argc, char **argv)
 
 	uint8_t id = 0; /* Tag for active message */
 	/*Set active message handler */
-	status = uct_iface_set_am_handler(iface, id, hello_world, arg);
+	status = uct_iface_set_am_handler(iface, id, hello_world, arg, UCT_AM_CB_FLAG_DEFAULT);
 	if (UCS_OK != status) {
 		fprintf(stderr, "Failed to set callback.\n");fflush(stderr);
 		goto out_free_ep;
