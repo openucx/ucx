@@ -744,7 +744,7 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
     ucp_context_t *context = worker->context;
     uint64_t flags;
 
-    flags = 0;
+    flags = UCT_IFACE_FLAG_AM_THREAD_SINGLE;
 
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         flags |= UCT_IFACE_FLAG_AM_BCOPY;
@@ -776,7 +776,7 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
         return 0.0;
     }
 
-    return 1e-3 / iface_attr->latency;
+    return 1e-3 / (iface_attr->latency + (iface_attr->overhead * 2));
 }
 
 static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *address,
