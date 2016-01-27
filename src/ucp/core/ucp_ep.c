@@ -26,11 +26,6 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
     ep->worker               = worker;
     ep->uct_ep               = NULL;
-    ep->config.max_short_egr = SIZE_MAX;
-    ep->config.max_bcopy_egr = SIZE_MAX;
-    ep->config.max_short_put = SIZE_MAX;
-    ep->config.max_bcopy_put = SIZE_MAX;
-    ep->config.max_bcopy_get = SIZE_MAX;
     ep->dest_uuid            = dest_uuid;
     ep->rsc_index            = -1;
     ep->dst_pd_index         = -1;

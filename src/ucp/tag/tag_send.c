@@ -69,7 +69,7 @@ ucp_tag_send_try(ucp_ep_h ep, const void *buffer, size_t count,
 
     if (ucs_likely((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)) {
         length = ucp_contig_dt_length(datatype, count);
-        if (ucs_likely(length <= ep->config.max_short_egr)) {
+        if (ucs_likely(length <= ucp_ep_config(ep)->eager.max_short)) {
             return ucp_tag_send_eager_short(ep, tag, buffer, length);
         }
     }

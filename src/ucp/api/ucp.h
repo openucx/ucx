@@ -506,7 +506,7 @@ void ucp_cleanup(ucp_context_h context_p);
  *
  * @note The worker object is allocated within context of the calling thread
  *
- * @param [in] context_p   Handle to @ref ucp_context_h
+ * @param [in] context     Handle to @ref ucp_context_h
  *                         "UCP application context".
  * @param [in] thread_mode Thread safety @ref ucs_thread_mode_t "mode" for
  *                         the worker object and resources associated with it.
@@ -535,6 +535,22 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
  * @param [in]  worker        Worker object to destroy.
  */
 void ucp_worker_destroy(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @bried Print information about protocols that would be used by a worker.
+ *
+ * This routine prints information about the protocols being used, thresholds,
+ * UCT methods, and so on, used by the current context.
+ *
+ * @param [in] context      Handle to @ref ucp_context_h "UCP application context".
+ * @param [in] stream       Output stream to print the information to.
+ * @param [in] title        Configuration title to print.
+ * @param [in] print_flags  Flags that control various printing options.
+ */
+void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title,
+                            ucs_config_print_flags_t print_flags);
 
 
 /**

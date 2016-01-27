@@ -22,6 +22,7 @@ build_config.h: $(top_builddir)/config.h Makefile
 ucx_info_SOURCES  = \
 	build_info.c \
 	cfg_info.c \
+	proto_info.c \
 	sys_info.c \
 	tl_info.c \
 	type_info.c \
