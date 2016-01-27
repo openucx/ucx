@@ -43,6 +43,9 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.flags              = UCT_IFACE_FLAG_GET_ZCOPY |
                                          UCT_IFACE_FLAG_PUT_ZCOPY |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->latency                = 80e-9; /* 80 ns */
+    iface_attr->bandwidth              = 6911 * 1024.0 * 1024.0;
+    iface_attr->overhead               = 50e-6; /* 50 us */
     return UCS_OK;
 }
 
@@ -99,9 +102,7 @@ static ucs_status_t uct_knem_query_tl_resources(uct_pd_h pd,
                       UCT_KNEM_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
                       pd->component->name);
-    resource->latency    =  10;
-    resource->bandwidth  = (long) (6911 * pow(1024,2)); /* FIXME temp value */
-    resource->dev_type   = UCT_DEVICE_TYPE_SHM;
+    resource->dev_type = UCT_DEVICE_TYPE_SHM;
 
     *num_resources_p = 1;
     *resource_p      = resource;

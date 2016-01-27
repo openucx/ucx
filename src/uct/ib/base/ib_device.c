@@ -258,6 +258,12 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_UNREACHABLE;
     }
 
+    if (!uct_ib_device_is_port_ib(dev, port_num)) {
+         ucs_trace("%s:%d is not IB link layer", uct_ib_device_name(dev),
+                   port_num);
+         return UCS_ERR_UNSUPPORTED;
+    }
+
     if (flags & UCT_IB_DEVICE_FLAG_DC) {
         if (!IBV_DEVICE_HAS_DC(&dev->dev_attr)) {
             ucs_trace("%s:%d does not support DC", uct_ib_device_name(dev), port_num);
@@ -323,91 +329,6 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-static ucs_status_t
-uct_ib_device_port_get_resource(uct_ib_device_t *dev, uint8_t port_num,
-                                size_t tl_hdr_len, uint64_t tl_overhead_ns,
-                                uct_tl_resource_desc_t *resource)
-{
-    static unsigned ib_port_widths[] = {
-        [0] = 1,
-        [1] = 4,
-        [2] = 8,
-        [3] = 12
-    };
-    double encoding, signal_rate, wire_speed;
-    unsigned active_width;
-    size_t extra_pkt_len;
-    size_t mtu;
-
-    /* HCA:Port is the hardware resource name */
-    ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s:%d",
-                      uct_ib_device_name(dev), port_num);
-
-    if (!uct_ib_device_is_port_ib(dev, port_num)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    /* Get active width */
-    active_width = uct_ib_device_port_attr(dev, port_num)->active_width;
-    if (!ucs_is_pow2(active_width) ||
-        (active_width < 1) || (ucs_ilog2(active_width) > 3))
-    {
-        ucs_error("Invalid active_width on %s:%d: %d",
-                  uct_ib_device_name(dev), port_num, active_width);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    /* Bandwidth calculation: Width * SignalRate * Encoding */
-    switch (uct_ib_device_port_attr(dev, port_num)->active_speed) {
-    case 1: /* SDR */
-        resource->latency = 5000;
-        signal_rate       = 2.5;
-        encoding          = 8.0/10.0;
-        break;
-    case 2: /* DDR */
-        resource->latency = 2500;
-        signal_rate       = 5.0;
-        encoding          = 8.0/10.0;
-        break;
-    case 4: /* QDR */
-        resource->latency = 1300;
-        signal_rate       = 10.0;
-        encoding          = 8.0/10.0;
-        break;
-    case 8: /* FDR10 */
-        resource->latency = 700;
-        signal_rate       = 10.3125;
-        encoding          = 64.0/66.0;
-        break;
-    case 16: /* FDR */
-        resource->latency = 700;
-        signal_rate       = 14.0625;
-        encoding          = 64.0/66.0;
-        break;
-    case 32: /* EDR */
-        resource->latency = 600;
-        signal_rate       = 25.78125;
-        encoding          = 64.0/66.0;
-        break;
-    default:
-        ucs_error("Invalid active_speed on %s:%d: %d",
-                  uct_ib_device_name(dev), port_num,
-                  uct_ib_device_port_attr(dev, port_num)->active_speed);
-        return UCS_ERR_IO_ERROR;
-    }
-
-    mtu           = uct_ib_mtu_value(uct_ib_device_port_attr(dev, port_num)->active_mtu);
-    wire_speed    = (signal_rate * 1e9 * encoding *
-                     ib_port_widths[ucs_ilog2(active_width)]) / 8.0;
-    extra_pkt_len = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + tl_hdr_len +
-                    UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
-
-    resource->latency   += tl_overhead_ns;
-    resource->bandwidth = (long)((wire_speed * mtu) / (mtu + extra_pkt_len) + 0.5);
-    resource->dev_type  = UCT_DEVICE_TYPE_NET;
-    return UCS_OK;
-}
-
 uint8_t uct_ib_to_fabric_time(double time)
 {
     double to;
@@ -427,7 +348,6 @@ uint8_t uct_ib_to_fabric_time(double time)
 
 ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
                                               const char *tl_name, unsigned flags,
-                                              size_t tl_hdr_len, uint64_t tl_overhead_ns,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p)
 {
@@ -463,16 +383,11 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
 
         /* Get port information */
         rsc = &resources[num_resources];
-        status = uct_ib_device_port_get_resource(dev, port_num, tl_hdr_len,
-                                                 tl_overhead_ns, rsc);
-        if (status != UCS_OK) {
-            ucs_debug("failed to get port info for %s:%d: %s",
-                      uct_ib_device_name(dev), port_num,
-                      ucs_status_string(status));
-            continue;
-        }
-
+        ucs_snprintf_zero(rsc->dev_name, sizeof(rsc->dev_name), "%s:%d",
+                          uct_ib_device_name(dev), port_num);
         ucs_snprintf_zero(rsc->tl_name, UCT_TL_NAME_MAX, "%s", tl_name);
+        rsc->dev_type = UCT_DEVICE_TYPE_NET;
+
         ucs_debug("found usable port for tl %s %s:%d", tl_name,
                   uct_ib_device_name(dev), port_num);
         ++num_resources;

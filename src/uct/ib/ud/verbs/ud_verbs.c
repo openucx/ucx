@@ -538,10 +538,7 @@ ucs_status_t uct_ud_verbs_query_resources(uct_pd_h pd,
                                           unsigned *num_resources_p)
 {
     return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
-                                            "ud",
-                                            0,
-                                            UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
-                                            80,
+                                            "ud", 0,
                                             resources_p, num_resources_p);
 }
 

@@ -130,13 +130,12 @@ typedef enum {
 typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
-    uint64_t                 latency;      /**< Latency, nanoseconds */
-    size_t                   bandwidth;    /**< Bandwidth, bytes/second */
     uct_device_type_t        dev_type;     /**< Device type. To which UCT group it belongs to */
 } uct_tl_resource_desc_t;
 
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
 #define UCT_TL_RESOURCE_DESC_ARG(_resource)   (_resource)->tl_name, (_resource)->dev_name
+
 
 /**
  * @ingroup UCT_RESOURCE
@@ -205,6 +204,20 @@ typedef enum {
 } uct_alloc_method_t;
 
 
+/*
+ * @ingroup UCT_RESOURCE
+ * @brief Linear growth specification: f(x) = overhead + growth * x
+ *
+ *  This structure specifies a linear function which is used as basis for time
+ * estimation of various UCT operations. This information can be used to select
+ * the best performing combination of UCT operations.
+ */
+typedef struct uct_linear_growth {
+    double                   overhead;  /**< Constant overhead factor */
+    double                   growth;    /**< Growth rate factor */
+} uct_linear_growth_t;
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface attributes: capabilities and limitations.
@@ -234,6 +247,15 @@ struct uct_iface_attr {
 
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
+
+    /*
+     * The following fields define expected performance of the communication
+     * interface, this would usually be a combination of device and system
+     * characteristics and determined at run time.
+     */
+    double                   overhead;     /**< Message overhead, seconds */
+    double                   latency;      /**< Latency, seconds */
+    double                   bandwidth;    /**< Maximal bandwidth, bytes/second */
 };
 
 
@@ -257,10 +279,14 @@ enum {
  */
 struct uct_pd_attr {
     struct {
-        size_t               max_alloc;     /**< Maximal allocation size */
-        size_t               max_reg;       /**< Maximal registration size */
-        uint64_t             flags;         /**< UCT_PD_FLAG_xx */
+        size_t               max_alloc; /**< Maximal allocation size */
+        size_t               max_reg;   /**< Maximal registration size */
+        uint64_t             flags;     /**< UCT_PD_FLAG_xx */
     } cap;
+
+    uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
+                                             (time,seconds) as a linear function
+                                             of the buffer size. */
 
     char                     component_name[UCT_PD_COMPONENT_NAME_MAX]; /**< PD component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */

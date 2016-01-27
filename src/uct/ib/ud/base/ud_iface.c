@@ -327,7 +327,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
                               UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
-                              config->super.tx.queue_len, &config->super);
+                              config->super.tx.queue_len, 4096, &config->super);
  
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
@@ -425,7 +425,9 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     int mtu = 4096; /* TODO: mtu from port header */
 
-    memset(iface_attr, 0, sizeof(*iface_attr));
+    uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
+                       iface_attr);
+
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY | 
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
@@ -442,6 +444,9 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = sizeof(uct_sockaddr_ib_t);
+
+    /* Software overhead */
+    iface_attr->overhead = 80e-9;
 }
 
 ucs_status_t

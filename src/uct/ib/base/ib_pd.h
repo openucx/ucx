@@ -32,6 +32,7 @@ typedef struct uct_ib_pd {
     ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
     struct ibv_pd            *pd;       /**< IB protection domain */
     uct_ib_device_t          dev;       /**< IB device */
+    uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     UCS_STATS_NODE_DECLARE(stats);
 } uct_ib_pd_t;
 
@@ -47,6 +48,9 @@ typedef struct uct_ib_pd_config {
         unsigned             event_prio;   /**< Memory events priority */
         double               overhead;     /**< Lookup overhead estimation */
     } rcache;
+
+    uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
+                                                without using the cache */
 
 } uct_ib_pd_config_t;
 

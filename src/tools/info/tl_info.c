@@ -15,7 +15,7 @@
 #define PRINT_CAP(_name, _cap_flags, _max) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name)) { \
         char *s = strduplower(#_name); \
-        printf("#         %12s: <= %zu\n", s, _max); \
+        printf("#         %12s: %s\n", s, size_limit_to_str(_max)); \
         free(s); \
     }
 #define PRINT_ATOMIC_CAP(_name, _cap_flags) \
@@ -43,6 +43,26 @@ static char *strduplower(const char *str)
     return s;
 }
 
+static const char *size_limit_to_str(size_t size)
+{
+    static const char * suffixes[] = {"", " KiB", " MiB", " GiB", " TiB", " PiB",
+                                      " EiB", " ZiB"};
+    static char buf[128];
+    const char **suffix;
+
+    if (size == SIZE_MAX) {
+        return "unlimited";
+    } else {
+        suffix = &suffixes[0];
+        while ((size > 10000) && ((size % 1024) == 0)) {
+            size /= 1024;
+            ++suffix;
+        }
+        snprintf(buf, sizeof(buf), "<= %zu%s", size, *suffix);
+        return buf;
+    }
+}
+
 static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
                              uct_tl_resource_desc_t *resource)
 {
@@ -58,8 +78,6 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
     }
 
     printf("#   Device: %s\n", resource->dev_name);
-    printf("#      speed:         %.2f MB/sec\n", resource->bandwidth / 1024.0 / 1024.0);
-    printf("#      latency:       %.3f microsec\n", resource->latency * 1e-3);
 
     status = uct_iface_open(pd, worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
@@ -76,6 +94,10 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
     if (status != UCS_OK) {
         printf("#   < failed to query interface >\n");
     } else {
+        printf("#           bandwidth:     %.2f MB/sec\n", iface_attr.bandwidth / (1024 * 1024));
+        printf("#           latency:       %.0f nsec\n", iface_attr.latency * 1e9);
+        printf("#           overhead:      %.0f nsec\n", iface_attr.overhead * 1e9);
+
         PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
         PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
         PRINT_CAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_zcopy);
@@ -85,7 +107,8 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
         PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
         PRINT_CAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_zcopy);
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
-            printf("#            am header: <= %zu\n", iface_attr.cap.am.max_hdr);
+            printf("#            am header: %s\n",
+                   size_limit_to_str(iface_attr.cap.am.max_hdr));
         }
 
         PRINT_ATOMIC_CAP(ATOMIC_ADD,   iface_attr.cap.flags);
@@ -243,10 +266,17 @@ static void print_pd_info(const char *pd_name, int print_opts,
         printf("# Protection domain: %s\n", pd_name);
         printf("#   component:        %s\n", pd_attr.component_name);
         if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
-            printf("#   allocate:         <= %zu\n", pd_attr.cap.max_alloc);
+            printf("#   allocate:         %s\n",
+                   size_limit_to_str(pd_attr.cap.max_alloc));
         }
         if (pd_attr.cap.flags & UCT_PD_FLAG_REG) {
-            printf("#   register:         <= %zu\n", pd_attr.cap.max_reg);
+            printf("#   register:         %s, cost: %.0f",
+                   size_limit_to_str(pd_attr.cap.max_reg),
+                   pd_attr.reg_cost.overhead * 1e9);
+            if (pd_attr.reg_cost.growth * 1e9 > 1e-3) {
+                printf("+(%.3f*<SIZE>)", pd_attr.reg_cost.growth * 1e9);
+            }
+            printf(" nsec\n");
         }
         printf("#   remote key:       %zu bytes\n", pd_attr.rkey_packed_size);
     }

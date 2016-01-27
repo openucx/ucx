@@ -116,6 +116,8 @@ ucs_status_t uct_mm_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
     }
     if (uct_mm_pd_mapper_ops(pd)->reg != NULL) {
         pd_attr->cap.flags |= UCT_PD_FLAG_REG;
+        pd_attr->reg_cost.overhead = 1000.0e-9;
+        pd_attr->reg_cost.growth   = 0.007e-9;
     }
     pd_attr->cap.max_alloc    = ULONG_MAX;
     pd_attr->cap.max_reg      = 0;

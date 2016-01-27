@@ -70,6 +70,8 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     echo "Build gtest"
     module load hpcx-gcc
+    unset LD_LIBRARY_PATH # Prevent out tests from using installed UCX libraries
+
     make $make_opt clean
 
     # todo: check in -devel mode as well
