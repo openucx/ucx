@@ -56,15 +56,15 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"BCOPY_THRESH", "0",
    "Threshold for switching from short to bcopy protocol",
-   ucs_offsetof(ucp_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH", "1gb",
    "Threshold for switching from eager to rendezvous protocol",
-   ucs_offsetof(ucp_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"LOG_DATA", "0",
    "Size of packet data that is dumped to the log system in debug mode (0 - nothing).",
-   ucs_offsetof(ucp_config_t, log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(ucp_config_t, ctx.log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -484,9 +484,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.request.size    = params->request_size;
     context->config.request.init    = params->request_init;
     context->config.request.cleanup = params->request_cleanup;
-    context->config.bcopy_thresh    = config->bcopy_thresh;
-    context->config.rndv_thresh     = config->rndv_thresh;
-    context->config.log_data_size   = config->log_data_size;
+    context->config.ext             = config->ctx;
 
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
@@ -615,10 +613,11 @@ void ucp_cleanup(ucp_context_h context)
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length)
 {
+    size_t data_size = context->config.ext.log_data_size;
     char *p, *endp;
     size_t offset;
 
-    if (context->config.log_data_size == 0) {
+    if (data_size == 0) {
         return;
     }
 
@@ -629,7 +628,7 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
     p = p + strlen(p);
 
     offset = 0;
-    while ((offset < length) && (offset < context->config.log_data_size) && (p < endp)) {
+    while ((offset < length) && (offset < data_size) && (p < endp)) {
         snprintf(p, endp - p, "%02x", ((const uint8_t*)data)[offset]);
         p += strlen(p);
         ++offset;
