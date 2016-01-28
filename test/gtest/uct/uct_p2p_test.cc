@@ -88,13 +88,6 @@ void uct_p2p_test::cleanup() {
     uct_test::cleanup();
 }
 
-void uct_p2p_test::short_progress_loop() {
-    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(1.0*ucs::test_time_multiplier());
-    while (ucs_get_time() < end_time) {
-        progress();
-    }
-}
-
 void uct_p2p_test::test_xfer(send_func_t send, size_t length, direction_t direction) {
     UCS_TEST_SKIP;
 }

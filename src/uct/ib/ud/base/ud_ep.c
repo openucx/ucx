@@ -106,7 +106,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
     ucs_wtimer_remove(&self->slow_timer);
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
-   /* TODO: in disconnect ucs_frag_list_cleanup(&self->rx.ooo_pkts); */
+    ucs_frag_list_cleanup(&self->rx.ooo_pkts); 
 
     ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
                             uct_ud_ep_pending_cancel_cb, 0);
@@ -148,6 +148,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d slid=%d qpn=%d ep_id=%u ep=%p connected to IFACE dlid=%d qpn=%d", 
@@ -165,6 +166,7 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
     ep->dest_ep_id = UCT_UD_EP_NULL_ID;
 
@@ -237,6 +239,8 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     ucs_trace_func("");
 
     ep->dest_ep_id = ib_addr->id;
+
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d slid=%d qpn=%d ep=%u connected to dlid=%d qpn=%d ep=%u", 
@@ -500,6 +504,11 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h)
                                            uct_ud_iface_t);
     uct_ud_enter(iface);
     status = uct_ud_ep_flush_nolock(iface, ep);
+    if (status == UCS_OK) {
+        UCT_TL_EP_STAT_FLUSH(&ep->super);
+    } else {
+        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
+    }
     uct_ud_leave(iface);
     return status;
 }

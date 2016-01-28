@@ -45,7 +45,7 @@ static void uct_cm_iface_notify(uct_cm_iface_t *iface)
                                iface->num_outstanding < iface->config.max_outstanding);
 }
 
-ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
 
@@ -55,6 +55,15 @@ ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
 
     sched_yield();
     return UCS_ERR_NO_RESOURCE;
+}
+
+ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
+{
+    ucs_status_t status;
+
+    status = uct_cm_iface_flush_do(tl_iface);
+    UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return status;
 }
 
 static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,

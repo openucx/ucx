@@ -193,6 +193,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     memcpy(skb->neth, neth, skb->len); 
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
                                  (char *)skb->neth + skb->len, buffer, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_ud_leave(&iface->super);
     return UCS_OK;
 }
@@ -219,6 +220,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_ud_leave(&iface->super);
     return length;
 }
@@ -273,6 +275,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     memcpy(skb->neth, neth, skb->len); 
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
                                  (char *)skb->neth + skb->len, buffer, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_ud_leave(&iface->super);
     return UCS_OK;
 }

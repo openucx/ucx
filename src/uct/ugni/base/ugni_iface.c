@@ -67,13 +67,29 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     if (0 == iface->outstanding) {
+        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
         return UCS_OK;
     }
     uct_ugni_progress(iface);
-    return UCS_ERR_NO_RESOURCE;
+    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_INPROGRESS;
 }
 
+ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep)
+{
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                           uct_ugni_iface_t);
 
+    if (0 == ep->outstanding) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    uct_ugni_progress(iface);
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
+}
 
 ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,

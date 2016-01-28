@@ -139,6 +139,9 @@ typedef struct uct_ud_ep_pending_op {
     ucs_arbiter_elem_t    elem;
 } uct_ud_ep_pending_op_t;
 
+enum {
+    UCT_UD_EP_STAT_TODO /* TODO: ud specific stats */
+};
 
 struct uct_ud_ep {
     uct_base_ep_t           super;
@@ -166,6 +169,7 @@ struct uct_ud_ep {
     ucs_list_link_t          cep_list;
     uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
     ucs_wtimer_t slow_timer;
+    UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
 };
 

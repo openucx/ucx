@@ -25,8 +25,6 @@ public:
 
     uct_ud_iface_t *iface(entity *e);
 
-    void short_progress_loop();
-
     void twait(int delta_ms);
 
     void connect();

@@ -64,10 +64,8 @@ static uct_iface_ops_t uct_cma_iface_ops = {
     .iface_query         = uct_cma_iface_query,
     .iface_get_address   = uct_cma_iface_get_address,
     .iface_is_reachable  = uct_cma_iface_is_reachable,
-    .iface_flush         = (void*)ucs_empty_function_return_success,
     .ep_put_zcopy        = uct_cma_ep_put_zcopy,
     .ep_get_zcopy        = uct_cma_ep_get_zcopy,
-    .ep_flush            = (void*)ucs_empty_function_return_success,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cma_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
 };

@@ -117,6 +117,7 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .ep_atomic_fadd32    = (void*)uct_empty_function_return_unsupported,
     .ep_atomic_cswap32   = (void*)uct_empty_function_return_unsupported,
     .ep_atomic_swap32    = (void*)uct_empty_function_return_unsupported,
+    .ep_flush            = uct_ugni_ep_flush,
 };
 
 static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {

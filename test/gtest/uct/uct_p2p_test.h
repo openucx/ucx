@@ -21,8 +21,6 @@ public:
     virtual void init();
     virtual void cleanup();
 
-    void short_progress_loop();
-
     UCS_TEST_BASE_IMPL;
 protected:
     typedef ucs_status_t (uct_p2p_test::* send_func_t)(uct_ep_h ep,

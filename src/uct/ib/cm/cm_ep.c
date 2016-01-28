@@ -157,6 +157,7 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     }
 
     iface->outstanding[iface->num_outstanding++] = id;
+    UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, payload_len);
     uct_cm_leave(iface);
 
     uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_SEND, hdr,
@@ -197,5 +198,9 @@ void uct_cm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
 
 ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep)
 {
-    return uct_cm_iface_flush(tl_ep->iface);
+    ucs_status_t status;
+
+    status = uct_cm_iface_flush_do(tl_ep->iface);
+    UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return status;
 }

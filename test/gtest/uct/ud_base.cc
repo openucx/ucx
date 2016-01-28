@@ -28,14 +28,6 @@ uct_ud_iface_t *ud_base_test::iface(entity *e)
     return ucs_derived_of(e->iface(), uct_ud_iface_t);
 }
 
-void ud_base_test::short_progress_loop() 
-{
-    ucs_time_t end_time = ucs_get_time() + ucs_time_from_msec(10.0* ucs::test_time_multiplier());
-    while (ucs_get_time() < end_time) {
-        progress();
-    }
-}
-
 void ud_base_test::twait(int delta_ms) 
 {
     ucs_time_t now, t1, t2;

@@ -218,6 +218,7 @@ uct_iface_ops_t uct_ugni_udt_iface_ops = {
     .ep_pending_purge      = uct_ugni_ep_pending_purge,
     .ep_am_short           = uct_ugni_udt_ep_am_short,
     .ep_am_bcopy           = uct_ugni_udt_ep_am_bcopy,
+    .ep_flush              = uct_ugni_ep_flush,
 };
 
 static ucs_mpool_ops_t uct_ugni_udt_desc_mpool_ops = {

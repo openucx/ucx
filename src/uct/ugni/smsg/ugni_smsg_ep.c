@@ -178,6 +178,7 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_mpool_put(desc);
+        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -218,6 +219,7 @@ ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t head
 
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND,
                        id, header_data, length, "TX: AM_SHORT");
+    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), AM, SHORT, sizeof(header) + length);
 
     return  uct_ugni_smsg_ep_am_common_send(ep, iface, id, sizeof(uct_ugni_smsg_header_t),
                                             smsg_header, smsg_header->length, (void*)header_data, desc);
@@ -252,6 +254,7 @@ ssize_t uct_ugni_smsg_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND,
                        id, smsg_data, packed, "TX: AM_BCOPY");
+    UCT_TL_EP_STAT_OP(ucs_derived_of(ep, uct_base_ep_t), AM, BCOPY, packed);
 
     rc = uct_ugni_smsg_ep_am_common_send(ep, iface, id, sizeof(uct_ugni_smsg_header_t),
                                          smsg_header, packed, smsg_data, desc);

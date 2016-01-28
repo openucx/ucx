@@ -54,6 +54,7 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t len
         return UCS_ERR_IO_ERROR;
     }         
 
+    UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, length);
     uct_cma_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]", length);
     return UCS_OK;
 }
@@ -75,6 +76,7 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
         return UCS_ERR_IO_ERROR;
     }         
 
+    UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, length);
     uct_cma_trace_data(remote_addr, rkey, "GET_ZCOPY [length %zu]", length);
     return UCS_OK;
 }

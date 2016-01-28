@@ -474,19 +474,19 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
 
     count = 0;
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
+        /* ud ep flush returns either ok or in progress */
         status = uct_ud_ep_flush_nolock(iface, ep);
-        if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
+        if (status == UCS_INPROGRESS) {
             ++count;
-        } else if (status != UCS_OK) {
-            ucs_fatal("flush failed with %d", status);
-            return status;
         }
     }
 
     uct_ud_leave(iface);
     if (count != 0) {
-        return UCS_ERR_NO_RESOURCE;
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
+        return UCS_INPROGRESS;
     }
+    UCT_TL_IFACE_STAT_FLUSH(&iface->super.super);
     return UCS_OK;
 }
 

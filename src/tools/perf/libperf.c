@@ -245,7 +245,7 @@ void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
     do {
         status = uct_iface_flush(perf->uct.iface);
         uct_worker_progress(perf->uct.worker);
-    } while(status == UCS_INPROGRESS || status == UCS_ERR_NO_RESOURCE);
+    } while (status == UCS_INPROGRESS);
 }
 
 static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_f,

@@ -44,6 +44,4 @@ typedef struct uct_ugni_smsg_header {
     uint32_t length;
 } uct_ugni_smsg_header_t;
 
-ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface);
-
 #endif

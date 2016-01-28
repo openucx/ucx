@@ -23,6 +23,7 @@ static ucs_stats_class_t uct_ep_stats_class = {
         [UCT_EP_STAT_BYTES_BCOPY] = "bytes_bcopy",
         [UCT_EP_STAT_BYTES_ZCOPY] = "bytes_zcopy",
         [UCT_EP_STAT_FLUSH]       = "flush",
+        [UCT_EP_STAT_FLUSH_WAIT]  = "flush_wait"
     }
 };
 
@@ -32,9 +33,9 @@ static ucs_stats_class_t uct_iface_stats_class = {
     .counter_names = {
         [UCT_IFACE_STAT_RX_AM]       = "rx_am",
         [UCT_IFACE_STAT_RX_AM_BYTES] = "rx_am_bytes",
-        [UCT_IFACE_STAT_TX_NO_DESC]  = "tx_no_desc",
-        [UCT_IFACE_STAT_RX_NO_DESC]  = "rx_no_desc",
+        [UCT_IFACE_STAT_TX_NO_RES]   = "tx_no_res",
         [UCT_IFACE_STAT_FLUSH]       = "flush",
+        [UCT_IFACE_STAT_FLUSH_WAIT]  = "flush_wait",
     }
 };
 #endif
@@ -112,9 +113,29 @@ void uct_iface_close(uct_iface_h iface)
     iface->ops.iface_close(iface);
 }
 
+static ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface)
+{
+    UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_OK;
+}
+
+static ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep)
+{
+    UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
+
     self->ops = *ops;
+    if (ops->ep_flush == NULL) {
+        self->ops.ep_flush = uct_base_ep_flush;
+    }
+
+    if (ops->iface_flush == NULL) {
+        self->ops.iface_flush = uct_base_iface_flush;
+    }
     return UCS_OK;
 }
 

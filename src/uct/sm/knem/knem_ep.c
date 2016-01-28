@@ -85,7 +85,11 @@ ucs_status_t uct_knem_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t le
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_knem_key_t *key = (uct_knem_key_t *)rkey;
-    return uct_knem_rma(tl_ep, buffer, length, remote_addr, key, 1);
+    ucs_status_t status;
+    
+    status = uct_knem_rma(tl_ep, buffer, length, remote_addr, key, 1);
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY, length);
+    return status;
 }
 
 ucs_status_t uct_knem_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
@@ -93,5 +97,9 @@ ucs_status_t uct_knem_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                    uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_knem_key_t *key = (uct_knem_key_t *)rkey;
-    return uct_knem_rma(tl_ep, buffer, length, remote_addr, key, 0);
+    ucs_status_t status;
+
+    status = uct_knem_rma(tl_ep, buffer, length, remote_addr, key, 0);
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY, length);
+    return status;
 }

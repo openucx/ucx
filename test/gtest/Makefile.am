@@ -72,6 +72,7 @@ gtest_SOURCES = \
 	uct/test_uct_perf.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
+	uct/test_stats.cc \
 	\
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_memheap.cc \

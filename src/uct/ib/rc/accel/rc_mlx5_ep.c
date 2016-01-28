@@ -675,11 +675,11 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
     if (ep->super.unsignaled != 0) {
         status = uct_rc_mlx5_ep_inline_post(ep, MLX5_OPCODE_NOP, NULL, 0, 0, 0, 0, 0);
         if (status != UCS_OK) {
-            UCT_TL_EP_STAT_FLUSH(&ep->super.super);
             return status;
         }
     }
 
+    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     return UCS_INPROGRESS;
 }
 

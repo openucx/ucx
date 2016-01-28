@@ -23,20 +23,21 @@ enum {
     UCT_EP_STAT_AM,
     UCT_EP_STAT_PUT,
     UCT_EP_STAT_GET,
-    UCT_EP_STAT_ATOMIC,
+    UCT_EP_STAT_ATOMIC,    
     UCT_EP_STAT_BYTES_SHORT,
     UCT_EP_STAT_BYTES_BCOPY,
     UCT_EP_STAT_BYTES_ZCOPY,
     UCT_EP_STAT_FLUSH,
+    UCT_EP_STAT_FLUSH_WAIT,  /* number of times flush called while in progress */
     UCT_EP_STAT_LAST
 };
 
 enum {
     UCT_IFACE_STAT_RX_AM,
     UCT_IFACE_STAT_RX_AM_BYTES,
-    UCT_IFACE_STAT_TX_NO_DESC,
-    UCT_IFACE_STAT_RX_NO_DESC,
+    UCT_IFACE_STAT_TX_NO_RES,
     UCT_IFACE_STAT_FLUSH,
+    UCT_IFACE_STAT_FLUSH_WAIT,  /* number of times flush called while in progress */
     UCT_IFACE_STAT_LAST
 };
 
@@ -54,9 +55,16 @@ enum {
 #define UCT_TL_EP_STAT_ATOMIC(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_ATOMIC, 1);
 #define UCT_TL_EP_STAT_FLUSH(_ep) \
-    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1);
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1); 
+#define UCT_TL_EP_STAT_FLUSH_WAIT(_ep) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH_WAIT, 1); 
+
 #define UCT_TL_IFACE_STAT_FLUSH(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH, 1);
+#define UCT_TL_IFACE_STAT_FLUSH_WAIT(_iface) \
+    UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH_WAIT, 1);
+#define UCT_TL_IFACE_STAT_TX_NO_RES(_iface) \
+    UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_RES, 1);
 
 
 /**
@@ -241,7 +249,7 @@ typedef struct uct_iface_mpool_config {
     { \
         _desc = ucs_mpool_get(_mp); \
         if (ucs_unlikely((_desc) == NULL)) { \
-            UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_DESC, 1); \
+            UCT_TL_IFACE_STAT_TX_NO_RES(_iface); \
             _failure; \
         } \
         \
@@ -253,7 +261,6 @@ typedef struct uct_iface_mpool_config {
     { \
         _desc = ucs_mpool_get_inline(_mp); \
         if (ucs_unlikely((_desc) == NULL)) { \
-            UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_RX_NO_DESC, 1); \
             _failure; \
         } \
         \
