@@ -34,4 +34,15 @@ typedef struct ucm_reloc_patch {
 ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t* patch);
 
 
+/**
+ * Get the original implementation of 'symbol', which is not equal to 'replacement'.
+ *
+ * @param [in]  symbol       Symbol name,
+ * @param [in]  replacement  Symbol replacement, which should be ignored.
+ *
+ * @return Original function pointer for 'symbol'.
+ */
+void* ucm_reloc_get_orig(const char *symbol, void *replacement);
+
+
 #endif

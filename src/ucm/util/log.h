@@ -7,6 +7,10 @@
 #ifndef UCM_LOG_H_
 #define UCM_LOG_H_
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/debug/log.h>
 
 #include "ucm_config.h"

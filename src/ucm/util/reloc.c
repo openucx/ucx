@@ -272,7 +272,7 @@ static void *ucm_dlopen(const char *filename, int flag)
     void *handle;
 
     if (ucm_reloc_orig_dlopen == NULL) {
-        ucm_error("ucm_reloc_orig_dlopen is NULL");
+        ucm_fatal("ucm_reloc_orig_dlopen is NULL");
         return NULL;
     }
 
@@ -300,6 +300,26 @@ static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
     .value  = ucm_dlopen
 };
 
+void* ucm_reloc_get_orig(const char *symbol, void *replacement)
+{
+    const char *error;
+    void *func_ptr;
+
+    func_ptr = dlsym(RTLD_DEFAULT, symbol);
+    if (func_ptr == replacement) {
+        (void)dlerror();
+        func_ptr = dlsym(RTLD_NEXT, symbol);
+        if (func_ptr == NULL) {
+            error = dlerror();
+            ucm_fatal("could not find address of original %s(): %s", symbol,
+                      error ? error : "Unknown error");
+        }
+    }
+
+    ucm_debug("original %s() is at %p", symbol, func_ptr);
+    return func_ptr;
+}
+
 /* called with lock held */
 static ucs_status_t ucm_reloc_install_dlopen()
 {
@@ -310,7 +330,9 @@ static ucs_status_t ucm_reloc_install_dlopen()
         return UCS_OK;
     }
 
-    ucm_reloc_orig_dlopen = dlsym(RTLD_NEXT, ucm_reloc_dlopen_patch.symbol);
+    ucm_reloc_orig_dlopen = ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
+                                               ucm_reloc_dlopen_patch.value);
+
     status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch);
     if (status != UCS_OK) {
         return status;
