@@ -222,17 +222,34 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
     ucs_mpool_cleanup(&self->free_mbox, 1);
 }
 
-ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface)
+static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface)
 {
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
 
     if (0 == iface->super.outstanding) {
+        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
         return UCS_OK;
     }
 
     progress_local_cq(iface);
 
-    return UCS_ERR_NO_RESOURCE;
+    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_INPROGRESS;
+}
+
+static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep){
+    uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
+    uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t);
+
+    if (0 == ep->super.outstanding) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    progress_local_cq(iface);
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
 }
 
 uct_iface_ops_t uct_ugni_smsg_iface_ops = {
@@ -250,6 +267,7 @@ uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .ep_pending_purge      = uct_ugni_ep_pending_purge,
     .ep_am_short           = uct_ugni_smsg_ep_am_short,
     .ep_am_bcopy           = uct_ugni_smsg_ep_am_bcopy,
+    .ep_flush              = uct_ugni_smsg_ep_flush,
 };
 
 #define UCT_UGNI_LOCAL_CQ (8192)
