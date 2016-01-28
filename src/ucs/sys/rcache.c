@@ -68,7 +68,7 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
               "%s: %s region " UCS_PGT_REGION_FMT " %c%c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
               rcache->name, message,
               UCS_PGT_REGION_ARG(&region->super),
-              (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) ? 'r' : '-',
+              (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) ? 'g' : '-',
               (region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE)    ? 't' : '-',
               (region->flags & UCS_RCACHE_REGION_FLAG_INVALID)    ? 'i' : '-',
               UCS_RCACHE_PROT_ARG(region->prot),
@@ -475,7 +475,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
         pgt_region = ucs_pgtable_lookup(&rcache->pgtable, start);
         if (ucs_likely(pgt_region != NULL)) {
             region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
-            if (((start + length) < region->super.end) &&
+            if (((start + length) <= region->super.end) &&
                 ucs_rcache_region_test(region, prot))
             {
                 ucs_rcache_region_hold(rcache, region);

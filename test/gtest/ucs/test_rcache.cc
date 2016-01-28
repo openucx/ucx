@@ -393,7 +393,7 @@ UCS_MT_TEST_F(test_rcache, merge_merge_unwritable, 6) {
     int ret = mprotect(ptr2, size2, PROT_READ);
     ASSERT_EQ(0, ret) << strerror(errno);
 
-    /* Get 2-nd part - should not merge becase we are read-only */
+    /* Get 2-nd part - should not merge because we are read-only */
     region *region2 = get(ptr2, size2, PROT_READ);
     EXPECT_GE(region2->super.super.start, (uintptr_t)ptr2);
     EXPECT_EQ(PROT_READ, region2->super.prot);
