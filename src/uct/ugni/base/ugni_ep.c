@@ -36,6 +36,8 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
     if (UCS_OK == rc) {
         /* sent successfully. remove from the arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else if (UCS_INPROGRESS == rc) {
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
         /* couldn't send. keep this request in the arbiter until the next time
          * this function is called */

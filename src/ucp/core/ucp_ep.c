@@ -61,6 +61,26 @@ void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep)
     uct_ep_destroy(uct_ep);
 }
 
+ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
+                                    uct_pending_req_t *req)
+{
+    ucs_status_t status;
+
+    status = uct_ep_pending_add(uct_ep, req);
+    if (status != UCS_ERR_BUSY) {
+        ucs_assert(status == UCS_OK);
+        return UCS_OK; /* Added to pending */
+    }
+
+    /* Forced progress */
+    status = req->func(req);
+    if (status == UCS_OK) {
+        return UCS_OK; /* Completed the operation */
+    }
+
+    return UCS_ERR_NO_PROGRESS;
+}
+
 void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req)
 {
     ucs_status_t status;
@@ -69,19 +89,10 @@ void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req)
                    &req->send.uct, uct_ep);
 
     req->send.ep = ep;
-    for (;;) {
-        status = uct_ep_pending_add(uct_ep, &req->send.uct);
-        if (status != UCS_ERR_BUSY) {
-            ucs_assert(status == UCS_OK);
-            return; /* Added to pending */
-        }
-
-        /* Forced progress */
-        status = req->send.uct.func(&req->send.uct);
-        if (status == UCS_OK) {
-            return; /* Completed the operation */
-        }
-    }
+    do {
+        status = ucp_ep_add_pending_uct(ep, uct_ep, &req->send.uct);
+        ucp_worker_progress(ep->worker);
+    } while (status != UCS_OK);
 }
 
 ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,

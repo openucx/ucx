@@ -85,7 +85,6 @@ void ucp_wireup_progress(ucp_ep_h ep)
     uct_pending_req_t *req;
     ucs_status_t status;
     uct_ep_h uct_ep;
-    int dispatch;
 
     ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
 
@@ -141,25 +140,10 @@ void ucp_wireup_progress(ucp_ep_h ep)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     /* Replay pending requests */
-    dispatch = 1;
     ucs_queue_for_each_extract(req, &tmp_pending_queue, priv, 1) {
-
-        /* As long as status is OK, dispatch the callback. Otherwise, add to
-         * the pending queue of the new transport.
-         */
-        if (dispatch) {
-            ucs_trace_data("executing pending request %p func %p", req, req->func);
-            status = req->func(req);
-            dispatch = dispatch && (status == UCS_OK);
-        }
-        if (!dispatch) {
-            ucs_trace_data("queuing pending request %p", req);
-            status = uct_ep_pending_add(ep->uct_ep, req);
-            /* If we could not send before, should be able to add to pending
-             * TODO retry the func
-             */
-            ucs_assert_always(status == UCS_OK);
-        }
+        do {
+            status = ucp_ep_add_pending_uct(ep, uct_ep, req);
+        } while (status != UCS_OK);
     }
 }
 
