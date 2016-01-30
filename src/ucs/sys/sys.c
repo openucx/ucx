@@ -392,7 +392,7 @@ ssize_t ucs_read_file(char *buffer, size_t max, int silent,
 {
     char filename[MAXPATHLEN];
     ucs_status_t status;
-    size_t nread;
+    size_t nread = 0;
     va_list ap;
 
     va_start(ap, filename_fmt);
@@ -413,7 +413,7 @@ static ucs_status_t ucs_read_file_long(long *value_p, const char *filename_fmt,
     char filename[MAXPATHLEN];
     char buffer[32], *endp;
     ucs_status_t status;
-    size_t nread;
+    size_t nread = 0;
     va_list ap;
 
     va_start(ap, filename_fmt);
@@ -435,7 +435,7 @@ static ucs_status_t ucs_read_file_memunits(size_t *value_p, const char *filename
     char filename[MAXPATHLEN];
     char buffer[32], *endp;
     ucs_status_t status;
-    size_t nread;
+    size_t nread = 0;
     va_list ap;
 
     va_start(ap, filename_fmt);
