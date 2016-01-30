@@ -115,15 +115,3 @@ UCM_OVERRIDE_MM_FUNC(shmdt)
 UCM_OVERRIDE_MM_FUNC(sbrk)
 #endif
 
-UCS_STATIC_INIT {
-    /*
-     * When library is loaded, invoke these to initialize the pointers to
-     * original functions.
-     */
-    ucm_orig_mmap(NULL, 0, 0, 0, -1, 0);
-    ucm_orig_munmap(NULL, 0);
-    ucm_orig_mremap(NULL, 0, 0, 0);
-    ucm_orig_shmat(0, NULL, 0);
-    ucm_orig_shmdt(NULL);
-    ucm_orig_sbrk(0);
-}
