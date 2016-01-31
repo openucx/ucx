@@ -21,7 +21,7 @@ ucp_tag_send_start_req(ucp_ep_h ep, const void *buffer, size_t count,
                        ucp_datatype_t datatype, ucp_tag_t tag,
                        ucp_request_t *req)
 {
-    size_t rndv_thresh = ep->worker->context->config.rndv_thresh;
+    size_t rndv_thresh = ep->worker->context->config.ext.rndv_thresh;
     ucp_dt_generic_t *dt_gen;
     void *state;
 

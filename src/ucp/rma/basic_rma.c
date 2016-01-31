@@ -46,7 +46,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
                 break;
             }
         } else {
-            if (length <= ep->worker->context->config.bcopy_thresh) {
+            if (length <= ep->worker->context->config.ext.bcopy_thresh) {
                 frag_length = ucs_min(length, ep->config.max_short_put);
                 status = uct_ep_put_short(ep->uct_ep, buffer, frag_length, remote_addr,
                                           uct_rkey);
@@ -88,7 +88,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, req->send.rma.rkey);
 
     for (;;) {
-        if (req->send.length <= ep->worker->context->config.bcopy_thresh) {
+        if (req->send.length <= ep->worker->context->config.ext.bcopy_thresh) {
             /* Should be replaced with bcopy */
             packed_len = ucs_min(req->send.length, ep->config.max_short_put);
             status = uct_ep_put_short(ep->uct_ep,
@@ -178,7 +178,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
             }
         } else {
             /* Fragmented put */
-            if (length <= ep->worker->context->config.bcopy_thresh) {
+            if (length <= ep->worker->context->config.ext.bcopy_thresh) {
                 /* TBD: Should be replaced with bcopy */
                 packed_len = ucs_min(length, ep->config.max_short_put);
                 status = uct_ep_put_short(ep->uct_ep, buffer, packed_len,

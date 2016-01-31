@@ -34,6 +34,20 @@ enum {
 };
 
 
+typedef struct ucp_context_config {
+    /** Threshold for switching UCP to buffered copy(bcopy) protocol */
+    size_t                                 bcopy_thresh;
+    /** Threshold for switching UCP to rendezvous protocol */
+    size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to zero copy protocol */
+    size_t                                 zcopy_thresh;
+    /** Estimation of bcopy bandwidth */
+    size_t                                 bcopy_bw;
+    /** Size of packet data that is dumped to the log system in debug mode */
+    size_t                                 log_data_size;
+} ucp_context_config_t;
+
+
 struct ucp_config {
     /** Array of device lists names to use.
      *  This array holds three lists - network devices, shared memory devices
@@ -43,12 +57,8 @@ struct ucp_config {
     str_names_array_t                      tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
-    /** Threshold for switching UCP to buffered copy(bcopy) protocol */
-    size_t                                 bcopy_thresh;
-    /** Threshold for switching UCP to rendezvous protocol */
-    size_t                                 rndv_thresh;
-    /** Size of packet data that is dumped to the log system in debug mode */
-    size_t                                 log_data_size;
+    /** Configuration saved directly in the context */
+    ucp_context_config_t                   ctx;
 };
 
 
@@ -116,14 +126,8 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 
-        /* Threshold for switching from short to bcopy protocol */
-        size_t                    bcopy_thresh;
-
-        /* Threshold for switching from to rendezvous protocol */
-        size_t                    rndv_thresh;
-
-        /* How much data to dump */
-        size_t                    log_data_size;
+        /* Configuration supplied by the user */
+        ucp_context_config_t      ext;
 
     } config;
 
