@@ -58,7 +58,7 @@ echo "Build without IB verbs"
 ../contrib/configure-release --without-verbs
 make $make_opt
 
-if [[ -n "$JENKINS_PPC_SERVER"  && -n "$JENKINS_RUN_TESTS" ]] ; then
+if [[ -n "$JENKINS_PPC_SERVER" || -n "$JENKINS_RUN_TESTS" ]] ; then
     # Set CPU affinity to 2 cores, for performance tests
     if [ -n "$EXECUTOR_NUMBER" ]; then
         AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
