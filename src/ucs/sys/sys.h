@@ -289,6 +289,18 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
 
 
 /**
+ * Get the sizes of caches in the system cpu.
+ *
+ * @param cpu     CPU number.
+ *
+ * @return Array of cache sizes, in bytes. The first entry is L1 cache size,
+ *   second is L2, and so on. The end of the array is marked by an entry which
+ *   equals to 0.
+ */
+const size_t *ucs_sys_get_cache_sizes(int cpu);
+
+
+/**
  * Empty function which can be casted to a no-operation callback in various situations.
  */
 void ucs_empty_function();

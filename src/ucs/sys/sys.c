@@ -351,43 +351,113 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
     va_end(ap);
 }
 
-ssize_t ucs_read_file(char *buffer, size_t max, int silent,
-                      const char *filename_fmt, ...)
+static ucs_status_t ucs_read_file_common(char *buffer, size_t max, int silent,
+                                         size_t *nread_p, const char *filename)
 {
-    char filename[MAXPATHLEN];
-    ssize_t read_bytes;
-    va_list ap;
+    ucs_status_t status;
+    ssize_t nread;
     int fd;
-
-    va_start(ap, filename_fmt);
-    vsnprintf(filename, MAXPATHLEN, filename_fmt, ap);
-    va_end(ap);
 
     fd = open(filename, O_RDONLY);
     if (fd < 0) {
         if (!silent) {
             ucs_error("failed to open %s: %m", filename);
         }
-        read_bytes = -1;
+        status = UCS_ERR_NO_ELEM;
         goto out;
     }
 
-    read_bytes = read(fd, buffer, max - 1);
-    if (read_bytes < 0) {
+    nread = read(fd, buffer, max - 1);
+    if (nread < 0) {
         if (!silent) {
             ucs_error("failed to read from %s: %m", filename);
         }
+        status = UCS_ERR_IO_ERROR;
         goto out_close;
     }
 
-    if (read_bytes < max) {
-        buffer[read_bytes] = '\0';
-    }
+    ucs_assert(nread < max);
+    buffer[nread] = '\0';
+    *nread_p = nread;
+    status = UCS_OK;
 
 out_close:
     close(fd);
 out:
-    return read_bytes;
+    return status;
+}
+
+ssize_t ucs_read_file(char *buffer, size_t max, int silent,
+                      const char *filename_fmt, ...)
+{
+    char filename[MAXPATHLEN];
+    ucs_status_t status;
+    size_t nread = 0;
+    va_list ap;
+
+    va_start(ap, filename_fmt);
+    vsnprintf(filename, MAXPATHLEN, filename_fmt, ap);
+    va_end(ap);
+
+    status = ucs_read_file_common(buffer, max, silent, &nread, filename);
+    if (status != UCS_OK) {
+        return -1;
+    }
+
+    return nread;
+}
+
+static ucs_status_t ucs_read_file_long(long *value_p, const char *filename_fmt,
+                                       ...)
+{
+    char filename[MAXPATHLEN];
+    char buffer[32], *endp;
+    ucs_status_t status;
+    size_t nread = 0;
+    va_list ap;
+
+    va_start(ap, filename_fmt);
+    vsnprintf(filename, MAXPATHLEN, filename_fmt, ap);
+    va_end(ap);
+
+    status = ucs_read_file_common(buffer, sizeof(buffer), 1, &nread, filename);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *value_p = strtol(buffer, &endp, 10);
+    return UCS_OK;
+}
+
+static ucs_status_t ucs_read_file_memunits(size_t *value_p, const char *filename_fmt,
+                                           ...)
+{
+    char filename[MAXPATHLEN];
+    char buffer[32], *endp;
+    ucs_status_t status;
+    size_t nread = 0;
+    va_list ap;
+
+    va_start(ap, filename_fmt);
+    vsnprintf(filename, MAXPATHLEN, filename_fmt, ap);
+    va_end(ap);
+
+    status = ucs_read_file_common(buffer, sizeof(buffer), 1, &nread, filename);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (nread == 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *value_p =  strtol(buffer, &endp, 10);
+    if (*endp == 'k' || *endp == 'K') {
+        *value_p *= 1024;
+    } else if (*endp == 'm' || *endp == 'M') {
+        *value_p *= 1024 * 1024;
+    }
+    return UCS_OK;
 }
 
 size_t ucs_get_page_size()
@@ -707,6 +777,58 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
         ucs_warn("Conflicting CPU frequencies detected, using: %.2f MHz", mhz);
     }
     return mhz * 1e6;
+}
+
+
+const size_t *ucs_sys_get_cache_sizes(int cpu)
+{
+#define UCS_SYS_MAX_CACHE_LEVELS 5
+    static const char *sysfs_cpu_cache_dir = "/sys/devices/system/cpu";
+    static size_t sizes[UCS_SYS_MAX_CACHE_LEVELS] = {0};
+    static int initialized = 0;
+    ucs_status_t status;
+    char cache_type[256];
+    size_t cache_size;
+    long cache_level;
+    ssize_t nread;
+    int i;
+
+    if (!initialized) {
+        for (i = 0; ; ++i) {
+           nread = ucs_read_file(cache_type, sizeof(cache_type), 1,
+                                 "%s/cpu%d/cache/index%d/type",
+                                 sysfs_cpu_cache_dir, cpu, i);
+           if (nread < 0) {
+               break;
+           }
+           if (!strcmp(cache_type, "Instruction")) {
+               /* Skip instruction cache */
+               continue;
+           }
+
+           status = ucs_read_file_long(&cache_level,
+                                       "%s/cpu%d/cache/index%d/level",
+                                       sysfs_cpu_cache_dir, cpu, i);
+           if (status != UCS_OK) {
+               continue;
+           }
+           if ((cache_level < 1) || (cache_level >= UCS_SYS_MAX_CACHE_LEVELS)) {
+               continue;
+           }
+
+           status = ucs_read_file_memunits(&cache_size,
+                                           "%s/cpu%d/cache/index%d/size",
+                                           sysfs_cpu_cache_dir, cpu, i);
+           if (status != UCS_OK) {
+               continue;
+           }
+
+           sizes[cache_level - 1] = cache_size;
+        }
+        initialized = 1;
+    }
+
+    return sizes;
 }
 
 void ucs_empty_function()
