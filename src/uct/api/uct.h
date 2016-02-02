@@ -184,9 +184,16 @@ enum {
     UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
     UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(41), /**< Supports connecting to specific endpoint */
 
-    /* Thread safety */
-    UCT_IFACE_FLAG_AM_THREAD_SINGLE = UCS_BIT(44), /**< Active messages callback is invoked only from main thread */
-
+    /* active message callback invocation */
+    UCT_IFACE_FLAG_AM_CB_SYNC       = UCS_BIT(44), /**< Interface supports setting active message callback
+                                                        which is invoked only from the calling context of
+                                                        uct_worker_progress() */
+    UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(45), /**< Interdace supports setting active message callback
+                                                        which will be invoked within a reasonable amount of 
+                                                        time if uct_worker_progress() is not being called,
+                                                        possibly from another thread. Active message callback
+                                                        may also be invoked when uct_worker_progress() 
+                                                        is called.  */
 };
 
 
@@ -665,13 +672,22 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
 
 /* @ingroup UCT_AM
  * @brief  List of capabilities of active message callback
+ *
+ * A callback must have either SYNC or ASYNC flags.
  */
 enum {
-    UCT_AM_CB_FLAG_DEFAULT     = 0,          /**< callback is always invoked from the thread 
-                                                  that called uct_iface_progress() */
-    UCT_AM_CB_FLAG_THREAD_SAFE = UCS_BIT(1), /**< callback may be invoked from any
-                                                  thread. For example it may be called
-                                                  from transport async progress thread */ 
+    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< callback is always invoked from the context (thread, processs)
+                                            that called uct_iface_progress(). An interface must
+                                            have UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync 
+                                            callback invocation */
+
+    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< callback may be invoked from any conext. For example,
+                                            it may be called from transport async progress thread. To gurantee 
+                                            async invocation, interface must have UCT_IFACE_FLAG_AM_CB_ASYNC 
+                                            flag set. 
+                                             If async callback is set on interface with only 
+                                            UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
+                                            sync callback  */ 
 };
 
 /**
@@ -681,11 +697,14 @@ enum {
  * Only one handler can be set of each active message ID, and setting a handler
  * replaces the previous value. If cb == NULL, the current handler is removed.
  *
+ *
  * @param [in]  iface    Interface to set the active message handler for.
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
  * @param [in]  flags    Required active message callback capabilities 
+ *
+ * @return error code if the interface does not support active messages or requested callback flags
  */
 ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
                                       uct_am_callback_t cb, void *arg, uint32_t flags);

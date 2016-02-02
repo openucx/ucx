@@ -224,7 +224,7 @@ uct_ud_neth_set_type_put(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 
 void uct_ud_ep_process_rx(uct_ud_iface_t *iface, 
                           uct_ud_neth_t *neth, unsigned byte_len, 
-                          uct_ud_recv_skb_t *skb);
+                          uct_ud_recv_skb_t *skb, int is_async);
 
 
 static UCS_F_ALWAYS_INLINE void

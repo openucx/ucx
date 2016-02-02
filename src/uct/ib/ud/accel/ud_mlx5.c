@@ -281,7 +281,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
 }
 
 static UCS_F_ALWAYS_INLINE 
-ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
+ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 {
     struct mlx5_cqe64 *cqe;
     uint16_t ci;
@@ -314,7 +314,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface)
     uct_ud_ep_process_rx(&iface->super,
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
-                         (uct_ud_recv_skb_t *)desc);
+                         (uct_ud_recv_skb_t *)desc, is_async);
     status = UCS_OK;
 
 out:
@@ -347,9 +347,12 @@ static void uct_ud_mlx5_iface_progress(void *arg)
     ucs_status_t status;
 
     uct_ud_enter(&iface->super);
-    status = uct_ud_mlx5_iface_poll_rx(iface);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        uct_ud_mlx5_iface_poll_tx(iface);
+    status = uct_ud_iface_dispatch_pending_rx(&iface->super);
+    if (ucs_likely(status == UCS_OK)) {
+        status = uct_ud_mlx5_iface_poll_rx(iface, 0);
+        if (status == UCS_ERR_NO_PROGRESS) {
+            uct_ud_mlx5_iface_poll_tx(iface);
+        }
     }
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
@@ -361,7 +364,7 @@ static void uct_ud_mlx5_iface_async_progress(void *arg)
     ucs_status_t status;
 
     do {
-        status = uct_ud_mlx5_iface_poll_rx(iface);
+        status = uct_ud_mlx5_iface_poll_rx(iface, 1);
     } while (status == UCS_OK);
 
     uct_ud_mlx5_iface_poll_tx(iface);

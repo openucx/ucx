@@ -62,6 +62,7 @@ struct uct_ud_iface {
     struct {
         ucs_mpool_t          mp;
         unsigned             available;
+        ucs_queue_head_t     pending_q;
     } rx;
     struct {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
@@ -299,6 +300,17 @@ uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
             UCS_CLASS_DELETE(_ep_type_t, _ep); \
         } \
     }
+
+ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
+
+static UCS_F_ALWAYS_INLINE ucs_status_t 
+uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
+{
+    if (ucs_likely(ucs_queue_is_empty(&iface->rx.pending_q))) {
+        return UCS_OK;
+    }
+    return uct_ud_iface_dispatch_pending_rx_do(iface);
+}
 
 #endif
 

@@ -257,7 +257,7 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface)
+uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
     uct_ib_iface_recv_desc_t *desc;
     struct ibv_wc wc[UCT_IB_MAX_WC];
@@ -289,7 +289,7 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface)
         uct_ud_ep_process_rx(&iface->super, 
                              (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                              wc[i].byte_len - UCT_IB_GRH_LEN,
-                             (uct_ud_recv_skb_t *)desc); 
+                             (uct_ud_recv_skb_t *)desc, is_async); 
     }
     iface->super.rx.available += ret;
     status = UCS_OK;
@@ -303,7 +303,7 @@ static void uct_ud_verbs_iface_async_progress(void *arg)
     uct_ud_verbs_iface_t *iface = arg;
     ucs_status_t status;
     do {
-        status = uct_ud_verbs_iface_poll_rx(iface);
+        status = uct_ud_verbs_iface_poll_rx(iface, 1);
     } while (status == UCS_OK);
     uct_ud_verbs_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 1);
@@ -315,9 +315,12 @@ static void uct_ud_verbs_iface_progress(void *arg)
     ucs_status_t status;
 
     uct_ud_enter(&iface->super);
-    status = uct_ud_verbs_iface_poll_rx(iface);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        uct_ud_verbs_iface_poll_tx(iface);
+    status = uct_ud_iface_dispatch_pending_rx(&iface->super);
+    if (status == UCS_OK) {
+        status = uct_ud_verbs_iface_poll_rx(iface, 0);
+        if (status == UCS_ERR_NO_PROGRESS) {
+            uct_ud_verbs_iface_poll_tx(iface);
+        }
     }
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
