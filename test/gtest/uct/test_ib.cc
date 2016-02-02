@@ -155,7 +155,7 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
     recv_buffer->length = 0; /* Initialize length to 0 */
 
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_AM_CB_FLAG_DEFAULT);
+    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
 
     /* send the data */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));

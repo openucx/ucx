@@ -93,7 +93,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
 
     iters = 1000000/ucs::test_time_multiplier();
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_DEFAULT);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_SYNC);
 
     /* send the data until the resources run out */
     i = 0;
@@ -144,7 +144,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
     /* set a callback for the uct to invoke when receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_DEFAULT);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_SYNC);
 
     loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
     /* send while resources are available. try to add a request to pending */

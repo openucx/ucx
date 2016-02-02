@@ -51,14 +51,17 @@ static ucs_status_t uct_iface_stub_am_handler(void *arg, void *data,
 
 static void uct_iface_set_stub_am_handler(uct_base_iface_t *iface, uint8_t id)
 {
-    iface->am[id].cb  = uct_iface_stub_am_handler;
-    iface->am[id].arg = (void*)(uintptr_t)id;
+    iface->am[id].cb    = uct_iface_stub_am_handler;
+    iface->am[id].arg   = (void*)(uintptr_t)id;
+    iface->am[id].flags = UCT_AM_CB_FLAG_ASYNC;
 }
 
 ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
                                       uct_am_callback_t cb, void *arg, uint32_t flags)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    ucs_status_t status;
+    uct_iface_attr_t attr;
 
     if (id >= UCT_AM_ID_MAX) {
         return UCS_ERR_INVALID_PARAM;
@@ -66,10 +69,47 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
 
     if (cb == NULL) {
         uct_iface_set_stub_am_handler(iface, id);
-    } else {
-        iface->am[id].cb  = cb;
-        iface->am[id].arg = arg;
+        return UCS_OK;
     }
+
+    if (flags == 0) {
+        ucs_debug("am cb flags must not be empty");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_iface_query(tl_iface, &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* interface must have am capabilities */
+    if (!(attr.cap.flags & 
+        (UCT_IFACE_FLAG_AM_SHORT|
+         UCT_IFACE_FLAG_AM_BCOPY|
+         UCT_IFACE_FLAG_AM_ZCOPY))) {
+        ucs_debug("attempt to set am cb on iface without active message capabilites");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (flags & UCT_AM_CB_FLAG_SYNC) {
+        /* to use sync cb iface must have sync flag */
+        if (!(attr.cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
+            ucs_debug("am cb sync requested on the interface that does not support it");
+            return UCS_ERR_INVALID_PARAM;
+        }
+    } else if (flags & UCT_AM_CB_FLAG_ASYNC) {
+        /* async cb can be set for any iface. In that case it will act as a sync one */ 
+        if (!(attr.cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC)) {
+            ucs_debug("am cb async requested on the interface that does not support it. It may be an error");
+        }
+    } else {
+        ucs_debug("am cb invalid capabilites requested 0x%x", flags);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    iface->am[id].cb    = cb;
+    iface->am[id].arg   = arg;
+    iface->am[id].flags = flags;
     return UCS_OK;
 }
 

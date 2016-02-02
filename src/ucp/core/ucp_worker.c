@@ -89,6 +89,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     uct_iface_config_t *iface_config;
     ucs_status_t status;
     uct_iface_h iface;
+    uct_iface_attr_t *attr;
 
     /* Read configuration
      * TODO pass env_prefix from context */
@@ -113,15 +114,20 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
-    /* Set active message handlers for tag matching */
-    status = ucp_worker_set_am_handlers(worker, iface);
-    if (status != UCS_OK) {
-        goto out_close_iface;
-    }
+    attr = &worker->iface_attrs[rsc_index];
 
-    status = uct_iface_set_am_tracer(iface, ucp_worker_am_tracer, worker);
-    if (status != UCS_OK) {
-        goto out_close_iface;
+    /* Set active message handlers for tag matching */
+    if ((attr->cap.flags & (UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) &&
+        (attr->cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
+        status = ucp_worker_set_am_handlers(worker, iface);
+        if (status != UCS_OK) {
+            goto out_close_iface;
+        }
+
+        status = uct_iface_set_am_tracer(iface, ucp_worker_am_tracer, worker);
+        if (status != UCS_OK) {
+            goto out_close_iface;
+        }
     }
 
     ucs_debug("created interface[%d] using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",

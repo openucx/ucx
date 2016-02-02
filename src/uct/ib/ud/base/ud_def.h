@@ -128,7 +128,15 @@ typedef struct uct_ud_send_skb_inl {
 
 typedef struct uct_ud_recv_skb {
     uct_ib_iface_recv_desc_t super;
-    ucs_frag_list_elem_t     ooo_elem;
+    union {
+        struct { 
+            ucs_frag_list_elem_t     elem;
+        } ooo;
+        struct { 
+            ucs_queue_elem_t         queue;
+            uint32_t                 len;
+        } am;
+    } u;
 } uct_ud_recv_skb_t;
 
 typedef struct uct_ud_am_short_hdr {

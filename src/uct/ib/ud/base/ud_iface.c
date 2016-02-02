@@ -23,6 +23,8 @@ static void uct_ud_iface_reserve_skbs(uct_ud_iface_t *iface, int count);
 static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface);
 static void uct_ud_iface_timer(void *arg);
 
+static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
+
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
 {
     sglib_hashed_uct_ud_iface_peer_t_init(iface->peers);
@@ -368,6 +370,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     self->tx.pending_q_len = 0;
     self->tx.in_pending = 0;
 
+    ucs_queue_head_init(&self->rx.pending_q);
+
     uct_ud_enter(self); 
     status = ucs_async_add_timer(self->super.super.worker->async->mode,
                                  uct_ud_slow_tick(), /* TODO: make configurable */
@@ -403,6 +407,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     uct_ud_iface_free_res_skbs(self);
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
+    uct_ud_iface_free_pending_rx(self);
     ucs_mpool_cleanup(&self->rx.mp, 0);
     ibv_destroy_qp(self->qp);
     ucs_debug("iface(%p): ptr_array cleanup", self);
@@ -432,7 +437,9 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                         UCT_IFACE_FLAG_AM_BCOPY | 
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_PENDING;
+                                        UCT_IFACE_FLAG_PENDING |
+                                        UCT_IFACE_FLAG_AM_CB_SYNC |
+                                        UCT_IFACE_FLAG_AM_CB_ASYNC;
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
@@ -551,6 +558,43 @@ static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface)
         ucs_mpool_put(skb);
     }
 }
+
+ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
+{
+    int count;
+    uct_ud_recv_skb_t *skb;
+    uct_ud_neth_t *neth;
+
+    count = 0;
+    do {
+        skb = ucs_queue_pull_elem_non_empty(&iface->rx.pending_q, uct_ud_recv_skb_t, u.am.queue);
+        neth =  (uct_ud_neth_t *)((char *)uct_ib_iface_recv_desc_hdr(&iface->super, 
+                                                                     (uct_ib_iface_recv_desc_t *)skb) +
+                                  UCT_IB_GRH_LEN);
+        uct_ib_iface_invoke_am(&iface->super, 
+                               uct_ud_neth_get_am_id(neth),
+                               neth + 1,
+                               skb->u.am.len, 
+                               &skb->super);
+        count++;
+        if (count >= UCT_IB_MAX_WC) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+    } while (!ucs_queue_is_empty(&iface->rx.pending_q));
+
+    return UCS_OK;
+}
+
+static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
+{
+    uct_ud_recv_skb_t *skb;
+
+    while (!ucs_queue_is_empty(&iface->rx.pending_q)) {
+        skb = ucs_queue_pull_elem_non_empty(&iface->rx.pending_q, uct_ud_recv_skb_t, u.am.queue);
+        ucs_mpool_put(skb);
+    }
+}
+
 
 static void uct_ud_iface_timer(void *arg)
 {

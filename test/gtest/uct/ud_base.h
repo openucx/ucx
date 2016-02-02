@@ -25,8 +25,6 @@ public:
 
     uct_ud_iface_t *iface(entity *e);
 
-    void twait(int delta_ms);
-
     void connect();
 
     void cleanup();
