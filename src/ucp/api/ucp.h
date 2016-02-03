@@ -538,11 +538,11 @@ void ucp_worker_destroy(ucp_worker_h worker);
 
 
 /**
- * @ingroup UCP_CONTEXT
+ * @ingroup UCP_WORKER
  * @bried Print information about protocols that would be used by a worker.
  *
  * This routine prints information about the protocols being used, thresholds,
- * UCT methods, and so on, used by the current context.
+ * UCT transport methods, and other useful information associated with the worker.
  *
  * @param [in] context      Handle to @ref ucp_context_h "UCP application context".
  * @param [in] stream       Output stream to print the information to.
