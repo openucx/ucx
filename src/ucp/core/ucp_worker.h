@@ -26,6 +26,7 @@ typedef struct ucp_worker {
 #if ENABLE_ASSERT
     int                           inprogress;
 #endif
+    unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucp_ep_t                      **ep_hash;     /* Hash table of all endpoints */
     uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */

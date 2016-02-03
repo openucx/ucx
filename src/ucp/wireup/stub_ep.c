@@ -39,6 +39,7 @@ static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req
     ucp_ep_h ep = stub_ep->ep;
 
     ucs_queue_push(&stub_ep->pending_q, ucp_stub_ep_req_priv(req));
+    ++ep->worker->stub_pend_count;
 
     /* Add a reference to the dummy progress function. If we have a pending
      * request and this endpoint is still doing wireup, we must make sure progress
