@@ -7,12 +7,14 @@
 #include "ucp_test.h"
 
 class test_ucp_wireup : public ucp_test {
-protected:
-    virtual void get_params(ucp_params_t& params) const {
-        ucp_test::get_params(params);
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_TAG;
+        return params;
     }
 
+protected:
     static void send_completion(void *request, ucs_status_t status) {
     }
 
@@ -28,7 +30,7 @@ protected:
     }
 };
 
-UCS_TEST_F(test_ucp_wireup, one_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
 
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const uint64_t TAG = 0xdeadbeef;
@@ -57,10 +59,12 @@ UCS_TEST_F(test_ucp_wireup, one_sided_wireup) {
     ucp_worker_flush(sender->worker());
 }
 
-UCS_TEST_F(test_ucp_wireup, two_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
     entity *sender   = create_entity();
     entity *receiver = create_entity();
 
     sender->connect(receiver);
     receiver->connect(sender);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)

@@ -373,6 +373,20 @@ void ucp_config_release(ucp_config_t *config);
 
 /**
  * @ingroup UCP_CONFIG
+ * @brief Modify context configuration.
+ *
+ * @param [in]  config        Configuration to modify.
+ * @param [in]  name          Configuration variable name.
+ * @param [in]  value         Value to set.
+ *
+ * @return Error code.
+ */
+ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
+                               const char *value);
+
+
+/**
+ * @ingroup UCP_CONFIG
  * @brief Print configuration information
  *
  * The routine prints the configuration information that is stored in

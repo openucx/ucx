@@ -13,6 +13,8 @@
 #define MB   pow(1024.0, -2)
 
 class test_ucp_perf : public ucp_test, public test_perf {
+public:
+    using ucp_test::get_ctx_params;
 protected:
     static test_spec tests[];
 };
@@ -69,9 +71,14 @@ test_perf::test_spec test_ucp_perf::tests[] =
 };
 
 
-UCS_TEST_F(test_ucp_perf, envelope) {
+UCS_TEST_P(test_ucp_perf, envelope) {
     /* Run all tests */
+    std::stringstream ss;
+    ss << GetParam();
+    ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     for (test_spec *test = tests; test->title != NULL; ++test) {
         run_test(*test, UCX_PERF_TEST_FLAG_ONE_SIDED, test->min, test->max, "", "");
     }
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)

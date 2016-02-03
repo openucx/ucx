@@ -15,6 +15,15 @@ extern "C" {
 using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_tag : public ucp_test {
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.features     = UCP_FEATURE_TAG;
+        params.request_size = sizeof(request);
+        params.request_init = request_init;
+        return params;
+    }
+
 protected:
     struct request {
         bool                completed;
@@ -43,13 +52,6 @@ protected:
         receiver->flush();
         sender->disconnect();
         ucp_test::cleanup();
-    }
-
-    virtual void get_params(ucp_params_t& params) const {
-        ucp_test::get_params(params);
-        params.features     = UCP_FEATURE_TAG;
-        params.request_size = sizeof(request);
-        params.request_init = request_init;
     }
 
     static void request_init(void *request) {
@@ -229,7 +231,7 @@ int test_ucp_tag::dt_gen_start_count = 0;
 int test_ucp_tag::dt_gen_finish_count = 0;
 
 
-UCS_TEST_F(test_ucp_tag, send_recv_exp) {
+UCS_TEST_P(test_ucp_tag, send_recv_exp) {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
@@ -248,7 +250,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp) {
     EXPECT_EQ(send_data, recv_data);
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_unexp) {
+UCS_TEST_P(test_ucp_tag, send_recv_unexp) {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
@@ -267,7 +269,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_unexp) {
     EXPECT_EQ(send_data, recv_data);
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_exp_medium) {
+UCS_TEST_P(test_ucp_tag, send_recv_exp_medium) {
     static const size_t size = 50000;
     ucs_status_t status;
     ucp_tag_recv_info_t info;
@@ -287,7 +289,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp_medium) {
     EXPECT_EQ(sendbuf, recvbuf);
 }
 
-UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
+UCS_TEST_P(test_ucp_tag, send2_nb_recv_exp_medium) {
     static const size_t size = 50000;
     ucp_tag_recv_info_t info;
     ucs_status_t status;
@@ -326,7 +328,7 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_exp_medium) {
     }
 }
 
-UCS_TEST_F(test_ucp_tag, send2_nb_recv_medium_wildcard) {
+UCS_TEST_P(test_ucp_tag, send2_nb_recv_medium_wildcard) {
     static const size_t size = 3000000;
 
     entity *sender1 = create_entity();
@@ -425,7 +427,7 @@ UCS_TEST_F(test_ucp_tag, send2_nb_recv_medium_wildcard) {
     sender2->disconnect();
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_nb_partial_exp_medium) {
+UCS_TEST_P(test_ucp_tag, send_recv_nb_partial_exp_medium) {
     static const size_t size = 50000;
 
     std::vector<char> sendbuf(size, 0);
@@ -454,6 +456,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_nb_partial_exp_medium) {
 }
 
 UCS_TEST_F(test_ucp_tag, send_recv_unexp_medium) {
+UCS_TEST_P(test_ucp_tag, send_recv_unexp_medium) {
     static const size_t size = 50000;
     ucs_status_t status;
     ucp_tag_recv_info_t info;
@@ -475,7 +478,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_unexp_medium) {
     EXPECT_EQ(sendbuf, recvbuf);
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_exp_gentype) {
+UCS_TEST_P(test_ucp_tag, send_recv_exp_gentype) {
     size_t counts[3];
     counts[0] = 0;
     counts[1] = 100;
@@ -511,7 +514,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_exp_gentype) {
     }
 }
 
-UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
+UCS_TEST_P(test_ucp_tag, send_nb_recv_unexp) {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
@@ -540,7 +543,7 @@ UCS_TEST_F(test_ucp_tag, send_nb_recv_unexp) {
     }
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_truncated) {
+UCS_TEST_P(test_ucp_tag, send_recv_truncated) {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
@@ -554,7 +557,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_truncated) {
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
+UCS_TEST_P(test_ucp_tag, send_recv_nb_exp) {
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
@@ -579,7 +582,7 @@ UCS_TEST_F(test_ucp_tag, send_recv_nb_exp) {
     request_release(my_recv_req);
 }
 
-UCS_TEST_F(test_ucp_tag, send_nb_multiple_recv_unexp) {
+UCS_TEST_P(test_ucp_tag, send_nb_multiple_recv_unexp) {
     const unsigned num_requests = 1000;
     ucp_tag_recv_info_t info;
     ucs_status_t status;
@@ -618,7 +621,7 @@ UCS_TEST_F(test_ucp_tag, send_nb_multiple_recv_unexp) {
     }
 }
 
-UCS_TEST_F(test_ucp_tag, send_probe) {
+UCS_TEST_P(test_ucp_tag, send_probe) {
 
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
@@ -652,7 +655,7 @@ UCS_TEST_F(test_ucp_tag, send_probe) {
     request_release(my_recv_req);
 }
 
-UCS_TEST_F(test_ucp_tag, send_medium_msg_probe) {
+UCS_TEST_P(test_ucp_tag, send_medium_msg_probe) {
     static const size_t size = 50000;
     ucp_tag_recv_info info;
     ucp_tag_message_h message;
@@ -689,7 +692,7 @@ UCS_TEST_F(test_ucp_tag, send_medium_msg_probe) {
     request_release(my_recv_req);
 }
 
-UCS_TEST_F(test_ucp_tag, send_medium_msg_probe_truncated) {
+UCS_TEST_P(test_ucp_tag, send_medium_msg_probe_truncated) {
     static const size_t size = 50000;
     ucp_tag_recv_info info;
     ucp_tag_message_h message;
@@ -719,7 +722,7 @@ UCS_TEST_F(test_ucp_tag, send_medium_msg_probe_truncated) {
     request_release(my_recv_req);
 }
 
-UCS_TEST_F(test_ucp_tag, cancel_exp) {
+UCS_TEST_P(test_ucp_tag, cancel_exp) {
     uint64_t recv_data = 0;
     request *req;
 
@@ -738,3 +741,5 @@ UCS_TEST_F(test_ucp_tag, cancel_exp) {
     EXPECT_EQ(0ul, recv_data);
     request_release(req);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag)
