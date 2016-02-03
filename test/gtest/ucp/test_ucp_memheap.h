@@ -44,7 +44,7 @@ protected:
     void test_blocking_xfer(blocking_send_func_t send, size_t alignment);
     void test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send, size_t alignment);
 
-    virtual void get_params(ucp_params_t& params) const;
+    static ucp_params_t get_ctx_params();
 };
 
 

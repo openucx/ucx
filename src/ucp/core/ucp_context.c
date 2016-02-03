@@ -113,6 +113,12 @@ void ucp_config_release(ucp_config_t *config)
     ucs_free(config);
 }
 
+ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
+                               const char *value)
+{
+    return ucs_config_parser_set_value(config,ucp_config_table, name, value);
+}
+
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
@@ -476,8 +482,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_status_t status;
 
     if (0 == params->features) {
-        ucs_error("empty features set passed to ucp context create");
-        return UCS_ERR_INVALID_PARAM;
+        ucs_warn("empty features set passed to ucp context create");
     }
 
     context->config.features        = params->features;

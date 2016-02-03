@@ -8,6 +8,8 @@
 
 
 class test_ucp_mmap : public test_ucp_memheap {
+public:
+    using test_ucp_memheap::get_ctx_params;
 protected:
     void test_mapped_memory(entity *e, ucp_mem_h memh, void *ptr, size_t size);
 };
@@ -37,7 +39,7 @@ void test_ucp_mmap::test_mapped_memory(entity *e, ucp_mem_h memh,
 }
 
 
-UCS_TEST_F(test_ucp_mmap, alloc) {
+UCS_TEST_P(test_ucp_mmap, alloc) {
     ucs_status_t status;
     entity *e = create_entity();
 
@@ -63,7 +65,7 @@ UCS_TEST_F(test_ucp_mmap, alloc) {
     }
 }
 
-UCS_TEST_F(test_ucp_mmap, reg) {
+UCS_TEST_P(test_ucp_mmap, reg) {
 
     ucs_status_t status;
     entity *e = create_entity();
@@ -92,3 +94,5 @@ UCS_TEST_F(test_ucp_mmap, reg) {
         free(ptr);
     }
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_mmap)
