@@ -129,7 +129,7 @@ UCS_TEST_P(test_ud_pending, connect)
         r[i].func = pending_cb_dispatch;
         EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
     }
-    short_progress_loop(10);
+    short_progress_loop();
     /* now all work should be complete */
     EXPECT_EQ(N, req_count);
     uct_ep_pending_purge(m_e1->ep(0), pending_cb);

@@ -41,6 +41,8 @@ public:
 
     void disable_async(entity *e);
 
+    virtual void short_progress_loop(double delta_ms=10.0);
+
 protected:
     entity *m_e1, *m_e2;
     uint64_t m_dummy;
