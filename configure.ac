@@ -124,6 +124,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      m4_include([config/m4/compiler.m4])
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucs.m4])
+     m4_include([config/m4/ucm.m4])
      m4_include([config/m4/ib.m4])
      m4_include([config/m4/cray_ugni.m4])
      m4_include([config/m4/mpi.m4])
