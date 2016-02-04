@@ -861,7 +861,7 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * message matching on the @ref ucp_tag_recv_nb "receiver".  The routine is
  * non-blocking and therefore returns immediately, however the actual send
  * operation may be delayed.  The send operation is considered completed when
- * it is safe to reuse the source @e buffer.  If the operation is
+ * it is safe to reuse the source @e buffer.  If the send operation is
  * completed immediately the routine return UCS_OK and the call-back function
  * @a cb is @b not invoked. If the operation is @b not completed immediately
  * and no error reported then the UCP library will schedule to invoke the
@@ -879,10 +879,10 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed in place.
  *
- * @return UCS_OK           - The send operation was completed completed
- *                          immediately.
+ * @return UCS_OK           - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
- * @return otherwise        - Operation was scheduled for send. The request handle
+ * @return otherwise        - Operation was scheduled for send or was already
+ *                          completed (after scheduling). The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
  *                          responsible to released the handle using
