@@ -16,7 +16,7 @@ void print_ucp_config(ucs_config_print_flags_t print_flags)
 
     status = ucp_config_read(NULL, NULL, &config);
     if (status != UCS_OK) {
-        printf("<Failed to read UCP configuraton>");
+        printf("<Failed to read UCP configuraton>\n");
         return;
     }
 

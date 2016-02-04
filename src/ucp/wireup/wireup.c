@@ -57,18 +57,10 @@ static void ucp_wireup_stop_aux(ucp_ep_h ep);
 
 static void ucp_wireup_ep_ready_to_send(ucp_ep_h ep)
 {
-    ucp_worker_h worker          = ep->worker;
-    uct_iface_attr_t *iface_attr = &worker->iface_attrs[ep->rsc_index];
+    ep->state |= UCP_EP_STATE_READY_TO_SEND;
 
-    ucs_debug("ready to send to %s 0x%"PRIx64"->0x%"PRIx64,
-              ucp_ep_peer_name(ep), worker->uuid, ep->dest_uuid);
-
-    ep->state               |= UCP_EP_STATE_READY_TO_SEND;
-    ep->config.max_short_egr = iface_attr->cap.am.max_short - sizeof(ucp_tag_t);
-    ep->config.max_bcopy_egr = iface_attr->cap.am.max_bcopy - sizeof(ucp_eager_hdr_t);
-    ep->config.max_short_put = iface_attr->cap.put.max_short;
-    ep->config.max_bcopy_put = iface_attr->cap.put.max_bcopy;
-    ep->config.max_bcopy_get = iface_attr->cap.get.max_bcopy;
+    ucs_debug("ready to send to %s 0x%"PRIx64"->0x%"PRIx64, ucp_ep_peer_name(ep),
+              ep->worker->uuid, ep->dest_uuid);
 }
 
 static ucp_stub_ep_t * ucp_ep_get_stub_ep(ucp_ep_h ep)
