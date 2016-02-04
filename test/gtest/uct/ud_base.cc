@@ -43,7 +43,7 @@ void ud_base_test::twait(int delta_ms)
     } while (now + ucs_time_from_msec(delta_ms) > ucs_get_time());
 }
 
-void ud_base_test::short_progress_loop(double delta_ms)
+void ud_base_test::short_progress_loop(double delta_ms) const
 {
     uct_test::short_progress_loop(delta_ms);
 }
