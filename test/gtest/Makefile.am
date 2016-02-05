@@ -1,7 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -52,9 +52,6 @@ gtest_SOURCES = \
 	common/test_helpers.cc \
 	common/test_perf.cc \
 	common/test.cc \
-	\
-	ucm/malloc_hook.cc \
-	\
 	uct/test_amo.cc \
 	uct/test_amo_add.cc \
 	uct/test_amo_cswap.cc \
@@ -106,6 +103,11 @@ gtest_SOURCES = \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc
+
+if ! ENABLE_SYMBOL_OVERRIDE
+gtest_SOURCES += \
+	ucm/malloc_hook.cc
+endif
 
 if HAVE_IB
 gtest_SOURCES += \
