@@ -881,8 +881,8 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  *
  * @return UCS_OK           - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
- * @return otherwise        - Operation was scheduled for send or was already
- *                          completed (after scheduling). The request handle
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
  *                          responsible to released the handle using
