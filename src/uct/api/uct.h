@@ -188,12 +188,12 @@ enum {
     UCT_IFACE_FLAG_AM_CB_SYNC       = UCS_BIT(44), /**< Interface supports setting active message callback
                                                         which is invoked only from the calling context of
                                                         uct_worker_progress() */
-    UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(45), /**< Interdace supports setting active message callback
+    UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(45), /**< Interface supports setting active message callback
                                                         which will be invoked within a reasonable amount of 
-                                                        time if uct_worker_progress() is not being called,
-                                                        possibly from another thread. Active message callback
-                                                        may also be invoked when uct_worker_progress() 
-                                                        is called.  */
+                                                        time if uct_worker_progress() is not being called.
+                                                        The callback can be invoked from any progress context
+                                                        and it may also be invoked when uct_worker_progress() 
+                                                        is called. */
 };
 
 
