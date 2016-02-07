@@ -104,6 +104,8 @@ AS_IF([test "x$with_valgrind" == xno],
 # Malloc hooks
 #
 AC_MSG_CHECKING([malloc hooks])
+SAVE_CFLAGS=$CFLAGS
+CFLAGS="$CFLAGS $CFLAGS_NO_DEPRECATED"
 CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
                                   static int rc = 1;
                                   void *myhook(size_t size, const void *caller) {
@@ -120,3 +122,4 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
                  [AC_MSG_RESULT([no])
                   AC_MSG_WARN([malloc hooks are not supported])]
                 )
+CFLAGS=$SAVE_CFLAGS
