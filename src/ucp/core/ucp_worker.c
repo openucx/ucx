@@ -114,7 +114,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
-    attr = &worker->iface_attrs[rsc_index];
+    attr = &worker->iface_attrs[tl_id];
 
     /* Set active message handlers for tag matching */
     if ((attr->cap.flags & (UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) &&
