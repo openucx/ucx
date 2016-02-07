@@ -13,7 +13,7 @@
 #include <ucm/api/ucm.h>
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
-#include "../util/reloc.h"
+#include <ucm/util/reloc.h>
 #include <ucm/util/ucm_config.h>
 
 #include <sys/mman.h>
