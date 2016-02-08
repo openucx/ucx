@@ -103,8 +103,13 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     done
 
-    echo "Running MPI tests"
+    echo "Running memory hook on MPI"
     mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks
+
+    echo "Running memory hook on MPI with LD_PRELOAD"
+    ucm_lib=$PWD/src/ucm/.libs/libucm.so
+    ls -l $ucm_lib
+    mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks
 
     module unload hpcx-gcc
 

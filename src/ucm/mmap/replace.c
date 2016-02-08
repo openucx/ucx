@@ -16,19 +16,21 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/type/component.h>
-#include <dlfcn.h>
+#include <pthread.h>
 
 
 #define MAP_FAILED ((void*)-1)
 
-static __thread int ucm_mmap_reentry = 0;
+static pthread_mutex_t ucm_mmap_get_orig_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static pthread_t volatile ucm_mmap_get_orig_thread = -1;
+
 
 /**
  * Define a replacement function to a memory-mapping function call, which calls
  * the event handler, and if event handler returns error code - calls the original
  * function.
  */
-#define UCM_DEFINE_MM_FUNC(_name, _event_type, _rettype, _fail_val, ...) \
+#define UCM_DEFINE_MM_FUNC(_name, _rettype, _fail_val, ...) \
     \
     _rettype ucm_override_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)); \
     \
@@ -39,9 +41,14 @@ static __thread int ucm_mmap_reentry = 0;
         static func_ptr_t orig_func_ptr = NULL; \
         \
         ucm_trace("%s()", __FUNCTION__); \
+        \
         if (ucs_unlikely(orig_func_ptr == NULL)) { \
+            pthread_mutex_lock(&ucm_mmap_get_orig_lock); \
+            ucm_mmap_get_orig_thread = pthread_self(); \
             orig_func_ptr = ucm_reloc_get_orig(UCS_PP_QUOTE(_name), \
                                                ucm_override_##_name); \
+            ucm_mmap_get_orig_thread = -1; \
+            pthread_mutex_unlock(&ucm_mmap_get_orig_lock); \
         } \
         return orig_func_ptr(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     } \
@@ -49,18 +56,12 @@ static __thread int ucm_mmap_reentry = 0;
     /* Define a symbol which goes to the replacement - in case we are loaded first */ \
     _rettype ucm_override_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \
     { \
-        _rettype ret; \
-        \
         ucm_trace("%s()", __FUNCTION__); \
-        if (ucm_mmap_reentry) { \
-            ucm_debug("failing on recursive call for %s", #_name); \
-            return _fail_val; /* fail on re-entry - avoid recursive events */ \
-        } \
         \
-        ucm_mmap_reentry = 1; \
-        ret = ucm_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
-        ucm_mmap_reentry = 0; \
-        return ret; \
+        if (ucs_unlikely(ucm_mmap_get_orig_thread == pthread_self())) { \
+            return _fail_val; \
+        } \
+        return ucm_##_name(UCM_FUNC_PASS_ARGS(__VA_ARGS__)); \
     }
 
 #define UCM_OVERRIDE_MM_FUNC(_name) \
@@ -93,18 +94,12 @@ static __thread int ucm_mmap_reentry = 0;
     UCS_PP_TOKENPASTE(arg, _index)
 
 
-UCM_DEFINE_MM_FUNC(mmap,  UCM_EVENT_MMAP,   void*, MAP_FAILED,
-                   void*, size_t, int, int, int, off_t)
-UCM_DEFINE_MM_FUNC(munmap,UCM_EVENT_MUNMAP, int,   -1,
-                   void*, size_t)
-UCM_DEFINE_MM_FUNC(mremap,UCM_EVENT_MREMAP, void*, MAP_FAILED,
-                   void*, size_t, size_t, int)
-UCM_DEFINE_MM_FUNC(shmat, UCM_EVENT_SHMAT,  void*, MAP_FAILED,
-                   int, const void*, int)
-UCM_DEFINE_MM_FUNC(shmdt, UCM_EVENT_SHMDT,  int,   -1,
-                   const void*)
-UCM_DEFINE_MM_FUNC(sbrk,  UCM_EVENT_SBRK,   void*, MAP_FAILED,
-                   intptr_t)
+UCM_DEFINE_MM_FUNC(mmap,   void*, MAP_FAILED, void*, size_t, int, int, int, off_t)
+UCM_DEFINE_MM_FUNC(munmap, int,   -1,         void*, size_t)
+UCM_DEFINE_MM_FUNC(mremap, void*, MAP_FAILED, void*, size_t, size_t, int)
+UCM_DEFINE_MM_FUNC(shmat,  void*, MAP_FAILED, int, const void*, int)
+UCM_DEFINE_MM_FUNC(shmdt,  int,   -1,         const void*)
+UCM_DEFINE_MM_FUNC(sbrk,   void*, MAP_FAILED, intptr_t)
 
 #if ENABLE_SYMBOL_OVERRIDE
 UCM_OVERRIDE_MM_FUNC(mmap)
