@@ -107,9 +107,11 @@ typedef void (*uct_completion_callback_t)(uct_completion_t *self);
  * @param [in]  self     Pointer to relevant pending structure, which was
  *                       initially passed to the operation.
  *
- * @return UCS_OK     - This pending request should be removed.
- *         Otherwise  - Keep this pending request on the queue, and stop
- *                       processing the queue.
+ * @return UCS_OK         - This pending request has completed and should be removed.
+ *         UCS_INPROGRESS - Some progress was made, but not completed. Keep this
+ *                          request and keep processing the queue.
+ *         Otherwise      - Could not make any progress. Keep this pending request
+ *                          on the queue, and stop processing the queue.
  */
 typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
 

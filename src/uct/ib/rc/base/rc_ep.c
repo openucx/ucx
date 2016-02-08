@@ -258,6 +258,8 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else if (status == UCS_INPROGRESS) {
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
         ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
         if (ep->available <= 0) {
