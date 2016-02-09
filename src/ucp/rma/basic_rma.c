@@ -141,7 +141,7 @@ void ucp_add_pending_rma(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.rma.rkey = rkey;
     req->send.uct.func = cb;
     req->flags = UCP_REQUEST_FLAG_RELEASED;
-    ucp_ep_add_pending(ep, ep->uct_ep, req);
+    ucp_ep_add_pending(ep, ep->uct_ep, req, 1);
 }
 
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,

@@ -76,7 +76,8 @@ ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
     return UCS_ERR_NO_PROGRESS;
 }
 
-void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req)
+void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
+                        int progress)
 {
     ucs_status_t status;
 
@@ -84,10 +85,13 @@ void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req)
                    &req->send.uct, uct_ep);
 
     req->send.ep = ep;
-    do {
+    status = ucp_ep_add_pending_uct(ep, uct_ep, &req->send.uct);
+    while (status != UCS_OK) {
+        if (progress) {
+            ucp_worker_progress(ep->worker);
+        }
         status = ucp_ep_add_pending_uct(ep, uct_ep, &req->send.uct);
-        ucp_worker_progress(ep->worker);
-    } while (status != UCS_OK);
+    }
 }
 
 ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
