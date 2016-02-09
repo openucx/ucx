@@ -1,6 +1,7 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (c) Los Alamos National Security, LLC. 2016.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -13,14 +14,7 @@
 
 static ucs_status_t uct_xpmem_query()
 {
-    int fd, ver;
-
-    fd = open(XPMEM_DEV_PATH, O_RDWR);
-    if (fd < 0) {
-        ucs_debug("Could not open the XPMEM device file at /dev/xpmem: %m. Disabling xpmem resource");
-        return UCS_ERR_UNSUPPORTED;
-    }
-    close(fd);
+    int ver;
 
     ver = xpmem_version();
     if (ver < 0) {
