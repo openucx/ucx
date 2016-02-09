@@ -189,6 +189,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 #if ENABLE_ASSERT
     worker->inprogress    = 0;
 #endif
+    worker->stub_pend_count = 0;
 
     worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_WORKER_EP_HASH_SIZE,
                                  "ucp_ep_hash");

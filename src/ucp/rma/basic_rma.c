@@ -378,6 +378,10 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker)
 {
     unsigned rsc_index;
 
+    while (worker->stub_pend_count > 0) {
+        ucp_worker_progress(worker);
+    }
+
     /* TODO flush in parallel */
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
         if (worker->ifaces[rsc_index] == NULL) {

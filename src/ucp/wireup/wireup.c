@@ -136,6 +136,7 @@ void ucp_wireup_progress(ucp_ep_h ep)
         do {
             status = ucp_ep_add_pending_uct(ep, uct_ep, req);
         } while (status != UCS_OK);
+        --ep->worker->stub_pend_count;
     }
 }
 
