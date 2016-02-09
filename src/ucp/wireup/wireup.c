@@ -381,7 +381,8 @@ static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
 
 static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint16_t flags,
                                        ucp_rsc_index_t dst_rsc_index,
-                                       ucp_rsc_index_t dst_aux_rsc_index)
+                                       ucp_rsc_index_t dst_aux_rsc_index,
+                                       int allow_progress)
 {
     uct_ep_h uct_ep = ucp_wireup_msg_ep(ep);
     ucp_request_t* req;
@@ -405,7 +406,7 @@ static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint16_t flags,
     req->send.wireup.dst_rsc_index     = dst_rsc_index;
     req->send.wireup.dst_aux_rsc_index = dst_aux_rsc_index;
     ucs_atomic_add32(&ucp_ep_get_stub_ep(ep)->pending_count, 1);
-    ucp_ep_add_pending(ep, uct_ep, req);
+    ucp_ep_add_pending(ep, uct_ep, req, allow_progress);
     return UCS_OK;
 }
 
@@ -580,7 +581,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
         /* Send a reply, which also includes the address of next_ep */
         status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_REPLY|UCP_WIREUP_FLAG_ADDR,
-                                    msg->src_rsc_index, -1);
+                                    msg->src_rsc_index, -1, 0);
         if (status != UCS_OK) {
             return;
         }
@@ -649,7 +650,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
      * We can use the new ep even from async thread, because main thread will not
      * started using it before ACK_SENT is turned on.
      */
-    status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_ACK, msg->src_rsc_index, -1);
+    status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_ACK, msg->src_rsc_index, -1, 0);
     if (status != UCS_OK) {
         return;
     }
@@ -903,7 +904,7 @@ ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address)
     /* Send initial connection request for wiring-up the transport */
     status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_REQUSET|UCP_WIREUP_FLAG_ADDR|
                                     UCP_WIREUP_FLAG_AUX_ADDR,
-                                dst_rsc_index, dst_aux_rsc_index);
+                                dst_rsc_index, dst_aux_rsc_index, 1);
     if (status != UCS_OK) {
         goto err_stop_aux;
     }

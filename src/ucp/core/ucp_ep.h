@@ -81,7 +81,8 @@ void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
                                     uct_pending_req_t *req);
 
-void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req);
+void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
+                        int progress);
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 {
