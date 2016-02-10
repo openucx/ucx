@@ -56,7 +56,8 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_ATOMIC_ADD64   |
                                          UCT_IFACE_FLAG_GET_BCOPY      |
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
-                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                         UCT_IFACE_FLAG_PENDING;
 
     if(GNI_DEVICE_ARIES == iface->super.dev->type) {
         iface_attr->cap.flags         |= UCT_IFACE_FLAG_PUT_SHORT |
