@@ -7,7 +7,7 @@
 
 #include "uct_test.h"
 
-#include <gtest/base/test_perf.h>
+#include <gtest/common/test_perf.h>
 extern "C" {
 #include <ucs/arch/cpu.h>
 }
