@@ -101,7 +101,7 @@ ucs_status_ptr_t ucp_tag_send_slow(ucp_ep_h ep, const void *buffer, size_t count
     }
 
     if (!(req->flags & UCP_REQUEST_FLAG_COMPLETED)) {
-        ucp_ep_add_pending(ep, ep->uct_ep, req);
+        ucp_ep_add_pending(ep, ep->uct_ep, req, 1);
         ucp_worker_progress(ep->worker);
     }
 
