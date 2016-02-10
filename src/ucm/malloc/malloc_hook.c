@@ -551,6 +551,7 @@ ucs_status_t ucm_malloc_install(int events)
      * have a way to call the original free(), also these hooks don't work with
      * valgrind anyway.
      */
+#if HAVE_MALLOC_HOOK
     if (ucm_global_config.enable_malloc_hooks) {
         /* Install using malloc hooks.
          * TODO detect glibc support in configure-time.
@@ -569,7 +570,9 @@ ucs_status_t ucm_malloc_install(int events)
         if (ucm_malloc_hook_state.hook_called) {
             goto out_install_opt_syms;
         }
-    } else {
+    } else
+#endif
+    {
         ucm_debug("using malloc hooks is disabled by configuration");
     }
 

@@ -704,7 +704,9 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
         req = ucs_container_of(elem, uct_pending_req_t, priv);
         status = req->func(req);
 
-        if (status != UCS_OK) {
+        if (status == UCS_INPROGRESS) {
+            return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+        } else if (status != UCS_OK) {
             /* avoid deadlock: send low priority ctl if user cb failed
              * no need to check for low prio here because we 
              * already checked above. 

@@ -19,6 +19,7 @@ static void usage() {
     printf("  -s         System\n");
     printf("  -d         Devices\n");
     printf("  -c         Configuration\n");
+    printf("  -p         Protocols\n");
     printf("  -a         Show also hidden configuration\n");
     printf("  -b         Build configuration\n");
     printf("  -y         Type information\n");
@@ -37,7 +38,7 @@ int main(int argc, char **argv)
     print_opts  = 0;
     print_flags = 0;
     tl_name     = NULL;
-    while ((c = getopt(argc, argv, "fahvcydbst:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbspt:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -62,6 +63,9 @@ int main(int argc, char **argv)
             break;
         case 's':
             print_opts |= PRINT_SYS_INFO;
+            break;
+        case 'p':
+            print_opts |= PRINT_PROTOCOLS;
             break;
         case 't':
             tl_name = optarg;
@@ -99,6 +103,10 @@ int main(int argc, char **argv)
         print_ucp_config(print_flags);
         print_uct_config(print_flags, tl_name);
         ucm_config_print(stdout, print_flags);
+    }
+
+    if (print_opts & PRINT_PROTOCOLS) {
+        print_proto_info(print_flags);
     }
 
     if (print_opts & PRINT_DEVICES) {

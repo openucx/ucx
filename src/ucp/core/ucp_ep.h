@@ -34,6 +34,24 @@ enum {
 };
 
 
+typedef struct ucp_ep_proto_config {
+    size_t                max_short;
+    size_t                max_bcopy;
+    size_t                max_zcopy;
+    size_t                bcopy_thresh;
+    size_t                zcopy_thresh;
+} ucp_ep_proto_config_t;
+
+
+typedef struct ucp_ep_config {
+    ucp_ep_proto_config_t  eager;
+    size_t                 rndv_thresh;
+    ucp_ep_proto_config_t  rndv;
+    ucp_ep_proto_config_t  put;
+    ucp_ep_proto_config_t  get;
+} ucp_ep_config_t;
+
+
 /**
  * Remote protocol layer endpoint
  */
@@ -41,20 +59,12 @@ typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
     uct_ep_h                      uct_ep;        /* Current transport for operations */
 
-    struct {
-        size_t                    max_short_egr; /* TODO should be unsigned */
-        size_t                    max_short_put; /* TODO should be unsigned */
-        size_t                    max_bcopy_egr; /* TODO should be unsigned */
-        size_t                    max_bcopy_put;
-        size_t                    max_bcopy_get;
-    } config;
-
-    uint64_t                      dest_uuid;     /* Destination worker uuid */
-    ucp_ep_h                      next;          /* Next in hash table linked list */
-
     ucp_rsc_index_t               rsc_index;     /* Resource index the endpoint uses */
     ucp_rsc_index_t               dst_pd_index;  /* Destination protection domain index */
     volatile uint32_t             state;         /* Endpoint state */
+
+    uint64_t                      dest_uuid;     /* Destination worker uuid */
+    ucp_ep_h                      next;          /* Next in hash table linked list */
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_PEER_NAME_MAX];
@@ -68,9 +78,11 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 
+ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
+                                    uct_pending_req_t *req);
 
-void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req);
-
+void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
+                        int progress);
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 {

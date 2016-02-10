@@ -134,7 +134,7 @@ static size_t ucp_tag_pack_eager_first_contig(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
-    length               = req->send.ep->config.max_bcopy_egr
+    length               = ucp_ep_config(req->send.ep)->eager.max_bcopy
                             + sizeof(ucp_eager_hdr_t) - sizeof(*hdr);
     hdr->super.super.tag = req->send.tag;
     hdr->total_len       = req->send.length;
@@ -151,7 +151,7 @@ static size_t ucp_tag_pack_eager_middle_contig(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
-    length         = req->send.ep->config.max_bcopy_egr;
+    length         = ucp_ep_config(req->send.ep)->eager.max_bcopy;
     hdr->super.tag = req->send.tag;
     memcpy(hdr + 1, req->send.buffer + req->send.state.offset, length);
     return sizeof(*hdr) + length;
@@ -181,7 +181,7 @@ ucs_status_t ucp_tag_progress_eager_contig(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
-    size_t max_bcopy_egr = ep->config.max_bcopy_egr;
+    size_t max_bcopy_egr = ucp_ep_config(req->send.ep)->eager.max_bcopy;
     size_t length, offset;
     ssize_t packed_len;
 
@@ -190,7 +190,7 @@ ucs_status_t ucp_tag_progress_eager_contig(uct_pending_req_t *self)
         if (offset == 0) {
             /* First packet */
             length = req->send.length;
-            if (length <= ep->config.max_short_egr) {
+            if (length <= ucp_ep_config(req->send.ep)->eager.max_short) {
                 /* Only packet */
                 packed_len = ucp_tag_send_eager_short(ep, req->send.tag,
                                                       req->send.buffer, length);
@@ -273,7 +273,7 @@ static size_t ucp_tag_pack_eager_first_generic(void *dest, void *arg)
 
     ucs_assert(req->send.state.offset == 0);
 
-    max_length           = req->send.ep->config.max_bcopy_egr
+    max_length           = ucp_ep_config(req->send.ep)->eager.max_bcopy
                             + sizeof(ucp_eager_hdr_t) - sizeof(*hdr);
     hdr->super.super.tag = req->send.tag;
     hdr->total_len       = req->send.length;
@@ -289,7 +289,7 @@ static size_t ucp_tag_pack_eager_middle_generic(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t max_length;
 
-    max_length     = req->send.ep->config.max_bcopy_egr;
+    max_length     = ucp_ep_config(req->send.ep)->eager.max_bcopy;
     hdr->super.tag = req->send.tag;
     return sizeof(*hdr) + ucp_req_generic_dt_pack(req, hdr + 1, max_length);
 }
@@ -312,7 +312,7 @@ ucs_status_t ucp_tag_progress_eager_generic(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
-    size_t max_bcopy_egr = ep->config.max_bcopy_egr;
+    size_t max_bcopy_egr = ucp_ep_config(req->send.ep)->eager.max_bcopy;
     size_t length, offset;
     ssize_t packed_len;
 

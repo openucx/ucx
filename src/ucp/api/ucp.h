@@ -523,7 +523,7 @@ void ucp_cleanup(ucp_context_h context_p);
  *
  * @note The worker object is allocated within context of the calling thread
  *
- * @param [in] context_p   Handle to @ref ucp_context_h
+ * @param [in] context     Handle to @ref ucp_context_h
  *                         "UCP application context".
  * @param [in] thread_mode Thread safety @ref ucs_thread_mode_t "mode" for
  *                         the worker object and resources associated with it.
@@ -552,6 +552,22 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
  * @param [in]  worker        Worker object to destroy.
  */
 void ucp_worker_destroy(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @bried Print information about protocols that would be used by a worker.
+ *
+ * This routine prints information about the protocols being used, thresholds,
+ * UCT transport methods, and other useful information associated with the worker.
+ *
+ * @param [in] context      Handle to @ref ucp_context_h "UCP application context".
+ * @param [in] stream       Output stream to print the information to.
+ * @param [in] title        Configuration title to print.
+ * @param [in] print_flags  Flags that control various printing options.
+ */
+void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title,
+                            ucs_config_print_flags_t print_flags);
 
 
 /**
@@ -862,7 +878,7 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * message matching on the @ref ucp_tag_recv_nb "receiver".  The routine is
  * non-blocking and therefore returns immediately, however the actual send
  * operation may be delayed.  The send operation is considered completed when
- * it is safe to reuse the source @e buffer.  If the operation is
+ * it is safe to reuse the source @e buffer.  If the send operation is
  * completed immediately the routine return UCS_OK and the call-back function
  * @a cb is @b not invoked. If the operation is @b not completed immediately
  * and no error reported then the UCP library will schedule to invoke the
@@ -880,10 +896,10 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  *                          that the call-back is only invoked in a case when
  *                          the operation cannot be completed in place.
  *
- * @return UCS_OK           - The send operation was completed completed
- *                          immediately.
+ * @return UCS_OK           - The send operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
- * @return otherwise        - Operation was scheduled for send. The request handle
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
  *                          responsible to released the handle using

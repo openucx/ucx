@@ -13,7 +13,7 @@
 #include <ucm/api/ucm.h>
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
-#include "../util/reloc.h"
+#include <ucm/util/reloc.h>
 #include <ucm/util/ucm_config.h>
 
 #include <sys/mman.h>
@@ -28,12 +28,12 @@ typedef struct ucm_mmap_func {
 } ucm_mmap_func_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { {"mmap",   ucm_mmap},   UCM_EVENT_MMAP},
-    { {"munmap", ucm_munmap}, UCM_EVENT_MUNMAP},
-    { {"mremap", ucm_mremap}, UCM_EVENT_MREMAP},
-    { {"shmat",  ucm_shmat},  UCM_EVENT_SHMAT},
-    { {"shmdt",  ucm_shmdt},  UCM_EVENT_SHMDT},
-    { {"sbrk",   ucm_sbrk},   UCM_EVENT_SBRK},
+    { {"mmap",   ucm_override_mmap},   UCM_EVENT_MMAP},
+    { {"munmap", ucm_override_munmap}, UCM_EVENT_MUNMAP},
+    { {"mremap", ucm_override_mremap}, UCM_EVENT_MREMAP},
+    { {"shmat",  ucm_override_shmat},  UCM_EVENT_SHMAT},
+    { {"shmdt",  ucm_override_shmdt},  UCM_EVENT_SHMDT},
+    { {"sbrk",   ucm_override_sbrk},   UCM_EVENT_SBRK},
     { {NULL, NULL}, 0}
 };
 

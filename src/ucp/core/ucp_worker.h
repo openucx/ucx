@@ -26,10 +26,12 @@ typedef struct ucp_worker {
 #if ENABLE_ASSERT
     int                           inprogress;
 #endif
+    unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucp_ep_t                      **ep_hash;     /* Hash table of all endpoints */
+    uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
-    uct_iface_h                   ifaces[0];     /* Array of interfaces, one for each resource */
+    ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
 
@@ -47,6 +49,11 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
 
     search.dest_uuid = dest_uuid;
     return sglib_hashed_ucp_ep_t_find_member(worker->ep_hash, &search);
+}
+
+static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
+{
+    return &ep->worker->ep_config[ep->rsc_index];
 }
 
 #endif

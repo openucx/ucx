@@ -7,6 +7,7 @@
 #include "ucp_worker.h"
 
 #include <ucp/wireup/wireup.h>
+#include <ucp/tag/eager.h>
 
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
@@ -81,10 +82,10 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
 }
 
 static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
-                                         ucp_rsc_index_t rsc_index)
+                                         ucp_rsc_index_t tl_id)
 {
     ucp_context_h context = worker->context;
-    ucp_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index];
+    ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
     uct_iface_config_t *iface_config;
     ucs_status_t status;
     uct_iface_h iface;
@@ -107,7 +108,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
-    status = uct_iface_query(iface, &worker->iface_attrs[rsc_index]);
+    status = uct_iface_query(iface, &worker->iface_attrs[tl_id]);
     if (status != UCS_OK) {
         goto out;
     }
@@ -124,9 +125,9 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     }
 
     ucs_debug("created interface[%d] using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
-              rsc_index, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), worker);
+              tl_id, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), worker);
 
-    worker->ifaces[rsc_index] = iface;
+    worker->ifaces[tl_id] = iface;
     return UCS_OK;
 
 out_close_iface:
@@ -135,15 +136,48 @@ out:
     return status;
 }
 
+static void ucp_worker_set_config(ucp_worker_h worker, ucp_rsc_index_t tl_id)
+{
+    ucp_context_h context        = worker->context;
+    uct_iface_attr_t *iface_attr = &worker->iface_attrs[tl_id];
+    ucp_ep_config_t *config      = &worker->ep_config[tl_id];
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        config->eager.max_short    = iface_attr->cap.am.max_short - sizeof(ucp_tag_t);
+    } else {
+        config->eager.max_short    = 0;
+    }
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+        config->eager.max_bcopy    = iface_attr->cap.am.max_bcopy - sizeof(ucp_eager_hdr_t);
+    } else {
+        config->eager.max_bcopy    = 0;
+    }
+    config->eager.max_zcopy        = 0;
+    config->eager.bcopy_thresh     = -1;
+    config->eager.zcopy_thresh     = -1;
+
+    config->put.max_short          = iface_attr->cap.put.max_short;
+    config->put.max_bcopy          = iface_attr->cap.put.max_bcopy;
+    config->put.max_zcopy          = 0;
+    config->put.bcopy_thresh       = context->config.ext.bcopy_thresh;
+    config->put.zcopy_thresh       = -1;
+
+    config->get.max_short          = 0;
+    config->get.max_bcopy          = iface_attr->cap.get.max_bcopy;
+    config->get.max_zcopy          = 0;
+    config->get.bcopy_thresh       = -1;
+    config->get.zcopy_thresh       = -1;
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
                                ucp_worker_h *worker_p)
 {
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t tl_id;
     ucp_worker_h worker;
     ucs_status_t status;
 
-    worker = ucs_calloc(1,
-                        sizeof(*worker) + sizeof(worker->ifaces[0]) * context->num_tls,
+    worker = ucs_calloc(1, sizeof(*worker) +
+                           sizeof(*worker->ep_config) * context->num_tls,
                         "ucp worker");
     if (worker == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -155,6 +189,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 #if ENABLE_ASSERT
     worker->inprogress    = 0;
 #endif
+    worker->stub_pend_count = 0;
 
     worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_WORKER_EP_HASH_SIZE,
                                  "ucp_ep_hash");
@@ -165,12 +200,19 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 
     sglib_hashed_ucp_ep_t_init(worker->ep_hash);
 
+    worker->ifaces = ucs_calloc(context->num_tls, sizeof(*worker->ifaces),
+                                "ucp iface");
+    if (worker->ifaces == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_ep_hash;
+    }
+
     worker->iface_attrs = ucs_calloc(context->num_tls,
                                      sizeof(*worker->iface_attrs),
                                      "ucp iface_attr");
     if (worker->iface_attrs == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_ep_hash;
+        goto err_free_ifaces;
     }
 
     status = ucs_async_context_init(&worker->async, UCS_ASYNC_MODE_THREAD);
@@ -194,11 +236,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     }
 
     /* Open all resources as interfaces on this worker */
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        status = ucp_worker_add_iface(worker, rsc_index);
+    for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
+        status = ucp_worker_add_iface(worker, tl_id);
         if (status != UCS_OK) {
             goto err_close_ifaces;
         }
+
+        ucp_worker_set_config(worker, tl_id);
     }
 
     *worker_p = worker;
@@ -213,6 +257,8 @@ err_destroy_async:
     ucs_async_context_cleanup(&worker->async);
 err_free_attrs:
     ucs_free(worker->iface_attrs);
+err_free_ifaces:
+    ucs_free(worker->ifaces);
 err_free_ep_hash:
     ucs_free(worker->ep_hash);
 err_free:
@@ -244,6 +290,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
     ucs_free(worker->iface_attrs);
+    ucs_free(worker->ifaces);
     ucs_free(worker->ep_hash);
     ucs_free(worker);
 }
@@ -414,3 +461,49 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
 SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_worker_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE,
                                         ucp_worker_ep_hash);
+
+static void ucp_worker_ep_proto_config_print(FILE *stream, const char *proto,
+                                             ucp_ep_proto_config_t *config)
+{
+    fprintf(stream, "# %20s   %15zd %15zd %15zd %15zd %15zd\n",
+            proto,
+            config->bcopy_thresh,
+            config->zcopy_thresh,
+            config->max_short,
+            config->max_bcopy,
+            config->max_zcopy);
+}
+
+void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title,
+                            ucs_config_print_flags_t print_flags)
+{
+    ucp_context_h context = worker->context;
+    ucp_rsc_index_t tl_id;
+    char rsc_name[UCT_TL_NAME_MAX + UCT_DEVICE_NAME_MAX + 2];
+
+    if (print_flags & UCS_CONFIG_PRINT_HEADER) {
+        fprintf(stream, "#\n");
+        fprintf(stream, "# %s\n", title);
+        fprintf(stream, "#\n");
+    }
+
+    fprintf(stream, "# Transports: \n");
+    fprintf(stream, "#\n");
+
+    for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
+
+        snprintf(rsc_name, sizeof(rsc_name), UCT_TL_RESOURCE_DESC_FMT,
+                 UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc));
+
+        fprintf(stream, "# %3d %-18s %15s %15s %15s %15s %15s\n", tl_id, rsc_name,
+                "bcopy_thresh", "zcopy_thresh", "max_short", "max_bcopy", "max_zcopy");
+
+        ucp_worker_ep_proto_config_print(stream, "eager",
+                                         &worker->ep_config[tl_id].eager);
+        ucp_worker_ep_proto_config_print(stream, "put",
+                                         &worker->ep_config[tl_id].put);
+        ucp_worker_ep_proto_config_print(stream, "get",
+                                         &worker->ep_config[tl_id].get);
+        fprintf(stream, "#\n");
+    }
+}

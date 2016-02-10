@@ -56,7 +56,7 @@ size_t ucm_get_shm_seg_size(const void *shmaddr)
             /* 00400000-0040b000 r-xp ... \n */
             ret = sscanf(ptr, "%lx-%lx ", &start_addr, &end_addr);
             if (ret != 2) {
-                ucs_debug("Failed to parse `%s'", ptr);
+                ucm_debug("Failed to parse `%s'", ptr);
                 continue;
             }
 

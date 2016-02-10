@@ -57,18 +57,10 @@ static void ucp_wireup_stop_aux(ucp_ep_h ep);
 
 static void ucp_wireup_ep_ready_to_send(ucp_ep_h ep)
 {
-    ucp_worker_h worker          = ep->worker;
-    uct_iface_attr_t *iface_attr = &worker->iface_attrs[ep->rsc_index];
+    ep->state |= UCP_EP_STATE_READY_TO_SEND;
 
-    ucs_debug("ready to send to %s 0x%"PRIx64"->0x%"PRIx64,
-              ucp_ep_peer_name(ep), worker->uuid, ep->dest_uuid);
-
-    ep->state               |= UCP_EP_STATE_READY_TO_SEND;
-    ep->config.max_short_egr = iface_attr->cap.am.max_short - sizeof(ucp_tag_t);
-    ep->config.max_bcopy_egr = iface_attr->cap.am.max_bcopy - sizeof(ucp_eager_hdr_t);
-    ep->config.max_short_put = iface_attr->cap.put.max_short;
-    ep->config.max_bcopy_put = iface_attr->cap.put.max_bcopy;
-    ep->config.max_bcopy_get = iface_attr->cap.get.max_bcopy;
+    ucs_debug("ready to send to %s 0x%"PRIx64"->0x%"PRIx64, ucp_ep_peer_name(ep),
+              ep->worker->uuid, ep->dest_uuid);
 }
 
 static ucp_stub_ep_t * ucp_ep_get_stub_ep(ucp_ep_h ep)
@@ -85,7 +77,6 @@ void ucp_wireup_progress(ucp_ep_h ep)
     uct_pending_req_t *req;
     ucs_status_t status;
     uct_ep_h uct_ep;
-    int dispatch;
 
     ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
 
@@ -141,25 +132,11 @@ void ucp_wireup_progress(ucp_ep_h ep)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     /* Replay pending requests */
-    dispatch = 1;
     ucs_queue_for_each_extract(req, &tmp_pending_queue, priv, 1) {
-
-        /* As long as status is OK, dispatch the callback. Otherwise, add to
-         * the pending queue of the new transport.
-         */
-        if (dispatch) {
-            ucs_trace_data("executing pending request %p func %p", req, req->func);
-            status = req->func(req);
-            dispatch = dispatch && (status == UCS_OK);
-        }
-        if (!dispatch) {
-            ucs_trace_data("queuing pending request %p", req);
-            status = uct_ep_pending_add(ep->uct_ep, req);
-            /* If we could not send before, should be able to add to pending
-             * TODO retry the func
-             */
-            ucs_assert_always(status == UCS_OK);
-        }
+        do {
+            status = ucp_ep_add_pending_uct(ep, uct_ep, req);
+        } while (status != UCS_OK);
+        --ep->worker->stub_pend_count;
     }
 }
 
@@ -404,7 +381,8 @@ static ucs_status_t ucp_ep_wireup_op_progress(uct_pending_req_t *self)
 
 static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint16_t flags,
                                        ucp_rsc_index_t dst_rsc_index,
-                                       ucp_rsc_index_t dst_aux_rsc_index)
+                                       ucp_rsc_index_t dst_aux_rsc_index,
+                                       int allow_progress)
 {
     uct_ep_h uct_ep = ucp_wireup_msg_ep(ep);
     ucp_request_t* req;
@@ -428,7 +406,7 @@ static ucs_status_t ucp_ep_wireup_send(ucp_ep_h ep, uint16_t flags,
     req->send.wireup.dst_rsc_index     = dst_rsc_index;
     req->send.wireup.dst_aux_rsc_index = dst_aux_rsc_index;
     ucs_atomic_add32(&ucp_ep_get_stub_ep(ep)->pending_count, 1);
-    ucp_ep_add_pending(ep, uct_ep, req);
+    ucp_ep_add_pending(ep, uct_ep, req, allow_progress);
     return UCS_OK;
 }
 
@@ -603,7 +581,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
         /* Send a reply, which also includes the address of next_ep */
         status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_REPLY|UCP_WIREUP_FLAG_ADDR,
-                                    msg->src_rsc_index, -1);
+                                    msg->src_rsc_index, -1, 0);
         if (status != UCS_OK) {
             return;
         }
@@ -672,7 +650,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
      * We can use the new ep even from async thread, because main thread will not
      * started using it before ACK_SENT is turned on.
      */
-    status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_ACK, msg->src_rsc_index, -1);
+    status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_ACK, msg->src_rsc_index, -1, 0);
     if (status != UCS_OK) {
         return;
     }
@@ -926,7 +904,7 @@ ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address)
     /* Send initial connection request for wiring-up the transport */
     status = ucp_ep_wireup_send(ep, UCP_WIREUP_FLAG_REQUSET|UCP_WIREUP_FLAG_ADDR|
                                     UCP_WIREUP_FLAG_AUX_ADDR,
-                                dst_rsc_index, dst_aux_rsc_index);
+                                dst_rsc_index, dst_aux_rsc_index, 1);
     if (status != UCS_OK) {
         goto err_stop_aux;
     }

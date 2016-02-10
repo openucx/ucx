@@ -28,14 +28,13 @@ public:
 
     typedef struct pending_send_request {
         uct_ep_h          ep;
-        uint64_t          hdr;
-        unsigned          buffer;     /* Send buffer */
-        size_t            length;     /* Total length, in bytes */
+        uint64_t          data;
+        int               countdown;  /* Actually send after X calls */
         uct_pending_req_t uct;
     } pending_send_request_t;
 
-    static ucs_status_t pending_am_handler(void *arg, void *data, size_t length,
-                                           void *desc) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   void *desc) {
 
         unsigned *counter = (unsigned *) arg;
         uint64_t test_hdr = *(uint64_t *) data;
@@ -55,14 +54,30 @@ public:
         pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
         ucs_status_t status;
 
-        status = uct_ep_am_short(req->ep, 0, req->hdr, &req->buffer, req->length);
+        if (req->countdown > 0) {
+            --req->countdown;
+            return UCS_INPROGRESS;
+        }
+
+        status = uct_ep_am_short(req->ep, 0, test_pending_hdr, &req->data,
+                                 sizeof(req->data));
         if (status == UCS_OK) {
-            free(req);
+            delete req;
         }
         return status;
     }
 
+    pending_send_request_t* pending_alloc(uint64_t send_data) {
+        pending_send_request_t *req =  new pending_send_request_t();
+        req->ep        = m_e1->ep(0);
+        req->data      = send_data;
+        req->countdown = 5;
+        req->uct.func  = pending_send_op;
+        return req;
+    }
+
 protected:
+    static const uint64_t test_pending_hdr = 0xabcd;
     entity *m_e1, *m_e2;
 };
 
@@ -70,7 +85,6 @@ protected:
 UCS_TEST_P(test_uct_pending, pending_op)
 {
     uint64_t send_data = 0xdeadbeef;
-    uint64_t test_pending_hdr = 0xabcd;
     ucs_status_t status;
     unsigned i, iters, counter = 0;
 
@@ -79,7 +93,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
 
     iters = 1000000/ucs::test_time_multiplier();
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, pending_am_handler , &counter, UCT_AM_CB_FLAG_DEFAULT);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_DEFAULT);
 
     /* send the data until the resources run out */
     i = 0;
@@ -89,12 +103,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
         if (status != UCS_OK) {
             if (status == UCS_ERR_NO_RESOURCE) {
 
-                pending_send_request_t *req = (pending_send_request_t *) malloc(sizeof(*req));
-                req->buffer   = send_data;
-                req->hdr      = test_pending_hdr;
-                req->length   = sizeof(send_data);
-                req->ep       = m_e1->ep(0);
-                req->uct.func = pending_send_op;
+                pending_send_request_t *req = pending_alloc(send_data);
 
                 status = uct_ep_pending_add(m_e1->ep(0), &req->uct);
                 if (status != UCS_OK) {
@@ -127,7 +136,6 @@ UCS_TEST_P(test_uct_pending, pending_op)
 UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
 {
     uint64_t send_data = 0xdeadbeef;
-    uint64_t test_pending_hdr = 0xabcd;
     ucs_status_t status_send, status_pend = UCS_ERR_LAST;
     ucs_time_t loop_end_limit;
     unsigned i, counter = 0;
@@ -136,7 +144,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
     /* set a callback for the uct to invoke when receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, pending_am_handler , &counter, UCT_AM_CB_FLAG_DEFAULT);
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_DEFAULT);
 
     loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
     /* send while resources are available. try to add a request to pending */
@@ -145,12 +153,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
                                       sizeof(send_data));
         if (status_send == UCS_ERR_NO_RESOURCE) {
 
-            pending_send_request_t *req = (pending_send_request_t *) malloc(sizeof(*req));
-            req->buffer   = send_data;
-            req->hdr      = test_pending_hdr;
-            req->length   = sizeof(send_data);
-            req->ep       = m_e1->ep(0);
-            req->uct.func = pending_send_op;
+            pending_send_request_t *req = pending_alloc(send_data);
 
             status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct);
             if (status_pend == UCS_ERR_BUSY) {

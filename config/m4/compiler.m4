@@ -46,6 +46,31 @@ AC_DEFUN([COMPILER_OPTION],
 
 
 #
+# CHECK_DEPRECATED_DECL_FLAG (flag, variable)
+#
+# The macro checks if the given compiler flag enables usig deprecated declarations.
+# If yes, it appends the flags to "variable".
+#
+AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
+[
+         AC_MSG_CHECKING([whether $1 overrides deprecated declarations])
+         SAVE_CFLAGS="$CFLAGS"
+         CFLAGS="$CFLAGS $1"
+         AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+                                  int __attribute__ ((__deprecated__)) f() { return 0; }
+                                  int main() { return f(); }
+                            ]])],
+                           [AC_MSG_RESULT([yes])
+                            $2="${$2} $1"],
+                           [AC_MSG_RESULT([no])])
+         CFLAGS="$SAVE_CFLAGS"
+])
+
+CHECK_DEPRECATED_DECL_FLAG([-diag-disable=1478], CFLAGS_NO_DEPRECATED) # icc
+CHECK_DEPRECATED_DECL_FLAG([-Wno-deprecated-declarations], CFLAGS_NO_DEPRECATED) # gcc
+AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
+
+#
 # Debug mode
 #
 AC_ARG_ENABLE(debug,

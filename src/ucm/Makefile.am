@@ -27,7 +27,7 @@ libucm_la_CPPFLAGS = \
     $(ptmalloc_cppflags)
 
 libucm_la_CFLAGS = \
-	-Wno-deprecated-declarations
+	$(CFLAGS_NO_DEPRECATED)
 
 nobase_dist_libucm_la_HEADERS = \
 	api/ucm.h
