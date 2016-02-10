@@ -179,7 +179,7 @@ static inline uct_ib_rcache_region_t* uct_ib_rache_region_from_memh(uct_mem_h me
     return ucs_container_of(memh, uct_ib_rcache_region_t, stub_mr);
 }
 
-static void uct_ib_rcfache_region_set_stub_mr(uct_ib_rcache_region_t *region)
+static void uct_ib_rcache_region_set_stub_mr(uct_ib_rcache_region_t *region)
 {
     /* Make sure the lkey and rkey fields of stub_mr do not overlap with 'super' */
     UCS_STATIC_ASSERT(ucs_offsetof(uct_ib_rcache_region_t, stub_mr.lkey) >=
@@ -214,7 +214,7 @@ uct_ib_mem_rcache_alloc(uct_pd_h uct_pd, size_t *length_p, void **address_p,
     region->super.super.start = (uintptr_t)*address_p;
     region->super.super.end   = (uintptr_t)*address_p + *length_p;
 
-    uct_ib_rcfache_region_set_stub_mr(region);
+    uct_ib_rcache_region_set_stub_mr(region);
     *memh_p = &region->stub_mr;
     return UCS_OK;
 }
@@ -281,7 +281,7 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
         return status;
     }
 
-    uct_ib_rcfache_region_set_stub_mr(region);
+    uct_ib_rcache_region_set_stub_mr(region);
     return UCS_OK;
 }
 
