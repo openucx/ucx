@@ -117,8 +117,10 @@ static void uct_ugni_udt_progress(void *arg)
             /* data message was received */
             uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                                header->am_id, payload, header->length, "RX: AM");
+            pthread_mutex_unlock(&uct_ugni_global_lock);
             status = uct_iface_invoke_am(&iface->super.super, header->am_id, payload,
                                          header->length, user_desc);
+            pthread_mutex_lock(&uct_ugni_global_lock);
             if (UCS_OK == status) {
                 uct_ugni_udt_reset_desc(desc, iface);
                 ucs_mpool_put(desc);
@@ -133,10 +135,9 @@ static void uct_ugni_udt_progress(void *arg)
         ep->posted_desc = NULL;
     }
 
-    /* have a go a processing the pending queue */
-
 exit:
     pthread_mutex_unlock(&uct_ugni_global_lock);
+    /* have a go a processing the pending queue */
     ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_ep_process_pending, NULL);
 }
 
