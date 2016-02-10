@@ -17,6 +17,9 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     entity *pe1 = create_entity();
     ucs_status_t status;
 
+    pe0->connect(pe1);
+    pe1->connect(pe0);
+
     ucp_mem_h memh;
     void *memheap = NULL;
     status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
@@ -28,9 +31,6 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     size_t rkey_buffer_size;
     status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
-
-    pe0->connect(pe1);
-    pe1->connect(pe0);
 
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
@@ -75,11 +75,14 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
 
 void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alignment)
 {
-    static const size_t memheap_size = 512 * 1024;
+    static const size_t memheap_size = 3 * 1024;
     entity *pe0 = create_entity();
     entity *pe1 = create_entity();
     ucs_status_t status;
     size_t size;
+
+    pe0->connect(pe1);
+    pe1->connect(pe0);
 
     ucp_mem_h memh;
     void *memheap = NULL;
@@ -93,12 +96,11 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
 
-    pe0->connect(pe1);
-    pe1->connect(pe0);
-
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
+
+    ucp_rkey_buffer_release(rkey_buffer);
 
     for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
 
@@ -135,12 +137,12 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     pe0->disconnect();
     pe1->disconnect();
 
-    ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(pe1->ucph(), memh);
     ASSERT_UCS_OK(status);
 }
 
-void test_ucp_memheap::get_params(ucp_params_t& params) const {
-    ucp_test::get_params(params);
+ucp_params_t test_ucp_memheap::get_ctx_params() {
+    ucp_params_t params = ucp_test::get_ctx_params();
     params.features |= UCP_FEATURE_RMA;
+    return params;
 }

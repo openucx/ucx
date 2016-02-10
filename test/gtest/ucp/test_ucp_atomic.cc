@@ -145,52 +145,59 @@ public:
 
 class test_ucp_atomic32 : public test_ucp_atomic {
 public:
-    virtual void get_params(ucp_params_t& params) const {
-        test_ucp_memheap::get_params(params);
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_memheap::get_ctx_params();
         params.features |= UCP_FEATURE_AMO32;
+        return params;
     }
 };
 
-UCS_TEST_F(test_ucp_atomic32, atomic_add) {
+UCS_TEST_P(test_ucp_atomic32, atomic_add) {
     test<uint32_t>(&test_ucp_atomic32::blocking_add<uint32_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic32, atomic_fadd) {
+UCS_TEST_P(test_ucp_atomic32, atomic_fadd) {
     test<uint32_t>(&test_ucp_atomic32::blocking_fadd<uint32_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic32, atomic_swap) {
+UCS_TEST_P(test_ucp_atomic32, atomic_swap) {
     test<uint32_t>(&test_ucp_atomic32::blocking_swap<uint32_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic32, atomic_cswap) {
+UCS_TEST_P(test_ucp_atomic32, atomic_cswap) {
     test<uint32_t>(&test_ucp_atomic32::blocking_cswap<uint32_t>);
 }
 
+UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
+
 class test_ucp_atomic64 : public test_ucp_atomic {
 public:
-    virtual void get_params(ucp_params_t& params) const {
-        test_ucp_memheap::get_params(params);
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_memheap::get_ctx_params();
         params.features |= UCP_FEATURE_AMO64;
+        return params;
     }
 };
 
-UCS_TEST_F(test_ucp_atomic64, atomic_add) {
+UCS_TEST_P(test_ucp_atomic64, atomic_add) {
     test<uint64_t>(&test_ucp_atomic64::blocking_add<uint64_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic64, atomic_fadd) {
+UCS_TEST_P(test_ucp_atomic64, atomic_fadd) {
     test<uint64_t>(&test_ucp_atomic64::blocking_fadd<uint64_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic64, atomic_swap) {
+UCS_TEST_P(test_ucp_atomic64, atomic_swap) {
     test<uint64_t>(&test_ucp_atomic64::blocking_swap<uint64_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic64, atomic_cswap) {
+UCS_TEST_P(test_ucp_atomic64, atomic_cswap) {
     test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>);
 }
 
-UCS_TEST_F(test_ucp_atomic64, unaligned_atomic_add) {
+UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_add) {
     test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic64)
+

@@ -10,6 +10,8 @@
 
 class test_ucp_rma : public test_ucp_memheap {
 public:
+    using test_ucp_memheap::get_ctx_params;
+
     void nonblocking_put_nbi(entity *e, size_t max_size,
                              void *memheap_addr,
                              ucp_rkey_h rkey,
@@ -59,32 +61,35 @@ public:
 };
 
 
-UCS_TEST_F(test_ucp_rma, blocking_put) {
+UCS_TEST_P(test_ucp_rma, blocking_put) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
                        1);
 }
 
-UCS_TEST_F(test_ucp_rma, nonblocking_put_nbi) {
+UCS_TEST_P(test_ucp_rma, nonblocking_put_nbi) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        1);
 }
 
-UCS_TEST_F(test_ucp_rma, nonblocking_stream_put_nbi) {
+UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
                        1);
 }
 
-UCS_TEST_F(test_ucp_rma, blocking_get) {
+UCS_TEST_P(test_ucp_rma, blocking_get) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
                        1);
 }
 
-UCS_TEST_F(test_ucp_rma, nonblocking_get_nbi) {
+UCS_TEST_P(test_ucp_rma, nonblocking_get_nbi) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
                        1);
 }
 
-UCS_TEST_F(test_ucp_rma, nonblocking_stream_get_nbi) {
+UCS_TEST_P(test_ucp_rma, nonblocking_stream_get_nbi) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
                        1);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_rma)
+
