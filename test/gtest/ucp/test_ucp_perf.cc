@@ -7,7 +7,7 @@
 
 #include "ucp_test.h"
 
-#include <gtest/base/test_perf.h>
+#include <gtest/common/test_perf.h>
 
 
 #define MB   pow(1024.0, -2)

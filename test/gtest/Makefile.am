@@ -50,9 +50,8 @@ gtest_SOURCES = \
 	common/gtest-all.cc \
 	common/main.cc \
 	common/test_helpers.cc \
+	common/test_perf.cc \
 	common/test.cc \
-	\
-	base/test_perf.cc \
 	\
 	ucm/malloc_hook.cc \
 	\
@@ -121,9 +120,8 @@ noinst_HEADERS = \
 	common/gtest.h \
 	common/test.h \
 	common/test_helpers.h \
+	common/test_perf.h \
 	common/tap.h \
-	\
-	base/test_perf.h \
 	\
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
