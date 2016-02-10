@@ -455,7 +455,6 @@ UCS_TEST_P(test_ucp_tag, send_recv_nb_partial_exp_medium) {
     request_release(my_recv_req);
 }
 
-UCS_TEST_F(test_ucp_tag, send_recv_unexp_medium) {
 UCS_TEST_P(test_ucp_tag, send_recv_unexp_medium) {
     static const size_t size = 50000;
     ucs_status_t status;

@@ -375,6 +375,9 @@ void ucp_config_release(ucp_config_t *config);
  * @ingroup UCP_CONFIG
  * @brief Modify context configuration.
  *
+ * The routine changes one configuration setting stored in @ref ucp_config_t
+ * "configuration" descriptor.
+ *
  * @param [in]  config        Configuration to modify.
  * @param [in]  name          Configuration variable name.
  * @param [in]  value         Value to set.
