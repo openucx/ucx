@@ -608,3 +608,13 @@ static void uct_ud_iface_timer(void *arg)
     iface->ops.async_progress(arg);
     uct_ud_leave(iface);
 }
+
+void uct_ud_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+
+    uct_ud_enter(iface);
+    uct_ib_iface_release_am_desc(tl_iface, desc);
+    uct_ud_leave(iface);
+}
+
