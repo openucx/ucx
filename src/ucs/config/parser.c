@@ -373,7 +373,13 @@ int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
 
     /* Special value: infinity */
     if (!strcasecmp(buf, "inf")) {
-        *(size_t*)dest = ULONG_MAX;
+        *(size_t*)dest = UCS_CONFIG_MEMUNITS_INF;
+        return 1;
+    }
+
+    /* Special value: auto */
+   if (!strcasecmp(buf, "auto")) {
+        *(size_t*)dest = UCS_CONFIG_MEMUNITS_AUTO;
         return 1;
     }
 
@@ -405,8 +411,10 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
 {
     size_t sz = *(size_t*)src;
 
-    if (sz == ULONG_MAX) {
+    if (sz == UCS_CONFIG_MEMUNITS_INF) {
         snprintf(buf, max, "inf");
+    } else if (sz == UCS_CONFIG_MEMUNITS_AUTO) {
+        snprintf(buf, max, "auto");
     } else {
         snprintf(buf, max, "%zu", sz);
     }
