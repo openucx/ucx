@@ -43,7 +43,8 @@ libucp_la_SOURCES = \
 	dt/dt_contig.c \
 	dt/dt_generic.c \
 	rma/basic_rma.c \
-	tag/eager.c \
+	tag/eager_rcv.c \
+	tag/eager_snd.c \
 	tag/probe.c \
 	tag/rndv.c \
 	tag/tag_recv.c \
