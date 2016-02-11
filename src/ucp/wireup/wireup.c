@@ -722,14 +722,14 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
     ucp_context_t *context = worker->context;
     uint64_t flags;
 
-    flags = UCT_IFACE_FLAG_AM_CB_SYNC;
+    flags = 0;
 
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         flags |= UCT_IFACE_FLAG_AM_BCOPY;
     }
 
     if (context->config.features & UCP_FEATURE_TAG) {
-        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING;
+        flags |= UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING | UCT_IFACE_FLAG_AM_CB_SYNC;
     }
 
     if (context->config.features & UCP_FEATURE_RMA) {
