@@ -25,7 +25,7 @@ test_perf::test_spec test_ucp_perf::tests[] =
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCT_PERF_DATA_LAYOUT_LAST, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
 
   { "put rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
@@ -40,7 +40,7 @@ test_perf::test_spec test_ucp_perf::tests[] =
   { "get latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_LAST, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
 
   { "get bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
@@ -55,17 +55,17 @@ test_perf::test_spec test_ucp_perf::tests[] =
   { "atomic fadd latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
 
   { "atomic swap latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
 
   { "atomic cswap latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 15.0 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
 
   { NULL }
 };
