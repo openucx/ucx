@@ -477,7 +477,7 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
 uct_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
     .iface_flush           = uct_ud_iface_flush,
-    .iface_release_am_desc = uct_ib_iface_release_am_desc,
+    .iface_release_am_desc = uct_ud_iface_release_am_desc,
     .iface_get_address     = uct_ud_iface_get_address,
     .iface_is_reachable    = uct_ib_iface_is_reachable,
     .iface_query           = uct_ud_mlx5_iface_query,
