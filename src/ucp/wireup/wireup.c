@@ -707,8 +707,8 @@ static double ucp_aux_score_func(ucp_worker_h worker, uct_iface_attr_t *iface_at
 {
     if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) || /* Need to use it for wireup messages */
         !(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) || /* Should connect immediately */
-         (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_THREAD_SINGLE) || /* Should progress asynchronously */
-         !(iface_attr->cap.flags & UCT_IFACE_FLAG_PENDING) /* Should support pending operations */ )
+        !(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC) || /* Should progress asynchronously */
+        !(iface_attr->cap.flags & UCT_IFACE_FLAG_PENDING) /* Should support pending operations */ )
     {
         return 0.0;
     }
@@ -722,7 +722,7 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
     ucp_context_t *context = worker->context;
     uint64_t flags;
 
-    flags = UCT_IFACE_FLAG_AM_THREAD_SINGLE;
+    flags = UCT_IFACE_FLAG_AM_CB_SYNC;
 
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         flags |= UCT_IFACE_FLAG_AM_BCOPY;
@@ -942,6 +942,6 @@ void ucp_address_peer_name(ucp_address_t *address, char *name)
 }
 
 UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, 
-              ucp_wireup_msg_dump, UCT_AM_CB_FLAG_THREAD_SAFE);
+              ucp_wireup_msg_dump, UCT_AM_CB_FLAG_ASYNC);
 
 

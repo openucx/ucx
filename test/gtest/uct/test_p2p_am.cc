@@ -28,8 +28,8 @@ public:
 
     uct_p2p_am_test() :
         uct_p2p_test(sizeof(receive_desc_t)),
-        m_keep_data(false),
-        m_am_count(0)
+        m_am_count(0),
+        m_keep_data(false)
     {
         m_send_tracer.count = 0;
         m_recv_tracer.count = 0;
@@ -130,14 +130,14 @@ public:
                                comp());
     }
 
-    virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
+    void test_xfer_do(send_func_t send, size_t length, direction_t direction, uint32_t am_mode) {
         ucs_status_t status;
 
         m_am_count = 0;
         m_send_tracer.count = 0;
         m_recv_tracer.count = 0;
 
-        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_DEFAULT);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, am_mode);
         ASSERT_UCS_OK(status);
 
         mapped_buffer sendbuf(length, SEED1, sender());
@@ -150,7 +150,7 @@ public:
             short_progress_loop();
         }
 
-        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, UCT_AM_CB_FLAG_DEFAULT);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, am_mode);
         ASSERT_UCS_OK(status);
 
         check_backlog();
@@ -165,17 +165,130 @@ public:
         }
     }
 
+    virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
+
+        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC) {
+            test_xfer_do(send, length, direction, UCT_AM_CB_FLAG_SYNC);
+        }
+        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC) {
+            test_xfer_do(send, length, direction, UCT_AM_CB_FLAG_ASYNC);
+        }
+    }
+
     void set_keep_data(bool keep) {
         m_keep_data = keep;
     }
 
+    void am_sync_finish() {
+        /* am message handler must be only invoked from progress */
+
+        unsigned prev_am_count = m_am_count;
+        twait(500);
+        EXPECT_EQ(prev_am_count, m_am_count);
+        short_progress_loop();
+        EXPECT_EQ(prev_am_count+1, m_am_count);
+    }
+
+    void am_async_finish(unsigned prev_am_count) {
+        /* am message handler must be only invoked within reasonable time if progress is not called */
+        twait(500);
+        EXPECT_EQ(prev_am_count+1, m_am_count);
+    }
+
+protected:
+    unsigned                     m_am_count;
 private:
     bool                         m_keep_data;
-    unsigned                     m_am_count;
     std::vector<receive_desc_t*> m_backlog;
     tracer_ctx_t                 m_send_tracer;
     tracer_ctx_t                 m_recv_tracer;
 };
+
+UCS_TEST_P(uct_p2p_am_test, am_sync) {
+
+    ucs_status_t status;
+
+    if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
+        UCS_TEST_SKIP;
+    }
+
+    mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+    m_am_count = 0;
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_SYNC);
+    ASSERT_UCS_OK(status);
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short, SEED1, sender());
+
+        status = am_short(sender_ep(), sendbuf_short, recvbuf);
+        EXPECT_UCS_OK(status);
+        am_sync_finish();
+    }
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+        mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy, SEED1, sender());
+
+        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
+        EXPECT_UCS_OK(status);
+        am_sync_finish();
+    }
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+        mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy, SEED1, sender());
+
+        am_zcopy(sender_ep(), sendbuf_zcopy, recvbuf);
+        am_sync_finish();
+    }
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, (void*)this, UCT_AM_CB_FLAG_SYNC);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_P(uct_p2p_am_test, am_async) {
+
+    unsigned am_count;
+    ucs_status_t status;
+
+    if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC)) {
+        UCS_TEST_SKIP;
+    }
+
+    mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+    am_count = m_am_count = 0;
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short, SEED1, sender());
+
+        am_count = m_am_count;
+        status = am_short(sender_ep(), sendbuf_short, recvbuf);
+        EXPECT_UCS_OK(status);
+        am_async_finish(am_count);
+    }
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+        mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy, SEED1, sender());
+
+        am_count = m_am_count;
+        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
+        EXPECT_UCS_OK(status);
+        am_async_finish(am_count);
+    }
+
+    if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+        mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy, SEED1, sender());
+
+        am_count = m_am_count;
+        am_zcopy(sender_ep(), sendbuf_zcopy, recvbuf);
+        am_async_finish(am_count);
+    }
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, (void*)this, UCT_AM_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+}
 
 UCS_TEST_P(uct_p2p_am_test, am_short) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
@@ -187,6 +300,9 @@ UCS_TEST_P(uct_p2p_am_test, am_short) {
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    if (GetParam()->tl_name == "cm") {
+        UCS_TEST_SKIP;
+    }
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_bcopy,
@@ -204,6 +320,9 @@ UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    if (GetParam()->tl_name == "cm") {
+        UCS_TEST_SKIP;
+    }
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
@@ -218,5 +337,6 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
                     sender().iface_attr().cap.am.max_zcopy,
                     DIRECTION_SEND_TO_RECV);
 }
+
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)

@@ -201,6 +201,10 @@ ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep)
     ucs_status_t status;
 
     status = uct_cm_iface_flush_do(tl_ep->iface);
-    UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    if (status == UCS_OK) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    } else {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    }
     return status;
 }

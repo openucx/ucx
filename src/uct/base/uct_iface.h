@@ -124,6 +124,7 @@ UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
 typedef struct uct_am_handler {
     uct_am_callback_t cb;
     void              *arg;
+    uint32_t          flags;
 } uct_am_handler_t;
 
 

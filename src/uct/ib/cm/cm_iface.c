@@ -54,7 +54,7 @@ ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface)
     }
 
     sched_yield();
-    return UCS_ERR_NO_RESOURCE;
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
@@ -62,7 +62,12 @@ ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
     ucs_status_t status;
 
     status = uct_cm_iface_flush_do(tl_iface);
-    UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+    if (status == UCS_OK) {
+        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+    }
+    else {
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+    }
     return status;
 }
 
@@ -326,8 +331,9 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_bcopy      = mtu;
     iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
     iface_attr->ep_addr_len           = 0;
-    iface_attr->cap.flags             = /* UCT_IFACE_FLAG_AM_BCOPY | enable only in case of emergency */
+    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_BCOPY | 
                                         UCT_IFACE_FLAG_PENDING |
+                                        UCT_IFACE_FLAG_AM_CB_ASYNC |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     return UCS_OK;
 }

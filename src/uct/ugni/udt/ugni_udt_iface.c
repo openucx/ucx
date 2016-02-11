@@ -173,7 +173,7 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
                                          UCT_IFACE_FLAG_AM_BCOPY |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING |
-                                         UCT_IFACE_FLAG_AM_THREAD_SINGLE;
+                                         UCT_IFACE_FLAG_AM_CB_SYNC;
 
     iface_attr->overhead               = 1e-6;  /* 1 usec */
     iface_attr->latency                = 40e-6; /* 40 usec */

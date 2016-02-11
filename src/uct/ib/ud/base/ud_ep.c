@@ -393,7 +393,7 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 }
 
 void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len,
-                          uct_ud_recv_skb_t *skb)
+                          uct_ud_recv_skb_t *skb, int is_async)
 {
     uint32_t dest_id;
     uint32_t is_am, am_id;
@@ -441,7 +441,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         }
     }
 
-    ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->ooo_elem, neth->psn);
+    ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->u.ooo.elem, neth->psn);
     if (ucs_unlikely(ooo_type != UCS_FRAG_LIST_INSERT_FAST)) {
         if (ooo_type != UCS_FRAG_LIST_INSERT_DUP &&
             ooo_type != UCS_FRAG_LIST_INSERT_FAIL) {
@@ -460,8 +460,14 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         goto out;
     }
 
-    uct_ib_iface_invoke_am(&iface->super, am_id, neth + 1,
-                           byte_len - sizeof(*neth), &skb->super);
+    if (ucs_unlikely(is_async && 
+                     (iface->super.super.am[am_id].flags & UCT_AM_CB_FLAG_SYNC))) {
+        skb->u.am.len = byte_len - sizeof(*neth);
+        ucs_queue_push(&iface->rx.pending_q, &skb->u.am.queue);
+    } else {
+        uct_ib_iface_invoke_am(&iface->super, am_id, neth + 1,
+                               byte_len - sizeof(*neth), &skb->super);
+    }
     return;
 
 out:
