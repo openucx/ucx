@@ -78,6 +78,10 @@ gtest_SOURCES = \
 	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_rma.cc \
+	ucp/test_ucp_tag_cancel.cc \
+	ucp/test_ucp_tag_match.cc \
+	ucp/test_ucp_tag_probe.cc \
+	ucp/test_ucp_tag_xfer.cc \
 	ucp/test_ucp_tag.cc \
 	ucp/test_ucp_version.cc \
 	ucp/test_ucp_wireup.cc \
@@ -129,6 +133,7 @@ noinst_HEADERS = \
 	uct/ud_base.h \
 	\
 	ucp/test_ucp_memheap.h \
+	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h
 
 .PHONY: test test gdb valgrind fix_rpath ucx
