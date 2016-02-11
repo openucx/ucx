@@ -414,28 +414,28 @@ ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
 uct_iface_ops_t uct_ud_verbs_iface_ops = {
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
-    .iface_flush         = uct_ud_iface_flush,
-    .iface_release_am_desc=uct_ib_iface_release_am_desc,
-    .iface_get_address   = uct_ud_iface_get_address,
-    .iface_is_reachable  = uct_ib_iface_is_reachable,
-    .iface_query         = uct_ud_verbs_iface_query,
+    .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
+    .iface_flush           = uct_ud_iface_flush,
+    .iface_release_am_desc = uct_ud_iface_release_am_desc,
+    .iface_get_address     = uct_ud_iface_get_address,
+    .iface_is_reachable    = uct_ib_iface_is_reachable,
+    .iface_query           = uct_ud_verbs_iface_query,
 
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_destroy          = uct_ud_ep_disconnect,
-    .ep_get_address      = uct_ud_ep_get_address,
+    .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
+    .ep_destroy            = uct_ud_ep_disconnect,
+    .ep_get_address        = uct_ud_ep_get_address,
 
-    .ep_create_connected = uct_ud_verbs_ep_create_connected,
-    .ep_connect_to_ep    = uct_ud_verbs_ep_connect_to_ep, 
+    .ep_create_connected   = uct_ud_verbs_ep_create_connected,
+    .ep_connect_to_ep      = uct_ud_verbs_ep_connect_to_ep, 
 
-    .ep_put_short        = uct_ud_verbs_ep_put_short,
-    .ep_am_short         = uct_ud_verbs_ep_am_short,
-    .ep_am_bcopy         = uct_ud_verbs_ep_am_bcopy,
+    .ep_put_short          = uct_ud_verbs_ep_put_short,
+    .ep_am_short           = uct_ud_verbs_ep_am_short,
+    .ep_am_bcopy           = uct_ud_verbs_ep_am_bcopy,
 
-    .ep_pending_add      = uct_ud_ep_pending_add,
-    .ep_pending_purge    = uct_ud_ep_pending_purge,
+    .ep_pending_add        = uct_ud_ep_pending_add,
+    .ep_pending_purge      = uct_ud_ep_pending_purge,
 
-    .ep_flush            = uct_ud_ep_flush
+    .ep_flush              = uct_ud_ep_flush
 };
 
 static UCS_F_NOINLINE void

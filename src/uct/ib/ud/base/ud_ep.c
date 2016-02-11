@@ -745,7 +745,6 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
         !uct_ud_ep_no_window(ep)) {
 
         uct_ud_leave(iface);
-        ucs_debug("can not add pending because ep=%p is able to transmit", ep);
         return UCS_ERR_BUSY;
     }
 

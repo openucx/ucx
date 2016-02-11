@@ -112,6 +112,7 @@ struct uct_ud_ctl_hdr {
 extern ucs_config_field_t uct_ud_iface_config_table[];
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr);
+void uct_ud_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
 
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr);
 
