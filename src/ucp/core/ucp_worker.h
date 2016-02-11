@@ -56,4 +56,10 @@ static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
     return &ep->worker->ep_config[ep->rsc_index];
 }
 
+static inline uct_pd_h ucp_ep_pd(ucp_ep_h ep)
+{
+    ucp_context_h context = ep->worker->context;
+    return context->pds[context->tl_rscs[ep->rsc_index].pd_index];
+}
+
 #endif

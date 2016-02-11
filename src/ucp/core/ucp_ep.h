@@ -34,21 +34,31 @@ enum {
 };
 
 
-typedef struct ucp_ep_proto_config {
-    size_t                max_short;
-    size_t                max_bcopy;
-    size_t                max_zcopy;
-    size_t                bcopy_thresh;
-    size_t                zcopy_thresh;
-} ucp_ep_proto_config_t;
-
-
 typedef struct ucp_ep_config {
-    ucp_ep_proto_config_t  eager;
+    /* Limits for protocols using short message only */
+    size_t                 max_eager_short;  /* Maximal payload of eager short */
+    size_t                 max_put_short;    /* Maximal payload of put short */
+    size_t                 max_am_short;     /* Maximal payload of am short */
+
+    /* Limits for bcopy operations */
+    size_t                 max_am_bcopy;     /* Maximal total size of am_bcopy */
+    size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
+    size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
+
+    /* Limits for zero-copy operations */
+    size_t                 max_am_zcopy;     /* Maximal total size of am_zcopy */
+    size_t                 max_put_zcopy;    /* Maximal total size of put_zcopy */
+    size_t                 max_get_zcopy;    /* Maximal total size of get_zcopy */
+
+    /* Threshold for switching from put_short to put_bcopy */
+    size_t                 bcopy_thresh;
+
+    /* Threshold for switching from eager to rendezvous */
     size_t                 rndv_thresh;
-    ucp_ep_proto_config_t  rndv;
-    ucp_ep_proto_config_t  put;
-    ucp_ep_proto_config_t  get;
+
+    /* zero-copy threshold for operations which do not have to wait for remote side */
+    size_t                 zcopy_thresh;
+
 } ucp_ep_config_t;
 
 

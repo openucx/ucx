@@ -57,6 +57,9 @@ typedef struct ucp_send_state {
     size_t                        offset;
     union {
         struct {
+            uct_mem_h             memh;
+        } contig;
+        struct {
             void                  *state;
         } generic;
     } dt;
@@ -78,7 +81,6 @@ typedef struct ucp_request {
         struct {
             ucp_ep_h              ep;
             const void            *buffer;  /* Send buffer */
-            size_t                count;    /* Send length */
             ucp_datatype_t        datatype; /* Send type */
 
             union {
@@ -99,6 +101,7 @@ typedef struct ucp_request {
             size_t                length;   /* Total length, in bytes */
             ucp_frag_state_t      state;
             uct_pending_req_t     uct;      /* Pending request */
+            uct_completion_t      uct_comp;
         } send;
 
         struct {

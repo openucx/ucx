@@ -22,9 +22,12 @@ noinst_HEADERS = \
 	core/ucp_ep.h \
 	core/ucp_mm.h \
 	core/ucp_request.h \
+	core/ucp_request.inl \
 	core/ucp_worker.h \
 	dt/dt_contig.h \
 	dt/dt_generic.h \
+	proto/proto.h \
+	proto/proto_am.inl \
 	tag/eager.h \
 	tag/match.h \
 	tag/rndv.h \

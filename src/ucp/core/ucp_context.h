@@ -23,12 +23,12 @@ typedef uint8_t                 ucp_rsc_index_t;
  * Active message codes
  */
 enum {
-    UCP_AM_ID_WIREUP,
+    UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
 
-    UCP_AM_ID_EAGER_ONLY,
-    UCP_AM_ID_EAGER_FIRST,
-    UCP_AM_ID_EAGER_MIDDLE,
-    UCP_AM_ID_EAGER_LAST,
+    UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager */
+    UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
+    UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
+    UCP_AM_ID_EAGER_LAST        =  5, /* Last eager fragment */
 
     UCP_AM_ID_LAST
 };
