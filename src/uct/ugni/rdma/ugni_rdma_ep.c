@@ -434,7 +434,7 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
 
     /* Call the orignal callback and skip padding */
     fma->super.unpack_cb(fma->user_buffer, (char *)(fma + 1) + fma->padding,
-                         fma->super.desc.length - fma->padding);
+                         fma->super.desc.length - fma->padding - fma->tail);
 
     uct_ugni_invoke_orig_comp(fma);
 }
@@ -467,7 +467,7 @@ static inline void uct_ugni_format_get_fma(uct_ugni_rdma_fetch_desc_t *fma,
     /* Make sure that the length is always aligned */
     align_length = ucs_check_if_align_pow2(length + fma->padding, UGNI_GET_ALIGN) ?
         ucs_align_up_pow2((length + fma->padding), UGNI_GET_ALIGN):length + fma->padding;
-
+    fma->tail = align_length - length - fma->padding;
     ucs_assert(ucs_check_if_align_pow2(addr, UGNI_GET_ALIGN)==0);
     ucs_assert(ucs_check_if_align_pow2(align_length, UGNI_GET_ALIGN)==0);
     uct_ugni_format_fma(&fma->super, type, buffer, addr, rkey, align_length,
