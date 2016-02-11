@@ -39,22 +39,22 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
      * changed by transport switch.
      */
     for (;;) {
-        if (length <= ucp_ep_config(ep)->put.max_short) {
+        if (length <= ucp_ep_config(ep)->max_put_short) {
             status = uct_ep_put_short(ep->uct_ep, buffer, length, remote_addr,
                                       uct_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 break;
             }
         } else {
-            if (length <= ucp_ep_config(ep)->put.bcopy_thresh) {
-                frag_length = ucs_min(length, ucp_ep_config(ep)->put.max_short);
+            if (length <= ucp_ep_config(ep)->bcopy_thresh) {
+                frag_length = ucs_min(length, ucp_ep_config(ep)->max_put_short);
                 status = uct_ep_put_short(ep->uct_ep, buffer, frag_length, remote_addr,
                                           uct_rkey);
             } else {
                 ucp_memcpy_pack_context_t pack_ctx;
                 pack_ctx.src    = buffer;
                 pack_ctx.length = frag_length =
-                                ucs_min(length, ucp_ep_config(ep)->put.max_bcopy);
+                                ucs_min(length, ucp_ep_config(ep)->max_put_bcopy);
                 packed_len = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
                                               remote_addr, uct_rkey);
                 status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
@@ -90,7 +90,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     for (;;) {
         if (req->send.length <= ep->worker->context->config.ext.bcopy_thresh) {
             /* Should be replaced with bcopy */
-            packed_len = ucs_min(req->send.length, ucp_ep_config(ep)->put.max_short);
+            packed_len = ucs_min(req->send.length, ucp_ep_config(ep)->max_put_short);
             status = uct_ep_put_short(ep->uct_ep,
                                       req->send.buffer,
                                       packed_len,
@@ -103,7 +103,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
             ucp_memcpy_pack_context_t pack_ctx;
             pack_ctx.src    = req->send.buffer;
             pack_ctx.length =
-                ucs_min(req->send.length, ucp_ep_config(ep)->put.max_bcopy);
+                ucs_min(req->send.length, ucp_ep_config(ep)->max_put_bcopy);
             packed_len = uct_ep_put_bcopy(ep->uct_ep,
                                           ucp_memcpy_pack,
                                           &pack_ctx,
@@ -157,7 +157,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
 
     for (;;) {
-        if (length <= ucp_ep_config(ep)->put.max_short) {
+        if (length <= ucp_ep_config(ep)->max_put_short) {
             /* Fast path for a single short message */
             status = uct_ep_put_short(ep->uct_ep, buffer, length, remote_addr,
                                       uct_rkey);
@@ -178,9 +178,9 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
             }
         } else {
             /* Fragmented put */
-            if (length <= ucp_ep_config(ep)->put.bcopy_thresh) {
+            if (length <= ucp_ep_config(ep)->bcopy_thresh) {
                 /* TBD: Should be replaced with bcopy */
-                packed_len = ucs_min(length, ucp_ep_config(ep)->put.max_short);
+                packed_len = ucs_min(length, ucp_ep_config(ep)->max_put_short);
                 status = uct_ep_put_short(ep->uct_ep, buffer, packed_len,
                                           remote_addr, uct_rkey);
             } else {
@@ -188,7 +188,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                 ucp_memcpy_pack_context_t pack_ctx;
                 pack_ctx.src    = buffer;
                 pack_ctx.length =
-                    ucs_min(length, ucp_ep_config(ep)->put.max_bcopy);
+                    ucs_min(length, ucp_ep_config(ep)->max_put_bcopy);
                 packed_len = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
                                               remote_addr, uct_rkey);
                 status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
@@ -243,7 +243,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
         /* Push out all fragments, and request completion only for the last
          * fragment.
          */
-        frag_length = ucs_min(ucp_ep_config(ep)->get.max_bcopy, length);
+        frag_length = ucs_min(ucp_ep_config(ep)->max_get_bcopy, length);
         status = uct_ep_get_bcopy(ep->uct_ep, (uct_unpack_callback_t)memcpy,
                                   (void*)buffer, frag_length, remote_addr,
                                   uct_rkey, &comp);
@@ -289,7 +289,7 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
     uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
 
     for (;;) {
-        frag_length = ucs_min(ucp_ep_config(ep)->get.max_bcopy, req->send.length);
+        frag_length = ucs_min(ucp_ep_config(ep)->max_get_bcopy, req->send.length);
         status = uct_ep_get_bcopy(ep->uct_ep,
                                   (uct_unpack_callback_t)memcpy,
                                   (void*)req->send.buffer,
@@ -329,7 +329,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
 
     for (;;) {
-        frag_length = ucs_min(ucp_ep_config(ep)->get.max_bcopy, length);
+        frag_length = ucs_min(ucp_ep_config(ep)->max_get_bcopy, length);
         status = uct_ep_get_bcopy(ep->uct_ep,
                                   (uct_unpack_callback_t)memcpy,
                                   (void*)buffer,
