@@ -48,6 +48,13 @@
 /* A function which does not return */
 #define UCS_F_NORETURN __attribute__((noreturn))
 
+/* A function which should not be optimized */
+#if defined(HAVE_ATTRIBUTE_NOOPTIMIZE) && (HAVE_ATTRIBUTE_NOOPTIMIZE == 1)
+#define UCS_F_NOOPTIMIZE __attribute__((optimize("O0")))
+#else
+#define UCS_F_NOOPTIMIZE
+#endif
+
 /* Always inline the function */
 #ifdef __GNUC__
 #define UCS_F_ALWAYS_INLINE inline __attribute__ ((always_inline))

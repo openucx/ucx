@@ -41,7 +41,8 @@ static inline uint64_t ucs_arch_read_hres_clock()
 
 double ucs_arch_get_clocks_per_sec();
 
-ucs_cpu_model_t ucs_arch_get_cpu_model();
+ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
+ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 
 
 #endif
