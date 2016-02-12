@@ -9,7 +9,6 @@
 
 #include <ucs/sys/compiler.h>
 
-
 /* Convert token to string */
 #define UCS_PP_QUOTE(x)                 # x
 

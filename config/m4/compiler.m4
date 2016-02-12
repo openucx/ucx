@@ -8,6 +8,17 @@
 #
 CFLAGS="-g -Wall -Werror $UCX_CFLAGS"
 
+#
+# Debug mode
+#
+AC_ARG_ENABLE(debug,
+        AC_HELP_STRING([--enable-debug], [Enable debug mode build]),
+        [],
+        [enable_debug=no])
+AS_IF([test "x$enable_debug" == xyes],
+        [CFLAGS="-O0 -D_DEBUG $CFLAGS"],
+        [CFLAGS="-O3 $CFLAGS"])
+
 
 #
 # CHECK_CROSS_COMP (program, true-action, false-action)
@@ -22,6 +33,23 @@ AC_DEFUN([CHECK_CROSS_COMP], [
                        [AC_LINK_IFELSE([$1], [$2], [$3])])
 ])
 
+#
+# Check for one specific attribute by compiling with C
+# Usage: CHECK_SPECIFIC_ATTRIBUTE([name], [doc], [program])
+#
+AC_DEFUN([CHECK_SPECIFIC_ATTRIBUTE], [
+    AC_CACHE_VAL(ucx_cv_attribute_[$1], [
+        #
+        # Try to compile using the C compiler
+        #
+        AC_TRY_COMPILE([$3],[],
+                       [ucx_cv_attribute_[$1]=1],
+                       [ucx_cv_attribute_[$1]=0])
+    ])
+	AC_MSG_CHECKING([for __attribute__([$1])])
+	AC_MSG_RESULT([$ucx_cv_attribute_[$1]])
+	AC_DEFINE_UNQUOTED([HAVE_ATTRIBUTE_[$2]], [$ucx_cv_attribute_[$1]], [Check attribute [$1]])
+])
 
 #
 # Check if compiler supports a given feaure
@@ -39,7 +67,8 @@ AC_DEFUN([COMPILER_OPTION],
            CFLAGS="$CFLAGS $3"
            AC_MSG_CHECKING([$2])
            CHECK_CROSS_COMP([AC_LANG_SOURCE([$5])],
-                            [AC_MSG_RESULT([yes])],
+                            [AC_MSG_RESULT([yes])
+                             OPT_CFLAGS="$OPT_CFLAGS|$1"],
                             [AC_MSG_RESULT([no])
                              CFLAGS="$SAVE_CFLAGS"])])
 ])
@@ -70,17 +99,6 @@ CHECK_DEPRECATED_DECL_FLAG([-diag-disable=1478], CFLAGS_NO_DEPRECATED) # icc
 CHECK_DEPRECATED_DECL_FLAG([-Wno-deprecated-declarations], CFLAGS_NO_DEPRECATED) # gcc
 AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
 
-#
-# Debug mode
-#
-AC_ARG_ENABLE(debug,
-        AC_HELP_STRING([--enable-debug], [Enable debug mode build]),
-        [],
-        [enable_debug=no])
-AS_IF([test "x$enable_debug" == xyes],
-        [CFLAGS="-O0 -D_DEBUG $CFLAGS"],
-        [CFLAGS="-O3 $CFLAGS"])
-
 
 #
 # SSE/AVX
@@ -94,8 +112,11 @@ AS_IF([test "x$with_avx" != xyes],
                        int main() { return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3)); }])
       ])
 
+CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
+                         [int foo (int arg) __attribute__ ((optimize("O0")));])
 
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
+CPPFLAGS="$CPPFLAGS -DCPU_FLAGS=\"$OPT_CFLAGS\""
 CXXFLAGS="$CFLAGS"
