@@ -204,7 +204,8 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_TYPE_MEMUNITS   {ucs_config_sscanf_memunits,  ucs_config_sprintf_memunits, \
                                     ucs_config_clone_ulong,      ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "memory units: <number>[b|kb|mb|gb], or \"inf\""}
+                                    ucs_config_help_generic,     \
+                                    "memory units: <number>[b|kb|mb|gb], \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_ARRAY(a)   {ucs_config_sscanf_array,     ucs_config_sprintf_array, \
                                     ucs_config_clone_array,      ucs_config_release_array, \
