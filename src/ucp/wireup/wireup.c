@@ -185,9 +185,29 @@ static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
     return 1;
 }
 
-static struct sockaddr * ucp_wireup_msg_get_addr(const ucp_wireup_msg_t *msg)
+static inline struct sockaddr * ucp_wireup_msg_addr(ucp_wireup_msg_t *msg)
 {
-    return (struct sockaddr *)((void*)(msg + 1));
+    void *msg_data = msg + 1;
+    return msg_data + msg->peer_name_len;
+}
+
+static const struct sockaddr * ucp_wireup_msg_get_addr(const ucp_wireup_msg_t *msg)
+{
+    const void *msg_data = msg + 1;
+    return msg_data + msg->peer_name_len;
+}
+
+static inline char* ucp_wireup_msg_peer_name(ucp_wireup_msg_t *msg)
+{
+    return (char *)(msg + 1);
+}
+
+static void ucp_wireup_msg_get_peer_name(const ucp_wireup_msg_t *msg,
+                                         char *peer_name, size_t max)
+{
+    size_t length = ucs_min(max - 1, msg->peer_name_len);
+    memcpy(peer_name, msg + 1, length);
+    peer_name[length] = '\0';
 }
 
 static struct sockaddr * ucp_wireup_msg_get_aux_addr(const ucp_wireup_msg_t *msg)
@@ -201,6 +221,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     ucp_context_h context = worker->context;
     const ucp_wireup_msg_t *msg = data;
+    char peer_name[UCP_PEER_NAME_MAX + 1];
     int af;
 
     #define UCP_WIREUP_MSG_FLAGS_FMT  "%c%c%c%c%c"
@@ -215,19 +236,21 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                     ucp_wireup_msg_get_addr(msg)->sa_family :
                     0;
 
+    ucp_wireup_msg_get_peer_name(msg, peer_name, sizeof(peer_name));
+
     switch (type) {
     case UCT_AM_TRACE_TYPE_SEND:
         snprintf(buffer, max, "WIREUP "UCP_WIREUP_MSG_FLAGS_FMT" "
-                 "[uuid %"PRIx64" "UCT_TL_RESOURCE_DESC_FMT",%s->#%d af %d]",
-                 UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), msg->src_uuid,
+                 "[%s uuid %"PRIx64" "UCT_TL_RESOURCE_DESC_FMT",%s->#%d af %d]",
+                 UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), peer_name, msg->src_uuid,
                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[msg->src_rsc_index].tl_rsc),
                  context->pd_rscs[msg->src_pd_index].pd_name,
                  msg->dst_rsc_index, af);
         break;
     case UCT_AM_TRACE_TYPE_RECV:
         snprintf(buffer, max, "WIREUP "UCP_WIREUP_MSG_FLAGS_FMT" "
-                 "[uuid %"PRIx64" #%d,%d->"UCT_TL_RESOURCE_DESC_FMT" af %d]",
-                 UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), msg->src_uuid,
+                 "[%s uuid %"PRIx64" #%d,%d->"UCT_TL_RESOURCE_DESC_FMT" af %d]",
+                 UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), peer_name, msg->src_uuid,
                  msg->src_rsc_index, msg->src_pd_index,
                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[msg->dst_rsc_index].tl_rsc),
                  af);
@@ -278,7 +301,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
      * Allocate buffer for active message.
      * TODO use custom pack callback to avoid this allocation and memcpy
      */
-    total_len = sizeof(*msg) + addr_len + aux_addr_len;
+    total_len = sizeof(*msg) + UCP_PEER_NAME_MAX + addr_len + aux_addr_len;
     msg = ucs_malloc(total_len, "conn_req");
     if (msg == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -294,16 +317,24 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
     msg->flags         = flags;
     msg->addr_len      = addr_len;
 
+    UCS_STATIC_ASSERT(UCP_PEER_NAME_MAX < UINT8_MAX);
+    ucp_worker_get_name(worker, ucp_wireup_msg_peer_name(msg), UCP_PEER_NAME_MAX);
+#if ENABLE_DEBUG_DATA
+    msg->peer_name_len = strlen(ep->peer_name);
+#else
+    msg->peer_name_len = 0;
+#endif
+
     /* Fill runtime address */
     if (flags & UCP_WIREUP_FLAG_ADDR) {
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
             ucs_assert(ep->state & UCP_EP_STATE_READY_TO_SEND);
             status = uct_iface_get_address(worker->ifaces[rsc_index],
-                                           ucp_wireup_msg_get_addr(msg));
+                                           ucp_wireup_msg_addr(msg));
         } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
             ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
             status = uct_ep_get_address(ucp_ep_get_stub_ep(ep)->next_ep,
-                                        ucp_wireup_msg_get_addr(msg));
+                                        ucp_wireup_msg_addr(msg));
         } else {
             status = UCS_ERR_UNREACHABLE;
         }
@@ -510,9 +541,11 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     uct_iface_attr_t *iface_attr;
     ucs_status_t status;
+    char peer_name[UCP_PEER_NAME_MAX + 1];
 
     if (ep == NULL) {
-        status = ucp_ep_new(worker, msg->src_uuid, "??", "on-demand", &ep);
+        ucp_wireup_msg_get_peer_name(msg, peer_name, sizeof(peer_name));
+        status = ucp_ep_new(worker, msg->src_uuid, peer_name, "on-demand", &ep);
         if (status != UCS_OK) {
             return;
         }
@@ -537,7 +570,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         status = uct_ep_create_connected(worker->ifaces[ep->rsc_index],
-                                         ucp_wireup_msg_get_addr(msg),
+                                         ucp_wireup_msg_addr(msg),
                                          &ep->uct_ep);
         if (status != UCS_OK) {
             ucs_debug("failed to create ep");
@@ -569,7 +602,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
             ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
             status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
-                                          ucp_wireup_msg_get_addr(msg));
+                                          ucp_wireup_msg_addr(msg));
             if (status != UCS_OK) {
                 ucs_debug("failed to connect"); /* TODO send reject */
                 return;
@@ -628,7 +661,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
         ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
         status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
-                                      ucp_wireup_msg_get_addr(msg));
+                                      ucp_wireup_msg_addr(msg));
         if (status != UCS_OK) {
             ucs_error("failed to connect");
             return;
