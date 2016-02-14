@@ -676,13 +676,13 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem);
  * A callback must have either SYNC or ASYNC flags.
  */
 enum {
-    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< callback is always invoked from the context (thread, processs)
+    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< callback is always invoked from the context (thread, process)
                                             that called uct_iface_progress(). An interface must
                                             have UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync 
                                             callback invocation */
 
-    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< callback may be invoked from any conext. For example,
-                                            it may be called from transport async progress thread. To gurantee 
+    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< callback may be invoked from any context. For example,
+                                            it may be called from transport async progress thread. To guarantee
                                             async invocation, interface must have UCT_IFACE_FLAG_AM_CB_ASYNC 
                                             flag set. 
                                              If async callback is set on interface with only 

@@ -25,7 +25,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1)",
      ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor), UCS_CONFIG_TYPE_DOUBLE},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 256, "receive",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", 16384, 256, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
     {"FIFO_HUGETLB", "no",
@@ -168,13 +168,12 @@ static inline void uct_mm_progress_fifo_tail(uct_mm_iface_t *iface)
 
 ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
                                              uct_mm_fifo_element_t *fifo_elem_p,
-                                             const unsigned abort_on_failure)
+                                             unsigned need_new_desc)
 {
     uct_mm_recv_desc_t *desc;
 
-    if (abort_on_failure) {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp, desc,
-                                 ucs_fatal("Failed to get a receive descriptor"));
+    if (!need_new_desc) {
+        desc = iface->last_recv_desc;
     } else {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp, desc,
                                  return UCS_ERR_NO_RESOURCE);
@@ -189,8 +188,8 @@ ucs_status_t uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
     return UCS_OK;
 }
 
-static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
-                                             uct_mm_fifo_element_t* elem)
+static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
+                                                     uct_mm_fifo_element_t* elem)
 {
     ucs_status_t status;
     uct_mm_recv_desc_t *desc;
@@ -200,8 +199,8 @@ static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
         /* read short (inline) messages from the FIFO elements */
         uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_RECV, elem->am_id,
                            elem + 1, elem->length, "RX: AM_SHORT");
-        uct_mm_iface_invoke_am(iface, elem->am_id, elem + 1, elem->length,
-                               iface->last_recv_desc, UCT_MM_AM_SHORT);
+        status = uct_mm_iface_invoke_am(iface, elem->am_id, elem + 1, elem->length,
+                                        iface->last_recv_desc);
     } else {
         /* read bcopy messages from the receive descriptors */
         VALGRIND_MAKE_MEM_DEFINED(elem->desc_chunk_base_addr + elem->desc_offset,
@@ -214,19 +213,26 @@ static inline void uct_mm_iface_process_recv(uct_mm_iface_t *iface,
                            data, elem->length, "RX: AM_BCOPY");
 
         status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
-                                        desc, UCT_MM_AM_BCOPY);
+                                        desc);
         if (status != UCS_OK) {
-            /* assign a new receive descriptor to this FIFO element.
-             * abort if the new descriptor allocation failed */
-            uct_mm_assign_desc_to_fifo_elem(iface, elem, 1);
+            /* assign a new receive descriptor to this FIFO element.*/
+            uct_mm_assign_desc_to_fifo_elem(iface, elem, 0);
         }
     }
+    return status;
 }
 
 static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 {
     uint64_t read_index_loc, read_index;
     uct_mm_fifo_element_t* read_index_elem;
+    ucs_status_t status;
+
+    /* check the memory pool to make sure that there is a new descriptor available */
+    if (ucs_unlikely(iface->last_recv_desc == NULL)) {
+        UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp,
+                                 iface->last_recv_desc, return);
+    }
 
     read_index = iface->read_index;
     read_index_loc = (read_index & iface->fifo_mask);
@@ -235,14 +241,20 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 
     /* check the read_index to see if there is a new item to read (checking the owner bit) */
     if (((read_index >> iface->fifo_shift) & 1) == ((read_index_elem->flags) & 1)) {
-        /* raise the read_index. */
-        iface->read_index++;
 
-        /* could progress the read_index. now read from read_index_elem */
+        /* read from read_index_elem */
         ucs_memory_cpu_load_fence();
         ucs_assert(iface->read_index <= iface->recv_fifo_ctl->head);
 
-        uct_mm_iface_process_recv(iface, read_index_elem);
+        status = uct_mm_iface_process_recv(iface, read_index_elem);
+        if (status != UCS_OK) {
+            /* the last_recv_desc is in use. get a new descriptor for it */
+            UCT_TL_IFACE_GET_RX_DESC(&iface->super, &iface->recv_desc_mp,
+                                     iface->last_recv_desc, ucs_debug("recv mpool is empty"));
+        }
+
+        /* raise the read_index. */
+        iface->read_index++;
     } else {
        /* progress the tail when there is nothing to read
         * to improve latency of receiving a message */
@@ -400,7 +412,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
         fifo_elem_p = UCT_MM_IFACE_GET_FIFO_ELEM(self, self->recv_fifo_elements, i);
         fifo_elem_p->flags = UCT_MM_FIFO_ELEM_FLAG_OWNER;
 
-        status = uct_mm_assign_desc_to_fifo_elem(self, fifo_elem_p, 0);
+        status = uct_mm_assign_desc_to_fifo_elem(self, fifo_elem_p, 1);
         if (status != UCS_OK) {
             ucs_error("Failed to allocate a descriptor for MM");
             goto destroy_descs;

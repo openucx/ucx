@@ -30,6 +30,7 @@ test_base::~test_base() {
     pop_config();
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
+                       m_state == NEW ||    /* can be skipped from a class constructor */
                        m_state == ABORTED,
                        "state=%d", m_state);
 }
