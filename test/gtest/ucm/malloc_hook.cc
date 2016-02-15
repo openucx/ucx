@@ -227,6 +227,7 @@ void test_thread::test() {
         EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_map_ranges)) << m_name;
     }
 
+    /* coverity[use_after_free] - we don't dereference ptr, just search it*/
     EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_unmap_ranges)) << m_name;
 
     /* Release old pointers (should not crash) */
