@@ -521,35 +521,41 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
     if (status != UCS_OK) {
+        uct_ud_leave(&self->super);
         return status;
     }
     if (uct_ib_mlx5_cqe_size(&self->tx.cq) != sizeof(struct mlx5_cqe64)) {
         ucs_error("TX CQE size (%d) is not %d", 
                   uct_ib_mlx5_cqe_size(&self->tx.cq),
                   (int)sizeof(struct mlx5_cqe64));
+        uct_ud_leave(&self->super);
         return UCS_ERR_IO_ERROR;
     }
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
+        uct_ud_leave(&self->super);
         return UCS_ERR_IO_ERROR;
     }
     if (uct_ib_mlx5_cqe_size(&self->rx.cq) != sizeof(struct mlx5_cqe64)) {
         ucs_error("RX CQE size (%d) is not %d", 
                   uct_ib_mlx5_cqe_size(&self->rx.cq),
                   (int)sizeof(struct mlx5_cqe64));
+        uct_ud_leave(&self->super);
         return UCS_ERR_IO_ERROR;
     }
 
     status = uct_ib_mlx5_get_txwq(self->super.super.super.worker, self->super.qp,
                                   &self->tx.wq);
     if (status != UCS_OK) {
+        uct_ud_leave(&self->super);
         return UCS_ERR_IO_ERROR;
     }
     self->super.tx.available = self->tx.wq.bb_max;
    
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq); 
     if (status != UCS_OK) {
+        uct_ud_leave(&self->super);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -562,9 +568,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         uct_ud_mlx5_iface_post_recv(self);
     }
 
-    /* TODO: add progress on first ep creation */
-    uct_worker_progress_register(worker, uct_ud_mlx5_iface_progress, self);
-
+    uct_ud_iface_complete_init(worker, &self->super, uct_ud_mlx5_iface_progress);
     uct_ud_leave(&self->super);
     return UCS_OK;
 }
@@ -578,7 +582,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
                                    uct_ud_mlx5_iface_progress, self);
     uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
-    uct_ud_enter(&self->super);
+    uct_ud_leave(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_ud_mlx5_iface_t, uct_ud_iface_t);

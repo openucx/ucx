@@ -514,8 +514,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->tx.wr_skb.sg_list           = self->tx.sge;
     self->tx.wr_skb.num_sge           = 1;
 
-    /* TODO: add progress on first ep creation */
-    uct_worker_progress_register(worker, uct_ud_verbs_iface_progress, self);
+    uct_ud_iface_complete_init(worker, &self->super, uct_ud_verbs_iface_progress);
     uct_ud_leave(&self->super);
     return UCS_OK;
 }

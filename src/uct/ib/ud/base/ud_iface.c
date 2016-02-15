@@ -305,6 +305,14 @@ err:
     return UCS_ERR_INVALID_PARAM;
 }
 
+void uct_ud_iface_complete_init(uct_worker_h worker, uct_ud_iface_t *iface, 
+                                ucs_notifier_chain_func_t progress_cb)
+{
+    /* TODO: add progress on first ep creation */
+    uct_ud_iface_reserve_skbs(iface, iface->tx.available);
+    uct_worker_progress_register(worker, progress_cb, iface);
+}
+
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, uct_ud_iface_config_t *config)
@@ -364,7 +372,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     self->tx.skb = ucs_mpool_get(&self->tx.mp);
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
     ucs_queue_head_init(&self->tx.res_skbs);
-    uct_ud_iface_reserve_skbs(self, 2*self->tx.available);
 
     ucs_arbiter_init(&self->tx.pending_q);
     self->tx.pending_q_len = 0;
@@ -372,6 +379,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     ucs_queue_head_init(&self->rx.pending_q);
 
+    /* Lock must be taken here to disable async callback until
+     * all initialization is done. 
+     * TODO: add option to start timer later
+     */
     uct_ud_enter(self); 
     status = ucs_async_add_timer(self->super.super.worker->async->mode,
                                  uct_ud_slow_tick(), /* TODO: make configurable */
