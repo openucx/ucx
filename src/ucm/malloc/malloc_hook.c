@@ -38,6 +38,17 @@
 #define UCM_MALLOC_INSTALLED_MALL_SYMS  UCS_BIT(3)  /* Installed malloc symbols */
 
 
+/* Mangled symbols of C++ allocators */
+#define UCM_OPERATOR_NEW_SYMBOL        "_Znwm"
+#define UCM_OPERATOR_DELETE_SYMBOL     "_ZdlPv"
+#define UCM_OPERATOR_VEC_NEW_SYMBOL    "_Znam"
+#define UCM_OPERATOR_VEC_DELETE_SYMBOL "_ZdaPv"
+
+
+/* Pointer to memory release function */
+typedef void (*ucm_release_func_t)(void *ptr);
+
+
 typedef struct ucm_malloc_hook_state {
     /*
      * State of hook installment
@@ -47,9 +58,8 @@ typedef struct ucm_malloc_hook_state {
     int                   installed_events; /* Which events are working */
     int                   hook_called; /* Our malloc hook was called */
     size_t                (*usable_size)(void*); /* function pointer to get usable size */
-#if !NVALGRIND
-    void                  (*free)(void*); /*function pointer to release memory */
-#endif
+
+    ucm_release_func_t    free; /* function pointer to release memory */
 
     /*
      * Track record of which pointers are ours
@@ -83,9 +93,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .installed_events = 0,
     .hook_called      = 0,
     .usable_size      = malloc_usable_size,
-#if !NVALGRIND
     .free             = free,
-#endif
     .heap_start       = (void*)-1,
     .heap_end         = (void*)-1,
     .ptrs             = NULL,
@@ -161,7 +169,7 @@ static int ucm_malloc_is_address_in_heap(void *ptr)
     return in_heap;
 }
 
-static int ucm_malloc_address_remove_if_managed(void *ptr, const char *caller)
+static int ucm_malloc_address_remove_if_managed(void *ptr, const char *debug_name)
 {
     int is_managed;
 
@@ -171,38 +179,41 @@ static int ucm_malloc_address_remove_if_managed(void *ptr, const char *caller)
         is_managed = ucm_malloc_mmaped_ptr_remove_if_exists(ptr);
     }
 
-    ucm_trace("%s(ptr=%p) - %s (heap [%p..%p])", caller, ptr,
+    ucm_trace("%s(ptr=%p) - %s (heap [%p..%p])", debug_name, ptr,
               is_managed ? "ours" : "foreign",
               ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
     return is_managed;
 }
 
-static void ucm_malloc_allocated(void *ptr, size_t size, const char *caller)
+static void ucm_malloc_allocated(void *ptr, size_t size, const char *debug_name)
 {
     VALGRIND_MALLOCLIKE_BLOCK(ptr, size, 0, 0);
     if (ucm_malloc_is_address_in_heap(ptr)) {
-        ucm_trace("%s(size=%zu)=%p, in heap [%p..%p]", caller, size, ptr,
+        ucm_trace("%s(size=%zu)=%p, in heap [%p..%p]", debug_name, size, ptr,
                   ucm_malloc_hook_state.heap_start, ucm_malloc_hook_state.heap_end);
     } else {
-        ucm_trace("%s(size=%zu)=%p, mmap'ed", caller, size, ptr);
+        ucm_trace("%s(size=%zu)=%p, mmap'ed", debug_name, size, ptr);
         ucm_malloc_mmaped_ptr_add(ptr);
     }
 }
 
-static void ucm_release_foreign_block(void *ptr, const char *caller)
+static void ucm_release_foreign_block(void *ptr, ucm_release_func_t orig_free,
+                                      const char *debug_name)
 {
-#if !NVALGRIND
     if (RUNNING_ON_VALGRIND) {
         /* We want to keep valgrind happy and release foreign memory as well.
          * Otherwise, it's safer to do nothing.
          */
-        ucm_trace("%s: release foreign block %p", caller, ptr);
-        ucm_malloc_hook_state.free(ptr);
+        if (orig_free == NULL) {
+            ucm_fatal("%s(): foreign block release function is NULL", debug_name);
+        }
+
+        ucm_trace("%s: release foreign block %p", debug_name, ptr);
+        orig_free(ptr);
     }
-#endif
 }
 
-static void *ucm_malloc(size_t size, const void *caller)
+static void *ucm_malloc_impl(size_t size, const char *debug_name)
 {
     void *ptr;
 
@@ -212,7 +223,7 @@ static void *ucm_malloc(size_t size, const void *caller)
     } else {
         ptr = ucm_dlmalloc(size);
     }
-    ucm_malloc_allocated(ptr, size, "malloc");
+    ucm_malloc_allocated(ptr, size, debug_name);
     return ptr;
 }
 
@@ -221,6 +232,35 @@ static inline void ucm_mem_free(void *ptr, size_t size)
     VALGRIND_FREELIKE_BLOCK(ptr, 0);
     VALGRIND_MAKE_MEM_UNDEFINED(ptr, size); /* Make memory accessible to ptmalloc3 */
     ucm_dlfree(ptr);
+}
+
+static void ucm_free_impl(void *ptr, ucm_release_func_t orig_free,
+                          const char *debug_name)
+{
+    ucm_malloc_hook_state.hook_called = 1;
+
+    if (ptr == NULL) {
+        /* Ignore */
+    } else if (ucm_malloc_address_remove_if_managed(ptr, debug_name)) {
+        ucm_mem_free(ptr, ucm_dlmalloc_usable_size(ptr));
+    } else {
+        ucm_release_foreign_block(ptr, orig_free, debug_name);
+    }
+}
+
+static void *ucm_memalign_impl(size_t alignment, size_t size, const char *debug_name)
+{
+    void *ptr;
+
+    ucm_malloc_hook_state.hook_called = 1;
+    ptr = ucm_dlmemalign(ucs_max(alignment, ucm_global_config.alloc_alignment), size);
+    ucm_malloc_allocated(ptr, size, debug_name);
+    return ptr;
+}
+
+static void *ucm_malloc(size_t size, const void *caller)
+{
+    return ucm_malloc_impl(size, "malloc");
 }
 
 static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
@@ -246,7 +286,7 @@ static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
         memcpy(newptr, oldptr, ucs_min(size, oldsz));
 
         if (foreign) {
-            ucm_release_foreign_block(oldptr, "realloc");
+            ucm_release_foreign_block(oldptr, ucm_malloc_hook_state.free, "realloc");
         } else{
             ucm_mem_free(oldptr, oldsz);
         }
@@ -259,30 +299,17 @@ static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
 
 static void ucm_free(void *ptr, const void *caller)
 {
-    ucm_malloc_hook_state.hook_called = 1;
-
-    if (ptr == NULL) {
-        /* Ignore */
-    } else if (ucm_malloc_address_remove_if_managed(ptr, "free")) {
-        ucm_mem_free(ptr, ucm_dlmalloc_usable_size(ptr));
-    } else {
-        ucm_release_foreign_block(ptr, "free");
-    }
+    return ucm_free_impl(ptr, ucm_malloc_hook_state.free, "free");
 }
 
 static void *ucm_memalign(size_t alignment, size_t size, const void *caller)
 {
-    void *ptr;
-
-    ucm_malloc_hook_state.hook_called = 1;
-    ptr = ucm_dlmemalign(ucs_max(alignment, ucm_global_config.alloc_alignment), size);
-    ucm_malloc_allocated(ptr, size, "memalign");
-    return ptr;
+    return ucm_memalign_impl(alignment, size, "memalign");
 }
 
 static void* ucm_calloc(size_t nmemb, size_t size)
 {
-    void *ptr = ucm_malloc(nmemb * size, NULL);
+    void *ptr = ucm_malloc_impl(nmemb * size, "calloc");
     if (ptr != NULL) {
         memset(ptr, 0, nmemb * size);
     }
@@ -291,7 +318,7 @@ static void* ucm_calloc(size_t nmemb, size_t size)
 
 static void* ucm_valloc(size_t size)
 {
-    return ucm_malloc(size, NULL);
+    return ucm_malloc_impl(size, "valloc");
 }
 
 static int ucm_posix_memalign(void **memptr, size_t alignment, size_t size)
@@ -302,13 +329,43 @@ static int ucm_posix_memalign(void **memptr, size_t alignment, size_t size)
         return EINVAL;
     }
 
-    ptr = ucm_memalign(alignment, size, NULL);
+    ptr = ucm_memalign_impl(alignment, size, "posix_memalign");
     if (ptr == NULL) {
         return ENOMEM;
     }
 
     *memptr = ptr;
     return 0;
+}
+
+static void* ucm_operator_new(size_t size)
+{
+    return ucm_malloc_impl(size, "operator new");
+}
+
+static void ucm_operator_delete(void* ptr)
+{
+    static ucm_release_func_t orig_delete = NULL;
+    if (orig_delete == NULL) {
+        orig_delete = ucm_reloc_get_orig(UCM_OPERATOR_DELETE_SYMBOL,
+                                         ucm_operator_delete);
+    }
+    ucm_free_impl(ptr, orig_delete, "operator delete");
+}
+
+static void* ucm_operator_vec_new(size_t size)
+{
+    return ucm_malloc_impl(size, "operator new[]");
+}
+
+static void ucm_operator_vec_delete(void* ptr)
+{
+    static ucm_release_func_t orig_vec_delete = NULL;
+    if (orig_vec_delete == NULL) {
+        orig_vec_delete = ucm_reloc_get_orig(UCM_OPERATOR_VEC_DELETE_SYMBOL,
+                                             ucm_operator_vec_delete);
+    }
+    ucm_free_impl(ptr, orig_vec_delete, "operator delete[]");
 }
 
 /*
@@ -495,27 +552,45 @@ static void ucm_malloc_populate_glibc_cache()
     (void)gethostbyname(hostname);
 }
 
+static void ucm_malloc_install_symbols(ucm_reloc_patch_t *patches)
+{
+    ucm_reloc_patch_t *patch;
+    for (patch = patches; patch->symbol != NULL; ++patch) {
+        ucm_reloc_modify(patch);
+    }
+}
+
+static ucm_reloc_patch_t ucm_malloc_symbol_patches[] = {
+    { "free", ucm_free },
+    { "realloc", ucm_realloc },
+    { "malloc", ucm_malloc },
+    { "memalign", ucm_memalign },
+    { "calloc", ucm_calloc },
+    { "valloc", ucm_valloc },
+    { "posix_memalign", ucm_posix_memalign },
+    { "setenv", ucm_setenv },
+    { UCM_OPERATOR_NEW_SYMBOL, ucm_operator_new },
+    { UCM_OPERATOR_DELETE_SYMBOL, ucm_operator_delete },
+    { UCM_OPERATOR_VEC_NEW_SYMBOL, ucm_operator_vec_new },
+    { UCM_OPERATOR_VEC_DELETE_SYMBOL, ucm_operator_vec_delete },
+    { NULL, NULL }
+};
+
+static ucm_reloc_patch_t ucm_malloc_optional_symbol_patches[] = {
+    { "mallopt", ucm_dlmallopt },
+    { "mallinfo", ucm_dlmallinfo },
+    { "malloc_stats", ucm_dlmalloc_stats },
+    { "malloc_trim", ucm_dlmalloc_trim },
+    { "malloc_usable_size", ucm_dlmalloc_usable_size },
+    { NULL, NULL }
+};
+
 static void ucm_malloc_install_optional_symbols()
 {
-    #define UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(_name) \
-        ucm_reloc_patch_t _name##_patch = { #_name, ucm_dl##_name }
-    static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(mallopt);
-    static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(mallinfo);
-    static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_stats);
-    static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_trim);
-    static UCM_MALLOC_HOOK_DL_SYMBOL_PATCH(malloc_usable_size);
-
-    if (ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS) {
-        return;
+    if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_OPT_SYMS)) {
+        ucm_malloc_install_symbols(ucm_malloc_optional_symbol_patches);
+        ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_OPT_SYMS;
     }
-
-    ucm_reloc_modify(&mallopt_patch);
-    ucm_reloc_modify(&mallinfo_patch);
-    ucm_reloc_modify(&malloc_stats_patch);
-    ucm_reloc_modify(&malloc_trim_patch);
-    ucm_reloc_modify(&malloc_usable_size_patch);
-
-    ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_OPT_SYMS;
 }
 
 ucs_status_t ucm_malloc_install(int events)
@@ -579,27 +654,9 @@ ucs_status_t ucm_malloc_install(int events)
     /* Install using malloc symbols */
     if (ucm_global_config.enable_malloc_reloc) {
         if (!(ucm_malloc_hook_state.install_state & UCM_MALLOC_INSTALLED_MALL_SYMS)) {
-            #define UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(_name) \
-                ucm_reloc_patch_t _name##_patch = { #_name, ucm_##_name }
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(free);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(realloc);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(malloc);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(memalign);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(calloc);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(valloc);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(posix_memalign);
-            static UCM_MALLOC_HOOK_UCM_SYMBOL_PATCH(setenv);
-
             ucm_debug("installing malloc relocations");
             ucm_malloc_populate_glibc_cache();
-            ucm_reloc_modify(&free_patch);
-            ucm_reloc_modify(&realloc_patch);
-            ucm_reloc_modify(&malloc_patch);
-            ucm_reloc_modify(&memalign_patch);
-            ucm_reloc_modify(&calloc_patch);
-            ucm_reloc_modify(&valloc_patch);
-            ucm_reloc_modify(&posix_memalign_patch);
-            ucm_reloc_modify(&setenv_patch);
+            ucm_malloc_install_symbols(ucm_malloc_symbol_patches);
             ucm_malloc_hook_state.install_state |= UCM_MALLOC_INSTALLED_MALL_SYMS;
         }
     } else {
