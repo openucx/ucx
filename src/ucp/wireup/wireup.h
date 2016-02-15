@@ -44,7 +44,12 @@ typedef struct ucp_wireup_msg {
     ucp_rsc_index_t               dst_aux_index;    /* Index of receiver wireup resource */
     uint16_t                      flags;            /* Wireup flags */
     uint8_t                       addr_len;         /* Length of first address */
-    /* addresses follow */
+    uint8_t                       peer_name_len;    /* Length of peer name */
+    /*
+     * Variable-length fields:
+     *   - peer name (peer_name_len)
+     *   - addresses (according to flags)
+     */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
 

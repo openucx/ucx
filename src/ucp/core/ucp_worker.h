@@ -43,6 +43,9 @@ SGLIB_DEFINE_LIST_PROTOTYPES(ucp_ep_t, ucp_worker_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE, ucp_worker_ep_hash);
 
 
+void ucp_worker_get_name(ucp_worker_h worker, char *name, size_t max);
+
+
 static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uuid)
 {
     ucp_ep_t search;
