@@ -305,12 +305,25 @@ err:
     return UCS_ERR_INVALID_PARAM;
 }
 
-void uct_ud_iface_complete_init(uct_worker_h worker, uct_ud_iface_t *iface, 
-                                ucs_notifier_chain_func_t progress_cb)
+void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_notifier_chain_func_t progress_cb)
 {
+    ucs_status_t status;
+
     /* TODO: add progress on first ep creation */
+    uct_ud_enter(iface); 
+    status = ucs_async_add_timer(iface->super.super.worker->async->mode,
+                                 uct_ud_slow_tick(), /* TODO: make configurable */
+                                 uct_ud_iface_timer, iface,
+                                 iface->super.super.worker->async,
+                                 &iface->async.timer_id);
+    ucs_assertv_always(status == UCS_OK, "status=%s", ucs_status_string(status));
+
+    status = ucs_twheel_init(&iface->async.slow_timer, uct_ud_slow_tick() / 4,
+                             uct_ud_iface_get_async_time(iface));
+    ucs_assert_always(status == UCS_OK);
     uct_ud_iface_reserve_skbs(iface, iface->tx.available);
-    uct_worker_progress_register(worker, progress_cb, iface);
+    uct_worker_progress_register(iface->super.super.worker, progress_cb, iface);
+    uct_ud_leave(iface); 
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
@@ -379,21 +392,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     ucs_queue_head_init(&self->rx.pending_q);
 
-    /* Lock must be taken here to disable async callback until
-     * all initialization is done. 
-     * TODO: add option to start timer later
-     */
-    uct_ud_enter(self); 
-    status = ucs_async_add_timer(self->super.super.worker->async->mode,
-                                 uct_ud_slow_tick(), /* TODO: make configurable */
-                                 uct_ud_iface_timer, self,
-                                 self->super.super.worker->async,
-                                 &self->async.timer_id);
-    ucs_assertv_always(status == UCS_OK, "status=%s", ucs_status_string(status));
-
-    status = ucs_twheel_init(&self->async.slow_timer, uct_ud_slow_tick() / 4,
-                             uct_ud_iface_get_async_time(self));
-    ucs_assert_always(status == UCS_OK);
                         
     return UCS_OK;
 

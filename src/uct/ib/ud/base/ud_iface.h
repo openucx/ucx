@@ -122,8 +122,7 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface);
 
-void uct_ud_iface_complete_init(uct_worker_h worker, uct_ud_iface_t *iface, 
-                                ucs_notifier_chain_func_t progress_cb);
+void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_notifier_chain_func_t progress_cb);
 
 static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 {
