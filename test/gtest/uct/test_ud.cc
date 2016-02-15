@@ -488,6 +488,7 @@ UCS_TEST_P(test_ud, res_skb_tx) {
 
             skb = uct_ud_iface_res_skb_get(ud_if);
             ASSERT_TRUE(skb);
+            VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
             ASSERT_LT(skb->flags, poll_sn);
             skb->flags = poll_sn;
 
