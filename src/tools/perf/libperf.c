@@ -837,7 +837,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     uct_iface_config_t *iface_config;
     ucs_status_t status;
 
-    status = ucs_async_context_init(&perf->uct.async, UCS_ASYNC_MODE_THREAD);
+    status = ucs_async_context_init(&perf->uct.async, params->async_mode);
     if (status != UCS_OK) {
         goto out;
     }
