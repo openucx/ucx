@@ -133,6 +133,7 @@ typedef struct ucx_perf_params {
     ucx_perf_test_type_t   test_type;       /* Test communication type */
     ucs_thread_mode_t      thread_mode;     /* Thread mode for communication objects */
     unsigned               thread_count;    /* Number of threads in the test program */
+    ucs_async_mode_t       async_mode;      /* how async progress and locking is done */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 

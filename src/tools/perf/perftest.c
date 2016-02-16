@@ -78,7 +78,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqM:T:d:x:"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqM:T:d:x:A:"
 
 
 test_type_t tests[] = {
@@ -342,6 +342,9 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("                        serialized : One thread can access at a time.\n");
     printf("                        multi      : Multiple threads can access.\n");
     printf("     -T <threads>   Number of threads in the test (1); also implies \"-M multi\".\n");
+    printf("     -A <mode>      Async progress mode. (thread)\n");
+    printf("                        thread     : Use separate progress thread.\n");
+    printf("                        signal     : Use signal based timer.\n"); 
 #if HAVE_MPI
     printf("     -P <0|1>       Disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
@@ -365,6 +368,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->test_type       = UCX_PERF_TEST_TYPE_LAST;
     params->thread_mode     = UCS_THREAD_MODE_SINGLE;
     params->thread_count    = 1;
+    params->async_mode      = UCS_ASYNC_MODE_THREAD;
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
@@ -462,6 +466,17 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->thread_count = atoi(optarg);
         params->thread_mode = UCS_THREAD_MODE_MULTI;
         return UCS_OK;
+    case 'A':
+        if (0 == strcmp(optarg, "thread")) {
+            params->async_mode = UCS_ASYNC_MODE_THREAD;
+            return UCS_OK;
+        } else if (0 == strcmp(optarg, "signal")) {
+            params->async_mode = UCS_ASYNC_MODE_SIGNAL;
+            return UCS_OK;
+        } else {
+            ucs_error("Invalid option argument for -A");
+            return UCS_ERR_INVALID_PARAM;
+        }
     default:
        return UCS_ERR_INVALID_PARAM;
     }
