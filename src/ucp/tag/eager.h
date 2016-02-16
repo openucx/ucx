@@ -11,6 +11,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/proto/proto.h>
 
 
 /*
@@ -27,16 +28,12 @@ typedef struct {
  */
 typedef struct {
     ucp_eager_hdr_t           super;
-    size_t                    total_len; /* TODO make it 32bit because of rndv */
+    size_t                    total_len;
 } UCS_S_PACKED ucp_eager_first_hdr_t;
 
 
-ucs_status_t ucp_tag_progress_eager_contig(uct_pending_req_t *self);
+extern const ucp_proto_t ucp_tag_eager_proto;
 
-ucs_status_t ucp_tag_progress_eager_generic(uct_pending_req_t *self);
-
-ucs_status_t ucp_tag_send_eager_only_contig(ucp_ep_t *ep, ucp_tag_t tag,
-                                            const void *buffer, size_t length);
 
 static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
                                                     const void *buffer, size_t length)

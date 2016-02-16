@@ -62,6 +62,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "Threshold for switching from eager to rendezvous protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"ZCOPY_THRESH", "auto",
+   "Threshold for switching from buffer copy to zero copy protocol",
+   ucs_offsetof(ucp_config_t, ctx.zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"BCOPY_BW", "5800mb",
+   "Estimation of buffer copy bandwidth",
+   ucs_offsetof(ucp_config_t, ctx.bcopy_bw), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"LOG_DATA", "0",
    "Size of packet data that is dumped to the log system in debug mode (0 - nothing).",
    ucs_offsetof(ucp_config_t, ctx.log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -73,7 +81,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "rc",    { "rc", "ud", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt", "ugni_rdma", NULL } },
   { NULL }
