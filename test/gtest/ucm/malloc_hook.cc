@@ -220,6 +220,16 @@ void test_thread::test() {
     ptr_r = realloc(ptr_r, m_test->small_alloc_size / 2);
     free(ptr_r);
 
+    /* Test C++ allocations */
+    {
+        std::vector<char> vec(large_alloc_size, 0);
+        ptr = &vec[0];
+        EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_map_ranges)) << m_name;
+    }
+
+    /* coverity[use_after_free] - we don't dereference ptr, just search it*/
+    EXPECT_TRUE(is_ptr_in_range(ptr, large_alloc_size, m_unmap_ranges)) << m_name;
+
     /* Release old pointers (should not crash) */
     old_ptrs.clear();
 
@@ -324,4 +334,48 @@ UCS_TEST_F(malloc_hook, fork) {
         waitpid(pids[i], &status, 0);
         EXPECT_EQ(0, WEXITSTATUS(status)) << "Process " << i << " failed";
     }
+}
+
+class malloc_hook_cplusplus : public malloc_hook {
+public:
+
+    malloc_hook_cplusplus() : m_unmapped_size(0) {
+    }
+
+    static void mem_event_callback(ucm_event_type_t event_type, ucm_event_t *event,
+                                   void *arg)
+    {
+        malloc_hook_cplusplus *self = reinterpret_cast<malloc_hook_cplusplus*>(arg);
+        self->m_unmapped_size += event->vm_unmapped.size;
+    }
+
+protected:
+    size_t m_unmapped_size;
+};
+
+UCS_TEST_F(malloc_hook_cplusplus, new_delete) {
+
+    const size_t size = 8 * 1000 * 1000;
+
+    ucs_status_t result = ucm_set_event_handler(UCM_EVENT_VM_UNMAPPED,
+                                                0, mem_event_callback,
+                                                reinterpret_cast<void*>(this));
+    ASSERT_UCS_OK(result);
+
+    {
+        std::vector<char> vec1(size, 0);
+        std::vector<char> vec2(size, 0);
+        std::vector<char> vec3(size, 0);
+    }
+
+    {
+        std::vector<char> vec1(size, 0);
+        std::vector<char> vec2(size, 0);
+        std::vector<char> vec3(size, 0);
+    }
+
+    EXPECT_GE(m_unmapped_size, size * 3);
+
+    ucm_unset_event_handler(UCM_EVENT_VM_UNMAPPED, mem_event_callback,
+                            reinterpret_cast<void*>(this));
 }
