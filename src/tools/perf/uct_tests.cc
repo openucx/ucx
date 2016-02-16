@@ -21,7 +21,8 @@ public:
 
     uct_perf_test_runner(ucx_perf_context_t &perf) :
         m_perf(perf),
-        m_max_outstanding(m_perf.params.max_outstanding)
+        m_max_outstanding(m_perf.params.max_outstanding),
+        m_send_b_count(0)
 
     {
         ucs_assert_always(m_max_outstanding > 0);
@@ -178,7 +179,9 @@ public:
         for (;;) {
             status = send(ep, sn, prev_sn, buffer, length, remote_addr, rkey, comp);
             if (ucs_likely(status == UCS_OK)) {
-                progress_requestor();
+                if ((m_send_b_count++ % N_SEND_B_PER_PROGRESS) == 0) {
+                    progress_requestor();
+                }
                 return;
             } else if (status == UCS_INPROGRESS) {
                 ++m_completion.count;
@@ -455,6 +458,8 @@ private:
     ucx_perf_context_t &m_perf;
     const unsigned     m_max_outstanding;
     uct_completion_t   m_completion;
+    int                m_send_b_count;
+    const static int   N_SEND_B_PER_PROGRESS = 16;
 };
 
 
