@@ -76,7 +76,7 @@ static ucs_status_t ucm_mmap_test(int events)
 
     if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT)) {
         p = shmat(0, NULL, 0);
-        shmdt(p);
+        shmdt(p == MAP_FAILED ? NULL : p);
     }
 
     if (events & UCM_EVENT_SBRK) {

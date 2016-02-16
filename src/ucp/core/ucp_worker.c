@@ -408,6 +408,15 @@ err:
     return status;
 }
 
+void ucp_worker_get_name(ucp_worker_h worker, char *name, size_t max)
+{
+#if ENABLE_DEBUG_DATA
+    ucs_snprintf_zero(name, max, "%s:%d", ucs_get_host_name(), getpid()); /* TODO tid? */
+#else
+    memset(name, 0, max);
+#endif
+}
+
 ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
                                     size_t *address_length_p)
 {
@@ -421,12 +430,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 
     UCS_STATIC_ASSERT((ucp_address_t*)0 + 1 == (void*)0 + 1);
 
-#if ENABLE_DEBUG_DATA
-    ucs_snprintf_zero(name, UCP_PEER_NAME_MAX, "%s:%d", ucs_get_host_name(),
-                      getpid()); /* TODO tid? */
-#else
-    memset(name, 0, sizeof(name));
-#endif
+    ucp_worker_get_name(worker, name, sizeof(name));
 
     address_length = sizeof(uint64_t) + strlen(name) + 1;
     address        = ucs_malloc(address_length + 1, "ucp address");

@@ -5,6 +5,7 @@
 */
 
 #include <ucs/sys/compiler.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/instrument.h>
 #include <ucs/debug/log.h>
@@ -13,8 +14,65 @@
 #include <ucs/async/async.h>
 
 
+/* run-time CPU detection */
+static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
+{
+    char str[256];
+    char *p_str;
+    int cpu_flags;
+    struct {
+        const char* flag;
+        ucs_cpu_flag_t value;
+    } *p_flags,
+    cpu_flags_array[] = {
+        { "cmov", UCS_CPU_FLAG_CMOV },
+        { "mmx", UCS_CPU_FLAG_MMX },
+        { "mmx2", UCS_CPU_FLAG_MMX2 },
+        { "sse", UCS_CPU_FLAG_SSE },
+        { "sse2", UCS_CPU_FLAG_SSE2 },
+        { "sse3", UCS_CPU_FLAG_SSE3 },
+        { "ssse3", UCS_CPU_FLAG_SSSE3 },
+        { "sse41", UCS_CPU_FLAG_SSE41 },
+        { "sse42", UCS_CPU_FLAG_SSE42 },
+        { "avx", UCS_CPU_FLAG_AVX },
+        { "avx2", UCS_CPU_FLAG_AVX2 },
+        { NULL, UCS_CPU_FLAG_UNKNOWN },
+    };
+
+    cpu_flags = ucs_arch_get_cpu_flag();
+    if (UCS_CPU_FLAG_UNKNOWN == cpu_flags) {
+        return ;
+    }
+    strncpy(str, UCS_PP_MAKE_STRING(CPU_FLAGS), sizeof(str) - 1);
+
+    p_str = strtok(str, " |\t\n\r");
+    while (p_str) {
+        p_flags = cpu_flags_array;
+        while (p_flags && p_flags->flag) {
+            if (!strcmp(p_str, p_flags->flag)) {
+                if (!(cpu_flags & p_flags->value)) {
+                    fprintf(stderr, "[%s:%d] FATAL: UCX library was compiled with %s"
+                            " but CPU does not support it.\n",
+                            ucs_get_host_name(), getpid(), p_flags->flag);
+                    exit(1);
+                }
+                break;
+            }
+            p_flags++;
+        }
+        if (NULL == p_flags->flag) {
+            fprintf(stderr, "[%s:%d] FATAL: UCX library was compiled with %s"
+                    " but CPU does not support it.\n",
+                    ucs_get_host_name(), getpid(), p_str);
+            exit(1);
+        }
+        p_str = strtok(NULL, " |\t\n\r");
+    }
+}
+
 static void UCS_F_CTOR ucs_init()
 {
+    ucs_check_cpu_flags();
     ucs_log_early_init(); /* Must be called before all others */
     ucs_global_opts_init();
     ucs_log_init();

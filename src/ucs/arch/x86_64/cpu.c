@@ -12,17 +12,26 @@
 #include <ucs/sys/sys.h>
 
 #define X86_CPUID_GET_MODEL       0x00000001u
+#define X86_CPUID_GET_BASE_VALUE  0x00000000u
+#define X86_CPUID_GET_EXTD_VALUE  0x00000007u
 #define X86_CPUID_GET_MAX_VALUE   0x80000000u
 #define X86_CPUID_INVARIANT_TSC   0x80000007u
 
 
-static inline void ucs_x86_cpuid(uint32_t level, uint32_t *a, uint32_t *b,
-                                 uint32_t *c, uint32_t *d)
+static UCS_F_NOOPTIMIZE inline void ucs_x86_cpuid(uint32_t level,
+                                                uint32_t *a, uint32_t *b,
+                                                uint32_t *c, uint32_t *d)
 {
   asm volatile ("cpuid\n\t"
                   : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
                   : "0" (level));
 }
+
+/* This allows the CPU detection to work with assemblers not supporting
+ * the xgetbv mnemonic.  These include clang and some BSD versions.
+ */
+#define ucs_x86_xgetbv(_index, _eax, _edx) \
+	asm volatile (".byte 0x0f, 0x01, 0xd0" : "=a"(_eax), "=d"(_edx) : "c" (_index))
 
 static void ucs_x86_check_invariant_tsc()
 {
@@ -151,6 +160,67 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
     }
 
     return UCS_CPU_MODEL_UNKNOWN;
+}
+
+
+int ucs_arch_get_cpu_flag()
+{
+    static int cpu_flag = UCS_CPU_FLAG_UNKNOWN;
+
+    if (UCS_CPU_FLAG_UNKNOWN == cpu_flag) {
+        uint32_t result = 0;
+        uint32_t base_value;
+        uint32_t _eax, _ebx, _ecx, _edx;
+
+        ucs_x86_cpuid(X86_CPUID_GET_BASE_VALUE, &_eax, &_ebx, &_ecx, &_edx);
+        base_value = _eax;
+
+        if (base_value >= 1) {
+            ucs_x86_cpuid(X86_CPUID_GET_MODEL, &_eax, &_ebx, &_ecx, &_edx);
+            if (_edx & (1 << 15)) {
+                result |= UCS_CPU_FLAG_CMOV;
+            }
+            if (_edx & (1 << 23)) {
+                result |= UCS_CPU_FLAG_MMX;
+            }
+            if (_edx & (1 << 25)) {
+                result |= UCS_CPU_FLAG_MMX2;
+            }
+            if (_edx & (1 << 25)) {
+                result |= UCS_CPU_FLAG_SSE;
+            }
+            if (_edx & (1 << 26)) {
+                result |= UCS_CPU_FLAG_SSE2;
+            }
+            if (_ecx & 1) {
+                result |= UCS_CPU_FLAG_SSE3;
+            }
+            if (_ecx & (1 << 9)) {
+                result |= UCS_CPU_FLAG_SSSE3;
+            }
+            if (_ecx & (1 << 19)) {
+                result |= UCS_CPU_FLAG_SSE41;
+            }
+            if (_ecx & (1 << 20)) {
+                result |= UCS_CPU_FLAG_SSE42;
+            }
+            if ((_ecx & 0x18000000) == 0x18000000) {
+                ucs_x86_xgetbv(0, _eax, _edx);
+                if ((_eax & 0x6) == 0x6) {
+                    result |= UCS_CPU_FLAG_AVX;
+                }
+            }
+        }
+        if (base_value >= 7) {
+            ucs_x86_cpuid(X86_CPUID_GET_EXTD_VALUE, &_eax, &_ebx, &_ecx, &_edx);
+            if ((result & UCS_CPU_FLAG_AVX) && (_ebx & (1 << 5))) {
+                result |= UCS_CPU_FLAG_AVX2;
+            }
+        }
+        cpu_flag = result;
+    }
+
+    return cpu_flag;
 }
 
 #endif
