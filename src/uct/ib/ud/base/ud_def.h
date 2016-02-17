@@ -16,10 +16,23 @@
 
 #define UCT_UD_QP_HASH_SIZE     256    
 #define UCT_UD_MAX_SGE          2
-#define UCT_UD_MAX_WINDOW       1024 /* TODO: make it config param */
 #define UCT_UD_TX_MODERATION    64
 #define UCT_UD_MIN_INLINE       48
 #define UCT_UD_HASH_SIZE        997
+
+/* congestion avoidance settings */
+/* adaptive increase/multiplicative decrease */
+#define UCT_UD_CA_AI_VALUE      1   /* windoe += AI_VALUE */
+#define UCT_UD_CA_MD_FACTOR     2   /* window = window/factor */
+#define UCT_UD_CA_DUP_ACK_CNT   2   /* TODO: not implemented yet */
+
+/* note that the ud tx window is [acked_psn+1, max_psn)
+ * and max_psn = acked_psn + cwnd
+ * so add 1 to the max/min window constants instead of doing this in the code
+ */
+#define UCT_UD_CA_MIN_WINDOW    2
+#define UCT_UD_CA_MAX_WINDOW    1025 
+
 
 typedef uint16_t                 uct_ud_psn_t;
 #define UCT_UD_PSN_COMPARE       UCS_CIRCULAR_COMPARE16
