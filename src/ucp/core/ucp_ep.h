@@ -13,6 +13,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/log.h>
 #include <limits.h>
 
 
@@ -23,14 +24,15 @@
  * Endpoint wire-up state
  */
 enum {
-    UCP_EP_STATE_READY_TO_SEND            = UCS_BIT(0), /* uct_ep is ready to go */
-    UCP_EP_STATE_AUX_EP                   = UCS_BIT(1), /* aux_ep was created */
-    UCP_EP_STATE_NEXT_EP                  = UCS_BIT(2), /* next_ep was created */
-    UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED  = UCS_BIT(3), /* next_ep connected to remote */
-    UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED = UCS_BIT(4), /* remote also connected to our next_ep */
-    UCP_EP_STATE_WIREUP_REPLY_SENT        = UCS_BIT(5), /* wireup reply message has been sent */
-    UCP_EP_STATE_WIREUP_ACK_SENT          = UCS_BIT(6), /* wireup ack message has been sent */
-    UCP_EP_STATE_STUB_EP                  = UCS_BIT(7), /* the current ep is a stub */
+    UCP_EP_STATE_READY_TO_SEND            = UCS_BIT(0), /* uct_ep can send to remote */
+    UCP_EP_STATE_READY_TO_RECEIVE         = UCS_BIT(1), /* remote can send to me */
+    UCP_EP_STATE_AUX_EP                   = UCS_BIT(2), /* aux_ep was created */
+    UCP_EP_STATE_NEXT_EP                  = UCS_BIT(3), /* next_ep was created */
+    UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED  = UCS_BIT(4), /* next_ep connected to remote */
+    UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED = UCS_BIT(5), /* remote also connected to our next_ep */
+    UCP_EP_STATE_WIREUP_REPLY_SENT        = UCS_BIT(6), /* wireup reply message has been sent */
+    UCP_EP_STATE_WIREUP_ACK_SENT          = UCS_BIT(7), /* wireup ack message has been sent */
+    UCP_EP_STATE_STUB_EP                  = UCS_BIT(8), /* the current ep is a stub */
 };
 
 
@@ -85,6 +87,8 @@ typedef struct ucp_ep {
 
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message, ucp_ep_h *ep_p);
+
+void ucp_ep_delete(ucp_ep_h ep);
 
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 

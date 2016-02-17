@@ -5,6 +5,11 @@
 */
 
 #include "ucp_test.h"
+extern "C" {
+#include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto.h>
+}
+
 
 class test_ucp_wireup : public ucp_test {
 public:
@@ -14,34 +19,25 @@ public:
         return params;
     }
 
+
 protected:
-    static void send_completion(void *request, ucs_status_t status) {
-    }
+    void tag_send(ucp_ep_h from, ucp_worker_h to);
+
+    static void send_completion(void *request, ucs_status_t status);
 
     static void recv_completion(void *request, ucs_status_t status,
-                                ucp_tag_recv_info_t *info) {
-    }
-
-    void wait(void *req) {
-        do {
-            progress();
-        } while (!ucp_request_is_completed(req));
-        ucp_request_release(req);
-    }
+                                ucp_tag_recv_info_t *info);
+    void wait(void *req);
 };
 
-UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
-
+void test_ucp_wireup::tag_send(ucp_ep_h from, ucp_worker_h to)
+{
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const uint64_t TAG = 0xdeadbeef;
     uint64_t send_data = 0x12121212;
-    entity *sender   = create_entity();
-    entity *receiver = create_entity();
     void *req;
 
-    sender->connect(receiver);
-
-    req = ucp_tag_send_nb(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
+    req = ucp_tag_send_nb(from, &send_data, sizeof(send_data), DATATYPE,
                           TAG, send_completion);
     if (UCS_PTR_IS_PTR(req)) {
         wait(req);
@@ -50,21 +46,82 @@ UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
     }
 
     uint64_t recv_data = 0;
-    req = ucp_tag_recv_nb(receiver->worker(), &recv_data, sizeof(recv_data),
+    req = ucp_tag_recv_nb(to, &recv_data, sizeof(recv_data),
                           DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
     wait(req);
 
     EXPECT_EQ(send_data, recv_data);
 
-    ucp_worker_flush(sender->worker());
+    ucp_worker_flush(from->worker);
+}
+
+void test_ucp_wireup::send_completion(void *request, ucs_status_t status)
+{
+}
+
+void test_ucp_wireup::recv_completion(void *request, ucs_status_t status,
+                                      ucp_tag_recv_info_t *info)
+{
+}
+
+void test_ucp_wireup::wait(void *req)
+{
+    do {
+        progress();
+    } while (!ucp_request_is_completed(req));
+    ucp_request_release(req);
+}
+
+UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    tag_send(ent1->ep(), ent2->worker());
 }
 
 UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
-    entity *sender   = create_entity();
-    entity *receiver = create_entity();
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
 
-    sender->connect(receiver);
-    receiver->connect(sender);
+    ent1->connect(ent2);
+    ent2->connect(ent1);
+
+    tag_send(ent1->ep(), ent2->worker());
+    tag_send(ent2->ep(), ent1->worker());
+}
+
+UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+
+    ucp_ep_connect_remote(ent1->ep());
+
+    /* Send a reply */
+    ucp_ep_h ep = ucp_worker_get_reply_ep(ent2->worker(), ent1->worker()->uuid);
+    tag_send(ep, ent1->worker());
+
+    ucp_ep_destroy(ep);
+}
+
+UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+
+    ucp_ep_connect_remote(ent1->ep());
+
+    /* Make sure the wireup message arrives before sending a reply */
+    tag_send(ent1->ep(), ent2->worker());
+
+    /* Send a reply */
+    ucp_ep_h ep = ucp_worker_get_reply_ep(ent2->worker(), ent1->worker()->uuid);
+    tag_send(ep, ent1->worker());
+
+    ucp_ep_destroy(ep);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)

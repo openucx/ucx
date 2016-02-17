@@ -202,6 +202,18 @@ static void ucp_worker_set_config(ucp_worker_h worker, ucp_rsc_index_t tl_id)
     config->rndv_thresh  = SIZE_MAX;
 }
 
+static void ucp_worker_set_stub_config(ucp_worker_h worker)
+{
+    ucp_context_h context        = worker->context;
+    ucp_ep_config_t *config      = &worker->ep_config[context->num_tls];
+
+    memset(config, 0, sizeof(*config));
+
+    config->max_am_bcopy      = 256;
+    config->zcopy_thresh      = SIZE_MAX;
+    config->rndv_thresh       = SIZE_MAX;
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
                                ucp_worker_h *worker_p)
 {
@@ -210,7 +222,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     ucs_status_t status;
 
     worker = ucs_calloc(1, sizeof(*worker) +
-                           sizeof(*worker->ep_config) * context->num_tls,
+                           sizeof(*worker->ep_config) * (context->num_tls + 1),
                         "ucp worker");
     if (worker == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -277,6 +289,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 
         ucp_worker_set_config(worker, tl_id);
     }
+
+    ucp_worker_set_stub_config(worker);
 
     *worker_p = worker;
     return UCS_OK;
@@ -493,6 +507,36 @@ err_free:
 void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
 {
     ucs_free(address);
+}
+
+ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
+{
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+
+    ep = ucp_worker_ep_find(worker, dest_uuid);
+    if (ep == NULL) {
+        status = ucp_ep_new(worker, dest_uuid, "??", "for-sending-reply", &ep);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        status = ucp_wireup_create_stub_ep(ep);
+        if (status != UCS_OK) {
+            ucp_ep_delete(ep);
+            goto err;
+        }
+    } else {
+        ucs_debug("found ep %p", ep);
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return ep;
+
+err:
+    ucs_fatal("failed to create reply endpoint: %s", ucs_status_string(status));
 }
 
 SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_worker_ep_compare, next);
