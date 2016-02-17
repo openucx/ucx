@@ -160,6 +160,10 @@ struct uct_ud_ep {
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;
     struct {
+        uct_ud_psn_t  wmax;
+        uct_ud_psn_t  cwnd;
+    } ca;
+    struct {
         uct_ud_psn_t        acked_psn;    /* Last psn we acked */
         ucs_frag_list_t     ooo_pkts;     /* Out of order packets that can not be processed yet,
                                             also keeps last psn we successfully received and processed */
@@ -299,7 +303,7 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE int uct_ud_ep_no_window(uct_ud_ep_t *ep)
 {
-        return ep->tx.psn == ep->tx.max_psn;
+        return UCT_UD_PSN_COMPARE(ep->tx.psn, ==, ep->tx.max_psn);
 }
 
 /*

@@ -29,6 +29,23 @@ public:
         return UCS_OK;
     }
 
+    static int rx_ack_count;
+
+    static ucs_status_t count_rx_acks(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (UCT_UD_PSN_COMPARE(neth->ack_psn, >, ep->tx.acked_psn)) {
+            rx_ack_count++;
+        }
+        return UCS_OK;
+    }
+
+    static int rx_drop_count;
+
+    static ucs_status_t drop_rx(uct_ud_ep_t *ep, uct_ud_neth_t *neth) {
+        rx_drop_count++;
+        return UCS_ERR_BUSY;
+    }
+
     static int ack_req_tx_cnt;
 
     static uct_ud_psn_t tx_ack_psn;
@@ -67,6 +84,8 @@ public:
 };
 
 int test_ud::ack_req_tx_cnt = 0;
+int test_ud::rx_ack_count   = 0;
+int test_ud::rx_drop_count  = 0;
 
 uct_ud_psn_t test_ud::tx_ack_psn = 0;
 
@@ -260,6 +279,83 @@ UCS_TEST_P(test_ud, creq_flush) {
     /* do flush while ep is not yet connected - should work */
     flush();
 }
+
+UCS_TEST_P(test_ud, ca_ai) {
+    ucs_status_t status;
+    int prev_cwnd;
+
+    /* check initial window */
+    disable_async(m_e1);
+    disable_async(m_e2);
+    connect();
+    EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e1)->ca.cwnd);
+    EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e2)->ca.cwnd);
+    
+    ep(m_e1, 0)->rx.rx_hook = count_rx_acks;
+    prev_cwnd = ep(m_e1)->ca.cwnd;
+    rx_ack_count = 0;
+
+    /* window increase upto max window should 
+     * happen when we receive acks */
+    while(ep(m_e1)->ca.cwnd < UCT_UD_CA_MAX_WINDOW) {
+       status = tx(m_e1);
+       if (status != UCS_OK) {
+           progress();
+           /* it is possible to get no acks if tx queue is full.
+            * But no more than 2 acks per window. 
+            * One at 1/4 and one at the end 
+            *
+            * every new ack should cause window increase
+            */
+           EXPECT_LE(rx_ack_count, 2); 
+           EXPECT_EQ(rx_ack_count, 
+                     UCT_UD_CA_AI_VALUE * (ep(m_e1)->ca.cwnd - prev_cwnd));
+           prev_cwnd = ep(m_e1)->ca.cwnd;
+           rx_ack_count = 0;
+       }
+    }
+}
+
+UCS_TEST_P(test_ud, ca_md) {
+
+    ucs_status_t status;
+    int new_cwnd;
+    int i;
+
+    connect();
+
+    /* assume we are at the max window 
+     * on receive drop all packets. After several retransmission
+     * attempts the window will be reduced to the minumum 
+     */
+    set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
+    ep(m_e2, 0)->rx.rx_hook = drop_rx;
+    for (i = 1; i < UCT_UD_CA_MAX_WINDOW; i++) {
+        status = tx(m_e1);
+        EXPECT_UCS_OK(status);
+        progress();
+    }
+
+    ep(m_e1)->tx.tx_hook = ack_req_count_tx;
+    do {
+        new_cwnd = ep(m_e1, 0)->ca.cwnd / UCT_UD_CA_MD_FACTOR;
+        rx_drop_count = 0;
+        ack_req_tx_cnt = 0;
+        do {
+            progress();
+        } while (ep(m_e1, 0)->ca.cwnd != new_cwnd);
+        /* more progress because resends may be waiting
+         * for tx queue to become available */
+        do { 
+            progress();
+        } while (ack_req_tx_cnt + 1 != new_cwnd);
+
+        EXPECT_EQ(new_cwnd-1, ack_req_tx_cnt);
+        EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
+
+    } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
+}
+
 #endif
 
 UCS_TEST_P(test_ud, connect_iface_single) {

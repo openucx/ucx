@@ -35,7 +35,7 @@ public:
 
     ucs_status_t iface_flush_b(entity *e);
 
-    void set_tx_win(entity *e, int size);
+    void set_tx_win(entity *e, uct_ud_psn_t size);
 
     void disable_async(entity *e);
 
