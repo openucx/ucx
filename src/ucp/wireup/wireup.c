@@ -1073,7 +1073,6 @@ out:
 err_stop_aux:
     ucp_wireup_stop_aux(ep);
 err:
-    sglib_hashed_ucp_ep_t_delete(worker->ep_hash, ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }
@@ -1085,7 +1084,6 @@ void ucp_wireup_stop(ucp_ep_h ep)
     ucs_trace_func("ep=%p", ep);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    sglib_hashed_ucp_ep_t_delete(worker->ep_hash, ep);
     ucp_wireup_stop_aux(ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
 }

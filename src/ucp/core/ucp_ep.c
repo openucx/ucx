@@ -143,6 +143,8 @@ err:
 void ucp_ep_destroy(ucp_ep_h ep)
 {
     ucs_debug("destroy ep %p", ep);
+
+    sglib_hashed_ucp_ep_t_delete(ep->worker->ep_hash, ep);
     ucp_wireup_stop(ep);
     if (ep->state & UCP_EP_STATE_READY_TO_SEND) {
         ucp_ep_destroy_uct_ep_safe(ep, ep->uct_ep);
