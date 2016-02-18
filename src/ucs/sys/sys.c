@@ -469,7 +469,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
             if (!(flags & SHM_HUGETLB)) {
                 shminfo_ptr = &shminfo;
                 if ((shmctl(0, IPC_INFO, (struct shmid_ds *) shminfo_ptr)) > -1) {
-                    ucs_error("shmget failed (size=%zu): The max number of shared memory segments in the system is = %ld. "
+                    ucs_error("shmget failed: %m. (size=%zu). The max number of shared memory segments in the system is = %ld. "
                               "Please try to increase this value through /proc/sys/kernel/shmmni",
                               alloc_size, shminfo.shmmni);
                 }

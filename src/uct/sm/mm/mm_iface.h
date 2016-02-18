@@ -59,7 +59,7 @@ struct uct_mm_iface {
     uint64_t                fifo_release_factor_mask;
 
     ucs_mpool_t             recv_desc_mp;
-    uct_mm_recv_desc_t      *last_recv_desc;
+    uct_mm_recv_desc_t      *last_recv_desc;    /* next receive descriptor to use */
 
     size_t                  rx_headroom;
     ucs_arbiter_t           arbiter;
@@ -106,21 +106,13 @@ struct uct_mm_recv_desc {
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
-                       unsigned length, uct_mm_recv_desc_t *mm_desc,
-                       uint8_t is_short)
+                       unsigned length, uct_mm_recv_desc_t *mm_desc)
 {
     ucs_status_t status;
     void *desc = mm_desc + 1;    /* point the desc to the user's headroom */
 
     status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
     if (status != UCS_OK) {
-        if (is_short) {
-            iface->last_recv_desc = ucs_mpool_get(&iface->recv_desc_mp);
-            VALGRIND_MAKE_MEM_DEFINED(iface->last_recv_desc, sizeof(*(iface->last_recv_desc)));
-            if (iface->last_recv_desc == NULL ) {
-                ucs_fatal("Failed to get a new receive descriptor for MM");
-            }
-        }
         /* save the iface of this desc for its later release */
         uct_recv_desc_iface(desc) = &iface->super.super;
     }

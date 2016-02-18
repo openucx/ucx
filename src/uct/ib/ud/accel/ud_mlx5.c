@@ -111,7 +111,7 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
         pi = next_pi;
     }
     if (ucs_unlikely(count == 0)) {
-        ucs_error("iface(%p) failed to post receive wqes", iface);
+        ucs_debug("iface(%p) failed to post receive wqes", iface);
         return;
     }
     pi = iface->rx.wq.rq_wqe_counter + count;

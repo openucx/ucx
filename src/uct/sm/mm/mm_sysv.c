@@ -60,7 +60,7 @@ uct_sysv_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
 err:
-    return status;
+    ucs_fatal("failed to allocate %zu bytes with mm", *length_p);
 
 out_ok:
     *mmid_p = shmid;
