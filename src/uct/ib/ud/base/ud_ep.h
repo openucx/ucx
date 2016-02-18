@@ -101,10 +101,12 @@ do { \
  *   - if wheel_time - saved_time > 3*one_tick_time 
  *        schedule resend 
  *        send_time = wheel_time
+ *        consgestion avoidance decreases tx window 
  *   - if window is not empty resched timer
  *   3x is needed to avoid false resends because of errors in timekeeping
  *
- * Fast ep timer
+ * Fast ep timer (Not implemented)
+ *
  * The purpose of the fast timer is to detect packet loss as early as
  * possible. The timer is a wheel timer. Fast timer sweep is done on 
  * CQ polling which happens either in explicit polling or in async

@@ -283,10 +283,15 @@ UCS_TEST_P(test_ud, creq_flush) {
 UCS_TEST_P(test_ud, ca_ai) {
     ucs_status_t status;
     int prev_cwnd;
+    int max_window;
 
     /* check initial window */
     disable_async(m_e1);
     disable_async(m_e2);
+    /* only test up to 'small' window when on valgrind
+     * valgrind drops rx packets when window is too big and resends are disabled in this test
+     */
+    max_window = RUNNING_ON_VALGRIND ? 128 : UCT_UD_CA_MAX_WINDOW;
     connect();
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e1)->ca.cwnd);
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e2)->ca.cwnd);
@@ -297,7 +302,7 @@ UCS_TEST_P(test_ud, ca_ai) {
 
     /* window increase upto max window should 
      * happen when we receive acks */
-    while(ep(m_e1)->ca.cwnd < UCT_UD_CA_MAX_WINDOW) {
+    while(ep(m_e1)->ca.cwnd < max_window) {
        status = tx(m_e1);
        if (status != UCS_OK) {
            progress();
