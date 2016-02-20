@@ -1,6 +1,7 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -92,6 +93,7 @@ struct uct_mm_fifo_element {
 
 struct uct_mm_fifo_ctl {
     volatile uint64_t  head;       /* where to write next */
+    char padding[UCS_SYS_CACHE_LINE_SIZE - sizeof(uint64_t)];
     volatile uint64_t  tail;       /* how much was read */
 } UCS_S_PACKED;
 
