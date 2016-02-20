@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -76,7 +77,7 @@ static ucs_status_t ucm_mmap_test(int events)
 
     if (events & (UCM_EVENT_SHMAT|UCM_EVENT_SHMDT)) {
         p = shmat(0, NULL, 0);
-        shmdt(p == MAP_FAILED ? NULL : p);
+        shmdt(p);
     }
 
     if (events & UCM_EVENT_SBRK) {
