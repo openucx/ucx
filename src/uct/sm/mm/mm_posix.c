@@ -1,6 +1,7 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -69,19 +70,23 @@ static ucs_status_t uct_posix_test_mem(size_t length, int shm_fd)
     while (remaining > 0) {
         size_to_write = ucs_min(remaining, chunk_size);
         single_write = write(shm_fd, buf, size_to_write);
+
         if (single_write < 0) {
-            ucs_error("Failed to write %zu bytes. %m", size_to_write);
-            status = UCS_ERR_IO_ERROR;
+            switch(errno) {
+            case ENOSPC:
+                ucs_error("Not enough memory to write total of %zu bytes. "
+                          "Please check that /dev/shm or the directory you specified has "
+                          "more available memory.", length);
+                status = UCS_ERR_NO_MEMORY;
+                break;
+            default:
+                ucs_error("Failed to write %zu bytes. %m", size_to_write);
+                status = UCS_ERR_IO_ERROR;
+            }
             goto out_free_buf;
         }
-        if (single_write != size_to_write) {
-            ucs_error("Not enough memory to write total of %zu bytes. "
-                      "Please check that /dev/shm or the directory you specified has "
-                      "more available memory.", length);
-            status = UCS_ERR_NO_MEMORY;
-            goto out_free_buf;
-        }
-        remaining -= size_to_write;
+
+        remaining -= single_write;
     }
 
 out_free_buf:
