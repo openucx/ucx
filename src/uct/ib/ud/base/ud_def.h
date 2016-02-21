@@ -26,8 +26,8 @@
  *
  * tx window is increased when ack is received and decreased when
  * resend is scheduled. Ack must be a 'new' one that is it must
- * acknoledge packets on window. Increasing window on ack does not casue 
- * exponential window increase because, unlike tcp, only 2 packets 
+ * acknowledge packets on window. Increasing window on ack does not casue 
+ * exponential window increase because, unlike tcp, only two acks 
  * per window are sent.
  *
  * Todo: 
