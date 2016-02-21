@@ -326,6 +326,7 @@ UCS_TEST_P(test_ud, ca_md) {
     ucs_status_t status;
     int new_cwnd;
     int i;
+    int max_window;
 
     connect();
 
@@ -333,9 +334,10 @@ UCS_TEST_P(test_ud, ca_md) {
      * on receive drop all packets. After several retransmission
      * attempts the window will be reduced to the minumum 
      */
-    set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
+    max_window = RUNNING_ON_VALGRIND ? 128 : UCT_UD_CA_MAX_WINDOW;
+    set_tx_win(m_e1, max_window);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
-    for (i = 1; i < UCT_UD_CA_MAX_WINDOW; i++) {
+    for (i = 1; i < max_window; i++) {
         status = tx(m_e1);
         EXPECT_UCS_OK(status);
         progress();
