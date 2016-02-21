@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -144,7 +145,7 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
     max_length = ucs_min(max_length, 4ull * 1124 * 1024 * 1024);
 
     /* Trim at max. phys memory */
-    max_length = ucs_min(max_length, ucs_get_phys_mem_size() / 4);
+    max_length = ucs_min(max_length, ucs_get_phys_mem_size() / 8);
 
     /* For large size, slow down if needed */
     if (max_length > 1 * 1024 * 1024) {
