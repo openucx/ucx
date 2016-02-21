@@ -37,7 +37,7 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
     } else if (length >= rndv_thresh) {
         /* rendezvous */
         ucp_tag_send_start_rndv(req);
-    } if (length < zcopy_thresh) {
+    } else if (length < zcopy_thresh) {
         /* bcopy */
         if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
             req->send.uct.func = proto->contig_bcopy_single;
