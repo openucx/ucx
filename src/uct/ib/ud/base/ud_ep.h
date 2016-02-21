@@ -101,10 +101,12 @@ do { \
  *   - if wheel_time - saved_time > 3*one_tick_time 
  *        schedule resend 
  *        send_time = wheel_time
+ *        consgestion avoidance decreases tx window 
  *   - if window is not empty resched timer
  *   3x is needed to avoid false resends because of errors in timekeeping
  *
- * Fast ep timer
+ * Fast ep timer (Not implemented)
+ *
  * The purpose of the fast timer is to detect packet loss as early as
  * possible. The timer is a wheel timer. Fast timer sweep is done on 
  * CQ polling which happens either in explicit polling or in async
@@ -159,6 +161,10 @@ struct uct_ud_ep {
          UCS_STATS_NODE_DECLARE(stats);
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;
+    struct {
+        uct_ud_psn_t  wmax;
+        uct_ud_psn_t  cwnd;
+    } ca;
     struct {
         uct_ud_psn_t        acked_psn;    /* Last psn we acked */
         ucs_frag_list_t     ooo_pkts;     /* Out of order packets that can not be processed yet,
@@ -299,7 +305,7 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE int uct_ud_ep_no_window(uct_ud_ep_t *ep)
 {
-        return ep->tx.psn == ep->tx.max_psn;
+        return UCT_UD_PSN_COMPARE(ep->tx.psn, ==, ep->tx.max_psn);
 }
 
 /*

@@ -12,11 +12,31 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 
+
+static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
+{
+    ucs_debug("ca drop@cwnd = %d in flight: %d", ep->ca.cwnd, (int)ep->tx.psn-(int)ep->tx.acked_psn-1);
+    ep->ca.cwnd /= UCT_UD_CA_MD_FACTOR;
+    if (ep->ca.cwnd < UCT_UD_CA_MIN_WINDOW) {
+        ep->ca.cwnd = UCT_UD_CA_MIN_WINDOW;
+    }
+    ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
+}
+
+static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
+{
+    if (ep->ca.cwnd < UCT_UD_CA_MAX_WINDOW) {
+        ep->ca.cwnd += UCT_UD_CA_AI_VALUE;
+    }
+    ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
+}
+
+
 static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
     ep->tx.psn         = 1;
-    /* TODO: configurable max window size */
-    ep->tx.max_psn     = ep->tx.psn + UCT_UD_MAX_WINDOW;
+    ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
+    ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = 0;
     ep->tx.rt_psn      = 0;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
@@ -48,6 +68,7 @@ static void uct_ud_ep_slow_timer(ucs_callback_t *self)
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
         ep->tx.rt_pos = ucs_queue_iter_begin(&ep->tx.window);
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
+        uct_ud_ep_ca_drop(ep);
     }
 
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, 
@@ -273,7 +294,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     }
 
     /* update window */
-    ep->tx.max_psn = ep->tx.acked_psn + UCT_UD_MAX_WINDOW;
+    uct_ud_ep_ca_ack(ep);
 
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
@@ -564,11 +585,19 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
         return NULL;
     }
+
+    /* check window */
+    sent_skb = ucs_queue_iter_elem(sent_skb, ep->tx.rt_pos, queue);
+    if (UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
+        ucs_debug("ep(%p): out of window(psn=%d/max_psn=%d) - can not resend more", 
+                  ep, sent_skb->neth->psn, ep->tx.max_psn);
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        return NULL;
+    }
+
     skb = uct_ud_iface_res_skb_get(iface);
     ucs_assert_always(skb != NULL);
 
-    /* TODO: variable window */
-    sent_skb = ucs_queue_iter_elem(sent_skb, ep->tx.rt_pos, queue);
     ep->tx.rt_pos = ucs_queue_iter_next(ep->tx.rt_pos);
     ep->tx.rt_psn = sent_skb->neth->psn;
     memcpy(skb->neth, sent_skb->neth, sent_skb->len);

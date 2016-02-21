@@ -121,6 +121,7 @@ UCS_TEST_P(test_ud_pending, connect)
     req_count = 0;
     me = this;
     m_e1->connect_to_iface(0, *m_e2);
+    set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
     /* ep is not connected yet */
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
     

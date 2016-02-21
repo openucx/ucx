@@ -76,10 +76,11 @@ ucs_status_t ud_base_test::iface_flush_b(entity *e)
 }
 
 
-void ud_base_test::set_tx_win(entity *e, int size) 
+void ud_base_test::set_tx_win(entity *e, uct_ud_psn_t size) 
 {
     /* force window */
-    ep(e)->tx.max_psn = size;
+    ep(e)->tx.max_psn = ep(e)->tx.acked_psn + size;
+    ep(e)->ca.cwnd = size;
 }
 
 void ud_base_test::disable_async(entity *e) 
