@@ -437,6 +437,83 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     EXPECT_EQ(1U, ud_ep->ep_id);
 }
 
+/* check that the amount of reserved skbs is not less than 
+ * iface tx queue len
+ */
+UCS_TEST_P(test_ud, res_skb_basic) {
+    uct_ud_send_skb_t *skb;
+    uct_ud_iface_t *ud_if;
+    int i, tx_qlen;
+
+    connect();
+
+    ud_if = iface(m_e1);
+    tx_qlen = ud_if->tx.available;
+
+    uct_ud_send_skb_t *used_skbs[tx_qlen];
+
+    for (i = 0; i < tx_qlen; i++) { 
+        skb = uct_ud_iface_res_skb_get(ud_if);
+        ASSERT_TRUE(skb);
+        used_skbs[i] = skb;
+    }
+
+    for (i = 0; i < tx_qlen; i++) { 
+        uct_ud_iface_res_skb_put(ud_if, used_skbs[i]);
+    }
+}
+
+/* test that reserved skb is not being reused while it is still in flight
+ */
+UCS_TEST_P(test_ud, res_skb_tx) {
+
+    uct_ud_iface_t *ud_if;
+    int poll_sn;
+    uct_ud_send_skb_t *skb;
+    int n, tx_count;
+
+    disable_async(m_e1);
+    disable_async(m_e2);
+    connect();
+    EXPECT_UCS_OK(tx(m_e1));
+    short_progress_loop();
+
+    ud_if = iface(m_e1);
+    n = tx_count = 0;
+    poll_sn = 1;
+    while(n < 100) {
+        while(uct_ud_iface_can_tx(ud_if)) {
+            uct_ud_put_hdr_t *put_hdr;
+            uct_ud_neth_t *neth;
+
+            skb = uct_ud_iface_res_skb_get(ud_if);
+            ASSERT_TRUE(skb);
+            VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
+            ASSERT_LT(skb->flags, poll_sn);
+            skb->flags = poll_sn;
+
+            /* simulate put */
+            neth = skb->neth;
+            uct_ud_neth_init_data(ep(m_e1), neth);
+            uct_ud_neth_set_type_put(ep(m_e1), neth);
+            uct_ud_neth_ack_req(ep(m_e1), neth);
+
+            put_hdr      = (uct_ud_put_hdr_t *)(neth+1);
+            put_hdr->rva = (uint64_t)&m_dummy;
+            memcpy(put_hdr+1, &m_dummy, sizeof(m_dummy));
+            skb->len = sizeof(*neth) + sizeof(*put_hdr) + sizeof(m_dummy);
+
+
+            ud_if->ops.tx_skb(ud_if, ep(m_e1), skb);
+            uct_ud_iface_res_skb_put(ud_if, skb);
+            tx_count++;
+        }
+        short_progress_loop(1);
+        poll_sn++;
+        n++;
+    }
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud)
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud_mlx5)
 

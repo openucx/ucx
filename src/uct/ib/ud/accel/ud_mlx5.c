@@ -562,10 +562,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         uct_ud_mlx5_iface_post_recv(self);
     }
 
-    /* TODO: add progress on first ep creation */
-    uct_worker_progress_register(worker, uct_ud_mlx5_iface_progress, self);
-
-    uct_ud_leave(&self->super);
+    uct_ud_iface_complete_init(&self->super, uct_ud_mlx5_iface_progress);
     return UCS_OK;
 }
 
@@ -578,7 +575,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
                                    uct_ud_mlx5_iface_progress, self);
     uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
-    uct_ud_enter(&self->super);
+    uct_ud_leave(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_ud_mlx5_iface_t, uct_ud_iface_t);
