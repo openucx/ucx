@@ -310,7 +310,12 @@ void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_notifier_chain_func_t
     ucs_status_t status;
 
     /* TODO: add progress on first ep creation */
-    uct_ud_enter(iface); 
+    uct_ud_iface_reserve_skbs(iface, iface->tx.available);
+
+    status = ucs_twheel_init(&iface->async.slow_timer, uct_ud_slow_tick() / 4,
+                             uct_ud_iface_get_async_time(iface));
+    ucs_assert_always(status == UCS_OK);
+
     status = ucs_async_add_timer(iface->super.super.worker->async->mode,
                                  uct_ud_slow_tick(), /* TODO: make configurable */
                                  uct_ud_iface_timer, iface,
@@ -318,12 +323,7 @@ void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_notifier_chain_func_t
                                  &iface->async.timer_id);
     ucs_assertv_always(status == UCS_OK, "status=%s", ucs_status_string(status));
 
-    status = ucs_twheel_init(&iface->async.slow_timer, uct_ud_slow_tick() / 4,
-                             uct_ud_iface_get_async_time(iface));
-    ucs_assert_always(status == UCS_OK);
-    uct_ud_iface_reserve_skbs(iface, iface->tx.available);
     uct_worker_progress_register(iface->super.super.worker, progress_cb, iface);
-    uct_ud_leave(iface); 
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
