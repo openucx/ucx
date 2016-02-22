@@ -70,13 +70,18 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     echo "Build gtest"
     module load hpcx-gcc
-    unset LD_LIBRARY_PATH # Prevent out tests from using installed UCX libraries
 
     make $make_opt clean
 
     # todo: check in -devel mode as well
     ../contrib/configure-release --with-mpi --prefix=$ucx_inst
     make $make_opt install
+    
+    # Prevent out tests from using installed UCX libraries
+    export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
+
+    # check whether installation is valid (it compiles examples at least)
+    make installcheck
 
     ucx_inst_ptest=$ucx_inst/share/ucx/perftest
 
@@ -86,6 +91,13 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
 
     opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
+    
+    # show UCX libraries being used 
+    ldd $ucx_inst/bin/ucx_perftest
+    echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+
+    # compile and then run UCT example to make sure it's not broken by UCX API changes
+    mpicc -o ./active_message $ucx_inst/share/ucx/examples/active_message.c -luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
     for dev in $(ibstat -l); do
         hca="${dev}:1"
@@ -99,9 +111,14 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         echo Running ucx_perf kit on $hca
         mpirun -np 2 -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
 
+        echo Running active_message example on $hca with rc
+        mpirun -np 2 -mca pml ob1 -mca btl sm,self ./active_message $hca "rc"
+
         # todo: add csv generation
 
     done
+
+    rm -f ./active_message
 
     echo "Running memory hook on MPI"
     mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks
