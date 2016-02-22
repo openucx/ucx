@@ -427,7 +427,7 @@ void ucp_worker_get_name(ucp_worker_h worker, char *name, size_t max)
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(name, max, "%s:%d", ucs_get_host_name(), getpid()); /* TODO tid? */
 #else
-    memset(name, 0, max);
+    memset(name, 0, ucs_min(max, 1));
 #endif
 }
 
@@ -536,6 +536,7 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
     return ep;
 
 err:
+    UCS_ASYNC_UNBLOCK(&worker->async);
     ucs_fatal("failed to create reply endpoint: %s", ucs_status_string(status));
 }
 

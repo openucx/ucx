@@ -450,6 +450,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
     ucp_context_h context        = worker->context;
     uct_iface_attr_t *iface_attr = &worker->iface_attrs[rsc_index];
     uct_tl_resource_desc_t *rsc  = &context->tl_rscs[rsc_index].tl_rsc;
+    char worker_name[UCP_PEER_NAME_MAX];
     uct_iface_attr_t aux_iface_attr;
     size_t addr_len = 0, aux_addr_len = 0, total_len;
     ucp_memcpy_pack_context_t pack_ctx;
@@ -479,12 +480,15 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
         aux_addr_len = aux_iface_attr.iface_addr_len;
     }
 
+    ucp_worker_get_name(worker, worker_name, UCP_PEER_NAME_MAX);
+
     /*
      * Allocate buffer for active message.
      * TODO use custom pack callback to avoid this allocation and memcpy
      */
     total_len = sizeof(*msg) +
-                UCP_PEER_NAME_MAX + UCT_TL_NAME_MAX +
+                strlen(worker_name) +
+                strlen(rsc->tl_name) +
                 addr_len + aux_addr_len;
     msg = ucs_malloc(total_len, "conn_req");
     if (msg == NULL) {
@@ -504,8 +508,8 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
     /* Copy peer name (debug mode only) */
     UCS_STATIC_ASSERT(UCP_PEER_NAME_MAX < UINT8_MAX);
 #if ENABLE_DEBUG_DATA
-    ucp_worker_get_name(worker, ucp_wireup_msg_peer_name(msg), UCP_PEER_NAME_MAX);
-    msg->peer_name_len = strlen(ep->peer_name);
+    msg->peer_name_len = strlen(worker_name);
+    memcpy(ucp_wireup_msg_peer_name(msg), worker_name, msg->peer_name_len);
 #else
     msg->peer_name_len = 0;
 #endif
