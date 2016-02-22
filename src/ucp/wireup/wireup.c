@@ -223,9 +223,10 @@ static void ucp_wireup_msg_get_tl_name(const ucp_wireup_msg_t *msg,
     tl_name[length] = '\0';
 }
 
-static struct sockaddr * ucp_wireup_msg_get_aux_addr(const ucp_wireup_msg_t *msg)
+static struct sockaddr * ucp_wireup_msg_get_aux_addr(ucp_wireup_msg_t *msg)
 {
-    return (struct sockaddr *)((void*)(msg + 1) + msg->addr_len);
+    void *msg_data = msg + 1;
+    return msg_data + msg->peer_name_len + msg->tl_name_len + msg->addr_len;
 }
 
 static double ucp_aux_score_func(ucp_worker_h worker, uct_iface_attr_t *iface_attr)
@@ -507,12 +508,8 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
 
     /* Copy peer name (debug mode only) */
     UCS_STATIC_ASSERT(UCP_PEER_NAME_MAX < UINT8_MAX);
-#if ENABLE_DEBUG_DATA
     msg->peer_name_len = strlen(worker_name);
     memcpy(ucp_wireup_msg_peer_name(msg), worker_name, msg->peer_name_len);
-#else
-    msg->peer_name_len = 0;
-#endif
 
     /* Copy transport name */
     msg->tl_name_len = strlen(rsc->tl_name);
@@ -857,7 +854,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
             ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
             status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
-                                          ucp_wireup_msg_addr(msg));
+                                          ucp_wireup_msg_get_addr(msg));
             if (status != UCS_OK) {
                 ucs_debug("failed to connect"); /* TODO send reject */
                 return;

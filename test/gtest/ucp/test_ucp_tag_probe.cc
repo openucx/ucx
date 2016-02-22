@@ -29,6 +29,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_probe) {
     send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
 
     do {
+        progress();
         message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 0, &info);
     } while (message == NULL);
 
