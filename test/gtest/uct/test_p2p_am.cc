@@ -163,6 +163,13 @@ public:
             short_progress_loop();
         }
 
+        if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_DUP) {
+            sender().flush();
+            EXPECT_EQ(1u, m_am_count);
+        } else {
+            EXPECT_GE(m_am_count, 1u);
+        }
+
         status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
                                           am_mode);
         ASSERT_UCS_OK(status);
@@ -224,7 +231,7 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
 
     ucs_status_t status;
 
-    check_caps(UCT_IFACE_FLAG_AM_CB_SYNC);
+    check_caps(UCT_IFACE_FLAG_AM_CB_SYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     m_am_count = 0;
@@ -267,7 +274,7 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
 UCS_TEST_P(uct_p2p_am_test, am_async) {
     ucs_status_t status;
 
-    check_caps(UCT_IFACE_FLAG_AM_CB_ASYNC);
+    check_caps(UCT_IFACE_FLAG_AM_CB_ASYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     unsigned am_count = m_am_count = 0;
@@ -320,9 +327,6 @@ UCS_TEST_P(uct_p2p_am_test, am_short) {
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
-    if (GetParam()->tl_name == "cm") {
-        UCS_TEST_SKIP;
-    }
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     0ul,
                     sender().iface_attr().cap.am.max_bcopy,
@@ -330,7 +334,7 @@ UCS_TEST_P(uct_p2p_am_test, am_bcopy) {
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP);
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
@@ -340,9 +344,6 @@ UCS_TEST_P(uct_p2p_am_test, am_short_keep_data) {
 
 UCS_TEST_P(uct_p2p_am_test, am_bcopy_keep_data) {
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
-    if (GetParam()->tl_name == "cm") {
-        UCS_TEST_SKIP;
-    }
     set_keep_data(true);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
                     sizeof(uint64_t),
@@ -357,6 +358,5 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
                     sender().iface_attr().cap.am.max_zcopy,
                     DIRECTION_SEND_TO_RECV);
 }
-
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)

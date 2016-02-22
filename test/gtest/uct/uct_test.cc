@@ -95,9 +95,13 @@ void uct_test::cleanup() {
     m_entities.clear();
 }
 
-void uct_test::check_caps(uint64_t flags) {
+void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
-        if (!ucs_test_all_flags((*iter)->iface_attr().cap.flags, flags)) {
+        uint64_t iface_flags = (*iter)->iface_attr().cap.flags;
+        if (!ucs_test_all_flags(iface_flags, required_flags)) {
+            UCS_TEST_SKIP_R("unsupported");
+        }
+        if (iface_flags & invalid_flags) {
             UCS_TEST_SKIP_R("unsupported");
         }
     }

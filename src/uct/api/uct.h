@@ -183,7 +183,12 @@ enum {
     UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
     UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(41), /**< Supports connecting to specific endpoint */
 
-    /* active message callback invocation */
+    /* Special transport flags */
+    UCT_IFACE_FLAG_AM_DUP           = UCS_BIT(43), /**< Active messages may be received with duplicates
+                                                        This happens if the transport does not keep enough
+                                                        information to detect retransmissions */
+
+    /* Active message callback invocation */
     UCT_IFACE_FLAG_AM_CB_SYNC       = UCS_BIT(44), /**< Interface supports setting active message callback
                                                         which is invoked only from the calling context of
                                                         uct_worker_progress() */

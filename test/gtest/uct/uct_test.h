@@ -148,7 +148,7 @@ protected:
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value);
 
-    void check_caps(uint64_t flags);
+    void check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     const entity& ent(unsigned index) const;
     void progress() const;
     void flush() const;

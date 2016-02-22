@@ -174,6 +174,7 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT |
                                          UCT_IFACE_FLAG_AM_BCOPY |
+                                         UCT_IFACE_FLAG_AM_DUP |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING;
 

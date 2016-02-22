@@ -254,6 +254,10 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
 
     flags = 0;
 
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_DUP) {
+        return 0.0;
+    }
+
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         flags |= UCT_IFACE_FLAG_AM_BCOPY;
     }
