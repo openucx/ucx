@@ -24,20 +24,33 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
 }
 
 static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
-                                               uct_iface_h iface)
+                                               uct_iface_h iface,
+                                               const uct_iface_attr_t *iface_attr)
 {
     ucp_context_h context = worker->context;
     ucs_status_t status;
     unsigned am_id;
 
     for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
-        if (context->config.features & ucp_am_handlers[am_id].features) {
-            status = uct_iface_set_am_handler(iface, am_id, ucp_am_handlers[am_id].cb,
-                                              worker, 
-                                              ucp_am_handlers[am_id].flags);
-            if (status != UCS_OK) {
-                return status;
-            }
+        if (!(context->config.features & ucp_am_handlers[am_id].features)) {
+            continue;
+        }
+
+        if ((ucp_am_handlers[am_id].flags & UCT_AM_CB_FLAG_SYNC) &&
+            !(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC))
+        {
+            /* Do not register a sync callback on interface which does not
+             * support it. The transport selection logic should not use async
+             * transports for protocols with sync active message handlers.
+             */
+            continue;
+        }
+
+        status = uct_iface_set_am_handler(iface, am_id, ucp_am_handlers[am_id].cb,
+                                          worker,
+                                          ucp_am_handlers[am_id].flags);
+        if (status != UCS_OK) {
+            return status;
         }
     }
 
@@ -117,9 +130,8 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     attr = &worker->iface_attrs[tl_id];
 
     /* Set active message handlers for tag matching */
-    if ((attr->cap.flags & (UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) &&
-        (attr->cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
-        status = ucp_worker_set_am_handlers(worker, iface);
+    if ((attr->cap.flags & (UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY))) {
+        status = ucp_worker_set_am_handlers(worker, iface, attr);
         if (status != UCS_OK) {
             goto out_close_iface;
         }

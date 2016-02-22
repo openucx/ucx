@@ -23,7 +23,7 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {"ASYNC_MODE", "thread", "Async mode to use",
    ucs_offsetof(uct_cm_iface_config_t, async_mode), UCS_CONFIG_TYPE_ENUM(ucs_async_mode_names)},
 
-  {"TIMEOUT", "100ms", "Timeout for MAD layer",
+  {"TIMEOUT", "300ms", "Timeout for MAD layer",
    ucs_offsetof(uct_cm_iface_config_t, timeout), UCS_CONFIG_TYPE_TIME},
 
   {"RETRY_COUNT", "20", "Number of retries for MAD layer",

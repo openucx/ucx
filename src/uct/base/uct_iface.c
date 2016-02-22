@@ -57,7 +57,8 @@ static void uct_iface_set_stub_am_handler(uct_base_iface_t *iface, uint8_t id)
 }
 
 ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
-                                      uct_am_callback_t cb, void *arg, uint32_t flags)
+                                      uct_am_callback_t cb, void *arg,
+                                      uint32_t flags)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     ucs_status_t status;
@@ -72,8 +73,8 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
         return UCS_OK;
     }
 
-    if (flags == 0) {
-        ucs_debug("am cb flags must not be empty");
+    if (!(flags & (UCT_AM_CB_FLAG_SYNC|UCT_AM_CB_FLAG_ASYNC))) {
+        ucs_debug("invalid active message flags 0x%x", flags);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -82,28 +83,11 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
         return status;
     }
 
-    /* interface must have am capabilities */
-    if (!(attr.cap.flags & 
-        (UCT_IFACE_FLAG_AM_SHORT|
-         UCT_IFACE_FLAG_AM_BCOPY|
-         UCT_IFACE_FLAG_AM_ZCOPY))) {
-        ucs_debug("attempt to set am cb on iface without active message capabilites");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (flags & UCT_AM_CB_FLAG_SYNC) {
-        /* to use sync cb iface must have sync flag */
-        if (!(attr.cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
-            ucs_debug("am cb sync requested on the interface that does not support it");
-            return UCS_ERR_INVALID_PARAM;
-        }
-    } else if (flags & UCT_AM_CB_FLAG_ASYNC) {
-        /* async cb can be set for any iface. In that case it will act as a sync one */ 
-        if (!(attr.cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC)) {
-            ucs_debug("am cb async requested on the interface that does not support it. It may be an error");
-        }
-    } else {
-        ucs_debug("am cb invalid capabilites requested 0x%x", flags);
+    /* If user wants a synchronous callback, it must be supported, or the
+     * callback could be called from another thread.
+     */
+    if ((flags & UCT_AM_CB_FLAG_SYNC) && !(attr.cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
+        ucs_error("Synchronous active message callback requested, but not supported");
         return UCS_ERR_INVALID_PARAM;
     }
 
