@@ -103,11 +103,11 @@ AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
 #
 # SSE/AVX
 #
-COMPILER_OPTION([avx], [AVX], [-mavx], [yes],
+COMPILER_OPTION([avx], [AVX], [-mavx], [no],
                 [#include <immintrin.h>
                  int main() { return _mm256_testz_si256(_mm256_set1_epi32(1), _mm256_set1_epi32(3)); }])
 AS_IF([test "x$with_avx" != xyes],
-      [COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [yes],
+      [COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [no],
                        [#include <smmintrin.h>
                        int main() { return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3)); }])
       ])
