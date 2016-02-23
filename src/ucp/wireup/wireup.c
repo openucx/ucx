@@ -155,7 +155,7 @@ void ucp_wireup_progress(ucp_ep_h ep)
  */
 
 
-static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
+static int ucp_address_iter_next(void **iter, uct_iface_addr_t **iface_addr_p,
                                  char *tl_name, ucp_rsc_index_t *pd_index,
                                  ucp_rsc_index_t *rsc_index)
 {
@@ -168,7 +168,7 @@ static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
         return 0;
     }
 
-    *iface_addr_p  = (struct sockaddr*)ptr;
+    *iface_addr_p  = (uct_iface_addr_t*)ptr;
     ptr += iface_addr_len;
 
     tl_name_len = *(uint8_t*)(ptr++);
@@ -184,13 +184,13 @@ static int ucp_address_iter_next(void **iter, struct sockaddr **iface_addr_p,
     return 1;
 }
 
-static inline struct sockaddr * ucp_wireup_msg_addr(ucp_wireup_msg_t *msg)
+static inline void * ucp_wireup_msg_addr(ucp_wireup_msg_t *msg)
 {
     void *msg_data = msg + 1;
     return msg_data + msg->peer_name_len + msg->tl_name_len;
 }
 
-static const struct sockaddr * ucp_wireup_msg_get_addr(const ucp_wireup_msg_t *msg)
+static const void * ucp_wireup_msg_get_addr(const ucp_wireup_msg_t *msg)
 {
     const void *msg_data = msg + 1;
     return msg_data + msg->peer_name_len + msg->tl_name_len;
@@ -223,7 +223,7 @@ static void ucp_wireup_msg_get_tl_name(const ucp_wireup_msg_t *msg,
     tl_name[length] = '\0';
 }
 
-static struct sockaddr * ucp_wireup_msg_get_aux_addr(ucp_wireup_msg_t *msg)
+static uct_iface_addr_t * ucp_wireup_msg_get_aux_addr(ucp_wireup_msg_t *msg)
 {
     void *msg_data = msg + 1;
     return msg_data + msg->peer_name_len + msg->tl_name_len + msg->addr_len;
@@ -287,7 +287,7 @@ static double ucp_runtime_score_func(ucp_worker_h worker, uct_iface_attr_t *ifac
  * Select which local transport to use for a particular destination address.
  */
 static ucs_status_t
-ucp_select_local_transport(ucp_worker_h worker, const struct sockaddr *remote_addr,
+ucp_select_local_transport(ucp_worker_h worker, const uct_iface_addr_t *remote_addr,
                            const char *tl_name, ucp_wireup_score_function_t score_func,
                            ucp_rsc_index_t dst_rsc_index,
                            ucp_rsc_index_t *src_rsc_index_p,
@@ -340,14 +340,14 @@ static ucs_status_t ucp_select_transport(ucp_worker_h worker, ucp_address_t *add
                                          ucp_rsc_index_t *src_rsc_index_p,
                                          ucp_rsc_index_t *dst_rsc_index_p,
                                          ucp_rsc_index_t *dst_pd_index_p,
-                                         struct sockaddr **addr_p,
+                                         uct_iface_addr_t **addr_p,
                                          uint64_t *reachable_pds,
                                          const char *title)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t dst_rsc_index, src_rsc_index;
     ucp_rsc_index_t pd_index;
-    struct sockaddr *addr, *best_addr;
+    uct_iface_addr_t *addr, *best_addr;
     double score, best_score;
     char tl_name[UCT_TL_NAME_MAX];
     ucs_status_t status;
@@ -399,7 +399,6 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     char tl_name[UCT_TL_NAME_MAX + 1];
     uct_tl_resource_desc_t *dst_rsc;
     uct_tl_resource_desc_t dummy_rsc = {"", "", UCT_DEVICE_TYPE_LAST};
-    int af;
 
     #define UCP_WIREUP_MSG_FLAGS_FMT  "%c%c%c%c%c"
     #define UCP_WIREUP_MSG_FLAGS_ARG(_flags) \
@@ -409,21 +408,17 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         ((_flags) & UCP_WIREUP_FLAG_ADDR    ) ? 't' : '-', \
         ((_flags) & UCP_WIREUP_FLAG_AUX_ADDR) ? 'x' : '-'
 
-    af = (msg->flags & UCP_WIREUP_FLAG_ADDR ) ?
-                    ucp_wireup_msg_get_addr(msg)->sa_family :
-                    0;
-
     ucp_wireup_msg_get_peer_name(msg, peer_name, sizeof(peer_name));
     ucp_wireup_msg_get_tl_name(msg, tl_name, sizeof(tl_name));
 
     switch (type) {
     case UCT_AM_TRACE_TYPE_SEND:
         snprintf(buffer, max, "WIREUP "UCP_WIREUP_MSG_FLAGS_FMT" "
-                 "[%s uuid %"PRIx64" "UCT_TL_RESOURCE_DESC_FMT",%s->#%d tl '%s' af %d]",
+                 "[%s uuid %"PRIx64" "UCT_TL_RESOURCE_DESC_FMT",%s->#%d tl '%s']",
                  UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), peer_name, msg->src_uuid,
                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[msg->src_rsc_index].tl_rsc),
                  context->pd_rscs[msg->src_pd_index].pd_name,
-                 msg->dst_rsc_index, tl_name, af);
+                 msg->dst_rsc_index, tl_name);
         break;
     case UCT_AM_TRACE_TYPE_RECV:
         if (msg->dst_rsc_index != (ucp_rsc_index_t)-1) {
@@ -432,10 +427,10 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
             dst_rsc = &dummy_rsc;
         }
         snprintf(buffer, max, "WIREUP "UCP_WIREUP_MSG_FLAGS_FMT" "
-                 "[%s uuid %"PRIx64" #%d,%d->"UCT_TL_RESOURCE_DESC_FMT" tl '%s' af %d]",
+                 "[%s uuid %"PRIx64" #%d,%d->"UCT_TL_RESOURCE_DESC_FMT" tl '%s']",
                  UCP_WIREUP_MSG_FLAGS_ARG(msg->flags), peer_name, msg->src_uuid,
                  msg->src_rsc_index, msg->src_pd_index,
-                 UCT_TL_RESOURCE_DESC_ARG(dst_rsc), tl_name, af);
+                 UCT_TL_RESOURCE_DESC_ARG(dst_rsc), tl_name);
         break;
     default:
         break;
@@ -656,7 +651,7 @@ ucs_status_t ucp_wireup_create_stub_ep(ucp_ep_h ep)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, struct sockaddr *aux_addr,
+static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, uct_iface_addr_t *aux_addr,
                                          ucp_rsc_index_t aux_rsc_index)
 {
     ucp_worker_h worker = ep->worker;
@@ -995,7 +990,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address)
 {
     ucp_worker_h worker = ep->worker;
-    struct sockaddr *uct_addr, *aux_addr;
+    uct_iface_addr_t *uct_addr, *aux_addr;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t dst_rsc_index, dst_aux_rsc_index;
     ucp_rsc_index_t aux_rsc_index;

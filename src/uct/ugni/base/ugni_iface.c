@@ -126,7 +126,7 @@ error:
 }
 
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
-                                        struct sockaddr *addr)
+                                        uct_iface_addr_t *addr)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     uct_sockaddr_ugni_t *iface_addr = (uct_sockaddr_ugni_t*)addr;
@@ -137,7 +137,7 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
+int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_iface_addr_t *addr)
 {
     const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
 

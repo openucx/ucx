@@ -8,7 +8,7 @@
 #include "cma_iface.h"
 #include "cma_ep.h"
 
-#include <uct/api/addr.h>
+#include <uct/base/addr.h>
 #include <uct/base/uct_pd.h>
 
 UCT_PD_REGISTER_TL(&uct_cma_pd_component, &uct_cma_tl);
@@ -21,7 +21,7 @@ static ucs_config_field_t uct_cma_iface_config_table[] = {
 };
 
 static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
-                                             struct sockaddr *addr)
+                                              uct_iface_addr_t *addr)
 {
     uct_sockaddr_process_t *iface_addr = (void*)addr;
     iface_addr->sp_family = UCT_AF_PROCESS;
@@ -31,9 +31,9 @@ static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
 }
 
 static int uct_cma_iface_is_reachable(uct_iface_t *tl_iface,
-                                     const struct sockaddr *addr)
+                                      const uct_iface_addr_t *addr)
 {
-    return (addr->sa_family == UCT_AF_PROCESS) &&
+    return (((uct_sockaddr_process_t*)addr)->sp_family == UCT_AF_PROCESS) &&
            (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
 }
 

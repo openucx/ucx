@@ -30,7 +30,8 @@ typedef struct {
 } uct_ud_verbs_iface_t;
 
 
-ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr);
+ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                                           const uct_ep_addr_t *addr);
 
 
 #endif

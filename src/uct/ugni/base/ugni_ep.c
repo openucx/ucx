@@ -84,7 +84,7 @@ ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface, const uct_sockaddr_ugni_t 
 
 /* Endpoint definition */
 UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
-                    const struct sockaddr *addr)
+                    const uct_iface_addr_t *addr)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
@@ -129,7 +129,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
     sglib_hashed_uct_ugni_ep_t_delete(iface->eps, self);
 }
 UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_base_ep_t)
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*, const struct sockaddr*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*, const uct_iface_addr_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 uct_ugni_ep_t *uct_ugni_iface_lookup_ep(uct_ugni_iface_t *iface, uintptr_t hash_key)

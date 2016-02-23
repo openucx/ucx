@@ -466,7 +466,7 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 }
 
 ucs_status_t
-uct_ud_iface_get_address(uct_iface_h tl_iface, struct sockaddr *iface_addr)
+uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
     uct_sockaddr_ib_t *addr = (uct_sockaddr_ib_t *)iface_addr;

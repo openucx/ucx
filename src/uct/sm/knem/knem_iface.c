@@ -8,14 +8,13 @@
 #include "knem_iface.h"
 #include "knem_ep.h"
 
-#include <uct/api/addr.h>
 #include <uct/base/uct_pd.h>
 
 
 UCT_PD_REGISTER_TL(&uct_knem_pd_component, &uct_knem_tl);
 
 static ucs_status_t uct_knem_iface_get_address(uct_iface_t *tl_iface,
-                                               struct sockaddr *addr)
+                                               uct_iface_addr_t *addr)
 {
     uct_sockaddr_process_t *iface_addr = (void*)addr;
     iface_addr->sp_family = UCT_AF_PROCESS;
@@ -24,10 +23,11 @@ static ucs_status_t uct_knem_iface_get_address(uct_iface_t *tl_iface,
 }
 
 static int uct_knem_iface_is_reachable(uct_iface_t *tl_iface,
-                                       const struct sockaddr *addr)
+                                       const uct_iface_addr_t *addr)
 {
-    return (addr->sa_family == UCT_AF_PROCESS) &&
-        (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
+    const uct_sockaddr_process_t *mm_addr = (const void*)addr;
+    return (mm_addr->sp_family == UCT_AF_PROCESS) &&
+           (mm_addr->node_guid == ucs_machine_guid());
 }
 
 static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,

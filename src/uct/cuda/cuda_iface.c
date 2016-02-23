@@ -25,7 +25,7 @@ static ucs_config_field_t uct_cuda_iface_config_table[] = {
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t)(uct_iface_t*);
 
 static ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface,
-                                               struct sockaddr *iface_addr)
+                                               uct_iface_addr_t *iface_addr)
 {
     uct_sockaddr_process_t *cuda_addr = (uct_sockaddr_process_t*)iface_addr;
 
@@ -36,7 +36,7 @@ static ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface,
 }
 
 static int uct_cuda_iface_is_reachable(uct_iface_h iface,
-                                       const struct sockaddr* addr)
+                                       const uct_iface_addr_t* addr)
 {
     return 0;
 }

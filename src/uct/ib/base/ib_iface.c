@@ -176,7 +176,7 @@ void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
-ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr)
+ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)addr;
@@ -192,7 +192,7 @@ ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, struct sockaddr *add
 }
 
 ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
-                                             struct sockaddr *addr)
+                                             uct_iface_addr_t *addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_sockaddr_ib_subnet_t *subn_addr = (uct_sockaddr_ib_subnet_t*)addr;
@@ -202,16 +202,17 @@ ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr)
+int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_iface_addr_t *addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    const struct sockaddr *sa = (const void*)addr;
 
-    if (addr->sa_family == UCT_AF_INFINIBAND) {
+    if (sa->sa_family == UCT_AF_INFINIBAND) {
         return iface->gid.global.subnet_prefix ==
                         ((const uct_sockaddr_ib_t*)addr)->subnet_prefix;
     }
 
-    if (addr->sa_family == UCT_AF_INFINIBAND_SUBNET) {
+    if (sa->sa_family == UCT_AF_INFINIBAND_SUBNET) {
         return iface->gid.global.subnet_prefix ==
                         ((const uct_sockaddr_ib_subnet_t*)addr)->subnet_prefix;
     }

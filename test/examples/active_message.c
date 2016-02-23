@@ -137,8 +137,8 @@ int main(int argc, char **argv)
      * process has knowledge of the others. */
     int partner;
     int size, rank;
-    struct sockaddr *own_ep, *peer_ep;
-    struct sockaddr *own_iface, *peer_iface;
+    uct_ep_addr_t *own_ep, *peer_ep;
+    uct_iface_addr_t *own_iface, *peer_iface;
     ucs_status_t status;          /* status codes for UCS */
     uct_ep_h ep;                  /* Remote endpoint */
     ucs_async_context_t async;    /* Async event context manages times and fd notifications */
@@ -190,9 +190,9 @@ int main(int argc, char **argv)
     CHKERR_JUMP(UCS_OK != status, "find supported device and transport", out_destroy_worker);
 
     /* Expect that addr len is the same on both peers */
-    own_iface = (struct sockaddr*)calloc(2, if_info.attr.iface_addr_len);
+    own_iface = (uct_iface_addr_t*)calloc(2, if_info.attr.iface_addr_len);
     CHKERR_JUMP(NULL == own_iface, "allocate memory for if addrs", out_destroy_iface);
-    peer_iface = (struct sockaddr*)((char*)own_iface + if_info.attr.iface_addr_len);
+    peer_iface = (uct_iface_addr_t*)((char*)own_iface + if_info.attr.iface_addr_len);
 
     /* Get interface address */
     status = uct_iface_get_address(if_info.iface, own_iface);
@@ -206,9 +206,9 @@ int main(int argc, char **argv)
     CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
 
     /* Again, expect that ep addr len is the same on both peers */
-    own_ep = (struct sockaddr*)calloc(2, if_info.attr.ep_addr_len);
+    own_ep = (uct_ep_addr_t*)calloc(2, if_info.attr.ep_addr_len);
     CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
-    peer_ep = (struct sockaddr*)((char*)own_ep + if_info.attr.ep_addr_len);
+    peer_ep = (uct_ep_addr_t*)((char*)own_ep + if_info.attr.ep_addr_len);
 
     if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         /* Create new endpoint */

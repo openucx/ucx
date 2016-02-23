@@ -250,13 +250,13 @@ void uct_test::entity::reserve_ep(unsigned index) {
 void uct_test::entity::connect_to_ep(uct_ep_h from, uct_ep_h to)
 {
     uct_iface_attr_t iface_attr;
-    struct sockaddr *addr;
+    uct_ep_addr_t *addr;
     ucs_status_t status;
 
     status = uct_iface_query(to->iface, &iface_attr);
     ASSERT_UCS_OK(status);
 
-    addr = (struct sockaddr*)malloc(iface_attr.ep_addr_len);
+    addr = (uct_ep_addr_t*)malloc(iface_attr.ep_addr_len);
 
     status = uct_ep_get_address(to, addr);
     ASSERT_UCS_OK(status);
@@ -291,7 +291,7 @@ void uct_test::entity::destroy_ep(unsigned index) {
 }
 
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index) {
-    struct sockaddr *addr = NULL;
+    uct_iface_addr_t *addr = NULL;
     uct_ep_h ep = NULL;
     uct_ep_h remote_ep = NULL;
     ucs_status_t status;
@@ -320,7 +320,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 
     } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
 
-        addr = (struct sockaddr*)malloc(iface_attr().iface_addr_len);
+        addr = (uct_iface_addr_t*)malloc(iface_attr().iface_addr_len);
 
         status = uct_iface_get_address(other.iface(), addr);
         ASSERT_UCS_OK(status);
@@ -337,7 +337,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 
 void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     ucs_status_t status;
-    struct sockaddr *addr = NULL;
+    uct_iface_addr_t *addr = NULL;
     uct_ep_h ep = NULL;
 
     reserve_ep(index);
@@ -345,7 +345,7 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
         return; /* Already connected */
     }
 
-    addr = (struct sockaddr*)malloc(iface_attr().iface_addr_len);
+    addr = (uct_iface_addr_t*)malloc(iface_attr().iface_addr_len);
 
     status = uct_iface_get_address(other.iface(), addr);
     ASSERT_UCS_OK(status);

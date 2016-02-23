@@ -52,6 +52,8 @@ typedef struct uct_pending_req   uct_pending_req_t;
 typedef struct uct_worker        *uct_worker_h;
 typedef struct uct_pd            uct_pd_t;
 typedef enum uct_am_trace_type   uct_am_trace_type_t;
+typedef struct uct_iface_addr    uct_iface_addr_t;
+typedef struct uct_ep_addr       uct_ep_addr_t;
 
 
 /**

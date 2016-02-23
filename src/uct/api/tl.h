@@ -15,6 +15,7 @@
 
 #include <ucs/type/callback.h>
 #include <ucs/type/status.h>
+#include <sys/types.h>
 #include <stddef.h>
 
 
@@ -37,18 +38,20 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
 
-    ucs_status_t (*ep_create_connected)(uct_iface_h iface, const struct sockaddr *addr,
+    ucs_status_t (*ep_create_connected)(uct_iface_h iface,
+                                        const uct_iface_addr_t *addr,
                                         uct_ep_h* ep_p);
 
     void         (*ep_destroy)(uct_ep_h ep);
 
-    ucs_status_t (*ep_get_address)(uct_ep_h ep, struct sockaddr *addr);
+    ucs_status_t (*ep_get_address)(uct_ep_h ep, uct_ep_addr_t *addr);
 
-    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, const struct sockaddr *addr);
+    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, const uct_ep_addr_t *addr);
 
-    ucs_status_t (*iface_get_address)(uct_iface_h iface, struct sockaddr *addr);
+    ucs_status_t (*iface_get_address)(uct_iface_h iface, uct_iface_addr_t *addr);
 
-    int          (*iface_is_reachable)(uct_iface_h iface, const struct sockaddr *addr);
+    int          (*iface_is_reachable)(uct_iface_h iface,
+                                       const uct_iface_addr_t *addr);
 
     /* Put */
 

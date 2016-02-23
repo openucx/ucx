@@ -163,12 +163,12 @@ uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
     }
 }
 
-ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, struct sockaddr *addr);
+ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
 
 ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
-                                             struct sockaddr *addr);
+                                             uct_iface_addr_t *addr);
 
-int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const struct sockaddr *addr);
+int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_iface_addr_t *addr);
 
 /*
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)

@@ -21,7 +21,7 @@ typedef struct uct_cm_iov {
 } uct_cm_iov_t;
 
 
-static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface, const struct sockaddr *addr)
+static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface, const uct_iface_addr_t *addr)
 
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
@@ -37,7 +37,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_cm_ep_t, uct_base_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h, const struct sockaddr *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h, const uct_iface_addr_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 
 

@@ -121,12 +121,12 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
-ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr)
+ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr)
 {
     return iface->ops.iface_get_address(iface, addr);
 }
 
-int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr)
+int uct_iface_is_reachable(uct_iface_h iface, const uct_iface_addr_t *addr)
 {
     return iface->ops.iface_is_reachable(iface, addr);
 
@@ -233,12 +233,12 @@ void uct_ep_destroy(uct_ep_h ep)
     ep->iface->ops.ep_destroy(ep);
 }
 
-ucs_status_t uct_ep_get_address(uct_ep_h ep, struct sockaddr *addr)
+ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr)
 {
     return ep->iface->ops.ep_get_address(ep, addr);
 }
 
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const struct sockaddr *addr)
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_ep_addr_t *addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, addr);
 }
