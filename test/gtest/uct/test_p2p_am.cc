@@ -33,6 +33,7 @@ public:
     {
         m_send_tracer.count = 0;
         m_recv_tracer.count = 0;
+        pthread_mutex_init(&m_lock, NULL);
     }
 
     virtual void init() {
@@ -68,7 +69,10 @@ public:
     }
 
     ucs_status_t am_handler(void *data, size_t length, void *desc) {
+        pthread_mutex_lock(&m_lock);
         ++m_am_count;
+        pthread_mutex_unlock(&m_lock);
+
         if (m_keep_data) {
             receive_desc_t *my_desc = (receive_desc_t *)desc;
             my_desc->magic  = MAGIC;
@@ -76,7 +80,9 @@ public:
             if (data != my_desc + 1) {
                 memcpy(my_desc + 1, data, length);
             }
+            pthread_mutex_lock(&m_lock);
             m_backlog.push_back(my_desc);
+            pthread_mutex_unlock(&m_lock);
             return UCS_INPROGRESS;
         }
         mapped_buffer::pattern_check(data, length, SEED1);
@@ -84,13 +90,17 @@ public:
     }
 
     void check_backlog() {
+        pthread_mutex_lock(&m_lock);
         while (!m_backlog.empty()) {
             receive_desc_t *my_desc = m_backlog.back();
             m_backlog.pop_back();
             EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
+            pthread_mutex_unlock(&m_lock);
             uct_iface_release_am_desc(my_desc);
+            pthread_mutex_lock(&m_lock);
         }
+        pthread_mutex_unlock(&m_lock);
     }
 
     ucs_status_t am_short(uct_ep_h ep, const mapped_buffer& sendbuf,
@@ -130,14 +140,17 @@ public:
                                comp());
     }
 
-    void test_xfer_do(send_func_t send, size_t length, direction_t direction, uint32_t am_mode) {
+    void test_xfer_do(send_func_t send, size_t length, direction_t direction,
+                      uint32_t am_mode)
+    {
         ucs_status_t status;
 
         m_am_count = 0;
         m_send_tracer.count = 0;
         m_recv_tracer.count = 0;
 
-        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, am_mode);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                          this, am_mode);
         ASSERT_UCS_OK(status);
 
         mapped_buffer sendbuf(length, SEED1, sender());
@@ -150,7 +163,8 @@ public:
             short_progress_loop();
         }
 
-        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, am_mode);
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
+                                          am_mode);
         ASSERT_UCS_OK(status);
 
         check_backlog();
@@ -190,7 +204,8 @@ public:
     }
 
     void am_async_finish(unsigned prev_am_count) {
-        /* am message handler must be only invoked within reasonable time if progress is not called */
+        /* am message handler must be only invoked within reasonable time if
+         * progress is not called */
         twait(500);
         EXPECT_EQ(prev_am_count+1, m_am_count);
     }
@@ -200,6 +215,7 @@ protected:
 private:
     bool                         m_keep_data;
     std::vector<receive_desc_t*> m_backlog;
+    pthread_mutex_t              m_lock;
     tracer_ctx_t                 m_send_tracer;
     tracer_ctx_t                 m_recv_tracer;
 };
@@ -208,18 +224,18 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
 
     ucs_status_t status;
 
-    if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC)) {
-        UCS_TEST_SKIP;
-    }
+    check_caps(UCT_IFACE_FLAG_AM_CB_SYNC);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
     m_am_count = 0;
 
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_SYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                      this, UCT_AM_CB_FLAG_SYNC);
     ASSERT_UCS_OK(status);
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short, SEED1, sender());
+        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
+                                    SEED1, sender());
 
         status = am_short(sender_ep(), sendbuf_short, recvbuf);
         EXPECT_UCS_OK(status);
@@ -227,7 +243,8 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-        mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy, SEED1, sender());
+        mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
+                                    SEED1, sender());
 
         status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
         EXPECT_UCS_OK(status);
@@ -235,33 +252,33 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
-        mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy, SEED1, sender());
+        mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy,
+                                    SEED1, sender());
 
         am_zcopy(sender_ep(), sendbuf_zcopy, recvbuf);
         am_sync_finish();
     }
 
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, (void*)this, UCT_AM_CB_FLAG_SYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
+                                      UCT_AM_CB_FLAG_SYNC);
     ASSERT_UCS_OK(status);
 }
 
 UCS_TEST_P(uct_p2p_am_test, am_async) {
-
-    unsigned am_count;
     ucs_status_t status;
 
-    if (!(receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_CB_ASYNC)) {
-        UCS_TEST_SKIP;
-    }
+    check_caps(UCT_IFACE_FLAG_AM_CB_ASYNC);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
-    am_count = m_am_count = 0;
+    unsigned am_count = m_am_count = 0;
 
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_ASYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                      this, UCT_AM_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short, SEED1, sender());
+        mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
+                                    SEED1, sender());
 
         am_count = m_am_count;
         status = am_short(sender_ep(), sendbuf_short, recvbuf);
@@ -270,7 +287,8 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-        mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy, SEED1, sender());
+        mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
+                                    SEED1, sender());
 
         am_count = m_am_count;
         status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
@@ -279,14 +297,16 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
-        mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy, SEED1, sender());
+        mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy,
+                                    SEED1, sender());
 
         am_count = m_am_count;
         am_zcopy(sender_ep(), sendbuf_zcopy, recvbuf);
         am_async_finish(am_count);
     }
 
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, (void*)this, UCT_AM_CB_FLAG_ASYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
+                                      UCT_AM_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
 }
 
