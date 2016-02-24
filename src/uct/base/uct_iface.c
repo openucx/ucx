@@ -65,6 +65,8 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     uct_iface_attr_t attr;
 
     if (id >= UCT_AM_ID_MAX) {
+        ucs_error("active message id out-of-range (got: %d max: %d)", id,
+                  (int)UCT_AM_ID_MAX);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -74,7 +76,7 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h tl_iface, uint8_t id,
     }
 
     if (!(flags & (UCT_AM_CB_FLAG_SYNC|UCT_AM_CB_FLAG_ASYNC))) {
-        ucs_debug("invalid active message flags 0x%x", flags);
+        ucs_error("invalid active message flags 0x%x", flags);
         return UCS_ERR_INVALID_PARAM;
     }
 
