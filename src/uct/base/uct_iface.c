@@ -123,6 +123,11 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
+ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
+{
+    return iface->ops.iface_get_device_address(iface, addr);
+}
+
 ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr)
 {
     return iface->ops.iface_get_address(iface, addr);

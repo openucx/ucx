@@ -251,6 +251,7 @@ struct uct_iface_attr {
         uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
     } cap;
 
+    size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     size_t                   ep_addr_len;    /**< Size of endpoint address */
 
@@ -635,10 +636,26 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Get interface address.
+ * @brief Get address of the device the interface is using.
+ *
+ *  Get underlying device address of the interface. All interfaces using the same
+ * device would return the same address.
  *
  * @param [in]  iface       Interface to query.
- * @param [out] iface_addr  Filled with interface address. The size of the buffer
+ * @param [out] addr        Filled with device address. The size of the buffer
+ *                           provided must be at least @ref uct_iface_attr_t::device_addr_len.
+ */
+ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get interface address.
+ *
+ * requires UCT_IFACE_FLAG_CONNECT_TO_IFACE.
+ *
+ * @param [in]  iface       Interface to query.
+ * @param [out] addr        Filled with interface address. The size of the buffer
  *                           provided must be at least @ref uct_iface_attr_t::iface_addr_len.
  */
 ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
