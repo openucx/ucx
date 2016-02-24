@@ -137,8 +137,8 @@ int main(int argc, char **argv)
      * process has knowledge of the others. */
     int partner;
     int size, rank;
-    struct sockaddr *ep_addrs;    /* Endpoint addresses (own and peer's) */
-    struct sockaddr *iface_addrs; /* Interface addresses (own and peer's) */
+    struct sockaddr *own_ep, *peer_ep;
+    struct sockaddr *own_iface, *peer_iface;
     ucs_status_t status;          /* status codes for UCS */
     uct_ep_h ep;                  /* Remote endpoint */
     ucs_async_context_t async;    /* Async event context manages times and fd notifications */
@@ -189,24 +189,26 @@ int main(int argc, char **argv)
     status = dev_tl_lookup(dev_name, tl_name, &if_info);
     CHKERR_JUMP(UCS_OK != status, "find supported device and transport", out_destroy_worker);
 
-    iface_addrs = (struct sockaddr*) calloc(2, if_info.attr.iface_addr_len);
-    CHKERR_JUMP(NULL == iface_addrs, "allocate memory for if addrs", out_destroy_iface);
+    /* Expect that addr len is the same on both peers */
+    own_iface = (struct sockaddr*)calloc(2, if_info.attr.iface_addr_len);
+    CHKERR_JUMP(NULL == own_iface, "allocate memory for if addrs", out_destroy_iface);
+    peer_iface = (struct sockaddr*)((char*)own_iface + if_info.attr.iface_addr_len);
 
     /* Get interface address */
-    status = uct_iface_get_address(if_info.iface, iface_addrs);
+    status = uct_iface_get_address(if_info.iface, own_iface);
     CHKERR_JUMP(UCS_OK != status, "get interface address", out_free_if_addrs);
 
-    /* Expect that addr len is the same on both peers.
-     * Store peer's address in iface_addrs[1] */
-    MPI_Sendrecv(iface_addrs, if_info.attr.iface_addr_len, MPI_BYTE, partner, 0,
-                 &iface_addrs[1], if_info.attr.iface_addr_len, MPI_BYTE, partner,
-                 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(own_iface, if_info.attr.iface_addr_len, MPI_BYTE, partner, 0,
+                 peer_iface, if_info.attr.iface_addr_len, MPI_BYTE, partner,0,
+                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    status = uct_iface_is_reachable(if_info.iface, &iface_addrs[1]);
+    status = uct_iface_is_reachable(if_info.iface, peer_iface);
     CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
 
-    ep_addrs = (struct sockaddr*)calloc(2, if_info.attr.ep_addr_len);
-    CHKERR_JUMP(NULL == ep_addrs, "allocate memory for ep addrs", out_free_if_addrs);
+    /* Again, expect that ep addr len is the same on both peers */
+    own_ep = (struct sockaddr*)calloc(2, if_info.attr.ep_addr_len);
+    CHKERR_JUMP(NULL == own_ep, "allocate memory for ep addrs", out_free_if_addrs);
+    peer_ep = (struct sockaddr*)((char*)own_ep + if_info.attr.ep_addr_len);
 
     if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         /* Create new endpoint */
@@ -214,23 +216,21 @@ int main(int argc, char **argv)
         CHKERR_JUMP(UCS_OK != status, "create endpoint", out_free_ep_addrs);
 
         /* Get endpoint address */
-        status = uct_ep_get_address(ep, ep_addrs);
+        status = uct_ep_get_address(ep, own_ep);
         CHKERR_JUMP(UCS_OK != status, "get endpoint address", out_free_ep);
     }
 
-    /* Again, expect that ep addr len is the same on both peers.
-     * Store peer's address in ep_addrs[1] */
-    MPI_Sendrecv(ep_addrs, if_info.attr.ep_addr_len, MPI_BYTE, partner, 0,
-                 &ep_addrs[1], if_info.attr.ep_addr_len, MPI_BYTE, partner,
-                 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(own_ep, if_info.attr.ep_addr_len, MPI_BYTE, partner, 0,
+                 peer_ep, if_info.attr.ep_addr_len, MPI_BYTE, partner, 0,
+                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         /* Connect endpoint to a remote endpoint */
-        status = uct_ep_connect_to_ep(ep, &ep_addrs[1]);
+        status = uct_ep_connect_to_ep(ep, peer_ep);
         MPI_Barrier(MPI_COMM_WORLD);
     } else if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         /* Create an endpoint which is connected to a remote interface */
-        status = uct_ep_create_connected(if_info.iface, &iface_addrs[1], &ep);
+        status = uct_ep_create_connected(if_info.iface, peer_iface, &ep);
     } else {
         status = UCS_ERR_UNSUPPORTED;
     }
@@ -260,9 +260,9 @@ int main(int argc, char **argv)
 out_free_ep:
     uct_ep_destroy(ep);
 out_free_ep_addrs:
-    free(ep_addrs);
+    free(own_ep);
 out_free_if_addrs:
-    free(iface_addrs);
+    free(own_iface);
 out_destroy_iface:
     uct_iface_close(if_info.iface);
     uct_pd_close(if_info.pd);
