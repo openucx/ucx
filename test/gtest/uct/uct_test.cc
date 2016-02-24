@@ -261,7 +261,7 @@ void uct_test::entity::connect_to_ep(uct_ep_h from, uct_ep_h to)
     status = uct_ep_get_address(to, addr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_connect_to_ep(from, addr);
+    status = uct_ep_connect_to_ep(from, NULL, addr);
     ASSERT_UCS_OK(status);
 
     free(addr);
@@ -325,7 +325,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
         status = uct_iface_get_address(other.iface(), addr);
         ASSERT_UCS_OK(status);
 
-        status = uct_ep_create_connected(iface(), addr, &ep);
+        status = uct_ep_create_connected(iface(), NULL, addr, &ep);
         ASSERT_UCS_OK(status);
     }
 
@@ -350,7 +350,7 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     status = uct_iface_get_address(other.iface(), addr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_create_connected(iface(), addr, &ep);
+    status = uct_ep_create_connected(iface(), NULL, addr, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);

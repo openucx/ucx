@@ -757,18 +757,17 @@ ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p);
  * @ingroup UCT_RESOURCE
  * @brief Create an endpoint which is connected to remote interface.
  *
- * @param [in]  iface   Interface to create the endpoint on.
- * @param [in]  addr    Remote interface address to connect to.
- * @param [out] ep_p    Filled with handle to the new endpoint.
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE capability.
  *
- *
+ * @param [in]  iface       Interface to create the endpoint on.
+ * @param [in]  dev_addr    Remote device address to connect to.
+ * @param [in]  iface_addr  Remote interface address to connect to.
+ * @param [out] ep_p        Filled with handle to the new endpoint.
  */
-static inline ucs_status_t uct_ep_create_connected(uct_iface_h iface,
-                                                   const uct_iface_addr_t *addr,
-                                                   uct_ep_h* ep_p)
-{
-    return iface->ops.ep_create_connected(iface, addr, ep_p);
-}
+ucs_status_t uct_ep_create_connected(uct_iface_h iface,
+                                     const uct_device_addr_t *dev_addr,
+                                     const uct_iface_addr_t *iface_addr,
+                                     uct_ep_h *ep_p);
 
 
 /**
@@ -795,11 +794,14 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
  * @ingroup UCT_RESOURCE
  * @brief Connect endpoint to a remote endpoint.
  *
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_EP capability.
+ *
  * @param [in] ep           Endpoint to connect.
- * @param [in] iface_addr   Remote interface address.
+ * @param [in] dev_addr     Remote device address.
  * @param [in] ep_addr      Remote endpoint address.
  */
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_ep_addr_t *addr);
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
+                                  const uct_ep_addr_t *ep_addr);
 
 
 /**

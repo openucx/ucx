@@ -337,14 +337,14 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
-ucs_status_t
-uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, 
-                                 const uct_iface_addr_t *addr, uct_ep_h *new_ep_p)
+static ucs_status_t
+uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *dev_addr,
+                                 const uct_iface_addr_t *iface_addr, uct_ep_h *new_ep_p)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep;
     uct_ud_ep_t *new_ud_ep; 
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)addr;
+    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)iface_addr;
     uct_ud_send_skb_t *skb;
     struct ibv_ah *ah;
     ucs_status_t status;
@@ -386,16 +386,18 @@ err:
 }
 
 
-ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           const uct_ep_addr_t *addr)
+static ucs_status_t
+uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                              const uct_device_addr_t *dev_addr,
+                              const uct_ep_addr_t *ep_addr)
 {
     ucs_status_t status;
     struct ibv_ah *ah;
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)addr;
+    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)ep_addr;
 
-    status = uct_ud_ep_connect_to_ep(&ep->super, addr);
+    status = uct_ud_ep_connect_to_ep(&ep->super, ep_addr);
     if (status != UCS_OK) {
         return status;
     }

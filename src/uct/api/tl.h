@@ -39,14 +39,17 @@ typedef struct uct_iface_ops {
     ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
 
     ucs_status_t (*ep_create_connected)(uct_iface_h iface,
-                                        const uct_iface_addr_t *addr,
+                                        const uct_device_addr_t *dev_addr,
+                                        const uct_iface_addr_t *iface_addr,
                                         uct_ep_h* ep_p);
 
     void         (*ep_destroy)(uct_ep_h ep);
 
     ucs_status_t (*ep_get_address)(uct_ep_h ep, uct_ep_addr_t *addr);
 
-    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep, const uct_ep_addr_t *addr);
+    ucs_status_t (*ep_connect_to_ep)(uct_ep_h ep,
+                                     const uct_device_addr_t *dev_addr,
+                                     const uct_ep_addr_t *ep_addr);
 
     ucs_status_t (*iface_get_device_address)(uct_iface_h iface,
                                              uct_device_addr_t *addr);

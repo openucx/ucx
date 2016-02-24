@@ -404,15 +404,16 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     return UCS_OK;
 }
 
-ucs_status_t
+static ucs_status_t
 uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
-                                const uct_iface_addr_t *addr,
+                                const uct_device_addr_t *dev_addr,
+                                const uct_iface_addr_t *iface_addr,
                                 uct_ep_h *new_ep_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(iface_h, uct_ud_mlx5_iface_t);
     uct_ud_mlx5_ep_t *ep;
     uct_ud_ep_t *new_ud_ep;
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)addr;
+    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)iface_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
 
@@ -448,17 +449,19 @@ err:
     return status;
 }
 
-ucs_status_t uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
-                                          const uct_ep_addr_t *addr)
+static ucs_status_t
+uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
+                             const uct_device_addr_t *dev_addr,
+                             const uct_ep_addr_t *ep_addr)
 {
     ucs_status_t status;
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ud_mlx5_iface_t);
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)addr;
+    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)ep_addr;
 
     ucs_trace_func("");
-    status = uct_ud_ep_connect_to_ep(&ep->super, addr);
+    status = uct_ud_ep_connect_to_ep(&ep->super, ep_addr);
     if (status != UCS_OK) {
         return status;
     }

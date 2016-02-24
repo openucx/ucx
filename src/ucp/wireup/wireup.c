@@ -669,7 +669,7 @@ static ucs_status_t ucp_wireup_start_aux(ucp_ep_h ep, uct_iface_addr_t *aux_addr
     /*
      * Create auxiliary endpoint which would be used to transfer wireup messages.
      */
-    status = uct_ep_create_connected(worker->ifaces[aux_rsc_index],
+    status = uct_ep_create_connected(worker->ifaces[aux_rsc_index], NULL,
                                      aux_addr, &ucp_ep_get_stub_ep(ep)->aux_ep);
     if (status != UCS_OK) {
         goto err_destroy_stub_ep;
@@ -801,7 +801,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     {
         if (ep->state & UCP_EP_STATE_STUB_EP) {
              status = uct_ep_create_connected(worker->ifaces[ep->rsc_index],
-                                              ucp_wireup_msg_addr(msg),
+                                              NULL, ucp_wireup_msg_addr(msg),
                                               &ucp_ep_get_stub_ep(ep)->next_ep);
              if (status != UCS_OK) {
                  return;
@@ -813,7 +813,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
         } else {
             status = uct_ep_create_connected(worker->ifaces[ep->rsc_index],
-                                             ucp_wireup_msg_addr(msg),
+                                             NULL, ucp_wireup_msg_addr(msg),
                                              &ep->uct_ep);
             if (status != UCS_OK) {
                 ucs_debug("failed to create ep");
@@ -853,7 +853,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
         if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
             ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
             status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
-                                          ucp_wireup_msg_get_addr(msg));
+                                          NULL, ucp_wireup_msg_get_addr(msg));
             if (status != UCS_OK) {
                 ucs_debug("failed to connect"); /* TODO send reject */
                 return;
@@ -912,7 +912,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     if (!(ep->state & UCP_EP_STATE_NEXT_EP_LOCAL_CONNECTED)) {
         ucs_assert(ep->state & UCP_EP_STATE_NEXT_EP);
         status = uct_ep_connect_to_ep(ucp_ep_get_stub_ep(ep)->next_ep,
-                                      ucp_wireup_msg_addr(msg));
+                                      NULL, ucp_wireup_msg_addr(msg));
         if (status != UCS_OK) {
             ucs_error("failed to connect");
             return;
@@ -1024,7 +1024,7 @@ ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_t *address)
      */
     if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         status = uct_ep_create_connected(worker->ifaces[ep->rsc_index],
-                                         uct_addr, &ep->uct_ep);
+                                         NULL, uct_addr, &ep->uct_ep);
         if (status != UCS_OK) {
             ucs_debug("failed to create ep");
             goto err;

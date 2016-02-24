@@ -56,7 +56,11 @@ ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t head
 ssize_t uct_ugni_smsg_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                   uct_pack_callback_t pack_cb, void *arg);
 ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
-ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep, const uct_ep_addr_t *addr);
+ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
+                                            const uct_device_addr_t *dev_addr,
+                                            const uct_ep_addr_t *ep_addr);
+
 UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
+
 #endif

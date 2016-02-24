@@ -32,7 +32,7 @@ struct uct_mm_ep {
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
-                           const uct_iface_addr_t *);
+                           const uct_device_addr_t *, const uct_iface_addr_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 

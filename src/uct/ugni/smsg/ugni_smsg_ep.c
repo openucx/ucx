@@ -75,7 +75,7 @@ static ucs_status_t uct_ugni_smsg_mbox_dereg(uct_ugni_smsg_iface_t *iface, uct_u
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_ep_t, uct_iface_t *tl_iface)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, tl_iface, NULL);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, tl_iface, NULL, NULL);
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
     void *mbox;
 
@@ -120,10 +120,13 @@ ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr) {
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep, const uct_ep_addr_t *addr){
+ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
+                                            const uct_device_addr_t *dev_addr,
+                                            const uct_ep_addr_t *ep_addr)
+{
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
-    const uct_sockaddr_smsg_ugni_t *iface_addr = (const uct_sockaddr_smsg_ugni_t*)addr;
+    const uct_sockaddr_smsg_ugni_t *iface_addr = (const uct_sockaddr_smsg_ugni_t*)ep_addr;
     gni_smsg_attr_t *local_attr = (gni_smsg_attr_t*)&ep->smsg_attr->mbox_attr;
     gni_smsg_attr_t *remote_attr = (gni_smsg_attr_t *)&iface_addr->smsg_attr;
     gni_return_t gni_rc;

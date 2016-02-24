@@ -322,7 +322,7 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ucs_assert_always(status == UCS_OK);
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
-    status = iface_h->ops.ep_connect_to_ep(ep_h, (const void*)&ctl->conn_req.ib_addr);
+    status = iface_h->ops.ep_connect_to_ep(ep_h, NULL, (const void*)&ctl->conn_req.ib_addr);
     ucs_assert_always(status == UCS_OK);
 
     status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.ib_addr, ep, ctl->conn_req.conn_id);
