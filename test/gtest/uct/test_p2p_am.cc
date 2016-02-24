@@ -290,6 +290,54 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
     ASSERT_UCS_OK(status);
 }
 
+class uct_p2p_am_misc : public uct_p2p_am_test
+{
+public:
+    static const unsigned RX_MAX_BUFS;
+    static const unsigned RX_QUEUE_LEN;
+
+    template<typename T>
+    std::string to_string(T v) {
+        std::stringstream ss;
+        ss << v;
+        return ss.str();
+    }
+
+    uct_p2p_am_misc() :
+        uct_p2p_am_test() {
+        ucs_status_t status_ib_bufs, status_ib_qlen, status_bufs;
+        m_rx_buf_limit_failed = 0;
+        status_ib_bufs = uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS" , to_string(RX_MAX_BUFS).c_str());
+        status_ib_qlen = uct_config_modify(m_iface_config, "IB_RX_QUEUE_LEN", to_string(RX_QUEUE_LEN).c_str());
+        status_bufs    = uct_config_modify(m_iface_config, "RX_MAX_BUFS"    , to_string(RX_MAX_BUFS).c_str());
+        if ((status_ib_bufs != UCS_OK) && (status_ib_qlen != UCS_OK) &&
+            (status_bufs != UCS_OK)) {
+            /* none of the above environment parameters were set successfully
+             * (for UCTs that don't have them) */
+            m_rx_buf_limit_failed = 1;
+        }
+
+    }
+
+    ucs_status_t send_with_timeout(uct_ep_h ep, const mapped_buffer& sendbuf,
+                                   const mapped_buffer& recvbuf, double timeout)
+    {
+        ucs_time_t loop_end_limit;
+        ucs_status_t status = UCS_ERR_NO_RESOURCE;
+
+        loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+
+        while ((ucs_get_time() < loop_end_limit) && (status != UCS_OK)) {
+            status = am_short(sender_ep(), sendbuf, recvbuf);
+            progress();
+        }
+        return status;
+    }
+
+    unsigned    m_rx_buf_limit_failed;
+};
+
+
 UCS_TEST_P(uct_p2p_am_test, am_short) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
@@ -339,4 +387,48 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
 }
 
 
+const unsigned uct_p2p_am_misc::RX_MAX_BUFS = 1024; /* due to hard coded 'grow'
+                                                       parameter in uct_ib_iface_recv_mpool_init */
+const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
+
+UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
+
+    mapped_buffer sendbuf(10 * sizeof(uint64_t), SEED1, sender());
+    mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+    ucs_status_t status;
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    if (m_rx_buf_limit_failed) {
+        UCS_TEST_SKIP_R("Current transport doesn't have rx memory pool");
+    }
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+
+    /* set a callback for the uct to invoke for receiving the data */
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_SYNC);
+    ASSERT_UCS_OK(status);
+
+    /* send many messages and progress the receiver. the receiver will keep getting
+     * UCS_INPROGRESS from the recv-handler and will keep consuming its rx memory pool.
+     * the goal is to make the reciever's rx memory pool run out.
+     * once this happens, the sender shouldn't be able to send */
+    set_keep_data(true);
+    status = send_with_timeout(sender_ep(), sendbuf, recvbuf, 1);
+    int cc = 0;
+    while (status != UCS_ERR_NO_RESOURCE) {
+        ASSERT_UCS_OK(status);
+        status = send_with_timeout(sender_ep(), sendbuf, recvbuf, 3);
+        cc++;
+    }
+    set_keep_data(false);
+    check_backlog();
+    short_progress_loop();
+
+    /* check that now the sender is able to send */
+    EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 3));
+}
+
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)

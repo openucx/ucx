@@ -43,6 +43,11 @@ public:
 
     static ucs_status_t drop_rx(uct_ud_ep_t *ep, uct_ud_neth_t *neth) {
         rx_drop_count++;
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
+            tx_ack_psn = neth->psn;
+            ack_req_tx_cnt++;
+            ucs_debug("RX: psn %u ack_req", neth->psn);
+        }
         return UCS_ERR_BUSY;
     }
 
@@ -56,6 +61,14 @@ public:
             tx_ack_psn = neth->psn;
             ack_req_tx_cnt++;
         }
+        return UCS_OK;
+    }
+
+    static int tx_count;
+    
+    static ucs_status_t count_tx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        tx_count++;
         return UCS_OK;
     }
 
@@ -86,6 +99,7 @@ public:
 int test_ud::ack_req_tx_cnt = 0;
 int test_ud::rx_ack_count   = 0;
 int test_ud::rx_drop_count  = 0;
+int test_ud::tx_count  = 0;
 
 uct_ud_psn_t test_ud::tx_ack_psn = 0;
 
@@ -327,6 +341,7 @@ UCS_TEST_P(test_ud, ca_md) {
     int new_cwnd;
     int i;
     int max_window;
+    int iters;
 
     connect();
 
@@ -334,7 +349,9 @@ UCS_TEST_P(test_ud, ca_md) {
      * on receive drop all packets. After several retransmission
      * attempts the window will be reduced to the minumum 
      */
-    max_window = RUNNING_ON_VALGRIND ? 128 : UCT_UD_CA_MAX_WINDOW;
+    max_window = RUNNING_ON_VALGRIND ? 64 : UCT_UD_CA_MAX_WINDOW;
+    iters      = RUNNING_ON_VALGRIND ? 0 : 1;
+
     set_tx_win(m_e1, max_window);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
     for (i = 1; i < max_window; i++) {
@@ -342,25 +359,53 @@ UCS_TEST_P(test_ud, ca_md) {
         EXPECT_UCS_OK(status);
         progress();
     }
+    short_progress_loop();
 
-    ep(m_e1)->tx.tx_hook = ack_req_count_tx;
+    ep(m_e1)->tx.tx_hook = count_tx;
     do {
         new_cwnd = ep(m_e1, 0)->ca.cwnd / UCT_UD_CA_MD_FACTOR;
-        rx_drop_count = 0;
-        ack_req_tx_cnt = 0;
+        tx_count = 0;
         do {
             progress();
         } while (ep(m_e1, 0)->ca.cwnd != new_cwnd);
-        /* more progress because resends may be waiting
-         * for tx queue to become available */
-        do { 
-            progress();
-        } while (ack_req_tx_cnt + 1 != new_cwnd);
+        short_progress_loop();
 
-        EXPECT_EQ(new_cwnd-1, ack_req_tx_cnt);
+        EXPECT_EQ(new_cwnd-1, tx_count);
         EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
 
-    } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
+    } while (iters && ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
+}
+
+UCS_TEST_P(test_ud, ca_resend) {
+
+    int max_window = 10;
+    int i;
+    ucs_status_t status;
+
+    connect();
+    set_tx_win(m_e1, max_window);
+
+    ep(m_e2, 0)->rx.rx_hook = drop_rx;
+    for (i = 1; i < max_window; i++) {
+        status = tx(m_e1);
+        EXPECT_UCS_OK(status);
+    }
+    short_progress_loop();
+    rx_drop_count = 0;
+    ack_req_tx_cnt = 0;
+    do {
+        progress();
+    } while(ep(m_e1)->ca.cwnd != max_window/2);
+    /* expect that:
+     * 4 packets will be retransmitted
+     * first packet will have ack_req,
+     * there will 2 ack_reqs
+     */ 
+    disable_async(m_e1);
+    disable_async(m_e2);
+    short_progress_loop();
+    EXPECT_EQ(4, rx_drop_count);
+    EXPECT_EQ(2, ack_req_tx_cnt);
 }
 
 #endif

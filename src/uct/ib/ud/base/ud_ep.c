@@ -12,6 +12,39 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 
+static void uct_ud_ep_resend_start(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+{
+    ep->resend.max_psn   = ep->tx.psn - 1;
+    ep->resend.psn       = ep->tx.acked_psn + 1;
+    ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
+    ep->resend.is_active = 1;
+    uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
+}
+
+
+static void uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+{
+    /* it is not possible to get here if whole 'resend window' was
+     * processed and resend
+     */
+    ucs_assert_always(UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->resend.max_psn));
+
+    if (UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->resend.max_psn)) {
+        /* new ack arrived that acked something in our resend window. */
+        if (UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->tx.acked_psn)) {
+            ucs_debug("ep(%p): ack received during resend resend.psn=%d tx.acked_psn=%d", 
+                      ep, ep->resend.psn, ep->tx.acked_psn);
+            ep->resend.pos = ucs_queue_iter_begin(&ep->tx.window);
+            ep->resend.psn = ep->tx.acked_psn + 1;
+        }
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
+    } else { 
+        /* everything in resend window was acked - no need to resend anymore */
+        ep->resend.is_active = 0;
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+    }
+}
+
 
 static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
 {
@@ -20,7 +53,11 @@ static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
     if (ep->ca.cwnd < UCT_UD_CA_MIN_WINDOW) {
         ep->ca.cwnd = UCT_UD_CA_MIN_WINDOW;
     }
-    ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
+    ep->tx.max_psn    = ep->tx.acked_psn + ep->ca.cwnd;
+    if (UCT_UD_PSN_COMPARE(ep->tx.max_psn, >, ep->tx.psn)) {
+        /* do not send more until we get acks going */
+        ep->tx.max_psn = ep->tx.psn;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
@@ -38,10 +75,13 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
     ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = 0;
-    ep->tx.rt_psn      = 0;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
     ucs_queue_head_init(&ep->tx.window);
-    ep->tx.rt_pos = ucs_queue_iter_begin(&ep->tx.window);
+
+    ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
+    ep->resend.psn       = 0;
+    ep->resend.max_psn   = 0;
+    ep->resend.is_active = 0;
 
     ep->rx.acked_psn = 0;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
@@ -65,10 +105,9 @@ static void uct_ud_ep_slow_timer(ucs_callback_t *self)
     if (now - ep->tx.send_time > 3*uct_ud_slow_tick()) {
         ucs_trace("sceduling resend now: %llu send_time: %llu diff: %llu tick: %llu",
                    now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick()); 
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
-        ep->tx.rt_pos = ucs_queue_iter_begin(&ep->tx.window);
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
         uct_ud_ep_ca_drop(ep);
+        uct_ud_ep_resend_start(iface, ep);
     }
 
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, 
@@ -293,8 +332,11 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         ucs_mpool_put(skb);
     }
 
-    /* update window */
     uct_ud_ep_ca_ack(ep);
+
+    if (ucs_unlikely(ep->resend.is_active)) {
+        uct_ud_ep_resend_ack(iface, ep);
+    }
 
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
@@ -450,6 +492,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
 
     if (ucs_unlikely(neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ)) {
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
+        ucs_trace_data("ACK_REQ - schedule ack, head_sn=%d sn=%d", 
+                       ep->rx.ooo_pkts.head_sn, neth->psn);
     }
 
     if (ucs_unlikely(!is_am)) {
@@ -573,21 +617,9 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
 {
     uct_ud_send_skb_t *skb, *sent_skb;
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-     /* We had new ACKs which freed the skb's rt_pos was pointing to */
-    if (UCT_UD_PSN_COMPARE(ep->tx.rt_psn, <=, ep->tx.acked_psn)) {
-        ep->tx.rt_pos = ucs_queue_iter_begin(&ep->tx.window);
-        ucs_debug("ep(%p): ack received during resend rt_psn=%d acked_psn=%d", 
-                  ep, ep->tx.rt_psn, ep->tx.acked_psn);
-    }
-
-    if (ucs_queue_iter_end(&ep->tx.window, ep->tx.rt_pos)) {
-        ucs_debug("ep(%p): resending completed", ep);
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
-        return NULL;
-    }
 
     /* check window */
-    sent_skb = ucs_queue_iter_elem(sent_skb, ep->tx.rt_pos, queue);
+    sent_skb = ucs_queue_iter_elem(sent_skb, ep->resend.pos, queue);
     if (UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
         ucs_debug("ep(%p): out of window(psn=%d/max_psn=%d) - can not resend more", 
                   ep, sent_skb->neth->psn, ep->tx.max_psn);
@@ -598,18 +630,28 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     skb = uct_ud_iface_res_skb_get(iface);
     ucs_assert_always(skb != NULL);
 
-    ep->tx.rt_pos = ucs_queue_iter_next(ep->tx.rt_pos);
-    ep->tx.rt_psn = sent_skb->neth->psn;
+    ep->resend.pos = ucs_queue_iter_next(ep->resend.pos);
+    ep->resend.psn = sent_skb->neth->psn;
     memcpy(skb->neth, sent_skb->neth, sent_skb->len);
     skb->neth->ack_psn = ep->rx.acked_psn;
-    skb->len = sent_skb->len;
-    /* force ack request on every resend */
-    skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
-    ucs_debug("ep(%p): resending rt_psn %u acked_psn %u", ep, ep->tx.rt_psn, ep->tx.acked_psn);
+    skb->len           = sent_skb->len;
+    /* force ack request on every Nth packet or on first packet in resend window */
+    if ((skb->neth->psn % UCT_UD_RESENDS_PER_ACK) == 0 || 
+        UCT_UD_PSN_COMPARE(skb->neth->psn, ==, ep->tx.acked_psn+1)) {
+        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
+    } else {
+        skb->neth->packet_type &= ~UCT_UD_PACKET_FLAG_ACK_REQ;
+    }
 
-    if (ucs_queue_iter_end(&ep->tx.window, ep->tx.rt_pos)) {
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+    ucs_debug("ep(%p): resending rt_psn %u rt_max_psn %u acked_psn %u max_psn %u ack_req %d", 
+              ep, ep->resend.psn, ep->resend.max_psn, 
+              ep->tx.acked_psn, ep->tx.max_psn, 
+              skb->neth->packet_type&UCT_UD_PACKET_FLAG_ACK_REQ ? 1 : 0);
+
+    if (UCT_UD_PSN_COMPARE(ep->resend.psn, ==, ep->resend.max_psn)) {
         ucs_debug("ep(%p): resending completed", ep);
+        ep->resend.is_active = 0;
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
     }
     return skb;
 }
