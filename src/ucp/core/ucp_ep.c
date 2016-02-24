@@ -27,7 +27,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->worker               = worker;
     ep->uct_ep               = NULL;
     ep->dest_uuid            = dest_uuid;
-    ep->rsc_index            = -1;
+    ep->rsc_index            = worker->context->num_tls;
     ep->dst_pd_index         = -1;
     ep->state                = 0;
     sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
@@ -39,6 +39,12 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
               ucp_ep_peer_name(ep), worker->uuid, ep->dest_uuid, message);
     *ep_p = ep;
     return UCS_OK;
+}
+
+void ucp_ep_delete(ucp_ep_h ep)
+{
+    sglib_hashed_ucp_ep_t_delete(ep->worker->ep_hash, ep);
+    ucs_free(ep);
 }
 
 static ucs_status_t ucp_pending_req_release(uct_pending_req_t *self)
@@ -128,7 +134,7 @@ out:
     return UCS_OK;
 
 err_free:
-    ucs_free(ep);
+    ucp_ep_delete(ep);
 err:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
@@ -137,6 +143,8 @@ err:
 void ucp_ep_destroy(ucp_ep_h ep)
 {
     ucs_debug("destroy ep %p", ep);
+
+    sglib_hashed_ucp_ep_t_delete(ep->worker->ep_hash, ep);
     ucp_wireup_stop(ep);
     if (ep->state & UCP_EP_STATE_READY_TO_SEND) {
         ucp_ep_destroy_uct_ep_safe(ep, ep->uct_ep);

@@ -7,6 +7,9 @@
 #ifndef UCP_PROTO_H_
 #define UCP_PROTO_H_
 
+#include <ucp/core/ucp_ep.h>
+#include <ucp/wireup/wireup.h>
+
 
 /**
  * Defines functions for a protocol, on all possible data types.
@@ -25,5 +28,16 @@ typedef struct ucp_proto {
     size_t                     mid_hdr_size;           /* Header size for rest of multi */
 } ucp_proto_t;
 
+
+/*
+ * Make sure the remote worker would be able to send replies to our endpoint.
+ * Should be used before a sending a message which requires a reply.
+ */
+static inline void ucp_ep_connect_remote(ucp_ep_h ep)
+{
+    if (ucs_unlikely(!(ep->state & UCP_EP_STATE_READY_TO_RECEIVE))) {
+        ucp_wireup_connect_remote(ep);
+    }
+}
 
 #endif

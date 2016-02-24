@@ -24,6 +24,7 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/wireup/wireup.h>
 
 #if HAVE_IB
 #  include <uct/ib/base/ib_device.h>
@@ -234,5 +235,6 @@ void print_type_info(const char * tl_name)
     PRINT_SIZE(ucp_tag_recv_info_t);
     PRINT_SIZE(ucp_mem_t);
     PRINT_SIZE(ucp_rkey_t);
+    PRINT_SIZE(ucp_wireup_msg_t);
 
 }
