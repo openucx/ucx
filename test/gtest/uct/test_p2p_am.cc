@@ -389,7 +389,7 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
 
 const unsigned uct_p2p_am_misc::RX_MAX_BUFS = 1024; /* due to hard coded 'grow'
                                                        parameter in uct_ib_iface_recv_mpool_init */
-const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
+const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 256;
 
 UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
 
@@ -416,11 +416,9 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
      * once this happens, the sender shouldn't be able to send */
     set_keep_data(true);
     status = send_with_timeout(sender_ep(), sendbuf, recvbuf, 1);
-    int cc = 0;
     while (status != UCS_ERR_NO_RESOURCE) {
         ASSERT_UCS_OK(status);
         status = send_with_timeout(sender_ep(), sendbuf, recvbuf, 3);
-        cc++;
     }
     set_keep_data(false);
     check_backlog();

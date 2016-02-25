@@ -17,18 +17,12 @@ static void uct_ud_ep_resend_start(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     ep->resend.max_psn   = ep->tx.psn - 1;
     ep->resend.psn       = ep->tx.acked_psn + 1;
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
-    ep->resend.is_active = 1;
     uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
 }
 
 
 static void uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    /* it is not possible to get here if whole 'resend window' was
-     * processed and resend
-     */
-    ucs_assert_always(UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->resend.max_psn));
-
     if (UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->resend.max_psn)) {
         /* new ack arrived that acked something in our resend window. */
         if (UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->tx.acked_psn)) {
@@ -40,7 +34,7 @@ static void uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
     } else { 
         /* everything in resend window was acked - no need to resend anymore */
-        ep->resend.is_active = 0;
+        ep->resend.psn = ep->resend.max_psn + 1;
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
     }
 }
@@ -79,9 +73,8 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ucs_queue_head_init(&ep->tx.window);
 
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
-    ep->resend.psn       = 0;
+    ep->resend.psn       = 1;
     ep->resend.max_psn   = 0;
-    ep->resend.is_active = 0;
 
     ep->rx.acked_psn = 0;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
@@ -334,7 +327,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     uct_ud_ep_ca_ack(ep);
 
-    if (ucs_unlikely(ep->resend.is_active)) {
+    if (ucs_unlikely(UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->resend.max_psn))) {
         uct_ud_ep_resend_ack(iface, ep);
     }
 
@@ -650,9 +643,10 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
 
     if (UCT_UD_PSN_COMPARE(ep->resend.psn, ==, ep->resend.max_psn)) {
         ucs_debug("ep(%p): resending completed", ep);
-        ep->resend.is_active = 0;
+        ep->resend.psn = ep->resend.max_psn + 1;
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
     }
+
     return skb;
 }
 

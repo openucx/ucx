@@ -192,9 +192,9 @@ struct uct_ud_ep {
     uint32_t                dest_ep_id;
     struct {
          uct_ud_psn_t           psn;          /* Next PSN to send */
-         uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent - (ack_psn + window) (from incoming packet) */
+         uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
-         ucs_queue_head_t       window;       /* send window */
+         ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
          UCS_STATS_NODE_DECLARE(stats);
@@ -204,7 +204,6 @@ struct uct_ud_ep {
          uct_ud_psn_t           psn;       /* last psn that was retransmitted */
          uct_ud_psn_t           max_psn;   /* max psn that should be retransmitted */
          ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
-         char                   is_active; /* resend operation is in progress */
     } resend;
     struct {
         uct_ud_psn_t  wmax;
