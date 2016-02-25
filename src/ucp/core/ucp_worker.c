@@ -75,7 +75,8 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
         for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
             if (context->config.features & ucp_am_handlers[am_id].features) {
                 (void)uct_iface_set_am_handler(worker->ifaces[tl_id], am_id,
-                                               ucp_stub_am_handler, worker, 0);
+                                               ucp_stub_am_handler, worker,
+                                               UCT_AM_CB_FLAG_ASYNC);
             }
         }
     }
