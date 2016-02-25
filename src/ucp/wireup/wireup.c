@@ -58,9 +58,13 @@ static void ucp_wireup_stop_aux(ucp_ep_h ep);
 static void ucp_wireup_ep_ready_to_send(ucp_ep_h ep)
 {
     ep->state |= UCP_EP_STATE_READY_TO_SEND;
+    if (ep->state & UCP_EP_STATE_NEXT_EP_REMOTE_CONNECTED) {
+        ep->state |= UCP_EP_STATE_READY_TO_RECEIVE;
+    }
 
-    ucs_debug("ready to send to %s 0x%"PRIx64"->0x%"PRIx64, ucp_ep_peer_name(ep),
-              ep->worker->uuid, ep->dest_uuid);
+    ucs_debug("ready to send%s to %s 0x%"PRIx64"->0x%"PRIx64,
+              (ep->state & UCP_EP_STATE_READY_TO_RECEIVE) ? " and receive" : "",
+              ucp_ep_peer_name(ep), ep->worker->uuid, ep->dest_uuid);
 }
 
 static ucp_stub_ep_t * ucp_ep_get_stub_ep(ucp_ep_h ep)

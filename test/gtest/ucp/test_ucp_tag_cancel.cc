@@ -19,8 +19,7 @@ UCS_TEST_P(test_ucp_tag_cancel, cancel_exp) {
     uint64_t recv_data = 0;
     request *req;
 
-    req = (request*)ucp_tag_recv_nb(receiver->worker(), &recv_data, sizeof(recv_data),
-                                    DATATYPE, 1, 1, recv_callback);
+    req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 1, 1);
     if (UCS_PTR_IS_ERR(req)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     } else if (req == NULL) {

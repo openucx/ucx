@@ -81,18 +81,56 @@ void test_ucp_tag::wait(request *req)
     }
 }
 
-void test_ucp_tag::send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
-                          ucp_tag_t tag)
+test_ucp_tag::request *
+test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                      ucp_tag_t tag)
 {
     request *req;
     req = (request*)ucp_tag_send_nb(sender->ep(), buffer, count, datatype,
                                     tag, send_callback);
-    if (!UCS_PTR_IS_PTR(req)) {
+    if (UCS_PTR_IS_ERR(req)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-    } else {
+    }
+    return req;
+}
+
+void test_ucp_tag::send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
+                          ucp_tag_t tag)
+{
+    request *req = send_nb(buffer, count, datatype, tag);
+    if (req != NULL) {
         wait(req);
         request_release(req);
     }
+}
+
+test_ucp_tag::request *
+test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                           ucp_tag_t tag)
+{
+    request *req;
+    req = (request*)ucp_tag_send_sync_nb(sender->ep(), buffer, count, datatype,
+                                         tag, send_callback);
+    if (!UCS_PTR_IS_PTR(req)) {
+        UCS_TEST_ABORT("ucp_tag_send_sync_nb returned status " <<
+                       ucs_status_string(UCS_PTR_STATUS(req)));
+    } else {
+        return req;
+    }
+}
+
+test_ucp_tag::request*
+test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
+                      ucp_tag_t tag, ucp_tag_t tag_mask)
+{
+    request *req = (request*)ucp_tag_recv_nb(receiver->worker(), buffer, count,
+                                             dt, tag, tag_mask, recv_callback);
+    if (UCS_PTR_IS_ERR(req)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    } else if (req == NULL) {
+        UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+    }
+    return req;
 }
 
 ucs_status_t test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t datatype,

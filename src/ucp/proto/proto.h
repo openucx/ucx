@@ -9,6 +9,28 @@
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_worker.h>
+#include <ucs/sys/compiler.h>
+#include <ucs/sys/sys.h>
+
+
+/**
+ * Header segment for a transaction
+ */
+typedef struct {
+    uint64_t                  sender_uuid;
+    uint64_t                  reqptr;
+} UCS_S_PACKED ucp_request_hdr_t;
+
+
+/**
+ * Header for transaction acknowledgment
+ */
+typedef struct {
+    uint64_t                  reqptr;
+    ucs_status_t              status;
+} UCS_S_PACKED ucp_reply_hdr_t;
 
 
 /**
@@ -29,6 +51,9 @@ typedef struct ucp_proto {
 } ucp_proto_t;
 
 
+ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self);
+
+
 /*
  * Make sure the remote worker would be able to send replies to our endpoint.
  * Should be used before a sending a message which requires a reply.
@@ -39,5 +64,14 @@ static inline void ucp_ep_connect_remote(ucp_ep_h ep)
         ucp_wireup_connect_remote(ep);
     }
 }
+
+
+static inline void ucp_send_req_init(ucp_request_t* req, ucp_ep_h ep)
+{
+    VALGRIND_MAKE_MEM_DEFINED(req + 1, ep->worker->context->config.request.size);
+    req->flags             = 0;
+    req->send.ep           = ep;
+}
+
 
 #endif

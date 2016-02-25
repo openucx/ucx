@@ -67,6 +67,8 @@ ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
 {
     ucs_status_t status;
 
+    ucs_assertv(req->func != NULL, "req=%p", req);
+
     status = uct_ep_pending_add(uct_ep, req);
     if (status != UCS_ERR_BUSY) {
         ucs_assert(status == UCS_OK);
@@ -154,3 +156,8 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_free(ep);
 }
 
+void ucp_ep_send_reply(ucp_request_t *req, int progress)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucp_ep_add_pending(ep, ep->uct_ep, req, progress);
+}

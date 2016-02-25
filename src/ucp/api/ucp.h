@@ -916,6 +916,37 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking synchronous tagged-send operation.
+ *
+ * Same as @ref ucp_tag_send_nb, except the request completes only after there
+ * is a remote tag match on the message (which does not always mean the remote
+ * receive has been completed). This function never completes "in-place", and
+ * always returns a request handle.
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag.
+ * @param [in]  cb          Callback function that is invoked whenever the
+ *                          send operation is completed.
+ *
+ * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
+ * @return otherwise        - Operation was scheduled for send and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the message. The application is
+ *                          responsible to released the handle using
+ *                          @ref ucp_request_release "ucp_request_release()"
+ *                          routine.
+ */
+ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
+                                      ucp_datatype_t datatype, ucp_tag_t tag,
+                                      ucp_send_callback_t cb);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking tagged-receive operation.
  *
  * This routine receives a messages that is described by the local address @a

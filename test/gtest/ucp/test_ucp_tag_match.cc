@@ -95,9 +95,7 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
     request *my_send_req;
-    my_send_req = (request*)ucp_tag_send_nb(sender->ep(), &sendbuf[0],
-                                            sendbuf.size(), DATATYPE, 0x111337,
-                                            send_callback);
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
@@ -160,14 +158,10 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard) {
 
         request *rreq1, *rreq2;
 
-        rreq1 = (request*)ucp_tag_recv_nb(receiver->worker(), &recvbuf1[0],
-                                          recvbuf1.size(), DATATYPE, 0, 0,
-                                          recv_callback);
+        rreq1 = recv_nb(&recvbuf1[0], recvbuf1.size(), DATATYPE, 0, 0);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq1));
 
-        rreq2 = (request*)ucp_tag_recv_nb(receiver->worker(), &recvbuf2[0],
-                                          recvbuf2.size(), DATATYPE, 0, 0,
-                                          recv_callback);
+        rreq2 = recv_nb(&recvbuf2[0], recvbuf2.size(), DATATYPE, 0, 0);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq2));
 
 
@@ -229,9 +223,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
     progress();
 
     request *my_recv_req;
-    my_recv_req = (request*)ucp_tag_recv_nb(receiver->worker(), &recvbuf[0],
-                                            recvbuf.size(), DATATYPE, 0x1337,
-                                            0xffff, recv_callback);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
 
     wait(my_recv_req);
@@ -251,9 +243,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
     uint64_t recv_data = 0;
 
     request *my_send_req;
-    my_send_req = (request*)ucp_tag_send_nb(sender->ep(), &send_data,
-                                            sizeof(send_data), DATATYPE, 0x111337,
-                                            send_callback);
+    my_send_req = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     ucp_worker_progress(receiver->worker());
@@ -292,9 +282,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_exp) {
     uint64_t recv_data = 0;
 
     request *my_recv_req;
-    my_recv_req = (request*)ucp_tag_recv_nb(receiver->worker(), &recv_data,
-                                            sizeof(recv_data), DATATYPE, 0x1337,
-                                            0xffff, recv_callback);
+    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff);
 
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
@@ -322,9 +310,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
     std::vector<request*> send_reqs(num_requests);
 
     for (unsigned i = 0; i < num_requests; ++i) {
-        send_reqs[i] = (request*)ucp_tag_send_nb(sender->ep(), &send_data,
-                                                 sizeof(send_data), DATATYPE,
-                                                 0x111337, send_callback);
+        send_reqs[i] = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(send_reqs[i]));
     }
 
@@ -348,6 +334,36 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
             request_release(send_reqs[i]);
         }
     }
+}
+
+UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
+    ucp_tag_recv_info_t info;
+    ucs_status_t status;
+
+    uint64_t send_data = 0x0102030405060708;
+    uint64_t recv_data = 0;
+
+    request *my_send_req = send_sync_nb(&send_data, sizeof(send_data), DATATYPE,
+                                        0x111337);
+    short_progress_loop();
+
+    ASSERT_TRUE(my_send_req != NULL);
+    EXPECT_FALSE(my_send_req->completed);
+
+    ucp_worker_progress(receiver->worker());
+
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(sizeof(send_data),   info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(send_data, recv_data);
+
+    short_progress_loop();
+
+    EXPECT_TRUE(my_send_req->completed);
+    EXPECT_EQ(UCS_OK, my_send_req->status);
+    request_release(my_send_req);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)

@@ -47,6 +47,8 @@ void ucp_worker_get_name(ucp_worker_h worker, char *name, size_t max);
 
 ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid);
 
+ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid);
+
 
 static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uuid)
 {

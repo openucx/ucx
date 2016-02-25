@@ -25,6 +25,8 @@ enum {
     UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
     UCP_REQUEST_FLAG_BLOCKING             = UCS_BIT(2),
     UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
+    UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
+    UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
 };
 
 
@@ -35,7 +37,8 @@ enum {
     UCP_RECV_DESC_FLAG_FIRST = UCS_BIT(0),
     UCP_RECV_DESC_FLAG_LAST  = UCS_BIT(1),
     UCP_RECV_DESC_FLAG_EAGER = UCS_BIT(2),
-    UCP_RECV_DESC_FLAG_RNDV  = UCS_BIT(3),
+    UCP_RECV_DESC_FLAG_SYNC  = UCS_BIT(3),
+    UCP_RECV_DESC_FLAG_RNDV  = UCS_BIT(4),
 };
 
 
@@ -46,7 +49,8 @@ enum {
  */
 #define ucp_request_complete(_req, _cb, ...) \
     { \
-        ucs_trace_data("completing request %p flags 0x%x", _req, (_req)->flags); \
+        ucs_trace_data("completing request %p (%p) flags 0x%x", (_req), \
+                       (_req) + 1, (_req)->flags); \
         (_cb)((_req) + 1, ## __VA_ARGS__); \
         if (((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) { \
             ucs_mpool_put(_req); \
@@ -69,7 +73,8 @@ typedef struct ucp_send_state {
 /**
  * Request in progress.
  */
-typedef struct ucp_request {
+typedef struct ucp_request ucp_request_t;
+struct ucp_request {
     uint16_t                      flags;   /* Request flags */
 
     union {
@@ -96,6 +101,12 @@ typedef struct ucp_request {
                     uint64_t      remote_addr; /* remote address */
                     ucp_rkey_h    rkey;        /* Rkey */
                 } rma;
+
+                struct {
+                    uintptr_t     remote_request;
+                    uint8_t       am_id;
+                    ucs_status_t  status;
+                } proto;
             };
 
             size_t                length;   /* Total length, in bytes */
@@ -115,7 +126,7 @@ typedef struct ucp_request {
             ucp_frag_state_t      state;
         } recv;
     };
-} ucp_request_t;
+};
 
 
 /**
@@ -124,7 +135,8 @@ typedef struct ucp_request {
 typedef struct ucp_recv_desc {
     ucs_queue_elem_t              queue;    /* Queue element */
     size_t                        length;   /* Received length */
-    unsigned                      flags;
+    uint16_t                      hdr_len;  /* Header size */
+    uint16_t                      flags;    /* Flags */
 } ucp_recv_desc_t;
 
 

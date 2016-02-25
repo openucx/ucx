@@ -45,6 +45,7 @@ libucp_la_SOURCES = \
 	core/ucp_worker.c \
 	dt/dt_contig.c \
 	dt/dt_generic.c \
+	proto/proto_am.c \
 	rma/basic_rma.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \
