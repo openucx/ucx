@@ -403,7 +403,7 @@ UCS_TEST_P(test_ud, ca_resend) {
      */ 
     disable_async(m_e1);
     disable_async(m_e2);
-    short_progress_loop();
+    short_progress_loop(100);
     EXPECT_EQ(4, rx_drop_count);
     EXPECT_EQ(2, ack_req_tx_cnt);
 }

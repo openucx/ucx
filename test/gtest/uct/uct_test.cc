@@ -139,9 +139,20 @@ void uct_test::progress() const {
 }
 
 void uct_test::flush() const {
-    FOR_EACH_ENTITY(iter) {
-        (*iter)->flush();
-    }
+
+    bool flushed;
+    do {
+        flushed = true;
+        FOR_EACH_ENTITY(iter) {
+            (*iter)->progress();
+            ucs_status_t status = uct_iface_flush((*iter)->iface());
+            if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
+                flushed = false;
+            } else {
+                ASSERT_UCS_OK(status);
+            }
+        }
+    } while (!flushed);
 }
 
 void uct_test::short_progress_loop(double delay_ms) const {

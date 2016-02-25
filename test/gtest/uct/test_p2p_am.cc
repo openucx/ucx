@@ -389,7 +389,7 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
 
 const unsigned uct_p2p_am_misc::RX_MAX_BUFS = 1024; /* due to hard coded 'grow'
                                                        parameter in uct_ib_iface_recv_mpool_init */
-const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 256;
+const unsigned uct_p2p_am_misc::RX_QUEUE_LEN = 64;
 
 UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
 
@@ -399,6 +399,10 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
 
     if (RUNNING_ON_VALGRIND) {
         UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("skipping on loopback");
     }
 
     if (m_rx_buf_limit_failed) {
@@ -425,7 +429,7 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
     short_progress_loop();
 
     /* check that now the sender is able to send */
-    EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 3));
+    EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 6));
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
