@@ -73,7 +73,7 @@ public:
     void check_am_rx_counters(size_t len) {
         uint64_t v;
 
-        short_progress_loop(10.0);
+        short_progress_loop(100.0);
         v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM);
         EXPECT_EQ(1UL, v);
         v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM_BYTES);
