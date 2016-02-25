@@ -58,8 +58,14 @@ typedef struct ucp_ep_config {
     /* Threshold for switching from eager to rendezvous */
     size_t                 rndv_thresh;
 
+    /* threshold for switching from eager-sync to rendezvous */
+    size_t                 sync_rndv_thresh;
+
     /* zero-copy threshold for operations which do not have to wait for remote side */
     size_t                 zcopy_thresh;
+
+    /* zero-copy threshold for operations which anyways have to wait for remote side */
+    size_t                 sync_zcopy_thresh;
 
 } ucp_ep_config_t;
 
@@ -97,6 +103,9 @@ ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
 
 void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
                         int progress);
+
+void ucp_ep_send_reply(ucp_request_t *req, int progress);
+
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 {

@@ -365,8 +365,6 @@ ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
         goto err;
     }
 
-    ucs_debug("resources=%p (calloc)", resources);
-
     /* Second pass: fill port information */
     num_resources = 0;
     for (port_num = dev->first_port; port_num < dev->first_port + dev->num_ports;

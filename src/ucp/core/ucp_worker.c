@@ -8,6 +8,7 @@
 
 #include <ucp/wireup/wireup.h>
 #include <ucp/tag/eager.h>
+#include <ucs/datastruct/mpool.inl>
 
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
@@ -199,19 +200,24 @@ static void ucp_worker_set_config(ucp_worker_h worker, ucp_rsc_index_t tl_id)
                                     (1.0 / iface_attr->bandwidth) -
                                     pd_attr->reg_cost.growth);
             if (zcopy_thresh < 0) {
-                config->zcopy_thresh = SIZE_MAX;
+                config->zcopy_thresh      = SIZE_MAX;
+                config->sync_zcopy_thresh = -1;
             } else {
                 config->zcopy_thresh = zcopy_thresh;
+                config->sync_zcopy_thresh = zcopy_thresh;
             }
         } else {
             config->zcopy_thresh = context->config.ext.zcopy_thresh;
+            config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
         }
     } else {
-        config->zcopy_thresh = SIZE_MAX;
+        config->zcopy_thresh      = SIZE_MAX;
+        config->sync_zcopy_thresh = -1;
     }
 
-    config->bcopy_thresh = context->config.ext.bcopy_thresh;
-    config->rndv_thresh  = SIZE_MAX;
+    config->bcopy_thresh     = context->config.ext.bcopy_thresh;
+    config->rndv_thresh      = SIZE_MAX;
+    config->sync_rndv_thresh = SIZE_MAX;
 }
 
 static void ucp_worker_set_stub_config(ucp_worker_h worker)
@@ -223,7 +229,9 @@ static void ucp_worker_set_stub_config(ucp_worker_h worker)
 
     config->max_am_bcopy      = 256;
     config->zcopy_thresh      = SIZE_MAX;
+    config->sync_zcopy_thresh = SIZE_MAX;
     config->rndv_thresh       = SIZE_MAX;
+    config->sync_rndv_thresh  = SIZE_MAX;
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
@@ -550,6 +558,21 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
 err:
     UCS_ASYNC_UNBLOCK(&worker->async);
     ucs_fatal("failed to create reply endpoint: %s", ucs_status_string(status));
+}
+
+ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid)
+{
+    ucp_request_t *req;
+    ucp_ep_h ep;
+
+    req = ucs_mpool_get_inline(&worker->req_mp);
+    if (req == NULL) {
+        ucs_fatal("could not allocate request");
+    }
+
+    ep = ucp_worker_get_reply_ep(worker, dest_uuid);
+    ucp_send_req_init(req, ep);
+    return req;
 }
 
 SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_worker_ep_compare, next);

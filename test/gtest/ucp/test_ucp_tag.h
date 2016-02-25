@@ -41,8 +41,17 @@ protected:
     static void recv_callback(void *request, ucs_status_t status,
                                   ucp_tag_recv_info_t *info);
 
+    request * send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                      ucp_tag_t tag);
+
     void send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
                 ucp_tag_t tag);
+
+    request * send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                           ucp_tag_t tag);
+
+    request* recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
+                     ucp_tag_t tag, ucp_tag_t tag_mask);
 
     ucs_status_t recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
                         ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);

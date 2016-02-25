@@ -30,6 +30,10 @@ enum {
     UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
     UCP_AM_ID_EAGER_LAST        =  5, /* Last eager fragment */
 
+    UCP_AM_ID_EAGER_SYNC_ONLY   =  6, /* Single packet eager-sync */
+    UCP_AM_ID_EAGER_SYNC_FIRST  =  7, /* First eager-sync fragment */
+    UCP_AM_ID_EAGER_SYNC_ACK    =  8, /* Eager-sync acknowldge */
+
     UCP_AM_ID_LAST
 };
 

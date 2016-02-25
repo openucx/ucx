@@ -15,27 +15,33 @@ class test_ucp_tag_xfer : public test_ucp_tag {
 public:
     using test_ucp_tag::get_ctx_params;
 
-    void test_xfer_contig(size_t size, bool expected);
-    void test_xfer_generic(size_t size, bool expected);
+    void test_xfer_contig(size_t size, bool expected, bool sync);
+    void test_xfer_generic(size_t size, bool expected, bool sync);
 
 protected:
-    typedef void (test_ucp_tag_xfer::* xfer_func_t)(size_t size, bool expected);
+    typedef void (test_ucp_tag_xfer::* xfer_func_t)(size_t size, bool expected,
+                                                    bool sync);
 
-    void test_xfer(xfer_func_t func, bool expected);
+    void test_xfer(xfer_func_t func, bool expected, bool sync);
 
 private:
     size_t do_xfer(const void *sendbuf, void *recvbuf, ucp_datatype_t dt,
-                   size_t count, bool expected);
-    request *recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                     ucp_tag_t tag, ucp_tag_t tag_mask);
+                   size_t count, bool expected, bool sync);
+
+    request* do_send(const void *sendbuf, size_t count, ucp_datatype_t dt, bool sync);
+
+    static const uint64_t SENDER_TAG = 0x111337;
+    static const uint64_t RECV_MASK  = 0xffff;
+    static const uint64_t RECV_TAG   = 0x1337;
+
 };
 
-void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected)
+void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync)
 {
     ucs::detail::message_stream ms("INFO");
 
     ms << "0 " << std::flush;
-    (this->*func)(0, expected);
+    (this->*func)(0, expected, sync);
 
     for (unsigned i = 1; i <= 7; ++i) {
         size_t max = (long)pow(10.0, i);
@@ -48,24 +54,24 @@ void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected)
         ms << count << "x10^" << i << " " << std::flush;
         for (long j = 0; j < count; ++j) {
             size_t size = rand() % max + 1;
-            (this->*func)(size, expected);
+            (this->*func)(size, expected, sync);
         }
     }
 }
 
-void test_ucp_tag_xfer::test_xfer_contig(size_t size, bool expected)
+void test_ucp_tag_xfer::test_xfer_contig(size_t size, bool expected, bool sync)
 {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
-    size_t recvd = do_xfer(&sendbuf[0], &recvbuf[0], size, DATATYPE, expected);
+    size_t recvd = do_xfer(&sendbuf[0], &recvbuf[0], size, DATATYPE, expected, sync);
 
     ASSERT_EQ(sendbuf.size(), recvd);
     EXPECT_TRUE(!memcmp(&sendbuf[0], &recvbuf[0], recvd));
 }
 
-void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected)
+void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync)
 {
     size_t count = size / sizeof(uint32_t);
     ucp_datatype_t dt;
@@ -78,7 +84,7 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected)
     status = ucp_dt_create_generic(&test_dt_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
-    recvd = do_xfer(NULL, NULL, count, dt, expected);
+    recvd = do_xfer(NULL, NULL, count, dt, expected, sync);
     EXPECT_EQ(count * sizeof(uint32_t), recvd);
 
     EXPECT_EQ(2, dt_gen_start_count);
@@ -88,57 +94,77 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected)
 }
 
 test_ucp_tag_xfer::request*
-test_ucp_tag_xfer::recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                           ucp_tag_t tag, ucp_tag_t tag_mask)
+test_ucp_tag_xfer::do_send(const void *sendbuf, size_t count, ucp_datatype_t dt,
+                           bool sync)
 {
-    request *req = (request*)ucp_tag_recv_nb(receiver->worker(), buffer, count,
-                                             dt, tag, tag_mask, recv_callback);
-    if (UCS_PTR_IS_ERR(req)) {
-        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-    } else if (req == NULL) {
-        UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+    if (sync) {
+        return send_sync_nb(sendbuf, count, dt, SENDER_TAG);
+    } else {
+        return send_nb(sendbuf, count, dt, SENDER_TAG);
     }
-    return req;
 }
 
 size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf, size_t count,
-                                  ucp_datatype_t dt, bool expected)
+                                  ucp_datatype_t dt, bool expected, bool sync)
 {
-    request *req;
+    request *rreq, *sreq;
     size_t recvd;
 
     if (expected) {
-        req = recv_nb(recvbuf, count, dt, 0x1337, 0xffff);
-        send_b(sendbuf, count, dt, 0x111337);
+        rreq = recv_nb(recvbuf, count, dt, RECV_TAG, RECV_MASK);
+        sreq = do_send(sendbuf, count, dt, sync);
     } else {
-        send_b(sendbuf, count, dt, 0x111337);
+        sreq = do_send(sendbuf, count, dt, sync);
         short_progress_loop();
-        req = recv_nb(recvbuf, count, dt, 0x1337, 0xffff);
+        if (sync) {
+            EXPECT_FALSE(sreq->completed);
+        }
+        rreq = recv_nb(recvbuf, count, dt, RECV_TAG, RECV_MASK);
     }
 
-    wait(req);
+    wait(rreq);
+    if (sreq != NULL) {
+        wait(sreq);
+        request_release(sreq);
+    }
 
-    ASSERT_UCS_OK(req->status);
-    EXPECT_EQ((ucp_tag_t)0x111337, req->info.sender_tag);
-    recvd = req->info.length;
-    request_release(req);
+    ASSERT_UCS_OK(rreq->status);
+    EXPECT_EQ((ucp_tag_t)SENDER_TAG, rreq->info.sender_tag);
+    recvd = rreq->info.length;
+    request_release(rreq);
     return recvd;
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp) {
-    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true);
-}
-
-UCS_TEST_P(test_ucp_tag_xfer, generic_exp) {
-    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true);
+    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_unexp) {
-    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false);
+    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_exp) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_unexp) {
-    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false);
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, contig_unexp_sync) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_contig, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_exp_sync) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_sync) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)

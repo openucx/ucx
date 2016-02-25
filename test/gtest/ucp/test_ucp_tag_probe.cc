@@ -37,9 +37,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_probe) {
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
 
     request *my_recv_req;
-    my_recv_req = (request*)ucp_tag_recv_nb(receiver->worker(), &recv_data,
-                                            sizeof(recv_data), DATATYPE, 0x1337,
-                                            0xffff, recv_callback);
+    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
 
     wait(my_recv_req);

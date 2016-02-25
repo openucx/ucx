@@ -32,7 +32,32 @@ typedef struct {
 } UCS_S_PACKED ucp_eager_first_hdr_t;
 
 
+/*
+ * EAGER_SYNC_ONLY
+ */
+typedef struct {
+    ucp_eager_hdr_t           super;
+    ucp_request_hdr_t         req;
+} UCS_S_PACKED ucp_eager_sync_hdr_t;
+
+
+/*
+ * EAGER_SYNC_FIRST
+ */
+typedef struct {
+    ucp_eager_first_hdr_t     super;
+    ucp_request_hdr_t         req;
+} UCS_S_PACKED ucp_eager_sync_first_hdr_t;
+
+
 extern const ucp_proto_t ucp_tag_eager_proto;
+extern const ucp_proto_t ucp_tag_eager_sync_proto;
+
+
+void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
+                                 uintptr_t remote_request, int progress);
+
+void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag);
 
 
 static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
@@ -42,16 +67,6 @@ static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
     UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
     return uct_ep_am_short(ep->uct_ep, UCP_AM_ID_EAGER_ONLY, tag,
                            buffer, length);
-}
-
-static inline size_t ucp_eager_hdr_len(unsigned flags)
-{
-    if ((flags & (UCP_RECV_DESC_FLAG_FIRST | UCP_RECV_DESC_FLAG_LAST))
-                    == UCP_RECV_DESC_FLAG_FIRST) {
-        return sizeof(ucp_eager_first_hdr_t);
-    } else {
-        return sizeof(ucp_eager_hdr_t);
-    }
 }
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -66,15 +81,17 @@ ucp_eager_total_len(ucp_eager_hdr_t *hdr, unsigned flags, unsigned payload_lengt
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
-                      void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_frag_state_t *state, ucp_tag_recv_info_t *info)
+ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag,
+                      unsigned flags, void *buffer, size_t count,
+                      ucp_datatype_t datatype, ucp_frag_state_t *state,
+                      ucp_tag_recv_info_t *info)
 {
     size_t recv_len, hdr_len;
     ucs_status_t status;
+    ucp_request_hdr_t *req_hdr;
     void *data = rdesc + 1;
 
-    hdr_len  = ucp_eager_hdr_len(flags);
+    hdr_len  = rdesc->hdr_len;
     recv_len = rdesc->length - hdr_len;
     status   = ucp_tag_process_recv(buffer, count, datatype, state,
                                     data + hdr_len, recv_len,
@@ -84,6 +101,14 @@ ucp_eager_unexp_match(ucp_recv_desc_t *rdesc, ucp_tag_t tag, unsigned flags,
     if (flags & UCP_RECV_DESC_FLAG_FIRST) {
         info->sender_tag = tag;
         info->length     = ucp_eager_total_len(data, flags, recv_len);
+
+        if (ucs_unlikely(flags & UCP_RECV_DESC_FLAG_SYNC)) {
+            req_hdr = (flags & UCP_RECV_DESC_FLAG_LAST) ?
+                            &((ucp_eager_sync_hdr_t*)data)->req :
+                            &((ucp_eager_sync_first_hdr_t*)data)->req;
+            ucp_tag_eager_sync_send_ack(worker, req_hdr->sender_uuid,
+                                        req_hdr->reqptr, 1);
+        }
     }
 
     if (flags & UCP_RECV_DESC_FLAG_LAST) {
