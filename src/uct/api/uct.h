@@ -10,7 +10,6 @@
 #define UCT_H_
 
 #include <uct/api/uct_def.h>
-#include <uct/api/addr.h>
 #include <uct/api/tl.h>
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
@@ -642,7 +641,7 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr);
  * @param [out] iface_addr  Filled with interface address. The size of the buffer
  *                           provided must be at least @ref uct_iface_attr_t::iface_addr_len.
  */
-ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr);
+ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
 
 
 /**
@@ -659,7 +658,7 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, struct sockaddr *addr);
  *
  * @return Nonzero if reachable, 0 if not.
  */
-int uct_iface_is_reachable(uct_iface_h iface, const struct sockaddr *addr);
+int uct_iface_is_reachable(uct_iface_h iface, const uct_iface_addr_t *addr);
 
 
 /**
@@ -748,7 +747,7 @@ ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p);
  *
  */
 static inline ucs_status_t uct_ep_create_connected(uct_iface_h iface,
-                                                   const struct sockaddr *addr,
+                                                   const uct_iface_addr_t *addr,
                                                    uct_ep_h* ep_p)
 {
     return iface->ops.ep_create_connected(iface, addr, ep_p);
@@ -772,7 +771,7 @@ void uct_ep_destroy(uct_ep_h ep);
  * @param [out] ep_addr  Filled with endpoint address. The size of the buffer
  *                        provided must be at least @ref uct_iface_attr_t::ep_addr_len.
  */
-ucs_status_t uct_ep_get_address(uct_ep_h ep, struct sockaddr *addr);
+ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
 
 
 /**
@@ -783,7 +782,7 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, struct sockaddr *addr);
  * @param [in] iface_addr   Remote interface address.
  * @param [in] ep_addr      Remote endpoint address.
  */
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const struct sockaddr *addr);
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_ep_addr_t *addr);
 
 
 /**

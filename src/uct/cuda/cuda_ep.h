@@ -21,7 +21,7 @@ typedef struct uct_cuda_ep {
     struct uct_cuda_ep *next;
 } uct_cuda_ep_t;
 
-UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ep_t, uct_ep_t, uct_iface_t*, const struct sockaddr *);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ep_t, uct_ep_t, uct_iface_t*, const uct_iface_addr_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cuda_ep_t, uct_ep_t);
 
 ucs_status_t uct_cuda_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length, 

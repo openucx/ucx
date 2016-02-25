@@ -14,13 +14,13 @@ libuct_la_LIBADD   = $(LIBM) ../ucs/libucs.la
 libuct_ladir       = $(includedir)/uct
 
 nobase_dist_libuct_la_HEADERS = \
-	api/addr.h \
 	api/tl.h \
 	api/uct_def.h \
 	api/uct.h \
 	api/version.h
 
 noinst_HEADERS = \
+	base/addr.h \
 	base/uct_pd.h \
 	base/uct_iface.h \
 	base/uct_log.h

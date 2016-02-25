@@ -339,7 +339,7 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
 }
 
 static ucs_status_t uct_cm_iface_get_address(uct_iface_h tl_iface,
-                                             struct sockaddr *addr)
+                                             uct_iface_addr_t *addr)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
     uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;

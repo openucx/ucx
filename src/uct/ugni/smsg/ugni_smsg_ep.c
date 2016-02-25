@@ -101,14 +101,14 @@ UCS_CLASS_DEFINE(uct_ugni_smsg_ep_t, uct_ugni_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, uct_iface_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
 
-ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr) {
+ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr) {
 
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_sockaddr_smsg_ugni_t *ep_addr = (uct_sockaddr_smsg_ugni_t*)addr;
 
     ucs_status_t rc;
 
-    rc = uct_ugni_iface_get_address(tl_ep->iface, addr);
+    rc = uct_ugni_iface_get_address(tl_ep->iface, (uct_iface_addr_t*)addr);
 
     if(UCS_OK != rc){
         return rc;
@@ -120,7 +120,7 @@ ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr){
+ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep, const uct_ep_addr_t *addr){
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     const uct_sockaddr_smsg_ugni_t *iface_addr = (const uct_sockaddr_smsg_ugni_t*)addr;

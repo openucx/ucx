@@ -406,7 +406,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
 ucs_status_t
 uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
-                                const struct sockaddr *addr,
+                                const uct_iface_addr_t *addr,
                                 uct_ep_h *new_ep_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(iface_h, uct_ud_mlx5_iface_t);
@@ -449,7 +449,7 @@ err:
 }
 
 ucs_status_t uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
-                                          const struct sockaddr *addr)
+                                          const uct_ep_addr_t *addr)
 {
     ucs_status_t status;
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);

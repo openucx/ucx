@@ -7,7 +7,6 @@
 #include "mm_iface.h"
 #include "mm_ep.h"
 
-#include <uct/api/addr.h>
 #include <ucs/arch/bitops.h>
 
 
@@ -49,7 +48,7 @@ static uint64_t uct_mm_iface_node_guid(uct_mm_iface_t *iface)
 }
 
 static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
-                                             struct sockaddr *addr)
+                                             uct_iface_addr_t *addr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_sockaddr_process_t *iface_addr = (void*)addr;
@@ -62,13 +61,14 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
 }
 
 static int uct_mm_iface_is_reachable(uct_iface_t *tl_iface,
-                                     const struct sockaddr *addr)
+                                     const uct_iface_addr_t *addr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uint64_t my_guid = uct_mm_iface_node_guid(iface);
+    const uct_sockaddr_process_t *mm_addr = (const void*)addr;
 
-    return (addr->sa_family == UCT_AF_PROCESS) &&
-           (((uct_sockaddr_process_t*)addr)->node_guid == my_guid);
+    return (mm_addr->sp_family == UCT_AF_PROCESS) &&
+           (mm_addr->node_guid == my_guid);
 }
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)

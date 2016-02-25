@@ -398,8 +398,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, i, group_index;
-    struct sockaddr *iface_addr;
-    struct sockaddr *ep_addr;
+    uct_iface_addr_t *iface_addr;
+    uct_ep_addr_t *ep_addr;
     uct_iface_attr_t iface_attr;
     uct_pd_attr_t pd_attr;
     unsigned long va;

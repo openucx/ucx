@@ -88,18 +88,18 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
 
-ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
+ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)addr;
 
-    uct_ib_iface_get_address(&iface->super.super.super, addr);
+    uct_ib_iface_get_address(&iface->super.super.super, (uct_iface_addr_t*)ib_addr);
     ib_addr->qp_num = ep->qp->qp_num;
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const struct sockaddr *addr)
+ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_ep_addr_t *addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);

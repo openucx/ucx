@@ -151,13 +151,13 @@ void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
     memcpy(new_ep, old_ep, sizeof(uct_ud_ep_t)); 
 }
 
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, struct sockaddr *addr)
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
 
-    uct_ib_iface_get_address(&iface->super.super.super, addr);
+    uct_ib_iface_get_address(&iface->super.super.super, (uct_iface_addr_t*)addr);
     ib_addr->qp_num = iface->qp->qp_num;
     ib_addr->id     = ep->ep_id;
     return UCS_OK;
@@ -250,7 +250,7 @@ void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep, const uct_sockaddr_ib_t *addr)
 }
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
-                                     const struct sockaddr *addr)
+                                     const uct_ep_addr_t *addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
@@ -322,8 +322,7 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ucs_assert_always(status == UCS_OK);
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
-    status = iface_h->ops.ep_connect_to_ep(ep_h, 
-            (struct sockaddr *)&ctl->conn_req.ib_addr);
+    status = iface_h->ops.ep_connect_to_ep(ep_h, (const void*)&ctl->conn_req.ib_addr);
     ucs_assert_always(status == UCS_OK);
 
     status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.ib_addr, ep, ctl->conn_req.conn_id);
@@ -385,7 +384,8 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
     memset(&iface_addr, 0, sizeof(iface_addr)); /* make coverity happy */
-    status = uct_ud_iface_get_address(&iface->super.super.super, (struct sockaddr *)&iface_addr);
+    status = uct_ud_iface_get_address(&iface->super.super.super,
+                                      (void*)&iface_addr);
     if (status != UCS_OK) {
         return NULL;
     }

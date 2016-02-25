@@ -339,7 +339,7 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
 ucs_status_t
 uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, 
-                                 const struct sockaddr *addr, uct_ep_h *new_ep_p)
+                                 const uct_iface_addr_t *addr, uct_ep_h *new_ep_p)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep;
@@ -387,7 +387,7 @@ err:
 
 
 ucs_status_t uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
-                                           const struct sockaddr *addr)
+                                           const uct_ep_addr_t *addr)
 {
     ucs_status_t status;
     struct ibv_ah *ah;

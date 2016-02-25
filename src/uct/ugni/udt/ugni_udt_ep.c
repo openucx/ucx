@@ -14,7 +14,7 @@
 #include <uct/ugni/base/ugni_ep.h>
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_udt_ep_t, uct_iface_t *tl_iface,
-                           const struct sockaddr *addr)
+                           const uct_iface_addr_t *addr)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, tl_iface, addr)
     self->posted_desc = NULL;
@@ -34,7 +34,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_udt_ep_t, uct_ugni_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_udt_ep_t, uct_ep_t, uct_iface_t*, const struct sockaddr*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_udt_ep_t, uct_ep_t, uct_iface_t*, const uct_iface_addr_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_udt_ep_t, uct_ep_t);
 
 enum {

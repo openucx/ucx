@@ -74,10 +74,10 @@ typedef struct {
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
-                           const struct sockaddr*);
+                           const uct_iface_addr_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 
-ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h ep, const struct sockaddr *iface_addr);
+ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr);
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface);
 ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_ep);
 
