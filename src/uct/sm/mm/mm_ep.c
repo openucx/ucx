@@ -1,6 +1,7 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -163,7 +164,7 @@ void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm
 }
 
 static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
-		                                             uct_mm_fifo_element_t **elem)
+                                                     uct_mm_fifo_element_t **elem)
 {
     uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
     uint64_t elem_index;       /* the fifo elem's index in the fifo. */
