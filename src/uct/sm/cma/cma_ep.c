@@ -1,6 +1,7 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -49,8 +50,9 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t len
 
     delivered = process_vm_writev(ep->remote_pid, &local_iov, 1, &remote_iov, 1, 0);
     if (ucs_unlikely(delivered != length)) {
-        ucs_error("process_vm_writev delivered %zu instead of %zu",
-                delivered, length);
+        ucs_error("process_vm_writev delivered %zu instead of %zu, error message %s",
+                  delivered < 0 ? 0 : delivered, length,
+		  delivered < 0 ? strerror(errno): "Unexpected CMA behaviour");
         return UCS_ERR_IO_ERROR;
     }         
 
@@ -71,9 +73,10 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
                                .iov_len = length};
     delivered = process_vm_readv(ep->remote_pid, &local_iov, 1, &remote_iov, 1, 0);
     if (ucs_unlikely(delivered != length)) {
-        ucs_error("process_vm_read delivered %zu instead of %zu",
-                delivered, length);
-        return UCS_ERR_IO_ERROR;
+	ucs_error("process_vm_writev delivered %zu instead of %zu, error message %s",
+		  delivered < 0 ? 0 : delivered, length,
+		  delivered < 0 ? strerror(errno): "Unexpected CMA behaviour");
+	return UCS_ERR_IO_ERROR;
     }         
 
     UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, length);
