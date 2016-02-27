@@ -226,11 +226,11 @@ int main(int argc, char **argv)
 
     if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         /* Connect endpoint to a remote endpoint */
-        status = uct_ep_connect_to_ep(ep, peer_ep);
+        status = uct_ep_connect_to_ep(ep, NULL, peer_ep);
         MPI_Barrier(MPI_COMM_WORLD);
     } else if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
         /* Create an endpoint which is connected to a remote interface */
-        status = uct_ep_create_connected(if_info.iface, peer_iface, &ep);
+        status = uct_ep_create_connected(if_info.iface, NULL, peer_iface, &ep);
     } else {
         status = UCS_ERR_UNSUPPORTED;
     }
