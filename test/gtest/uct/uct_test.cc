@@ -223,6 +223,7 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
 
 void uct_test::entity::progress() const {
     uct_worker_progress(m_worker);
+    m_async.check_miss();
 }
 
 uct_pd_h uct_test::entity::pd() const {
@@ -509,4 +510,8 @@ uct_test::entity::async_wrapper::~async_wrapper()
     ucs_async_context_cleanup(&m_async);
 }
 
+void uct_test::entity::async_wrapper::check_miss()
+{
+    ucs_async_check_miss(&m_async);
+}
 

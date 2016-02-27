@@ -80,6 +80,7 @@ protected:
             ucs_async_context_t   m_async;
             async_wrapper();
             ~async_wrapper();
+            void check_miss();
         private:
             async_wrapper(const async_wrapper &);
         };
@@ -92,7 +93,7 @@ protected:
         void connect_to_ep(uct_ep_h from, uct_ep_h to);
 
         ucs::handle<uct_pd_h>      m_pd;
-        async_wrapper              m_async;
+        mutable async_wrapper      m_async;
         ucs::handle<uct_worker_h>  m_worker;
         ucs::handle<uct_iface_h>   m_iface;
         eps_vec_t                  m_eps;
