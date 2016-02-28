@@ -338,6 +338,7 @@ uct_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
     .iface_get_address   = uct_ib_iface_get_subnet_address,
+    .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_is_reachable  = uct_ib_iface_is_reachable,
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_am_short         = uct_rc_verbs_ep_am_short,

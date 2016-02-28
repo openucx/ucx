@@ -355,6 +355,7 @@ static uct_iface_ops_t uct_cm_iface_ops = {
     .iface_flush           = uct_cm_iface_flush,
     .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
     .iface_get_address     = uct_cm_iface_get_address,
+    .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_is_reachable    = uct_ib_iface_is_reachable,
     .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
