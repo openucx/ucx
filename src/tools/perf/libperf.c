@@ -505,9 +505,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
 
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, ep_addr);
+            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, NULL, ep_addr);
         } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-            status = uct_ep_create_connected(perf->uct.iface, iface_addr,
+            status = uct_ep_create_connected(perf->uct.iface, NULL, iface_addr,
                                              &perf->uct.peers[i].ep);
         } else {
             status = UCS_ERR_UNSUPPORTED;

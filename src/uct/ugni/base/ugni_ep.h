@@ -38,8 +38,10 @@ static inline unsigned uct_ugni_ep_hash(uct_ugni_ep_t *ep)
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ugni_ep_t, uct_ugni_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
 
-UCS_CLASS_DECLARE(uct_ugni_ep_t, uct_iface_t*, const uct_iface_addr_t*);
-UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*, const uct_iface_addr_t*);
+UCS_CLASS_DECLARE(uct_ugni_ep_t, uct_iface_t*, const uct_device_addr_t*,
+                  const uct_iface_addr_t*);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*,
+                           const uct_device_addr_t*, const uct_iface_addr_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 struct uct_ugni_iface;

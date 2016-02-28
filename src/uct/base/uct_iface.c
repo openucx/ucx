@@ -123,6 +123,11 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
+ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
+{
+    return iface->ops.iface_get_device_address(iface, addr);
+}
+
 ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr)
 {
     return iface->ops.iface_get_address(iface, addr);
@@ -230,6 +235,13 @@ ucs_status_t uct_ep_create(uct_iface_h iface, uct_ep_h *ep_p)
     return iface->ops.ep_create(iface, ep_p);
 }
 
+ucs_status_t
+uct_ep_create_connected(uct_iface_h iface, const uct_device_addr_t *dev_addr,
+                        const uct_iface_addr_t *iface_addr, uct_ep_h *ep_p)
+{
+    return iface->ops.ep_create_connected(iface, dev_addr, iface_addr, ep_p);
+}
+
 void uct_ep_destroy(uct_ep_h ep)
 {
     ep->iface->ops.ep_destroy(ep);
@@ -240,9 +252,10 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr)
     return ep->iface->ops.ep_get_address(ep, addr);
 }
 
-ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_ep_addr_t *addr)
+ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
+                                  const uct_ep_addr_t *ep_addr)
 {
-    return ep->iface->ops.ep_connect_to_ep(ep, addr);
+    return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)

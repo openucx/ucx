@@ -58,7 +58,8 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
-ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_ep_addr_t *addr);
+ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
+                                     const uct_ep_addr_t *ep_addr);
 
 void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               void *data, size_t length, size_t valid_length,

@@ -99,11 +99,12 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_ep_addr_t *addr)
+ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
+                                     const uct_ep_addr_t *ep_addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
-    const uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)addr;
+    const uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)ep_addr;
     struct ibv_qp_attr qp_attr;
     int ret;
 

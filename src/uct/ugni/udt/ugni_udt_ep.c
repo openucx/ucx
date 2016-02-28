@@ -14,9 +14,10 @@
 #include <uct/ugni/base/ugni_ep.h>
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_udt_ep_t, uct_iface_t *tl_iface,
-                           const uct_iface_addr_t *addr)
+                           const uct_device_addr_t *dev_addr,
+                           const uct_iface_addr_t *iface_addr)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, tl_iface, addr)
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, tl_iface, dev_addr, iface_addr);
     self->posted_desc = NULL;
     return UCS_OK;
 }
@@ -34,7 +35,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ugni_udt_ep_t, uct_ugni_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_udt_ep_t, uct_ep_t, uct_iface_t*, const uct_iface_addr_t*);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_udt_ep_t, uct_ep_t, uct_iface_t*,
+                          const uct_device_addr_t *, const uct_iface_addr_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_udt_ep_t, uct_ep_t);
 
 enum {

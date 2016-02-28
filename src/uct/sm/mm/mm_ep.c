@@ -16,10 +16,11 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_mm_remote_seg_t,
                                         uct_mm_remote_seg_hash)
 
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
-                           const uct_iface_addr_t *addr)
+                           const uct_device_addr_t *dev_addr,
+                           const uct_iface_addr_t *iface_addr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
-    uct_sockaddr_process_t *remote_iface_addr = (uct_sockaddr_process_t *)addr;
+    uct_sockaddr_process_t *remote_iface_addr = (uct_sockaddr_process_t *)iface_addr;
     ucs_status_t status;
     size_t size_to_attach;
 
@@ -88,7 +89,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
-                          const uct_iface_addr_t *);
+                          const uct_device_addr_t *, const uct_iface_addr_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 
