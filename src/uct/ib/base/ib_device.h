@@ -47,6 +47,15 @@ enum {
 
 
 /**
+ * IB network address
+ */
+typedef struct uct_ib_address {
+    uint16_t           lid;
+    uint64_t           subnet_prefix;
+} UCS_S_PACKED uct_ib_address_t;
+
+
+/**
  * IB device (corresponds to HCA)
  */
 typedef struct uct_ib_device {
