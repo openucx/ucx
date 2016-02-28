@@ -23,11 +23,17 @@ typedef struct ucp_worker {
     ucp_context_h                 context;       /* Back-reference to UCP context */
     uint64_t                      uuid;          /* Unique ID for wireup */
     uct_worker_h                  uct;           /* UCT worker handle */
+    ucs_mpool_t                   req_mp;        /* Memory pool for requests */
+
 #if ENABLE_ASSERT
     int                           inprogress;
 #endif
+
+#if ENABLE_DEBUG_DATA
+    char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
+#endif
+
     unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
-    ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucp_ep_t                      **ep_hash;     /* Hash table of all endpoints */
     uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
@@ -43,12 +49,19 @@ SGLIB_DEFINE_LIST_PROTOTYPES(ucp_ep_t, ucp_worker_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE, ucp_worker_ep_hash);
 
 
-void ucp_worker_get_name(ucp_worker_h worker, char *name, size_t max);
-
 ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid);
 
 ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid);
 
+
+static inline const char* ucp_worker_get_name(ucp_worker_h worker)
+{
+#if ENABLE_DEBUG_DATA
+    return worker->name;
+#else
+    return "";
+#endif
+}
 
 static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uuid)
 {

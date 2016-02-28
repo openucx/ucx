@@ -241,6 +241,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     ucp_rsc_index_t tl_id;
     ucp_worker_h worker;
     ucs_status_t status;
+#if ENABLE_DEBUG_DATA
+    unsigned name_length;
+#endif
 
     worker = ucs_calloc(1, sizeof(*worker) +
                            sizeof(*worker->ep_config) * (context->num_tls + 1),
@@ -252,10 +255,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
 
     worker->context       = context;
     worker->uuid          = ucs_generate_uuid((uintptr_t)worker);
+    worker->stub_pend_count = 0;
 #if ENABLE_ASSERT
     worker->inprogress    = 0;
 #endif
-    worker->stub_pend_count = 0;
+#if ENABLE_DEBUG_DATA
+    name_length = ucs_min(UCP_WORKER_NAME_MAX,
+                          context->config.ext.max_worker_name + 1);
+    ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
+                      getpid());
+#endif
 
     worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_WORKER_EP_HASH_SIZE,
                                  "ucp_ep_hash");
@@ -443,20 +452,10 @@ err:
     return status;
 }
 
-void ucp_worker_get_name(ucp_worker_h worker, char *name, size_t max)
-{
-#if ENABLE_DEBUG_DATA
-    ucs_snprintf_zero(name, max, "%s:%d", ucs_get_host_name(), getpid()); /* TODO tid? */
-#else
-    memset(name, 0, ucs_min(max, 1));
-#endif
-}
-
 ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
                                     size_t *address_length_p)
 {
     ucp_context_h context = worker->context;
-    char name[UCP_PEER_NAME_MAX];
     ucp_address_t *address;
     size_t address_length, rsc_addr_length = 0;
     ucs_status_t status;
@@ -465,9 +464,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 
     UCS_STATIC_ASSERT((ucp_address_t*)0 + 1 == (void*)0 + 1);
 
-    ucp_worker_get_name(worker, name, sizeof(name));
-
-    address_length = sizeof(uint64_t) + strlen(name) + 1;
+    address_length = sizeof(uint64_t) + strlen(ucp_worker_get_name(worker)) + 1;
     address        = ucs_malloc(address_length + 1, "ucp address");
     if (address == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -478,9 +475,9 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     *(uint64_t*)address = worker->uuid;
 
     /* Set peer name */
-    UCS_STATIC_ASSERT(UCP_PEER_NAME_MAX <= UINT8_MAX);
-    *(uint8_t*)(address + sizeof(uint64_t)) = strlen(name);
-    strcpy(address + sizeof(uint64_t) + 1, name);
+    UCS_STATIC_ASSERT(UCP_WORKER_NAME_MAX <= UINT8_MAX);
+    *(uint8_t*)(address + sizeof(uint64_t)) = strlen(ucp_worker_get_name(worker));
+    strcpy(address + sizeof(uint64_t) + 1, ucp_worker_get_name(worker));
 
     ucs_assert(ucp_address_iter_start(address) == address + address_length);
 
@@ -612,6 +609,9 @@ void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title
         fprintf(stream, "# %s\n", title);
         fprintf(stream, "#\n");
     }
+
+    fprintf(stream, "# Name:        `%s'\n", ucp_worker_get_name(worker));
+    fprintf(stream, "#\n");
 
     fprintf(stream, "# Transports: \n");
     fprintf(stream, "#\n");

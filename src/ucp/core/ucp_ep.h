@@ -17,7 +17,6 @@
 #include <limits.h>
 
 
-#define UCP_PEER_NAME_MAX         HOST_NAME_MAX
 
 
 /**
@@ -85,7 +84,7 @@ typedef struct ucp_ep {
     ucp_ep_h                      next;          /* Next in hash table linked list */
 
 #if ENABLE_DEBUG_DATA
-    char                          peer_name[UCP_PEER_NAME_MAX];
+    char                          peer_name[UCP_WORKER_NAME_MAX];
 #endif
 
 } ucp_ep_t;
