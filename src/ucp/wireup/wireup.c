@@ -399,7 +399,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     ucp_context_h context = worker->context;
     const ucp_wireup_msg_t *msg = data;
-    char peer_name[UCP_PEER_NAME_MAX + 1];
+    char peer_name[UCP_WORKER_NAME_MAX + 1];
     char tl_name[UCT_TL_NAME_MAX + 1];
     uct_tl_resource_desc_t *dst_rsc;
     uct_tl_resource_desc_t dummy_rsc = {"", "", UCT_DEVICE_TYPE_LAST};
@@ -450,7 +450,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
     ucp_context_h context        = worker->context;
     uct_iface_attr_t *iface_attr = &worker->iface_attrs[rsc_index];
     uct_tl_resource_desc_t *rsc  = &context->tl_rscs[rsc_index].tl_rsc;
-    char worker_name[UCP_PEER_NAME_MAX];
+    const char * worker_name;
     uct_iface_attr_t aux_iface_attr;
     size_t addr_len = 0, aux_addr_len = 0, total_len;
     ucp_memcpy_pack_context_t pack_ctx;
@@ -480,7 +480,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
         aux_addr_len = aux_iface_attr.iface_addr_len;
     }
 
-    ucp_worker_get_name(worker, worker_name, UCP_PEER_NAME_MAX);
+    worker_name = ucp_worker_get_name(worker);
 
     /*
      * Allocate buffer for active message.
@@ -506,7 +506,7 @@ static ucs_status_t ucp_wireup_send_am(ucp_ep_h ep, uct_ep_h uct_ep, uint16_t fl
     msg->addr_len      = addr_len;
 
     /* Copy peer name (debug mode only) */
-    UCS_STATIC_ASSERT(UCP_PEER_NAME_MAX < UINT8_MAX);
+    UCS_STATIC_ASSERT(UCP_WORKER_NAME_MAX < UINT8_MAX);
     msg->peer_name_len = strlen(worker_name);
     memcpy(ucp_wireup_msg_peer_name(msg), worker_name, msg->peer_name_len);
 
@@ -748,7 +748,7 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     uct_iface_attr_t *iface_attr;
     ucs_status_t status;
-    char peer_name[UCP_PEER_NAME_MAX + 1];
+    char peer_name[UCP_WORKER_NAME_MAX + 1];
     char tl_name[UCT_TL_NAME_MAX + 1];
     double score;
 
@@ -1101,7 +1101,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep)
 void ucp_address_peer_name(ucp_address_t *address, char *name)
 {
     uint8_t length = *(uint8_t*)(address + sizeof(uint64_t));
-    ucs_assertv(length < UCP_PEER_NAME_MAX, "length=%d", length);
+    ucs_assertv(length < UCP_WORKER_NAME_MAX, "length=%d", length);
     memcpy(name, address + sizeof(uint64_t) + 1, length);
     name[length] = '\0';
 }

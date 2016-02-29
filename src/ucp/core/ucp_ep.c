@@ -32,7 +32,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->state                = 0;
     sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
 #if ENABLE_DEBUG_DATA
-    ucs_snprintf_zero(ep->peer_name, UCP_PEER_NAME_MAX, "%s", peer_name);
+    ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
 
     ucs_debug("created ep %p to %s 0x%"PRIx64"->0x%"PRIx64" %s", ep,
@@ -106,7 +106,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
                            ucp_ep_h *ep_p)
 {
     uint64_t dest_uuid = ucp_address_uuid(address);
-    char peer_name[UCP_PEER_NAME_MAX];
+    char peer_name[UCP_WORKER_NAME_MAX];
     ucs_status_t status;
     ucp_ep_h ep;
 

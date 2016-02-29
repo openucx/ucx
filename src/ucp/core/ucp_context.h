@@ -16,6 +16,7 @@
 
 #define UCP_MAX_RESOURCES       UINT8_MAX
 #define UCP_MAX_PDS             (sizeof(uint64_t) * 8)
+#define UCP_WORKER_NAME_MAX     32
 typedef uint8_t                 ucp_rsc_index_t;
 
 
@@ -49,6 +50,8 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_bw;
     /** Size of packet data that is dumped to the log system in debug mode */
     size_t                                 log_data_size;
+    /** Maximal size of worker name for debugging */
+    unsigned                               max_worker_name;
 } ucp_context_config_t;
 
 
