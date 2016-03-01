@@ -14,12 +14,12 @@ ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n){
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
 
     UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
-
+    uct_ugni_enter_async(iface);
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
     ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
     ep->arb_size++;
-
+    uct_ugni_leave_async(iface);
     return UCS_OK;
 }
 
@@ -62,17 +62,16 @@ static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbit
                                                             void *arg){
     uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_purge_cb_args_t *cb_args    = arg;
-    uct_pending_purge_callback_t cb = cb_args->cb;
+    uct_purge_cb_args_t *cb_args = arg;
 
-    if (NULL != cb) {
-        cb(req, cb_args->arg);
+    if (NULL != arg) {
+        cb_args->cb(req, cb_args->arg);
     } else {
         ucs_warn("ep=%p cancelling user pending request %p", ep, req);
     }
 
     ep->arb_size--;
-   
+
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
@@ -142,6 +141,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     big_hash = (void *)&self->ep;
 
     self->hash_key = big_hash[0];
+    ucs_debug("Adding ep hash %x to iface %p", self->hash_key, iface);
     sglib_hashed_uct_ugni_ep_t_add(iface->eps, self);
 
     return rc;
@@ -152,6 +152,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
     uct_ugni_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                              uct_ugni_iface_t);
     gni_return_t ugni_rc;
+
+    ucs_debug("Removinig ep hash %x from iface %p", self->hash_key, iface);
+
+    ucs_arbiter_group_purge(&iface->arbiter, &self->arb_group,
+                            uct_ugni_ep_abriter_purge_cb, NULL);
 
     ugni_rc = GNI_EpDestroy(self->ep);
     if (GNI_RC_SUCCESS != ugni_rc) {

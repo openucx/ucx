@@ -13,20 +13,24 @@
 #include <ucs/type/class.h>
 #include <uct/ugni/base/ugni_ep.h>
 
-#define UCT_UGNI_UDT_ANY 0
+#define UCT_UGNI_UDT_ANY    0
+#define UCT_UGNI_UDT_CANCEL 1
 
 struct uct_ugni_udt_desc;
 
 typedef struct uct_ugni_udt_ep {
-  uct_ugni_ep_t super;
-  struct uct_ugni_udt_desc *posted_desc;
+    uct_ugni_ep_t super;
+    struct uct_ugni_udt_desc *posted_desc;
 } uct_ugni_udt_ep_t;
 
 ucs_status_t uct_ugni_udt_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                       const void *payload, unsigned length);
 ssize_t uct_ugni_udt_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                  uct_pack_callback_t pack_cb, void *arg);
-
+ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
+ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                        ucs_arbiter_elem_t *elem,
+                                                        void *arg);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_udt_ep_t, uct_ep_t, uct_iface_t*,
                            const uct_device_addr_t *, const uct_iface_addr_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_udt_ep_t, uct_ep_t);
