@@ -33,10 +33,6 @@ static void progress_local_cq(uct_ugni_smsg_iface_t *iface){
     uct_ugni_smsg_desc_t message_data;
     uct_ugni_smsg_desc_t *message_pointer;
 
-    if(0 == iface->super.outstanding){
-        return;
-    }
-
     ugni_rc = GNI_CqGetEvent(iface->super.local_cq, &event_data);
     if(GNI_RC_NOT_DONE == ugni_rc){
         return;
