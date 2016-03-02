@@ -323,7 +323,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucs_status_t status;
     size_t frag_length;
 
-    uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
+    uct_rkey_t uct_rkey;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
     uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
@@ -395,3 +395,20 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker)
 
     return UCS_OK;
 }
+
+ucs_status_t ucp_ep_flush(ucp_ep_h ep)
+{
+    ucs_status_t status;
+
+    /* TODO all uct endpoints need to be flushed. Currenlty ucp endpoint
+     * supports just one uct endpoint. */
+    for (;;) {
+        status = uct_ep_flush(ep->uct_ep);
+        if (status != UCS_INPROGRESS && status != UCS_ERR_NO_RESOURCE) {
+            break;
+        }
+        ucp_worker_progress(ep->worker);
+    }
+    return status;
+}
+

@@ -32,7 +32,9 @@ public:
 
         void connect(const entity* other);
 
-        void flush() const;
+        void flush_ep() const;
+
+        void flush_worker() const;
 
         void disconnect();
 

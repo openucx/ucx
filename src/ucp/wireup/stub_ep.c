@@ -57,7 +57,7 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep, uct_pending_callback_t cb)
 UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ucp_ep) {
 
     memset(&self->iface, 0, sizeof(self->iface));
-    self->iface.ops.ep_flush          = (void*)ucs_empty_function_return_success;
+    self->iface.ops.ep_flush          = (void*)ucs_empty_function_return_inprogress;
     self->iface.ops.ep_destroy        = UCS_CLASS_DELETE_FUNC_NAME(ucp_stub_ep_t);
     self->iface.ops.ep_pending_add    = ucp_stub_pending_add;
     self->iface.ops.ep_pending_purge  = ucp_stub_pending_purge;
