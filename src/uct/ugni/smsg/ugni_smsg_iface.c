@@ -224,31 +224,38 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface)
 {
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
+    ucs_status_t status;
 
     if (0 == iface->super.outstanding) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-        return UCS_OK;
+        status = UCS_OK;
+    } else {
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+        status = UCS_INPROGRESS;
     }
 
+    /* Even if there are no oustanding requests we can get send credits. */
     progress_local_cq(iface);
 
-    UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
-    return UCS_INPROGRESS;
+    return status;
 }
 
 static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep){
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t);
+    ucs_status_t status;
 
     if (0 == ep->super.outstanding) {
         UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-        return UCS_OK;
+        status = UCS_OK;
+    } else {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+        status = UCS_INPROGRESS;
     }
 
     progress_local_cq(iface);
 
-    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_INPROGRESS;
+    return status;
 }
 
 uct_iface_ops_t uct_ugni_smsg_iface_ops = {
@@ -268,8 +275,6 @@ uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .ep_am_bcopy           = uct_ugni_smsg_ep_am_bcopy,
     .ep_flush              = uct_ugni_smsg_ep_flush,
 };
-
-#define UCT_UGNI_LOCAL_CQ (8192)
 
 static ucs_status_t ugni_smsg_activate_iface(uct_ugni_smsg_iface_t *iface)
 {

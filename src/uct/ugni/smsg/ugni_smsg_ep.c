@@ -93,6 +93,12 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_ep_t, uct_iface_t *tl_iface)
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_ep_t)
 {
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(self->super.super.super.iface, uct_ugni_smsg_iface_t);
+    ucs_status_t status;
+
+    do {
+        status = iface->super.super.super.ops.ep_flush(&self->super.super.super);
+    } while(UCS_INPROGRESS == status);
+
     uct_ugni_smsg_mbox_dereg(iface, self->smsg_attr);
     ucs_mpool_put(self->smsg_attr);
 }
