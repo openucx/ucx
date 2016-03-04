@@ -364,6 +364,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
   self->activated = false;
   self->outstanding = 0;
 
+  sglib_hashed_uct_ugni_ep_t_init(self->eps);
   ucs_arbiter_init(&self->arbiter);
 
   return UCS_OK;
