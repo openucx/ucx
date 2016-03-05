@@ -404,7 +404,7 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep)
      * supports just one uct endpoint. */
     for (;;) {
         status = uct_ep_flush(ep->uct_ep);
-        if (status != UCS_INPROGRESS && status != UCS_ERR_NO_RESOURCE) {
+        if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
             break;
         }
         ucp_worker_progress(ep->worker);

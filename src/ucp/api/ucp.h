@@ -678,9 +678,9 @@ void ucp_ep_destroy(ucp_ep_h ep);
  * @brief Flush outstanding one-sided operations on the @ref ucp_ep_h "endpoint"
  *
  * This routine flushes all outstanding one-sided communications on the
- * @ref ucp_ep_h "endpoint".  Communication operations issued on the @a ep
- * prior to this call will have been completed both at the origin and at the
- * target @ref ucp_ep_h "endpont" when this call returns.
+ * @ref ucp_ep_h "endpoint". Communication operations issued on the @a ep
+ * prior to this call are completed both at the origin and at the target
+ * @ref ucp_ep_h "endpont" when this call returns.
  *
  * @param [in] ep        UCP endpont.
  *
