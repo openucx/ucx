@@ -26,9 +26,14 @@ class ucp_test : public ucs::test_base, public ::testing::TestWithParam<ucp_test
 public:
     UCS_TEST_BASE_IMPL;
 
+    ucp_test();
+    virtual ~ucp_test();
+
+    ucp_config_t* m_ucp_config;
+
     class entity {
     public:
-        entity(const ucp_test_param& test_param);
+        entity(const ucp_test_param& test_param, ucp_config_t* ucp_config);
 
         void connect(const entity* other);
 
@@ -57,6 +62,8 @@ public:
                      const std::string& name,
                      const std::string& test_case_name,
                      ...);
+
+    virtual void modify_config(const std::string& name, const std::string& value);
 
 protected:
     virtual void cleanup();
