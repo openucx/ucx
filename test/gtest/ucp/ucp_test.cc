@@ -215,8 +215,13 @@ void ucp_test::entity::connect(const ucp_test::entity* other) {
     ucp_worker_release_address(other->worker(), address);
 }
 
-void ucp_test::entity::flush() const {
+void ucp_test::entity::flush_worker() const {
     ucs_status_t status = ucp_worker_flush(worker());
+    ASSERT_UCS_OK(status);
+}
+
+void ucp_test::entity::flush_ep() const {
+    ucs_status_t status = ucp_ep_flush(ep());
     ASSERT_UCS_OK(status);
 }
 

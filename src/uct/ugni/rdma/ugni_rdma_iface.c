@@ -113,11 +113,11 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .ep_pending_add      = uct_ugni_ep_pending_add,
     .ep_pending_purge    = uct_ugni_ep_pending_purge,
     /* Not supported on Gemini and we overlaod it for Aries */
-    .ep_atomic_swap64    = (void*)uct_empty_function_return_unsupported,
-    .ep_atomic_add32     = (void*)uct_empty_function_return_unsupported,
-    .ep_atomic_fadd32    = (void*)uct_empty_function_return_unsupported,
-    .ep_atomic_cswap32   = (void*)uct_empty_function_return_unsupported,
-    .ep_atomic_swap32    = (void*)uct_empty_function_return_unsupported,
+    .ep_atomic_swap64    = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_add32     = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_fadd32    = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_cswap32   = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_swap32    = (void*)ucs_empty_function_return_unsupported,
     .ep_flush            = uct_ugni_ep_flush,
 };
 

@@ -202,10 +202,10 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard) {
         request_release(rreq2);
     }
 
-    sender1->flush();
+    sender1->flush_worker();
     sender1->disconnect();
 
-    sender2->flush();
+    sender2->flush_worker();
     sender2->disconnect();
 }
 

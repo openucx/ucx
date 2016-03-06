@@ -8,7 +8,8 @@
 #include "test_ucp_memheap.h"
 
 
-void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send, size_t alignment)
+void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send,
+                                                             size_t alignment, bool is_ep_flush)
 {
     static const int max_iter = 300 / ucs::test_time_multiplier();
     static const size_t size = ucs_max((size_t)rand() % (12*1024), alignment);
@@ -53,7 +54,11 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
 
     }
 
-    status = ucp_worker_flush(pe0->worker());
+    if (is_ep_flush) {
+        pe0->flush_ep();
+    } else {
+        pe0->flush_worker();
+    }
 
     for (int i = 0; i < max_iter; ++i) {
         EXPECT_EQ(expected_data[i],
@@ -61,9 +66,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     ucp_rkey_destroy(rkey);
-
-    status = ucp_worker_flush(pe1->worker());
-    ASSERT_UCS_OK(status);
+    pe1->flush_worker();
 
     pe0->disconnect();
     pe1->disconnect();
@@ -73,7 +76,8 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     ASSERT_UCS_OK(status);
 }
 
-void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alignment)
+void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alignment,
+                                          bool is_ep_flush)
 {
     static const size_t memheap_size = 3 * 1024;
     entity *pe0 = create_entity();
@@ -120,8 +124,11 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
         (this->*send)(pe0, size, (void*)((uintptr_t)memheap + offset),
                       rkey, expected_data);
 
-        status = ucp_worker_flush(pe0->worker());
-        ASSERT_UCS_OK(status);
+        if (is_ep_flush) {
+            pe0->flush_ep();
+        } else {
+            pe0->flush_worker();
+        }
 
         EXPECT_EQ(expected_data,
                   std::string((char*)memheap + offset, expected_data.length()));
@@ -130,9 +137,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     }
 
     ucp_rkey_destroy(rkey);
-
-    status = ucp_worker_flush(pe1->worker());
-    ASSERT_UCS_OK(status);
+    pe1->flush_worker();
 
     pe0->disconnect();
     pe1->disconnect();
