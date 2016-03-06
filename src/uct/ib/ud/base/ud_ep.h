@@ -119,6 +119,47 @@ do { \
  * many to one traffic pattern. 
  */
 
+/* Congestion avoidance and retransmits
+ *
+ * UD uses additive increase/multiplicative decrease algorightm
+ * See https://en.wikipedia.org/wiki/Additive_increase/multiplicative_decrease
+ *
+ * tx window is increased when ack is received and decreased when
+ * resend is scheduled. Ack must be a 'new' one that is it must
+ * acknowledge packets on window. Increasing window on ack does not casue 
+ * exponential window increase because, unlike tcp, only two acks 
+ * per window are sent.
+ *
+ * Todo: 
+ *
+ * Consider trigering window decrease before resend timeout:
+ * - on ECN (explicit congestion notification) from receiever. ECN can
+ *   be based on some heuristic. For example on number of rx completions
+ *   that receiver picked from CQ.
+ * - upon receiving a 'duplicate ack' packet
+ *
+ * Consider using other algorithm (ex BIC/CUBIC)
+ */
+
+/*
+ * Handling retransmits
+ *
+ * On slow timer timeout schedule a retransmit operation for
+ * [acked_psn+1, psn-1]. These values are saved as 'resend window'
+ *
+ * Resend operation will resend no more then the current cwnd
+ * If ack arrives when resend window is active it means that 
+ *  - something new in the resend window was acked. As a
+ *  resutlt a new resend operation will be scheduled.
+ *  - either resend window or something beyond it was 
+ *  acked. It means that no more retransmisions are needed.
+ *  Current 'resend window' is deactivated
+ * 
+ * When retransmitting, ack is requested if:
+ * psn == acked_psn + 1 or
+ * psn % UCT_UD_RESENDS_PER_ACK = 0
+ */
+
 /* 
  * Endpoint pending control operations. The operations
  * are executed in time of progress along with
@@ -151,16 +192,19 @@ struct uct_ud_ep {
     uint32_t                dest_ep_id;
     struct {
          uct_ud_psn_t           psn;          /* Next PSN to send */
-         uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent - (ack_psn + window) (from incoming packet) */
+         uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
-         uct_ud_psn_t           rt_psn;       /* last psn that was retransmitted */
-         ucs_queue_head_t       window;       /* send window */
+         ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
-         ucs_queue_iter_t       rt_pos;       /* points to the part of tx window that needs to be resent */
          UCS_STATS_NODE_DECLARE(stats);
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;
+    struct {
+         uct_ud_psn_t           psn;       /* last psn that was retransmitted */
+         uct_ud_psn_t           max_psn;   /* max psn that should be retransmitted */
+         ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
+    } resend;
     struct {
         uct_ud_psn_t  wmax;
         uct_ud_psn_t  cwnd;
@@ -300,12 +344,13 @@ uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
 /* TODO: relay on window check instead. max_psn = psn  */
 static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
 {
-        return ep->dest_ep_id != UCT_UD_EP_NULL_ID;
+    return ep->dest_ep_id != UCT_UD_EP_NULL_ID;
 }
 
 static UCS_F_ALWAYS_INLINE int uct_ud_ep_no_window(uct_ud_ep_t *ep)
 {
-        return UCT_UD_PSN_COMPARE(ep->tx.psn, ==, ep->tx.max_psn);
+    /* max_psn can be decreased by CA, so check >= */
+    return UCT_UD_PSN_COMPARE(ep->tx.psn, >=, ep->tx.max_psn);
 }
 
 /*

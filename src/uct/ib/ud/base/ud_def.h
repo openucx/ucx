@@ -20,29 +20,11 @@
 #define UCT_UD_MIN_INLINE       48
 #define UCT_UD_HASH_SIZE        997
 
-/* congestion avoidance settings */
-/* UD uses additive increase/multiplicative decrease algorightm
- * See https://en.wikipedia.org/wiki/Additive_increase/multiplicative_decrease
- *
- * tx window is increased when ack is received and decreased when
- * resend is scheduled. Ack must be a 'new' one that is it must
- * acknowledge packets on window. Increasing window on ack does not casue 
- * exponential window increase because, unlike tcp, only two acks 
- * per window are sent.
- *
- * Todo: 
- *
- * Consider trigering window decrease before resend timeout:
- * - on ECN (explicit congestion notification) from receiever. ECN can
- *   be based on some heuristic. For example on number of rx completions
- *   that receiver picked from CQ.
- * - upon receiving a 'duplicate ack' packet
- *
- * Consider using other algorithm (ex BIC/CUBIC)
- */
+/* congestion avoidance settings. See ud_ep.h for details */
 #define UCT_UD_CA_AI_VALUE      1   /* window += AI_VALUE */
 #define UCT_UD_CA_MD_FACTOR     2   /* window = window/factor */
 #define UCT_UD_CA_DUP_ACK_CNT   2   /* TODO: not implemented yet */
+#define UCT_UD_RESENDS_PER_ACK  4   /* request per every N resends */
 
 /* note that the ud tx window is [acked_psn+1, max_psn)
  * and max_psn = acked_psn + cwnd

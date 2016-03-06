@@ -28,6 +28,16 @@ const ucs::ptr_vector<ucp_test::entity>& ucp_test::entities() const {
     return m_entities;
 }
 
+ucp_test::ucp_test() {
+    ucs_status_t status;
+    status = ucp_config_read(NULL, NULL, &m_ucp_config);
+    ASSERT_UCS_OK(status);
+}
+
+ucp_test::~ucp_test() {
+    ucp_config_release(m_ucp_config);
+}
+
 void ucp_test::cleanup() {
     /* disconnect before destroying the entities */
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
@@ -39,7 +49,7 @@ void ucp_test::cleanup() {
 }
 
 ucp_test::entity* ucp_test::create_entity() {
-    entity *e = new entity(GetParam());
+    entity *e = new entity(GetParam(), m_ucp_config);
     m_entities.push_back(e);
     return e;
 }
@@ -97,6 +107,20 @@ void ucp_test::set_ucp_config(ucp_config_t *config,
     std::stringstream ss;
     ss << test_param;
     ucp_config_modify(config, "TLS", ss.str().c_str());
+}
+
+void ucp_test::modify_config(const std::string& name, const std::string& value)
+{
+    ucs_status_t status;
+
+    status = ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
+    if (status == UCS_ERR_NO_ELEM) {
+        test_base::modify_config(name, value);
+    } else if (status != UCS_OK) {
+        UCS_TEST_ABORT("Couldn't modify ucp config parameter: " <<
+                        name.c_str() << " to " << value.c_str() << ": " <<
+                        ucs_status_string(status));
+    }
 }
 
 bool ucp_test::check_test_param(const std::string& name,
@@ -159,15 +183,12 @@ void ucp_test::restore_errors()
     ucs_log_pop_handler();
 }
 
-ucp_test::entity::entity(const ucp_test_param& test_param) {
-    ucs::handle<ucp_config_t*> config;
+ucp_test::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_config) {
 
-    UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
-                           ucp_config_read, NULL, NULL);
-    set_ucp_config(config, test_param);
+    set_ucp_config(ucp_config, test_param);
 
     UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
-                           &test_param.ctx_params, config);
+                           &test_param.ctx_params, ucp_config);
 
     UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_worker, ucp_worker_destroy,
                            ucp_worker_create, m_ucph, UCS_THREAD_MODE_MULTI);

@@ -108,13 +108,14 @@ SAVE_CFLAGS=$CFLAGS
 CFLAGS="$CFLAGS $CFLAGS_NO_DEPRECATED"
 CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
                                   static int rc = 1;
+                                  void *ptr;
                                   void *myhook(size_t size, const void *caller) {
                                       rc = 0;
                                       return NULL;
                                   }
                                   int main() {
                                       __malloc_hook = myhook;
-                                      (void)malloc(1);
+                                      ptr = malloc(1);
                                       return rc;
                                   }])],
                  [AC_MSG_RESULT([yes])
