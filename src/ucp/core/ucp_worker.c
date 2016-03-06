@@ -603,6 +603,9 @@ void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title
     ucp_ep_config_t *config;
     ucp_rsc_index_t tl_id;
     char rsc_name[UCT_TL_NAME_MAX + UCT_DEVICE_NAME_MAX + 2];
+    ucp_address_t *address;
+    size_t address_length;
+    ucs_status_t status;
 
     if (print_flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "#\n");
@@ -610,7 +613,16 @@ void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title
         fprintf(stream, "#\n");
     }
 
-    fprintf(stream, "# Name:        `%s'\n", ucp_worker_get_name(worker));
+    fprintf(stream, "# Name:           `%s'\n", ucp_worker_get_name(worker));
+
+    status = ucp_worker_get_address(worker, &address, &address_length);
+    if (status == UCS_OK) {
+        ucp_worker_release_address(worker, address);
+        fprintf(stream, "# Address length: %zu bytes\n", address_length);
+    } else {
+        fprintf(stream, "# <failed to get address>\n");
+    }
+
     fprintf(stream, "#\n");
 
     fprintf(stream, "# Transports: \n");
