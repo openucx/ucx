@@ -169,7 +169,9 @@ static void uct_ugni_smsg_progress(void *arg)
     progress_remote_cq(iface);
 
     /* have a go a processing the pending queue */
-    ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_ep_process_pending, NULL);
+
+    ucs_arbiter_dispatch(&iface->super.arbiter, iface->config.smsg_max_credit,
+                         uct_ugni_ep_process_pending, NULL);
 }
 
 static void uct_ugni_smsg_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)

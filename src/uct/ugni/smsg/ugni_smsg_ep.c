@@ -180,15 +180,18 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 {
     gni_return_t gni_rc;
 
+    if (ucs_unlikely(ep->super.arb_size > 0 && ep->super.arb_sched == 0)) {
+        goto exit_no_res;
+    }
+
     desc->msg_id = iface->smsg_id++;
     desc->ep = &ep->super;
 
-    gni_rc = GNI_SmsgSendWTag(ep->super.ep, header, header_length, payload, payload_length, desc->msg_id, am_id);
+    gni_rc = GNI_SmsgSendWTag(ep->super.ep, header, header_length, 
+                              payload, payload_length, desc->msg_id, am_id);
 
     if(GNI_RC_SUCCESS != gni_rc){
-        ucs_mpool_put(desc);
-        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
-        return UCS_ERR_NO_RESOURCE;
+        goto exit_no_res;
     }
 
     ++ep->super.outstanding;
@@ -197,6 +200,11 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
     sglib_hashed_uct_ugni_smsg_desc_t_add(iface->smsg_list, desc);
 
     return UCS_OK;
+
+exit_no_res:
+    ucs_mpool_put(desc);
+    UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
+    return UCS_ERR_NO_RESOURCE;
 }
 
 ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
