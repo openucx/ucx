@@ -239,7 +239,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     if (ep) {
         *new_ep_p = ep;
         *skb_p    = NULL;
-        return UCS_OK;
+        return UCS_ERR_ALREADY_EXISTS;
     }
 
     status = uct_ep_create(&iface->super.super.super, &new_ep_h);
@@ -261,14 +261,12 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     *skb_p = uct_ud_ep_prepare_creq(ep);
     if (!*skb_p) {
         status = UCS_ERR_NO_RESOURCE;
-        goto err_creq;
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREQ);
     }
 
     *new_ep_p = ep;
-    return UCS_OK;
+    return status;
 
-err_creq:
-    uct_ud_iface_cep_rollback(iface, addr, ep);
 err_cep_insert:
     uct_ud_ep_disconnect_from_iface(&ep->super.super);
     return status;
@@ -507,7 +505,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         }
         ucs_trace_data("DUP/OOB - schedule ack, head_sn=%d sn=%d", 
                        ep->rx.ooo_pkts.head_sn, neth->psn);
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK); 
         goto out;
     }
     
@@ -537,12 +535,26 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     uct_ud_send_skb_t *skb;
 
     if (ucs_unlikely(!uct_ud_ep_is_connected(ep))) {
+        /* check for CREQ either being sceduled or sent and waiting for CREP ack */
+        if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) ||
+            !ucs_queue_is_empty(&ep->tx.window)) {
+            return UCS_INPROGRESS;
+        }
         return UCS_OK;
     }
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
-        return UCS_OK;
+        /* check that there are no pending requests.
+         * The code also forces flush of pending controls.
+         * This may be a problem.
+         */
+        if (ucs_arbiter_group_is_empty(&ep->tx.pending.group)) {
+            return UCS_OK;
+        }
+        else {
+            return UCS_INPROGRESS;
+        }
     }
     
     skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t, queue);
@@ -656,7 +668,18 @@ uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
 
-    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP)) {
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
+        skb = uct_ud_ep_prepare_creq(ep);
+        if (skb) {
+            /* creq allocates real skb, it must be put on window like
+             * a regular packet to ensure a retransmission.
+             */
+            iface->ops.tx_skb(iface, ep, skb);
+            uct_ud_iface_complete_tx_skb(iface, ep, skb);
+            uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
+        }
+        return;
+    } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP)) {
         skb = uct_ud_ep_prepare_crep(ep);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_RESEND)) {
         skb =  uct_ud_ep_resend(ep);
@@ -700,6 +723,7 @@ uct_ud_ep_ctl_op_next(uct_ud_ep_t *ep)
 /**
  * pending operations are processed according to priority:
  * - high prio control:
+ *   - creq request
  *   - crep reply 
  *   - resends   
  * - pending uct requests 

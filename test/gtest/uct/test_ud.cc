@@ -286,12 +286,15 @@ UCS_TEST_P(test_ud, creq_drop) {
 }
 
 UCS_TEST_P(test_ud, creq_flush) {
+    ucs_status_t status;
+
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
     ep(m_e1, 0)->rx.rx_hook = drop_crep;
     short_progress_loop();
-    /* do flush while ep is not yet connected - should work */
-    flush();
+    /* do flush while ep is being connected it must return in progress */
+    status = uct_iface_flush(m_e1->iface());
+    EXPECT_EQ(UCS_INPROGRESS, status);
 }
 
 UCS_TEST_P(test_ud, ca_ai) {
@@ -509,6 +512,32 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     /* psns are not checked because it really depends on scheduling */
 }
 
+/*
+ * check that:
+ * - connect is not blocking when we run out of iface resources
+ * - flush() will also progress pending CREQs
+ */
+UCS_TEST_P(test_ud, connect_iface_2k) {
+
+    unsigned i;
+    unsigned cids[2000];
+
+    /* create 2k connections */
+    for (i = 0; i < 2000; i++) {
+        m_e1->connect_to_iface(i, *m_e2);
+        cids[i] = UCT_UD_EP_NULL_ID;
+    }
+
+    flush();
+
+    for (i = 0; i < 2000; i++) {
+        ASSERT_EQ(cids[i], (unsigned)UCT_UD_EP_NULL_ID);
+        cids[i] = ep(m_e1,i)->dest_ep_id;
+        ASSERT_NE((unsigned)UCT_UD_EP_NULL_ID, ep(m_e1,i)->dest_ep_id);
+        EXPECT_EQ(i, ep(m_e1,i)->conn_id);
+        EXPECT_EQ(i, ep(m_e1,i)->ep_id);
+    }
+}
 
 UCS_TEST_P(test_ud, ep_destroy_simple) {
     uct_ep_h ep;
