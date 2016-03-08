@@ -639,25 +639,29 @@ void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title
         config = &worker->ep_config[tl_id];
         {
             const char *names[] = {"egr_short", "put_short", "am_short"};
-            size_t     values[] = {config->max_eager_short, config->max_put_short, config->max_am_short};
+            size_t     values[] = {config->max_eager_short, config->max_put_short,
+                                   config->max_am_short};
             ucp_worker_print_config(stream, names, values, 3, "<=");
         }
 
         {
             const char *names[] = {"am_bcopy", "put_bcopy", "get_bcopy"};
-            size_t     values[] = {config->max_am_bcopy, config->max_put_bcopy, config->max_get_bcopy};
+            size_t     values[] = {config->max_am_bcopy, config->max_put_bcopy,
+                                   config->max_get_bcopy};
             ucp_worker_print_config(stream, names, values, 3, "<=");
         }
 
         {
             const char *names[] = {"am_zcopy", "put_zcopy", "get_zcopy"};
-            size_t     values[] = {config->max_am_zcopy, config->max_put_zcopy, config->max_get_zcopy};
+            size_t     values[] = {config->max_am_zcopy, config->max_put_zcopy,
+                                   config->max_get_zcopy};
             ucp_worker_print_config(stream, names, values, 3, "<=");
         }
 
         {
             const char *names[] = {"bcopy", "rndv", "zcopy"};
-            size_t     values[] = {config->bcopy_thresh, config->rndv_thresh, config->zcopy_thresh};
+            size_t     values[] = {config->bcopy_thresh, config->rndv_thresh,
+                                   config->zcopy_thresh};
             ucp_worker_print_config(stream, names, values, 3, ">=");
         }
 
