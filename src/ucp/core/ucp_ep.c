@@ -28,7 +28,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ep->uct_ep               = NULL;
     ep->dest_uuid            = dest_uuid;
     ep->rsc_index            = worker->context->num_tls;
-    ep->dst_pd_index         = -1;
+    ep->dst_pd_index         = UCP_NULL_RESOURCE;
     ep->state                = 0;
     sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
 #if ENABLE_DEBUG_DATA

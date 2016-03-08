@@ -17,6 +17,8 @@
 #define UCP_MAX_RESOURCES       UINT8_MAX
 #define UCP_MAX_PDS             (sizeof(uint64_t) * 8)
 #define UCP_WORKER_NAME_MAX     32
+#define UCP_NULL_RESOURCE       ((ucp_rsc_index_t)-1)
+
 typedef uint8_t                 ucp_rsc_index_t;
 
 

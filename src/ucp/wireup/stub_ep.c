@@ -93,3 +93,9 @@ UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t) {
 }
 
 UCS_CLASS_DEFINE(ucp_stub_ep_t, void);
+
+ucp_stub_ep_t* ucp_ep_get_stub_ep(ucp_ep_h ep)
+{
+    ucs_assert(ep->state & UCP_EP_STATE_STUB_EP);
+    return ucs_derived_of(ep->uct_ep, ucp_stub_ep_t);
+}
