@@ -651,7 +651,7 @@ void ucp_worker_progress(ucp_worker_h worker);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
+ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
                            ucp_ep_h *ep_p);
 
 

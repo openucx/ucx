@@ -80,7 +80,7 @@ typedef struct ucp_ep                    *ucp_ep_h;
  * The address handle is an opaque object that is used as an identifier for a
  * @ref ucp_worker_h "worker" instance.
  */
-typedef void                             ucp_address_t;
+typedef struct ucp_address               ucp_address_t;
 
 
 /**

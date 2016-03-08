@@ -17,8 +17,6 @@
 #include <limits.h>
 
 
-
-
 /**
  * Endpoint wire-up state
  */

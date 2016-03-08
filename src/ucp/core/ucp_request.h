@@ -92,9 +92,8 @@ struct ucp_request {
                 ucp_tag_t         tag;      /* Tagged send */
 
                 struct {
-                    ucp_rsc_index_t dst_rsc_index;
-                    ucp_rsc_index_t dst_aux_rsc_index;
-                    uint16_t        flags;
+                    uint8_t       type;
+                    ucp_rsc_index_t aux_rsc_index;
                 } wireup;
 
                 struct {
