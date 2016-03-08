@@ -27,7 +27,7 @@ static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
     is_ctl  = neth->packet_type & UCT_UD_PACKET_FLAG_CTL;
     is_put  = neth->packet_type & UCT_UD_PACKET_FLAG_PUT;
 
-    n = snprintf(p, max, "PKT: dst=0x%x psn=%u ack=%u dlen=%u ", 
+    n = snprintf(p, max, "PKT: dst 0x%x psn %u ack %u dlen %u ",
                  (unsigned)dest_id, 
                  (unsigned)neth->psn, (unsigned)neth->ack_psn,
                  (unsigned)(pkt_len - sizeof(*neth))
@@ -53,7 +53,7 @@ static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
         ctl_hdr = (uct_ud_ctl_hdr_t *)(neth+1);
         switch(ctl_hdr->type) {
         case UCT_UD_PACKET_CREQ:
-            n = snprintf(p, max, "CREQ: qp=%x lid=%d epid=%d cid=%d ",
+            n = snprintf(p, max, "CREQ: qp 0x%x lid %d epid %d cid %d ",
                          ctl_hdr->conn_req.ib_addr.qp_num,
                          ctl_hdr->conn_req.ib_addr.lid,
                          ctl_hdr->conn_req.ib_addr.id,
