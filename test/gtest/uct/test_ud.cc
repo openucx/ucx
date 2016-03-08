@@ -385,6 +385,9 @@ UCS_TEST_P(test_ud, ca_resend) {
     int i;
     ucs_status_t status;
 
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
     connect();
     set_tx_win(m_e1, max_window);
 
