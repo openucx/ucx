@@ -55,6 +55,7 @@ static uct_iface_ops_t uct_knem_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_iface_t),
     .iface_query         = uct_knem_iface_query,
     .iface_get_address   = uct_knem_iface_get_address,
+    .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_is_reachable  = uct_knem_iface_is_reachable,
     .ep_put_zcopy        = uct_knem_ep_put_zcopy,
     .ep_get_zcopy        = uct_knem_ep_get_zcopy,

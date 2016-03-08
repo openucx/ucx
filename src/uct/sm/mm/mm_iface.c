@@ -133,6 +133,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
     .iface_query         = uct_mm_iface_query,
     .iface_get_address   = uct_mm_iface_get_address,
+    .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_is_reachable  = uct_mm_iface_is_reachable,
     .iface_release_am_desc = uct_mm_iface_release_am_desc,
     .iface_flush         = uct_mm_iface_flush,
