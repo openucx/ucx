@@ -179,6 +179,9 @@ void test_base::TestBodyProxy() {
 
             /* If not running on valgrind / execp failed, use exit() */
             exit(e.failed() ? 1 : 0);
+        } catch (...) {
+            m_state = ABORTED;
+            throw;
         }
     } else if (m_state == SKIPPED) {
     } else if (m_state == ABORTED) {
