@@ -349,11 +349,13 @@ static void uct_ud_mlx5_iface_progress(void *arg)
     uct_ud_enter(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (ucs_likely(status == UCS_OK)) {
-        status = uct_ud_mlx5_iface_poll_rx(iface, 0);
-        if (status == UCS_ERR_NO_PROGRESS) {
-            uct_ud_mlx5_iface_poll_tx(iface);
-        }
+        int count = 0;
+        do {
+            status = uct_ud_mlx5_iface_poll_rx(iface, 0);
+            count++;
+        } while (status == UCS_OK && count < UCT_IB_MAX_WC);
     }
+    uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
 }
