@@ -16,9 +16,36 @@ extern "C" {
 
 class test_ud_pending : public ud_base_test {
 public:
+    uct_pending_req_t m_r[64];
+
     void dispatch_req(uct_pending_req_t *r) {
         EXPECT_UCS_OK(tx(m_e1));
     } 
+
+    void post_pending_reqs(void) 
+    {
+        int i;
+
+        req_count = 0;
+        me = this;
+        m_e1->connect_to_iface(0, *m_e2);
+        set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
+        /* ep is not connected yet */
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
+
+        /* queuee some work */
+        for(i = 0; i < N; i++) {
+            m_r[i].func = pending_cb_dispatch;
+            EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &m_r[i]));
+        }
+    }
+
+    void check_pending_reqs(void) 
+    {
+        /* all work should be complete */
+        EXPECT_EQ(N, req_count);
+        uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+    }
 
     static const int N; 
     static const int W; 
@@ -43,33 +70,6 @@ public:
         return UCS_ERR_BUSY;
     }
 
-    uct_pending_req_t r[64];
-
-    void post_pending_reqs(void) 
-    {
-
-        int i;
-
-        req_count = 0;
-        me = this;
-        m_e1->connect_to_iface(0, *m_e2);
-        set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
-        /* ep is not connected yet */
-        EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
-
-        /* queuee some work */
-        for(i = 0; i < N; i++) {
-            r[i].func = pending_cb_dispatch;
-            EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r[i]));
-        }
-    }
-
-    void check_pending_reqs(void) 
-    {
-        /* now all work should be complete */
-        EXPECT_EQ(N, req_count);
-        uct_ep_pending_purge(m_e1->ep(0), pending_cb);
-    }
 };
 
 const int test_ud_pending::N = 13; 
