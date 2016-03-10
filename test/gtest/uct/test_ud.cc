@@ -370,7 +370,9 @@ UCS_TEST_P(test_ud, ca_md) {
         } while (ep(m_e1, 0)->ca.cwnd != new_cwnd);
         short_progress_loop();
 
-        EXPECT_EQ(new_cwnd-1, tx_count);
+        /* up to 2 additional ack_reqs per each resend */
+        EXPECT_LE(new_cwnd-1, tx_count);
+        EXPECT_GE(new_cwnd-1+2, tx_count);
         EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
 
     } while (iters && ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
@@ -400,12 +402,16 @@ UCS_TEST_P(test_ud, ca_resend) {
      * 4 packets will be retransmitted
      * first packet will have ack_req,
      * there will 2 ack_reqs
+     * in addition there may be up to two 
+     * standalone ack_reqs
      */ 
     disable_async(m_e1);
     disable_async(m_e2);
     short_progress_loop(100);
-    EXPECT_EQ(4, rx_drop_count);
-    EXPECT_EQ(2, ack_req_tx_cnt);
+    EXPECT_LE(4, rx_drop_count);
+    EXPECT_GE(4+2, rx_drop_count);
+    EXPECT_LE(2, ack_req_tx_cnt);
+    EXPECT_GE(2+2, ack_req_tx_cnt);
 }
 
 #endif
