@@ -165,6 +165,9 @@ uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
 
 ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
 
+ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
+                                             uct_device_addr_t *dev_addr);
+
 ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
                                              uct_iface_addr_t *addr);
 

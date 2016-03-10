@@ -191,6 +191,17 @@ ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *ad
     return UCS_OK;
 }
 
+ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
+                                             uct_device_addr_t *dev_addr)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_address_t *ib_addr = (void*)dev_addr;
+
+    ib_addr->lid           = uct_ib_iface_port_attr(iface)->lid;
+    ib_addr->subnet_prefix = iface->gid.global.subnet_prefix;
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
                                              uct_iface_addr_t *addr)
 {
@@ -531,6 +542,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     }
 
     memset(iface_attr, 0, sizeof(*iface_attr));
+
+    iface_attr->device_addr_len = sizeof(uct_ib_address_t);
 
     switch (active_speed) {
     case 1: /* SDR */
