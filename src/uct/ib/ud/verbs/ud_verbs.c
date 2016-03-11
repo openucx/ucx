@@ -352,12 +352,16 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
                                                &new_ud_ep, &skb);
-    if (status != UCS_OK) {
+    if (status != UCS_OK && 
+        status != UCS_ERR_NO_RESOURCE && 
+        status != UCS_ERR_ALREADY_EXISTS) {
+        uct_ud_leave(&iface->super);
         return status;
     }
+
     ep = ucs_derived_of(new_ud_ep, uct_ud_verbs_ep_t);
     *new_ep_p = &ep->super.super.super;
-    if (skb == NULL) {
+    if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
         return UCS_OK;
     }
@@ -366,23 +370,21 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
-        status = UCS_ERR_INVALID_ADDR;
-        goto err;
+        uct_ud_ep_destroy_connected(&ep->super, if_addr);
+        *new_ep_p = NULL;
+        uct_ud_leave(&iface->super);
+        return UCS_ERR_INVALID_ADDR;
     }
     ep->ah = ah;
     ep->dest_qpn = if_addr->qp_num;
 
-    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
-    uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
-    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    if (status == UCS_OK) {
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+        uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
+        uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    }
     uct_ud_leave(&iface->super);
     return UCS_OK;
-
-err:
-    uct_ud_ep_destroy_connected(&ep->super, if_addr);
-    uct_ud_leave(&iface->super);
-    *new_ep_p = NULL;
-    return status;
 }
 
 

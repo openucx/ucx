@@ -415,38 +415,41 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     uct_ud_ep_t *new_ud_ep;
     const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)iface_addr;
     uct_ud_send_skb_t *skb;
-    ucs_status_t status;
+    ucs_status_t status, status_ah;
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
                                                &new_ud_ep, &skb);
-    if (status != UCS_OK) {
+    if (status != UCS_OK &&
+        status != UCS_ERR_NO_RESOURCE &&
+        status != UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
         return status;
     }
+
     ep = ucs_derived_of(new_ud_ep, uct_ud_mlx5_ep_t);
     *new_ep_p = &ep->super.super.super;
-    if (skb == NULL) {
+    if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
         return UCS_OK;
     }
 
-    status = uct_ud_mlx5_ep_create_ah(iface, ep, if_addr);
-    if (status != UCS_OK) {
-        goto err;
+    status_ah = uct_ud_mlx5_ep_create_ah(iface, ep, if_addr);
+    if (status_ah != UCS_OK) {
+        uct_ud_ep_destroy_connected(&ep->super, if_addr);
+        *new_ep_p = NULL;
+        uct_ud_leave(&iface->super);
+        return status_ah;
     }
 
-    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
-    uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
-    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    if (status == UCS_OK) {
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+        uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
+        uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    }
+
     uct_ud_leave(&iface->super);
     return UCS_OK;
-
-err:
-    uct_ud_ep_destroy_connected(&ep->super, if_addr);
-    uct_ud_leave(&iface->super);
-    *new_ep_p = NULL;
-    return status;
 }
 
 static ucs_status_t
