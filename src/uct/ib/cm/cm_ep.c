@@ -182,12 +182,18 @@ ucs_status_t uct_cm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cm_iface_t);
     uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
+    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(iface->super.super.worker->async);
-    ucs_derived_of(uct_pending_req_priv(req), uct_cm_pending_req_priv_t)->ep = ep;
-    uct_pending_req_push(&iface->notify_q, req);
+    if (iface->num_outstanding < iface->config.max_outstanding) {
+        status = UCS_ERR_BUSY;
+    } else {
+        ucs_derived_of(uct_pending_req_priv(req), uct_cm_pending_req_priv_t)->ep = ep;
+        uct_pending_req_push(&iface->notify_q, req);
+        status = UCS_OK;
+    }
     UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
-    return UCS_OK;
+    return status;
 }
 
 void uct_cm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
