@@ -131,6 +131,8 @@ UCS_TEST_P(test_ud, basic_tx) {
 UCS_TEST_P(test_ud, duplex_tx) {
     unsigned i, N=5;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, 1024);
     set_tx_win(m_e2, 1024);
@@ -160,6 +162,8 @@ UCS_TEST_P(test_ud, duplex_tx) {
 UCS_TEST_P(test_ud, tx_window1) {
     unsigned i, N=13;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, N+1);
     for (i = 0; i < N; i++) {
