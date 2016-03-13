@@ -215,7 +215,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
-    ucs_debug("%s:%d slid=%d qpn=%d ep_id=%u ep=%p connected to IFACE dlid=%d qpn=%d", 
+    ucs_debug("%s:%d lid %d qpn 0x%x ep_id %u ep %p connected to IFACE dlid %d qpn 0x%x",
               ibv_get_device_name(dev->ibv_context->device),
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,

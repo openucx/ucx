@@ -473,7 +473,6 @@ uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 
     uct_ib_iface_get_address(tl_iface, iface_addr);
     addr->qp_num = iface->qp->qp_num;
-    ucs_debug("iface=%p get_address: qpnum=%d lid=%d", iface, addr->qp_num, addr->lid);
 
     return UCS_OK;
 }
