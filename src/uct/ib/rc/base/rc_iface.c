@@ -184,7 +184,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     self->config.tx_moderation      = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
                                               ucs_roundup_pow2(config->super.tx.queue_len / 4));
     self->config.tx_ops_mask        = ucs_roundup_pow2(config->tx.cq_len) - 1;
-    self->config.rx_max_batch       = ucs_min(config->super.rx.max_batch, config->super.rx.queue_len / 4);
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);

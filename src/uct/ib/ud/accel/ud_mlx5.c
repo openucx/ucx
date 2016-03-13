@@ -93,7 +93,7 @@ uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_iface_t *ud_iface, uct_ud_ep_t *ud_ep,
 static UCS_F_NOINLINE void
 uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
 {
-    unsigned batch = iface->super.config.rx_max_batch;
+    unsigned batch = iface->super.super.config.rx_max_batch;
     struct mlx5_wqe_data_seg *rx_wqes;
     uint16_t pi, next_pi, count;
     uct_ib_iface_recv_desc_t *desc;
@@ -318,7 +318,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     status = UCS_OK;
 
 out:
-    if (iface->super.rx.available >= iface->super.config.rx_max_batch) {
+    if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
         /* we need to try to post buffers always. Otherwise it is possible
          * to run out of rx wqes if receiver is slow and there are always
          * cqe to process
@@ -353,7 +353,7 @@ static void uct_ud_mlx5_iface_progress(void *arg)
         do {
             status = uct_ud_mlx5_iface_poll_rx(iface, 0);
             count++;
-        } while (status == UCS_OK && count < UCT_IB_MAX_WC);
+        } while ((status == UCS_OK) && (count < iface->super.super.config.rx_max_poll));
     }
     uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 0);
@@ -564,7 +564,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset + 
                                                self->super.super.config.seg_size);
     }
-    while (self->super.rx.available >= self->super.config.rx_max_batch) {
+    while (self->super.rx.available >= self->super.super.config.rx_max_batch) {
         uct_ud_mlx5_iface_post_recv(self);
     }
 

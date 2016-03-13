@@ -19,6 +19,7 @@
 #define UCT_UD_TX_MODERATION    64
 #define UCT_UD_MIN_INLINE       48
 #define UCT_UD_HASH_SIZE        997
+#define UCT_UD_RX_BATCH_MIN     8
 
 /* congestion avoidance settings. See ud_ep.h for details */
 #define UCT_UD_CA_AI_VALUE      1   /* window += AI_VALUE */
