@@ -42,7 +42,8 @@ static void uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
 static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
 {
-    ucs_debug("ca drop@cwnd = %d in flight: %d", ep->ca.cwnd, (int)ep->tx.psn-(int)ep->tx.acked_psn-1);
+    ucs_debug("ep: %p ca drop@cwnd = %d in flight: %d",
+              ep, ep->ca.cwnd, (int)ep->tx.psn-(int)ep->tx.acked_psn-1);
     ep->ca.cwnd /= UCT_UD_CA_MD_FACTOR;
     if (ep->ca.cwnd < UCT_UD_CA_MIN_WINDOW) {
         ep->ca.cwnd = UCT_UD_CA_MIN_WINDOW;
@@ -95,10 +96,20 @@ static void uct_ud_ep_slow_timer(ucs_callback_t *self)
         return;
     }
 
+    /* It is possible that the sender is slow.
+     * Try to flush the window twice before going into
+     * full resend mode.    
+     */
+    if (now - ep->tx.send_time > uct_ud_slow_tick() &&
+        uct_ud_ep_is_connected(ep)) {
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+    }
+
     if (now - ep->tx.send_time > 3*uct_ud_slow_tick()) {
         ucs_trace("sceduling resend now: %llu send_time: %llu diff: %llu tick: %llu",
                    now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick()); 
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
     }
@@ -462,6 +473,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     if (ucs_unlikely(dest_id == UCT_UD_EP_NULL_ID)) {
         /* must be connection request packet */
         uct_ud_iface_log_rx(iface, NULL, neth, byte_len);
+        ucs_assert_always(sizeof(*neth) + sizeof(uct_ud_ctl_hdr_t) == byte_len);
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     }
