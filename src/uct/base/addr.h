@@ -28,14 +28,6 @@ enum {
 };
 
 
-typedef struct uct_sockaddr_process {
-    UCT_SOCKADDR_COMMON (sp_);
-    uint64_t   node_guid;
-    uint64_t   id;
-    uintptr_t  vaddr;
-} UCS_S_PACKED uct_sockaddr_process_t;
-
-
 typedef struct uct_sockaddr_ib {
     UCT_SOCKADDR_COMMON (sib_);
     uint16_t   lid;

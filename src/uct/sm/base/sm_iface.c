@@ -27,3 +27,9 @@ ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
     *(uint64_t*)addr = uct_sm_iface_node_guid(iface);
     return UCS_OK;
 }
+
+int uct_sm_iface_is_reachable(uct_iface_t *tl_iface, const uct_device_addr_t *addr)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    return uct_sm_iface_node_guid(iface) == *(const uint64_t*)addr;
+}

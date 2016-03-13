@@ -680,7 +680,7 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
  *
  * @return Nonzero if reachable, 0 if not.
  */
-int uct_iface_is_reachable(uct_iface_h iface, const uct_iface_addr_t *addr);
+int uct_iface_is_reachable(uct_iface_h iface, const uct_device_addr_t *addr);
 
 
 /**

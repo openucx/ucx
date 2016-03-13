@@ -24,19 +24,17 @@ static ucs_config_field_t uct_cuda_iface_config_table[] = {
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t)(uct_iface_t*);
 
+
 static ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface,
                                                uct_iface_addr_t *iface_addr)
 {
-    uct_sockaddr_process_t *cuda_addr = (uct_sockaddr_process_t*)iface_addr;
-
-    cuda_addr->sp_family = UCT_AF_PROCESS;
-    cuda_addr->node_guid = ucs_machine_guid();
-    cuda_addr->id        = 0;
+    int *cuda_addr = (int*)iface_addr;
+    *cuda_addr = 0;
     return UCS_OK;
 }
 
 static int uct_cuda_iface_is_reachable(uct_iface_h iface,
-                                       const uct_iface_addr_t* addr)
+                                       const uct_device_addr_t *addr)
 {
     return 0;
 }
@@ -47,7 +45,7 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* FIXME all of these values */
-    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
+    iface_attr->iface_addr_len         = sizeof(int);
     iface_attr->device_addr_len        = 0;
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = 0;

@@ -20,7 +20,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
                            const uct_iface_addr_t *iface_addr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
-    uct_sockaddr_process_t *remote_iface_addr = (uct_sockaddr_process_t *)iface_addr;
+    const uct_mm_iface_addr_t *addr = (const void*)iface_addr;
     ucs_status_t status;
     size_t size_to_attach;
 
@@ -30,20 +30,20 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     /* Attach the address's memory */
     size_to_attach = UCT_MM_GET_FIFO_SIZE(iface);
     status =
-        uct_mm_pd_mapper_ops(iface->super.pd)->attach(remote_iface_addr->id,
+        uct_mm_pd_mapper_ops(iface->super.pd)->attach(addr->id,
                                                       size_to_attach,
-                                                      (void *)remote_iface_addr->vaddr,
+                                                      (void *)addr->vaddr,
                                                       &self->mapped_desc.address,
                                                       &self->mapped_desc.cookie,
                                                       iface->path);
     if (status != UCS_OK) {
         ucs_error("failed to connect to remote peer with mm. remote mm_id: %zu",
-                   remote_iface_addr->id);
+                   addr->id);
         return status;
     }
 
     self->mapped_desc.length = size_to_attach;
-    self->mapped_desc.mmid   = remote_iface_addr->id;
+    self->mapped_desc.mmid   = addr->id;
     uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl, &self->fifo);
 
     self->cached_tail = self->fifo_ctl->tail;
@@ -54,7 +54,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
 
     ucs_arbiter_group_init(&self->arb_group);
 
-    ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, remote_iface_addr->id);
+    ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, addr->id);
 
     return UCS_OK;
 }

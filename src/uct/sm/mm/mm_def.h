@@ -53,4 +53,11 @@ typedef struct uct_mm_pd_config {
     ucs_ternary_value_t  hugetlb_mode;     /* Enable using huge pages */
 } uct_mm_pd_config_t;
 
+
+typedef struct uct_mm_iface_addr {
+    uint64_t   id;
+    uintptr_t  vaddr;
+} UCS_S_PACKED uct_mm_iface_addr_t;
+
+
 #endif /* UCT_MM_H */

@@ -13,13 +13,15 @@
 #include "cma_ep.h"
 #include <ucs/debug/log.h>
 
+
 static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
 {
     uct_cma_iface_t *iface = ucs_derived_of(tl_iface, uct_cma_iface_t);
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
-    self->remote_pid = (pid_t)(((uct_sockaddr_process_t*)iface_addr)->id);
+    self->remote_pid = *(const pid_t*)iface_addr;
     return UCS_OK;
 }
 
