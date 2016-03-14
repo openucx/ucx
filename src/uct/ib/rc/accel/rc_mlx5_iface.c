@@ -210,7 +210,7 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     status = UCS_OK;
 
 done:
-    max_batch = iface->super.config.rx_max_batch;
+    max_batch = iface->super.super.config.rx_max_batch;
     if (iface->super.rx.available >= max_batch) {
         uct_rc_mlx5_iface_post_recv(iface);
     }

@@ -44,6 +44,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "receiver.",
    ucs_offsetof(uct_ib_iface_config_t, tx.max_batch), UCS_CONFIG_TYPE_UINT},
 
+  {"TX_MAX_POLL", "16",
+   "Max number of receive completions to pick during TX poll",
+   ucs_offsetof(uct_ib_iface_config_t, tx.max_poll), UCS_CONFIG_TYPE_UINT},
+
   {"TX_MIN_INLINE", "64",
    "Bytes to reserve in send WQE for inline data. Messages which are small\n"
    "enough will be sent inline.",
@@ -69,6 +73,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"RX_MAX_BATCH", "16",
    "How many post-receives to perform in one batch.",
    ucs_offsetof(uct_ib_iface_config_t, rx.max_batch), UCS_CONFIG_TYPE_UINT},
+
+  {"RX_MAX_POLL", "16",
+   "Max number of receive completions to pick during RX poll",
+   ucs_offsetof(uct_ib_iface_config_t, rx.max_poll), UCS_CONFIG_TYPE_UINT},
 
   {"RX_INLINE", "0",
    "Number of bytes to request for inline receive. If the maximal supported size\n"
@@ -391,6 +399,10 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
     self->config.seg_size          = config->super.max_bcopy;
+    self->config.tx_max_poll       = config->tx.max_poll;
+    self->config.rx_max_poll       = config->rx.max_poll;
+    self->config.rx_max_batch      = ucs_min(config->rx.max_batch,
+                                             config->rx.queue_len / 4);
 
     status = uct_ib_iface_init_pkey(self, config);
     if (status != UCS_OK) {

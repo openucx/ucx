@@ -260,13 +260,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
     uct_ib_iface_recv_desc_t *desc;
-    struct ibv_wc wc[UCT_IB_MAX_WC];
     int i, ret;
     char *packet;
     ucs_status_t status;
+    unsigned num_wcs = iface->super.super.config.rx_max_poll;
+    struct ibv_wc wc[num_wcs];
 
 
-    ret = ibv_poll_cq(iface->super.super.recv_cq, UCT_IB_MAX_WC, wc);
+    ret = ibv_poll_cq(iface->super.super.recv_cq, num_wcs, wc);
     if (ret == 0) {
         status = UCS_ERR_NO_PROGRESS;
         goto out;
@@ -469,7 +470,7 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface)
 {
-    unsigned batch = iface->super.config.rx_max_batch;
+    unsigned batch = iface->super.super.config.rx_max_batch;
 
     if (iface->super.rx.available < batch) 
         return;
@@ -491,13 +492,13 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->super.ops.async_progress = uct_ud_verbs_iface_async_progress;
     self->super.ops.tx_skb         = uct_ud_verbs_ep_tx_ctl_skb;
 
-    if (self->super.config.rx_max_batch < UCT_IB_MAX_WC) {
-        ucs_warn("max batch is too low (%d < %d), performance may be impacted",
-                self->super.config.rx_max_batch,
-                UCT_IB_MAX_WC);
+    if (self->super.super.config.rx_max_batch < UCT_UD_RX_BATCH_MIN) {
+        ucs_warn("rx max batch is too low (%d < %d), performance may be impacted",
+                self->super.super.config.rx_max_batch,
+                UCT_UD_RX_BATCH_MIN);
     }
 
-    while (self->super.rx.available >= self->super.config.rx_max_batch) {
+    while (self->super.rx.available >= self->super.super.config.rx_max_batch) {
         uct_ud_verbs_iface_post_recv(self);
     }
     

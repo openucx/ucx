@@ -73,7 +73,6 @@ struct uct_rc_iface {
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
         unsigned             tx_ops_mask;
-        unsigned             rx_max_batch;
         unsigned             rx_inline;
         uint16_t             tx_moderation;
         uint8_t              min_rnr_timer;

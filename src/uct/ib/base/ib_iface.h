@@ -35,6 +35,7 @@ typedef struct uct_ib_iface_config {
     struct {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many fragments can be batched to one post send */
+        unsigned            max_poll;        /* How many wcs can be picked when polling tx cq */
         size_t              min_inline;      /* Inline space to reserve */
         unsigned            min_sge;         /* How many SG entries to support */
         unsigned            cq_moderation;   /* How many TX messages are batched to one CQE */
@@ -44,6 +45,7 @@ typedef struct uct_ib_iface_config {
     struct {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many buffers can be batched to one post receuive */
+        unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         size_t              inl;             /* Inline space to reserve in CQ/QP */
         uct_iface_mpool_config_t mp;
     } rx;
@@ -81,6 +83,9 @@ typedef struct uct_ib_iface {
         unsigned            rx_payload_offset;   /* offset from desc to payload */
         unsigned            rx_hdr_offset;       /* offset from desc to network header */
         unsigned            rx_headroom_offset;  /* offset from desc to user headroom */
+        unsigned            rx_max_batch;
+        unsigned            rx_max_poll;
+        unsigned            tx_max_poll;
         unsigned            seg_size;
     } config;
 
