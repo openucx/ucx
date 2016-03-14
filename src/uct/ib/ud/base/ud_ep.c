@@ -354,7 +354,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                     zdesc->payload = ep;
                     continue;
                 }
-                uct_invoke_completion(zdesc->comp);
+                uct_invoke_completion(zdesc->comp, UCS_OK);
             }
         }
         skb->flags = 0; /* reset also ACK_REQ flag */

@@ -114,8 +114,10 @@ typedef void (*uct_am_tracer_t)(void *arg, uct_am_trace_type_t type, uint8_t id,
  *
  * @param [in]  self     Pointer to relevant completion structure, which was
  *                       initially passed to the operation.
+ * @param [in]  status   Status of send action, possibly indicating an error.
  */
-typedef void (*uct_completion_callback_t)(uct_completion_t *self);
+typedef void (*uct_completion_callback_t)(uct_completion_t *self,
+                                          ucs_status_t status);
 
 
 /**

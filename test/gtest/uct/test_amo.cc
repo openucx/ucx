@@ -41,7 +41,7 @@ uint64_t uct_amo_test::hash64(uint64_t value) {
     return value * 171711717;
 }
 
-void uct_amo_test::atomic_reply_cb(uct_completion_t *self) {
+void uct_amo_test::atomic_reply_cb(uct_completion_t *self, ucs_status_t status) {
     completion *comp = ucs_container_of(self, completion, uct);
     comp->self->add_reply_safe(comp->result);
 }
@@ -176,7 +176,7 @@ void uct_amo_test::worker::run() {
         }
         if (status == UCS_OK) {
             if (comp->uct.func != NULL) {
-                comp->uct.func(&comp->uct);
+                comp->uct.func(&comp->uct, UCS_OK);
             }
         } else if (status == UCS_INPROGRESS) {
             comp->uct.count = 1;

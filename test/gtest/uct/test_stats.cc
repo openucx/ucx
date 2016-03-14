@@ -108,7 +108,7 @@ public:
         return count_wait;
     }
 
-    static void atomic_completion(uct_completion_t *self) {
+    static void atomic_completion(uct_completion_t *self, ucs_status_t status) {
     }
 
 protected:
