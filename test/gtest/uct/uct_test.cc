@@ -258,24 +258,30 @@ void uct_test::entity::reserve_ep(unsigned index) {
     }
 }
 
-void uct_test::entity::connect_to_ep(uct_ep_h from, uct_ep_h to)
+void uct_test::entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
 {
     uct_iface_attr_t iface_attr;
-    uct_ep_addr_t *addr;
+    uct_device_addr_t *dev_addr;
+    uct_ep_addr_t *ep_addr;
     ucs_status_t status;
 
     status = uct_iface_query(to->iface, &iface_attr);
     ASSERT_UCS_OK(status);
 
-    addr = (uct_ep_addr_t*)malloc(iface_attr.ep_addr_len);
+    dev_addr = (uct_device_addr_t*)malloc(iface_attr.device_addr_len);
+    ep_addr  = (uct_ep_addr_t*)malloc(iface_attr.ep_addr_len);
 
-    status = uct_ep_get_address(to, addr);
+    status = uct_iface_get_device_address(to->iface, dev_addr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_connect_to_ep(from, NULL, addr);
+    status = uct_ep_get_address(to, ep_addr);
     ASSERT_UCS_OK(status);
 
-    free(addr);
+    status = uct_ep_connect_to_ep(from, dev_addr, ep_addr);
+    ASSERT_UCS_OK(status);
+
+    free(ep_addr);
+    free(dev_addr);
 }
 
 void uct_test::entity::create_ep(unsigned index) {
@@ -301,71 +307,74 @@ void uct_test::entity::destroy_ep(unsigned index) {
     m_eps[index].reset();
 }
 
-void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index) {
-    uct_iface_addr_t *addr = NULL;
-    uct_ep_h ep = NULL;
-    uct_ep_h remote_ep = NULL;
+void uct_test::entity::connect_to_ep(unsigned index, entity& other,
+                                     unsigned other_index)
+{
     ucs_status_t status;
+    uct_ep_h ep, remote_ep;
 
     reserve_ep(index);
     if (m_eps[index]) {
         return; /* Already connected */
     }
 
-    if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+    other.reserve_ep(other_index);
+    status = uct_ep_create(other.m_iface, &remote_ep);
+    ASSERT_UCS_OK(status);
+    other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
 
-        other.reserve_ep(other_index);
-        status = uct_ep_create(other.m_iface, &remote_ep);
-        ASSERT_UCS_OK(status);
-        other.m_eps[other_index].reset(remote_ep, uct_ep_destroy);
-
-        if (&other == this) {
-            connect_to_ep(remote_ep, remote_ep);
-        } else {
-            ucs_status_t status = uct_ep_create(m_iface, &ep);
-            ASSERT_UCS_OK(status);
-
-            connect_to_ep(ep, remote_ep);
-            connect_to_ep(remote_ep, ep);
-        }
-
-    } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-
-        addr = (uct_iface_addr_t*)malloc(iface_attr().iface_addr_len);
-
-        status = uct_iface_get_address(other.iface(), addr);
+    if (&other == this) {
+        connect_p2p_ep(remote_ep, remote_ep);
+    } else {
+        ucs_status_t status = uct_ep_create(m_iface, &ep);
         ASSERT_UCS_OK(status);
 
-        status = uct_ep_create_connected(iface(), NULL, addr, &ep);
-        ASSERT_UCS_OK(status);
-    }
+        connect_p2p_ep(ep, remote_ep);
+        connect_p2p_ep(remote_ep, ep);
 
-    if (ep != NULL) {
         m_eps[index].reset(ep, uct_ep_destroy);
     }
-    free(addr);
 }
 
 void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
+    uct_device_addr_t *dev_addr;
+    uct_iface_addr_t *iface_addr;
     ucs_status_t status;
-    uct_iface_addr_t *addr = NULL;
-    uct_ep_h ep = NULL;
+    uct_ep_h ep;
 
     reserve_ep(index);
     if (m_eps[index]) {
         return; /* Already connected */
     }
 
-    addr = (uct_iface_addr_t*)malloc(iface_attr().iface_addr_len);
+    dev_addr   = (uct_device_addr_t*)malloc(other.iface_attr().device_addr_len);
+    iface_addr = (uct_iface_addr_t*) malloc(other.iface_attr().iface_addr_len);
 
-    status = uct_iface_get_address(other.iface(), addr);
+    status = uct_iface_get_device_address(other.iface(), dev_addr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_create_connected(iface(), NULL, addr, &ep);
+    status = uct_iface_get_address(other.iface(), iface_addr);
+    ASSERT_UCS_OK(status);
+
+    status = uct_ep_create_connected(iface(), dev_addr, iface_addr, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);
-    free(addr);
+
+    free(iface_addr);
+    free(dev_addr);
+}
+
+void uct_test::entity::connect(unsigned index, entity& other,
+                               unsigned other_index)
+{
+    if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        connect_to_ep(index, other, other_index);
+    } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        connect_to_iface(index, other);
+    } else {
+        UCS_TEST_SKIP_R("cannot connect");
+    }
 }
 
 void uct_test::entity::flush() const {

@@ -7,9 +7,9 @@ void ud_base_test::init()
     uct_test::init();
 
     m_e1 = uct_test::create_entity(0);
-    m_e2 = uct_test::create_entity(0);
-
     m_entities.push_back(m_e1);
+
+    m_e2 = uct_test::create_entity(0);
     m_entities.push_back(m_e2);
 }
 

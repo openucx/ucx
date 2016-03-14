@@ -27,7 +27,9 @@ test_base::test_base() :
 }
 
 test_base::~test_base() {
-    pop_config();
+    while (!m_config_stack.empty()) {
+        pop_config();
+    }
     ucs_assertv_always(m_state == FINISHED ||
                        m_state == SKIPPED ||
                        m_state == NEW ||    /* can be skipped from a class constructor */
@@ -179,6 +181,9 @@ void test_base::TestBodyProxy() {
 
             /* If not running on valgrind / execp failed, use exit() */
             exit(e.failed() ? 1 : 0);
+        } catch (...) {
+            m_state = ABORTED;
+            throw;
         }
     } else if (m_state == SKIPPED) {
     } else if (m_state == ABORTED) {

@@ -398,6 +398,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
     unsigned group_size, i, group_index;
+    uct_device_addr_t *dev_addr;
     uct_iface_addr_t *iface_addr;
     uct_ep_addr_t *ep_addr;
     uct_iface_attr_t iface_attr;
@@ -405,7 +406,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     unsigned long va;
     void *rkey_buffer;
     ucs_status_t status;
-    struct iovec vec[4];
+    struct iovec vec[5];
     void *req;
 
     status = uct_iface_query(perf->uct.iface, &iface_attr);
@@ -420,10 +421,18 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err;
     }
 
+    dev_addr    = calloc(1, iface_attr.device_addr_len);
     iface_addr  = calloc(1, iface_attr.iface_addr_len);
     ep_addr     = calloc(1, iface_attr.ep_addr_len);
     rkey_buffer = calloc(1, pd_attr.rkey_packed_size);
     if ((iface_addr == NULL) || (ep_addr == NULL) || (rkey_buffer == NULL)) {
+        goto err_free;
+    }
+
+    status = uct_iface_get_device_address(perf->uct.iface, dev_addr);
+    if (status != UCS_OK) {
+        ucs_error("Failed to uct_iface_get_device_address: %s",
+                  ucs_status_string(status));
         goto err_free;
     }
 
@@ -440,7 +449,6 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
         goto err_free;
     }
-
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
@@ -474,12 +482,14 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     vec[0].iov_len      = sizeof(va);
     vec[1].iov_base     = rkey_buffer;
     vec[1].iov_len      = pd_attr.rkey_packed_size;
-    vec[2].iov_base     = iface_addr;
-    vec[2].iov_len      = iface_attr.iface_addr_len;
-    vec[3].iov_base     = ep_addr;
-    vec[3].iov_len      = iface_attr.ep_addr_len;
+    vec[2].iov_base     = dev_addr;
+    vec[2].iov_len      = iface_attr.device_addr_len;
+    vec[3].iov_base     = iface_addr;
+    vec[3].iov_len      = iface_attr.iface_addr_len;
+    vec[4].iov_base     = ep_addr;
+    vec[4].iov_len      = iface_attr.ep_addr_len;
 
-    rte_call(perf, post_vec, vec , 4, &req);
+    rte_call(perf, post_vec, vec, 5, &req);
     rte_call(perf, exchange_vec, req);
 
     for (i = 0; i < group_size; ++i) {
@@ -490,12 +500,14 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         vec[0].iov_len      = sizeof(va);
         vec[1].iov_base     = rkey_buffer;
         vec[1].iov_len      = pd_attr.rkey_packed_size;
-        vec[2].iov_base     = iface_addr;
-        vec[2].iov_len      = iface_attr.iface_addr_len;
-        vec[3].iov_base     = ep_addr;
-        vec[3].iov_len      = iface_attr.ep_addr_len;
+        vec[2].iov_base     = dev_addr;
+        vec[2].iov_len      = iface_attr.device_addr_len;
+        vec[3].iov_base     = iface_addr;
+        vec[3].iov_len      = iface_attr.iface_addr_len;
+        vec[4].iov_base     = ep_addr;
+        vec[4].iov_len      = iface_attr.ep_addr_len;
 
-        rte_call(perf, recv_vec, i, vec , 4, req);
+        rte_call(perf, recv_vec, i, vec, 5, req);
 
         perf->uct.peers[i].remote_addr = va;
         status = uct_rkey_unpack(rkey_buffer, &perf->uct.peers[i].rkey);
@@ -505,9 +517,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
 
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, NULL, ep_addr);
+            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, dev_addr, ep_addr);
         } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-            status = uct_ep_create_connected(perf->uct.iface, NULL, iface_addr,
+            status = uct_ep_create_connected(perf->uct.iface, dev_addr, iface_addr,
                                              &perf->uct.peers[i].ep);
         } else {
             status = UCS_ERR_UNSUPPORTED;
@@ -521,8 +533,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
     rte_call(perf, barrier);
 
-    free(iface_addr);
     free(ep_addr);
+    free(iface_addr);
+    free(dev_addr);
     free(rkey_buffer);
 
     return UCS_OK;
@@ -538,8 +551,9 @@ err_destroy_eps:
     }
     free(perf->uct.peers);
 err_free:
-    free(iface_addr);
     free(ep_addr);
+    free(iface_addr);
+    free(dev_addr);
     free(rkey_buffer);
 err:
     return status;

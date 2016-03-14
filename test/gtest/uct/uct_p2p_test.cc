@@ -71,8 +71,9 @@ void uct_p2p_test::init() {
         e->connect(0, *e, 0);
     } else {
         entity *e1 = uct_test::create_entity(m_rx_headroom);
-        entity *e2 = uct_test::create_entity(m_rx_headroom);
         m_entities.push_back(e1);
+
+        entity *e2 = uct_test::create_entity(m_rx_headroom);
         m_entities.push_back(e2);
 
         e1->connect(0, *e2, 0);
