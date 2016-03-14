@@ -36,5 +36,6 @@ static inline ucs_queue_elem_t* ucp_stub_ep_req_priv(uct_pending_req_t *req)
 
 void ucp_stub_ep_progress(void *arg);
 
+ucp_stub_ep_t *ucp_ep_get_stub_ep(ucp_ep_h ep);
 
 #endif
