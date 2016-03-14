@@ -19,9 +19,9 @@ public:
         uct_test::init();
 
         m_e1 = create_entity(0);
-        m_e2 = create_entity(0);
-
         m_entities.push_back(m_e1);
+
+        m_e2 = create_entity(0);
         m_entities.push_back(m_e2);
 
         uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t *)&adr1);
