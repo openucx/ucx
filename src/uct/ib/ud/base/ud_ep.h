@@ -198,6 +198,8 @@ struct uct_ud_ep {
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
+         int                    zcopy_comps;  /* true if there are zcopy completions that
+                                               * were picked by async thread and queued */
          UCS_STATS_NODE_DECLARE(stats);
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;

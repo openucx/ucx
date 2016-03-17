@@ -318,7 +318,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
 
 static UCS_F_ALWAYS_INLINE void 
 uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep, 
-                      uct_ud_psn_t ack_psn)
+                      uct_ud_psn_t ack_psn, int is_async)
 {
     uct_ud_send_skb_t *skb;
 
@@ -331,6 +331,21 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     /* Release acknowledged skb's */
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                UCT_UD_PSN_COMPARE(skb->neth[0].psn, <=, ack_psn)) {
+        if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY)) {
+            uct_ud_zcopy_hdr_t *zhdr;
+
+            zhdr = uct_ud_zhdr(skb);
+            if (zhdr->comp) {
+                if (ucs_unlikely(is_async)) {
+                    ucs_queue_push(&iface->tx.zcopy_comp_q, &skb->queue);
+                    ep->tx.zcopy_comps = 1;
+                    zhdr->payload = ep;
+                    continue;
+                }
+                uct_invoke_completion(zhdr->comp);
+            }
+            skb->flags = 0;
+        }
         ucs_mpool_put(skb);
     }
 
@@ -492,7 +507,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, byte_len);
     uct_ud_iface_log_rx(iface, ep, neth, byte_len);
     
-    uct_ud_ep_process_ack(iface, ep, neth->ack_psn);
+    uct_ud_ep_process_ack(iface, ep, neth->ack_psn, is_async);
 
     if (ucs_unlikely(neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ)) {
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
@@ -563,6 +578,9 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
          * This may be a problem.
          */
         if (ucs_arbiter_group_is_empty(&ep->tx.pending.group)) {
+            if (ucs_unlikely(ep->tx.zcopy_comps)) {
+                return UCS_INPROGRESS;
+            }
             return UCS_OK;
         }
         else {
@@ -653,6 +671,13 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     memcpy(skb->neth, sent_skb->neth, sent_skb->len);
     skb->neth->ack_psn = ep->rx.acked_psn;
     skb->len           = sent_skb->len;
+    if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
+        uct_ud_zcopy_hdr_t *zhdr;
+
+        zhdr = uct_ud_zhdr(sent_skb);
+        memcpy((char *)skb->neth + skb->len, zhdr->payload, zhdr->len);
+        skb->len += zhdr->len;
+    }
     /* force ack request on every Nth packet or on first packet in resend window */
     if ((skb->neth->psn % UCT_UD_RESENDS_PER_ACK) == 0 || 
         UCT_UD_PSN_COMPARE(skb->neth->psn, ==, ep->tx.acked_psn+1)) {
