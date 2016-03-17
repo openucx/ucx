@@ -33,7 +33,7 @@ typedef struct uct_sockaddr_process {
     uint64_t   node_guid;
     uint64_t   id;
     uintptr_t  vaddr;
-} uct_sockaddr_process_t;
+} UCS_S_PACKED uct_sockaddr_process_t;
 
 
 typedef struct uct_sockaddr_ib {
@@ -43,20 +43,20 @@ typedef struct uct_sockaddr_ib {
     uint64_t   subnet_prefix;
     uint64_t   guid;
     uint32_t   id;
-} uct_sockaddr_ib_t;
+} UCS_S_PACKED uct_sockaddr_ib_t;
 
 
 typedef struct uct_sockaddr_ib_subnet {
     UCT_SOCKADDR_COMMON (sib_);
     uint64_t   subnet_prefix;
-} uct_sockaddr_ib_subnet_t;
+} UCS_S_PACKED uct_sockaddr_ib_subnet_t;
 
 
 typedef struct uct_sockaddr_ugni {
     UCT_SOCKADDR_COMMON (sgni_);
     uint32_t   nic_addr;
     uint32_t   domain_id;
-} uct_sockaddr_ugni_t;
+} UCS_S_PACKED uct_sockaddr_ugni_t;
 
 
 #endif

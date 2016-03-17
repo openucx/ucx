@@ -19,6 +19,8 @@ static ucs_status_t uct_knem_iface_get_address(uct_iface_t *tl_iface,
     uct_sockaddr_process_t *iface_addr = (void*)addr;
     iface_addr->sp_family = UCT_AF_PROCESS;
     iface_addr->node_guid = ucs_machine_guid();
+    iface_addr->id        = 0;
+    iface_addr->vaddr     = 0;
     return UCS_OK;
 }
 

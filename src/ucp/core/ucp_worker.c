@@ -395,6 +395,7 @@ ucp_worker_pack_resource_address(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
     ucs_status_t status;
     void *buffer, *ptr;
     uint8_t tl_name_len;
+    void *undef_ptr;
     size_t length;
     int af;
 
@@ -426,6 +427,13 @@ ucp_worker_pack_resource_address(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
     status = uct_iface_get_address(worker->ifaces[rsc_index], ptr);
     if (status != UCS_OK) {
         goto err_free;
+    }
+
+    undef_ptr = (void*)VALGRIND_CHECK_MEM_IS_DEFINED(ptr, iface_attr->iface_addr_len);
+    if (undef_ptr != NULL) {
+        ucs_error(UCT_TL_RESOURCE_DESC_FMT
+                  " iface address contains undefined bytes at offset %zd",
+                  UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc), undef_ptr - ptr);
     }
 
     af   = ((struct sockaddr*)ptr)->sa_family;
@@ -487,6 +495,8 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
         if (status != UCS_OK) {
             goto err_free;
         }
+
+        VALGRIND_CHECK_MEM_IS_DEFINED(rsc_addr, rsc_addr_length);
 
         /* Enlarge address buffer, leave room for NULL terminator */
         address_length += rsc_addr_length;
