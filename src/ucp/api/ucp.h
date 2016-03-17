@@ -673,6 +673,23 @@ void ucp_ep_destroy(ucp_ep_h ep);
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ *
+ * @brief Flush outstanding one-sided operations on the @ref ucp_ep_h "endpoint"
+ *
+ * This routine flushes all outstanding one-sided communications on the
+ * @ref ucp_ep_h "endpoint". Communication operations issued on the @a ep
+ * prior to this call are completed both at the origin and at the target
+ * @ref ucp_ep_h "endpont" when this call returns.
+ *
+ * @param [in] ep        UCP endpont.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_flush(ucp_ep_h ep);
+
+
+/**
  * @ingroup UCP_MEM
  * @brief Map or allocate memory for zero-copy operations.
  *

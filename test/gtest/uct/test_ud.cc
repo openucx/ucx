@@ -131,6 +131,8 @@ UCS_TEST_P(test_ud, basic_tx) {
 UCS_TEST_P(test_ud, duplex_tx) {
     unsigned i, N=5;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, 1024);
     set_tx_win(m_e2, 1024);
@@ -160,6 +162,8 @@ UCS_TEST_P(test_ud, duplex_tx) {
 UCS_TEST_P(test_ud, tx_window1) {
     unsigned i, N=13;
 
+    disable_async(m_e1);
+    disable_async(m_e2);
     connect();
     set_tx_win(m_e1, N+1);
     for (i = 0; i < N; i++) {
@@ -286,12 +290,15 @@ UCS_TEST_P(test_ud, creq_drop) {
 }
 
 UCS_TEST_P(test_ud, creq_flush) {
+    ucs_status_t status;
+
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
     ep(m_e1, 0)->rx.rx_hook = drop_crep;
     short_progress_loop();
-    /* do flush while ep is not yet connected - should work */
-    flush();
+    /* do flush while ep is being connected it must return in progress */
+    status = uct_iface_flush(m_e1->iface());
+    EXPECT_EQ(UCS_INPROGRESS, status);
 }
 
 UCS_TEST_P(test_ud, ca_ai) {
@@ -370,7 +377,9 @@ UCS_TEST_P(test_ud, ca_md) {
         } while (ep(m_e1, 0)->ca.cwnd != new_cwnd);
         short_progress_loop();
 
-        EXPECT_EQ(new_cwnd-1, tx_count);
+        /* up to 2 additional ack_reqs per each resend */
+        EXPECT_LE(new_cwnd-1, tx_count);
+        EXPECT_GE(new_cwnd-1+2, tx_count);
         EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
 
     } while (iters && ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
@@ -382,6 +391,9 @@ UCS_TEST_P(test_ud, ca_resend) {
     int i;
     ucs_status_t status;
 
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
     connect();
     set_tx_win(m_e1, max_window);
 
@@ -400,12 +412,16 @@ UCS_TEST_P(test_ud, ca_resend) {
      * 4 packets will be retransmitted
      * first packet will have ack_req,
      * there will 2 ack_reqs
+     * in addition there may be up to two 
+     * standalone ack_reqs
      */ 
     disable_async(m_e1);
     disable_async(m_e2);
     short_progress_loop(100);
-    EXPECT_EQ(4, rx_drop_count);
-    EXPECT_EQ(2, ack_req_tx_cnt);
+    EXPECT_LE(4, rx_drop_count);
+    EXPECT_GE(4+2, rx_drop_count);
+    EXPECT_LE(2, ack_req_tx_cnt);
+    EXPECT_GE(2+2, ack_req_tx_cnt);
 }
 
 #endif
@@ -509,6 +525,32 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     /* psns are not checked because it really depends on scheduling */
 }
 
+/*
+ * check that:
+ * - connect is not blocking when we run out of iface resources
+ * - flush() will also progress pending CREQs
+ */
+UCS_TEST_P(test_ud, connect_iface_2k) {
+
+    unsigned i;
+    unsigned cids[2000];
+
+    /* create 2k connections */
+    for (i = 0; i < 2000; i++) {
+        m_e1->connect_to_iface(i, *m_e2);
+        cids[i] = UCT_UD_EP_NULL_ID;
+    }
+
+    flush();
+
+    for (i = 0; i < 2000; i++) {
+        ASSERT_EQ(cids[i], (unsigned)UCT_UD_EP_NULL_ID);
+        cids[i] = ep(m_e1,i)->dest_ep_id;
+        ASSERT_NE((unsigned)UCT_UD_EP_NULL_ID, ep(m_e1,i)->dest_ep_id);
+        EXPECT_EQ(i, ep(m_e1,i)->conn_id);
+        EXPECT_EQ(i, ep(m_e1,i)->ep_id);
+    }
+}
 
 UCS_TEST_P(test_ud, ep_destroy_simple) {
     uct_ep_h ep;

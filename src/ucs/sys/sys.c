@@ -718,7 +718,12 @@ ucs_status_t ucs_empty_function_return_success()
     return UCS_OK;
 }
 
-ucs_status_t uct_empty_function_return_unsupported()
+ucs_status_t ucs_empty_function_return_unsupported()
 {
     return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t ucs_empty_function_return_inprogress()
+{
+    return UCS_INPROGRESS;
 }

@@ -71,6 +71,8 @@ protected:
         void destroy_ep(unsigned index);
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect_to_iface(unsigned index, entity& other);
+        void connect_to_ep(unsigned index, entity& other,
+                           unsigned other_index);
 
         void flush() const;
 
@@ -90,7 +92,7 @@ protected:
 
         void reserve_ep(unsigned index);
 
-        void connect_to_ep(uct_ep_h from, uct_ep_h to);
+        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
 
         ucs::handle<uct_pd_h>      m_pd;
         mutable async_wrapper      m_async;

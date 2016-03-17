@@ -56,7 +56,7 @@ uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
                                                     int fill)
 {
-    unsigned batch = iface->super.config.rx_max_batch;
+    unsigned batch = iface->super.super.config.rx_max_batch;
     unsigned count;
 
     if (iface->super.rx.available < batch) {
@@ -75,12 +75,13 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
 static UCS_F_ALWAYS_INLINE void 
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
-    struct ibv_wc wc[UCT_IB_MAX_WC];
     uct_rc_verbs_ep_t *ep;
     unsigned count;
     int i, ret;
+    unsigned num_wcs = iface->super.super.config.tx_max_poll;
+    struct ibv_wc wc[num_wcs];
 
-    ret = ibv_poll_cq(iface->super.super.send_cq, UCT_IB_MAX_WC, wc);
+    ret = ibv_poll_cq(iface->super.super.send_cq, num_wcs, wc);
     if (ucs_unlikely(ret <= 0)) {
         if (ucs_unlikely(ret < 0)) {
             ucs_fatal("Failed to poll send CQ");
@@ -114,11 +115,12 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 {
     uct_ib_iface_recv_desc_t *desc;
     uct_rc_hdr_t *hdr;
-    struct ibv_wc wc[UCT_IB_MAX_WC];
     int i, ret;
     ucs_status_t status;
+    unsigned num_wcs = iface->super.super.config.rx_max_poll;
+    struct ibv_wc wc[num_wcs];
 
-    ret = ibv_poll_cq(iface->super.super.recv_cq, UCT_IB_MAX_WC, wc);
+    ret = ibv_poll_cq(iface->super.super.recv_cq, num_wcs, wc);
     if (ret > 0) {
         for (i = 0; i < ret; ++i) {
             if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
@@ -338,6 +340,7 @@ uct_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
     .iface_get_address   = uct_ib_iface_get_subnet_address,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable  = uct_ib_iface_is_reachable,
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_am_short         = uct_rc_verbs_ep_am_short,

@@ -138,7 +138,7 @@ public:
 
     template <typename T, typename F>
     void test(F f) {
-        test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T));
+        test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T), false);
     }
 
 };

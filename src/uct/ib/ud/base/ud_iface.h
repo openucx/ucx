@@ -79,7 +79,6 @@ struct uct_ud_iface {
     struct {
         unsigned             tx_qp_len;
         unsigned             max_inline;
-        unsigned             rx_max_batch;
     } config;
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE]; 

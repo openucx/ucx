@@ -67,12 +67,6 @@ static void ucp_wireup_ep_ready_to_send(ucp_ep_h ep)
               ucp_ep_peer_name(ep), ep->worker->uuid, ep->dest_uuid);
 }
 
-static ucp_stub_ep_t * ucp_ep_get_stub_ep(ucp_ep_h ep)
-{
-    ucs_assert(ep->state & UCP_EP_STATE_STUB_EP);
-    return ucs_derived_of(ep->uct_ep, ucp_stub_ep_t);
-}
-
 void ucp_wireup_progress(ucp_ep_h ep)
 {
     ucp_stub_ep_t *stub_ep = ucp_ep_get_stub_ep(ep);

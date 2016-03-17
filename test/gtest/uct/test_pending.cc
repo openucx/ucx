@@ -17,13 +17,13 @@ public:
         uct_test::init();
 
         m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+
         m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
 
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
-
-        m_entities.push_back(m_e1);
-        m_entities.push_back(m_e2);
     }
 
     typedef struct pending_send_request {
@@ -81,6 +81,20 @@ protected:
     entity *m_e1, *m_e2;
 };
 
+void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callback_t cb, void *arg)
+{
+    ucs_status_t status;
+    uct_iface_attr_t attr;
+
+    status = uct_iface_query(iface, &attr);
+    ASSERT_UCS_OK(status);
+
+    if (attr.cap.flags & UCT_IFACE_FLAG_AM_CB_SYNC) {
+        uct_iface_set_am_handler(iface, id, cb, arg, UCT_AM_CB_FLAG_SYNC);
+    } else {
+        uct_iface_set_am_handler(iface, id, cb, arg, UCT_AM_CB_FLAG_ASYNC);
+    }
+}
 
 UCS_TEST_P(test_uct_pending, pending_op)
 {
@@ -92,8 +106,9 @@ UCS_TEST_P(test_uct_pending, pending_op)
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
     iters = 1000000/ucs::test_time_multiplier();
+
     /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_SYNC);
+    install_handler_sync_or_async(m_e2->iface(), 0, am_handler, &counter);
 
     /* send the data until the resources run out */
     i = 0;
@@ -144,7 +159,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
 
     /* set a callback for the uct to invoke when receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler , &counter, UCT_AM_CB_FLAG_SYNC);
+    install_handler_sync_or_async(m_e2->iface(), 0, am_handler, &counter);
 
     loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
     /* send while resources are available. try to add a request to pending */

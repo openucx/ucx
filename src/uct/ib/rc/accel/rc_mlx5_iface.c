@@ -210,7 +210,7 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     status = UCS_OK;
 
 done:
-    max_batch = iface->super.config.rx_max_batch;
+    max_batch = iface->super.super.config.rx_max_batch;
     if (iface->super.rx.available >= max_batch) {
         uct_rc_mlx5_iface_post_recv(iface);
     }
@@ -420,6 +420,7 @@ uct_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_get_address      = uct_rc_ep_get_address,
     .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
     .iface_get_address   = uct_ib_iface_get_subnet_address,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable  = uct_ib_iface_is_reachable,
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_put_short        = uct_rc_mlx5_ep_put_short,

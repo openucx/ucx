@@ -42,7 +42,8 @@ static void uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
 static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
 {
-    ucs_debug("ca drop@cwnd = %d in flight: %d", ep->ca.cwnd, (int)ep->tx.psn-(int)ep->tx.acked_psn-1);
+    ucs_debug("ep: %p ca drop@cwnd = %d in flight: %d",
+              ep, ep->ca.cwnd, (int)ep->tx.psn-(int)ep->tx.acked_psn-1);
     ep->ca.cwnd /= UCT_UD_CA_MD_FACTOR;
     if (ep->ca.cwnd < UCT_UD_CA_MIN_WINDOW) {
         ep->ca.cwnd = UCT_UD_CA_MIN_WINDOW;
@@ -95,10 +96,20 @@ static void uct_ud_ep_slow_timer(ucs_callback_t *self)
         return;
     }
 
+    /* It is possible that the sender is slow.
+     * Try to flush the window twice before going into
+     * full resend mode.    
+     */
+    if (now - ep->tx.send_time > uct_ud_slow_tick() &&
+        uct_ud_ep_is_connected(ep)) {
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+    }
+
     if (now - ep->tx.send_time > 3*uct_ud_slow_tick()) {
         ucs_trace("sceduling resend now: %llu send_time: %llu diff: %llu tick: %llu",
                    now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick()); 
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
     }
@@ -204,7 +215,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
-    ucs_debug("%s:%d slid=%d qpn=%d ep_id=%u ep=%p connected to IFACE dlid=%d qpn=%d", 
+    ucs_debug("%s:%d lid %d qpn 0x%x ep_id %u ep %p connected to IFACE dlid %d qpn 0x%x",
               ibv_get_device_name(dev->ibv_context->device),
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
@@ -239,7 +250,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     if (ep) {
         *new_ep_p = ep;
         *skb_p    = NULL;
-        return UCS_OK;
+        return UCS_ERR_ALREADY_EXISTS;
     }
 
     status = uct_ep_create(&iface->super.super.super, &new_ep_h);
@@ -261,14 +272,12 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     *skb_p = uct_ud_ep_prepare_creq(ep);
     if (!*skb_p) {
         status = UCS_ERR_NO_RESOURCE;
-        goto err_creq;
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREQ);
     }
 
     *new_ep_p = ep;
-    return UCS_OK;
+    return status;
 
-err_creq:
-    uct_ud_iface_cep_rollback(iface, addr, ep);
 err_cep_insert:
     uct_ud_ep_disconnect_from_iface(&ep->super.super);
     return status;
@@ -393,6 +402,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     /* scedule connection reply op */
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
     uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
+    uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
 }
 
 static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_hdr_t *ctl)
@@ -463,6 +473,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     if (ucs_unlikely(dest_id == UCT_UD_EP_NULL_ID)) {
         /* must be connection request packet */
         uct_ud_iface_log_rx(iface, NULL, neth, byte_len);
+        ucs_assert_always(sizeof(*neth) + sizeof(uct_ud_ctl_hdr_t) == byte_len);
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     }
@@ -537,12 +548,26 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     uct_ud_send_skb_t *skb;
 
     if (ucs_unlikely(!uct_ud_ep_is_connected(ep))) {
+        /* check for CREQ either being sceduled or sent and waiting for CREP ack */
+        if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) ||
+            !ucs_queue_is_empty(&ep->tx.window)) {
+            return UCS_INPROGRESS;
+        }
         return UCS_OK;
     }
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
-        return UCS_OK;
+        /* check that there are no pending requests.
+         * The code also forces flush of pending controls.
+         * This may be a problem.
+         */
+        if (ucs_arbiter_group_is_empty(&ep->tx.pending.group)) {
+            return UCS_OK;
+        }
+        else {
+            return UCS_INPROGRESS;
+        }
     }
     
     skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t, queue);
@@ -656,7 +681,18 @@ uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
 
-    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP)) {
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
+        skb = uct_ud_ep_prepare_creq(ep);
+        if (skb) {
+            /* creq allocates real skb, it must be put on window like
+             * a regular packet to ensure a retransmission.
+             */
+            iface->ops.tx_skb(iface, ep, skb);
+            uct_ud_iface_complete_tx_skb(iface, ep, skb);
+            uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
+        }
+        return;
+    } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP)) {
         skb = uct_ud_ep_prepare_crep(ep);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_RESEND)) {
         skb =  uct_ud_ep_resend(ep);
@@ -700,6 +736,7 @@ uct_ud_ep_ctl_op_next(uct_ud_ep_t *ep)
 /**
  * pending operations are processed according to priority:
  * - high prio control:
+ *   - creq request
  *   - crep reply 
  *   - resends   
  * - pending uct requests 

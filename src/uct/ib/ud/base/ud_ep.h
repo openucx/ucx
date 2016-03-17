@@ -171,10 +171,11 @@ enum {
     UCT_UD_EP_OP_ACK_REQ    = UCS_BIT(1),  /* request ack of sent packets */
     UCT_UD_EP_OP_RESEND     = UCS_BIT(2),  /* resend un acked packets */
     UCT_UD_EP_OP_CREP       = UCS_BIT(3),  /* send connection reply */
+    UCT_UD_EP_OP_CREQ       = UCS_BIT(4)   /* send connection request */
 };
 
 #define UCT_UD_EP_OP_CTL_LOW_PRIO (UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_ACK)
-#define UCT_UD_EP_OP_CTL_HI_PRIO  (UCT_UD_EP_OP_CREP|UCT_UD_EP_OP_RESEND)
+#define UCT_UD_EP_OP_CTL_HI_PRIO  (UCT_UD_EP_OP_CREQ|UCT_UD_EP_OP_CREP|UCT_UD_EP_OP_RESEND)
 
 typedef struct uct_ud_ep_pending_op {
     ucs_arbiter_group_t   group;  

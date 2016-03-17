@@ -34,8 +34,8 @@ void test_ucp_tag::init()
 
 void test_ucp_tag::cleanup()
 {
-    sender->flush();
-    receiver->flush();
+    sender->flush_worker();
+    receiver->flush_worker();
     sender->disconnect();
     ucp_test::cleanup();
 }

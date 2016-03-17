@@ -247,7 +247,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
 
     start = (uintptr_t)event->vm_unmapped.address;
     end   = (uintptr_t)event->vm_unmapped.address + event->vm_unmapped.size;
-    ucs_trace("%s: event vm_unmapped 0x%lx..0x%lx", rcache->name, start, end);
+    ucs_trace_func("%s: event vm_unmapped 0x%lx..0x%lx", rcache->name, start, end);
 
     pthread_spin_lock(&rcache->inv_lock);
     entry = ucs_mpool_get(&rcache->inv_mp);

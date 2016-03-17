@@ -357,7 +357,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
-    self->config.rx_max_batch    = ucs_min(config->super.rx.max_batch, config->super.rx.queue_len / 4);
 
     if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
@@ -473,7 +472,6 @@ uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 
     uct_ib_iface_get_address(tl_iface, iface_addr);
     addr->qp_num = iface->qp->qp_num;
-    ucs_debug("iface=%p get_address: qpnum=%d lid=%d", iface, addr->qp_num, addr->lid);
 
     return UCS_OK;
 }
@@ -573,6 +571,7 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
     int count;
     uct_ud_recv_skb_t *skb;
     uct_ud_neth_t *neth;
+    unsigned max_poll = iface->super.config.rx_max_poll;
 
     count = 0;
     do {
@@ -586,7 +585,7 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
                                skb->u.am.len, 
                                &skb->super);
         count++;
-        if (count >= UCT_IB_MAX_WC) {
+        if (count >= max_poll) {
             return UCS_ERR_NO_RESOURCE;
         }
     } while (!ucs_queue_is_empty(&iface->rx.pending_q));

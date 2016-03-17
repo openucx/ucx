@@ -14,6 +14,7 @@
 #include "ugni_smsg_ep.h"
 
 #define SMSG_MAX_SIZE 65535
+#define UCT_UGNI_LOCAL_CQ 8192
 
 typedef struct uct_ugni_smsg_iface {
     uct_ugni_iface_t        super;        /**< Super type */

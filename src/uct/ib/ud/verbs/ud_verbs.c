@@ -260,13 +260,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
     uct_ib_iface_recv_desc_t *desc;
-    struct ibv_wc wc[UCT_IB_MAX_WC];
     int i, ret;
     char *packet;
     ucs_status_t status;
+    unsigned num_wcs = iface->super.super.config.rx_max_poll;
+    struct ibv_wc wc[num_wcs];
 
 
-    ret = ibv_poll_cq(iface->super.super.recv_cq, UCT_IB_MAX_WC, wc);
+    ret = ibv_poll_cq(iface->super.super.recv_cq, num_wcs, wc);
     if (ret == 0) {
         status = UCS_ERR_NO_PROGRESS;
         goto out;
@@ -352,12 +353,16 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
                                                &new_ud_ep, &skb);
-    if (status != UCS_OK) {
+    if (status != UCS_OK && 
+        status != UCS_ERR_NO_RESOURCE && 
+        status != UCS_ERR_ALREADY_EXISTS) {
+        uct_ud_leave(&iface->super);
         return status;
     }
+
     ep = ucs_derived_of(new_ud_ep, uct_ud_verbs_ep_t);
     *new_ep_p = &ep->super.super.super;
-    if (skb == NULL) {
+    if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
         return UCS_OK;
     }
@@ -366,23 +371,21 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
-        status = UCS_ERR_INVALID_ADDR;
-        goto err;
+        uct_ud_ep_destroy_connected(&ep->super, if_addr);
+        *new_ep_p = NULL;
+        uct_ud_leave(&iface->super);
+        return UCS_ERR_INVALID_ADDR;
     }
     ep->ah = ah;
     ep->dest_qpn = if_addr->qp_num;
 
-    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
-    uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
-    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    if (status == UCS_OK) {
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+        uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
+        uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    }
     uct_ud_leave(&iface->super);
     return UCS_OK;
-
-err:
-    uct_ud_ep_destroy_connected(&ep->super, if_addr);
-    uct_ud_leave(&iface->super);
-    *new_ep_p = NULL;
-    return status;
 }
 
 
@@ -420,6 +423,7 @@ uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_flush           = uct_ud_iface_flush,
     .iface_release_am_desc = uct_ud_iface_release_am_desc,
     .iface_get_address     = uct_ud_iface_get_address,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable    = uct_ib_iface_is_reachable,
     .iface_query           = uct_ud_verbs_iface_query,
 
@@ -466,7 +470,7 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface)
 {
-    unsigned batch = iface->super.config.rx_max_batch;
+    unsigned batch = iface->super.super.config.rx_max_batch;
 
     if (iface->super.rx.available < batch) 
         return;
@@ -488,13 +492,13 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->super.ops.async_progress = uct_ud_verbs_iface_async_progress;
     self->super.ops.tx_skb         = uct_ud_verbs_ep_tx_ctl_skb;
 
-    if (self->super.config.rx_max_batch < UCT_IB_MAX_WC) {
-        ucs_warn("max batch is too low (%d < %d), performance may be impacted",
-                self->super.config.rx_max_batch,
-                UCT_IB_MAX_WC);
+    if (self->super.super.config.rx_max_batch < UCT_UD_RX_BATCH_MIN) {
+        ucs_warn("rx max batch is too low (%d < %d), performance may be impacted",
+                self->super.super.config.rx_max_batch,
+                UCT_UD_RX_BATCH_MIN);
     }
 
-    while (self->super.rx.available >= self->super.config.rx_max_batch) {
+    while (self->super.rx.available >= self->super.super.config.rx_max_batch) {
         uct_ud_verbs_iface_post_recv(self);
     }
     

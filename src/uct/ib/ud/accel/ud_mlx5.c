@@ -93,7 +93,7 @@ uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_iface_t *ud_iface, uct_ud_ep_t *ud_ep,
 static UCS_F_NOINLINE void
 uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
 {
-    unsigned batch = iface->super.config.rx_max_batch;
+    unsigned batch = iface->super.super.config.rx_max_batch;
     struct mlx5_wqe_data_seg *rx_wqes;
     uint16_t pi, next_pi, count;
     uct_ib_iface_recv_desc_t *desc;
@@ -318,7 +318,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     status = UCS_OK;
 
 out:
-    if (iface->super.rx.available >= iface->super.config.rx_max_batch) {
+    if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
         /* we need to try to post buffers always. Otherwise it is possible
          * to run out of rx wqes if receiver is slow and there are always
          * cqe to process
@@ -349,11 +349,13 @@ static void uct_ud_mlx5_iface_progress(void *arg)
     uct_ud_enter(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (ucs_likely(status == UCS_OK)) {
-        status = uct_ud_mlx5_iface_poll_rx(iface, 0);
-        if (status == UCS_ERR_NO_PROGRESS) {
-            uct_ud_mlx5_iface_poll_tx(iface);
-        }
+        int count = 0;
+        do {
+            status = uct_ud_mlx5_iface_poll_rx(iface, 0);
+            count++;
+        } while ((status == UCS_OK) && (count < iface->super.super.config.rx_max_poll));
     }
+    uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 0);
     uct_ud_leave(&iface->super);
 }
@@ -415,38 +417,41 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     uct_ud_ep_t *new_ud_ep;
     const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)iface_addr;
     uct_ud_send_skb_t *skb;
-    ucs_status_t status;
+    ucs_status_t status, status_ah;
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
                                                &new_ud_ep, &skb);
-    if (status != UCS_OK) {
+    if (status != UCS_OK &&
+        status != UCS_ERR_NO_RESOURCE &&
+        status != UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
         return status;
     }
+
     ep = ucs_derived_of(new_ud_ep, uct_ud_mlx5_ep_t);
     *new_ep_p = &ep->super.super.super;
-    if (skb == NULL) {
+    if (status == UCS_ERR_ALREADY_EXISTS) {
         uct_ud_leave(&iface->super);
         return UCS_OK;
     }
 
-    status = uct_ud_mlx5_ep_create_ah(iface, ep, if_addr);
-    if (status != UCS_OK) {
-        goto err;
+    status_ah = uct_ud_mlx5_ep_create_ah(iface, ep, if_addr);
+    if (status_ah != UCS_OK) {
+        uct_ud_ep_destroy_connected(&ep->super, if_addr);
+        *new_ep_p = NULL;
+        uct_ud_leave(&iface->super);
+        return status_ah;
     }
 
-    ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
-    uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
-    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    if (status == UCS_OK) {
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+        uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
+        uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    }
+
     uct_ud_leave(&iface->super);
     return UCS_OK;
-
-err:
-    uct_ud_ep_destroy_connected(&ep->super, if_addr);
-    uct_ud_leave(&iface->super);
-    *new_ep_p = NULL;
-    return status;
 }
 
 static ucs_status_t
@@ -482,6 +487,7 @@ uct_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_flush           = uct_ud_iface_flush,
     .iface_release_am_desc = uct_ud_iface_release_am_desc,
     .iface_get_address     = uct_ud_iface_get_address,
+    .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable    = uct_ib_iface_is_reachable,
     .iface_query           = uct_ud_mlx5_iface_query,
 
@@ -561,7 +567,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset + 
                                                self->super.super.config.seg_size);
     }
-    while (self->super.rx.available >= self->super.config.rx_max_batch) {
+    while (self->super.rx.available >= self->super.super.config.rx_max_batch) {
         uct_ud_mlx5_iface_post_recv(self);
     }
 

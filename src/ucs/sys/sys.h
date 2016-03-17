@@ -293,6 +293,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
  */
 void ucs_empty_function();
 ucs_status_t ucs_empty_function_return_success();
-ucs_status_t uct_empty_function_return_unsupported();
+ucs_status_t ucs_empty_function_return_unsupported();
+ucs_status_t ucs_empty_function_return_inprogress();
 
 #endif

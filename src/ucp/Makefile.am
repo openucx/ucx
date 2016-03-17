@@ -31,6 +31,7 @@ noinst_HEADERS = \
 	tag/eager.h \
 	tag/match.h \
 	tag/rndv.h \
+	wireup/address.h \
 	wireup/stub_ep.h \
 	wireup/wireup.h
 
@@ -53,5 +54,6 @@ libucp_la_SOURCES = \
 	tag/rndv.c \
 	tag/tag_recv.c \
 	tag/tag_send.c \
+	wireup/address.c \
 	wireup/stub_ep.c \
 	wireup/wireup.c
