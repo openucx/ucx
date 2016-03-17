@@ -57,6 +57,11 @@ struct uct_rc_ep {
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 
+typedef struct uct_rc_ep_address {
+    uint8_t             qp_num[3];
+} UCS_S_PACKED ucp_rc_ep_address_t;
+
+
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,

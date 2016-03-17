@@ -67,8 +67,8 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                        ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
                        iface_attr);
 
-    iface_attr->iface_addr_len      = sizeof(uct_sockaddr_ib_subnet_t);
-    iface_attr->ep_addr_len         = sizeof(uct_sockaddr_ib_t);
+    iface_attr->iface_addr_len      = 0;
+    iface_attr->ep_addr_len         = sizeof(ucp_rc_ep_address_t);
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
                                       UCT_IFACE_FLAG_AM_BCOPY |
                                       UCT_IFACE_FLAG_AM_ZCOPY |
