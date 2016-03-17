@@ -56,6 +56,7 @@ usage()
 	echo "  --ppn  <count>                Number of processes per node ($PPN)"
 	echo "  --mpi-log-level <level>       Log level for MPI UCX component ($MPI_LOG_LEVEL)"
 	echo "  --valgrind                    Run with valgrind"
+	echo "  --valgrind-args \"<args>\"      Extra arguments to valgrind"
 	echo
 }
 
@@ -74,6 +75,7 @@ initialize()
 	export CONFIG=""
 	export MPI_LOG_LEVEL=0
 	export VALGRIND=0
+	export VALGRIND_ARGS=""
 }
 
 parse_args()
@@ -107,6 +109,10 @@ parse_args()
 			;;
 		--valgrind)
 			export VALGRIND=1
+			;;
+		--valgrind-args)
+			export VALGRIND_ARGS="$2"
+			shift
 			;;
 		[^-]*)
 			export EXE=$key
@@ -175,14 +181,20 @@ run_open_mpi()
 
 	if [ $VALGRIND -ne 0 ]
 	then
+		MPI_HOME=$(cd $(dirname ${MPIRUN})/.. && pwd)
 		EXE="valgrind \
 			--fair-sched=try \
 			--track-origins=yes \
 			--leak-check=yes \
+			--suppressions=${MPI_HOME}/share/openmpi/openmpi-valgrind.supp \
 			--suppressions=@abs_srcdir@/ompi.supp \
+			$VALGRIND_ARGS \
 			$EXE"
+		LD_LIBRARY_PATH="$LD_LIBRARY_PATH:@VALGRIND_LIBPATH@"
 	fi
 
+	OMPI_ARGS="$OMPI_ARGS -x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+	
 	verbose $MPIRUN $OMPI_ARGS $EXTRA_MPI_ARGS $EXE "${EXE_ARGS[@]}"
 	$MPIRUN $OMPI_ARGS $EXTRA_MPI_ARGS $EXE "${EXE_ARGS[@]}"
 }
