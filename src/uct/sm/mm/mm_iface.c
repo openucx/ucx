@@ -7,6 +7,7 @@
 #include "mm_iface.h"
 #include "mm_ep.h"
 
+#include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/bitops.h>
 
 
@@ -103,6 +104,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
     iface_attr->cap.am.max_zcopy       = 0;
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
+    iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT        |
                                          UCT_IFACE_FLAG_PUT_BCOPY        |
@@ -133,7 +135,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_iface_t),
     .iface_query         = uct_mm_iface_query,
     .iface_get_address   = uct_mm_iface_get_address,
-    .iface_get_device_address = (void*)ucs_empty_function_return_success,
+    .iface_get_device_address = uct_sm_iface_get_device_address,
     .iface_is_reachable  = uct_mm_iface_is_reachable,
     .iface_release_am_desc = uct_mm_iface_release_am_desc,
     .iface_flush         = uct_mm_iface_flush,
