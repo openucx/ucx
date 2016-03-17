@@ -8,7 +8,6 @@
 #include "cuda_pd.h"
 #include "cuda_ep.h"
 
-#include <uct/sm/base/sm_iface.h>
 #include <ucs/type/class.h>
 
 
@@ -49,7 +48,7 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
 
     /* FIXME all of these values */
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
-    iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
+    iface_attr->device_addr_len        = 0;
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = 0;
 
@@ -75,7 +74,7 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
 static uct_iface_ops_t uct_cuda_iface_ops = {
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_iface_t),
     .iface_get_address   = uct_cuda_iface_get_address,
-    .iface_get_device_address = uct_sm_iface_get_device_address,
+    .iface_get_device_address = (void*)ucs_empty_function_return_success,
     .iface_query         = uct_cuda_iface_query,
     .iface_is_reachable  = uct_cuda_iface_is_reachable,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ep_t),
