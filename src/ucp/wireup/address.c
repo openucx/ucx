@@ -177,6 +177,19 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
     return size;
 }
 
+static void ucp_address_memchek(void *ptr, size_t size,
+                                const uct_tl_resource_desc_t *rsc)
+{
+    void *undef_ptr;
+
+    undef_ptr = (void*)VALGRIND_CHECK_MEM_IS_DEFINED(ptr, size);
+    if (undef_ptr != NULL) {
+        ucs_error(UCT_TL_RESOURCE_DESC_FMT
+                  " address contains undefined bytes at offset %zd",
+                  UCT_TL_RESOURCE_DESC_ARG(rsc), undef_ptr - ptr);
+    }
+}
+
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                         void *buffer, size_t size,
                                         uint64_t tl_bitmap, unsigned *order,
@@ -265,6 +278,9 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 return status;
             }
 
+            ucp_address_memchek(ptr + 1, tl_addr_len,
+                                &context->tl_rscs[dev->rsc_index].tl_rsc);
+
             /* Save the address index of this transport */
             if (order != NULL) {
                 order[ucs_count_one_bits(tl_bitmap & UCS_MASK(i))] = index++;
@@ -316,6 +332,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
         ucs_free(buffer);
         goto out_free_devices;
     }
+
+    VALGRIND_CHECK_MEM_IS_DEFINED(buffer, size);
 
     *size_p   = size;
     *buffer_p = buffer;
