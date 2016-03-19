@@ -66,6 +66,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
  *
  * @note Entries in the address list could point into the data buffer, so it
  *       should not be released as long as the list is used.
+ *
+ * @note The address list should be released by ucs_free().
  */
 ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
                                 char *remote_name, size_t max,
