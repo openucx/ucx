@@ -24,6 +24,9 @@
  * [ device2_pd_index | device2_address(var) ]
  *    ...
  *
+ *   * Last address in the tl address list, it's address will have the flag LAST.
+ *   * If a device does not have tl addresses, it's pd_index will have the flag
+ *     EMPTY.
  *   * If the address list is empty, then it will contain only a single pd_index
  *     which equals to UCP_NULL_RESOURCE.
  *
@@ -41,6 +44,7 @@ typedef struct {
 
 
 #define UCP_ADDRESS_FLAG_LAST         0x80   /* Last address in the list */
+#define UCP_ADDRESS_FLAG_EMPTY        0x80   /* Device without TL addresses */
 
 
 static size_t ucp_address_string_packed_size(const char *s)
@@ -173,6 +177,19 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
     return size;
 }
 
+static void ucp_address_memchek(void *ptr, size_t size,
+                                const uct_tl_resource_desc_t *rsc)
+{
+    void *undef_ptr;
+
+    undef_ptr = (void*)VALGRIND_CHECK_MEM_IS_DEFINED(ptr, size);
+    if (undef_ptr != NULL) {
+        ucs_error(UCT_TL_RESOURCE_DESC_FMT
+                  " address contains undefined bytes at offset %zd",
+                  UCT_TL_RESOURCE_DESC_ARG(rsc), undef_ptr - ptr);
+    }
+}
+
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                         void *buffer, size_t size,
                                         uint64_t tl_bitmap, unsigned *order,
@@ -184,7 +201,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     uct_iface_attr_t *iface_attr;
     ucs_status_t status;
     ucp_rsc_index_t i;
-    uint64_t dev_tl_bitmap;
     size_t tl_addr_len;
     unsigned index;
     uct_ep_h uct_ep;
@@ -205,10 +221,9 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     for (dev = devices; dev < devices + num_devices; ++dev) {
 
-        dev_tl_bitmap = dev->tl_bitmap & UCS_MASK(context->num_tls);
-
         /* PD index */
-        *(uint8_t*)ptr = context->tl_rscs[dev->rsc_index].pd_index;
+        *(uint8_t*)ptr = context->tl_rscs[dev->rsc_index].pd_index |
+                         ((dev->tl_bitmap == 0) ? UCP_ADDRESS_FLAG_EMPTY : 0);
         ++ptr;
 
         /* Device address length */
@@ -263,13 +278,16 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 return status;
             }
 
+            ucp_address_memchek(ptr + 1, tl_addr_len,
+                                &context->tl_rscs[dev->rsc_index].tl_rsc);
+
             /* Save the address index of this transport */
             if (order != NULL) {
                 order[ucs_count_one_bits(tl_bitmap & UCS_MASK(i))] = index++;
             }
 
             ucs_assert(tl_addr_len < UCP_ADDRESS_FLAG_LAST);
-            *(uint8_t*)ptr = tl_addr_len | ((i == ucs_ilog2(dev_tl_bitmap)) ?
+            *(uint8_t*)ptr = tl_addr_len | ((i == ucs_ilog2(dev->tl_bitmap)) ?
                                             UCP_ADDRESS_FLAG_LAST : 0);
             ptr += 1 + tl_addr_len;
         }
@@ -315,6 +333,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
         goto out_free_devices;
     }
 
+    VALGRIND_CHECK_MEM_IS_DEFINED(buffer, size);
+
     *size_p   = size;
     *buffer_p = buffer;
     status    = UCS_OK;
@@ -335,6 +355,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     ucp_rsc_index_t pd_index;
     unsigned address_count;
     int last_dev, last_tl;
+    int empty_dev;
     size_t dev_addr_len;
     size_t tl_addr_len;
     const void *ptr;
@@ -351,11 +372,13 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     /* Count addresses */
     ptr = aptr;
     do {
-        /* pd_index */
-        pd_index     = *(uint8_t*)ptr;
-        if (pd_index == UCP_NULL_RESOURCE) {
+        if (*(uint8_t*)ptr == UCP_NULL_RESOURCE) {
             break;
         }
+
+        /* pd_index */
+        pd_index     = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_EMPTY;
+        empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
         ++ptr;
 
         /* device address length */
@@ -364,7 +387,9 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
         ++ptr;
 
         ptr += dev_addr_len;
-        do {
+
+        last_tl = empty_dev;
+        while (!last_tl) {
             ptr = ucp_address_skip_string(ptr); /* tl_name */
 
             /* tl address length */
@@ -376,7 +401,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             ucs_assert(address_count <= UCP_MAX_RESOURCES);
 
             ptr += tl_addr_len;
-        } while (!last_tl);
+        }
 
     } while (!last_dev);
 
@@ -392,11 +417,13 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     address = address_list;
     ptr     = aptr;
     do {
-        /* pd_index */
-        pd_index     = *(uint8_t*)ptr;
-        if (pd_index == UCP_NULL_RESOURCE) {
+        if (*(uint8_t*)ptr == UCP_NULL_RESOURCE) {
             break;
         }
+
+        /* pd_index */
+        pd_index     = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_EMPTY;
+        empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
         ++ptr;
 
         /* device address length */
@@ -407,7 +434,9 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
         dev_addr = ptr;
 
         ptr += dev_addr_len;
-        do {
+
+        last_tl = empty_dev;
+        while (!last_tl) {
             /* tl name */
             ptr = ucp_address_unpack_string(ptr, address->tl_name,
                                             UCT_TL_NAME_MAX);
@@ -425,7 +454,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             ++address;
 
             ptr += tl_addr_len;
-        } while (!last_tl);
+        }
     } while (!last_dev);
 
     *address_count_p = address_count;
