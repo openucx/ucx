@@ -95,9 +95,13 @@ void uct_test::cleanup() {
     m_entities.clear();
 }
 
-void uct_test::check_caps(uint64_t flags) {
+void uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
-        if (!ucs_test_all_flags((*iter)->iface_attr().cap.flags, flags)) {
+        uint64_t iface_flags = (*iter)->iface_attr().cap.flags;
+        if (!ucs_test_all_flags(iface_flags, required_flags)) {
+            UCS_TEST_SKIP_R("unsupported");
+        }
+        if (iface_flags & invalid_flags) {
             UCS_TEST_SKIP_R("unsupported");
         }
     }
@@ -230,6 +234,7 @@ void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
 
 void uct_test::entity::progress() const {
     uct_worker_progress(m_worker);
+    m_async.check_miss();
 }
 
 uct_pd_h uct_test::entity::pd() const {
@@ -525,4 +530,8 @@ uct_test::entity::async_wrapper::~async_wrapper()
     ucs_async_context_cleanup(&m_async);
 }
 
+void uct_test::entity::async_wrapper::check_miss()
+{
+    ucs_async_check_miss(&m_async);
+}
 

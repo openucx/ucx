@@ -98,6 +98,7 @@ ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
     UCS_ASYNC_BLOCK((_iface)->super.super.worker->async);
 
 #define uct_cm_leave(_iface) \
-    UCS_ASYNC_UNBLOCK((_iface)->super.super.worker->async);
+    UCS_ASYNC_UNBLOCK((_iface)->super.super.worker->async); \
+    ucs_async_check_miss((_iface)->super.super.worker->async);
 
 #endif
