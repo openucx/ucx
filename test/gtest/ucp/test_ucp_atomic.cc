@@ -195,9 +195,11 @@ UCS_TEST_P(test_ucp_atomic64, atomic_cswap) {
     test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>);
 }
 
+#if ENABLE_PARAMS_CHECK
 UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_add) {
     test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64);
 }
+#endif
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic64)
 
