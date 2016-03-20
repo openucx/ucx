@@ -85,10 +85,10 @@ static ucs_status_t ucs_async_dispatch_handler_cb(ucs_async_handler_t *handler,
         handler->cb(handler->arg);
     } else if (!from_async) {
         ucs_trace_async("calling missed async handler %d", handler->id);
-        ucs_async_method_call(mode, block);
+        UCS_ASYNC_BLOCK(async);
         handler->missed = 0;
         handler->cb(handler->arg);
-        ucs_async_method_call(mode, unblock);
+        UCS_ASYNC_UNBLOCK(async);
     } else if (ucs_async_method_call(mode, context_try_block, async, from_async)) {
         ucs_trace_async("calling async handler %d", handler->id);
         handler->cb(handler->arg);

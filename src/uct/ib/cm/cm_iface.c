@@ -94,7 +94,8 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     }
 
     /* Send reply */
-    ucs_trace_data("TX: SIDR_REP");
+    ucs_trace_data("TX: SIDR_REP [id %p{%u}]", event->cm_id,
+                   event->cm_id->handle);
     memset(&rep, 0, sizeof rep);
     rep.status = IB_SIDR_SUCCESS;
     ret = ib_cm_send_sidr_rep(event->cm_id, &rep);
@@ -166,7 +167,7 @@ static void uct_cm_iface_event_handler(void *arg)
             destroy_id = 1; /* Destroy the ID created by the driver */
             break;
         case IB_CM_SIDR_REP_RECEIVED:
-            ucs_trace_data("RX: SIDR_REP");
+            ucs_trace_data("RX: SIDR_REP [id %p{%u}]", id, id->handle);
             uct_cm_iface_outstanding_remove(iface, id);
             destroy_id = 1; /* Destroy the ID which was used for sending */
             break;
