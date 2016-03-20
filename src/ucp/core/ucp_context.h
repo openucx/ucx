@@ -14,12 +14,15 @@
 #include <ucs/type/component.h>
 
 
-#define UCP_MAX_RESOURCES       UINT8_MAX
-#define UCP_MAX_PDS             (sizeof(uint64_t) * 8)
-#define UCP_WORKER_NAME_MAX     32
-#define UCP_NULL_RESOURCE       ((ucp_rsc_index_t)-1)
+#define UCP_MAX_RESOURCES         UINT8_MAX
+#define UCP_MAX_PDS               (sizeof(uint64_t) * 8)
+#define UCP_WORKER_NAME_MAX       32
+#define UCP_NULL_RESOURCE         ((ucp_rsc_index_t)-1)
 
-typedef uint8_t                 ucp_rsc_index_t;
+typedef uint8_t                   ucp_rsc_index_t;
+typedef struct ucp_request        ucp_request_t;
+typedef struct ucp_address_entry  ucp_address_entry_t;
+typedef struct ucp_stub_ep        ucp_stub_ep_t;
 
 
 /**

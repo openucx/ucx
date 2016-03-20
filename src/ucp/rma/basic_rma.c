@@ -10,6 +10,7 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_request.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucs/datastruct/mpool.inl>
 
@@ -32,7 +33,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
-    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
+    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey, ep->rma_dst_pdi);
 
     /* Loop until all message has been sent.
      * We re-check the configuration on every iteration, because it can be
@@ -40,22 +41,23 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
      */
     for (;;) {
         if (length <= ucp_ep_config(ep)->max_put_short) {
-            status = uct_ep_put_short(ep->uct_ep, buffer, length, remote_addr,
-                                      uct_rkey);
+            status = uct_ep_put_short(ep->uct_eps[UCP_EP_OP_RMA], buffer, length,
+                                      remote_addr, uct_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 break;
             }
         } else {
             if (length <= ucp_ep_config(ep)->bcopy_thresh) {
                 frag_length = ucs_min(length, ucp_ep_config(ep)->max_put_short);
-                status = uct_ep_put_short(ep->uct_ep, buffer, frag_length, remote_addr,
-                                          uct_rkey);
+                status = uct_ep_put_short(ep->uct_eps[UCP_EP_OP_RMA], buffer,
+                                          frag_length, remote_addr, uct_rkey);
             } else {
                 ucp_memcpy_pack_context_t pack_ctx;
                 pack_ctx.src    = buffer;
                 pack_ctx.length = frag_length =
                                 ucs_min(length, ucp_ep_config(ep)->max_put_bcopy);
-                packed_len = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
+                packed_len = uct_ep_put_bcopy(ep->uct_eps[UCP_EP_OP_RMA],
+                                              ucp_memcpy_pack, &pack_ctx,
                                               remote_addr, uct_rkey);
                 status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
             }
@@ -85,13 +87,13 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     ucp_ep_t *ep = req->send.ep;
-    uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, req->send.rma.rkey);
+    uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, req->send.rma.rkey, ep->rma_dst_pdi);
 
     for (;;) {
         if (req->send.length <= ep->worker->context->config.ext.bcopy_thresh) {
             /* Should be replaced with bcopy */
             packed_len = ucs_min(req->send.length, ucp_ep_config(ep)->max_put_short);
-            status = uct_ep_put_short(ep->uct_ep,
+            status = uct_ep_put_short(ep->uct_eps[UCP_EP_OP_RMA],
                                       req->send.buffer,
                                       packed_len,
                                       req->send.rma.remote_addr,
@@ -104,7 +106,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
             pack_ctx.src    = req->send.buffer;
             pack_ctx.length =
                 ucs_min(req->send.length, ucp_ep_config(ep)->max_put_bcopy);
-            packed_len = uct_ep_put_bcopy(ep->uct_ep,
+            packed_len = uct_ep_put_bcopy(ep->uct_eps[UCP_EP_OP_RMA],
                                           ucp_memcpy_pack,
                                           &pack_ctx,
                                           req->send.rma.remote_addr,
@@ -141,7 +143,7 @@ void ucp_add_pending_rma(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.rma.rkey = rkey;
     req->send.uct.func = cb;
     req->flags = UCP_REQUEST_FLAG_RELEASED;
-    ucp_ep_add_pending(ep, ep->uct_ep, req, 1);
+    ucp_ep_add_pending(ep, ep->uct_eps[UCP_EP_OP_RMA], req, 1);
 }
 
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
@@ -154,13 +156,13 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
-    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
+    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey, ep->rma_dst_pdi);
 
     for (;;) {
         if (length <= ucp_ep_config(ep)->max_put_short) {
             /* Fast path for a single short message */
-            status = uct_ep_put_short(ep->uct_ep, buffer, length, remote_addr,
-                                      uct_rkey);
+            status = uct_ep_put_short(ep->uct_eps[UCP_EP_OP_RMA], buffer, length,
+                                      remote_addr, uct_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 /* Return on error or success */
                 break;
@@ -181,15 +183,16 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
             if (length <= ucp_ep_config(ep)->bcopy_thresh) {
                 /* TBD: Should be replaced with bcopy */
                 packed_len = ucs_min(length, ucp_ep_config(ep)->max_put_short);
-                status = uct_ep_put_short(ep->uct_ep, buffer, packed_len,
-                                          remote_addr, uct_rkey);
+                status = uct_ep_put_short(ep->uct_eps[UCP_EP_OP_RMA], buffer,
+                                          packed_len, remote_addr, uct_rkey);
             } else {
                 /* TBD: Use z-copy */
                 ucp_memcpy_pack_context_t pack_ctx;
                 pack_ctx.src    = buffer;
                 pack_ctx.length =
                     ucs_min(length, ucp_ep_config(ep)->max_put_bcopy);
-                packed_len = uct_ep_put_bcopy(ep->uct_ep, ucp_memcpy_pack, &pack_ctx,
+                packed_len = uct_ep_put_bcopy(ep->uct_eps[UCP_EP_OP_RMA],
+                                              ucp_memcpy_pack, &pack_ctx,
                                               remote_addr, uct_rkey);
                 status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
             }
@@ -234,7 +237,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
-    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
+    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey, ep->rma_dst_pdi);
 
     comp.count = 1;
 
@@ -244,9 +247,9 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
          * fragment.
          */
         frag_length = ucs_min(ucp_ep_config(ep)->max_get_bcopy, length);
-        status = uct_ep_get_bcopy(ep->uct_ep, (uct_unpack_callback_t)memcpy,
-                                  (void*)buffer, frag_length, remote_addr,
-                                  uct_rkey, &comp);
+        status = uct_ep_get_bcopy(ep->uct_eps[UCP_EP_OP_RMA],
+                                  (uct_unpack_callback_t)memcpy, (void*)buffer,
+                                  frag_length, remote_addr, uct_rkey, &comp);
         if (ucs_likely(status == UCS_OK)) {
             goto posted;
         } else if (status == UCS_INPROGRESS) {
@@ -286,11 +289,11 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
 
     ucp_ep_t *ep = req->send.ep;
     ucp_rkey_h rkey = req->send.rma.rkey;
-    uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
+    uct_rkey_t uct_rkey = UCP_RKEY_LOOKUP(ep, rkey, ep->rma_dst_pdi);
 
     for (;;) {
         frag_length = ucs_min(ucp_ep_config(ep)->max_get_bcopy, req->send.length);
-        status = uct_ep_get_bcopy(ep->uct_ep,
+        status = uct_ep_get_bcopy(ep->uct_eps[UCP_EP_OP_RMA],
                                   (uct_unpack_callback_t)memcpy,
                                   (void*)req->send.buffer,
                                   frag_length,
@@ -326,11 +329,11 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     uct_rkey_t uct_rkey;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
-    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey);
+    uct_rkey = UCP_RKEY_LOOKUP(ep, rkey, ep->rma_dst_pdi);
 
     for (;;) {
         frag_length = ucs_min(ucp_ep_config(ep)->max_get_bcopy, length);
-        status = uct_ep_get_bcopy(ep->uct_ep,
+        status = uct_ep_get_bcopy(ep->uct_eps[UCP_EP_OP_RMA],
                                   (uct_unpack_callback_t)memcpy,
                                   (void*)buffer,
                                   frag_length,
@@ -403,7 +406,8 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep)
     /* TODO all uct endpoints need to be flushed. Currenlty ucp endpoint
      * supports just one uct endpoint. */
     for (;;) {
-        status = uct_ep_flush(ep->uct_ep);
+        // TODO flush AMO as well
+        status = uct_ep_flush(ep->uct_eps[UCP_EP_OP_RMA]);
         if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
             break;
         }

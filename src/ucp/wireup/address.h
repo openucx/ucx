@@ -14,7 +14,7 @@
 /**
  * Address entry.
  */
-typedef struct ucp_address_entry {
+struct ucp_address_entry {
     const uct_device_addr_t    *dev_addr;                /* Points to device address */
     size_t                     dev_addr_len;             /* Device address length */
     char                       tl_name[UCT_TL_NAME_MAX]; /* Transport name */
@@ -25,7 +25,7 @@ typedef struct ucp_address_entry {
         const void             *tl_addr;
     };
     size_t                     tl_addr_len;
-} ucp_address_entry_t;
+};
 
 
 /**

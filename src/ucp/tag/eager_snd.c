@@ -240,7 +240,7 @@ static ucs_status_t ucp_tag_eager_contig_bcopy_multi(uct_pending_req_t *self)
 
 static void ucp_tag_eager_contig_zcopy_req_complete(ucp_request_t *req)
 {
-    ucp_request_send_buffer_dereg(req);
+    ucp_request_send_buffer_dereg(req, UCP_EP_OP_AM);
     ucp_request_complete(req, req->cb.send, UCS_OK);
 }
 
@@ -373,7 +373,7 @@ static ucs_status_t ucp_tag_eager_sync_contig_bcopy_multi(uct_pending_req_t *sel
 
 static inline void ucp_tag_eager_sync_contig_zcopy_req_complete(ucp_request_t *req)
 {
-    ucp_request_send_buffer_dereg(req);
+    ucp_request_send_buffer_dereg(req, UCP_EP_OP_AM);
     ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
 }
 

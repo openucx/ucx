@@ -45,7 +45,8 @@ typedef struct ucp_mem {
 } ucp_mem_t;
 
 
-static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
+static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey,
+                                             ucp_rsc_index_t dst_pd_index)
 {
     unsigned rkey_index;
 
@@ -55,23 +56,23 @@ static inline uct_rkey_t ucp_lookup_uct_rkey(ucp_ep_h ep, ucp_rkey_h rkey)
      * only the less-than indices, and then count them using popcount operation.
      * TODO save the mask in ep->uct, to avoid the shift operation.
      */
-    rkey_index = ucs_count_one_bits(rkey->pd_map & UCS_MASK(ep->dst_pd_index));
+    rkey_index = ucs_count_one_bits(rkey->pd_map & UCS_MASK(dst_pd_index));
     return rkey->uct[rkey_index].rkey;
 }
 
 
-#define UCP_RKEY_LOOKUP(_ep, _rkey) \
+#define UCP_RKEY_LOOKUP(_ep, _rkey, _dst_pd_index) \
     ({ \
         if (ENABLE_PARAMS_CHECK && \
-            !((_rkey)->pd_map & UCS_BIT((_ep)->dst_pd_index))) \
+            !((_rkey)->pd_map & UCS_BIT(_dst_pd_index))) \
         { \
             ucs_fatal("Remote key does not support current transport " \
                        "(remote pd index: %d rkey map: 0x%"PRIx64")", \
-                       (_ep)->dst_pd_index, (_rkey)->pd_map); \
+                       (_dst_pd_index), (_rkey)->pd_map); \
             return UCS_ERR_UNREACHABLE; \
         } \
         \
-        ucp_lookup_uct_rkey(_ep, _rkey); \
+        ucp_lookup_uct_rkey(_ep, _rkey, _dst_pd_index); \
     })
 
 

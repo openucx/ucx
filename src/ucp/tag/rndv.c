@@ -10,6 +10,7 @@
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req)
 {
     /* TODO */
+    ucs_fatal("unimplemented");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 

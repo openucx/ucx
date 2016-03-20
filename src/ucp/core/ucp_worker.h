@@ -34,18 +34,17 @@ typedef struct ucp_worker {
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucp_worker_wakeup_t           wakeup;        /* Wakeup-related context */
 
-#if ENABLE_ASSERT
     int                           inprogress;
-#endif
-
-#if ENABLE_DEBUG_DATA
     char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
-#endif
 
     unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
+    ucs_list_link_t               stub_ep_list;  /* List of stub endpoints to progress */
+
     ucp_ep_t                      **ep_hash;     /* Hash table of all endpoints */
     uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
+    unsigned                      ep_config_max; /* Maximal number of configurations */
+    unsigned                      ep_config_count; /* Current number of configurations */
     ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
@@ -62,14 +61,18 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid);
 
 ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid);
 
+unsigned ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_rsc_index_t *rscs);
+
+void ucp_worker_progress_stub_eps(void *arg);
+
+void ucp_worker_stub_ep_add(ucp_worker_h worker, ucp_stub_ep_t *stub_ep);
+
+void ucp_worker_stub_ep_remove(ucp_worker_h worker, ucp_stub_ep_t *stub_ep);
+
 
 static inline const char* ucp_worker_get_name(ucp_worker_h worker)
 {
-#if ENABLE_DEBUG_DATA
     return worker->name;
-#else
-    return "";
-#endif
 }
 
 static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uuid)
@@ -82,19 +85,19 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
-    return &ep->worker->ep_config[ep->rsc_index];
+    return &ep->worker->ep_config[ep->cfg_index];
 }
 
-static inline ucp_rsc_index_t ucp_ep_pd_index(ucp_ep_h ep)
+static inline ucp_rsc_index_t ucp_ep_pd_index(ucp_ep_h ep, ucp_ep_op_t optype)
 {
     ucp_context_h context = ep->worker->context;
-    return context->tl_rscs[ep->rsc_index].pd_index;
+    return context->tl_rscs[ucp_ep_config(ep)->rscs[optype]].pd_index;
 }
 
-static inline uct_pd_h ucp_ep_pd(ucp_ep_h ep)
+static inline uct_pd_h ucp_ep_pd(ucp_ep_h ep, ucp_ep_op_t optype)
 {
     ucp_context_h context = ep->worker->context;
-    return context->pds[ucp_ep_pd_index(ep)];
+    return context->pds[ucp_ep_pd_index(ep, optype)];
 }
 
 #endif
