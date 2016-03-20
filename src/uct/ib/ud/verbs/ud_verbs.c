@@ -176,6 +176,7 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     }
 
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
+    UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
     ucs_trace_data("TX(iface=%p): AM_BCOPY [%d] skb=%p buf=%p len=%u", iface, id,
@@ -185,6 +186,50 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_ud_leave(&iface->super);
     return length;
+}
+
+static ucs_status_t 
+uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                         unsigned header_length, const void *payload,
+                         size_t length, uct_mem_h memh,
+                         uct_completion_t *comp)
+{
+    uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_ud_verbs_iface_t);
+    uct_ud_send_skb_t *skb;
+    struct ibv_mr *mr = memh;
+    ucs_status_t status;
+
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
+                     iface->super.config.max_inline, "am_zcopy header");
+    UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length, length);
+
+    uct_ud_enter(&iface->super);
+    uct_ud_iface_progress_pending_tx(&iface->super);
+    status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
+    if (status != UCS_OK) {
+        uct_ud_leave(&iface->super);
+        return status;
+    }
+    /* force ACK_REQ because we want to call user completion ASAP */
+    skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
+    memcpy(skb->neth + 1, header, header_length);
+    skb->len = sizeof(uct_ud_neth_t) + header_length;
+           
+    iface->tx.sge[1].lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
+    iface->tx.sge[1].length = length;
+    iface->tx.sge[1].addr   = (uintptr_t)payload;
+    iface->tx.wr_skb.num_sge = 2;
+
+    uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
+    iface->tx.wr_skb.num_sge = 1;
+
+    uct_ud_am_set_zcopy_desc(skb, payload, length, iface->tx.sge[1].lkey, comp);
+    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
+    uct_ud_leave(&iface->super);
+    return UCS_INPROGRESS;
 }
 
 static
@@ -324,6 +369,7 @@ static void uct_ud_verbs_iface_progress(void *arg)
         }
     }
     uct_ud_iface_progress_pending(&iface->super, 0);
+    uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     uct_ud_leave(&iface->super);
 }
 
@@ -437,6 +483,7 @@ uct_iface_ops_t uct_ud_verbs_iface_ops = {
     .ep_put_short          = uct_ud_verbs_ep_put_short,
     .ep_am_short           = uct_ud_verbs_ep_am_short,
     .ep_am_bcopy           = uct_ud_verbs_ep_am_bcopy,
+    .ep_am_zcopy           = uct_ud_verbs_ep_am_zcopy,
 
     .ep_pending_add        = uct_ud_ep_pending_add,
     .ep_pending_purge      = uct_ud_ep_pending_purge,

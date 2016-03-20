@@ -307,7 +307,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     while ((ds > 0) && (i < sizeof(sg_list) / sizeof(sg_list[0]))) {
         ds -= uct_ib_mlx5_parse_dseg(&seg, qstart, qend, sg_list, &i, &is_inline);
         if (is_inline) {
-            inline_bitmap |= UCS_BIT(i);
+            inline_bitmap |= UCS_BIT(i-1);
         }
         s += strlen(s);
     }

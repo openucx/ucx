@@ -24,6 +24,7 @@ static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface);
 static void uct_ud_iface_timer(void *arg);
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
+static void uct_ud_iface_free_zcopy_comps(uct_ud_iface_t *iface);
 
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
 {
@@ -331,6 +332,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                     unsigned rx_priv_len, uct_ud_iface_config_t *config)
 {
     ucs_status_t status;
+    int mtu;
 
     ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%u rx_priv_len=%u",
                    dev_name, self, ops, worker, rx_headroom, rx_priv_len);
@@ -372,8 +374,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err_qp;
     }
 
+    mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&self->super)->active_mtu);
     status = uct_iface_mpool_init(&self->super.super, &self->tx.mp,
-                                sizeof(uct_ud_send_skb_t) + 4096 /* TODO mtu */,
+                                sizeof(uct_ud_send_skb_t) + 
+                                ucs_max(sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline, mtu),
                                 sizeof(uct_ud_send_skb_t),
                                 UCS_SYS_CACHE_LINE_SIZE,
                                 &config->super.tx.mp, self->config.tx_qp_len,
@@ -384,6 +388,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     self->tx.skb = ucs_mpool_get(&self->tx.mp);
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
     ucs_queue_head_init(&self->tx.res_skbs);
+    ucs_queue_head_init(&self->tx.zcopy_comp_q);
 
     ucs_arbiter_init(&self->tx.pending_q);
     self->tx.pending_q_len = 0;
@@ -413,6 +418,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_cep_cleanup(self);
     uct_ud_iface_free_res_skbs(self);
+    uct_ud_iface_free_zcopy_comps(self);
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
@@ -436,13 +442,15 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    int mtu = 4096; /* TODO: mtu from port header */
+    int mtu; 
 
+    mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
     uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
                        iface_attr);
 
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY | 
+                                        UCT_IFACE_FLAG_AM_ZCOPY | 
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                         UCT_IFACE_FLAG_PENDING |
@@ -451,7 +459,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_zcopy      = 0;
+    iface_attr->cap.am.max_zcopy      = mtu - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_hdr        = iface->config.max_inline - sizeof(uct_ud_neth_t);
 
     iface_attr->cap.put.max_short     = iface->config.max_inline - sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
     iface_attr->cap.put.max_bcopy     = 0;
@@ -565,6 +574,34 @@ static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface)
         ucs_mpool_put(skb);
     }
 }
+
+void uct_ud_iface_dispatch_zcopy_comps_do(uct_ud_iface_t *iface)
+{
+    uct_ud_send_skb_t *skb;
+    uct_ud_zcopy_desc_t *zdesc;
+    uct_ud_ep_t *ep;
+
+    do {
+        skb = ucs_queue_pull_elem_non_empty(&iface->tx.zcopy_comp_q, uct_ud_send_skb_t, queue);   
+        ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
+        zdesc = uct_ud_zcopy_desc(skb);
+        uct_invoke_completion(zdesc->comp);
+        ep = (uct_ud_ep_t *)zdesc->payload;
+        ep->flags &= ~UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS;
+        ucs_mpool_put(skb);
+    } while (!ucs_queue_is_empty(&iface->tx.zcopy_comp_q));
+}
+
+static void uct_ud_iface_free_zcopy_comps(uct_ud_iface_t *iface)
+{
+    uct_ud_send_skb_t *skb;
+
+    while (!ucs_queue_is_empty(&iface->tx.zcopy_comp_q)) {
+        skb = ucs_queue_pull_elem_non_empty(&iface->tx.zcopy_comp_q, uct_ud_send_skb_t, queue);
+        ucs_mpool_put(skb);
+    }
+}
+
 
 ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
 {

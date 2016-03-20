@@ -124,7 +124,8 @@ typedef struct uct_ud_neth {
 } UCS_S_PACKED uct_ud_neth_t;
 
 enum {
-    UCT_UD_SEND_SKB_FLAG_ACK_REQ = UCS_BIT(1)
+    UCT_UD_SEND_SKB_FLAG_ACK_REQ = UCS_BIT(1),
+    UCT_UD_SEND_SKB_FLAG_ZCOPY   = UCS_BIT(2),
 };
 
 typedef struct uct_ud_send_skb {
@@ -134,6 +135,27 @@ typedef struct uct_ud_send_skb {
     uint16_t                flags;
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED uct_ud_send_skb_t;
+
+typedef struct uct_ud_zcopy_desc {
+    uint32_t           lkey;
+    uint32_t           len;
+    const void        *payload;
+    uct_completion_t  *comp;
+} uct_ud_zcopy_desc_t;
+
+/* Zcopy send skb layout:
+ * - zcopy skb flag is set
+ * - skb->len = sizeof(neth) + zcopy_header_len
+ * - uct_ud_zcopy_desc_t has user provider data buffer, lkey, len
+ *   and completion
+ * - data layout: 
+ *    uct_ud_send_skb_t | neth + zcopy_desc | uct_ud_zcopy_desc_t
+ */
+
+static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
+{
+    return (uct_ud_zcopy_desc_t *)((char *)skb->neth + skb->len);
+}
 
 typedef struct uct_ud_send_skb_inl {
     uct_ud_send_skb_t  super;

@@ -65,6 +65,19 @@ static inline ucs_time_t uct_ud_fast_tick()
     return ucs_time_from_usec(1024);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_ud_am_set_zcopy_desc(uct_ud_send_skb_t *skb, const void *payload, size_t length, 
+                         uint32_t lkey, uct_completion_t *comp)
+{
+    uct_ud_zcopy_desc_t *zdesc;
+
+    skb->flags    |= UCT_UD_SEND_SKB_FLAG_ZCOPY;
+    zdesc          = uct_ud_zcopy_desc(skb);
+    zdesc->comp    = comp;
+    zdesc->lkey    = lkey;
+    zdesc->payload = payload;
+    zdesc->len     = length;
+}
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,

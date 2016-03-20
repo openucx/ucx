@@ -75,6 +75,7 @@ struct uct_ud_iface {
         ucs_arbiter_t          pending_q;
         int                    pending_q_len;
         int                    in_pending;
+        ucs_queue_head_t       zcopy_comp_q;
     } tx;
     struct {
         unsigned             tx_qp_len;
@@ -314,5 +315,35 @@ uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
     return uct_ud_iface_dispatch_pending_rx_do(iface);
 }
 
+void uct_ud_iface_dispatch_zcopy_comps_do(uct_ud_iface_t *iface);
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
+{
+    if (ucs_likely(ucs_queue_is_empty(&iface->tx.zcopy_comp_q))) {
+        return;
+    }
+    uct_ud_iface_dispatch_zcopy_comps_do(iface);
+}
+
+#if ENABLE_PARAMS_CHECK
+#define UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, msg) \
+     do { \
+         int mtu; \
+         mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super)->active_mtu); \
+         UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + payload_len + header_len, \
+                          mtu, msg); \
+     } while(0);
+
+#define UCT_UD_CHECK_BCOPY_LENGTH(iface, len) \
+    UCT_UD_CHECK_LENGTH(iface, 0, len, "am_bcopy length") 
+
+#define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len) \
+    UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, "am_zcopy payload") 
+
+#else
+#define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len)
+#define UCT_UD_CHECK_BCOPY_LENGTH(iface, len)
 #endif
 
+#endif
