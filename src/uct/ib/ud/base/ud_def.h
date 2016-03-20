@@ -136,25 +136,25 @@ typedef struct uct_ud_send_skb {
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED uct_ud_send_skb_t;
 
-typedef struct uct_ud_zcopy_hdr {
+typedef struct uct_ud_zcopy_desc {
     uint32_t           lkey;
     uint32_t           len;
     const void        *payload;
     uct_completion_t  *comp;
-} uct_ud_zcopy_hdr_t;
+} uct_ud_zcopy_desc_t;
 
 /* Zcopy send skb layout:
  * - zcopy skb flag is set
  * - skb->len = sizeof(neth) + zcopy_header_len
- * - uct_ud_zcopy_hdr_t has user provider data buffer, lkey, len
+ * - uct_ud_zcopy_desc_t has user provider data buffer, lkey, len
  *   and completion
  * - data layout: 
- *    uct_ud_send_skb_t | neth + zcopy_hdr | uct_ud_zcopy_hdr_t
+ *    uct_ud_send_skb_t | neth + zcopy_desc | uct_ud_zcopy_desc_t
  */
 
-static inline uct_ud_zcopy_hdr_t *uct_ud_zhdr(uct_ud_send_skb_t *skb)
+static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
 {
-    return (uct_ud_zcopy_hdr_t *)((char *)skb->neth + skb->len);
+    return (uct_ud_zcopy_desc_t *)((char *)skb->neth + skb->len);
 }
 
 typedef struct uct_ud_send_skb_inl {

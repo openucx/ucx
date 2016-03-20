@@ -176,6 +176,7 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     }
 
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
+    UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
     ucs_trace_data("TX(iface=%p): AM_BCOPY [%d] skb=%p buf=%p len=%u", iface, id,
@@ -202,6 +203,8 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
                      iface->super.config.max_inline, "am_zcopy header");
+    UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length, length);
+
     uct_ud_enter(&iface->super);
     uct_ud_iface_progress_pending_tx(&iface->super);
     status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
@@ -222,7 +225,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
     iface->tx.wr_skb.num_sge = 1;
 
-    uct_ud_am_set_zhdr(skb, payload, length, iface->tx.sge[1].lkey, comp);
+    uct_ud_am_set_zcopy_desc(skb, payload, length, iface->tx.sge[1].lkey, comp);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
     uct_ud_leave(&iface->super);

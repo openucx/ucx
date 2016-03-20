@@ -326,5 +326,24 @@ uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
     uct_ud_iface_dispatch_zcopy_comps_do(iface);
 }
 
+#if ENABLE_PARAMS_CHECK
+#define UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, msg) \
+     do { \
+         int mtu; \
+         mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super)->active_mtu); \
+         UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + payload_len + header_len, \
+                          mtu, msg); \
+     } while(0);
+
+#define UCT_UD_CHECK_BCOPY_LENGTH(iface, len) \
+    UCT_UD_CHECK_LENGTH(iface, 0, len, "am_bcopy length") 
+
+#define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len) \
+    UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, "am_zcopy payload") 
+
+#else
+#define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len)
+#define UCT_UD_CHECK_BCOPY_LENGTH(iface, len)
 #endif
 
+#endif

@@ -332,17 +332,17 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                UCT_UD_PSN_COMPARE(skb->neth[0].psn, <=, ack_psn)) {
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY)) {
-            uct_ud_zcopy_hdr_t *zhdr;
+            uct_ud_zcopy_desc_t *zdesc;
 
-            zhdr = uct_ud_zhdr(skb);
-            if (zhdr->comp) {
+            zdesc = uct_ud_zcopy_desc(skb);
+            if (zdesc->comp) {
                 if (ucs_unlikely(is_async)) {
                     ucs_queue_push(&iface->tx.zcopy_comp_q, &skb->queue);
-                    ep->tx.zcopy_comps = 1;
-                    zhdr->payload = ep;
+                    ep->flags |= UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS;
+                    zdesc->payload = ep;
                     continue;
                 }
-                uct_invoke_completion(zhdr->comp);
+                uct_invoke_completion(zdesc->comp);
             }
             skb->flags = 0;
         }
@@ -578,7 +578,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
          * This may be a problem.
          */
         if (ucs_arbiter_group_is_empty(&ep->tx.pending.group)) {
-            if (ucs_unlikely(ep->tx.zcopy_comps)) {
+            if (ucs_unlikely(ep->flags & UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS)) {
                 return UCS_INPROGRESS;
             }
             return UCS_OK;
@@ -672,11 +672,11 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     skb->neth->ack_psn = ep->rx.acked_psn;
     skb->len           = sent_skb->len;
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
-        uct_ud_zcopy_hdr_t *zhdr;
+        uct_ud_zcopy_desc_t *zdesc;
 
-        zhdr = uct_ud_zhdr(sent_skb);
-        memcpy((char *)skb->neth + skb->len, zhdr->payload, zhdr->len);
-        skb->len += zhdr->len;
+        zdesc = uct_ud_zcopy_desc(sent_skb);
+        memcpy((char *)skb->neth + skb->len, zdesc->payload, zdesc->len);
+        skb->len += zdesc->len;
     }
     /* force ack request on every Nth packet or on first packet in resend window */
     if ((skb->neth->psn % UCT_UD_RESENDS_PER_ACK) == 0 || 

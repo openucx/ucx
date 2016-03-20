@@ -217,6 +217,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     }
 
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
+    UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
     uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
@@ -246,6 +247,8 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
                      iface->super.config.max_inline, "am_zcopy header");
+    UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length, length);
+
     uct_ud_enter(&iface->super);
     uct_ud_iface_progress_pending_tx(&iface->super);
 
@@ -286,7 +289,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     skb->len = sizeof(*neth) + header_length;
     memcpy(skb->neth, neth, sizeof(*neth));
     memcpy(skb->neth + 1, header, header_length);
-    uct_ud_am_set_zhdr(skb, payload, length, lkey, comp);
+    uct_ud_am_set_zcopy_desc(skb, payload, length, lkey, comp);
 
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);

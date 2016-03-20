@@ -184,7 +184,13 @@ typedef struct uct_ud_ep_pending_op {
 } uct_ud_ep_pending_op_t;
 
 enum {
-    UCT_UD_EP_STAT_TODO /* TODO: ud specific stats */
+    UCT_UD_EP_STAT_TODO 
+};
+
+/* TODO: optimize endpoint memory footprint */
+enum {
+    UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS = UCS_BIT(0), /* set if there are zcopy completions that
+                                                    * were picked by async thread and queued */
 };
 
 struct uct_ud_ep {
@@ -198,8 +204,6 @@ struct uct_ud_ep {
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
-         int                    zcopy_comps;  /* true if there are zcopy completions that
-                                               * were picked by async thread and queued */
          UCS_STATS_NODE_DECLARE(stats);
          UCT_UD_EP_HOOK_DECLARE(tx_hook);
     } tx;
@@ -219,9 +223,10 @@ struct uct_ud_ep {
         UCS_STATS_NODE_DECLARE(stats);
         UCT_UD_EP_HOOK_DECLARE(rx_hook);
     } rx;
-    ucs_list_link_t          cep_list;
-    uint32_t                 conn_id;      /* connection id. assigned in connect_to_iface() */
-    ucs_wtimer_t slow_timer;
+    ucs_list_link_t  cep_list;
+    uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
+    ucs_wtimer_t     slow_timer;
+    uint8_t          flags;
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
 };
