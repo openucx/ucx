@@ -36,7 +36,7 @@ UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_pd_h, uct_worker_h, const char *, uct_if
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface);
 ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep);
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
-int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_iface_addr_t *addr);
+int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *addr);
 void uct_ugni_progress(void *arg);
 
 typedef struct uct_ugni_base_desc {

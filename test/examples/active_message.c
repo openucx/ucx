@@ -203,19 +203,22 @@ int main(int argc, char **argv)
     status = uct_iface_get_device_address(if_info.iface, own_dev);
     CHKERR_JUMP(UCS_OK != status, "get device address", out_free_if_addrs);
 
-    /* Get interface address */
-    status = uct_iface_get_address(if_info.iface, own_iface);
-    CHKERR_JUMP(UCS_OK != status, "get interface address", out_free_if_addrs);
-
     MPI_Sendrecv(own_dev, if_info.attr.device_addr_len, MPI_BYTE, partner, 0,
                  peer_dev, if_info.attr.device_addr_len, MPI_BYTE, partner,0,
                  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    MPI_Sendrecv(own_iface, if_info.attr.iface_addr_len, MPI_BYTE, partner, 0,
-                 peer_iface, if_info.attr.iface_addr_len, MPI_BYTE, partner,0,
-                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    status = uct_iface_is_reachable(if_info.iface, peer_iface);
+    status = uct_iface_is_reachable(if_info.iface, peer_dev);
     CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
+
+    /* Get interface address */
+    if (if_info.attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        status = uct_iface_get_address(if_info.iface, own_iface);
+        CHKERR_JUMP(UCS_OK != status, "get interface address", out_free_if_addrs);
+
+        MPI_Sendrecv(own_iface, if_info.attr.iface_addr_len, MPI_BYTE, partner, 0,
+                     peer_iface, if_info.attr.iface_addr_len, MPI_BYTE, partner,0,
+                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
 
     /* Again, expect that ep addr len is the same on both peers */
     own_ep = (uct_ep_addr_t*)calloc(2, if_info.attr.ep_addr_len);

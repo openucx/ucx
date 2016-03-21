@@ -173,10 +173,7 @@ ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *ad
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 
-ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
-                                             uct_iface_addr_t *addr);
-
-int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_iface_addr_t *addr);
+int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *addr);
 
 /*
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)

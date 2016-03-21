@@ -72,6 +72,7 @@ ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
     status = uct_ep_pending_add(uct_ep, req);
     if (status != UCS_ERR_BUSY) {
         ucs_assert(status == UCS_OK);
+        ucs_trace_data("added pending uct request %p to uct_ep %p", req, uct_ep);
         return UCS_OK; /* Added to pending */
     }
 
@@ -89,9 +90,6 @@ void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
 {
     ucs_status_t status;
 
-    ucs_trace_data("add pending request %p uct %p to uct_ep %p", req,
-                   &req->send.uct, uct_ep);
-
     req->send.ep = ep;
     status = ucp_ep_add_pending_uct(ep, uct_ep, &req->send.uct);
     while (status != UCS_OK) {
@@ -102,42 +100,54 @@ void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
     }
 }
 
-ucs_status_t ucp_ep_create(ucp_worker_h worker, ucp_address_t *address,
+ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
                            ucp_ep_h *ep_p)
 {
-    uint64_t dest_uuid = ucp_address_uuid(address);
     char peer_name[UCP_WORKER_NAME_MAX];
     ucs_status_t status;
+    uint64_t dest_uuid;
+    unsigned address_count;
+    ucp_address_entry_t *address_list;
     ucp_ep_h ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ep = ucp_worker_ep_find(worker, dest_uuid);
-    if (ep != NULL) {
-        ucs_debug("returning existing ep %p which is already connected to %"PRIx64,
-                  ep, ep->dest_uuid);
+    status = ucp_address_unpack(address, &dest_uuid, peer_name, sizeof(peer_name),
+                                &address_count, &address_list);
+    if (status != UCS_OK) {
+        ucs_error("failed to unpack remote address: %s", ucs_status_string(status));
         goto out;
     }
 
-    ucp_address_peer_name(address, peer_name);
+    ep = ucp_worker_ep_find(worker, dest_uuid);
+    if (ep != NULL) {
+        /* TODO handle a case where the existing endpoint is incomplete */
+        ucs_assert(ep->dst_pd_index != UCP_NULL_RESOURCE);
+        ucs_debug("returning existing ep %p which is already connected to %"PRIx64,
+                  ep, ep->dest_uuid);
+        *ep_p = ep;
+        status = UCS_OK;
+        goto out_free_address;
+    }
+
     status = ucp_ep_new(worker, dest_uuid, peer_name, " from api call", &ep);
     if (status != UCS_OK) {
-        goto err;
+        goto out_free_address;
     }
 
-    status = ucp_wireup_start(ep, address);
+    status = ucp_wireup_start(ep, address_list, address_count);
     if (status != UCS_OK) {
-        goto err_free;
+        goto out_delete_ep;
     }
 
-out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
     *ep_p = ep;
-    return UCS_OK;
+    goto out_free_address;
 
-err_free:
+out_delete_ep:
     ucp_ep_delete(ep);
-err:
+out_free_address:
+    ucs_free(address_list);
+out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }

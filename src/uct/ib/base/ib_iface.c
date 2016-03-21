@@ -210,33 +210,11 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_get_subnet_address(uct_iface_h tl_iface,
-                                             uct_iface_addr_t *addr)
+int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    uct_sockaddr_ib_subnet_t *subn_addr = (uct_sockaddr_ib_subnet_t*)addr;
-
-    subn_addr->sib_family    = UCT_AF_INFINIBAND_SUBNET;
-    subn_addr->subnet_prefix = iface->gid.global.subnet_prefix;
-    return UCS_OK;
-}
-
-int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_iface_addr_t *addr)
-{
-    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    const struct sockaddr *sa = (const void*)addr;
-
-    if (sa->sa_family == UCT_AF_INFINIBAND) {
-        return iface->gid.global.subnet_prefix ==
-                        ((const uct_sockaddr_ib_t*)addr)->subnet_prefix;
-    }
-
-    if (sa->sa_family == UCT_AF_INFINIBAND_SUBNET) {
-        return iface->gid.global.subnet_prefix ==
-                        ((const uct_sockaddr_ib_subnet_t*)addr)->subnet_prefix;
-    }
-
-    return 0;
+    const uct_ib_address_t *ib_addr = (const void*)addr;
+    return ib_addr->subnet_prefix == iface->gid.global.subnet_prefix;
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,

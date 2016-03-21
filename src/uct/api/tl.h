@@ -57,7 +57,7 @@ typedef struct uct_iface_ops {
     ucs_status_t (*iface_get_address)(uct_iface_h iface, uct_iface_addr_t *addr);
 
     int          (*iface_is_reachable)(uct_iface_h iface,
-                                       const uct_iface_addr_t *addr);
+                                       const uct_device_addr_t *addr);
 
     /* Put */
 

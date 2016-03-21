@@ -24,18 +24,8 @@ static ucs_config_field_t uct_cma_iface_config_table[] = {
 static ucs_status_t uct_cma_iface_get_address(uct_iface_t *tl_iface,
                                               uct_iface_addr_t *addr)
 {
-    uct_sockaddr_process_t *iface_addr = (void*)addr;
-    iface_addr->sp_family = UCT_AF_PROCESS;
-    iface_addr->node_guid = ucs_machine_guid();
-    iface_addr->id        = getpid();
+    *(pid_t*)addr = getpid();
     return UCS_OK;
-}
-
-static int uct_cma_iface_is_reachable(uct_iface_t *tl_iface,
-                                      const uct_iface_addr_t *addr)
-{
-    return (((uct_sockaddr_process_t*)addr)->sp_family == UCT_AF_PROCESS) &&
-           (((uct_sockaddr_process_t*)addr)->node_guid == ucs_machine_guid());
 }
 
 static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
@@ -46,7 +36,7 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
     /* default values for all shared memory transports */
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
-    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
+    iface_attr->iface_addr_len         = sizeof(pid_t);
     iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_GET_ZCOPY |
@@ -66,7 +56,7 @@ static uct_iface_ops_t uct_cma_iface_ops = {
     .iface_query         = uct_cma_iface_query,
     .iface_get_address   = uct_cma_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable  = uct_cma_iface_is_reachable,
+    .iface_is_reachable  = uct_sm_iface_is_reachable,
     .ep_put_zcopy        = uct_cma_ep_put_zcopy,
     .ep_get_zcopy        = uct_cma_ep_get_zcopy,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_cma_ep_t),

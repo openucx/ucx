@@ -39,37 +39,15 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
     {NULL}
 };
 
-static uint64_t uct_mm_iface_node_guid(uct_mm_iface_t *iface)
-{
-    /* The address should be different for different mm 'devices' so that
-     * they won't seem reachable one to another. Their 'name' will create the
-     * uniqueness in the address */
-    return ucs_machine_guid() *
-           ucs_string_to_id(iface->super.pd->component->name);
-}
-
 static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
                                              uct_iface_addr_t *addr)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
-    uct_sockaddr_process_t *iface_addr = (void*)addr;
+    uct_mm_iface_addr_t *iface_addr = (void*)addr;
 
-    iface_addr->sp_family = UCT_AF_PROCESS;
-    iface_addr->node_guid = uct_mm_iface_node_guid(iface);
-    iface_addr->id        = iface->fifo_mm_id;
-    iface_addr->vaddr     = (uintptr_t)iface->shared_mem;
+    iface_addr->id    = iface->fifo_mm_id;
+    iface_addr->vaddr = (uintptr_t)iface->shared_mem;
     return UCS_OK;
-}
-
-static int uct_mm_iface_is_reachable(uct_iface_t *tl_iface,
-                                     const uct_iface_addr_t *addr)
-{
-    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
-    uint64_t my_guid = uct_mm_iface_node_guid(iface);
-    const uct_sockaddr_process_t *mm_addr = (const void*)addr;
-
-    return (mm_addr->sp_family == UCT_AF_PROCESS) &&
-           (mm_addr->node_guid == my_guid);
 }
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
@@ -103,7 +81,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                          sizeof(uct_mm_fifo_element_t);
     iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
     iface_attr->cap.am.max_zcopy       = 0;
-    iface_attr->iface_addr_len         = sizeof(uct_sockaddr_process_t);
+    iface_attr->iface_addr_len         = sizeof(uct_mm_iface_addr_t);
     iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT        |
@@ -136,7 +114,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_query         = uct_mm_iface_query,
     .iface_get_address   = uct_mm_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
-    .iface_is_reachable  = uct_mm_iface_is_reachable,
+    .iface_is_reachable  = uct_sm_iface_is_reachable,
     .iface_release_am_desc = uct_mm_iface_release_am_desc,
     .iface_flush         = uct_mm_iface_flush,
     .ep_put_short        = uct_mm_ep_put_short,
