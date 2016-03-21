@@ -18,6 +18,7 @@ ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n){
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
     ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*) n->priv);
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
+    ep->arb_size++;
 
     return UCS_OK;
 }
@@ -25,15 +26,19 @@ ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n){
 ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
                                                     ucs_arbiter_elem_t *elem,
                                                     void *arg){
+    uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t rc;
 
+    ep->arb_sched = 1;
     rc = req->func(req);
+    ep->arb_sched = 0;
     ucs_trace_data("progress pending request %p returned %s", req,
                    ucs_status_string(rc));
 
 
     if (UCS_OK == rc) {
+        ep->arb_size--;
         /* sent successfully. remove from the arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (UCS_INPROGRESS == rc) {
@@ -48,10 +53,16 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
 static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
                                                             ucs_arbiter_elem_t *elem,
                                                             void *arg){
+    uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_pending_callback_t cb = arg;
 
-    cb(req);
+    if (NULL != cb) {
+        cb(req);
+    }
+
+    ep->arb_size--;
+   
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
@@ -90,6 +101,8 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
     ucs_status_t rc = UCS_OK;
     gni_return_t ugni_rc;
+    self->arb_size = 0;
+    self->arb_sched = 0;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 

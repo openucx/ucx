@@ -22,6 +22,8 @@ typedef struct uct_ugni_ep {
   unsigned          outstanding;
   uint32_t          hash_key;
   ucs_arbiter_group_t arb_group;
+  uint32_t arb_size;
+  uint32_t arb_sched;
   struct uct_ugni_ep *next;
 } uct_ugni_ep_t;
 
