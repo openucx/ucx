@@ -9,6 +9,7 @@
 #include "rc_iface.h"
 
 #include <uct/ib/base/ib_verbs.h>
+#include <ucs/debug/instrument.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
@@ -201,6 +202,7 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
         uct_invoke_completion(desc->super.user_comp);
     }
     ucs_mpool_put(desc);
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op)
@@ -210,11 +212,13 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op)
     VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
     desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
     ucs_mpool_put(desc);
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
 void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
 {
     uct_invoke_completion(op->user_comp);
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
 static int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
@@ -316,6 +320,7 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
         \
         uct_invoke_completion(desc->super.user_comp); \
         ucs_mpool_put(desc); \
+        UCT_IB_INSTRUMENT_RECORD_SEND_OP(op); \
   }
 
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 0);

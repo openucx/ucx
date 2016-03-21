@@ -51,6 +51,9 @@ typedef struct {
     /* File name to dump instrumentation records to */
     char                     *instrument_file;
 
+    /* Types of instrumentation to be recorded for this run */
+    unsigned                 instrument_types;
+
     /* Limit for instrumentation data size */
     size_t                   instrument_max_size;
 

@@ -10,6 +10,7 @@
 #include "rc_def.h"
 
 #include <uct/base/uct_iface.h>
+#include <uct/ib/base/ib_log.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/queue.h>

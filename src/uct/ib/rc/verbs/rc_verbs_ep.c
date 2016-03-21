@@ -10,7 +10,6 @@
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
 
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_posted(uct_rc_verbs_ep_t* ep, int signaled)
 {
@@ -35,6 +34,8 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
 
     uct_ib_log_post_send(&iface->super.super, ep->super.qp, wr,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+
+    UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_rc_verbs_ep_post_send", wr);
 
     ret = ibv_post_send(ep->super.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -63,6 +64,8 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
 
     uct_ib_log_exp_post_send(&iface->super.super, ep->super.qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+
+    UCT_IB_INSTRUMENT_RECORD_SEND_EXP_WR_LEN("uct_rc_verbs_exp_post_send", wr);
 
     ret = ibv_exp_post_send(ep->super.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -426,6 +429,7 @@ static void uct_rc_verbs_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op)
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
     uct_invoke_completion(desc->super.user_comp);
     ucs_mpool_put(desc);
+    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
