@@ -419,6 +419,7 @@ static void uct_ud_mlx5_iface_progress(void *arg)
     ucs_status_t status;
 
     uct_ud_enter(&iface->super);
+    uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (ucs_likely(status == UCS_OK)) {
         int count = 0;
@@ -429,7 +430,6 @@ static void uct_ud_mlx5_iface_progress(void *arg)
     }
     uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 0);
-    uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     uct_ud_leave(&iface->super);
 }
 

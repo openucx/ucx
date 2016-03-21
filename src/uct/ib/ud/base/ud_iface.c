@@ -588,6 +588,7 @@ void uct_ud_iface_dispatch_zcopy_comps_do(uct_ud_iface_t *iface)
         uct_invoke_completion(zdesc->comp);
         ep = (uct_ud_ep_t *)zdesc->payload;
         ep->flags &= ~UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS;
+        skb->flags = 0;
         ucs_mpool_put(skb);
     } while (!ucs_queue_is_empty(&iface->tx.zcopy_comp_q));
 }
