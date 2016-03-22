@@ -19,7 +19,7 @@ typedef struct uct_sockaddr_smsg_ugni {
     uct_sockaddr_ugni_t super;
     uint64_t ep_hash;
     gni_smsg_attr_t smsg_attr;
-} uct_sockaddr_smsg_ugni_t;
+} UCS_S_PACKED uct_sockaddr_smsg_ugni_t;
 
 typedef struct uct_ugni_mbox_handle {
     gni_mem_handle_t gni_mem;
