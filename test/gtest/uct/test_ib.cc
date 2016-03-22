@@ -5,6 +5,7 @@
 */
 
 extern "C" {
+#include <poll.h>
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 }

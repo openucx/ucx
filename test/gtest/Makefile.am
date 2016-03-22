@@ -72,6 +72,7 @@ gtest_SOURCES = \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
 	uct/test_stats.cc \
+	uct/test_wakeup.cc \
 	\
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_memheap.cc \
@@ -85,6 +86,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag.cc \
 	ucp/test_ucp_version.cc \
 	ucp/test_ucp_wireup.cc \
+	ucp/test_ucp_wakeup.cc \
 	ucp/ucp_test.cc \
 	\
 	ucs/test_arbiter.cc \
