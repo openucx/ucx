@@ -4,9 +4,6 @@ rc=0
 
 WORKSPACE=${WORKSPACE:=$PWD}
 
-# Load newer doxygen 
-module load tools/doxygen-1.8.11
-
 if [ -z "$BUILD_NUMBER" ]; then
     echo Running interactive
     BUILD_NUMBER=1
@@ -70,6 +67,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         AFFINITY=""
         TIMEOUT=""
     fi
+
+    # Load newer doxygen 
+    module load tools/doxygen-1.8.11
 
     echo "Build gtest"
     module load hpcx-gcc
