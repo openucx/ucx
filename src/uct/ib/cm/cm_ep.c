@@ -29,7 +29,8 @@ static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface,
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
-    self->dest_addr  = *(const uct_sockaddr_ib_t*)iface_addr;
+    self->dest_addr       = *(const uct_ib_address_t*)dev_addr;
+    self->dest_service_id = *(const uint32_t*)iface_addr;
     return UCS_OK;
 }
 
@@ -49,8 +50,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
 {
     uct_cm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_cm_iface_t);
 
-    path->dgid.global.subnet_prefix = ep->dest_addr.subnet_prefix;
-    path->dgid.global.interface_id  = ep->dest_addr.guid;
+    path->dgid                      = ep->dest_addr.gid;
     path->sgid                      = iface->super.gid;
     path->dlid                      = htons(ep->dest_addr.lid);
     path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
@@ -136,7 +136,7 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     /* Fill SIDR request */
     memset(&req, 0, sizeof req);
     req.path             = &path;
-    req.service_id       = ep->dest_addr.id;
+    req.service_id       = ep->dest_service_id;
     req.timeout_ms       = iface->config.timeout_ms;
     req.private_data     = hdr;
     req.private_data_len = total_len;

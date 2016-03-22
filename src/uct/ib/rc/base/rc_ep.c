@@ -92,11 +92,11 @@ UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
 ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
-    uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)addr;
+    ucp_rc_ep_address_t *rc_addr = (ucp_rc_ep_address_t*)addr;
 
-    uct_ib_iface_get_address(&iface->super.super.super, (uct_iface_addr_t*)ib_addr);
-    ib_addr->qp_num = ep->qp->qp_num;
+    rc_addr->qp_num[0] = (ep->qp->qp_num >> 0)  & 0xFF;
+    rc_addr->qp_num[1] = (ep->qp->qp_num >> 8)  & 0xFF;
+    rc_addr->qp_num[2] = (ep->qp->qp_num >> 16) & 0xFF;
     return UCS_OK;
 }
 
@@ -105,7 +105,8 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
-    const uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)ep_addr;
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    const ucp_rc_ep_address_t *rc_addr = (const ucp_rc_ep_address_t*)ep_addr;
     struct ibv_qp_attr qp_attr;
     int ret;
 
@@ -136,7 +137,9 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     qp_attr.ah_attr.static_rate   = 0;
     qp_attr.ah_attr.is_global     = 0; /* TODO RoCE */
     qp_attr.ah_attr.port_num      = iface->super.port_num;
-    qp_attr.dest_qp_num           = ib_addr->qp_num;
+    qp_attr.dest_qp_num           = rc_addr->qp_num[0] |
+                                    ((uint32_t)rc_addr->qp_num[1] << 8) |
+                                    ((uint32_t)rc_addr->qp_num[2] << 16);
     qp_attr.rq_psn                = 0;
     qp_attr.path_mtu              = iface->config.path_mtu;
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;

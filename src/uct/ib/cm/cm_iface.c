@@ -330,7 +330,7 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
                   UINT8_MAX);
 
     iface_attr->cap.am.max_bcopy      = mtu;
-    iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
+    iface_attr->iface_addr_len        = sizeof(uint32_t);
     iface_attr->ep_addr_len           = 0;
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_AM_DUP |
@@ -341,13 +341,10 @@ static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
 }
 
 static ucs_status_t uct_cm_iface_get_address(uct_iface_h tl_iface,
-                                             uct_iface_addr_t *addr)
+                                             uct_iface_addr_t *iface_addr)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
-    uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t *)addr;
-
-    uct_ib_iface_get_address(&iface->super.super.super, addr);
-    ib_addr->id = iface->service_id;
+    *(uint32_t*)iface_addr = iface->service_id;
     return UCS_OK;
 }
 

@@ -51,7 +51,8 @@ typedef struct uct_cm_iface {
  */
 typedef struct uct_cm_ep {
     uct_base_ep_t          super;
-    uct_sockaddr_ib_t      dest_addr;
+    uct_ib_address_t       dest_addr;
+    uint32_t               dest_service_id;
 } uct_cm_ep_t;
 
 
