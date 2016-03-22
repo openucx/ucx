@@ -27,21 +27,22 @@ static ucs_config_field_t uct_ugni_smsg_iface_config_table[] = {
     {NULL}
 };
 
-static void progress_local_cq(uct_ugni_smsg_iface_t *iface){
+static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
     gni_return_t ugni_rc;
     gni_cq_entry_t event_data;
     uct_ugni_smsg_desc_t message_data;
     uct_ugni_smsg_desc_t *message_pointer;
 
     ugni_rc = GNI_CqGetEvent(iface->super.local_cq, &event_data);
+
     if(GNI_RC_NOT_DONE == ugni_rc){
-        return;
+        return UCS_OK;
     }
 
     if((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)){
         /* TODO: handle overruns */
         ucs_error("Error posting data. CQ overrun = %d", (int)GNI_CQ_OVERRUN(event_data));
-        return;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     message_data.msg_id = GNI_CQ_GET_MSG_ID(event_data);
@@ -50,6 +51,7 @@ static void progress_local_cq(uct_ugni_smsg_iface_t *iface){
     iface->super.outstanding--;
     sglib_hashed_uct_ugni_smsg_desc_t_delete(iface->smsg_list,message_pointer);
     ucs_mpool_put(message_pointer);
+    return UCS_INPROGRESS;
 }
 
 static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
@@ -91,8 +93,10 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                            tag, user_data, header->length, "RX: AM");
 
+        pthread_mutex_unlock(&uct_ugni_global_lock);
         status = uct_iface_invoke_am(&iface->super.super, tag, user_data,
                                      header->length, user_desc);
+        pthread_mutex_lock(&uct_ugni_global_lock);
 
         if(status != UCS_OK){
             uct_recv_desc_iface(user_desc) = &iface->super.super.super;
@@ -122,6 +126,7 @@ static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
     } while(GNI_RC_NOT_DONE != ugni_rc);
 
     current_ep = sglib_hashed_uct_ugni_ep_t_it_init(&ep_iterator, iface->super.eps);
+
     while(NULL != current_ep){
         ep = ucs_derived_of(current_ep, uct_ugni_smsg_ep_t);
         process_mbox(iface, ep);
@@ -129,7 +134,7 @@ static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
     }
 }
 
-static void progress_remote_cq(uct_ugni_smsg_iface_t *iface){
+static ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface){
     gni_return_t ugni_rc;
     gni_cq_entry_t event_data;
     uct_ugni_ep_t tl_ep;
@@ -139,17 +144,18 @@ static void progress_remote_cq(uct_ugni_smsg_iface_t *iface){
     ugni_rc = GNI_CqGetEvent(iface->remote_cq, &event_data);
 
     if(GNI_RC_NOT_DONE == ugni_rc){
-        return;
+        return UCS_OK;
     }
 
     if (GNI_RC_SUCCESS != ugni_rc || !GNI_CQ_STATUS_OK(event_data) || GNI_CQ_OVERRUN(event_data)) {
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || (GNI_RC_SUCCESS == ugni_rc && GNI_CQ_OVERRUN(event_data))){
+            ucs_debug("Detected remote CQ overrun. ungi_rc = %d [%s]", ugni_rc, gni_err_str[ugni_rc]);
             uct_ugni_smsg_handle_remote_overflow(iface);
-            return;
+            return UCS_OK;
         }
         ucs_error("GNI_CqGetEvent falied with unhandled error. Error status %s %d ",
                   gni_err_str[ugni_rc], ugni_rc);
-        return;
+        return UCS_ERR_IO_ERROR;
     }
 
     tl_ep.hash_key = GNI_CQ_GET_INST_ID(event_data);
@@ -157,6 +163,7 @@ static void progress_remote_cq(uct_ugni_smsg_iface_t *iface){
     ep = ucs_derived_of(ugni_ep, uct_ugni_smsg_ep_t);
 
     process_mbox(iface, ep);
+    return UCS_INPROGRESS;
 }
 
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_smsg_iface_t, uct_iface_t);
@@ -164,9 +171,14 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_smsg_iface_t, uct_iface_t);
 static void uct_ugni_smsg_progress(void *arg)
 {
     uct_ugni_smsg_iface_t *iface = (uct_ugni_smsg_iface_t *)arg;
+    ucs_status_t status;
 
-    progress_local_cq(iface);
-    progress_remote_cq(iface);
+    do {
+        status = progress_local_cq(iface);
+    } while(status == UCS_INPROGRESS);
+    do {
+         status = progress_remote_cq(iface);
+    } while(status == UCS_INPROGRESS);
 
     /* have a go a processing the pending queue */
 
@@ -226,38 +238,30 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface)
 {
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
-    ucs_status_t status;
+    /* Always progress to local cq to get back send credits */
+    ucs_status_t status = progress_local_cq(iface);
 
-    if (0 == iface->super.outstanding) {
+    if (UCS_OK == status) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-        status = UCS_OK;
     } else {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
-        status = UCS_INPROGRESS;
     }
-
-    /* Even if there are no oustanding requests we can get send credits. */
-    progress_local_cq(iface);
 
     return status;
 }
 
-static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep){
+static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep)
+{
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
-    uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t);
-    ucs_status_t status;
 
     if (0 == ep->super.outstanding) {
-        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-        status = UCS_OK;
+        /* We progress the local CQ anyways because we may get back send credits */
+        progress_local_cq(ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t));
+        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+        return UCS_OK;
     } else {
-        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
-        status = UCS_INPROGRESS;
+        return uct_ugni_smsg_iface_flush(tl_ep->iface);
     }
-
-    progress_local_cq(iface);
-
-    return status;
 }
 
 uct_iface_ops_t uct_ugni_smsg_iface_ops = {
