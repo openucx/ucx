@@ -1,5 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) The University of Tennessee and The University
+ *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -33,6 +35,10 @@ static ucs_config_field_t uct_ib_pd_config_table[] = {
 
   {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
    ucs_offsetof(uct_ib_pd_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+
+  {"FORK_INIT", "try",
+   "Initialize a fork-safe IB library with ibv_fork_init().",
+   ucs_offsetof(uct_ib_pd_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
@@ -360,7 +366,7 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
     char tmp_pd_name[UCT_PD_NAME_MAX];
     ucs_rcache_params_t rcache_params;
     ucs_status_t status;
-    int i, num_devices;
+    int i, num_devices, ret;
     uct_ib_pd_t *pd;
 
     /* Get device list from driver */
@@ -398,6 +404,24 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
                                   "%s-%p", ibv_get_device_name(ib_device), pd);
     if (status != UCS_OK) {
         goto err_free_pd;
+    }
+
+    if (pd_config->fork_init != UCS_NO) {
+        ret = ibv_fork_init();
+        if (ret) {
+            if (pd_config->fork_init == UCS_YES) {
+                ucs_error("ibv_fork_init() failed: %m");
+                status = UCS_ERR_IO_ERROR;
+                goto err_release_stats;
+            }
+            if (errno != ENOENT) {
+                /* ENOENT returned when ibv_fork_init attempted after an
+                 * interoperable communication library already initialized
+                 * without doing ibv_fork_init, and created qpairs. Lets not
+                 * report this error to the end-user in this case. */
+                ucs_warn("ibv_fork_init() failed: %m");
+            }
+        }
     }
 
     status = uct_ib_device_init(&pd->dev, ib_device UCS_STATS_ARG(pd->stats));

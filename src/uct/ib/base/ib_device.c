@@ -142,13 +142,6 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
     setenv("MLX5_TOTAL_UUARS",       "64", 1);
     setenv("MLX5_NUM_LOW_LAT_UUARS", "60", 1);
 
-    ret = ibv_fork_init();
-    if (ret) {
-        ucs_error("ibv_fork_init() failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err;
-    }
-
     /* Open verbs context */
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
