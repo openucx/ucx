@@ -1,6 +1,8 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# Copyright (c) The University of Tennesse and the University of Tennessee
+#               Research Foundation. 2016.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -32,7 +34,7 @@ libuct_la_SOURCES = \
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
-libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS)
+libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS) -lpthread
 noinst_HEADERS += \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \

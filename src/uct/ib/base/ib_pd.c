@@ -9,7 +9,7 @@
 #include "ib_pd.h"
 #include "ib_device.h"
 
-
+#include <pthread.h>
 
 #define UCT_IB_PD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
@@ -358,6 +358,12 @@ out:
     return status;
 }
 
+static void
+uct_ib_fork_warn(void)
+{
+    ucs_warn("ibv_fork_init() was not successful, yet a fork() has been issued.");
+}
+
 static ucs_status_t
 uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd_h *pd_p)
 {
@@ -414,12 +420,10 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
                 status = UCS_ERR_IO_ERROR;
                 goto err_release_stats;
             }
-            if (errno != ENOENT) {
-                /* ENOENT returned when ibv_fork_init attempted after an
-                 * interoperable communication library already initialized
-                 * without doing ibv_fork_init, and created qpairs. Lets not
-                 * report this error to the end-user in this case. */
-                ucs_warn("ibv_fork_init() failed: %m");
+            ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
+            ret = pthread_atfork(uct_ib_fork_warn, NULL, NULL);
+            if (ret) {
+                ucs_warn("ibv_fork_init failed, and registering the atfork warning failed too: %m");
             }
         }
     }
