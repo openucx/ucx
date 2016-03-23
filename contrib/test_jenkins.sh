@@ -68,6 +68,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         TIMEOUT=""
     fi
 
+    # Load newer doxygen 
+    module load tools/doxygen-1.8.11
+
     echo "Build gtest"
     module load hpcx-gcc
 
