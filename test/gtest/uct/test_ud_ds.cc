@@ -24,11 +24,11 @@ public:
         m_e2 = create_entity(0);
         m_entities.push_back(m_e2);
 
-        uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t *)&if_adr1);
-        uct_iface_get_address(m_e2->iface(), (uct_iface_addr_t *)&if_adr2);
+        uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t *)(unsigned long)&if_adr1);
+        uct_iface_get_address(m_e2->iface(), (uct_iface_addr_t *)(unsigned long)&if_adr2);
 
-        uct_iface_get_device_address(m_e1->iface(), (uct_device_addr_t *)&ib_adr1);
-        uct_iface_get_device_address(m_e2->iface(), (uct_device_addr_t *)&ib_adr2);
+        uct_iface_get_device_address(m_e1->iface(), (uct_device_addr_t *)(unsigned long)&ib_adr1);
+        uct_iface_get_device_address(m_e2->iface(), (uct_device_addr_t *)(unsigned long)&ib_adr2);
     }
     uct_ud_iface_t *iface(entity *e) {
         return ucs_derived_of(e->iface(), uct_ud_iface_t);

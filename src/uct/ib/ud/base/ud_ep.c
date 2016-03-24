@@ -385,8 +385,8 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
     status = iface_h->ops.ep_connect_to_ep(ep_h, 
-                                           (const uct_device_addr_t *)&ctl->conn_req.ib_addr, 
-                                           (const uct_ep_addr_t *)&ctl->conn_req.ep_addr);
+                                           (void *)&ctl->conn_req.ib_addr, 
+                                           (void *)&ctl->conn_req.ep_addr);
     ucs_assert_always(status == UCS_OK);
 
     status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.ib_addr, 
@@ -454,13 +454,13 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
     memset(&ep_addr, 0, sizeof(ep_addr)); /* make coverity happy */
-    status = uct_ud_ep_get_address(&ep->super.super, (uct_ep_addr_t *)&ep_addr);
+    status = uct_ud_ep_get_address(&ep->super.super, (void *)&ep_addr);
     if (status != UCS_OK) {
         return NULL;
     }
 
     status = uct_ib_iface_get_device_address(&iface->super.super.super, 
-                                             (uct_device_addr_t *)&ib_addr);
+                                             (void *)&ib_addr);
     if (status != UCS_OK) {
         return NULL;
     }
