@@ -160,6 +160,11 @@ do { \
  * psn % UCT_UD_RESENDS_PER_ACK = 0
  */
 
+struct uct_ud_ep_addr {
+    uint8_t     qp_num[3];
+    uint8_t     ep_id[3];
+};
+
 /* 
  * Endpoint pending control operations. The operations
  * are executed in time of progress along with
@@ -240,7 +245,8 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, 
-                                     const uct_ep_addr_t *addr);
+                                     const uct_ib_address_t *ib_addr,
+                                     const uct_ud_ep_addr_t *ep_addr);
 
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n);
 
@@ -251,12 +257,14 @@ void         uct_ud_ep_disconnect(uct_ep_h ep);
 
 /* helper function to create/destroy new connected ep */
 ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
-                                               const uct_sockaddr_ib_t *addr,
+                                               const uct_ib_address_t *ib_addr,
+                                               const uct_ud_iface_addr_t *if_addr,
                                                uct_ud_ep_t **new_ep_p,
                                                uct_ud_send_skb_t **skb_p);
 
 void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep, 
-                                 const uct_sockaddr_ib_t *addr);
+                                 const uct_ib_address_t *ib_addr,
+                                  const uct_ud_iface_addr_t *if_addr);
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 

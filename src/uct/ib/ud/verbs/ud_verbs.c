@@ -401,13 +401,14 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     uct_ud_verbs_iface_t *iface = ucs_derived_of(iface_h, uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep;
     uct_ud_ep_t *new_ud_ep; 
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)iface_addr;
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t *)iface_addr;
     uct_ud_send_skb_t *skb;
     struct ibv_ah *ah;
     ucs_status_t status;
 
     uct_ud_enter(&iface->super);
-    status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
+    status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
                                                &new_ud_ep, &skb);
     if (status != UCS_OK && 
         status != UCS_ERR_NO_RESOURCE && 
@@ -424,19 +425,19 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     }
 
     ucs_assert_always(ep->ah == NULL);
-    ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
+    ah = uct_ib_create_ah(&iface->super.super, ib_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
-        uct_ud_ep_destroy_connected(&ep->super, if_addr);
+        uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
         *new_ep_p = NULL;
         uct_ud_leave(&iface->super);
         return UCS_ERR_INVALID_ADDR;
     }
     ep->ah = ah;
-    ep->dest_qpn = if_addr->qp_num;
+    ep->dest_qpn = uct_ib_buf2qpnum(if_addr->qp_num);
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_buf2qpnum(if_addr->qp_num), ib_addr->lid);
         uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }
@@ -454,15 +455,16 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     struct ibv_ah *ah;
     uct_ud_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)ep_addr;
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
+    const uct_ud_ep_addr_t *ud_ep_addr = (const uct_ud_ep_addr_t *)ep_addr;
 
-    status = uct_ud_ep_connect_to_ep(&ep->super, ep_addr);
+    status = uct_ud_ep_connect_to_ep(&ep->super, ib_addr, ud_ep_addr);
     if (status != UCS_OK) {
         return status;
     }
     ucs_assert_always(ep->ah == NULL);
-    ep->dest_qpn = if_addr->qp_num;
-    ah = uct_ib_create_ah(iface, if_addr->lid);
+    ep->dest_qpn = uct_ib_buf2qpnum(ud_ep_addr->qp_num);
+    ah = uct_ib_create_ah(iface, ib_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         return UCS_ERR_INVALID_ADDR;

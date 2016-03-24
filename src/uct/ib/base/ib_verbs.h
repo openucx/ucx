@@ -171,5 +171,18 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
 #endif /* HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE */
 
+static inline void uct_ib_qpnum2buf(uint8_t buf[3], const uint32_t qp_num)
+{
+
+    buf[0] = (qp_num >> 0)  & 0xFF;
+    buf[1] = (qp_num >> 8)  & 0xFF;
+    buf[2] = (qp_num >> 16) & 0xFF;
+}
+
+static inline uint32_t uct_ib_buf2qpnum(const uint8_t buf[3])
+{
+    return buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16);
+}
+
 
 #endif /* UCT_IB_VERBS_H */
