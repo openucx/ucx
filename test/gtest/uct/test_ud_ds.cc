@@ -55,7 +55,7 @@ unsigned test_ud_ds::N = 1000;
 
 UCS_TEST_P(test_ud_ds, if_addr) {
     EXPECT_EQ(ib_adr1.lid, ib_adr2.lid);
-    EXPECT_NE(uct_ib_buf2qpnum(if_adr1.qp_num), uct_ib_buf2qpnum(if_adr2.qp_num));
+    EXPECT_NE(uct_ib_unpack_uint24(if_adr1.qp_num), uct_ib_unpack_uint24(if_adr2.qp_num));
 }
 
 void test_ud_ds::test_cep_insert(entity *e, uct_ib_address_t *ib_addr,

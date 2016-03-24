@@ -161,8 +161,8 @@ do { \
  */
 
 struct uct_ud_ep_addr {
-    uint8_t     qp_num[3];
-    uint8_t     ep_id[3];
+    uct_ib_uint24_t qp_num;
+    uct_ib_uint24_t ep_id;
 };
 
 /* 

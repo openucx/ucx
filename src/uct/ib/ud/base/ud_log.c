@@ -54,9 +54,9 @@ static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
         switch(ctl_hdr->type) {
         case UCT_UD_PACKET_CREQ:
             n = snprintf(p, max, "CREQ: qp 0x%x lid %d epid %d cid %d ",
-                         uct_ib_buf2qpnum(ctl_hdr->conn_req.ep_addr.qp_num),
+                         uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.qp_num),
                          ctl_hdr->conn_req.ib_addr.lid,
-                         uct_ib_buf2qpnum(ctl_hdr->conn_req.ep_addr.ep_id),
+                         uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.ep_id),
                          ctl_hdr->conn_req.conn_id);
             p += n; max -= n;
             break;

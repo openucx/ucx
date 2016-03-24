@@ -94,7 +94,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
 
-    uct_ib_qpnum2buf(rc_addr->qp_num, ep->qp->qp_num);
+    uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
     return UCS_OK;
 }
 
@@ -135,7 +135,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     qp_attr.ah_attr.static_rate   = 0;
     qp_attr.ah_attr.is_global     = 0; /* TODO RoCE */
     qp_attr.ah_attr.port_num      = iface->super.port_num;
-    qp_attr.dest_qp_num           = uct_ib_buf2qpnum(rc_addr->qp_num);
+    qp_attr.dest_qp_num           = uct_ib_unpack_uint24(rc_addr->qp_num);
     qp_attr.rq_psn                = 0;
     qp_attr.path_mtu              = iface->config.path_mtu;
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;

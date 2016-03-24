@@ -57,7 +57,7 @@ typedef struct uct_ud_iface_ops {
 
 
 struct uct_ud_iface_addr {
-    uint8_t qp_num[3];
+    uct_ib_uint24_t qp_num;
 };
 
 struct uct_ud_iface {

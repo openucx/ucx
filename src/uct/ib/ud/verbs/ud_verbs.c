@@ -434,10 +434,10 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
         return UCS_ERR_INVALID_ADDR;
     }
     ep->ah = ah;
-    ep->dest_qpn = uct_ib_buf2qpnum(if_addr->qp_num);
+    ep->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_buf2qpnum(if_addr->qp_num), ib_addr->lid);
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_unpack_uint24(if_addr->qp_num), ib_addr->lid);
         uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }
@@ -463,7 +463,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
         return status;
     }
     ucs_assert_always(ep->ah == NULL);
-    ep->dest_qpn = uct_ib_buf2qpnum(ud_ep_addr->qp_num);
+    ep->dest_qpn = uct_ib_unpack_uint24(ud_ep_addr->qp_num);
     ah = uct_ib_create_ah(iface, ib_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");

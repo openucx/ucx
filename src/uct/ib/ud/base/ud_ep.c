@@ -200,8 +200,8 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_ep_addr_t *ep_addr = (uct_ud_ep_addr_t *)addr;
 
-    uct_ib_qpnum2buf(ep_addr->qp_num, iface->qp->qp_num);
-    uct_ib_qpnum2buf(ep_addr->ep_id, ep->ep_id);
+    uct_ib_pack_uint24(ep_addr->qp_num, iface->qp->qp_num);
+    uct_ib_pack_uint24(ep_addr->ep_id, ep->ep_id);
     return UCS_OK;
 }
 
@@ -221,7 +221,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, ep, 
-              ib_addr->lid, uct_ib_buf2qpnum(if_addr->qp_num));
+              ib_addr->lid, uct_ib_unpack_uint24(if_addr->qp_num));
 
     return UCS_OK;
 }
@@ -303,7 +303,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_trace_func("");
 
-    ep->dest_ep_id = uct_ib_buf2qpnum(ep_addr->ep_id);
+    ep->dest_ep_id = uct_ib_unpack_uint24(ep_addr->ep_id);
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
@@ -314,7 +314,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, 
-              ib_addr->lid, uct_ib_buf2qpnum(ep_addr->qp_num), ep->dest_ep_id);
+              ib_addr->lid, uct_ib_unpack_uint24(ep_addr->qp_num), ep->dest_ep_id);
 
     return UCS_OK;
 }
@@ -413,14 +413,14 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
             /* simultaniuos CREQ */
-            ep->dest_ep_id = uct_ib_buf2qpnum(ctl->conn_req.ep_addr.ep_id);
+            ep->dest_ep_id = uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id);
             ep->rx.ooo_pkts.head_sn = neth->psn;
             ucs_debug("created ep=%p (iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, iface, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
         }
     }
 
     ucs_assert_always(ctl->conn_req.conn_id == ep->conn_id);
-    ucs_assert_always(uct_ib_buf2qpnum(ctl->conn_req.ep_addr.ep_id) == ep->dest_ep_id);
+    ucs_assert_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) == ep->dest_ep_id);
     /* creq must always have same psn */
     ucs_assert_always(ep->rx.ooo_pkts.head_sn == neth->psn);
     /* scedule connection reply op */

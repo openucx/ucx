@@ -58,7 +58,7 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 
 
 typedef struct uct_rc_ep_address {
-    uint8_t             qp_num[3];
+    uct_ib_uint24_t  qp_num;
 } UCS_S_PACKED uct_rc_ep_address_t;
 
 

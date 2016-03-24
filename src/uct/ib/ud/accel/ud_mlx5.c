@@ -475,7 +475,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     uct_ib_mlx5_get_av(ah, &ep->av);
     mlx5_av_base(&ep->av)->key.qkey.qkey      = htonl(UCT_IB_QKEY);
     mlx5_av_base(&ep->av)->key.qkey.reserved  = iface->super.qp->qp_num;
-    mlx5_av_base(&ep->av)->dqp_dct            = htonl(uct_ib_buf2qpnum(if_addr->qp_num) |
+    mlx5_av_base(&ep->av)->dqp_dct            = htonl(uct_ib_unpack_uint24(if_addr->qp_num) |
                                                       UCT_IB_MLX5_EXTENDED_UD_AV); 
     ibv_destroy_ah(ah);
     return UCS_OK;
@@ -521,7 +521,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     }
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_buf2qpnum(if_addr->qp_num), ib_addr->lid);
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_unpack_uint24(if_addr->qp_num), ib_addr->lid);
         uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }
