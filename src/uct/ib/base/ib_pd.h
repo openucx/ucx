@@ -1,5 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) The University of Tennessee and The University
+ *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -51,6 +53,8 @@ typedef struct uct_ib_pd_config {
 
     uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
+
+    unsigned                fork_init;     /**< Use ibv_fork_init() */
 
 } uct_ib_pd_config_t;
 
