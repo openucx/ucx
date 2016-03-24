@@ -257,7 +257,7 @@ static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep)
     if (0 == ep->super.outstanding) {
         /* We progress the local CQ anyways because we may get back send credits */
         progress_local_cq(ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t));
-        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
+        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_ep->iface, uct_base_iface_t));
         return UCS_OK;
     } else {
         return uct_ugni_smsg_iface_flush(tl_ep->iface);
