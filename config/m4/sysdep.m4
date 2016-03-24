@@ -35,6 +35,7 @@ AC_CHECK_DECLS([CPU_ZERO, CPU_ISSET], [],
 # pthread
 #
 AC_SEARCH_LIBS(pthread_create, pthread)
+AC_SEARCH_LIBS(pthread_atfork, pthread)
 
 
 #

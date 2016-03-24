@@ -9,7 +9,9 @@
 #include "ib_pd.h"
 #include "ib_device.h"
 
+#include <ucs/arch/atomic.h>
 #include <pthread.h>
+
 
 #define UCT_IB_PD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
@@ -358,10 +360,24 @@ out:
     return status;
 }
 
-static void
-uct_ib_fork_warn(void)
+static void uct_ib_fork_warn()
 {
     ucs_warn("ibv_fork_init() was not successful, yet a fork() has been issued.");
+}
+
+static void uct_ib_fork_warn_enable()
+{
+    static volatile uint32_t enabled = 0;
+    int ret;
+
+    if (ucs_atomic_cswap32(&enabled, 0, 1) != 0) {
+        return;
+    }
+
+    ret = pthread_atfork(uct_ib_fork_warn, NULL, NULL);
+    if (ret) {
+        ucs_warn("ibv_fork_init failed, and registering atfork warning failed too: %m");
+    }
 }
 
 static ucs_status_t
@@ -421,10 +437,7 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
                 goto err_release_stats;
             }
             ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
-            ret = pthread_atfork(uct_ib_fork_warn, NULL, NULL);
-            if (ret) {
-                ucs_warn("ibv_fork_init failed, and registering the atfork warning failed too: %m");
-            }
+            uct_ib_fork_warn_enable();
         }
     }
 
