@@ -651,10 +651,10 @@ static void ucp_wireup_process_request(ucp_worker_h worker, ucp_wireup_msg_t *ms
     ucp_ep_h ep = ucp_worker_ep_find(worker, uuid);
     const ucp_address_entry_t *tl_addr, *aux_addr;
     uct_iface_attr_t *iface_attr;
-    ucp_rsc_index_t aux_rsc_index;
-    unsigned addr_index;
     ucs_status_t status;
     uct_ep_h uct_ep;
+    ucp_rsc_index_t aux_rsc_index = UCP_NULL_RESOURCE;
+    unsigned addr_index           = -1;
 
     ucs_assert(msg->tl_index != (uint8_t)-1);
     tl_addr = &address_list[msg->tl_index];
@@ -916,11 +916,12 @@ out:
 ucs_status_t ucp_wireup_start(ucp_ep_h ep, ucp_address_entry_t *address_list,
                               unsigned address_count)
 {
-    ucp_worker_h worker = ep->worker;
     uct_iface_attr_t *iface_attr;
-    unsigned addr_index, aux_addr_index;
-    ucp_rsc_index_t aux_rsc_index;
     ucs_status_t status;
+    ucp_worker_h worker           = ep->worker;
+    unsigned addr_index           = -1;
+    unsigned aux_addr_index       = -1;
+    ucp_rsc_index_t aux_rsc_index = UCP_NULL_RESOURCE;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
