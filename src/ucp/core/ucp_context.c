@@ -44,7 +44,9 @@ static ucs_config_field_t ucp_config_table[] = {
    " - ugni   : ugni_rdma and ugni_udt.\n"
    " - rc     : rc and ud.\n"
    " - rc-x   : rc with accelerated verbs and ud.\n"
-   " - ud-x   : ud with accelerated verbs.\n",
+   " - ud-x   : ud with accelerated verbs.\n"
+   " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
+   " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"ALLOC_PRIO", "pd:sysv,pd:posix,huge,pd:*,mmap,heap",
@@ -160,10 +162,15 @@ static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
     return count;
 }
 
-static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name)
+static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name,
+                                    int is_alias)
 {
     const char **names = (const char**)config->tls.names;
-    return (ucp_str_array_search(names, config->tls.count, tl_name) >= 0) ||
+    char buf[UCT_TL_NAME_MAX + 1];
+
+    snprintf(buf, sizeof(buf), "\\%s", tl_name);
+    return (ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
+           (!is_alias && (ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
            (ucp_str_array_search(names, config->tls.count, "all"  ) >= 0);
 }
 
@@ -219,7 +226,7 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
 
     /* Find the enabled UCTs */
     ucs_assert(config->tls.count > 0);
-    if (ucp_config_is_tl_enabled(config, resource->tl_name)) {
+    if (ucp_config_is_tl_enabled(config, resource->tl_name, 0)) {
         tl_enabled = 1;
     } else {
         tl_enabled = 0;
@@ -230,9 +237,9 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
             /* If an alias is enabled, and the transport is part of this alias,
              * enable the transport.
              */
-            if (ucp_config_is_tl_enabled(config, alias->alias) &&
+            if (ucp_config_is_tl_enabled(config, alias->alias, 1) &&
                 (ucp_str_array_search(alias->tls, ucp_tl_alias_count(alias),
-                                     resource->tl_name) >= 0))
+                                      resource->tl_name) >= 0))
             {
                 tl_enabled = 1;
                 ucs_trace("enabling tl '%s' for alias '%s'", resource->tl_name,
