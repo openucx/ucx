@@ -169,6 +169,8 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard) {
         wait(rreq1);
         wait(rreq2);
 
+        short_progress_loop();
+
         /* Release sends */
         if (sreq1 != NULL) {
             EXPECT_TRUE(sreq1->completed);

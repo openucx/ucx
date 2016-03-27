@@ -9,7 +9,11 @@
 
 class test_ucp_version : public ucp_test {
 public:
-    using ucp_test::get_ctx_params;
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.features |= UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP;
+        return params;
+    }
 };
 
 
@@ -19,12 +23,7 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
 
-    ucp_params_t params;
-    params.features        = UCP_FEATURE_TAG;
-    params.request_size    = 0;
-    params.request_init    = NULL;
-    params.request_cleanup = NULL;
-
+    ucp_params_t params = get_ctx_params();
     ucp_context_h ucph;
     ucs_status_t status;
     {
