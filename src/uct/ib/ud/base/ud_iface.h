@@ -56,6 +56,10 @@ typedef struct uct_ud_iface_ops {
 } uct_ud_iface_ops_t;
 
 
+struct uct_ud_iface_addr {
+    uct_ib_uint24_t qp_num;
+};
+
 struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;
@@ -98,8 +102,9 @@ struct uct_ud_ctl_hdr {
     uint8_t reserved[3];
     union {
         struct {
-            uct_sockaddr_ib_t   ib_addr;
-            uint32_t            conn_id;
+            uct_ib_address_t   ib_addr;
+            uct_ud_ep_addr_t   ep_addr;
+            uint32_t           conn_id;
         } conn_req;
         struct {
             uint32_t src_ep_id;
@@ -239,7 +244,8 @@ void uct_ud_iface_cep_init(uct_ud_iface_t *iface);
  * reuse ep with conn_id == conn_last_id
  */
 uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
-                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     const uct_ib_address_t *src_ib_addr,
+                                     const uct_ud_iface_addr_t *src_if_addr,
                                      uint32_t conn_id);
 
 /* remove ep */
@@ -249,12 +255,14 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
  * rollback last ordered insert (conn_id == UCT_UD_EP_CONN_ID_MAX).
  */
 void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
-                               const uct_sockaddr_ib_t *src_if_addr,
+                               const uct_ib_address_t *src_ib_addr,
+                               const uct_ud_iface_addr_t *src_if_addr,
                                uct_ud_ep_t *ep);
 
 /* insert new ep that is connected to src_if_addr */
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
-                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     const uct_ib_address_t *src_ib_addr,
+                                     const uct_ud_iface_addr_t *src_if_addr,
                                      uct_ud_ep_t *ep, uint32_t conn_id);
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);

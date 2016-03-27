@@ -69,12 +69,13 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
 
 static uct_ud_iface_peer_t *
 uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, 
-                             const uct_sockaddr_ib_t *src_if_addr)
+                             const uct_ib_address_t *src_ib_addr,
+                             const uct_ud_iface_addr_t *src_if_addr)
 {
     uct_ud_iface_peer_t *peer, key;
 
-    key.dest_iface.qp_num = src_if_addr->qp_num;
-    key.dest_iface.lid    = src_if_addr->lid;
+    key.dest_iface.qp_num = uct_ib_unpack_uint24(src_if_addr->qp_num);
+    key.dest_iface.lid    = src_ib_addr->lid;
 
     peer = sglib_hashed_uct_ud_iface_peer_t_find_member(iface->peers, &key);
     return peer;
@@ -118,20 +119,21 @@ uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 
 /* insert new ep that is connected to src_if_addr */
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
-                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     const uct_ib_address_t *src_ib_addr,
+                                     const uct_ud_iface_addr_t *src_if_addr,
                                      uct_ud_ep_t *ep, uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *cep;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
     if (!peer) {
         peer = (uct_ud_iface_peer_t *)malloc(sizeof(*peer));
         if (!peer) {
             return UCS_ERR_NO_MEMORY;
         }
-        peer->dest_iface.qp_num = src_if_addr->qp_num;
-        peer->dest_iface.lid    = src_if_addr->lid;
+        peer->dest_iface.qp_num = uct_ib_unpack_uint24(src_if_addr->qp_num);
+        peer->dest_iface.lid    = src_ib_addr->lid;
         sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
         ucs_list_head_init(&peer->ep_list);
         peer->conn_id_last = 0;
@@ -167,13 +169,14 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
 }
 
 uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface, 
-                                     const uct_sockaddr_ib_t *src_if_addr,
+                                     const uct_ib_address_t *src_ib_addr,
+                                     const uct_ud_iface_addr_t *src_if_addr,
                                      uint32_t conn_id)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *ep;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
     if (!peer) {
         return NULL;
     }
@@ -186,12 +189,13 @@ uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
 }
 
 void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface, 
-                               const uct_sockaddr_ib_t *src_if_addr,
+                               const uct_ib_address_t *src_ib_addr,
+                               const uct_ud_iface_addr_t *src_if_addr,
                                uct_ud_ep_t *ep)
 {
     uct_ud_iface_peer_t *peer;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
 
     ucs_assert_always(peer != NULL);
     ucs_assert_always(peer->conn_id_last > 0);
@@ -467,8 +471,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.max_bcopy     = 0;
     iface_attr->cap.put.max_zcopy     = 0;
 
-    iface_attr->iface_addr_len        = sizeof(uct_sockaddr_ib_t);
-    iface_attr->ep_addr_len           = sizeof(uct_sockaddr_ib_t);
+    iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
+    iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
 
     /* Software overhead */
     iface_attr->overhead = 80e-9;
@@ -478,10 +482,9 @@ ucs_status_t
 uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
-    uct_sockaddr_ib_t *addr = (uct_sockaddr_ib_t *)iface_addr;
+    uct_ud_iface_addr_t *addr = (uct_ud_iface_addr_t *)iface_addr;
 
-    uct_ib_iface_get_address(tl_iface, iface_addr);
-    addr->qp_num = iface->qp->qp_num;
+    uct_ib_pack_uint24(addr->qp_num, iface->qp->qp_num);
 
     return UCS_OK;
 }

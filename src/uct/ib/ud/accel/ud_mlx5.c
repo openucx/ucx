@@ -461,11 +461,12 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
 static ucs_status_t
 uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                         const uct_sockaddr_ib_t *if_addr)
+                         const uct_ib_address_t *ib_addr,
+                         const uct_ud_iface_addr_t *if_addr)
 {
     struct ibv_ah *ah;
 
-    ah = uct_ib_create_ah(&iface->super.super, if_addr->lid);
+    ah = uct_ib_create_ah(&iface->super.super, ib_addr->lid);
     if (ah == NULL) {
         ucs_error("failed to create address handle: %m");
         return UCS_ERR_INVALID_ADDR;
@@ -474,7 +475,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     uct_ib_mlx5_get_av(ah, &ep->av);
     mlx5_av_base(&ep->av)->key.qkey.qkey      = htonl(UCT_IB_QKEY);
     mlx5_av_base(&ep->av)->key.qkey.reserved  = iface->super.qp->qp_num;
-    mlx5_av_base(&ep->av)->dqp_dct            = htonl(if_addr->qp_num |
+    mlx5_av_base(&ep->av)->dqp_dct            = htonl(uct_ib_unpack_uint24(if_addr->qp_num) |
                                                       UCT_IB_MLX5_EXTENDED_UD_AV); 
     ibv_destroy_ah(ah);
     return UCS_OK;
@@ -489,12 +490,13 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(iface_h, uct_ud_mlx5_iface_t);
     uct_ud_mlx5_ep_t *ep;
     uct_ud_ep_t *new_ud_ep;
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)iface_addr;
+    const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t *)iface_addr;
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
 
     uct_ud_enter(&iface->super);
-    status = uct_ud_ep_create_connected_common(&iface->super, if_addr,
+    status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
                                                &new_ud_ep, &skb);
     if (status != UCS_OK &&
         status != UCS_ERR_NO_RESOURCE &&
@@ -510,16 +512,16 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
         return UCS_OK;
     }
 
-    status_ah = uct_ud_mlx5_ep_create_ah(iface, ep, if_addr);
+    status_ah = uct_ud_mlx5_ep_create_ah(iface, ep, ib_addr, if_addr);
     if (status_ah != UCS_OK) {
-        uct_ud_ep_destroy_connected(&ep->super, if_addr);
+        uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
         *new_ep_p = NULL;
         uct_ud_leave(&iface->super);
         return status_ah;
     }
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", if_addr->qp_num, if_addr->lid);
+        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_unpack_uint24(if_addr->qp_num), ib_addr->lid);
         uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }
@@ -531,21 +533,22 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
 static ucs_status_t
 uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                              const uct_device_addr_t *dev_addr,
-                             const uct_ep_addr_t *ep_addr)
+                             const uct_ep_addr_t *uct_ep_addr)
 {
     ucs_status_t status;
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ud_mlx5_iface_t);
-    const uct_sockaddr_ib_t *if_addr = (const uct_sockaddr_ib_t *)ep_addr;
+    const uct_ud_ep_addr_t *ep_addr = (const uct_ud_ep_addr_t *)uct_ep_addr;
+    const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
 
     ucs_trace_func("");
-    status = uct_ud_ep_connect_to_ep(&ep->super, ep_addr);
+    status = uct_ud_ep_connect_to_ep(&ep->super, ib_addr, ep_addr);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ud_mlx5_ep_create_ah(iface, ep, if_addr);
+    status = uct_ud_mlx5_ep_create_ah(iface, ep, ib_addr, (const uct_ud_iface_addr_t *)ep_addr);
     if (status != UCS_OK) {
         return status;
     }
