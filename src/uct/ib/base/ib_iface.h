@@ -181,7 +181,6 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *add
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr);
 
-
 static inline uct_ib_pd_t* uct_ib_iface_pd(uct_ib_iface_t *iface)
 {
     return ucs_derived_of(iface->super.pd, uct_ib_pd_t);

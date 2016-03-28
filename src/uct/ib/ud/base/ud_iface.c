@@ -353,10 +353,16 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         return UCS_ERR_INVALID_PARAM; 
     }
 
+    mtu = uct_ib_device_mtu(dev_name, pd);
+    if (mtu < 0) {
+        ucs_error("%s failed to get mtu", dev_name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
                               rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
                               UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
-                              config->super.tx.queue_len, 4096, &config->super);
+                              config->super.tx.queue_len, mtu, &config->super);
  
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
@@ -373,15 +379,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     /* TODO: correct hdr + payload offset  */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
-                                            "ud_recv_skb", &self->rx.mp); 
+                                          "ud_recv_skb", &self->rx.mp); 
     if (status != UCS_OK) {
         goto err_qp;
     }
 
-    mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&self->super)->active_mtu);
     status = uct_iface_mpool_init(&self->super.super, &self->tx.mp,
                                 sizeof(uct_ud_send_skb_t) + 
-                                ucs_max(sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline, mtu),
+                                ucs_max(sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline, 
+                                               self->super.config.seg_size),
                                 sizeof(uct_ud_send_skb_t),
                                 UCS_SYS_CACHE_LINE_SIZE,
                                 &config->super.tx.mp, self->config.tx_qp_len,
@@ -446,9 +452,6 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
-    int mtu; 
-
-    mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
     uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
                        iface_attr);
 
@@ -463,8 +466,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                         UCT_IFACE_FLAG_WAKEUP;
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_bcopy      = mtu - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_zcopy      = mtu - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_zcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_hdr        = iface->config.max_inline - sizeof(uct_ud_neth_t);
 
     iface_attr->cap.put.max_short     = iface->config.max_inline - sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
