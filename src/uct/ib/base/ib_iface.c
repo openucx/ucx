@@ -329,7 +329,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     status = uct_ib_device_find_port(dev, dev_name, &port_num);
     if (status != UCS_OK) {
-        ucs_error("Failed to find port %s: %s", dev_name, ucs_status_string(status));
         goto err;
     }
 

@@ -435,10 +435,11 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
     return UCS_OK;
 
 err:
+    ucs_error("%s: failed to find port", resource_dev_name);
     return UCS_ERR_NO_DEVICE;
 }
 
-int uct_ib_device_mtu(const char *dev_name, uct_pd_h pd)
+ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_pd_h pd, int *p_mtu)
 {
 
     uct_ib_device_t *dev = &ucs_derived_of(pd, uct_ib_pd_t)->dev;
@@ -447,9 +448,9 @@ int uct_ib_device_mtu(const char *dev_name, uct_pd_h pd)
 
     status = uct_ib_device_find_port(dev, dev_name, &port_num);
     if (status != UCS_OK) {
-        ucs_error("Failed to find port %s: %s", dev_name, ucs_status_string(status));
-        return -1;
+        return status;
     }
 
-    return  uct_ib_mtu_value(uct_ib_device_port_attr(dev, port_num)->active_mtu);
+    *p_mtu = uct_ib_mtu_value(uct_ib_device_port_attr(dev, port_num)->active_mtu);
+    return UCS_OK;
 }

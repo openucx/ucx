@@ -353,10 +353,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         return UCS_ERR_INVALID_PARAM; 
     }
 
-    mtu = uct_ib_device_mtu(dev_name, pd);
-    if (mtu < 0) {
-        ucs_error("%s failed to get mtu", dev_name);
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_ib_device_mtu(dev_name, pd, &mtu);
+    if (status != UCS_OK) {
+        return status;
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
@@ -377,7 +376,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     ucs_ptr_array_init(&self->eps, 0, "ud_eps");
     uct_ud_iface_cep_init(self);    
 
-    /* TODO: correct hdr + payload offset  */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
                                           "ud_recv_skb", &self->rx.mp); 
     if (status != UCS_OK) {

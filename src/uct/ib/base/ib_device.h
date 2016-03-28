@@ -124,7 +124,7 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu);
  * find device mtu. This function can be used before ib
  * interface is created.
  */
-int uct_ib_device_mtu(const char *dev_name, uct_pd_h pd);
+ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_pd_h pd, int *p_mtu);
 
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
