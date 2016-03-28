@@ -22,6 +22,11 @@ protected:
 
 test_perf::test_spec test_ucp_perf::tests[] =
 {
+  { "tag latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_LAST, 8, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
+
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCT_PERF_DATA_LAYOUT_LAST, 8, 1, 100000l,
@@ -77,7 +82,9 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     ss << GetParam();
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     for (test_spec *test = tests; test->title != NULL; ++test) {
-        run_test(*test, UCX_PERF_TEST_FLAG_ONE_SIDED, test->min, test->max, "", "");
+        unsigned flags = (test->command == UCX_PERF_CMD_TAG) ? 0 :
+                                 UCX_PERF_TEST_FLAG_ONE_SIDED;
+        run_test(*test, flags, test->min, test->max, "", "");
     }
 }
 
