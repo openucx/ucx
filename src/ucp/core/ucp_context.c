@@ -163,14 +163,14 @@ static unsigned ucp_tl_alias_count(ucp_tl_alias_t *alias)
 }
 
 static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_name,
-                                    int allow_alias)
+                                    int is_alias)
 {
     const char **names = (const char**)config->tls.names;
     char buf[UCT_TL_NAME_MAX + 1];
 
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
-    return (ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
-           (allow_alias && (ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
+    return (!is_alias && ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
+           ((ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
            (ucp_str_array_search(names, config->tls.count, "all"  ) >= 0);
 }
 
