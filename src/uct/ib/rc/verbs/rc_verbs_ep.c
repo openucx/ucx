@@ -274,8 +274,8 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     iface->inl_rwrite_wr.wr.rdma.remote_addr = remote_addr;
     iface->inl_rwrite_wr.wr.rdma.rkey        = rkey;
-    iface->inl_sge[0].addr                   = (uintptr_t)buffer;
-    iface->inl_sge[0].length                 = length;
+    iface->verbs_common.inl_sge[0].addr                   = (uintptr_t)buffer;
+    iface->verbs_common.inl_sge[0].length                 = length;
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
@@ -377,18 +377,12 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_am_short_hdr_t am;
 
-    UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(sizeof(am) + length, iface->config.max_inline, "am_short");
+    UCT_RC_CHECK_AM_SHORT(id, length, iface->config.max_inline);
+
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
 
-    am.rc_hdr.am_id             = id;
-    am.am_hdr                   = hdr;
-
-    iface->inl_sge[0].addr      = (uintptr_t)&am;
-    iface->inl_sge[0].length    = sizeof(am);
-    iface->inl_sge[1].addr      = (uintptr_t)buffer;
-    iface->inl_sge[1].length    = length;
+    uct_rc_verbs_iface_common_fill_inl_sge(&iface->verbs_common, &am, id, hdr, buffer, length);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);

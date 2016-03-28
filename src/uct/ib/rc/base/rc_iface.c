@@ -388,8 +388,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
+#if HAVE_DECL_IBV_EXP_QPT_DC_INI 
+#define IB_RC_QP_TYPE_CHECK(type) \
+    ucs_assert_always((type) == IBV_QPT_RC || (type) == IBV_EXP_QPT_DC_INI)
+#else
+#define IB_RC_QP_TYPE_CHECK(type) \
+    ucs_assert_always((type) == IBV_QPT_RC)
+#endif
 
-ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap)
 {
     uct_ib_device_t *dev UCS_V_UNUSED = uct_ib_iface_device(&iface->super);
@@ -397,17 +404,20 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     struct ibv_qp *qp;
     int inline_recv = 0;
 
+    IB_RC_QP_TYPE_CHECK(qp_type);
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
-    qp_init_attr.srq                 = iface->rx.srq;
+    if (qp_type == IBV_QPT_RC) {
+        qp_init_attr.srq             = iface->rx.srq;
+    }
     qp_init_attr.cap.max_send_wr     = iface->config.tx_qp_len;
     qp_init_attr.cap.max_recv_wr     = 0;
     qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
-    qp_init_attr.qp_type             = IBV_QPT_RC;
+    qp_init_attr.qp_type             = qp_type;
     qp_init_attr.sq_sig_all          = 0;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;

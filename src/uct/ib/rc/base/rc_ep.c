@@ -37,7 +37,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    status = uct_rc_iface_qp_create(iface, &self->qp, &cap);
+    status = uct_rc_iface_qp_create(iface, IBV_QPT_RC, &self->qp, &cap);
     if (status != UCS_OK) {
         goto err;
     }
@@ -49,7 +49,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     }
 
     self->unsignaled        = 0;
-    self->sl                = iface->config.sl;          /* TODO multi-rail */
+    self->sl                = iface->super.sl;           /* TODO multi-rail */
     self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
     self->fc_wnd            = iface->config.fc_wnd_size;
     self->flags             = 0;

@@ -103,7 +103,6 @@ struct uct_rc_iface {
         uint8_t              rnr_retry;
         uint8_t              retry_cnt;
         uint8_t              max_rd_atomic;
-        uint8_t              sl;
         enum ibv_mtu         path_mtu;
     } config;
 
@@ -167,9 +166,9 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface);
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
 /**
- * Creates an RC QP and fills 'cap' with QP capabilities;
+ * Creates an RC or DCI QP and fills 'cap' with QP capabilities;
  */
-ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap);
 
 ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
@@ -197,5 +196,8 @@ uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
     return &iface->tx.ops[(iface->tx.next_op++) & iface->config.tx_ops_mask];
 }
 
+#define UCT_RC_CHECK_AM_SHORT(am_id, length, max_inline) \
+     UCT_CHECK_AM_ID(am_id); \
+     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + length, max_inline, "am_short");
 
 #endif

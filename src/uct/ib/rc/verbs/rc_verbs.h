@@ -11,6 +11,8 @@
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
 
+#include "rc_verbs_common.h"
+
 
 /**
  * RC mlx5 interface configuration
@@ -41,11 +43,12 @@ typedef struct uct_rc_verbs_ep {
 typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t     super;
 
-    ucs_mpool_t        short_desc_mp;
-    struct ibv_send_wr inl_am_wr;
-    struct ibv_send_wr inl_rwrite_wr;
-    struct ibv_sge     inl_sge[2];
+    ucs_mpool_t                 short_desc_mp;
+    struct ibv_send_wr          inl_am_wr;
+    struct ibv_send_wr          inl_rwrite_wr;
+    uct_rc_verbs_iface_common_t verbs_common;
 
+    /* TODO: make a separate datatype */
     struct {
         size_t               short_desc_size;
         uct_rc_send_handler_t  atomic32_handler;

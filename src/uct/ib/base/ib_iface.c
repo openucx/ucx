@@ -513,6 +513,24 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     return count;
 }
 
+struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
+{
+    uct_ib_pd_t *ib_pd = ucs_derived_of(iface->super.pd, uct_ib_pd_t);
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+
+    memset(&ah_attr, 0, sizeof(ah_attr));
+    ah_attr.port_num  = iface->port_num;
+    ah_attr.sl        = iface->sl;
+    ah_attr.is_global = 0;
+    ah_attr.dlid      = dlid;
+    ah = ibv_create_ah(ib_pd->pd, &ah_attr);
+    if (ah == NULL) {
+        ucs_error("failed to create address handle: %m");
+    }
+    return ah;
+}
+
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {

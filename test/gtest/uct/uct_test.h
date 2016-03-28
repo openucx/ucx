@@ -183,6 +183,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
 #define UCT_TEST_IB_TLS \
     rc_mlx5, \
     rc, \
+    dc, \
     ud, \
     ud_mlx5, \
     cm
