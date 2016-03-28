@@ -84,7 +84,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag_probe.cc \
 	ucp/test_ucp_tag_xfer.cc \
 	ucp/test_ucp_tag.cc \
-	ucp/test_ucp_version.cc \
+	ucp/test_ucp_context.cc \
 	ucp/test_ucp_wireup.cc \
 	ucp/test_ucp_wakeup.cc \
 	ucp/ucp_test.cc \

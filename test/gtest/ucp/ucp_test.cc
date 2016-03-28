@@ -19,7 +19,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
         if (iter != transports.begin()) {
             os << ",";
         }
-        os << "\\" << *iter; /* disable aliases */
+        os << *iter;
     }
     return os;
 }

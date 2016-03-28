@@ -43,8 +43,8 @@ static ucs_config_field_t ucp_config_table[] = {
    " - mm     : shared memory transports - only memory mappers.\n"
    " - ugni   : ugni_rdma and ugni_udt.\n"
    " - rc     : rc and ud.\n"
-   " - rc-x   : rc with accelerated verbs and ud.\n"
-   " - ud-x   : ud with accelerated verbs.\n"
+   " - rc_x   : rc with accelerated verbs and ud.\n"
+   " - ud_x   : ud with accelerated verbs.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -169,8 +169,8 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
     char buf[UCT_TL_NAME_MAX + 1];
 
     snprintf(buf, sizeof(buf), "\\%s", tl_name);
-    return (ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
-           (!is_alias && (ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
+    return (!is_alias && ucp_str_array_search(names, config->tls.count, buf) >= 0) ||
+           ((ucp_str_array_search(names, config->tls.count, tl_name) >= 0)) ||
            (ucp_str_array_search(names, config->tls.count, "all"  ) >= 0);
 }
 
@@ -288,6 +288,11 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
         ucs_error("Failed to allocate resources");
         status = UCS_ERR_NO_MEMORY;
         goto err_free_resources;
+    }
+
+    /* print configuration */
+    for (i = 0; i < config->tls.count; ++i) {
+        ucs_trace("allowed transport %d : '%s'", i, config->tls.names[i]);
     }
 
     /* copy only the resources enabled by user configuration */

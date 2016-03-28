@@ -7,7 +7,7 @@
 #include "ucp_test.h"
 
 
-class test_ucp_version : public ucp_test {
+class test_ucp_context : public ucp_test {
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -16,6 +16,28 @@ public:
     }
 };
 
+
+class test_ucp_aliases : public test_ucp_context {
+public:
+    using test_ucp_context::get_ctx_params;
+};
+
+UCS_TEST_P(test_ucp_aliases, aliases) {
+    create_entity();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rc, "rc")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, rc_x, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud, "ud")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud_mlx5, "ud_mlx5")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ugni, "ugni")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, shm, "shm")
+
+
+class test_ucp_version : public test_ucp_context {
+public:
+    using test_ucp_context::get_ctx_params;
+};
 
 UCS_TEST_P(test_ucp_version, wrong_api_version) {
 
@@ -50,4 +72,4 @@ UCS_TEST_P(test_ucp_version, version_string) {
     EXPECT_EQ(std::string(buffer), std::string(ucp_get_version_string()));
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_version)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
