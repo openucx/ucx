@@ -359,6 +359,11 @@ UCS_TEST_P(test_ud, ca_md) {
     max_window = RUNNING_ON_VALGRIND ? 64 : UCT_UD_CA_MAX_WINDOW;
     iters      = RUNNING_ON_VALGRIND ? 0 : 1;
 
+    if (RUNNING_ON_VALGRIND) {
+        /* skip valgrind for now */
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
     set_tx_win(m_e1, max_window);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
     for (i = 1; i < max_window; i++) {

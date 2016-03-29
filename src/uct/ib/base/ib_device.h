@@ -120,6 +120,15 @@ uint8_t uct_ib_to_fabric_time(double time);
  */
 size_t uct_ib_mtu_value(enum ibv_mtu mtu);
 
+/**
+ * find device mtu. This function can be used before ib
+ * interface is created.
+ */
+ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_pd_h pd, int *p_mtu);
+
+ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
+                                     const char *resource_dev_name,
+                                     uint8_t *p_port_num);
 
 static inline struct ibv_exp_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)

@@ -5,6 +5,7 @@
 */
 
 #include "ib_device.h"
+#include "ib_pd.h"
 
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/memtrack.h>
@@ -398,4 +399,58 @@ err_free:
     ucs_free(resources);
 err:
     return status;
+}
+
+ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
+                                     const char *resource_dev_name,
+                                     uint8_t *p_port_num)
+{
+    const char *ibdev_name;
+    unsigned port_num;
+    size_t devname_len;
+    char *p;
+
+    p = strrchr(resource_dev_name, ':');
+    if (p == NULL) {
+        goto err; /* Wrong device name format */
+    }
+    devname_len = p - resource_dev_name;
+
+    ibdev_name = uct_ib_device_name(dev);
+    if ((strlen(ibdev_name) != devname_len) ||
+        strncmp(ibdev_name, resource_dev_name, devname_len))
+    {
+        goto err; /* Device name is wrong */
+    }
+
+    port_num = strtod(p + 1, &p);
+    if (*p != '\0') {
+        goto err; /* Failed to parse port number */
+    }
+    if ((port_num < dev->first_port) || (port_num >= dev->first_port + dev->num_ports)) {
+        goto err; /* Port number out of range */
+    }
+
+    *p_port_num = port_num;
+    return UCS_OK;
+
+err:
+    ucs_error("%s: failed to find port", resource_dev_name);
+    return UCS_ERR_NO_DEVICE;
+}
+
+ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_pd_h pd, int *p_mtu)
+{
+
+    uct_ib_device_t *dev = &ucs_derived_of(pd, uct_ib_pd_t)->dev;
+    uint8_t port_num;
+    ucs_status_t status;
+
+    status = uct_ib_device_find_port(dev, dev_name, &port_num);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *p_mtu = uct_ib_mtu_value(uct_ib_device_port_attr(dev, port_num)->active_mtu);
+    return UCS_OK;
 }

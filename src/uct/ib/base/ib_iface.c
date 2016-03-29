@@ -109,43 +109,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {NULL}
 };
 
-static ucs_status_t uct_ib_iface_find_port(uct_ib_device_t *dev,
-                                           const char *resource_dev_name,
-                                           uint8_t *p_port_num)
-{
-    const char *ibdev_name;
-    unsigned port_num;
-    size_t devname_len;
-    char *p;
-
-    p = strrchr(resource_dev_name, ':');
-    if (p == NULL) {
-        goto err; /* Wrong device name format */
-    }
-    devname_len = p - resource_dev_name;
-
-    ibdev_name = uct_ib_device_name(dev);
-    if ((strlen(ibdev_name) != devname_len) ||
-        strncmp(ibdev_name, resource_dev_name, devname_len))
-    {
-        goto err; /* Device name is wrong */
-    }
-
-    port_num = strtod(p + 1, &p);
-    if (*p != '\0') {
-        goto err; /* Failed to parse port number */
-    }
-    if ((port_num < dev->first_port) || (port_num >= dev->first_port + dev->num_ports)) {
-        goto err; /* Port number out of range */
-    }
-
-    *p_port_num = port_num;
-    return UCS_OK;
-
-err:
-    return UCS_ERR_NO_DEVICE;
-}
-
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
@@ -364,9 +327,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, pd, worker,
                               &config->super UCS_STATS_ARG(dev->stats));
 
-    status = uct_ib_iface_find_port(dev, dev_name, &port_num);
+    status = uct_ib_device_find_port(dev, dev_name, &port_num);
     if (status != UCS_OK) {
-        ucs_error("Failed to find port %s: %s", dev_name, ucs_status_string(status));
         goto err;
     }
 
@@ -377,7 +339,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
                                              rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
     self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
-    self->config.seg_size          = config->super.max_bcopy;
+    self->config.seg_size          = ucs_min(mss, config->super.max_bcopy);
     self->config.tx_max_poll       = config->tx.max_poll;
     self->config.rx_max_poll       = config->rx.max_poll;
     self->config.rx_max_batch      = ucs_min(config->rx.max_batch,
@@ -491,7 +453,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     while (count < n) {
         UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
-        wrs[count].sg.length = iface->config.seg_size;
+        wrs[count].sg.length = iface->config.rx_payload_offset + iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;
         wrs[count].ibwr.num_sge = 1;
         wrs[count].ibwr.wr_id   = (uintptr_t)desc;
