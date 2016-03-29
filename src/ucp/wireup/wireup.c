@@ -492,14 +492,14 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
             return;
         }
 
+        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+
         ucs_trace("ep %p: sending wireup reply", ep);
 
         status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY);
         if (status != UCS_OK) {
             return;
         }
-
-        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
     }
 }
 
