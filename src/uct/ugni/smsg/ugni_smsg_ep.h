@@ -15,10 +15,16 @@
 
 #define UCT_UGNI_SMSG_ANY 0
 
+typedef struct uct_ugni_compact_smsg_attr {
+    gni_mem_handle_t mem_hndl;
+    void *msg_buffer;
+    uint32_t mbox_offset;
+} UCS_S_PACKED uct_ugni_compact_smsg_attr_t;
+
 typedef struct uct_sockaddr_smsg_ugni {
     uct_sockaddr_ugni_t super;
+    uct_ugni_compact_smsg_attr_t smsg_compact_attr;
     uint64_t ep_hash;
-    gni_smsg_attr_t smsg_attr;
 } UCS_S_PACKED uct_sockaddr_smsg_ugni_t;
 
 typedef struct uct_ugni_mbox_handle {
@@ -30,6 +36,7 @@ typedef struct uct_ugni_mbox_handle {
 typedef struct uct_ugni_smsg_ep {
     uct_ugni_ep_t super;
     uct_ugni_smsg_mbox_t *smsg_attr;
+    uct_ugni_compact_smsg_attr_t smsg_compact_attr;
 } uct_ugni_smsg_ep_t;
 
 typedef struct uct_ugni_smsg_desc {

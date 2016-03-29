@@ -16,6 +16,24 @@
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ugni_smsg_desc_t, uct_ugni_smsg_desc_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_smsg_desc_t, UCT_UGNI_HASH_SIZE, uct_ugni_smsg_desc_hash);
 
+static void compact_smsg_attr(gni_smsg_attr_t *smsg_attr, uct_ugni_compact_smsg_attr_t *smsg_compact_attr)
+{
+    smsg_compact_attr->msg_buffer = smsg_attr->msg_buffer;
+    smsg_compact_attr->mbox_offset = smsg_attr->mbox_offset;
+    smsg_compact_attr->mem_hndl = smsg_attr->mem_hndl;
+}
+
+static void uncompact_smsg_attr(uct_ugni_smsg_iface_t *iface, uct_ugni_compact_smsg_attr_t *smsg_compact_attr, gni_smsg_attr_t *smsg_attr)
+{
+    smsg_attr->mem_hndl = smsg_compact_attr->mem_hndl;
+    smsg_attr->msg_buffer = smsg_compact_attr->msg_buffer;
+    smsg_attr->msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
+    smsg_attr->buff_size = iface->bytes_per_mbox;
+    smsg_attr->mbox_offset = smsg_compact_attr->mbox_offset;
+    smsg_attr->mbox_maxcredit = iface->config.smsg_max_credit;
+    smsg_attr->msg_maxsize = iface->config.smsg_seg_size;
+}
+
 static void uct_ugni_smsg_mbox_init(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_mbox_t *mbox_info){
     void *mbox_data = (void *)(mbox_info+1);
 
@@ -86,6 +104,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_ep_t, uct_iface_t *tl_iface)
 
     uct_ugni_smsg_mbox_reg(iface, self->smsg_attr);
     uct_ugni_smsg_mbox_init(iface, self->smsg_attr);
+    compact_smsg_attr(&self->smsg_attr->mbox_attr, &self->smsg_compact_attr);
 
     return UCS_OK;
 }
@@ -121,7 +140,7 @@ ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr) {
     }
 
     ep_addr->ep_hash = ep->super.hash_key;
-    memcpy(&ep_addr->smsg_attr, &ep->smsg_attr->mbox_attr, sizeof(gni_smsg_attr_t));
+    memcpy(&ep_addr->smsg_compact_attr, &ep->smsg_compact_attr, sizeof(ep_addr->smsg_compact_attr));
 
     return UCS_OK;
 }
@@ -134,10 +153,13 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     const uct_sockaddr_smsg_ugni_t *iface_addr = (const uct_sockaddr_smsg_ugni_t*)ep_addr;
     gni_smsg_attr_t *local_attr = (gni_smsg_attr_t*)&ep->smsg_attr->mbox_attr;
-    gni_smsg_attr_t *remote_attr = (gni_smsg_attr_t *)&iface_addr->smsg_attr;
+    uct_ugni_compact_smsg_attr_t *compact_remote_attr = (uct_ugni_compact_smsg_attr_t *)&iface_addr->smsg_compact_attr;
+    gni_smsg_attr_t remote_attr;
     gni_return_t gni_rc;
     ucs_status_t rc = UCS_OK;
     uint32_t ep_hash;
+
+    uncompact_smsg_attr(ucs_derived_of(iface, uct_ugni_smsg_iface_t), compact_remote_attr, &remote_attr);
 
     pthread_mutex_lock(&uct_ugni_global_lock);
     rc = ugni_connect_ep(iface, &iface_addr->super, &ep->super);
@@ -147,7 +169,7 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
         goto exit_lock;
     }
 
-    gni_rc = GNI_SmsgInit(ep->super.ep, local_attr, remote_attr);
+    gni_rc = GNI_SmsgInit(ep->super.ep, local_attr, &remote_attr);
 
     if(GNI_RC_SUCCESS != gni_rc){
         ucs_error("Failed to initalize smsg. %s [%i]", gni_err_str[gni_rc], gni_rc);
