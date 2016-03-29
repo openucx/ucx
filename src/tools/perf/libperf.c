@@ -675,7 +675,8 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
     free(perf->ucp.peers);
 }
 
-static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
+                                                  uint64_t features)
 {
     unsigned group_size, i, group_index;
     ucp_address_t *address;
@@ -685,6 +686,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     void *rkey_buffer;
     size_t rkey_size;
     void *req = NULL;
+    int iov_len;
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
@@ -694,21 +696,27 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err;
     }
 
-    status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh, &rkey_buffer,
-                           &rkey_size);
-    if (status != UCS_OK) {
-        ucp_worker_release_address(perf->ucp.worker, address);
-        goto err;
-    }
-
     vec[0].iov_base = address;
     vec[0].iov_len  = address_length;
     vec[1].iov_base = &perf->recv_buffer;
     vec[1].iov_len  = sizeof(uintptr_t);
-    vec[2].iov_base = rkey_buffer;
-    vec[2].iov_len  = rkey_size;
 
-    rte_call(perf, post_vec, vec, 3, &req);
+    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
+                               &rkey_buffer, &rkey_size);
+        if (status != UCS_OK) {
+            ucp_worker_release_address(perf->ucp.worker, address);
+            goto err;
+        }
+
+        vec[2].iov_base = rkey_buffer;
+        vec[2].iov_len  = rkey_size;
+        iov_len = 3;
+    } else {
+        iov_len = 2;
+    }
+
+    rte_call(perf, post_vec, vec, iov_len, &req);
 
     ucp_rkey_buffer_release(rkey_buffer);
     ucp_worker_release_address(perf->ucp.worker, address);
@@ -725,17 +733,21 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
             continue;
         }
 
-        address     = malloc(address_length);
-        rkey_buffer = malloc(rkey_size);
+        address         = malloc(address_length);
+        rkey_buffer     = NULL;
 
         vec[0].iov_base = address;
         vec[0].iov_len  = address_length;
         vec[1].iov_base = &perf->ucp.peers[i].remote_addr;
         vec[1].iov_len  = sizeof(uintptr_t);
-        vec[2].iov_base = rkey_buffer;
-        vec[2].iov_len  = rkey_size;
 
-        rte_call(perf, recv_vec, i, vec, 3, req);
+        if (iov_len > 2) {
+            rkey_buffer     = malloc(rkey_size);
+            vec[2].iov_base = rkey_buffer;
+            vec[2].iov_len  = rkey_size;
+        }
+
+        rte_call(perf, recv_vec, i, vec, iov_len, req);
 
         status = ucp_ep_create(perf->ucp.worker, address, &perf->ucp.peers[i].ep);
         if (status != UCS_OK) {
@@ -749,14 +761,18 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
         free(address);
 
-        status = ucp_ep_rkey_unpack(perf->ucp.peers[i].ep, rkey_buffer,
-                                    &perf->ucp.peers[i].rkey);
-        if (status != UCS_OK) {
-            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
+        if (iov_len > 2) {
+            status = ucp_ep_rkey_unpack(perf->ucp.peers[i].ep, rkey_buffer,
+                                        &perf->ucp.peers[i].rkey);
+            if (status != UCS_OK) {
+                if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                    ucs_error("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
+                }
+                free(rkey_buffer);
+                goto err_destroy_eps;
             }
-            free(rkey_buffer);
-            goto err_destroy_eps;
+        } else {
+            perf->ucp.peers[i].rkey = NULL;
         }
 
         free(rkey_buffer);
@@ -962,7 +978,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err_destroy_worker;
     }
 
-    status = ucp_perf_test_setup_endpoints(perf);
+    status = ucp_perf_test_setup_endpoints(perf, features);
     if (status != UCS_OK) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
