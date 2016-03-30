@@ -699,6 +699,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
     self->super.available = self->tx.wq.bb_max;
     self->qp_num          = self->super.qp->qp_num;
+
+    uct_worker_progress_register(iface->super.super.super.worker,
+                                 uct_rc_mlx5_iface_progress, iface);
     return UCS_OK;
 }
 
@@ -706,6 +709,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                 uct_rc_mlx5_iface_t);
+    uct_worker_progress_unregister(iface->super.super.super.worker,
+                                   uct_rc_mlx5_iface_progress, iface);
     uct_ib_mlx5_put_txwq(iface->super.super.super.worker, &self->tx.wq);
 }
 

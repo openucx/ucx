@@ -155,7 +155,7 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
     return status;
 }
 
-static void uct_rc_verbs_iface_progress(void *arg)
+void uct_rc_verbs_iface_progress(void *arg)
 {
     uct_rc_verbs_iface_t *iface = arg;
     ucs_status_t status;
@@ -313,7 +313,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
         }
     }
 
-    uct_worker_progress_register(worker, uct_rc_verbs_iface_progress, self);
     return UCS_OK;
 
 err_destroy_short_desc_mp:
@@ -324,8 +323,6 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    uct_worker_progress_unregister(self->super.super.super.worker,
-                                   uct_rc_verbs_iface_progress, self);
     ucs_mpool_cleanup(&self->short_desc_mp, 1);
 }
 
