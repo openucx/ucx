@@ -655,11 +655,18 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
     self->super.available     = iface->super.config.tx_qp_len;
     self->tx.post_count       = 0;
     self->tx.completion_count = 0;
+
+    uct_worker_progress_register(iface->super.super.super.worker,
+                                 uct_rc_verbs_iface_progress, iface);
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 {
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_worker_progress_unregister(iface->super.super.super.worker,
+                                   uct_rc_verbs_iface_progress, iface);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

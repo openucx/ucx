@@ -123,4 +123,6 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep);
 
+void uct_rc_verbs_iface_progress(void *arg);
+
 #endif
