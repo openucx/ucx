@@ -285,14 +285,14 @@ typedef struct ucp_generic_dt_ops {
 typedef struct ucp_params {
     /**
      * UCP @ref ucp_feature "features" that are used for library
-     * initialization.  It is recommend for applications only request
+     * initialization. It is recommend for applications only request
      * the features that are required for an optimal functionality
      */
     uint64_t                    features;
     /**
      * The size of a reserved space in a non-blocking requests. Typically
-     * applications use the this space for caching own structures in order
-     * avoid costly memory allocations, pointer dereferences, and cache misses.
+     * applications use this space for caching own structures in order to avoid
+     * costly memory allocations, pointer dereferences, and cache misses.
      * For example, MPI implementation can use this memory for caching MPI
      * descriptors
      */
@@ -788,11 +788,12 @@ void ucp_ep_destroy(ucp_ep_h ep);
 /**
  * @ingroup UCP_ENDPOINT
  *
- * @brief Flush outstanding one-sided operations on the @ref ucp_ep_h "endpoint"
+ * @brief Flush outstanding AMO and RMA operations on the @ref ucp_ep_h
+ * "endpoint".
  *
- * This routine flushes all outstanding one-sided communications on the
- * @ref ucp_ep_h "endpoint". Communication operations issued on the @a ep
- * prior to this call are completed both at the origin and at the target
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
+ * @a ep prior to this call are completed both at the origin and at the target
  * @ref ucp_ep_h "endpont" when this call returns.
  *
  * @param [in] ep        UCP endpont.
@@ -1255,9 +1256,8 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
  * address @a remote_addr and the @ref ucp_rkey_h "memory handle" @a rkey in
  * the local contiguous memory region described by @a buffer address.  The
  * routine returns when remote data is loaded and stored under the local address
- * @e buffer. If the operation is completed immediately the routine return UCS_OK,
- * otherwise UCS_INPROGRESS or an error is returned to user.
-
+ * @e buffer.
+ *
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
@@ -1286,7 +1286,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
  * @note A user can use @ref ucp_worker_flush "ucp_worker_flush()" in order
  * guarantee that remote data is loaded and stored under the local address
  * @e buffer.
-
+ *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
  * @param [in]  length       Length of the data (in bytes) stored under the
@@ -1664,8 +1664,8 @@ void ucp_dt_destroy(ucp_datatype_t datatype);
  * and the @ref ucp_worker_flush "ucp_worker_flush()" is the fact the fence
  * routine does not gurantee completion of the operations on the call return but
  * only ensures the order between communication operations. The
- * @ref ucp_worker_flush "flush" operation on return grantees that all
- * operation are completed and corresponding memory regions were updated.
+ * @ref ucp_worker_flush "flush" operation on return guarantees that all
+ * operations are completed and corresponding memory regions were updated.
  *
  * @param [in] worker        UCP worker.
  *
@@ -1677,12 +1677,13 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
 /**
  * @ingroup UCP_WORKER
  *
- * @brief Flush all outstanding communication on the @ref ucp_worker_h "worker"
+ * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
+ * "worker"
  *
- * This routine flushes all outstanding communication on the @ref ucp_worker_h
- * "worker".  Communication operations issued by on the @a worker prior to this
- * call will have completed both at the origin and at the target @ref
- * ucp_worker_h "worker" when this call returns.
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_worker_h "worker". All the AMO and RMA operations issued on the
+ * @a worker prior to this call are completed both at the origin and at the
+ * target when this call returns.
  *
  * @note For description of the differences between @ref ucp_worker_flush
  * "flush" and @ref ucp_worker_fence "fence" operations please see
