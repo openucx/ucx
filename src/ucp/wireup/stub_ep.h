@@ -22,17 +22,17 @@
  * endpoint it also contains an auxiliary endpoint which can send wireup messages.
  */
 struct ucp_stub_ep {
-    uct_ep_t            super;         /* Derive from uct_ep */
-    ucp_ep_h            ep;            /* Pointer to the ucp_ep we're wiring */
-    ucs_queue_head_t    pending_q;     /* Queue of pending operations */
-    uct_ep_h            aux_ep;        /* Used to wireup the "real" endpoint */
-    uct_ep_h            next_ep;       /* Next transport being wired up */
+    uct_ep_t            super;         /**< Derive from uct_ep */
+    ucp_ep_h            ep;            /**< Pointer to the ucp_ep we're wiring */
+    ucs_queue_head_t    pending_q;     /**< Queue of pending operations */
+    uct_ep_h            aux_ep;        /**< Used to wireup the "real" endpoint */
+    uct_ep_h            next_ep;       /**< Next transport being wired up */
     ucs_list_link_t     list;
 
-    ucp_ep_op_t         optype;        /* Which operation type inside the ucp_ep */
-    ucp_rsc_index_t     aux_rsc_index; /* Index of auxiliary transport */
-    volatile uint32_t   pending_count; /* Number of pending wireup operations */
-    volatile int        connected;     /* next_ep is fully connected */
+    ucp_ep_op_t         optype;        /**< Which operation type inside the ucp_ep */
+    ucp_rsc_index_t     aux_rsc_index; /**< Index of auxiliary transport */
+    volatile uint32_t   pending_count; /**< Number of pending wireup operations */
+    volatile int        connected;     /**< next_ep is fully connected */
 };
 
 
