@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
 */
 
@@ -10,7 +11,6 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 #include <common/test.h>
-#include <uct/ib/base/ib_iface.h>
 #include "uct_test.h"
 
 class test_uct_wakeup : public uct_test {
