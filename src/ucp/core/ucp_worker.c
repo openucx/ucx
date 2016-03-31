@@ -219,9 +219,9 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     /* Set wake-up handlers */
     if (attr->cap.flags & UCT_IFACE_FLAG_WAKEUP) {
         status = uct_wakeup_open(iface,
-                                 UCT_WAKEUP_TX_COMPLETION |
+                                 UCT_WAKEUP_TX_RESOURCES |
                                  UCT_WAKEUP_RX_AM |
-                                 UCT_WAKEUP_RX_SIGNALED_AM,
+                                 UCT_WAKEUP_RX_SIGNAL,
                                  &wakeup);
         if (status != UCS_OK) {
             goto out_close_iface;

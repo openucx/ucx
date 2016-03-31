@@ -222,10 +222,10 @@ typedef enum {
  * @ingroup UCT_RESOURCE
  * @brief  Wakeup event types.
  */
-enum uct_wakeup_event_types {
-    UCT_WAKEUP_TX_COMPLETION   = UCS_BIT(0),
-    UCT_WAKEUP_RX_AM           = UCS_BIT(1),
-    UCT_WAKEUP_RX_SIGNALED_AM  = UCS_BIT(2),
+enum {
+    UCT_WAKEUP_TX_RESOURCES   = UCS_BIT(0),  /**< Send resources became available */
+    UCT_WAKEUP_RX_AM          = UCS_BIT(1),  /**< Active message received */
+    UCT_WAKEUP_RX_SIGNAL      = UCS_BIT(2),  /**< Wakeup signal from remote sender */
 };
 
 

@@ -77,7 +77,13 @@ typedef struct uct_ib_iface {
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
-    struct ibv_comp_channel *comp_channel;
+
+    struct {
+        struct ibv_comp_channel *channel;     /* IB completion channel */
+        unsigned                tx_refcount;  /* refcount for send completion event */
+        unsigned                rx_refcount;  /* refcount for receive completion event */
+        unsigned                sol_refcount; /* refcount for solicited receive event */
+    } comp;
 
     struct {
         unsigned            rx_payload_offset;   /* offset from desc to payload */
@@ -93,6 +99,17 @@ typedef struct uct_ib_iface {
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h, const char*,
                   unsigned, unsigned, unsigned, unsigned, size_t, uct_ib_iface_config_t*)
 
+
+/**
+ * IB wakeup object
+ */
+typedef struct uct_ib_wakeup {
+    uct_wakeup_t            super;
+    uct_ib_iface_t          *iface;
+    unsigned                events;
+} uct_ib_wakeup_t;
+UCS_CLASS_DECLARE(uct_ib_wakeup_t, uct_iface_h, unsigned)
+UCS_CLASS_DECLARE_NEW_FUNC(uct_ib_wakeup_t, uct_wakeup_t, uct_iface_h, unsigned);
 
 /*
  * The offset to the payload is the maximum between user-requested headroom
@@ -217,18 +234,5 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
 
 struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid);
-
-ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
-                                      uct_wakeup_h wakeup);
-
-ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p);
-
-ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup);
-
-ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup);
-
-ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup);
-
-void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup);
 
 #endif

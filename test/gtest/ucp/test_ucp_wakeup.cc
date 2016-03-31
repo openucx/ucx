@@ -50,7 +50,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
 
     polled.fd = recv_efd;
-    EXPECT_EQ(poll(&polled, 1, 0), 0);
+    EXPECT_EQ(0, poll(&polled, 1, 0));
     ASSERT_UCS_OK(ucp_worker_arm(recv_worker));
 
     req = ucp_tag_send_nb(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
@@ -61,7 +61,9 @@ UCS_TEST_P(test_ucp_wakeup, efd)
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
 
-    ASSERT_EQ(poll(&polled, 1, 1), 1);
+    ucs::safe_usleep(10e3);
+
+    ASSERT_EQ(1, poll(&polled, 1, 1)) << "fd=" << polled.fd;
     ASSERT_UCS_OK(ucp_worker_arm(recv_worker));
 
     uint64_t recv_data = 0;
