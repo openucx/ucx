@@ -713,6 +713,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
         vec[2].iov_len  = rkey_size;
         iov_len = 3;
     } else {
+        rkey_buffer     = NULL;
         iov_len = 2;
     }
 
