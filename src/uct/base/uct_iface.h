@@ -133,10 +133,9 @@ typedef struct uct_am_handler {
  * Wakeup event handle item
  */
 typedef struct uct_wakeup {
-    uct_iface_h                 iface;
-    enum uct_wakeup_event_types events;
-    int                         fd;
+    uct_wakeup_ops_t  *ops;
 } uct_wakeup_t;
+UCS_CLASS_DECLARE(uct_wakeup_t, uct_wakeup_ops_t*);
 
 
 /**

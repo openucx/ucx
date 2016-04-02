@@ -74,22 +74,22 @@ UCS_TEST_P(test_uct_wakeup, am)
                              UCT_AM_CB_FLAG_SYNC);
 
     /* create reciever makeup */
-    ASSERT_EQ(uct_wakeup_open(m_e2->iface(), UCT_WAKEUP_RX_SIGNALED_AM,
-            &wakeup_handle), UCS_OK);
+    ASSERT_EQ(uct_wakeup_open(m_e2->iface(), UCT_WAKEUP_RX_AM, &wakeup_handle),
+              UCS_OK);
     ASSERT_EQ(uct_wakeup_efd_get(wakeup_handle, &wakeup_fd.fd), UCS_OK);
     wakeup_fd.events = POLLIN;
-    EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
+    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
     ASSERT_EQ(uct_wakeup_efd_arm(wakeup_handle), UCS_OK);
-    EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
+    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
 
     /* make sure the file descriptor IS signaled ONCE */
-    ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
+    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1));
     ASSERT_EQ(uct_wakeup_efd_arm(wakeup_handle), UCS_OK);
     wakeup_fd.revents = 0;
-    EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
+    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
     /* send the data again */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));

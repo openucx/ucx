@@ -334,6 +334,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     self->port_num                 = port_num;
     self->sl                       = config->sl;
+    self->comp.tx_refcount         = 0;
+    self->comp.rx_refcount         = 0;
+    self->comp.sol_refcount        = 0;
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
                                      ucs_max(sizeof(uct_am_recv_desc_t) + rx_headroom,
                                              rx_priv_len + rx_hdr_len);
@@ -360,21 +363,21 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         goto err;
     }
 
-    self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
-    if (self->comp_channel == NULL) {
+    self->comp.channel = ibv_create_comp_channel(dev->ibv_context);
+    if (self->comp.channel == NULL) {
         ucs_error("Failed to create completion channel: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_free_path_bits;
     }
 
-    status = ucs_sys_fcntl_modfl(self->comp_channel->fd, O_NONBLOCK, 0);
+    status = ucs_sys_fcntl_modfl(self->comp.channel->fd, O_NONBLOCK, 0);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
 
     /* TODO inline scatter for send SQ */
-    self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len,
-                                  NULL, self->comp_channel, 0);
+    self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len, NULL,
+                                  self->comp.channel, 0);
     if (self->send_cq == NULL) {
         ucs_error("Failed to create send cq: %m");
         status = UCS_ERR_IO_ERROR;
@@ -386,7 +389,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     }
 
     self->recv_cq = ibv_create_cq(dev->ibv_context, config->rx.queue_len,
-                                  NULL, self->comp_channel, 0);
+                                  NULL, self->comp.channel, 0);
     ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "64", 1);
 
     if (self->recv_cq == NULL) {
@@ -412,7 +415,7 @@ err_destroy_recv_cq:
 err_destroy_send_cq:
     ibv_destroy_cq(self->send_cq);
 err_destroy_comp_channel:
-    ibv_destroy_comp_channel(self->comp_channel);
+    ibv_destroy_comp_channel(self->comp.channel);
 err_free_path_bits:
     ucs_free(self->path_bits);
 err:
@@ -433,7 +436,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
     }
 
-    ret = ibv_destroy_comp_channel(self->comp_channel);
+    ret = ibv_destroy_comp_channel(self->comp.channel);
     if (ret != 0) {
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
@@ -567,48 +570,65 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
-                                        struct ibv_cq *cq)
+static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface, struct ibv_cq *cq,
+                                        int solicited_only, const char *title)
 {
-    if (ibv_req_notify_cq(cq, 0)) {
-        uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    int ret;
+
+    ret = ibv_req_notify_cq(cq, solicited_only);
+    if (ret != 0) {
         ucs_error("ibv_req_notify_cq(%s:%d, cq) failed: %m",
                   uct_ib_device_name(dev), iface->port_num);
         return UCS_ERR_IO_ERROR;
     }
+
+    ucs_debug("iface %p armed %s cq %p solicited_only=%d", iface, title, cq,
+              solicited_only);
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
+static ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h tl_wakeup)
 {
-    int res, ack_count = 0;
+    uct_ib_wakeup_t *wakeup = ucs_derived_of(tl_wakeup, uct_ib_wakeup_t);
+    uct_ib_iface_t *iface = wakeup->iface;
     ucs_status_t status;
     struct ibv_cq *cq;
+    unsigned ack_count;
     void *cq_context;
-    uct_ib_iface_t *iface = ucs_derived_of(wakeup->iface, uct_ib_iface_t);
+    int ret;
 
-    do {
-        res = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
-        ack_count++;
-    } while (res == 0);
+    ack_count = 0;
+    for (;;) {
+        ret = ibv_get_cq_event(iface->comp.channel, &cq, &cq_context);
+        if (ret != 0) {
+            break;
+        }
 
+        ++ack_count;
+    }
     if (errno != EAGAIN) {
+        ucs_error("Failed to get CQ event: %m");
         return UCS_ERR_IO_ERROR;
     }
 
-    if (ack_count > 1) {
-        ibv_ack_cq_events(cq, ack_count - 1);
+    if (ack_count > 0) {
+        ibv_ack_cq_events(cq, ack_count);
     }
 
-    if (wakeup->events & UCT_WAKEUP_TX_COMPLETION) {
-        status = uct_ib_iface_arm_cq(iface, iface->send_cq);
+    /* TODO accelerated verbs should update CI */
+
+    if (iface->comp.tx_refcount > 0) {
+        status = uct_ib_iface_arm_cq(iface, iface->send_cq, 0, "send");
         if (status != UCS_OK) {
             return status;
         }
     }
 
-    if (wakeup->events & (UCT_WAKEUP_RX_AM | UCT_WAKEUP_RX_SIGNALED_AM)) {
-        status = uct_ib_iface_arm_cq(iface, iface->recv_cq);
+    if ((iface->comp.rx_refcount > 0) || (iface->comp.sol_refcount > 0)) {
+        /* Arm only for solicited events in case there aren't any regular wakeups. */
+        status = uct_ib_iface_arm_cq(iface, iface->recv_cq,
+                                     iface->comp.rx_refcount == 0, "receive");
         if (status != UCS_OK) {
             return status;
         }
@@ -617,41 +637,85 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p)
+static ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h tl_wakeup, int *fd_p)
 {
-    *fd_p = wakeup->fd;
+    uct_ib_wakeup_t *wakeup = ucs_derived_of(tl_wakeup, uct_ib_wakeup_t);
+    *fd_p = wakeup->iface->comp.channel->fd;
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup)
+static ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h tl_wakeup)
 {
-    int res;
-    struct pollfd polled = { .fd = wakeup->fd, .events = POLLIN };
+    ucs_status_t status;
+    struct pollfd pfd;
+    int ret;
+
+    status = uct_ib_iface_wakeup_arm(tl_wakeup);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    (void)uct_ib_iface_wakeup_get_fd(tl_wakeup, &pfd.fd);
+    pfd.events = POLLIN;
 
     do {
-        res = poll(&polled, 1, -1);
-    } while ((res == -1) && (errno == EINTR));
+        ret = poll(&pfd, 1, -1);
+    } while ((ret < 0) && (errno == EINTR));
 
-    if ((res != 1) || (polled.revents != POLLIN)) {
+    if (ret < 0) {
+        ucs_error("poll(fd=%d) failed: %m", pfd.fd);
         return UCS_ERR_IO_ERROR;
+    } else if (ret == 0) {
+        ucs_warn("polling on completion event returned empty set");
     }
 
-    return uct_ib_iface_wakeup_arm(wakeup);
-}
-
-ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
-                                      uct_wakeup_h wakeup)
-{
-    uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
-    wakeup->fd = ib_iface->comp_channel->fd;
+    ucs_assert(pfd.revents == POLLIN);
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup)
+static ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 
-void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup)
+static void uct_ib_iface_update_comp(uct_ib_iface_t *iface, unsigned events,
+                                     int delta)
 {
+    if (events & UCT_WAKEUP_TX_RESOURCES) {
+        iface->comp.tx_refcount += delta;
+    }
+    if (events & UCT_WAKEUP_RX_AM) {
+        iface->comp.rx_refcount += delta;
+    }
+    if (events & UCT_WAKEUP_RX_SIGNAL) {
+        iface->comp.tx_refcount += delta;
+    }
 }
+
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ib_wakeup_t, uct_wakeup_t, uct_iface_h, unsigned);
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ib_wakeup_t, uct_wakeup_t);
+
+static uct_wakeup_ops_t uct_ib_wakeup_ops = {
+    .get_fd = uct_ib_iface_wakeup_get_fd,
+    .arm    = uct_ib_iface_wakeup_arm,
+    .wait   = uct_ib_iface_wakeup_wait,
+    .signal = uct_ib_iface_wakeup_signal,
+    .close  = UCS_CLASS_DELETE_FUNC_NAME(uct_ib_wakeup_t),
+};
+
+UCS_CLASS_INIT_FUNC(uct_ib_wakeup_t, uct_iface_h tl_iface, unsigned events) {
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_wakeup_t, &uct_ib_wakeup_ops)
+
+    self->iface     = iface;
+    self->events    = events;
+    uct_ib_iface_update_comp(iface, events, +1);
+    return UCS_OK;
+}
+
+UCS_CLASS_CLEANUP_FUNC(uct_ib_wakeup_t) {
+    uct_ib_iface_update_comp(self->iface, self->events, -1);
+}
+
+UCS_CLASS_DEFINE(uct_ib_wakeup_t, uct_wakeup_t);
