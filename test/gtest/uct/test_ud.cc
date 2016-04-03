@@ -698,8 +698,8 @@ UCS_TEST_P(test_ud, res_skb_tx) {
             memcpy(put_hdr+1, &m_dummy, sizeof(m_dummy));
             skb->len = sizeof(*neth) + sizeof(*put_hdr) + sizeof(m_dummy);
 
-
-            ud_if->ops.tx_skb(ud_if, ep(m_e1), skb);
+            ucs_derived_of(ud_if->super.ops, uct_ud_iface_ops_t)->tx_skb(ep(m_e1),
+                                                                         skb);
             uct_ud_iface_res_skb_put(ud_if, skb);
             tx_count++;
         }

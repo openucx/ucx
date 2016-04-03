@@ -46,13 +46,14 @@ static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a) {
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE, uct_ud_iface_peer_hash)
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
+                                         uct_ud_iface_peer_hash)
 
-typedef void (*uct_ud_ep_tx_skb_t)(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                   uct_ud_send_skb_t *skb);
+
 typedef struct uct_ud_iface_ops {
+    uct_ib_iface_ops_t        super;
     ucs_async_event_cb_t      async_progress;
-    uct_ud_ep_tx_skb_t        tx_skb;
+    void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb);
 } uct_ud_iface_ops_t;
 
 
@@ -91,10 +92,9 @@ struct uct_ud_iface {
         int               timer_id;
         ucs_twheel_t      slow_timer;
     } async;
-    uct_ud_iface_ops_t    ops;
 };
 
-UCS_CLASS_DECLARE(uct_ud_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char *, unsigned, unsigned, uct_ud_iface_config_t*)
 
 struct uct_ud_ctl_hdr {

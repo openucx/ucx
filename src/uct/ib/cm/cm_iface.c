@@ -35,7 +35,7 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {NULL}
 };
 
-static uct_iface_ops_t uct_cm_iface_ops;
+static uct_ib_iface_ops_t uct_cm_iface_ops;
 
 
 static void uct_cm_iface_notify(uct_cm_iface_t *iface)
@@ -349,20 +349,24 @@ static ucs_status_t uct_cm_iface_get_address(uct_iface_h tl_iface,
 }
 
 
-static uct_iface_ops_t uct_cm_iface_ops = {
-    .iface_query           = uct_cm_iface_query,
-    .iface_flush           = uct_cm_iface_flush,
-    .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
-    .iface_get_address     = uct_cm_iface_get_address,
+static uct_ib_iface_ops_t uct_cm_iface_ops = {
+    {
+    .iface_query              = uct_cm_iface_query,
+    .iface_flush              = uct_cm_iface_flush,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_iface_t),
+    .iface_get_address        = uct_cm_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable    = uct_ib_iface_is_reachable,
-    .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
-    .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
-    .iface_release_am_desc = uct_cm_iface_release_desc,
-    .ep_am_bcopy           = uct_cm_ep_am_bcopy,
-    .ep_pending_add        = uct_cm_ep_pending_add,
-    .ep_pending_purge      = uct_cm_ep_pending_purge,
-    .ep_flush              = uct_cm_ep_flush,
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
+    .iface_release_am_desc    = uct_cm_iface_release_desc,
+    .ep_am_bcopy              = uct_cm_ep_am_bcopy,
+    .ep_pending_add           = uct_cm_ep_pending_add,
+    .ep_pending_purge         = uct_cm_ep_pending_purge,
+    .ep_flush                 = uct_cm_ep_flush,
+    },
+    .arm_tx_cq                = (void*)ucs_empty_function_return_success,
+    .arm_rx_cq                = (void*)ucs_empty_function_return_success,
 };
 
 static ucs_status_t uct_cm_query_resources(uct_pd_h pd,
