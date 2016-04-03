@@ -4,6 +4,7 @@
 * See file LICENSE for terms.
 */
 
+#include <ucs/arch/atomic.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
 #include <ucs/sys/sys.h>
@@ -30,7 +31,7 @@ int ucs_notifier_chain_add(ucs_notifier_chain_t *chain, ucs_notifier_chain_func_
 
     ucs_notifier_chain_for_each(elem, chain) {
         if ((elem->func == func) && (elem->arg == arg)) {
-            ++elem->refcount;
+            ucs_atomic_add32(&elem->refcount, 1);
             return 0;
         }
     }
@@ -45,9 +46,11 @@ int ucs_notifier_chain_add(ucs_notifier_chain_t *chain, ucs_notifier_chain_func_
     ucs_debug("add %s to progress chain %p",
               ucs_debug_get_symbol_name(func, func_name, sizeof(func_name)),
               chain);
-    free_slot->func     = func;
     free_slot->arg      = arg;
     free_slot->refcount = 1;
+
+    ucs_memory_cpu_store_fence();
+    free_slot->func     = func;
     return 1;
 }
 
@@ -59,7 +62,7 @@ int ucs_notifier_chain_remove(ucs_notifier_chain_t *chain, ucs_notifier_chain_fu
     removed_elem = NULL;
     last_elem    = NULL;
     ucs_notifier_chain_for_each(elem, chain) {
-        if (elem->func == func && elem->arg == arg) {
+        if ((elem->func == func) && (elem->arg == arg)) {
             removed_elem = elem;
         }
         last_elem = elem;
@@ -70,8 +73,7 @@ int ucs_notifier_chain_remove(ucs_notifier_chain_t *chain, ucs_notifier_chain_fu
         return 0;
     }
 
-    --removed_elem->refcount;
-    if (removed_elem->refcount != 0) {
+    if (ucs_atomic_fadd32(&removed_elem->refcount, -1) != 1) {
         return 0;
     }
 

@@ -7,6 +7,7 @@
 #include "ucp_worker.h"
 
 #include <ucp/wireup/address.h>
+#include <ucp/wireup/stub_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucs/datastruct/mpool.inl>
 
@@ -257,78 +258,126 @@ out:
     return status;
 }
 
-static void ucp_worker_set_config(ucp_worker_h worker, ucp_rsc_index_t tl_id)
+unsigned ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_rsc_index_t *rscs)
 {
-    ucp_context_h context        = worker->context;
-    uct_iface_attr_t *iface_attr = &worker->iface_attrs[tl_id];
-    ucp_ep_config_t *config      = &worker->ep_config[tl_id];
-    uct_pd_attr_t *pd_attr       = &context->pd_attrs[context->tl_rscs[tl_id].pd_index];
+    ucp_context_h context = worker->context;
+    uct_iface_attr_t *iface_attr;
+    uct_pd_attr_t *pd_attr;
+    ucp_ep_config_t *config;
+    ucp_rsc_index_t rsc_index;
     double zcopy_thresh;
+    ucp_ep_op_t optype, dup;
+    unsigned i;
+
+    for (i = 0; i < worker->ep_config_count; ++i) {
+        if (!memcmp(rscs, &worker->ep_config[i].rscs, sizeof(worker->ep_config[i].rscs))) {
+            return i;
+        }
+    }
+
+    if (worker->ep_config_count >= worker->ep_config_max) {
+        /* TODO support larger number of configurations */
+        ucs_fatal("too many ep configurations");
+    }
+
+    config         = &worker->ep_config[worker->ep_config_count];
 
     memset(config, 0, sizeof(*config));
+    memcpy(config->rscs, rscs, sizeof(config->rscs));
 
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-        config->max_eager_short  = iface_attr->cap.am.max_short - sizeof(ucp_eager_hdr_t);
-        config->max_am_short     = iface_attr->cap.am.max_short - sizeof(uint64_t);
-    }
-
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
-        config->max_put_short    = iface_attr->cap.put.max_short;
-    }
-
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-        config->max_am_bcopy     = iface_attr->cap.am.max_bcopy;
-    }
-
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
-        config->max_put_bcopy    = iface_attr->cap.put.max_bcopy;
-    }
-
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
-        config->max_get_bcopy    = iface_attr->cap.get.max_bcopy;
-    }
-
-    if ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) &&
-        (pd_attr->cap.flags & UCT_PD_FLAG_REG))
-    {
-        config->max_am_zcopy  = iface_attr->cap.am.max_zcopy;
-        config->max_put_zcopy = iface_attr->cap.put.max_zcopy;
-        config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
-
-        if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-            /* auto */
-            zcopy_thresh = pd_attr->reg_cost.overhead / (
-                                    (1.0 / context->config.ext.bcopy_bw) -
-                                    (1.0 / iface_attr->bandwidth) -
-                                    pd_attr->reg_cost.growth);
-            if (zcopy_thresh < 0) {
-                config->zcopy_thresh      = SIZE_MAX;
-                config->sync_zcopy_thresh = -1;
-            } else {
-                config->zcopy_thresh = zcopy_thresh;
-                config->sync_zcopy_thresh = zcopy_thresh;
+    /* find duplicate resources */
+    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
+        config->dups[optype] = UCP_EP_OP_LAST;
+        for (dup = 0; dup < optype; ++dup) {
+            if (config->rscs[optype] == config->rscs[dup]) {
+                config->dups[optype] = dup;
+                break;
             }
-        } else {
-            config->zcopy_thresh = context->config.ext.zcopy_thresh;
-            config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
         }
-    } else {
-        config->zcopy_thresh      = SIZE_MAX;
-        config->sync_zcopy_thresh = -1;
     }
 
-    config->bcopy_thresh     = context->config.ext.bcopy_thresh;
-    config->rndv_thresh      = SIZE_MAX;
-    config->sync_rndv_thresh = SIZE_MAX;
+    /* Default thresholds */
+    config->zcopy_thresh      = SIZE_MAX;
+    config->sync_zcopy_thresh = -1;
+    config->bcopy_thresh      = context->config.ext.bcopy_thresh;
+    config->rndv_thresh       = SIZE_MAX;
+    config->sync_rndv_thresh  = SIZE_MAX;
+
+    /* Configuration for active messages */
+    rsc_index = config->rscs[UCP_EP_OP_AM];
+    if (rsc_index != UCP_NULL_RESOURCE) {
+        iface_attr  = &worker->iface_attrs[rsc_index];
+        pd_attr     = &context->pd_attrs[context->tl_rscs[rsc_index].pd_index];
+
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+            config->max_am_bcopy     = iface_attr->cap.am.max_bcopy;
+        }
+
+        if ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) &&
+            (pd_attr->cap.flags & UCT_PD_FLAG_REG))
+        {
+            config->max_am_zcopy  = iface_attr->cap.am.max_zcopy;
+            config->max_put_zcopy = iface_attr->cap.put.max_zcopy;
+            config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
+
+            if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                /* auto */
+                zcopy_thresh = pd_attr->reg_cost.overhead / (
+                                        (1.0 / context->config.ext.bcopy_bw) -
+                                        (1.0 / iface_attr->bandwidth) -
+                                        pd_attr->reg_cost.growth);
+                if (zcopy_thresh < 0) {
+                    config->zcopy_thresh      = SIZE_MAX;
+                    config->sync_zcopy_thresh = -1;
+                } else {
+                    config->zcopy_thresh      = zcopy_thresh;
+                    config->sync_zcopy_thresh = zcopy_thresh;
+                }
+            } else {
+                config->zcopy_thresh      = context->config.ext.zcopy_thresh;
+                config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
+            }
+        }
+    }
+
+    /* Configuration for remote memory access */
+    rsc_index = config->rscs[UCP_EP_OP_RMA];
+    if (rsc_index != UCP_NULL_RESOURCE) {
+        iface_attr = &worker->iface_attrs[rsc_index];
+
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+            config->max_eager_short  = iface_attr->cap.am.max_short - sizeof(ucp_eager_hdr_t);
+            config->max_am_short     = iface_attr->cap.am.max_short - sizeof(uint64_t);
+        }
+
+
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
+            config->max_put_short    = iface_attr->cap.put.max_short;
+        }
+
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
+            config->max_put_bcopy    = iface_attr->cap.put.max_bcopy;
+        }
+
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
+            config->max_get_bcopy    = iface_attr->cap.get.max_bcopy;
+        }
+    }
+
+    return worker->ep_config_count++;
 }
 
 static void ucp_worker_set_stub_config(ucp_worker_h worker)
 {
-    ucp_context_h context        = worker->context;
-    ucp_ep_config_t *config      = &worker->ep_config[context->num_tls];
+    ucp_ep_config_t *config = &worker->ep_config[0];
+    ucp_ep_op_t optype;
 
     memset(config, 0, sizeof(*config));
 
+    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
+        config->rscs[optype] = UCP_NULL_RESOURCE;
+        config->dups[optype] = UCP_EP_OP_LAST;
+    }
     config->max_am_bcopy      = 256;
     config->zcopy_thresh      = SIZE_MAX;
     config->sync_zcopy_thresh = SIZE_MAX;
@@ -342,30 +391,31 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     ucp_rsc_index_t tl_id;
     ucp_worker_h worker;
     ucs_status_t status;
-#if ENABLE_DEBUG_DATA
+    unsigned config_count;
     unsigned name_length;
-#endif
+
+    config_count = ucs_min((context->num_tls + 1) * context->num_tls, UINT8_MAX);
 
     worker = ucs_calloc(1, sizeof(*worker) +
-                           sizeof(*worker->ep_config) * (context->num_tls + 1),
+                           sizeof(*worker->ep_config) * config_count,
                         "ucp worker");
     if (worker == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
-    worker->context       = context;
-    worker->uuid          = ucs_generate_uuid((uintptr_t)worker);
+    worker->context         = context;
+    worker->uuid            = ucs_generate_uuid((uintptr_t)worker);
     worker->stub_pend_count = 0;
-#if ENABLE_ASSERT
-    worker->inprogress    = 0;
-#endif
-#if ENABLE_DEBUG_DATA
+    worker->inprogress      = 0;
+    worker->ep_config_max   = config_count;
+    worker->ep_config_count = 0;
+    ucs_list_head_init(&worker->stub_ep_list);
+
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
                       getpid());
-#endif
 
     worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_WORKER_EP_HASH_SIZE,
                                  "ucp_ep_hash");
@@ -422,11 +472,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
         if (status != UCS_OK) {
             goto err_close_ifaces;
         }
-
-        ucp_worker_set_config(worker, tl_id);
     }
 
+    /* configuration index 0 is for stub endpoints */
     ucp_worker_set_stub_config(worker);
+    ++worker->ep_config_count;
 
     *worker_p = worker;
     return UCS_OK;
@@ -639,14 +689,8 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid)
 
     ep = ucp_worker_ep_find(worker, dest_uuid);
     if (ep == NULL) {
-        status = ucp_ep_new(worker, dest_uuid, "??", "for-sending-reply", &ep);
+        status = ucp_ep_create_stub(worker, dest_uuid, "for-sending-reply", &ep);
         if (status != UCS_OK) {
-            goto err;
-        }
-
-        status = ucp_wireup_create_stub_ep(ep);
-        if (status != UCS_OK) {
-            ucp_ep_delete(ep);
             goto err;
         }
     } else {
@@ -679,6 +723,45 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
 SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_worker_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE,
                                         ucp_worker_ep_hash);
+
+void ucp_worker_progress_stub_eps(void *arg)
+{
+    ucp_worker_h worker = arg;
+    ucp_stub_ep_t *stub_ep, *tmp;
+
+    /*
+     * We switch the endpoint in this function (instead in wireup code) since
+     * this is guaranteed to run from the main thread.
+     * Don't start using the transport before the wireup protocol finished
+     * sending ack/reply.
+     */
+    sched_yield();
+    ucs_async_check_miss(&worker->async);
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_list_for_each_safe(stub_ep, tmp, &worker->stub_ep_list, list) {
+        ucp_stub_ep_progress(stub_ep);
+    }
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+void ucp_worker_stub_ep_add(ucp_worker_h worker, ucp_stub_ep_t *stub_ep)
+{
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_list_add_head(&worker->stub_ep_list, &stub_ep->list);
+    uct_worker_progress_register(worker->uct, ucp_worker_progress_stub_eps,
+                                 worker);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+void ucp_worker_stub_ep_remove(ucp_worker_h worker, ucp_stub_ep_t *stub_ep)
+{
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_list_del(&stub_ep->list);
+    uct_worker_progress_unregister(worker->uct, ucp_worker_progress_stub_eps,
+                                   worker);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
 
 static void ucp_worker_print_config(FILE *stream, const char * const *names,
                                     const size_t *values, unsigned count,

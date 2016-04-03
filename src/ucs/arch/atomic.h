@@ -7,6 +7,7 @@
 #ifndef UCS_ARCH_ATOMIC_H
 #define UCS_ARCH_ATOMIC_H
 
+#include <stdint.h>
 
 #if defined(__x86_64__)
 #  include "x86_64/atomic.h"

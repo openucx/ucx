@@ -5,6 +5,7 @@
 */
 
 #include "ucp_mm.h"
+#include "ucp_request.h"
 
 #include <inttypes.h>
 
@@ -73,8 +74,6 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     uint64_t pd_map;
     void *p;
 
-    ucs_assert(ep->dst_pd_index != UCP_NULL_RESOURCE);
-
     /* Count the number of remote PDs in the rkey buffer */
     p = rkey_buffer;
 
@@ -113,7 +112,9 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         ucs_assert(pd_map & 1);
 
         /* Unpack only reachable rkeys */
-        if (ep->dst_pd_index == remote_pd_index) {
+        if ((remote_pd_index == ep->rma_dst_pdi) ||
+            (remote_pd_index == ep->amo_dst_pdi))
+        {
             ucs_assert(rkey_index < pd_count);
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
             if (status != UCS_OK) {

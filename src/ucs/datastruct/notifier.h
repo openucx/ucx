@@ -7,6 +7,7 @@
 #ifndef UCS_DATASTRUCT_NOTIFIER_H
 #define UCS_DATASTRUCT_NOTIFIER_H
 
+#include <ucs/arch/cpu.h>
 #include <ucs/type/callback.h>
 
 
@@ -23,7 +24,7 @@ typedef void                           (*ucs_notifier_chain_func_t)(void *arg);
 struct ucs_notifier_chain_elem {
     ucs_notifier_chain_func_t func;
     void                      *arg;
-    unsigned                  refcount;
+    volatile uint32_t         refcount;
 };
 
 /**
@@ -49,6 +50,7 @@ static inline void ucs_notifier_chain_call(ucs_notifier_chain_t *chain)
     ucs_notifier_chain_elem_t *elem;
 
     ucs_notifier_chain_for_each(elem, chain) {
+        ucs_memory_cpu_load_fence();
         elem->func(elem->arg);
     }
 }

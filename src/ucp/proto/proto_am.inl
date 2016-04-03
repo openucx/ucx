@@ -18,7 +18,7 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ucp_ep_t *ep = req->send.ep;
     ssize_t packed_len;
 
-    packed_len = uct_ep_am_bcopy(ep->uct_ep, am_id, pack_cb, req);
+    packed_len = uct_ep_am_bcopy(ep->uct_eps[UCP_EP_OP_AM], am_id, pack_cb, req);
     if (packed_len < 0) {
         return packed_len;
     }
@@ -43,7 +43,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     offset = req->send.state.offset;
     if (offset == 0) {
         /* First */
-        packed_len = uct_ep_am_bcopy(ep->uct_ep, am_id_first, pack_first, req);
+        packed_len = uct_ep_am_bcopy(ep->uct_eps[UCP_EP_OP_AM], am_id_first,
+                                     pack_first, req);
         if (packed_len < 0) {
             return packed_len; /* Failed */
         }
@@ -52,7 +53,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
-        packed_len = uct_ep_am_bcopy(ep->uct_ep, am_id_middle, pack_middle, req);
+        packed_len = uct_ep_am_bcopy(ep->uct_eps[UCP_EP_OP_AM], am_id_middle,
+                                     pack_middle, req);
         if (packed_len < 0) {
             return packed_len; /* Failed */
         }
@@ -64,7 +66,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else {
         /* Last */
-        packed_len = uct_ep_am_bcopy(ep->uct_ep, am_id_last, pack_last, req);
+        packed_len = uct_ep_am_bcopy(ep->uct_eps[UCP_EP_OP_AM], am_id_last,
+                                     pack_last, req);
         if (packed_len < 0) {
             return packed_len; /* Failed */
         }
@@ -82,9 +85,9 @@ ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id, const void *hdr,
     ucs_status_t status;
 
     /* TODO fix UCT api to have header ptr as const */
-    status = uct_ep_am_zcopy(ep->uct_ep, am_id, (void*)hdr, hdr_size, req->send.buffer,
-                             req->send.length, req->send.state.dt.contig.memh,
-                             &req->send.uct_comp);
+    status = uct_ep_am_zcopy(ep->uct_eps[UCP_EP_OP_AM], am_id, (void*)hdr,
+                             hdr_size, req->send.buffer, req->send.length,
+                             req->send.state.dt.contig.memh, &req->send.uct_comp);
     if (status == UCS_OK) {
         complete(req);
     } else if (status < 0) {
@@ -113,8 +116,9 @@ ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     if (offset == 0) {
         /* First */
         length = max_middle - hdr_size_first + hdr_size_middle;
-        status = uct_ep_am_zcopy(ep->uct_ep, am_id_first, (void*)hdr_first,
-                                 hdr_size_first, req->send.buffer, length,
+        status = uct_ep_am_zcopy(ep->uct_eps[UCP_EP_OP_AM], am_id_first,
+                                 (void*)hdr_first, hdr_size_first,
+                                 req->send.buffer, length,
                                  req->send.state.dt.contig.memh,
                                  &req->send.uct_comp);
         if (status < 0) {
@@ -125,9 +129,10 @@ ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
-        status = uct_ep_am_zcopy(ep->uct_ep, am_id_middle, (void*)hdr_middle,
-                                 hdr_size_middle, req->send.buffer + offset,
-                                 max_middle, req->send.state.dt.contig.memh,
+        status = uct_ep_am_zcopy(ep->uct_eps[UCP_EP_OP_AM], am_id_middle,
+                                 (void*)hdr_middle, hdr_size_middle,
+                                 req->send.buffer + offset, max_middle,
+                                 req->send.state.dt.contig.memh,
                                  &req->send.uct_comp);
         if (status < 0) {
             return status; /* Failed */
@@ -138,9 +143,10 @@ ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     } else {
         /* Last */
         length = req->send.length - offset;
-        status = uct_ep_am_zcopy(ep->uct_ep, am_id_last, (void*)hdr_middle,
-                                 hdr_size_middle, req->send.buffer + offset,
-                                 length, req->send.state.dt.contig.memh,
+        status = uct_ep_am_zcopy(ep->uct_eps[UCP_EP_OP_AM], am_id_last,
+                                 (void*)hdr_middle, hdr_size_middle,
+                                 req->send.buffer + offset, length,
+                                 req->send.state.dt.contig.memh,
                                  &req->send.uct_comp);
         if (status < 0) {
             return status; /* Failed */

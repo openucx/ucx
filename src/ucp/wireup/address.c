@@ -190,6 +190,29 @@ static void ucp_address_memchek(void *ptr, size_t size,
     }
 }
 
+static ucs_status_t
+ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
+                            uct_ep_addr_t *addr)
+{
+    ucp_ep_op_t optype;
+    uct_ep_h uct_ep;
+
+    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
+        uct_ep = ep->uct_eps[optype];
+        if (ucp_ep_config(ep)->rscs[optype] == tl_index) {
+            /*
+             * If this is a stub endpoint, it will return the underlying next_ep
+             * address, and the length will be correct because the resource index
+             * is of the next_ep.
+             */
+            return uct_ep_get_address(uct_ep, addr);
+        }
+    }
+
+    ucs_bug("provided ucp_ep without required transport");
+    return UCS_ERR_INVALID_ADDR;
+}
+
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                         void *buffer, size_t size,
                                         uint64_t tl_bitmap, unsigned *order,
@@ -203,7 +226,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_rsc_index_t i;
     size_t tl_addr_len;
     unsigned index;
-    uct_ep_h uct_ep;
     void *ptr;
 
     ptr = buffer;
@@ -257,21 +279,14 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 status = uct_iface_get_address(worker->ifaces[i],
                                                (uct_iface_addr_t*)(ptr + 1));
             } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-                if (ep != NULL) {
-                    tl_addr_len = iface_attr->ep_addr_len;
-                    ucs_assert(ep->rsc_index == i);
-                    if (ep->state & UCP_EP_STATE_STUB_EP) {
-                        uct_ep = ucp_ep_get_stub_ep(ep)->next_ep;
-                    } else {
-                        uct_ep = ep->uct_ep;
-                    }
-                    status = uct_ep_get_address(uct_ep, (uct_ep_addr_t*)(ptr + 1));
-                } else {
+                if (ep == NULL) {
                     tl_addr_len = 0;
                     status      = UCS_OK;
+                } else {
+                    tl_addr_len = iface_attr->ep_addr_len;
+                    status      = ucp_address_pack_ep_address(ep, i, ptr + 1);
                 }
             } else {
-                tl_addr_len = 0;
                 status      = UCS_ERR_INVALID_ADDR;
             }
             if (status != UCS_OK) {

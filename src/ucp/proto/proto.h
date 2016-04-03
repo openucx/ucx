@@ -8,6 +8,7 @@
 #define UCP_PROTO_H_
 
 #include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_request.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
@@ -60,8 +61,8 @@ ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self);
  */
 static inline void ucp_ep_connect_remote(ucp_ep_h ep)
 {
-    if (ucs_unlikely(!(ep->state & UCP_EP_STATE_READY_TO_RECEIVE))) {
-        ucp_wireup_connect_remote(ep);
+    if (ucs_unlikely(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_SENT))) {
+        ucp_wireup_send_request(ep);
     }
 }
 
