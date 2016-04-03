@@ -28,6 +28,8 @@ ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
+static uct_ib_iface_ops_t uct_rc_verbs_iface_ops;
+
 static UCS_F_NOINLINE unsigned
 uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
 {
@@ -251,7 +253,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
 
-    extern uct_iface_ops_t uct_rc_verbs_iface_ops;
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, &config->super);
 
@@ -333,42 +334,46 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_pd_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_iface_t, uct_iface_t);
 
 
-uct_iface_ops_t uct_rc_verbs_iface_ops = {
-    .iface_query         = uct_rc_verbs_iface_query,
-    .iface_flush         = uct_rc_iface_flush,
-    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
-    .iface_release_am_desc = uct_ib_iface_release_am_desc,
-    .iface_wakeup_open   = uct_ib_iface_wakeup_open,
-    .iface_wakeup_get_fd = uct_ib_iface_wakeup_get_fd,
-    .iface_wakeup_arm    = uct_ib_iface_wakeup_arm,
-    .iface_wakeup_wait   = uct_ib_iface_wakeup_wait,
-    .iface_wakeup_signal = uct_ib_iface_wakeup_signal,
-    .iface_wakeup_close  = uct_ib_iface_wakeup_close,
-    .ep_create           = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
-    .ep_get_address      = uct_rc_ep_get_address,
-    .ep_connect_to_ep    = uct_rc_ep_connect_to_ep,
+static uct_ib_iface_ops_t uct_rc_verbs_iface_ops = {
+    {
+    .iface_query              = uct_rc_verbs_iface_query,
+    .iface_flush              = uct_rc_iface_flush,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_iface_t),
+    .iface_release_am_desc    = uct_ib_iface_release_am_desc,
+    .iface_wakeup_open        = uct_ib_iface_wakeup_open,
+    .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
+    .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
+    .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
+    .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
+    .iface_wakeup_close       = uct_ib_iface_wakeup_close,
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
+    .ep_get_address           = uct_rc_ep_get_address,
+    .ep_connect_to_ep         = uct_rc_ep_connect_to_ep,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable  = uct_ib_iface_is_reachable,
-    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
-    .ep_am_short         = uct_rc_verbs_ep_am_short,
-    .ep_am_bcopy         = uct_rc_verbs_ep_am_bcopy,
-    .ep_am_zcopy         = uct_rc_verbs_ep_am_zcopy,
-    .ep_put_short        = uct_rc_verbs_ep_put_short,
-    .ep_put_bcopy        = uct_rc_verbs_ep_put_bcopy,
-    .ep_put_zcopy        = uct_rc_verbs_ep_put_zcopy,
-    .ep_get_bcopy        = uct_rc_verbs_ep_get_bcopy,
-    .ep_get_zcopy        = uct_rc_verbs_ep_get_zcopy,
-    .ep_atomic_add64     = uct_rc_verbs_ep_atomic_add64,
-    .ep_atomic_fadd64    = uct_rc_verbs_ep_atomic_fadd64,
-    .ep_atomic_swap64    = uct_rc_verbs_ep_atomic_swap64,
-    .ep_atomic_cswap64   = uct_rc_verbs_ep_atomic_cswap64,
-    .ep_atomic_add32     = uct_rc_verbs_ep_atomic_add32,
-    .ep_atomic_fadd32    = uct_rc_verbs_ep_atomic_fadd32,
-    .ep_atomic_swap32    = uct_rc_verbs_ep_atomic_swap32,
-    .ep_atomic_cswap32   = uct_rc_verbs_ep_atomic_cswap32,
-    .ep_pending_add      = uct_rc_ep_pending_add,
-    .ep_pending_purge    = uct_rc_ep_pending_purge,
-    .ep_flush            = uct_rc_verbs_ep_flush
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
+    .ep_am_short              = uct_rc_verbs_ep_am_short,
+    .ep_am_bcopy              = uct_rc_verbs_ep_am_bcopy,
+    .ep_am_zcopy              = uct_rc_verbs_ep_am_zcopy,
+    .ep_put_short             = uct_rc_verbs_ep_put_short,
+    .ep_put_bcopy             = uct_rc_verbs_ep_put_bcopy,
+    .ep_put_zcopy             = uct_rc_verbs_ep_put_zcopy,
+    .ep_get_bcopy             = uct_rc_verbs_ep_get_bcopy,
+    .ep_get_zcopy             = uct_rc_verbs_ep_get_zcopy,
+    .ep_atomic_add64          = uct_rc_verbs_ep_atomic_add64,
+    .ep_atomic_fadd64         = uct_rc_verbs_ep_atomic_fadd64,
+    .ep_atomic_swap64         = uct_rc_verbs_ep_atomic_swap64,
+    .ep_atomic_cswap64        = uct_rc_verbs_ep_atomic_cswap64,
+    .ep_atomic_add32          = uct_rc_verbs_ep_atomic_add32,
+    .ep_atomic_fadd32         = uct_rc_verbs_ep_atomic_fadd32,
+    .ep_atomic_swap32         = uct_rc_verbs_ep_atomic_swap32,
+    .ep_atomic_cswap32        = uct_rc_verbs_ep_atomic_cswap32,
+    .ep_pending_add           = uct_rc_ep_pending_add,
+    .ep_pending_purge         = uct_rc_ep_pending_purge,
+    .ep_flush                 = uct_rc_verbs_ep_flush
+    },
+    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
+    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
 };
 
 static ucs_status_t uct_rc_verbs_query_resources(uct_pd_h pd,

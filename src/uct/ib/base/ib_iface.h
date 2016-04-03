@@ -16,6 +16,12 @@
 #include <ucs/datastruct/mpool.inl>
 
 
+/* Forward declarations */
+typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
+typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
+typedef struct uct_ib_iface         uct_ib_iface_t;
+
+
 /**
  * IB port/path MTU.
  */
@@ -29,7 +35,7 @@ typedef enum uct_ib_mtu {
 } uct_ib_mtu_t;
 
 
-typedef struct uct_ib_iface_config {
+struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
     struct {
@@ -62,10 +68,17 @@ typedef struct uct_ib_iface_config {
     /* IB PKEY to use */
     unsigned                pkey_value;
 
-} uct_ib_iface_config_t;
+};
 
 
-typedef struct uct_ib_iface {
+struct uct_ib_iface_ops {
+    uct_iface_ops_t         super;
+    ucs_status_t            (*arm_tx_cq)(uct_ib_iface_t *iface);
+    ucs_status_t            (*arm_rx_cq)(uct_ib_iface_t *iface, int solicited);
+};
+
+
+struct uct_ib_iface {
     uct_base_iface_t        super;
     uint8_t                 *path_bits;
     unsigned                path_bits_count;
@@ -89,8 +102,10 @@ typedef struct uct_ib_iface {
         unsigned            seg_size;
     } config;
 
-} uct_ib_iface_t;
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_pd_h, uct_worker_h, const char*,
+    uct_ib_iface_ops_t      *ops;
+
+};
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_pd_h, uct_worker_h, const char*,
                   unsigned, unsigned, unsigned, unsigned, size_t, uct_ib_iface_config_t*)
 
 
@@ -230,5 +245,9 @@ ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup);
 ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup);
 
 void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup);
+
+ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
+
+ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);
 
 #endif

@@ -315,7 +315,7 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
  * @param rx_hdr_len    Length of transport network header.
  * @param mss           Maximal segment size (transport limit).
  */
-UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
                     size_t mss, uct_ib_iface_config_t *config)
@@ -324,7 +324,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     ucs_status_t status;
     uint8_t port_num;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, ops, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, pd, worker,
                               &config->super UCS_STATS_ARG(dev->stats));
 
     status = uct_ib_device_find_port(dev, dev_name, &port_num);
@@ -344,6 +344,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
     self->config.rx_max_poll       = config->rx.max_poll;
     self->config.rx_max_batch      = ucs_min(config->rx.max_batch,
                                              config->rx.queue_len / 4);
+    self->ops                      = ops;
 
     status = uct_ib_iface_init_pkey(self, config);
     if (status != UCS_OK) {
@@ -567,18 +568,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
-                                        struct ibv_cq *cq)
-{
-    if (ibv_req_notify_cq(cq, 0)) {
-        uct_ib_device_t *dev = uct_ib_iface_device(iface);
-        ucs_error("ibv_req_notify_cq(%s:%d, cq) failed: %m",
-                  uct_ib_device_name(dev), iface->port_num);
-        return UCS_ERR_IO_ERROR;
-    }
-    return UCS_OK;
-}
-
 ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
 {
     int res, ack_count = 0;
@@ -601,14 +590,14 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
     }
 
     if (wakeup->events & UCT_WAKEUP_TX_COMPLETION) {
-        status = uct_ib_iface_arm_cq(iface, iface->send_cq);
+        status = iface->ops->arm_tx_cq(iface);
         if (status != UCS_OK) {
             return status;
         }
     }
 
     if (wakeup->events & (UCT_WAKEUP_RX_AM | UCT_WAKEUP_RX_SIGNALED_AM)) {
-        status = uct_ib_iface_arm_cq(iface, iface->recv_cq);
+        status = iface->ops->arm_rx_cq(iface, 0);
         if (status != UCS_OK) {
             return status;
         }
@@ -654,4 +643,29 @@ ucs_status_t uct_ib_iface_wakeup_signal(uct_wakeup_h wakeup)
 
 void uct_ib_iface_wakeup_close(uct_wakeup_h wakeup)
 {
+}
+
+static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface, struct ibv_cq *cq,
+                                        int solicited)
+{
+    int ret;
+
+    ret = ibv_req_notify_cq(cq, solicited);
+    if (ret != 0) {
+        uct_ib_device_t *dev = uct_ib_iface_device(iface);
+        ucs_error("ibv_req_notify_cq(%s:%d, cq) failed: %m",
+                  uct_ib_device_name(dev), iface->port_num);
+        return UCS_ERR_IO_ERROR;
+    }
+    return UCS_OK;
+}
+
+ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface)
+{
+    return uct_ib_iface_arm_cq(iface, iface->send_cq, 0);
+}
+
+ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited)
+{
+    return uct_ib_iface_arm_cq(iface, iface->recv_cq, solicited);
 }

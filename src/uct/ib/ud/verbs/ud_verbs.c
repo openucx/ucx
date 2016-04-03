@@ -107,11 +107,9 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface,
     --iface->super.tx.available;
 }
 
-static void 
-uct_ud_verbs_ep_tx_ctl_skb(uct_ud_iface_t *ud_iface, uct_ud_ep_t *ud_ep,
-                           uct_ud_send_skb_t *skb)
+static void uct_ud_verbs_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb)
 {
-    uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_iface,
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                                  uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_verbs_ep_t);
     unsigned flags = 0;
@@ -476,37 +474,45 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
-uct_iface_ops_t uct_ud_verbs_iface_ops = {
-    .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
-    .iface_flush           = uct_ud_iface_flush,
-    .iface_release_am_desc = uct_ud_iface_release_am_desc,
-    .iface_wakeup_open     = uct_ib_iface_wakeup_open,
-    .iface_wakeup_get_fd   = uct_ib_iface_wakeup_get_fd,
-    .iface_wakeup_arm      = uct_ib_iface_wakeup_arm,
-    .iface_wakeup_wait     = uct_ib_iface_wakeup_wait,
-    .iface_wakeup_signal   = uct_ib_iface_wakeup_signal,
-    .iface_wakeup_close    = uct_ib_iface_wakeup_close,
-    .iface_get_address     = uct_ud_iface_get_address,
+static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
+    {
+    {
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
+    .iface_flush              = uct_ud_iface_flush,
+    .iface_release_am_desc    = uct_ud_iface_release_am_desc,
+    .iface_wakeup_open        = uct_ib_iface_wakeup_open,
+    .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
+    .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
+    .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
+    .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
+    .iface_wakeup_close       = uct_ib_iface_wakeup_close,
+    .iface_get_address        = uct_ud_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable    = uct_ib_iface_is_reachable,
-    .iface_query           = uct_ud_verbs_iface_query,
+    .iface_is_reachable       = uct_ib_iface_is_reachable,
+    .iface_query              = uct_ud_verbs_iface_query,
 
-    .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
-    .ep_destroy            = uct_ud_ep_disconnect,
-    .ep_get_address        = uct_ud_ep_get_address,
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
+    .ep_destroy               = uct_ud_ep_disconnect,
+    .ep_get_address           = uct_ud_ep_get_address,
 
-    .ep_create_connected   = uct_ud_verbs_ep_create_connected,
-    .ep_connect_to_ep      = uct_ud_verbs_ep_connect_to_ep, 
+    .ep_create_connected      = uct_ud_verbs_ep_create_connected,
+    .ep_connect_to_ep         = uct_ud_verbs_ep_connect_to_ep,
 
-    .ep_put_short          = uct_ud_verbs_ep_put_short,
-    .ep_am_short           = uct_ud_verbs_ep_am_short,
-    .ep_am_bcopy           = uct_ud_verbs_ep_am_bcopy,
-    .ep_am_zcopy           = uct_ud_verbs_ep_am_zcopy,
+    .ep_put_short             = uct_ud_verbs_ep_put_short,
+    .ep_am_short              = uct_ud_verbs_ep_am_short,
+    .ep_am_bcopy              = uct_ud_verbs_ep_am_bcopy,
+    .ep_am_zcopy              = uct_ud_verbs_ep_am_zcopy,
 
-    .ep_pending_add        = uct_ud_ep_pending_add,
-    .ep_pending_purge      = uct_ud_ep_pending_purge,
+    .ep_pending_add           = uct_ud_ep_pending_add,
+    .ep_pending_purge         = uct_ud_ep_pending_purge,
 
-    .ep_flush              = uct_ud_ep_flush
+    .ep_flush                 = uct_ud_ep_flush
+    },
+    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
+    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    },
+    .async_progress           = uct_ud_verbs_iface_async_progress,
+    .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
 };
 
 static UCS_F_NOINLINE void
@@ -555,9 +561,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, config);
-
-    self->super.ops.async_progress = uct_ud_verbs_iface_async_progress;
-    self->super.ops.tx_skb         = uct_ud_verbs_ep_tx_ctl_skb;
 
     if (self->super.super.config.rx_max_batch < UCT_UD_RX_BATCH_MIN) {
         ucs_warn("rx max batch is too low (%d < %d), performance may be impacted",

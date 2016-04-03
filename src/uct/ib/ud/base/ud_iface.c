@@ -331,15 +331,16 @@ void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_notifier_chain_func_t
     uct_worker_progress_register(iface->super.super.worker, progress_cb, iface);
 }
 
-UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
-                    unsigned rx_priv_len, uct_ud_iface_config_t *config)
+                    unsigned ud_rx_priv_len, uct_ud_iface_config_t *config)
 {
+    unsigned rx_priv_len, rx_hdr_len;
     ucs_status_t status;
     int mtu;
 
-    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%u rx_priv_len=%u",
-                   dev_name, self, ops, worker, rx_headroom, rx_priv_len);
+    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%u ud_rx_priv_len=%u",
+                   dev_name, self, ops, worker, rx_headroom, ud_rx_priv_len);
 
     if (worker->async == NULL) {
         ucs_error("%s ud iface must have valid async context", dev_name);
@@ -358,9 +359,12 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
         return status;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
-                              rx_priv_len + sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t), 
-                              UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t),
+    rx_priv_len = ud_rx_priv_len +
+                  sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t);
+    rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, pd, worker, dev_name,
+                              rx_headroom, rx_priv_len, rx_hdr_len,
                               config->super.tx.queue_len, mtu, &config->super);
  
     self->tx.unsignaled          = 0;
@@ -656,7 +660,7 @@ static void uct_ud_iface_timer(void *arg)
     now = uct_ud_iface_get_async_time(iface);
     ucs_trace_async("iface(%p) slow_timer_sweep: now %llu", iface, now);
     ucs_twheel_sweep(&iface->async.slow_timer, now);
-    iface->ops.async_progress(arg);
+    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(arg);
     uct_ud_leave(iface);
 }
 
