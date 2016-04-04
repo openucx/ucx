@@ -198,6 +198,16 @@ static void unload_file(struct backtrace_file *file)
     bfd_close(file->abfd);
 }
 
+static char *ucs_debug_demangle(const char *name)
+{
+    char *demangled = NULL;
+#ifdef HAVE_CPLUS_DEMANGLE
+    extern char *cplus_demangle(const char *, int);
+    demangled = cplus_demangle(name, 0);
+#endif
+    return demangled ? demangled : strdup(name);
+}
+
 static void find_address_in_section(bfd *abfd, asection *section, void *data)
 {
     struct backtrace_search *search = data;
@@ -230,8 +240,8 @@ static void find_address_in_section(bfd *abfd, asection *section, void *data)
                                   &filename, &function, &lineno);
     do {
         search->lines[search->count].address  = address;
-        search->lines[search->count].file     = filename ? strdup(filename) : NULL;
-        search->lines[search->count].function = function ? strdup(function) : NULL;
+        search->lines[search->count].file     = strdup(filename ? filename : "??");
+        search->lines[search->count].function = ucs_debug_demangle(function ? function : "??");
         search->lines[search->count].lineno   = lineno;
         if (search->count == 0) {
             /* To get the inliner info, search at the original address */
