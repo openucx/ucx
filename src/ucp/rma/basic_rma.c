@@ -81,8 +81,8 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 
 static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
 {
-    ucs_status_t status;
     ssize_t packed_len;
+    ucs_status_t status;
 
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
@@ -282,8 +282,8 @@ retry:
 
 static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
 {
-    ucs_status_t status;
     size_t frag_length;
+    ucs_status_t status;
 
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 

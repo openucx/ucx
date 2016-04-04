@@ -796,6 +796,9 @@ void ucp_ep_destroy(ucp_ep_h ep);
  * @a ep prior to this call are completed both at the origin and at the target
  * @ref ucp_ep_h "endpont" when this call returns.
  *
+ * @note The call flushes outstanding communication operations and therefore
+ * it may return error codes associated with the operations.
+ *
  * @param [in] ep        UCP endpont.
  *
  * @return Error code as defined by @ref ucs_status_t
@@ -1688,6 +1691,8 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  * @note For description of the differences between @ref ucp_worker_flush
  * "flush" and @ref ucp_worker_fence "fence" operations please see
  * @ref ucp_worker_fence "ucp_worker_fence()"
+ *
+ * @note Errors originating from non-blocking calls may return from invocation.
  *
  * @param [in] worker        UCP worker.
  *
