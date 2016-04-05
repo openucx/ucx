@@ -81,7 +81,6 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_async_pipe_t);
         PRINT_SIZE(ucs_async_signal_context_t);
         PRINT_SIZE(ucs_async_thread_context_t);
-        PRINT_SIZE(ucs_callback_t);
         PRINT_SIZE(ucs_class_t);
         PRINT_SIZE(ucs_component_t);
         PRINT_SIZE(ucs_config_field_t);

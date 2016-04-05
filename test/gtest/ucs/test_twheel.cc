@@ -37,7 +37,7 @@ protected:
     // @override
     virtual void cleanup();
 
-    static void timer_func(ucs_callback_t *self);
+    static void timer_func(ucs_wtimer_t *self);
     void timer_expired(struct hr_timer *t);
     void add_timer(struct hr_timer *t);
     void init_timer(struct hr_timer *t, int id);
@@ -57,7 +57,7 @@ void twheel::cleanup()
     ucs_twheel_cleanup(&m_wheel);
 }
 
-void twheel::timer_func(ucs_callback_t *self)
+void twheel::timer_func(ucs_wtimer_t *self)
 {
     struct hr_timer *t = ucs_container_of(self, struct hr_timer, timer);
     t->self->timer_expired(t);

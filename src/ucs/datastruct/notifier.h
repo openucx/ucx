@@ -8,7 +8,6 @@
 #define UCS_DATASTRUCT_NOTIFIER_H
 
 #include <ucs/arch/cpu.h>
-#include <ucs/type/callback.h>
 
 
 /*

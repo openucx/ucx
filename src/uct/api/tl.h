@@ -13,7 +13,6 @@
 
 #include "uct_def.h"
 
-#include <ucs/type/callback.h>
 #include <ucs/type/status.h>
 #include <sys/types.h>
 #include <stddef.h>

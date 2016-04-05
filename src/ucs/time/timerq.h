@@ -8,7 +8,6 @@
 #define UCS_TIMERQ_H
 
 #include <ucs/datastruct/queue.h>
-#include <ucs/type/callback.h>
 #include <ucs/time/time.h>
 #include <ucs/sys/preprocessor.h>
 #include <pthread.h>
