@@ -95,11 +95,14 @@ ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
     uct_iface_trace_am(&(_iface)->super.super, _type, (_hdr)->am_id, \
                        (_hdr) + 1, (_hdr)->length, _fmt, ## __VA_ARGS__)
 
+#define uct_cm_iface_worker(_iface) \
+    ((_iface)->super.super.worker)
+
 #define uct_cm_enter(_iface) \
-    UCS_ASYNC_BLOCK((_iface)->super.super.worker->async);
+    UCS_ASYNC_BLOCK(uct_cm_iface_worker(_iface)->async);
 
 #define uct_cm_leave(_iface) \
-    UCS_ASYNC_UNBLOCK((_iface)->super.super.worker->async); \
-    ucs_async_check_miss((_iface)->super.super.worker->async);
+    UCS_ASYNC_UNBLOCK(uct_cm_iface_worker(_iface)->async); \
+    ucs_async_check_miss(uct_cm_iface_worker(_iface)->async);
 
 #endif

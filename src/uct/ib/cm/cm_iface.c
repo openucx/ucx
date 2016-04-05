@@ -38,11 +38,18 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
 static uct_ib_iface_ops_t uct_cm_iface_ops;
 
 
-static void uct_cm_iface_notify(uct_cm_iface_t *iface)
+static void uct_cm_iface_progress(void *arg)
 {
     uct_cm_pending_req_priv_t *priv;
+    uct_cm_iface_t *iface = arg;
+
+    uct_cm_enter(iface);
     uct_pending_queue_dispatch(priv, &iface->notify_q,
                                iface->num_outstanding < iface->config.max_outstanding);
+    uct_cm_leave(iface);
+
+    ucs_callbackq_remove(&uct_cm_iface_worker(iface)->progress_q,
+                         uct_cm_iface_progress, iface);
 }
 
 ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface)
@@ -193,7 +200,8 @@ static void uct_cm_iface_event_handler(void *arg)
             }
         }
 
-        uct_cm_iface_notify(iface);
+        ucs_callbackq_add_safe(&uct_cm_iface_worker(iface)->progress_q,
+                               uct_cm_iface_progress, iface);
     }
 }
 
@@ -308,6 +316,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
     uct_cm_leave(self);
+
+    /* At this point all outstanding have been removed, and no further events
+     * can be added.
+     */
+    ucs_callbackq_remove_all(&uct_cm_iface_worker(self)->progress_q,
+                             uct_cm_iface_progress, self);
 
     ucs_free(self->outstanding);
 }
