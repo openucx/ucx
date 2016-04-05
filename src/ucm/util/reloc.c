@@ -25,21 +25,6 @@
 #include <link.h>
 
 
-typedef struct ucm_elf_strtab {
-    char               *tab;
-    ElfW(Xword)        size;
-} ucm_elf_strtab_t;
-
-typedef struct ucm_elf_jmpreltab {
-    ElfW(Rela)         *tab;
-    ElfW(Xword)        size;
-} ucm_elf_jmprel_t;
-
-typedef struct ucm_elf_symtab {
-    ElfW(Sym)          *tab;
-    ElfW(Xword)        entsz;
-} ucm_elf_symtab_t;
-
 typedef struct ucm_auxv {
     long               type;
     long               value;
@@ -51,98 +36,29 @@ typedef struct ucm_reloc_dl_iter_context {
     ucs_status_t        status;
 } ucm_reloc_dl_iter_context_t;
 
-
 /* List of patches to be applied to additional libraries */
 static UCS_LIST_HEAD(ucm_reloc_patch_list);
 static void * (*ucm_reloc_orig_dlopen)(const char *, int) = NULL;
 static pthread_mutex_t ucm_reloc_patch_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
-static const ElfW(Phdr) *
-ucm_reloc_get_phdr_dynamic(const ElfW(Phdr) *phdr, uint16_t phnum, int phent)
+static uintptr_t
+ucm_reloc_get_entry(ElfW(Addr) base, const ElfW(Phdr) *dphdr, ElfW(Sxword) tag)
 {
-    uint16_t i;
-
-    for (i = 0; i < phnum; ++i) {
-        if (phdr->p_type == PT_DYNAMIC) {
-            return phdr;
-        }
-        phdr = (ElfW(Phdr)*)((char*)phdr + phent);
-    }
-    return NULL;
-}
-
-static const ElfW(Dyn)*
-ucm_reloc_get_dynentry(ElfW(Addr) base, const ElfW(Phdr) *pdyn, uint32_t type)
-{
-    ElfW(Dyn) *dyn;
-
-    for (dyn = (ElfW(Dyn)*)(base + pdyn->p_vaddr); dyn->d_tag; ++dyn) {
-        if (dyn->d_tag == type) {
-            return dyn;
+    ElfW(Dyn) *entry;
+    for (entry = (void*)(base + dphdr->p_vaddr); entry->d_tag != 0; ++entry) {
+        if (entry->d_tag == tag) {
+            return entry->d_un.d_val;
         }
     }
-    return NULL;
+    return 0;
 }
 
-static void ucm_reloc_get_jmprel(ElfW(Addr) base, const ElfW(Phdr) *pdyn,
-                                  ucm_elf_jmprel_t *table)
-{
-    const ElfW(Dyn) *dyn;
-
-    dyn = ucm_reloc_get_dynentry(base, pdyn, DT_JMPREL);
-    table->tab = (dyn == NULL) ? NULL : (ElfW(Rela)*)dyn->d_un.d_ptr;
-    dyn = ucm_reloc_get_dynentry(base, pdyn, DT_PLTRELSZ);
-    table->size = (dyn == NULL) ? 0 : dyn->d_un.d_val;
-}
-
-static void ucm_reloc_get_symtab(ElfW(Addr) base, const ElfW(Phdr) *pdyn,
-                                  ucm_elf_symtab_t *table)
-{
-    const ElfW(Dyn) *dyn;
-
-    dyn = ucm_reloc_get_dynentry(base, pdyn, DT_SYMTAB);
-    table->tab = (dyn == NULL) ? NULL : (ElfW(Sym)*)dyn->d_un.d_ptr;
-    dyn = ucm_reloc_get_dynentry(base, pdyn, DT_SYMENT);
-    table->entsz = (dyn == NULL) ? 0 : dyn->d_un.d_val;
-}
-
-static void ucm_reloc_get_strtab(ElfW(Addr) base, const ElfW(Phdr) *pdyn,
-                                  ucm_elf_strtab_t *table)
-{
-    const ElfW(Dyn) *dyn;
-
-    dyn = ucm_reloc_get_dynentry(base, pdyn, DT_STRTAB);
-    table->tab = (dyn == NULL) ? NULL : (char *)dyn->d_un.d_ptr;
-    dyn = ucm_reloc_get_dynentry(base, pdyn, DT_STRSZ);
-    table->size = (dyn == NULL) ? 0 : dyn->d_un.d_val;
-}
-
-static void * ucm_reloc_get_got_entry(ElfW(Addr) base, const char *symbol,
-                                       const ucm_elf_jmprel_t *jmprel,
-                                       const ucm_elf_symtab_t *symtab,
-                                       const ucm_elf_strtab_t *strtab)
-{
-    ElfW(Rela) *rela, *relaend;
-    const char *relsymname;
-    uint32_t relsymidx;
-
-    relaend = (ElfW(Rela) *)((char *)jmprel->tab + jmprel->size);
-    for (rela = jmprel->tab; rela < relaend; ++rela) {
-        relsymidx  = ELF64_R_SYM(rela->r_info);
-        relsymname = strtab->tab + symtab->tab[relsymidx].st_name;
-        if (!strcmp(symbol, relsymname)) {
-            return (void *)(base + rela->r_offset);
-        }
-    }
-    return NULL;
-}
-
-static int ucm_reloc_get_aux_phent()
+static int ucm_reloc_get_aux_phsize()
 {
 #define UCM_RELOC_AUXV_BUF_LEN 16
     static const char *proc_auxv_filename = "/proc/self/auxv";
-    static int phent = 0;
+    static int phsize = 0;
     ucm_auxv_t buffer[UCM_RELOC_AUXV_BUF_LEN];
     ucm_auxv_t *auxv;
     unsigned count;
@@ -150,7 +66,7 @@ static int ucm_reloc_get_aux_phent()
     int fd;
 
     /* Can avoid lock here - worst case we'll read the file more than once */
-    if (phent == 0) {
+    if (phsize == 0) {
         fd = open(proc_auxv_filename, O_RDONLY);
         if (fd < 0) {
             ucm_error("failed to open '%s' for reading: %m", proc_auxv_filename);
@@ -171,30 +87,33 @@ static int ucm_reloc_get_aux_phent()
                             ++auxv)
             {
                 if (auxv->type == AT_PHENT) {
-                    phent = auxv->value;
-                    ucm_debug("read phent from %s: %d", proc_auxv_filename, phent);
+                    phsize = auxv->value;
+                    ucm_debug("read phent from %s: %d", proc_auxv_filename, phsize);
                     break;
                 }
             }
-        } while ((count > 0) && (phent == 0));
+        } while ((count > 0) && (phsize == 0));
 
         close(fd);
     }
-    return phent;
+    return phsize;
 }
 
 static ucs_status_t
 ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname,
-                     int16_t phnum, int phent, const char *symbol, void *newvalue)
+                     int phnum, int phsize, const char *symbol, void *newvalue)
 {
-    const ElfW(Phdr) *dphdr;
-    ucm_elf_jmprel_t jmprel;
-    ucm_elf_symtab_t symtab;
-    ucm_elf_strtab_t strtab;
+    ElfW(Phdr) *dphdr;
+    ElfW(Rela) *reloc;
+    ElfW(Sym)  *symtab;
+    void *jmprel, *strtab;
+    size_t pltrelsz;
     long page_size;
+    char *elf_sym;
     void **entry;
     void *page;
     int ret;
+    int i;
 
     page_size = sysconf(_SC_PAGESIZE);
     if (page_size < 0) {
@@ -202,44 +121,62 @@ ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char *phname
         return UCS_ERR_IO_ERROR;
     }
 
-    dphdr = ucm_reloc_get_phdr_dynamic(phdr, phnum, phent);
-
-    ucm_reloc_get_jmprel(base, dphdr, &jmprel);
-    ucm_reloc_get_symtab(base, dphdr, &symtab);
-    ucm_reloc_get_strtab(base, dphdr, &strtab);
-
-    entry = ucm_reloc_get_got_entry(base, symbol, &jmprel, &symtab, &strtab);
-    if (entry == NULL) {
-        return UCS_OK; /* Would be patched later */
+    /* find PT_DYNAMIC */
+    dphdr = NULL;
+    for (i = 0; i < phnum; ++i) {
+        dphdr = (void*)phdr + phsize * i;
+        if (dphdr->p_type == PT_DYNAMIC) {
+            break;
+        }
+    }
+    if (dphdr == NULL) {
+        return UCS_ERR_NO_ELEM;
     }
 
-    page = (void *)((intptr_t)entry & ~(page_size - 1));
-    ret = mprotect(page, page_size, PROT_READ|PROT_WRITE);
-    if (ret < 0) {
-        ucm_error("failed to modify GOT page %p to rw: %m", page);
-        return UCS_ERR_UNSUPPORTED;
+    /* Get ELF tables pointers */
+    jmprel   = (void*)ucm_reloc_get_entry(base, dphdr, DT_JMPREL);
+    symtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
+    strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
+    pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
+
+    /* Find matching symbol and replace it */
+    for (reloc = jmprel; (void*)reloc < jmprel + pltrelsz; ++reloc) {
+        elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
+        if (!strcmp(symbol, elf_sym)) {
+            entry = (void *)(base + reloc->r_offset);
+
+            ucm_trace("'%s' entry in '%s' is at %p", symbol, basename(phname),
+                      entry);
+
+            page  = (void *)((intptr_t)entry & ~(page_size - 1));
+            ret = mprotect(page, page_size, PROT_READ|PROT_WRITE);
+            if (ret < 0) {
+                ucm_error("failed to modify GOT page %p to rw: %m", page);
+                return UCS_ERR_UNSUPPORTED;
+            }
+            *entry = newvalue;
+            break;
+        }
     }
 
-    ucm_trace("'%s' entry in '%s' is at %p", symbol, basename(phname), entry);
-    *entry    = newvalue;
     return UCS_OK;
 }
 
 static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size, void *data)
 {
     ucm_reloc_dl_iter_context_t *ctx = data;
-    int phent;
+    int phsize;
 
-    phent = ucm_reloc_get_aux_phent();
-    if (phent <= 0) {
+    phsize = ucm_reloc_get_aux_phsize();
+    if (phsize <= 0) {
         ucm_error("failed to read phent size");
         ctx->status = UCS_ERR_UNSUPPORTED;
         return -1;
     }
 
     ctx->status = ucm_reloc_modify_got(info->dlpi_addr, info->dlpi_phdr,
-                                          info->dlpi_name, info->dlpi_phnum,
-                                          phent, ctx->symbol, ctx->newvalue);
+                                       info->dlpi_name, info->dlpi_phnum,
+                                       phsize, ctx->symbol, ctx->newvalue);
     if (ctx->status == UCS_OK) {
         return 0; /* continue iteration and patch all objects */
     } else {
