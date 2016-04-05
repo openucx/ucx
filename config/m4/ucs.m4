@@ -46,6 +46,7 @@ AS_IF([test "x$enable_backtrace_detail" == xyes],
 					[#define _GNU_SOURCE 1
 					 #include <link.h>]) 
 	if test "x$BT" == "x1"; then
+		AC_CHECK_FUNCS([cplus_demangle])
 		AC_DEFINE([HAVE_DETAILED_BACKTRACE], 1, [Enable detailed backtrace])
 	else
 		AC_MSG_WARN([detailed backtrace is not supported])
