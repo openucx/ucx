@@ -7,6 +7,8 @@
 #ifndef UCS_COMPILER_H_
 #define UCS_COMPILER_H_
 
+#include "preprocessor.h"
+
 #include <stddef.h>
 #include <stdarg.h>
 
@@ -184,5 +186,18 @@
         alloca(_size); \
     })
 
+
+/**
+ * Define cache-line padding variable inside a structure
+ *
+ * @param ...    List of types, of the variables which should be padded to cache line.
+ */
+#define UCS_CACHELINE_PADDING(...) \
+    char UCS_PP_APPEND_UNIQUE_ID(pad)[UCS_SYS_CACHE_LINE_SIZE - \
+                                      UCS_CACHELINE_PADDING_MISALIGN(__VA_ARGS__)];
+#define UCS_CACHELINE_PADDING_SIZEOF(_, _x) \
+    + sizeof(_x)
+#define UCS_CACHELINE_PADDING_MISALIGN(...) \
+    ((UCS_PP_FOREACH(UCS_CACHELINE_PADDING_SIZEOF, _, __VA_ARGS__)) % UCS_SYS_CACHE_LINE_SIZE)
 
 #endif

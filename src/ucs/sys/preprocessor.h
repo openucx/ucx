@@ -7,8 +7,6 @@
 #ifndef UCS_PREPROCESSOR_H
 #define UCS_PREPROCESSOR_H
 
-#include <ucs/sys/compiler.h>
-
 /* Convert token to string */
 #define UCS_PP_QUOTE(x)                 # x
 

@@ -15,6 +15,26 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_mm_remote_seg_t,
                                         UCT_MM_BASE_ADDRESS_HASH_SIZE,
                                         uct_mm_remote_seg_hash)
 
+
+static ucs_status_t uct_mm_ep_send_connect(uct_mm_ep_t *ep, int connect)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
+    int ret;
+
+    /**
+     * Send connect message to remote interface
+     */
+    ret = sendto(iface->signal_fd, &connect, sizeof(connect), 0,
+                 (const struct sockaddr*)&ep->fifo_ctl->signal_sockaddr,
+                 ep->fifo_ctl->signal_addrlen);
+    if (ret < 0) {
+        ucs_error("failed to send %sconnect message: %m", connect ? "" : "dis");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
@@ -45,14 +65,24 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     self->mapped_desc.length = size_to_attach;
     self->mapped_desc.mmid   = addr->id;
     uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl, &self->fifo);
+    self->cached_tail        = self->fifo_ctl->tail;
 
-    self->cached_tail = self->fifo_ctl->tail;
+    /* Send connect message to remote side so it will start polling */
+    status = uct_mm_ep_send_connect(self, 1);
+    if (status != UCS_OK) {
+        uct_mm_pd_mapper_ops(iface->super.pd)->detach(&self->mapped_desc);
+        return status;
+    }
 
     /* Initiate the hash which will keep the base_adresses of remote memory
      * chunks that hold the descriptors for bcopy. */
     sglib_hashed_uct_mm_remote_seg_t_init(self->remote_segments_hash);
 
     ucs_arbiter_group_init(&self->arb_group);
+
+    /* Register for send side progress */
+    uct_worker_progress_register(iface->super.worker, uct_mm_iface_progress,
+                                 iface);
 
     ucs_debug("mm: ep connected: %p, to remote_shmid: %zu", self, addr->id);
 
@@ -65,6 +95,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     ucs_status_t status;
     uct_mm_remote_seg_t *remote_seg;
     struct sglib_hashed_uct_mm_remote_seg_t_iterator iter;
+
+    uct_mm_ep_send_connect(self, 0);
+
+    uct_worker_progress_unregister(iface->super.worker, uct_mm_iface_progress,
+                                   iface);
 
     for (remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_init(&iter, self->remote_segments_hash);
          remote_seg != NULL; remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_next(&iter)) {
