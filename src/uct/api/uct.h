@@ -14,7 +14,7 @@
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
-#include <ucs/datastruct/notifier.h>
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 
@@ -536,7 +536,7 @@ void uct_worker_progress(uct_worker_h worker);
  * @note This operation could potentially be slow.
  */
 void uct_worker_progress_register(uct_worker_h worker,
-                                  ucs_notifier_chain_func_t func, void *arg);
+                                  ucs_callback_t func, void *arg);
 
 
 /**
@@ -554,7 +554,7 @@ void uct_worker_progress_register(uct_worker_h worker,
  * @note This operation could potentially be slow.
  */
 void uct_worker_progress_unregister(uct_worker_h worker,
-                                    ucs_notifier_chain_func_t func, void *arg);
+                                    ucs_callback_t func, void *arg);
 
 
 /**

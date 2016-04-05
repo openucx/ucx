@@ -36,13 +36,13 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/arbiter.h \
+	datastruct/callbackq.h \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
 	datastruct/list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.h \
 	datastruct/mpool.inl \
-	datastruct/notifier.h \
 	datastruct/pgtable.h \
 	datastruct/ptr_array.h \
 	datastruct/queue_types.h \
@@ -83,8 +83,8 @@ libucs_la_SOURCES = \
 	config/global_opts.c \
 	config/parser.c \
 	datastruct/arbiter.c \
+	datastruct/callbackq.c \
 	datastruct/frag_list.c \
-	datastruct/notifier.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
 	datastruct/pgtable.c \

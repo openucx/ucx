@@ -10,7 +10,7 @@
 #include "uct_iface.h"
 
 #include <uct/api/uct.h>
-#include <ucs/datastruct/notifier.h>
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/component.h>
 #include <ucs/config/parser.h>
@@ -152,7 +152,7 @@ typedef struct uct_worker_tl_data {
 typedef struct uct_worker uct_worker_t;
 struct uct_worker {
     ucs_async_context_t    *async;
-    ucs_notifier_chain_t   progress_chain;
+    ucs_callbackq_t        progress_q;
     ucs_thread_mode_t      thread_mode;
     ucs_list_link_t        tl_data;
 };

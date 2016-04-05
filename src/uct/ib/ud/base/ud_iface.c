@@ -310,7 +310,7 @@ err:
     return UCS_ERR_INVALID_PARAM;
 }
 
-void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_notifier_chain_func_t progress_cb)
+void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_callback_t progress_cb)
 {
     ucs_status_t status;
 

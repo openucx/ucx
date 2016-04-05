@@ -92,8 +92,8 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_list_link_t);
         PRINT_SIZE(ucs_memtrack_entry_t);
         PRINT_SIZE(ucs_mpmc_queue_t);
-        PRINT_SIZE(ucs_notifier_chain_t);
-        PRINT_SIZE(ucs_notifier_chain_elem_t);
+        PRINT_SIZE(ucs_callbackq_t);
+        PRINT_SIZE(ucs_callbackq_elem_t);
         PRINT_SIZE(ucs_ptr_array_t);
         PRINT_SIZE(ucs_queue_elem_t);
         PRINT_SIZE(ucs_queue_head_t);
