@@ -220,7 +220,7 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
 typedef struct uct_ib_recv_wr {
     struct ibv_recv_wr ibwr;
     struct ibv_sge     sg;
-} uct_ib_recv_wr_t; 
+} uct_ib_recv_wr_t;
 
 /**
  * prepare a list of n work requests that can be passed to

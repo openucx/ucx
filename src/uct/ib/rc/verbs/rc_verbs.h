@@ -125,4 +125,6 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep);
 
 void uct_rc_verbs_iface_progress(void *arg);
 
+ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_rc_ep_t *rc_ep);
+
 #endif

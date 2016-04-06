@@ -45,6 +45,21 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
    ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
 
+  {"FC_WND_SIZE", "512",
+   "The size of flow control window per endpoint. limits the number of AM\n"
+   "which can be sent w/o acknowledgment.",
+   ucs_offsetof(uct_rc_iface_config_t, fc.wnd_size), UCS_CONFIG_TYPE_UINT},
+
+  {"FC_SOFT_THRESH", "0.5",
+   "Threshold for sending soft request for FC credits to the peer. This value\n"
+   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
+   ucs_offsetof(uct_rc_iface_config_t, fc.soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+
+  {"FC_HARD_THRESH", "0.25",
+   "Threshold for sending hard request for FC credits to the peer. This value\n"
+   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < SOFT_THRESH)",
+   ucs_offsetof(uct_rc_iface_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
+
   {NULL}
 };
 
@@ -165,14 +180,67 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
+void uct_rc_iface_handle_fc(uct_rc_iface_t *iface, struct ibv_wc *wc,
+                            uct_ib_iface_recv_desc_t *desc)
+{
+    ucs_status_t status;
+    int16_t      cur_wnd;
+    ucs_arbiter_elem_t* elem;
+    uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, wc->qp_num);
+    uct_rc_hdr_t *hdr = uct_ib_iface_recv_desc_hdr(&iface->super, desc);
+    uint8_t fc_hdr    = uct_rc_ep_get_fc_hdr(hdr->am_id);
+
+    if (fc_hdr & UCT_RC_EP_FC_FLAG_GRANT) {
+        /* Got either grant flag or special FC grant message */
+        cur_wnd = ep->fc_wnd;
+
+        /* Peer granted resources, so update wnd */
+        ep->fc_wnd = iface->config.fc_wnd_size;
+
+        /* To preserve ordering we have to dispatch all pending
+         * operations if current fc_wnd is <= 0
+         * (otherwise it will be dispatched by tx progress) */
+        if (cur_wnd <= 0) {
+            ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
+            ucs_arbiter_dispatch(&iface->tx.arbiter, 1,
+                                 uct_rc_ep_process_pending, NULL);
+        }
+        if  (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
+            /* Special FC grant message can't be bundled with any other FC
+             * request. Stop processing this AM and do not invoke AM handler */
+            ucs_mpool_put_inline(desc);
+            return;
+        }
+    }
+
+    if (fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ) {
+        /* Got soft credit request. Mark ep that it needs to grant
+         * credits to the peer in outgoing AM (if any). */
+        ep->flags |= UCT_RC_EP_FC_FLAG_GRANT;
+
+    } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
+        /* Got hard credit request. Send grant to the peer immediately */
+        status = uct_rc_ep_fc_grant(&ep->fc_grant_req);
+
+        if (status == UCS_ERR_NO_RESOURCE){
+            elem =(ucs_arbiter_elem_t*) ep->fc_grant_req.priv;
+            ucs_arbiter_group_push_elem(&ep->arb_group, elem);
+        } else {
+            ucs_assert_always(status == UCS_OK);
+        }
+    }
+    uct_ib_iface_invoke_am(&iface->super, (hdr->am_id & ~UCT_RC_EP_FC_MASK),
+                           hdr + 1, wc->byte_len - sizeof(*hdr), desc);
+}
+
+UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, ops, pd, worker, dev_name, rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, pd, worker, dev_name, rx_headroom,
                               rx_priv_len, sizeof(uct_rc_hdr_t), config->tx.cq_len,
                               SIZE_MAX, &config->super);
 
@@ -198,6 +266,22 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
+
+    /* Check FC parameters correctness */
+    if ((config->fc.soft_thresh <= 0) || (config->fc.soft_thresh >= 1)) {
+        ucs_error("The factor for soft FC threshold must be in the range (0..1)");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    if ((config->fc.hard_thresh <= 0) ||
+        (config->fc.hard_thresh >= config->fc.soft_thresh)) {
+        ucs_error("The factor for hard FC threshold should be positive and less"
+                  " than FC_SOFT_THRESH value");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
 
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
@@ -240,6 +324,17 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
     }
 
     self->rx.available           = srq_init_attr.attr.max_wr;
+
+    /* Assume that number of recv buffers is the same on all peers.
+     * Then FC window size is the same for all endpoints as well.
+     * TODO: Make wnd size to be a property of the particular interface.
+     * We could distribute it via rc address then.*/
+    self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
+                                           srq_init_attr.attr.max_wr);
+    self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
+                                           config->fc.hard_thresh), 1);
+    self->config.fc_soft_thresh  = ucs_max((int)(self->config.fc_wnd_size *
+                                           config->fc.soft_thresh), 1);
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);

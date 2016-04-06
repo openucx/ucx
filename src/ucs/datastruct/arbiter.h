@@ -211,6 +211,9 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
 void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg);
 
+/* Internal function */
+void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
+                                    ucs_arbiter_elem_t *head);
 
 /**
  * Schedule a group for arbitration. If the group is already there, the operation

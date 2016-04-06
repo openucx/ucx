@@ -49,7 +49,19 @@ struct uct_rc_iface_config {
         unsigned             rnr_retry_count;
         unsigned             cq_len;
     } tx;
+
+    struct {
+        double               soft_thresh;
+        double               hard_thresh;
+        unsigned             wnd_size;
+    } fc;
 };
+
+
+typedef struct uct_rc_iface_ops {
+    uct_ib_iface_ops_t   super;
+    ucs_status_t         (*fc_ctrl)(uct_rc_ep_t *ep);
+} uct_rc_iface_ops_t;
 
 
 struct uct_rc_iface {
@@ -76,6 +88,16 @@ struct uct_rc_iface {
         unsigned             tx_ops_mask;
         unsigned             rx_inline;
         uint16_t             tx_moderation;
+
+        /* Threshold to send "soft" FC credit request. The peer will try to
+         * piggy-back credits grant to the counter AM, if any. */
+        uint16_t             fc_soft_thresh;
+
+        /* Threshold to sent "hard" credits request. The peer will grant
+         * credits in a separate AM as soon as it handles this request. */
+        uint16_t             fc_hard_thresh;
+
+        uint16_t             fc_wnd_size;
         uint8_t              min_rnr_timer;
         uint8_t              timeout;
         uint8_t              rnr_retry;
@@ -90,7 +112,7 @@ struct uct_rc_iface {
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
 };
-UCS_CLASS_DECLARE(uct_rc_iface_t, uct_ib_iface_ops_t*, uct_pd_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char*, unsigned, unsigned, uct_rc_iface_config_t*)
 
 
@@ -150,6 +172,8 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap);
 
+void uct_rc_iface_handle_fc(uct_rc_iface_t *iface, struct ibv_wc *wc,
+                            uct_ib_iface_recv_desc_t *desc);
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
                                                   unsigned qp_num)
