@@ -733,7 +733,8 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
             /* creq allocates real skb, it must be put on window like
              * a regular packet to ensure a retransmission.
              */
-            ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->tx_skb(ep, skb);
+            ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->tx_skb(ep, skb,
+                                                                         1);
             uct_ud_iface_complete_tx_skb(iface, ep, skb);
             uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
         }
@@ -762,7 +763,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
     }
 
     VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
-    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->tx_skb(ep, skb);
+    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->tx_skb(ep, skb, 0);
     uct_ud_ep_log_tx(iface, ep, skb);
     uct_ud_iface_res_skb_put(iface, skb);
 }
