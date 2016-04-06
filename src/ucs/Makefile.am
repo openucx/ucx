@@ -64,7 +64,6 @@ nobase_dist_libucs_la_HEADERS = \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
-	type/callback.h \
 	type/class.h \
 	type/component.h \
 	type/spinlock.h \

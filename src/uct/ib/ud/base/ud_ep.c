@@ -82,7 +82,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
                        UCS_STATS_ARG(ep->rx.stats));
 }
 
-static void uct_ud_ep_slow_timer(ucs_callback_t *self)
+static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
 {
     uct_ud_ep_t *ep = ucs_container_of(self, uct_ud_ep_t, slow_timer);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,

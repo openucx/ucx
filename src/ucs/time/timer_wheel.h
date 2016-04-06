@@ -10,35 +10,37 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
-#include <ucs/type/callback.h>
+
+
+/* Forward declarations */
+typedef struct ucs_wtimer       ucs_wtimer_t;
+typedef struct ucs_timer_wheel  ucs_twheel_t;
+
+
+/**
+ * Timer wheel callback
+ */
+typedef void (*ucs_twheel_callback_t)(ucs_wtimer_t *self);
 
 
 /**
  * UCS high resolution timer.
  */
-typedef struct ucs_wtimer {
-    ucs_callback_t  cb;               /* User callback */
-    ucs_list_link_t list;             /* Link in the list of timers */
-    int             is_active;
-} ucs_wtimer_t;
+struct ucs_wtimer {
+    ucs_twheel_callback_t  cb;         /* User callback */
+    ucs_list_link_t        list;       /* Link in the list of timers */
+    int                    is_active;
+};
 
 
-typedef struct ucs_timer_wheel {
-    ucs_time_t     res;
-    ucs_time_t     now;        /* when wheel was last updated */
-    uint64_t       current;
-    ucs_list_link_t    *wheel;
-    unsigned       res_order;
-    unsigned       num_slots;
-} ucs_twheel_t;
-
-
-/**
- * Initialize wheel timer
- *
- * @param func          Callback to call
- */
-ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, ucs_callback_func_t func);
+struct ucs_timer_wheel {
+    ucs_time_t             res;
+    ucs_time_t             now;        /* when wheel was last updated */
+    uint64_t               current;
+    ucs_list_link_t        *wheel;
+    unsigned               res_order;
+    unsigned               num_slots;
+};
 
 
 /**
@@ -58,6 +60,14 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution,
  * @param twheel    Timer queue to clean up.
  */
 void ucs_twheel_cleanup(ucs_twheel_t *twheel);
+
+
+/**
+ * Initialize wheel timer
+ *
+ * @param cb          Callback to call
+ */
+ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, ucs_twheel_callback_t cb);
 
 
 /**
