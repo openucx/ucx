@@ -511,6 +511,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
     },
+    .progress                 = uct_ud_verbs_iface_progress,
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
 };
@@ -590,7 +591,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->tx.wr_skb.sg_list           = self->tx.sge;
     self->tx.wr_skb.num_sge           = 1;
 
-    uct_ud_iface_complete_init(&self->super, uct_ud_verbs_iface_progress);
+    uct_ud_iface_complete_init(&self->super);
     return UCS_OK;
 }
 
@@ -598,8 +599,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 {
     ucs_trace_func("");
     uct_ud_enter(&self->super);
-    uct_worker_progress_unregister(self->super.super.super.worker,
-                                   uct_ud_verbs_iface_progress, self);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_verbs_ep_t);
     uct_ud_leave(&self->super);
 }

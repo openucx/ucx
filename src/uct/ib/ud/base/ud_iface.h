@@ -52,6 +52,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
 
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
+    ucs_callback_t            progress;
     ucs_async_event_cb_t      async_progress;
     void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb);
 } uct_ud_iface_ops_t;
@@ -127,7 +128,7 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface);
 
-void uct_ud_iface_complete_init(uct_ud_iface_t *iface, ucs_callback_t progress_cb);
+void uct_ud_iface_complete_init(uct_ud_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 {

@@ -602,6 +602,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .arm_tx_cq                = uct_ud_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ud_mlx5_iface_arm_rx_cq,
     },
+    .progress                 = uct_ud_mlx5_iface_progress,
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .tx_skb                   = uct_ud_mlx5_ep_tx_ctl_skb,
 };
@@ -665,7 +666,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         uct_ud_mlx5_iface_post_recv(self);
     }
 
-    uct_ud_iface_complete_init(&self->super, uct_ud_mlx5_iface_progress);
+    uct_ud_iface_complete_init(&self->super);
     return UCS_OK;
 }
 
@@ -674,8 +675,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
 {
     ucs_trace_func("");
     uct_ud_enter(&self->super);
-    uct_worker_progress_unregister(self->super.super.super.worker,
-                                   uct_ud_mlx5_iface_progress, self);
     uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
     uct_ud_leave(&self->super);

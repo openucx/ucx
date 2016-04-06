@@ -133,6 +133,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
+    uct_worker_progress_register(iface->super.super.worker,
+                                 ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                                 iface);
+
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("NEW EP: iface=%p ep=%p id=%d", iface, self, self->ep_id);
     return UCS_OK;
@@ -167,6 +171,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
     uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
+
+    uct_worker_progress_unregister(iface->super.super.worker,
+                                   ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                                   iface);
+
     ucs_wtimer_remove(&self->slow_timer);
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
