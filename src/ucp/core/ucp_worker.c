@@ -309,6 +309,11 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_rsc_index_t *rs
         iface_attr  = &worker->iface_attrs[rsc_index];
         pd_attr     = &context->pd_attrs[context->tl_rscs[rsc_index].pd_index];
 
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+            config->max_eager_short  = iface_attr->cap.am.max_short - sizeof(ucp_eager_hdr_t);
+            config->max_am_short     = iface_attr->cap.am.max_short - sizeof(uint64_t);
+        }
+
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
             config->max_am_bcopy     = iface_attr->cap.am.max_bcopy;
         }
@@ -344,12 +349,6 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_rsc_index_t *rs
     rsc_index = config->rscs[UCP_EP_OP_RMA];
     if (rsc_index != UCP_NULL_RESOURCE) {
         iface_attr = &worker->iface_attrs[rsc_index];
-
-        if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-            config->max_eager_short  = iface_attr->cap.am.max_short - sizeof(ucp_eager_hdr_t);
-            config->max_am_short     = iface_attr->cap.am.max_short - sizeof(uint64_t);
-        }
-
 
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
             config->max_put_short    = iface_attr->cap.put.max_short;
