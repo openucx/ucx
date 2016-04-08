@@ -242,11 +242,11 @@ void* ucm_reloc_get_orig(const char *symbol, void *replacement)
     const char *error;
     void *func_ptr;
 
-    func_ptr = dlsym(RTLD_DEFAULT, symbol);
-    if (func_ptr == replacement) {
+    func_ptr = dlsym(RTLD_NEXT, symbol);
+    if (func_ptr == NULL) {
         (void)dlerror();
-        func_ptr = dlsym(RTLD_NEXT, symbol);
-        if (func_ptr == NULL) {
+        func_ptr = dlsym(RTLD_DEFAULT, symbol);
+        if (func_ptr == replacement) {
             error = dlerror();
             ucm_fatal("could not find address of original %s(): %s", symbol,
                       error ? error : "Unknown error");
