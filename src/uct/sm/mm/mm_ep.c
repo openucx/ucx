@@ -16,7 +16,9 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_mm_remote_seg_t,
                                         uct_mm_remote_seg_hash)
 
 
-static ucs_status_t uct_mm_ep_send_connect(uct_mm_ep_t *ep, int connect)
+/* send a signal to remote interface using Unix-domain docket */
+static ucs_status_t
+uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
 {
     uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
     int ret;
@@ -24,15 +26,25 @@ static ucs_status_t uct_mm_ep_send_connect(uct_mm_ep_t *ep, int connect)
     /**
      * Send connect message to remote interface
      */
-    ret = sendto(iface->signal_fd, &connect, sizeof(connect), 0,
-                 (const struct sockaddr*)&ep->fifo_ctl->signal_sockaddr,
-                 ep->fifo_ctl->signal_addrlen);
-    if (ret < 0) {
-        ucs_error("failed to send %sconnect message: %m", connect ? "" : "dis");
-        return UCS_ERR_IO_ERROR;
+    for (;;) {
+        ret = sendto(iface->signal_fd, &sig, sizeof(sig), 0,
+                     (const struct sockaddr*)&ep->fifo_ctl->signal_sockaddr,
+                     ep->fifo_ctl->signal_addrlen);
+        if (ret >= 0) {
+            ucs_assert(ret == sizeof(sig));
+            return UCS_OK;
+        } else if (errno == EAGAIN) {
+            /* If sending a signal has failed, retry.
+             * Note the by default the receiver might have a limited backlog,
+             * on Linux systems it is net.unix.max_dgram_qlen (10 by default).
+             */
+            uct_mm_iface_recv_messages(iface);
+        } else {
+            ucs_error("failed to send %sconnect signal: %m",
+                      (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
+            return UCS_ERR_IO_ERROR;
+        }
     }
-
-    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
@@ -68,7 +80,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     self->cached_tail        = self->fifo_ctl->tail;
 
     /* Send connect message to remote side so it will start polling */
-    status = uct_mm_ep_send_connect(self, 1);
+    status = uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_CONNECT);
     if (status != UCS_OK) {
         uct_mm_pd_mapper_ops(iface->super.pd)->detach(&self->mapped_desc);
         return status;
@@ -96,7 +108,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     uct_mm_remote_seg_t *remote_seg;
     struct sglib_hashed_uct_mm_remote_seg_t_iterator iter;
 
-    uct_mm_ep_send_connect(self, 0);
+    uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_DISCONNECT);
 
     uct_worker_progress_unregister(iface->super.worker, uct_mm_iface_progress,
                                    iface);

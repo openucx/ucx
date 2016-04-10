@@ -285,8 +285,9 @@ static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
                                       uct_mm_iface_config_t *config, uct_pd_h pd)
 {
-    ucs_status_t status;
+    uct_mm_fifo_ctl_t *ctl;
     size_t size_to_alloc;
+    ucs_status_t status;
 
     /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
@@ -300,7 +301,16 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
         return status;
     }
 
-    uct_mm_set_fifo_ptrs(iface->shared_mem, &iface->recv_fifo_ctl, &iface->recv_fifo_elements);
+    uct_mm_set_fifo_ptrs(iface->shared_mem, &ctl, &iface->recv_fifo_elements);
+
+    /* Make sure head and tail are cahe-aligned, and not on same cacheline, to
+     * avoid false-sharing.
+     */
+    ucs_assert_always((((uintptr_t)&ctl->head) % UCS_SYS_CACHE_LINE_SIZE) == 0);
+    ucs_assert_always((((uintptr_t)&ctl->tail) % UCS_SYS_CACHE_LINE_SIZE) == 0);
+    ucs_assert_always(((uintptr_t)&ctl->tail - (uintptr_t)&ctl->head) >= UCS_SYS_CACHE_LINE_SIZE);
+
+    iface->recv_fifo_ctl = ctl;
 
     ucs_assert(iface->shared_mem != NULL);
     return UCS_OK;
@@ -341,7 +351,6 @@ static ucs_status_t uct_mm_iface_create_signal_fd(uct_mm_iface_t *iface)
      */
     addrlen = sizeof(struct sockaddr_un);
     memset(&iface->recv_fifo_ctl->signal_sockaddr, 0, addrlen);
-    iface->recv_fifo_ctl->null = 0;
     ret = getsockname(iface->signal_fd,
                       (struct sockaddr *)&iface->recv_fifo_ctl->signal_sockaddr,
                       &addrlen);
@@ -360,23 +369,22 @@ err:
     return status;
 }
 
-static void uct_mm_iface_singal_handler(void *arg)
+void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
 {
-    uct_mm_iface_t *iface = arg;
-    int connect;
+    uct_mm_iface_conn_signal_t sig;
     int ret;
 
     for (;;) {
-        ret = recvfrom(iface->signal_fd, &connect, sizeof(connect), 0, NULL, 0);
-        if (ret == sizeof(connect)) {
+        ret = recvfrom(iface->signal_fd, &sig, sizeof(sig), 0, NULL, 0);
+        if (ret == sizeof(sig)) {
             ucs_debug("mm_iface %p: got %sconnect message", iface,
-                      connect ? "" : "dis");
-            if (connect) {
+                      (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
+            if (sig == UCT_MM_IFACE_SIGNAL_CONNECT) {
                 ucs_callbackq_add_safe(&iface->super.worker->progress_q,
-                                        uct_mm_iface_progress, arg);
+                                        uct_mm_iface_progress, iface);
             } else {
                 ucs_callbackq_remove_safe(&iface->super.worker->progress_q,
-                                          uct_mm_iface_progress, arg);
+                                          uct_mm_iface_progress, iface);
             }
         } else {
             if (ret < 0) {
@@ -385,11 +393,16 @@ static void uct_mm_iface_singal_handler(void *arg)
                 }
             } else {
                 ucs_error("mm connect signal with invalid size (expected: %zu got: %d)",
-                          sizeof(connect), ret);
+                          sizeof(sig), ret);
             }
             break;
         }
     }
+}
+
+static void uct_mm_iface_singal_handler(void *arg)
+{
+    uct_mm_iface_recv_messages(arg);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,

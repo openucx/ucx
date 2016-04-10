@@ -29,6 +29,13 @@
                                      ((iface)->config.fifo_size *    \
                                      (iface)->config.fifo_elem_size))
 
+
+typedef enum {
+    UCT_MM_IFACE_SIGNAL_CONNECT    = 0,
+    UCT_MM_IFACE_SIGNAL_DISCONNECT = 1,
+} uct_mm_iface_conn_signal_t;
+
+
 typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
     unsigned                 fifo_size;            /* Size of the receive FIFO */
@@ -96,11 +103,13 @@ struct uct_mm_fifo_element {
 
 
 struct uct_mm_fifo_ctl {
+    /* 1st cacheline */
     volatile uint64_t  head;       /* where to write next */
-    socklen_t          signal_addrlen;
-    struct sockaddr_un signal_sockaddr;
-    char               null;
-    UCS_CACHELINE_PADDING(uint64_t, socklen_t, struct sockaddr_un, char);
+    socklen_t          signal_addrlen;   /* address length of signaling socket */
+    struct sockaddr_un signal_sockaddr;  /* address of signaling socket */
+    UCS_CACHELINE_PADDING(uint64_t, socklen_t, struct sockaddr_un);
+
+    /* 2nd cacheline */
     volatile uint64_t  tail;       /* how much was read */
 } UCS_S_PACKED;
 
@@ -152,6 +161,7 @@ ucs_status_t uct_mm_flush();
 
 void uct_mm_iface_progress(void *arg);
 
+void uct_mm_iface_recv_messages(uct_mm_iface_t *iface);
 
 extern uct_tl_component_t uct_mm_tl;
 
