@@ -195,32 +195,32 @@ static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
 {
     self->async       = async;
     self->thread_mode = thread_mode;
-    ucs_notifier_chain_init(&self->progress_chain);
+    ucs_callbackq_init(&self->progress_q, 64);
     ucs_list_head_init(&self->tl_data);
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_worker_t)
 {
-    /* TODO warn if notifier chain is non-empty */
+    ucs_callbackq_cleanup(&self->progress_q);
 }
 
 void uct_worker_progress(uct_worker_h worker)
 {
-    ucs_notifier_chain_call(&worker->progress_chain);
+    ucs_callbackq_dispatch(&worker->progress_q);
 }
 
 
 void uct_worker_progress_register(uct_worker_h worker,
-                                  ucs_notifier_chain_func_t func, void *arg)
+                                  ucs_callback_t func, void *arg)
 {
-    ucs_notifier_chain_add(&worker->progress_chain, func, arg);
+    ucs_callbackq_add(&worker->progress_q, func, arg);
 }
 
 void uct_worker_progress_unregister(uct_worker_h worker,
-                                    ucs_notifier_chain_func_t func, void *arg)
+                                    ucs_callback_t func, void *arg)
 {
-    ucs_notifier_chain_remove(&worker->progress_chain, func, arg);
+    ucs_callbackq_remove(&worker->progress_q, func, arg);
 }
 
 UCS_CLASS_DEFINE(uct_worker_t, void);

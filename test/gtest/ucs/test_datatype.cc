@@ -6,7 +6,6 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/datastruct/notifier.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/queue.h>
@@ -520,83 +519,6 @@ UCS_TEST_F(test_datatype, ptr_array_perf) {
     EXPECT_LT(lookup_ns, 15.0);
 }
 
-typedef struct {
-    int                       me;
-    int                       ncalls;
-    bool                      remove;
-    ucs_notifier_chain_t      *chain;
-} notifier_test_cb_t;
-
-static void notifier_test_func(notifier_test_cb_t *cb) {
-    cb->ncalls++;
-    if (cb->remove) {
-        ucs_notifier_chain_remove(cb->chain, (ucs_notifier_chain_func_t)notifier_test_func, cb);
-    }
-}
-
-UCS_TEST_F(test_datatype, notifier_chain) {
-
-    static size_t N_CALLS = 1000;
-
-    ucs_notifier_chain_t chain;
-    std::vector<notifier_test_cb_t> elems(3);
-
-    ucs_notifier_chain_init(&chain);
-
-    int i = 0;
-    for (std::vector<notifier_test_cb_t>::iterator iter = elems.begin();
-                    iter != elems.end(); ++iter) {
-        notifier_test_cb_t& cb = *iter;
-        cb.me         = i++;
-        cb.ncalls     = 0;
-        cb.remove     = 0;
-        cb.chain      = &chain;
-        ucs_notifier_chain_add(&chain, (ucs_notifier_chain_func_t)notifier_test_func, &cb);
-    }
-
-    {
-        for (size_t i = 0; i < N_CALLS; ++i) {
-            ucs_notifier_chain_call(&chain);
-        }
-        EXPECT_NEAR(N_CALLS, elems[0].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS, elems[1].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS, elems[2].ncalls, N_CALLS/100);
-    }
-
-    elems[1].remove = true;
-
-    {
-        for (size_t i = 0; i < N_CALLS; ++i) {
-            ucs_notifier_chain_call(&chain);
-        }
-        EXPECT_NEAR(N_CALLS*2, elems[0].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS,   elems[1].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS*2, elems[2].ncalls, N_CALLS/100);
-    }
-
-    elems[0].remove = true;
-
-    {
-        for (size_t i = 0; i < N_CALLS; ++i) {
-            ucs_notifier_chain_call(&chain);
-        }
-        EXPECT_NEAR(N_CALLS*2, elems[0].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS  , elems[1].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS*3, elems[2].ncalls, N_CALLS/100);
-    }
-
-    elems[2].remove = true;
-
-    {
-        for (size_t i = 0; i < N_CALLS; ++i) {
-            ucs_notifier_chain_call(&chain);
-        }
-        EXPECT_NEAR(N_CALLS*2, elems[0].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS  , elems[1].ncalls, N_CALLS/100);
-        EXPECT_NEAR(N_CALLS*3, elems[2].ncalls, N_CALLS/100);
-    }
-}
-
 UCS_TEST_F(test_datatype, ptr_status) {
     void *ptr1 = (void*)(UCS_BIT(63) + 10);
     EXPECT_TRUE(UCS_PTR_IS_PTR(ptr1));
@@ -607,4 +529,3 @@ UCS_TEST_F(test_datatype, ptr_status) {
     void *ptr2 = (void*)(uintptr_t)(UCS_ERR_LAST + 1);
     EXPECT_TRUE(UCS_PTR_IS_ERR(ptr2));
 }
-
