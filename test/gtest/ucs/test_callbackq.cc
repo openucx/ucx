@@ -28,7 +28,7 @@ protected:
 
     virtual void init() {
         ucs::test::init();
-        ucs_status_t status = ucs_callbackq_init(&m_cbq, 64);
+        ucs_status_t status = ucs_callbackq_init(&m_cbq, 64, NULL);
         ASSERT_UCS_OK(status);
     }
 
