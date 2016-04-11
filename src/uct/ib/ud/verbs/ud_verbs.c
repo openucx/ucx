@@ -107,7 +107,8 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface,
     --iface->super.tx.available;
 }
 
-static void uct_ud_verbs_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb)
+static void uct_ud_verbs_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
+                                       int solicited)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                                  uct_ud_verbs_iface_t);
@@ -116,6 +117,9 @@ static void uct_ud_verbs_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *sk
 
     if (skb->len < iface->super.config.max_inline) {
         flags = IBV_SEND_INLINE;
+    }
+    if (solicited) {
+        flags |= IBV_SEND_SOLICITED;
     }
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, flags);
 }
@@ -352,10 +356,11 @@ out:
     return status;
 }
 
-static void uct_ud_verbs_iface_async_progress(void *arg)
+static void uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
-    uct_ud_verbs_iface_t *iface = arg;
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_verbs_iface_t);
     ucs_status_t status;
+
     do {
         status = uct_ud_verbs_iface_poll_rx(iface, 1);
     } while (status == UCS_OK);
@@ -436,7 +441,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
 
     if (status == UCS_OK) {
         ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_unpack_uint24(if_addr->qp_num), ib_addr->lid);
-        uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE);
+        uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE|IBV_SEND_SOLICITED);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }
     uct_ud_leave(&iface->super);
@@ -511,6 +516,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
     },
+    .progress                 = uct_ud_verbs_iface_progress,
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .tx_skb                   = uct_ud_verbs_ep_tx_ctl_skb,
 };
@@ -557,21 +563,13 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
 {
     uct_ud_iface_config_t *config = ucs_derived_of(tl_config,
                                                    uct_ud_iface_config_t);
+    ucs_status_t status;
+
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, config);
 
-    if (self->super.super.config.rx_max_batch < UCT_UD_RX_BATCH_MIN) {
-        ucs_warn("rx max batch is too low (%d < %d), performance may be impacted",
-                self->super.super.config.rx_max_batch,
-                UCT_UD_RX_BATCH_MIN);
-    }
-
-    while (self->super.rx.available >= self->super.super.config.rx_max_batch) {
-        uct_ud_verbs_iface_post_recv(self);
-    }
-    
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;
     self->tx.wr_inl.wr_id             = 0xBEEBBEEB;
@@ -590,7 +588,21 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->tx.wr_skb.sg_list           = self->tx.sge;
     self->tx.wr_skb.num_sge           = 1;
 
-    uct_ud_iface_complete_init(&self->super, uct_ud_verbs_iface_progress);
+    if (self->super.super.config.rx_max_batch < UCT_UD_RX_BATCH_MIN) {
+        ucs_warn("rx max batch is too low (%d < %d), performance may be impacted",
+                self->super.super.config.rx_max_batch,
+                UCT_UD_RX_BATCH_MIN);
+    }
+
+    while (self->super.rx.available >= self->super.super.config.rx_max_batch) {
+        uct_ud_verbs_iface_post_recv(self);
+    }
+
+    status = uct_ud_iface_complete_init(&self->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return UCS_OK;
 }
 
@@ -598,9 +610,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 {
     ucs_trace_func("");
     uct_ud_enter(&self->super);
-    uct_worker_progress_unregister(self->super.super.super.worker,
-                                   uct_ud_verbs_iface_progress, self);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_verbs_ep_t);
+    uct_ud_iface_begin_cleanup(&self->super);
     uct_ud_leave(&self->super);
 }
 

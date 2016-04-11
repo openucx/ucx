@@ -26,13 +26,13 @@
                               sizeof(struct mlx5_wqe_datagram_seg))
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep, 
-                      struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
+uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
+                      uint8_t se, struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
 {
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi,
                              MLX5_OPCODE_SEND, 0,
                              iface->super.qp->qp_num,
-                             uct_ud_mlx5_tx_moderation(iface),
+                             uct_ud_mlx5_tx_moderation(iface) | se,
                              wqe_size);
     uct_ib_mlx5_set_dgram_seg((struct mlx5_wqe_datagram_seg *)(ctrl+1),
                               &ep->av, 0);
@@ -45,7 +45,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_mlx5_ep_tx_skb(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                      uct_ud_send_skb_t *skb)
+                      uct_ud_send_skb_t *skb, uint8_t se)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
     struct mlx5_wqe_data_seg *dptr;
@@ -54,13 +54,13 @@ uct_ud_mlx5_ep_tx_skb(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     dptr = uct_ib_mlx5_get_next_seg(&iface->tx.wq, ctrl, UCT_UD_MLX5_WQE_SIZE);
     uct_ib_mlx5_set_data_seg(dptr, skb->neth, skb->len, skb->lkey);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, skb->neth);
-    uct_ud_mlx5_post_send(iface, ucs_derived_of(ep, uct_ud_mlx5_ep_t), 
-                          ctrl, UCT_UD_MLX5_WQE_SIZE + sizeof(*dptr));
+    uct_ud_mlx5_post_send(iface, ep, se, ctrl,
+                          UCT_UD_MLX5_WQE_SIZE + sizeof(*dptr));
 }
 
 static inline void
 uct_ud_mlx5_ep_tx_inl(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                      const void *buf, unsigned length)
+                      const void *buf, unsigned length, uint8_t se)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
     struct mlx5_wqe_inl_data_seg *inl;
@@ -70,21 +70,24 @@ uct_ud_mlx5_ep_tx_inl(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     inl->byte_count = htonl(length | MLX5_INLINE_SEG);
     uct_ib_mlx5_inline_copy(inl + 1, buf, length, &iface->tx.wq);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)buf);
-    uct_ud_mlx5_post_send(iface, ep, ctrl,
+    uct_ud_mlx5_post_send(iface, ep, se, ctrl,
                           UCT_UD_MLX5_WQE_SIZE + sizeof(*inl) + length);
 }
 
 
-static void uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb)
+static void uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
+                                      int solicited)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                                 uct_ud_mlx5_iface_t);
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
+    uint8_t se;
 
+    se = solicited ? MLX5_WQE_CTRL_SOLICITED : 0;
     if (skb->len >= iface->super.config.max_inline) {
-        uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
+        uct_ud_mlx5_ep_tx_skb(iface, ep, skb, se);
     } else {
-        uct_ud_mlx5_ep_tx_inl(iface, ep, skb->neth, skb->len);
+        uct_ud_mlx5_ep_tx_inl(iface, ep, skb->neth, skb->len, se);
     }
 }
 
@@ -185,7 +188,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     UCT_CHECK_LENGTH(wqe_size, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
                      "am_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
-    uct_ud_mlx5_post_send(iface, ep, ctrl, wqe_size);
+    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
 
     skb->len = sizeof(*neth) + sizeof(*am);
     memcpy(skb->neth, neth, skb->len); 
@@ -217,7 +220,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
     UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
-    uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
+    uct_ud_mlx5_ep_tx_skb(iface, ep, skb, 0);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_ud_leave(&iface->super);
@@ -282,7 +285,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     }
 
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
-    uct_ud_mlx5_post_send(iface, ep, ctrl, wqe_size);
+    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
 
     skb->len = sizeof(*neth) + header_length;
     memcpy(skb->neth, neth, sizeof(*neth));
@@ -339,7 +342,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     UCT_CHECK_LENGTH(wqe_size, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
                      "put_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
-    uct_ud_mlx5_post_send(iface, ep, ctrl, wqe_size);
+    uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
 
     skb->len = sizeof(*neth) + sizeof(*put_hdr);
     memcpy(skb->neth, neth, skb->len); 
@@ -415,12 +418,13 @@ static void uct_ud_mlx5_iface_progress(void *arg)
 {
     uct_ud_mlx5_iface_t *iface = arg;
     ucs_status_t status;
+    int count;
 
     uct_ud_enter(&iface->super);
     uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (ucs_likely(status == UCS_OK)) {
-        int count = 0;
+        count = 0;
         do {
             status = uct_ud_mlx5_iface_poll_rx(iface, 0);
             count++;
@@ -431,18 +435,16 @@ static void uct_ud_mlx5_iface_progress(void *arg)
     uct_ud_leave(&iface->super);
 }
 
-static void uct_ud_mlx5_iface_async_progress(void *arg)
+static void uct_ud_mlx5_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
-    uct_ud_mlx5_iface_t *iface = arg;
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_mlx5_iface_t);
     ucs_status_t status;
 
     do {
         status = uct_ud_mlx5_iface_poll_rx(iface, 1);
     } while (status == UCS_OK);
-
     uct_ud_mlx5_iface_poll_tx(iface);
     uct_ud_iface_progress_pending(&iface->super, 1);
-
 }
 
 static ucs_status_t 
@@ -453,7 +455,6 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     ucs_trace_func("");
     uct_ud_iface_query(iface, iface_attr);
     iface_attr->cap.flags &= ~UCT_IFACE_FLAG_WAKEUP;
-
     return UCS_OK;
 }
 
@@ -520,7 +521,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
 
     if (status == UCS_OK) {
         ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_unpack_uint24(if_addr->qp_num), ib_addr->lid);
-        uct_ud_mlx5_ep_tx_skb(iface, ep, skb);
+        uct_ud_mlx5_ep_tx_ctl_skb(&ep->super, skb, 1);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }
 
@@ -602,6 +603,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .arm_tx_cq                = uct_ud_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ud_mlx5_iface_arm_rx_cq,
     },
+    .progress                 = uct_ud_mlx5_iface_progress,
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .tx_skb                   = uct_ud_mlx5_ep_tx_ctl_skb,
 };
@@ -635,8 +637,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
+
     if (uct_ib_mlx5_cqe_size(&self->rx.cq) != sizeof(struct mlx5_cqe64)) {
         ucs_error("RX CQE size (%d) is not %d", 
                   uct_ib_mlx5_cqe_size(&self->rx.cq),
@@ -647,13 +650,13 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     status = uct_ib_mlx5_get_txwq(self->super.super.super.worker, self->super.qp,
                                   &self->tx.wq);
     if (status != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
     self->super.tx.available = self->tx.wq.bb_max;
    
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq); 
     if (status != UCS_OK) {
-        return UCS_ERR_IO_ERROR;
+        return status;
     }
 
     /* write buffer sizes */
@@ -665,7 +668,11 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         uct_ud_mlx5_iface_post_recv(self);
     }
 
-    uct_ud_iface_complete_init(&self->super, uct_ud_mlx5_iface_progress);
+    status = uct_ud_iface_complete_init(&self->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return UCS_OK;
 }
 
@@ -674,10 +681,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
 {
     ucs_trace_func("");
     uct_ud_enter(&self->super);
-    uct_worker_progress_unregister(self->super.super.super.worker,
-                                   uct_ud_mlx5_iface_progress, self);
-    uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
+    uct_ud_iface_begin_cleanup(&self->super);
+    uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
     uct_ud_leave(&self->super);
 }
 

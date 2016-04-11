@@ -40,6 +40,10 @@
 #  define mlx5_av_grh(_av)    (_av)
 #endif
 
+#if !(HAVE_MLX5_WQE_CTRL_SOLICITED)
+#  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
+#endif
+
 
 typedef struct uct_ib_mlx5_qp_info {
     uint32_t           qpn;           /* QP number */

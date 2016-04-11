@@ -105,7 +105,8 @@ AS_IF([test "x$with_ib" == xyes],
        AC_CHECK_DECLS([ibv_mlx5_exp_get_qp_info,
                        ibv_mlx5_exp_get_cq_info,
                        ibv_mlx5_exp_get_srq_info,
-                       ibv_mlx5_exp_update_cq_ci],
+                       ibv_mlx5_exp_update_cq_ci,
+                       MLX5_WQE_CTRL_SOLICITED],
                       [], [], [[#include <infiniband/mlx5_hw.h>]])
 
        # Disable mlx5_hw if the driver does not provide BF locking information
