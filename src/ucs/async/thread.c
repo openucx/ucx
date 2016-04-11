@@ -224,7 +224,7 @@ static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
     }
 
     memset(&event, 0, sizeof(event));
-    event.events  = events | EPOLLET; /* Use edge-triggered epoll */
+    event.events  = events;
     event.data.fd = event_fd;
     ret = epoll_ctl(ucs_async_thread_global_context.epfd, EPOLL_CTL_ADD,
                     event_fd, &event);
