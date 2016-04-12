@@ -124,18 +124,6 @@ enum ucp_feature {
 
 
 /**
- * @ingroup UCP_MEM
- * @brief Memory allocation flags
- *
- * The enumeration list describes the memory allocation flags supported by UCP.
- */
-enum ucp_mem_flags {
-    /* Support for registration of zero size memory chunks.
-     * Maybe helpful for MPI implementations. */
-    UCP_MEM_FLAG_ZERO_REG   = UCS_BIT(0)
-};
-
-/**
  * @ingroup UCP_DATATYPE
  * @brief UCP data type classification
  *

@@ -9,7 +9,12 @@
 
 #include <inttypes.h>
 
-static ucp_rkey_t dummy_rkey = {.pd_map = 0};
+
+static ucp_rkey_t ucp_mem_dummy_rkey = {
+    .pd_map = 0
+};
+
+static uint64_t ucp_mem_dummy_buffer = 0;
 
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
@@ -24,10 +29,11 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     if (memh->length == 0) {
         /* dummy memh, return dummy key */
-        *rkey_buffer_p = &dummy_rkey;
-        *size_p        = sizeof(dummy_rkey);
+        *rkey_buffer_p = &ucp_mem_dummy_buffer;
+        *size_p        = sizeof(ucp_mem_dummy_buffer);
         return UCS_OK;
     }
+
     size = sizeof(uint64_t);
     for (pd_index = 0; pd_index < context->num_pds; ++pd_index) {
         size += sizeof(uint8_t);
@@ -61,8 +67,9 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         ++uct_memh_index;
         p += pd_size;
     }
+
     if (uct_memh_index == 0) {
-        status = UCS_ERR_UNREACHABLE;
+        status = UCS_ERR_UNSUPPORTED;
         goto err_destroy;
     }
 
@@ -78,8 +85,7 @@ err:
 
 void ucp_rkey_buffer_release(void *rkey_buffer)
 {
-    uint64_t pd_map   = *(uint64_t*)rkey_buffer;
-    if (pd_map == 0) {
+    if (rkey_buffer == &ucp_mem_dummy_buffer) {
         /* Dummy key, just return */
         return;
     }
@@ -107,7 +113,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
 
     if (pd_map == 0) {
         /* Dummy key return ok */
-        *rkey_p = &dummy_rkey;
+        *rkey_p = &ucp_mem_dummy_rkey;
         return UCS_OK;
     }
 
@@ -182,12 +188,14 @@ err:
 
 void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
-    unsigned num_rkeys = ucs_count_one_bits(rkey->pd_map);
+    unsigned num_rkeys;
     unsigned i;
 
-    if (rkey == &dummy_rkey) {
+    if (rkey == &ucp_mem_dummy_rkey) {
         return;
     }
+
+    num_rkeys = ucs_count_one_bits(rkey->pd_map);
 
     for (i = 0; i < num_rkeys; ++i) {
         uct_rkey_release(&rkey->uct[i]);

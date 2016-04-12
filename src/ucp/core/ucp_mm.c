@@ -13,7 +13,7 @@
 #include <inttypes.h>
 
 
-static ucp_mem_t dummy_mem = {
+static ucp_mem_t ucp_mem_dummy_handle = {
     .address      = NULL,
     .length       = 0,
     .alloc_method = UCT_ALLOC_METHOD_LAST,
@@ -181,12 +181,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
     ucp_mem_h memh;
 
     if (length == 0) {
-        if (flags & UCP_MEM_FLAG_ZERO_REG) {
-            ucs_debug("mapping zero length buffer, return dummy memh");
-            *memh_p = &dummy_mem;
-            return UCS_OK;
-        }
-        return UCS_ERR_INVALID_PARAM;
+        ucs_debug("mapping zero length buffer, return dummy memh");
+        *memh_p = &ucp_mem_dummy_handle;
+        return UCS_OK;
     }
 
     /* Allocate the memory handle */
@@ -236,7 +233,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
     ucs_status_t status;
 
     ucs_debug("unmapping buffer %p memh %p", memh->address, memh);
-    if (memh == &dummy_mem) {
+    if (memh == &ucp_mem_dummy_handle) {
         return UCS_OK;
     }
 

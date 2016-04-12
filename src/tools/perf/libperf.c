@@ -719,7 +719,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
 
     rte_call(perf, post_vec, vec, iov_len, &req);
 
-    if (rkey_buffer) {
+    if (rkey_buffer != NULL) {
         ucp_rkey_buffer_release(rkey_buffer);
     }
     ucp_worker_release_address(perf->ucp.worker, address);
