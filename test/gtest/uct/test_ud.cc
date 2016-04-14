@@ -274,7 +274,7 @@ UCS_TEST_P(test_ud, creq_drop) {
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
     ep(m_e1, 0)->rx.rx_hook = drop_crep;
-    short_progress_loop();
+    short_progress_loop(50);
     /* remove filter. Go to sleep. CREQ will be retransmitted */
     ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
     twait(500);
@@ -295,7 +295,7 @@ UCS_TEST_P(test_ud, creq_flush) {
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
     ep(m_e1, 0)->rx.rx_hook = drop_crep;
-    short_progress_loop();
+    short_progress_loop(50);
     /* do flush while ep is being connected it must return in progress */
     status = uct_iface_flush(m_e1->iface());
     EXPECT_EQ(UCS_INPROGRESS, status);
@@ -434,7 +434,7 @@ UCS_TEST_P(test_ud, ca_resend) {
 UCS_TEST_P(test_ud, connect_iface_single) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
-    short_progress_loop();
+    short_progress_loop(50);
     EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
 
@@ -448,7 +448,7 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     /* 2 to 1 connect */
     m_e1->connect_to_iface(0, *m_e2);
     m_e1->connect_to_iface(1, *m_e2);
-    short_progress_loop();
+    short_progress_loop(50);
 
     EXPECT_EQ(0U, ep(m_e1,0)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1,0)->conn_id);
@@ -464,7 +464,7 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
 UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
-    short_progress_loop();
+    short_progress_loop(50);
     EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1)->conn_id);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
@@ -472,7 +472,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
-    short_progress_loop();
+    short_progress_loop(50);
     EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e2)->ep_id);
     EXPECT_EQ(0U, ep(m_e2)->conn_id);
@@ -506,7 +506,7 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     m_e2->connect_to_iface(0, *m_e1);
     m_e1->connect_to_iface(1, *m_e2);
     m_e2->connect_to_iface(1, *m_e1);
-    short_progress_loop();
+    short_progress_loop(50);
 
     EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
     EXPECT_EQ(0U, ep(m_e1)->conn_id);
@@ -614,7 +614,7 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
 
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
-    short_progress_loop();
+    short_progress_loop(50);
 
     uct_ep_destroy(m_e1->ep(0));
 
