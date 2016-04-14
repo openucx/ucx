@@ -71,6 +71,10 @@ struct ucs_callbackq {
  * @param  [in] async    If != NULL, make calling add/remove from this async
  *                       context deadlock-free.
  *
+ * @note In general, calling add/remove from an async context, or a signal
+ * handler, may cause a deadlock. However, if async != NULL is passed to this
+ * function, it would be safe to use add/remove from this async context *only*.
+ *
  * @note The callback queue currently does not expand beyond the size defined
  *       during initialization time. More callbacks *cannot* be added.
  */
