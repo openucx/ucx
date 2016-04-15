@@ -7,10 +7,11 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/arch/atomic.h>
+#include <ucs/async/async.h>
 #include <ucs/datastruct/callbackq.h>
 }
 
-class test_callbackq : public ucs::test {
+class test_callbackq_base : public ucs::test_base {
 protected:
 
     enum {
@@ -20,21 +21,25 @@ protected:
     };
 
     struct callback_ctx {
-        test_callbackq *test;
-        uint32_t       count;
-        int            command;
-        callback_ctx   *to_add;
+        test_callbackq_base *test;
+        uint32_t            count;
+        int                 command;
+        callback_ctx        *to_add;
     };
 
+    test_callbackq_base() : m_async_ptr(NULL) {
+        memset(&m_cbq, 0, sizeof(m_cbq)); /* Silence coverity */
+    }
+
     virtual void init() {
-        ucs::test::init();
-        ucs_status_t status = ucs_callbackq_init(&m_cbq, 64);
+        ucs::test_base::init();
+        ucs_status_t status = ucs_callbackq_init(&m_cbq, 64, m_async_ptr);
         ASSERT_UCS_OK(status);
     }
 
     virtual void cleanup() {
         ucs_callbackq_cleanup(&m_cbq);
-        ucs::test::cleanup();
+        ucs::test_base::cleanup();
     }
 
     static void callback_proxy(void *arg)
@@ -87,15 +92,18 @@ protected:
 
     void add_safe(callback_ctx *ctx)
     {
-        ucs_callbackq_add_safe(&m_cbq, callback_proxy,
-                               reinterpret_cast<void*>(ctx));
-    }
+        ucs_status_t status = ucs_callbackq_add_safe(&m_cbq, callback_proxy,
+                                                     reinterpret_cast<void*>(ctx));
+        ASSERT_UCS_OK(status);
+     }
 
     void remove_safe(callback_ctx *ctx)
     {
-        ucs_callbackq_remove_safe(&m_cbq, callback_proxy,
-                                  reinterpret_cast<void*>(ctx));
-    }
+        ucs_status_t status = ucs_callbackq_remove_safe(&m_cbq, callback_proxy,
+                                                        reinterpret_cast<void*>(ctx));
+
+        ASSERT_UCS_OK(status);
+     }
 
     void dispatch(unsigned count = 1)
     {
@@ -104,9 +112,13 @@ protected:
         }
     }
 
-    ucs_callbackq_t m_cbq;
+    ucs_callbackq_t     m_cbq;
+    ucs_async_context_t *m_async_ptr;
 };
 
+class test_callbackq : public test_callbackq_base, public ::testing::Test {
+    UCS_TEST_BASE_IMPL;
+};
 
 UCS_TEST_F(test_callbackq, single) {
     callback_ctx ctx;
@@ -268,3 +280,74 @@ UCS_MT_TEST_F(test_callbackq, remove_all, 10) {
         barrier();
     }
 }
+
+class test_callbackq_async : public test_callbackq_base,
+                             public ::testing::TestWithParam<ucs_async_mode_t>
+{
+protected:
+    test_callbackq_async() : m_add_count(0) {
+        /* Silence coverity */
+        memset(&m_cbctx, 0, sizeof(m_cbctx));
+        memset(&m_async, 0, sizeof(m_async));
+    }
+
+    virtual void init() {
+        ucs_status_t status = ucs_async_context_init(&m_async, GetParam());
+        ASSERT_UCS_OK(status);
+        m_async_ptr = &m_async;
+        test_callbackq_base::init();
+        init_ctx(&m_cbctx);
+    }
+
+    virtual void cleanup() {
+        test_callbackq_base::cleanup();
+        ucs_async_context_cleanup(&m_async);
+    }
+
+    void timer() {
+        if ((m_add_count > 0) && ((rand() % 2) == 0)) {
+            remove_safe(&m_cbctx);
+            --m_add_count;
+        } else {
+            add_safe(&m_cbctx);
+            ++m_add_count;
+        }
+    }
+
+    static void timer_callback(void *arg) {
+        test_callbackq_async *self = reinterpret_cast<test_callbackq_async*>(arg);
+        self->timer();
+    }
+
+protected:
+    ucs_async_context_t m_async;
+    callback_ctx        m_cbctx;
+    volatile uint32_t   m_add_count;
+
+    UCS_TEST_BASE_IMPL
+};
+
+
+UCS_TEST_P(test_callbackq_async, test) {
+    ucs_status_t status;
+    int timer_id;
+
+    status = ucs_async_add_timer(m_async.mode, ucs_time_from_msec(1),
+                                 timer_callback, this, &m_async, &timer_id);
+    ASSERT_UCS_OK(status);
+
+    ucs_time_t end_time   = ucs_get_time() + ucs_time_from_msec(300);
+    while (ucs_get_time() < end_time) {
+        dispatch(10);
+        add(&m_cbctx);
+        dispatch(10);
+        remove(&m_cbctx);
+    }
+
+    ucs_async_remove_timer(timer_id);
+
+    remove_all(&m_cbctx);
+}
+
+INSTANTIATE_TEST_CASE_P(signal, test_callbackq_async, ::testing::Values(UCS_ASYNC_MODE_SIGNAL));
+INSTANTIATE_TEST_CASE_P(thread, test_callbackq_async, ::testing::Values(UCS_ASYNC_MODE_THREAD));

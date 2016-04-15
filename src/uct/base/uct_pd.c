@@ -195,7 +195,7 @@ static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
 {
     self->async       = async;
     self->thread_mode = thread_mode;
-    ucs_callbackq_init(&self->progress_q, 64);
+    ucs_callbackq_init(&self->progress_q, 64, async);
     ucs_list_head_init(&self->tl_data);
     return UCS_OK;
 }

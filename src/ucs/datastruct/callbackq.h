@@ -8,6 +8,7 @@
 #define UCS_CALLBACKQ_H
 
 #include <ucs/arch/cpu.h> /* for memory load fence */
+#include <ucs/async/async_fwd.h>
 #include <stdint.h>
 
 /*
@@ -23,7 +24,6 @@
  * Forward declarations
  */
 typedef struct ucs_callbackq         ucs_callbackq_t;
-typedef struct ucs_callbackq_cmd     ucs_callbackq_cmd_t;
 typedef struct ucs_callbackq_elem    ucs_callbackq_elem_t;
 typedef void                         (*ucs_callback_t)(void *arg);
 
@@ -46,7 +46,7 @@ struct ucs_callbackq {
     ucs_callbackq_elem_t             *end;     /**< Iteration end pointer */
     ucs_callbackq_elem_t             *ptr;     /**< Array of elements */
     size_t                           size;     /**< Array size */
-    char                             priv[32]; /**< Private data, which we don't want
+    char                             priv[24]; /**< Private data, which we don't want
                                                     to expose in API to avoid
                                                     pulling more header files */
 };
@@ -68,11 +68,18 @@ struct ucs_callbackq {
  *
  * @param  [in] cbq      Callback queue to initialize.
  * @param  [in] size     Callback queue size.
+ * @param  [in] async    If != NULL, make calling add/remove from this async
+ *                       context deadlock-free.
+ *
+ * @note In general, calling add/remove from an async context, or a signal
+ * handler, may cause a deadlock. However, if async != NULL is passed to this
+ * function, it would be safe to use add/remove from this async context *only*.
  *
  * @note The callback queue currently does not expand beyond the size defined
  *       during initialization time. More callbacks *cannot* be added.
  */
-ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq, size_t size);
+ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq, size_t size,
+                                ucs_async_context_t *async);
 
 
 /**

@@ -143,7 +143,7 @@ UCS_TEST_P(test_ud_pending, err_busy) {
 UCS_TEST_P(test_ud_pending, connect)
 {
     post_pending_reqs();
-    short_progress_loop();
+    short_progress_loop(50.0);
     check_pending_reqs();
 }
 
