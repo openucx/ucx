@@ -402,17 +402,22 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker)
 ucs_status_t ucp_ep_flush(ucp_ep_h ep)
 {
     ucs_status_t status;
+    ucp_ep_op_t optype;
 
-    /* TODO all uct endpoints need to be flushed. Currenlty ucp endpoint
-     * supports just one uct endpoint. */
-    for (;;) {
-        // TODO flush AMO as well
-        status = uct_ep_flush(ep->uct_eps[UCP_EP_OP_RMA]);
-        if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
-            break;
+    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
+        for (;;) {
+            if (!ucp_ep_is_op_primary(ep, optype)) {
+                /* EP layout may change after ucp progress */
+                break;
+            }
+
+            status = uct_ep_flush(ep->uct_eps[optype]);
+            if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
+                return status;
+            }
+            ucp_worker_progress(ep->worker);
         }
-        ucp_worker_progress(ep->worker);
     }
-    return status;
+    return UCS_OK;
 }
 
