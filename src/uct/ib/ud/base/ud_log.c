@@ -35,7 +35,7 @@ static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
     p += n; max -= n;
 
     if (is_am) {
-        n = snprintf(p, max, "AM: %d", am_id);
+        n = snprintf(p, max, "AM: %d ", am_id);
         p += n; max -= n;
         uct_iface_dump_am(&iface->super.super, type, am_id, neth + 1,
                           pkt_len - sizeof(*neth), p, max);
