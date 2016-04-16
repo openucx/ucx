@@ -151,6 +151,8 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     ucs_status_t status;
     void *udesc;
 
+    ucs_assert(uct_rc_mlx5_iface_get_srq_wqe(iface, iface->rx.mask)->srq.next_wqe_index == 0);
+
     cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
         /* If not CQE - post receives */
