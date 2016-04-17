@@ -8,7 +8,10 @@
 #include "mm_ep.h"
 
 #include <uct/sm/base/sm_iface.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/async/async.h>
+#include <sys/poll.h>
 
 
 static ucs_config_field_t uct_mm_iface_config_table[] = {
@@ -243,7 +246,7 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
     }
 }
 
-static void uct_mm_iface_progress(void *arg)
+void uct_mm_iface_progress(void *arg)
 {
     uct_mm_iface_t *iface = arg;
 
@@ -282,8 +285,9 @@ static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
                                       uct_mm_iface_config_t *config, uct_pd_h pd)
 {
-    ucs_status_t status;
+    uct_mm_fifo_ctl_t *ctl;
     size_t size_to_alloc;
+    ucs_status_t status;
 
     /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
@@ -297,10 +301,108 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
         return status;
     }
 
-    uct_mm_set_fifo_ptrs(iface->shared_mem, &iface->recv_fifo_ctl, &iface->recv_fifo_elements);
+    uct_mm_set_fifo_ptrs(iface->shared_mem, &ctl, &iface->recv_fifo_elements);
+
+    /* Make sure head and tail are cahe-aligned, and not on same cacheline, to
+     * avoid false-sharing.
+     */
+    ucs_assert_always((((uintptr_t)&ctl->head) % UCS_SYS_CACHE_LINE_SIZE) == 0);
+    ucs_assert_always((((uintptr_t)&ctl->tail) % UCS_SYS_CACHE_LINE_SIZE) == 0);
+    ucs_assert_always(((uintptr_t)&ctl->tail - (uintptr_t)&ctl->head) >= UCS_SYS_CACHE_LINE_SIZE);
+
+    iface->recv_fifo_ctl = ctl;
 
     ucs_assert(iface->shared_mem != NULL);
     return UCS_OK;
+}
+
+static ucs_status_t uct_mm_iface_create_signal_fd(uct_mm_iface_t *iface)
+{
+    ucs_status_t status;
+    socklen_t addrlen;
+    sa_family_t bind_addr;
+    int ret;
+
+    /* Create a UNIX domain socket to send and receive wakeup signal from remote processes */
+    iface->signal_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (iface->signal_fd < 0) {
+        ucs_error("Failed to create unix domain socket for signal: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err;
+    }
+
+    /* Set the signal socket to non-blocking mode */
+    status = ucs_sys_fcntl_modfl(iface->signal_fd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        goto err_close;
+    }
+
+    /* Bind the signal socket to automatic address */
+    bind_addr = AF_UNIX;
+    ret = bind(iface->signal_fd, (struct sockaddr*)&bind_addr, sizeof(sa_family_t));
+    if (ret < 0) {
+        ucs_error("Failed to auto-bind unix domain socket: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_close;
+    }
+
+    /* Share the socket address on the FIFO control area, so we would not have
+     * to enlarge the interface address size.
+     */
+    addrlen = sizeof(struct sockaddr_un);
+    memset(&iface->recv_fifo_ctl->signal_sockaddr, 0, addrlen);
+    ret = getsockname(iface->signal_fd,
+                      (struct sockaddr *)&iface->recv_fifo_ctl->signal_sockaddr,
+                      &addrlen);
+    if (ret < 0) {
+        ucs_error("Failed to retrieve unix domain socket address: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_close;
+    }
+
+    iface->recv_fifo_ctl->signal_addrlen = addrlen;
+    return UCS_OK;
+
+err_close:
+    close(iface->signal_fd);
+err:
+    return status;
+}
+
+void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
+{
+    uct_mm_iface_conn_signal_t sig;
+    int ret;
+
+    for (;;) {
+        ret = recvfrom(iface->signal_fd, &sig, sizeof(sig), 0, NULL, 0);
+        if (ret == sizeof(sig)) {
+            ucs_debug("mm_iface %p: got %sconnect message", iface,
+                      (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
+            if (sig == UCT_MM_IFACE_SIGNAL_CONNECT) {
+                ucs_callbackq_add_safe(&iface->super.worker->progress_q,
+                                        uct_mm_iface_progress, iface);
+            } else {
+                ucs_callbackq_remove_safe(&iface->super.worker->progress_q,
+                                          uct_mm_iface_progress, iface);
+            }
+        } else {
+            if (ret < 0) {
+                if (errno != EAGAIN) {
+                    ucs_error("failed to retrieve message from signal pipe: %m");
+                }
+            } else {
+                ucs_error("mm connect signal with invalid size (expected: %zu got: %d)",
+                          sizeof(sig), ret);
+            }
+            break;
+        }
+    }
+}
+
+static void uct_mm_iface_singal_handler(void *arg)
+{
+    uct_mm_iface_recv_messages(arg);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
@@ -362,6 +464,11 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     self->recv_fifo_ctl->tail   = 0;
     self->read_index            = 0;
 
+    status = uct_mm_iface_create_signal_fd(self);
+    if (status != UCS_OK) {
+        goto err_free_fifo;
+    }
+
     /* create a memory pool for receive descriptors */
     status = uct_iface_mpool_init(&self->super,
                                   &self->recv_desc_mp,
@@ -375,7 +482,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
                                   "mm_recv_desc");
     if (status != UCS_OK) {
         ucs_error("Failed to create a receive descriptor memory pool for the MM transport");
-        goto err_free_fifo;
+        goto err_close_signal_fd;
     }
 
     /* set the first receive descriptor */
@@ -401,7 +508,11 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     }
 
     ucs_arbiter_init(&self->arbiter);
-    // TODO - Move this call to the ep_init function
+
+    ucs_async_set_event_handler((worker->async != NULL) ? worker->async->mode : UCS_ASYNC_MODE_THREAD,
+                                self->signal_fd, POLLIN, uct_mm_iface_singal_handler,
+                                self, worker->async);
+
     uct_worker_progress_register(worker, uct_mm_iface_progress, self);
 
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
@@ -412,6 +523,8 @@ destroy_descs:
     ucs_mpool_put(self->last_recv_desc);
 destroy_recv_mpool:
     ucs_mpool_cleanup(&self->recv_desc_mp, 1);
+err_close_signal_fd:
+    close(self->signal_fd);
 err_free_fifo:
     uct_mm_pd_mapper_ops(pd)->free(self->shared_mem, self->fifo_mm_id,
                                    UCT_MM_GET_FIFO_SIZE(self), self->path);
@@ -424,12 +537,18 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
     size_t size_to_free;
 
+    ucs_async_unset_event_handler(self->signal_fd);
+
+    ucs_callbackq_remove_all(&self->super.worker->progress_q,
+                             uct_mm_iface_progress, self);
+
     /* return all the descriptors that are now 'assigned' to the FIFO,
      * to their mpool */
     uct_mm_iface_free_rx_descs(self, self->config.fifo_size);
 
     ucs_mpool_put(self->last_recv_desc);
     ucs_mpool_cleanup(&self->recv_desc_mp, 1);
+    close(self->signal_fd);
 
     size_to_free = UCT_MM_GET_FIFO_SIZE(self);
 
@@ -442,8 +561,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     }
 
     ucs_arbiter_cleanup(&self->arbiter);
-    uct_worker_progress_unregister(self->super.worker, uct_mm_iface_progress,
-                                   self);
 }
 
 UCS_CLASS_DEFINE(uct_mm_iface_t, uct_base_iface_t);

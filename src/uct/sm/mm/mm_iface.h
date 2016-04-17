@@ -15,8 +15,10 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/arbiter.h>
+#include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
+#include <sys/un.h>
 
 
 #define UCT_MM_TL_NAME "mm"
@@ -26,6 +28,13 @@
                                       UCT_MM_FIFO_CTL_SIZE_ALIGNED + \
                                      ((iface)->config.fifo_size *    \
                                      (iface)->config.fifo_elem_size))
+
+
+typedef enum {
+    UCT_MM_IFACE_SIGNAL_CONNECT    = 0,
+    UCT_MM_IFACE_SIGNAL_DISCONNECT = 1,
+} uct_mm_iface_conn_signal_t;
+
 
 typedef struct uct_mm_iface_config {
     uct_iface_config_t       super;
@@ -62,6 +71,8 @@ struct uct_mm_iface {
     ucs_mpool_t             recv_desc_mp;
     uct_mm_recv_desc_t      *last_recv_desc;    /* next receive descriptor to use */
 
+    int                     signal_fd;        /* Unix socket for receiving remote signal */
+
     size_t                  rx_headroom;
     ucs_arbiter_t           arbiter;
     const char              *path;            /* path to the backing file (for 'posix') */
@@ -92,8 +103,13 @@ struct uct_mm_fifo_element {
 
 
 struct uct_mm_fifo_ctl {
+    /* 1st cacheline */
     volatile uint64_t  head;       /* where to write next */
-    char padding[UCS_SYS_CACHE_LINE_SIZE - sizeof(uint64_t)];
+    socklen_t          signal_addrlen;   /* address length of signaling socket */
+    struct sockaddr_un signal_sockaddr;  /* address of signaling socket */
+    UCS_CACHELINE_PADDING(uint64_t, socklen_t, struct sockaddr_un);
+
+    /* 2nd cacheline */
     volatile uint64_t  tail;       /* how much was read */
 } UCS_S_PACKED;
 
@@ -142,6 +158,10 @@ static inline void uct_mm_set_fifo_ptrs(void *mem_region, uct_mm_fifo_ctl_t **fi
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
 ucs_status_t uct_mm_flush();
+
+void uct_mm_iface_progress(void *arg);
+
+void uct_mm_iface_recv_messages(uct_mm_iface_t *iface);
 
 extern uct_tl_component_t uct_mm_tl;
 

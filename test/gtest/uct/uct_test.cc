@@ -92,6 +92,9 @@ void uct_test::init() {
 }
 
 void uct_test::cleanup() {
+    FOR_EACH_ENTITY(iter) {
+        (*iter)->destroy_eps();
+    }
     m_entities.clear();
 }
 
@@ -310,6 +313,15 @@ void uct_test::entity::destroy_ep(unsigned index) {
     }
 
     m_eps[index].reset();
+}
+
+void uct_test::entity::destroy_eps() {
+    for (unsigned index = 0; index < m_eps.size(); ++index) {
+        if (!m_eps[index]) {
+            continue;
+        }
+        m_eps[index].reset();
+    }
 }
 
 void uct_test::entity::connect_to_ep(unsigned index, entity& other,

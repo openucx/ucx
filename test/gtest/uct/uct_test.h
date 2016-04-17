@@ -69,6 +69,7 @@ protected:
 
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
+        void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
