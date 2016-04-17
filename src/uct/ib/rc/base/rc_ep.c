@@ -180,6 +180,19 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     return UCS_OK;
 }
 
+void uct_rc_ep_reset_qp(uct_rc_ep_t *ep)
+{
+    struct ibv_qp_attr qp_attr;
+    int ret;
+
+    memset(&qp_attr, 0, sizeof(qp_attr));
+    qp_attr.qp_state = IBV_QPS_RESET;
+    ret = ibv_modify_qp(ep->qp, &qp_attr, IBV_QP_STATE);
+    if (ret != 0) {
+        ucs_warn("modify qp 0x%x to RESET failed: %m", ep->qp->qp_num);
+    }
+}
+
 void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               void *data, size_t length, size_t valid_length,
                               char *buffer, size_t max)

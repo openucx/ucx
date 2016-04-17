@@ -97,6 +97,7 @@ static UCS_F_NOINLINE unsigned uct_rc_mlx5_iface_post_recv(uct_rc_mlx5_iface_t *
         iface->super.rx.available -= count;
         ucs_memory_cpu_store_fence();
         *iface->rx.db = htonl(iface->rx.sw_pi);
+        ucs_assert(uct_rc_mlx5_iface_get_srq_wqe(iface, iface->rx.mask)->srq.next_wqe_index == 0);
     }
     return count;
 }

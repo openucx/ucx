@@ -161,6 +161,12 @@ void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci)
 #endif
 }
 
+unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq)
+{
+    struct mlx5_cq *mcq = ucs_container_of(cq, struct mlx5_cq, ibv_cq);
+    return mcq->cons_index;
+}
+
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
 {
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));

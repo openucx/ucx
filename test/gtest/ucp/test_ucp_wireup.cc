@@ -208,15 +208,22 @@ UCS_TEST_P(test_ucp_wireup, stress_connect) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
-    if (std::find(GetParam().transports.begin(), GetParam().transports.end(), "\\rc_mlx5")
-        != GetParam().transports.end())
-    {
-        UCS_TEST_SKIP_R("TODO fix rc_mlx5 srq connect/disconnect");
-    }
-
-    for (unsigned i = 0; i < 30; ++i) {
+    for (int i = 0; i < 30; ++i) {
         ent1->connect(ent2);
         tag_send(ent1->ep(), ent2->worker(), 10000 / ucs::test_time_multiplier());
+        ent2->connect(ent1);
+        ent1->disconnect();
+        ent2->disconnect();
+    }
+}
+
+UCS_TEST_P(test_ucp_wireup, stress_connect2) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        ent1->connect(ent2);
+        tag_send(ent1->ep(), ent2->worker(), 1);
         ent2->connect(ent1);
         ent1->disconnect();
         ent2->disconnect();
