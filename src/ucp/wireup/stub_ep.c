@@ -149,10 +149,12 @@ static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req
     uct_ep_h wireup_msg_ep;
     ucs_status_t status;
 
+    UCS_ASYNC_BLOCK(&worker->async);
     if (req->func == ucp_wireup_msg_progress) {
         proxy_req = ucs_mpool_get(&worker->req_mp);
         if (proxy_req == NULL) {
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto out;
         }
 
         wireup_msg_ep                 = ucp_stub_ep_get_wireup_msg_ep(stub_ep);
@@ -166,12 +168,14 @@ static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req
         } else {
             ucs_mpool_put(proxy_req);
         }
-        return status;
+    } else {
+        ucs_queue_push(&stub_ep->pending_q, ucp_stub_ep_req_priv(req));
+        ++ep->worker->stub_pend_count;
+        status = UCS_OK;
     }
-
-    ucs_queue_push(&stub_ep->pending_q, ucp_stub_ep_req_priv(req));
-    ++ep->worker->stub_pend_count;
-    return UCS_OK;
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return status;
 }
 
 static void ucp_stub_pending_purge(uct_ep_h uct_ep, uct_pending_callback_t cb)
