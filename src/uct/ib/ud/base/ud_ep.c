@@ -356,8 +356,8 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                 }
                 uct_invoke_completion(zdesc->comp);
             }
-            skb->flags = 0;
         }
+        skb->flags = 0; /* reset also ACK_REQ flag */
         ucs_mpool_put(skb);
     }
 
@@ -534,7 +534,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
 
     if (ucs_unlikely(neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ)) {
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
-        ucs_trace_data("ACK_REQ - schedule ack, head_sn=%d sn=%d", 
+        ucs_trace_data("ACK_REQ - schedule ack, head_sn=%d sn=%d",
                        ep->rx.ooo_pkts.head_sn, neth->psn);
     }
 

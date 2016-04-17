@@ -8,6 +8,8 @@
 
 #include "ucp_test.h"
 
+#include <algorithm>
+
 extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/wireup/address.h>
@@ -25,7 +27,7 @@ public:
 
 
 protected:
-    void tag_send(ucp_ep_h from, ucp_worker_h to);
+    void tag_send(ucp_ep_h from, ucp_worker_h to, int count = 1);
 
     static void send_completion(void *request, ucs_status_t status);
 
@@ -34,29 +36,38 @@ protected:
     void wait(void *req);
 };
 
-void test_ucp_wireup::tag_send(ucp_ep_h from, ucp_worker_h to)
+void test_ucp_wireup::tag_send(ucp_ep_h from, ucp_worker_h to, int count)
 {
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const uint64_t TAG = 0xdeadbeef;
     uint64_t send_data = 0x12121212;
+    std::vector<void*> reqs;
     void *req;
 
-    req = ucp_tag_send_nb(from, &send_data, sizeof(send_data), DATATYPE,
-                          TAG, send_completion);
-    if (UCS_PTR_IS_PTR(req)) {
-        wait(req);
-    } else {
-        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    for (int i = 0; i < count; ++i) {
+        req = ucp_tag_send_nb(from, &send_data, sizeof(send_data), DATATYPE,
+                              TAG, send_completion);
+        if (UCS_PTR_IS_PTR(req)) {
+            reqs.push_back(req);
+        } else {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+        }
     }
 
-    uint64_t recv_data = 0;
-    req = ucp_tag_recv_nb(to, &recv_data, sizeof(recv_data),
-                          DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
-    wait(req);
+    for (int i = 0; i < count; ++i) {
+        uint64_t recv_data = 0;
+        req = ucp_tag_recv_nb(to, &recv_data, sizeof(recv_data),
+                              DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
+        wait(req);
 
-    EXPECT_EQ(send_data, recv_data);
+        EXPECT_EQ(send_data, recv_data);
+    }
 
-    ucp_worker_flush(from->worker);
+    while (!reqs.empty()) {
+        req = reqs.back();
+        wait(req);
+        reqs.pop_back();
+    }
 }
 
 void test_ucp_wireup::send_completion(void *request, ucs_status_t status)
@@ -141,6 +152,7 @@ UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
 
     ent1->connect(ent2);
     tag_send(ent1->ep(), ent2->worker());
+    ent1->flush_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
@@ -151,7 +163,9 @@ UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
     ent2->connect(ent1);
 
     tag_send(ent1->ep(), ent2->worker());
+    ent1->flush_worker();
     tag_send(ent2->ep(), ent1->worker());
+    ent2->flush_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
@@ -165,6 +179,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
     /* Send a reply */
     ucp_ep_h ep = ucp_worker_get_reply_ep(ent2->worker(), ent1->worker()->uuid);
     tag_send(ep, ent1->worker());
+    ent1->flush_worker();
 
     ucp_ep_destroy(ep);
 }
@@ -179,12 +194,33 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
 
     /* Make sure the wireup message arrives before sending a reply */
     tag_send(ent1->ep(), ent2->worker());
+    ent1->flush_worker();
 
     /* Send a reply */
     ucp_ep_h ep = ucp_worker_get_reply_ep(ent2->worker(), ent1->worker()->uuid);
     tag_send(ep, ent1->worker());
+    ent1->flush_worker();
 
     ucp_ep_destroy(ep);
+}
+
+UCS_TEST_P(test_ucp_wireup, stress_connect) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    if (std::find(GetParam().transports.begin(), GetParam().transports.end(), "\\rc_mlx5")
+        != GetParam().transports.end())
+    {
+        UCS_TEST_SKIP_R("TODO fix rc_mlx5 srq connect/disconnect");
+    }
+
+    for (unsigned i = 0; i < 30; ++i) {
+        ent1->connect(ent2);
+        tag_send(ent1->ep(), ent2->worker(), 10000 / ucs::test_time_multiplier());
+        ent2->connect(ent1);
+        ent1->disconnect();
+        ent2->disconnect();
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)

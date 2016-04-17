@@ -120,7 +120,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "\\ud"                        ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "\\ud_mlx5"                   ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud", "\\rc"                ) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrc,  "\\cm", "\\rc_mlx5"           ) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrcx, "\\cm", "\\rc_mlx5"           ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm,   "\\mm", "\\knem", "\\cma", "\\xpmem") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5", "\\rc_mlx5"      ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg", "\\ugni_udt", "\\ugni_rdma")
