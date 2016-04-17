@@ -10,15 +10,29 @@
 #include <inttypes.h>
 
 
+static ucp_rkey_t ucp_mem_dummy_rkey = {
+    .pd_map = 0
+};
+
+static uint64_t ucp_mem_dummy_buffer = 0;
+
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
 {
     unsigned pd_index, uct_memh_index;
     void *rkey_buffer, *p;
     size_t size, pd_size;
+    ucs_status_t status;
 
     ucs_trace("packing rkeys for buffer %p memh %p pd_map 0x%"PRIx64,
               memh->address, memh, memh->pd_map);
+
+    if (memh->length == 0) {
+        /* dummy memh, return dummy key */
+        *rkey_buffer_p = &ucp_mem_dummy_buffer;
+        *size_p        = sizeof(ucp_mem_dummy_buffer);
+        return UCS_OK;
+    }
 
     size = sizeof(uint64_t);
     for (pd_index = 0; pd_index < context->num_pds; ++pd_index) {
@@ -30,7 +44,8 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     rkey_buffer = ucs_malloc(size, "ucp_rkey_buffer");
     if (rkey_buffer == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     p = rkey_buffer;
@@ -53,13 +68,27 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         p += pd_size;
     }
 
+    if (uct_memh_index == 0) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_destroy;
+    }
+
     *rkey_buffer_p = rkey_buffer;
     *size_p        = size;
     return UCS_OK;
+
+err_destroy:
+    ucs_free(rkey_buffer);
+err:
+    return status;
 }
 
 void ucp_rkey_buffer_release(void *rkey_buffer)
 {
+    if (rkey_buffer == &ucp_mem_dummy_buffer) {
+        /* Dummy key, just return */
+        return;
+    }
     ucs_free(rkey_buffer);
 }
 
@@ -79,6 +108,15 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
 
     /* Read remote PD map */
     pd_map   = *(uint64_t*)p;
+
+    ucs_trace("unpacking rkey with pd_map 0x%"PRIx64, pd_map);
+
+    if (pd_map == 0) {
+        /* Dummy key return ok */
+        *rkey_p = &ucp_mem_dummy_rkey;
+        return UCS_OK;
+    }
+
     pd_count = ucs_count_one_bits(pd_map);
     p       += sizeof(uint64_t);
 
@@ -96,7 +134,6 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     rkey_index      = 0; /* Index of the rkey in the array */
 
     /* Unpack rkey of each UCT PD */
-    ucs_trace("unpacking rkey with pd_map 0x%"PRIx64, pd_map);
     while (pd_map > 0) {
         pd_size = *((uint8_t*)p++);
 
@@ -151,8 +188,14 @@ err:
 
 void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
-    unsigned num_rkeys = ucs_count_one_bits(rkey->pd_map);
+    unsigned num_rkeys;
     unsigned i;
+
+    if (rkey == &ucp_mem_dummy_rkey) {
+        return;
+    }
+
+    num_rkeys = ucs_count_one_bits(rkey->pd_map);
 
     for (i = 0; i < num_rkeys; ++i) {
         uct_rkey_release(&rkey->uct[i]);
