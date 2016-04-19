@@ -236,15 +236,15 @@ void uct_p2p_test::wait_for_remote() {
     sender().flush();
 }
 
-const uct_test::entity& uct_p2p_test::sender() const {
+uct_test::entity& uct_p2p_test::sender() {
     return **m_entities.begin();
 }
 
-uct_ep_h uct_p2p_test::sender_ep() const {
+uct_ep_h uct_p2p_test::sender_ep() {
     return sender().ep(0);
 }
 
-const uct_test::entity& uct_p2p_test::receiver() const {
+uct_test::entity& uct_p2p_test::receiver() {
     return **(m_entities.end() - 1);
 }
 

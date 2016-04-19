@@ -124,6 +124,11 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq);
 void uct_ib_mlx5_update_cq_ci(struct ibv_cq *cq, unsigned cq_ci);
 
 /**
+ * Retrieve CI from the driver
+ */
+unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
+
+/**
  * Get internal AV information.
  */
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
@@ -138,7 +143,7 @@ static inline unsigned uct_ib_mlx5_cqe_size(uct_ib_mlx5_cq_t *cq)
     return 1<<cq->cqe_size_log;
 }
 
-static UCS_F_ALWAYS_INLINE struct mlx5_cqe64* 
+static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq, int cqe_size_log)
 {
     struct mlx5_cqe64 *cqe;

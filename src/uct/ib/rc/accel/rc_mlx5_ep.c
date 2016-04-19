@@ -712,6 +712,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    uct_rc_mlx5_iface_progress, iface);
     uct_ib_mlx5_put_txwq(iface->super.super.super.worker, &self->tx.wq);
+
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->tx.cq.cq_ci);
+    uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->rx.cq.cq_ci);
+    uct_rc_ep_reset_qp(&self->super);
+    iface->tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.send_cq);
+    iface->rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.recv_cq);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
