@@ -124,7 +124,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ucs_assert(ep != NULL);
 
     hw_ci = ntohs(cqe->wqe_counter);
-    ep->super.available = uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci);
+    uct_rc_txqp_available_set(&ep->super.txqp, uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci));
     ++iface->super.tx.cq_available;
 
     uct_rc_ep_process_tx_completion(&iface->super, &ep->super, hw_ci);

@@ -13,8 +13,12 @@
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_posted(uct_rc_verbs_ep_t* ep, int signaled)
 {
-    uct_rc_ep_tx_posted(&ep->super, signaled);
-    --ep->super.available;
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                           uct_rc_iface_t);
+
+    /* TODO: stat should be moved to txqp */
+    UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_RC_EP_STAT_SINGAL, signaled)
+    uct_rc_txqp_posted(&ep->super.txqp, iface, 1, signaled);
     ++ep->tx.post_count;
 }
 
@@ -26,18 +30,18 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     int ret;
 
     if (!(send_flags & IBV_SEND_SIGNALED)) {
-        send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super,
+        send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                  IBV_SEND_SIGNALED);
     }
     wr->send_flags = send_flags;
-    wr->wr_id      = ep->super.unsignaled;
+    wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
-    uct_ib_log_post_send(&iface->super.super, ep->super.qp, wr,
+    uct_ib_log_post_send(&iface->super.super, ep->super.txqp.qp, wr,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_rc_verbs_ep_post_send", wr);
 
-    ret = ibv_post_send(ep->super.qp, wr, &bad_wr);
+    ret = ibv_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_send() returned %d (%m)", ret);
     }
@@ -56,18 +60,18 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
     int ret;
 
     if (!signal) {
-         signal = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
+         signal = uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                              IBV_EXP_SEND_SIGNALED);
     }
     wr->exp_send_flags |= signal;
-    wr->wr_id          = ep->super.unsignaled;
+    wr->wr_id          = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
-    uct_ib_log_exp_post_send(&iface->super.super, ep->super.qp, wr,
+    uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     UCT_IB_INSTRUMENT_RECORD_SEND_EXP_WR_LEN("uct_rc_verbs_exp_post_send", wr);
 
-    ret = ibv_exp_post_send(ep->super.qp, wr, &bad_wr);
+    ret = ibv_exp_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_exp_post_send() returned %d (%m)", ret);
     }
@@ -75,17 +79,6 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
     uct_rc_verbs_ep_posted(ep, signal);
 }
 #endif
-
-static UCS_F_ALWAYS_INLINE void uct_rc_verbs_ep_push_desc(uct_rc_verbs_ep_t* ep,
-                                                          uct_rc_iface_send_desc_t *desc)
-{
-    /* NOTE: We insert the descriptor with the sequence number after the post,
-     * because when polling completions, we get the number of completions (rather
-     * than completion zero-based index).
-     */
-    desc->super.sn = ep->tx.post_count;
-    ucs_queue_push(&ep->super.outstanding, &desc->super.queue);
-}
 
 /*
  * Helper function for posting sends with a descriptor.
@@ -106,7 +99,7 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
     sge->lkey      = desc->lkey;
 
     uct_rc_verbs_ep_post_send(iface, ep, wr, send_flags);
-    uct_rc_verbs_ep_push_desc(ep, desc);
+    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super, ep->tx.post_count);
 }
 
 static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
@@ -141,7 +134,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const void *buffer, size_t len
     sge.lkey               = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
-    uct_rc_ep_add_send_comp(&iface->super, &ep->super, comp, ep->tx.post_count);
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->tx.post_count);
     return UCS_INPROGRESS;
 }
 
@@ -228,7 +221,7 @@ uct_rc_verbs_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t length,
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_verbs_exp_post_send(ep, &wr, force_sig);
-    uct_rc_verbs_ep_push_desc(ep, desc);
+    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super, ep->tx.post_count);
     return success;
 }
 
@@ -628,12 +621,12 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    if (ep->super.available == iface->super.config.tx_qp_len) {
+    if (uct_rc_txqp_available(&ep->super.txqp) == iface->super.config.tx_qp_len) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);
         return UCS_OK;
     }
 
-    if (ep->super.unsignaled != 0) {
+    if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
         if (IBV_DEVICE_HAS_NOP(&uct_ib_iface_device(&iface->super.super)->dev_attr)) {
             status = uct_rc_verbs_ep_nop(ep);
         } else {
@@ -680,7 +673,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    self->super.available     = iface->super.config.tx_qp_len;
+    uct_rc_txqp_available_set(&self->super.txqp, iface->super.config.tx_qp_len);
     self->tx.post_count       = 0;
     self->tx.completion_count = 0;
 

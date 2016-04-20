@@ -100,7 +100,7 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
-    unsigned qp_num = ep->qp->qp_num;
+    unsigned qp_num = ep->txqp.qp->qp_num;
     uct_rc_ep_t ***ptr, **memb;
 
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
@@ -117,7 +117,7 @@ void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
-    unsigned qp_num = ep->qp->qp_num;
+    unsigned qp_num = ep->txqp.qp->qp_num;
     uct_rc_ep_t **memb;
 
     memb = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]

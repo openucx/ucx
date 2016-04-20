@@ -36,7 +36,7 @@ static ucs_status_t uct_dc_iface_tgt_create(uct_dc_iface_t *iface)
 }
 
 /* take dc qp to rts state */
-static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, struct ibv_qp *qp) 
+static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci) 
 {
     struct ibv_exp_qp_attr attr;
 
@@ -47,7 +47,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, struct ibv_q
     attr.port_num        = iface->super.super.port_num;
     attr.dct_key         = UCT_IB_DC_KEY;
 
-    if (ibv_exp_modify_qp(qp, &attr,
+    if (ibv_exp_modify_qp(dci->qp, &attr,
                          IBV_EXP_QP_STATE        |
                          IBV_EXP_QP_PKEY_INDEX   |
                          IBV_EXP_QP_PORT         |
@@ -65,7 +65,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, struct ibv_q
     attr.max_dest_rd_atomic         = 1;
     attr.ah_attr.sl                 = iface->super.super.sl;
 
-    if (ibv_exp_modify_qp(qp, &attr,
+    if (ibv_exp_modify_qp(dci->qp, &attr,
                          IBV_EXP_QP_STATE     |
                          IBV_EXP_QP_PATH_MTU  |
                          IBV_EXP_QP_AV)) {
@@ -81,7 +81,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, struct ibv_q
     attr.retry_cnt      = iface->super.config.retry_cnt;
     attr.max_rd_atomic  = iface->super.config.max_rd_atomic;
 
-    if (ibv_exp_modify_qp(qp, &attr,
+    if (ibv_exp_modify_qp(dci->qp, &attr,
                          IBV_EXP_QP_STATE      |
                          IBV_EXP_QP_TIMEOUT    |
                          IBV_EXP_QP_RETRY_CNT  |
@@ -102,28 +102,26 @@ static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface)
 
     iface->tx.ndci = 8; /* TODO: make configurable */
 
-    iface->tx.dcis = ucs_calloc(iface->tx.ndci,  sizeof(uct_ib_dci_t), "dc");
+    iface->tx.dcis = ucs_calloc(iface->tx.ndci,  sizeof(uct_rc_txqp_t), "dc");
     if (iface->tx.dcis == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        status = uct_rc_iface_qp_create(&iface->super, IBV_EXP_QPT_DC_INI,
-                                       &iface->tx.dcis[i].qp, &cap);
+        status = uct_rc_txqp_init(&iface->tx.dcis[i], &iface->super, 
+                                  IBV_EXP_QPT_DC_INI, &cap);
         if (status != UCS_OK) {
             goto create_err;
         }
 
-        status = uct_dc_iface_dci_connect(iface, iface->tx.dcis[i].qp);
+        status = uct_dc_iface_dci_connect(iface, &iface->tx.dcis[i]);
         if (status != UCS_OK) {
             goto create_err;
         }
-
-        iface->tx.dcis[i].unsignaled = 0;
-        iface->tx.dcis[i].available  = iface->super.config.tx_qp_len;
     }
     iface->config.max_inline = cap.max_inline_data;
     return UCS_OK;
+
 create_err:
     for (;i >= 0; i--) {
         if (iface->tx.dcis[i].qp) { 
@@ -166,7 +164,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     ibv_exp_destroy_dct(self->rx.dct);
 
     for (i = 0; i < self->tx.ndci; i++) {
-        ibv_destroy_qp(self->tx.dcis[i].qp);
+        uct_rc_txqp_cleanup(&self->tx.dcis[i]);
     }
     ucs_free(self->tx.dcis);
 }

@@ -70,7 +70,7 @@ enum {
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
     UCT_RC_CHECK_CQE(_iface) \
-    if ((_ep)->available <= 0) { \
+    if (uct_rc_txqp_available(&(_ep)->txqp) <= 0) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_RC_EP_STAT_QP_FULL, 1); \
         UCT_TL_IFACE_STAT_TX_NO_RES(&(_iface)->super.super); \
         return UCS_ERR_NO_RESOURCE; \
@@ -97,18 +97,22 @@ enum {
     } while (0)
 
 
-struct uct_rc_ep {
-    uct_base_ep_t       super;
+/* this is a common type for all rc and dc transports */
+typedef struct uct_rc_txqp {
     struct ibv_qp       *qp;
     ucs_queue_head_t    outstanding;
     uint16_t            unsignaled;
     int16_t             available;
-
     /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
     int16_t             fc_wnd;
-
     /* used only for FC protocol at this point (3 higher bits) */
     uint8_t             flags;
+} uct_rc_txqp_t; 
+
+
+struct uct_rc_ep {
+    uct_base_ep_t       super;
+    uct_rc_txqp_t       txqp;
     uint8_t             sl;
     uint8_t             path_bits;
     ucs_list_link_t     list;
@@ -156,18 +160,47 @@ void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 1)(uct_rc_iface_send_op_t *op);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op);
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_add_send_op(uct_rc_ep_t *ep, uct_rc_iface_send_op_t *op, uint16_t sn)
+ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
+                              int qp_type, struct ibv_qp_cap *cap);
+void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
+
+static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp) 
 {
+    return txqp->available;
+}
+
+static inline void uct_rc_txqp_available_add(uct_rc_txqp_t *txqp, int16_t val) 
+{
+    txqp->available += val;
+}
+
+static inline void uct_rc_txqp_available_set(uct_rc_txqp_t *txqp, int16_t val) 
+{
+    txqp->available = val;
+}
+
+static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp) 
+{
+    return txqp->unsignaled;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint16_t sn)
+{
+
+    /* NOTE: We insert the descriptor with the sequence number after the post,
+     * because when polling completions, we get the number of completions (rather
+     * than completion zero-based index).
+     */
     ucs_assert(op != NULL);
     op->sn = sn;
-    ucs_queue_push(&ep->outstanding, &op->queue);
+    ucs_queue_push(&txqp->outstanding, &op->queue);
     UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_add_send_comp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                        uct_completion_t *comp, uint16_t sn)
+uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                          uct_completion_t *comp, uint16_t sn)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -178,43 +211,46 @@ uct_rc_ep_add_send_comp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
     op            = uct_rc_iface_get_send_op(iface);
     op->handler   = uct_rc_ep_send_completion_proxy_handler;
     op->user_comp = comp;
-    uct_rc_ep_add_send_op(ep, op, sn);
+    uct_rc_txqp_add_send_op(txqp, op, sn);
+}
+
+static inline void 
+uct_rc_txqp_completion(uct_rc_txqp_t *txqp, uint16_t sn) 
+{
+    uct_rc_iface_send_op_t *op;
+
+    ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
+        op->handler(op);
+    }
+    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static inline void uct_rc_ep_process_tx_completion(uct_rc_iface_t *iface,
                                                    uct_rc_ep_t *ep, uint16_t sn)
 {
-    uct_rc_iface_send_op_t *op;
-
-    ucs_queue_for_each_extract(op, &ep->outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        op->handler(op);
-    }
-
+    uct_rc_txqp_completion(&ep->txqp, sn);
     ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
     ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
-uct_rc_iface_tx_moderation(uct_rc_iface_t *iface, uct_rc_ep_t *ep, uint8_t flag)
+uct_rc_iface_tx_moderation(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uint8_t flag)
 {
-    return (ep->unsignaled >= iface->config.tx_moderation) ? flag : 0;
+    return (txqp->unsignaled >= iface->config.tx_moderation) ? flag : 0;
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_tx_posted(uct_rc_ep_t *ep, int signaled)
+uct_rc_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface, uint16_t res_count, int signaled)
 {
-    uct_rc_iface_t *iface;
     if (signaled) {
-        iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
         ucs_assert(uct_rc_iface_have_tx_cqe_avail(iface));
-        ep->unsignaled = 0;
+        txqp->unsignaled = 0;
         --iface->tx.cq_available;
-        UCS_STATS_UPDATE_COUNTER(ep->stats, UCT_RC_EP_STAT_SINGAL, 1);
     } else {
-        ++ep->unsignaled;
+        txqp->unsignaled++;
     }
+    txqp->available -= res_count;
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t

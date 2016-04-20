@@ -29,6 +29,35 @@ static ucs_stats_class_t uct_rc_ep_stats_class = {
 
 static void uct_rc_ep_fc_purge(uct_rc_ep_t *ep);
 
+ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
+                              int qp_type, struct ibv_qp_cap *cap)
+{
+    txqp->unsignaled = 0;
+    txqp->available  = 0;
+    ucs_queue_head_init(&txqp->outstanding);
+
+    return uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap);
+}
+
+void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
+{
+    uct_rc_iface_send_op_t *op;
+    int ret;
+
+    ret = ibv_destroy_qp(txqp->qp);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+    }
+
+    ucs_queue_for_each_extract(op, &txqp->outstanding, queue, 1) {
+        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
+            ucs_warn("destroying rc ep %p with uncompleted operation %p",
+                     txqp, op);
+        }
+        op->handler(op);
+    }
+}
+
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
@@ -37,7 +66,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    status = uct_rc_iface_qp_create(iface, IBV_QPT_RC, &self->qp, &cap);
+    status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap);
     if (status != UCS_OK) {
         goto err;
     }
@@ -60,14 +89,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
      * (just in case AM id space gets extended) */
     UCS_STATIC_ASSERT(UCT_RC_EP_FC_MASK < UINT8_MAX);
 
-    ucs_queue_head_init(&self->outstanding);
     ucs_arbiter_group_init(&self->arb_group);
 
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
 
 err_qp_destroy:
-    ibv_destroy_qp(self->qp);
+    ibv_destroy_qp(self->txqp.qp);
 err:
     return status;
 }
@@ -75,8 +103,6 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
     uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rc_iface_t);
-    uct_rc_iface_send_op_t *op;
-    int ret;
 
     ucs_debug("destroy rc ep %p", self);
 
@@ -86,18 +112,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ucs_arbiter_group_cleanup(&self->arb_group);
 
     UCS_STATS_NODE_FREE(self->stats);
-    ret = ibv_destroy_qp(self->qp);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-    }
-
-    ucs_queue_for_each_extract(op, &self->outstanding, queue, 1) {
-        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            ucs_warn("destroying rc ep %p with uncompleted operation %p",
-                     self, op);
-        }
-        op->handler(op);
-    }
+    uct_rc_txqp_cleanup(&self->txqp);
 }
 
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
@@ -107,7 +122,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
 
-    uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
+    uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
     return UCS_OK;
 }
 
@@ -130,7 +145,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
                                     IBV_ACCESS_REMOTE_WRITE|
                                     IBV_ACCESS_REMOTE_READ|
                                     IBV_ACCESS_REMOTE_ATOMIC;
-    ret = ibv_modify_qp(ep->qp, &qp_attr,
+    ret = ibv_modify_qp(ep->txqp.qp, &qp_attr,
                         IBV_QP_STATE      |
                         IBV_QP_PKEY_INDEX |
                         IBV_QP_PORT       |
@@ -148,7 +163,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     uct_ib_iface_fill_ah_attr(&iface->super, ib_addr, ep->path_bits,
                               &qp_attr.ah_attr);
-    ret = ibv_modify_qp(ep->qp, &qp_attr,
+    ret = ibv_modify_qp(ep->txqp.qp, &qp_attr,
                         IBV_QP_STATE              |
                         IBV_QP_AV                 |
                         IBV_QP_PATH_MTU           |
@@ -167,7 +182,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     qp_attr.rnr_retry             = iface->config.rnr_retry;
     qp_attr.retry_cnt             = iface->config.retry_cnt;
     qp_attr.max_rd_atomic         = iface->config.max_rd_atomic;
-    ret = ibv_modify_qp(ep->qp, &qp_attr,
+    ret = ibv_modify_qp(ep->txqp.qp, &qp_attr,
                         IBV_QP_STATE              |
                         IBV_QP_TIMEOUT            |
                         IBV_QP_RETRY_CNT          |
@@ -187,6 +202,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
               qp_attr.max_rd_atomic);
+
     return UCS_OK;
 }
 

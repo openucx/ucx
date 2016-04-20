@@ -66,7 +66,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
                             uct_rc_verbs_ep_t);
         ucs_assert(ep != NULL);
 
-        ep->super.available         += count;
+        uct_rc_txqp_available_add(&ep->super.txqp, count);
         ep->tx.completion_count     += count;
 
         uct_rc_ep_process_tx_completion(&iface->super, &ep->super,

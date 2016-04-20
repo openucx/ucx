@@ -107,14 +107,9 @@ uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
     if (ret != 0) {
         ucs_fatal("ibv_post_send() returned %d (%m)", ret);
     }
-    --iface->super.super.tx.cq_available;  
-    if (send_flags & IBV_SEND_SIGNALED) {
-        iface->super.tx.dcis[dci].unsignaled = 0;
-    } else {
-        iface->super.tx.dcis[dci].unsignaled++;
-    }
-//    ucs_warn("send wr_id=%d dct_num=%d", (int)wr->wr_id, wr->dc.dct_number);
-    --iface->super.tx.dcis[dci].available;
+
+    uct_rc_txqp_posted(&iface->super.tx.dcis[dci], &iface->super.super, 
+                       1, send_flags & IBV_SEND_SIGNALED);
 }
 
 ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
@@ -122,17 +117,15 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
-    int dci;
     uct_rc_am_short_hdr_t am;
+    int dci;
 
     UCT_RC_CHECK_AM_SHORT(id, length, iface->super.config.max_inline);
-
     UCT_DC_CHECK_RES(&iface->super, &ep->super, dci);
-
     uct_rc_verbs_iface_common_fill_inl_sge(&iface->verbs_common, &am, id, hdr, buffer, length);
-
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_dc_verbs_iface_post_send(iface, ep, dci, &iface->inl_am_wr, IBV_SEND_INLINE);
+
     return UCS_OK;
 }
 
@@ -142,13 +135,13 @@ static inline ucs_status_t uct_dc_verbs_flush_dcis(uct_dc_iface_t *iface)
     int is_flush_done = 1;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        if (iface->tx.dcis[i].available == iface->super.config.tx_qp_len) {
+        if (uct_rc_txqp_available(&iface->tx.dcis[i]) == iface->super.config.tx_qp_len) {
             continue;
         }
         ucs_trace_data("dci %d is not flushed %d/%d", i, 
                        iface->tx.dcis[i].available, iface->super.config.tx_qp_len);
         is_flush_done = 0;
-        if (iface->tx.dcis[i].unsignaled != 0) { 
+        if (uct_rc_txqp_unsignaled(&iface->tx.dcis[i]) != 0) { 
             /* TODO */
             ucs_fatal("unsignalled send is not supported!!!");
         }
@@ -199,9 +192,9 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
 
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super.super, i, wc, num_wcs) {
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
-        count = 1;
+        ucs_assert_always(count == 1);
         dci = uct_dc_iface_dci_find(&iface->super, wc[i].qp_num);
-        iface->super.tx.dcis[dci].available += count;
+        uct_rc_txqp_available_add(&iface->super.tx.dcis[dci], count);
         ucs_trace_poll("dc tx completion on dc %d cound %d", dci, count);
     }
 }
@@ -264,6 +257,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
+    int i;
     ucs_status_t status;
     uct_dc_iface_config_t *config = ucs_derived_of(tl_config,
                                                    uct_dc_iface_config_t);
@@ -279,6 +273,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
         goto out;
     }
 
+    for (i = 0; i < self->super.tx.ndci; i++) {
+        uct_rc_txqp_available_set(&self->super.tx.dcis[i], self->super.super.config.tx_qp_len);
+    }
+    
     uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self);
     ucs_debug("created iface %p", self);
 out:

@@ -7,6 +7,7 @@
 #ifndef UCT_DC_IFACE_H
 #define UCT_DC_IFACE_H
 #include <uct/ib/rc/base/rc_iface.h>
+#include <uct/ib/rc/base/rc_ep.h>
 
 typedef uct_ib_qpnum_t uct_dc_iface_addr_t;
 typedef struct uct_dc_ep uct_dc_ep_t;
@@ -18,16 +19,10 @@ typedef struct uct_dc_iface_config {
     int tx_policy;
 } uct_dc_iface_config_t;
 
-typedef struct uct_ib_dci {
-    struct ibv_qp *qp;
-    int16_t        available;
-    int16_t        unsignaled;
-} uct_ib_dci_t;
-
 typedef struct uct_dc_iface { 
     uct_rc_iface_t super;
     struct {
-        uct_ib_dci_t *dcis;
+        uct_rc_txqp_t *dcis;
         int ndci;
     } tx;
     struct { 
