@@ -205,9 +205,10 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard) {
     }
 
     sender1->flush_worker();
-    sender1->disconnect();
-
     sender2->flush_worker();
+    receiver->flush_worker();
+
+    sender1->disconnect();
     sender2->disconnect();
 }
 
