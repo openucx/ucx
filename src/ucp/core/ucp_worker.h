@@ -14,6 +14,7 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/async/async.h>
 
+
 /**
  * UCP worker wake-up context.
  */
@@ -22,6 +23,7 @@ typedef struct ucp_worker_wakeup {
     int                           wakeup_pipe[2]; /* Pipe to support signal() calls */
     uct_wakeup_h                  *iface_wakeups; /* Array of interface wake-up handles */
 } ucp_worker_wakeup_t;
+
 
 /**
  * UCP worker (thread context).
@@ -61,7 +63,8 @@ ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid);
 
 ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid);
 
-unsigned ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_rsc_index_t *rscs);
+unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
+                                  const ucp_ep_config_key_t *key);
 
 void ucp_worker_progress_stub_eps(void *arg);
 
@@ -81,23 +84,6 @@ static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uui
 
     search.dest_uuid = dest_uuid;
     return sglib_hashed_ucp_ep_t_find_member(worker->ep_hash, &search);
-}
-
-static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
-{
-    return &ep->worker->ep_config[ep->cfg_index];
-}
-
-static inline ucp_rsc_index_t ucp_ep_pd_index(ucp_ep_h ep, ucp_ep_op_t optype)
-{
-    ucp_context_h context = ep->worker->context;
-    return context->tl_rscs[ucp_ep_config(ep)->rscs[optype]].pd_index;
-}
-
-static inline uct_pd_h ucp_ep_pd(ucp_ep_h ep, ucp_ep_op_t optype)
-{
-    ucp_context_h context = ep->worker->context;
-    return context->pds[ucp_ep_pd_index(ep, optype)];
 }
 
 #endif

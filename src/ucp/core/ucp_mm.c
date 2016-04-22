@@ -214,7 +214,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
         }
     }
 
-    ucs_debug("%s buffer %p length %zu memh %p pd_map 0x%"PRIx64,
+    ucs_debug("%s buffer %p length %zu memh %p pd_map 0x%x",
               (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" : "allocated",
               memh->address, memh->length, memh, memh->pd_map);
     *memh_p = memh;

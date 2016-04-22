@@ -42,6 +42,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - sm/shm : all shared memory transports.\n"
    " - mm     : shared memory transports - only memory mappers.\n"
    " - ugni   : ugni_rdma and ugni_udt.\n"
+   " - ib     : all infiniband transports.\n"
    " - rc     : rc and ud.\n"
    " - rc_x   : rc with accelerated verbs and ud.\n"
    " - ud_x   : ud with accelerated verbs.\n"
@@ -86,6 +87,7 @@ static ucs_config_field_t ucp_config_table[] = {
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "sm",    { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
   { "shm",   { "mm", "knem", "sysv", "posix", "cma", "xpmem", NULL } },
+  { "ib",    { "rc", "ud", "rc_mlx5", "ud_mlx5", NULL } },
   { "rc",    { "rc", "ud", NULL } },
   { "rc_x",  { "rc_mlx5", "ud_mlx5", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
@@ -198,14 +200,6 @@ static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
             device_enabled  = 1;
             masks[index] |= UCS_BIT(config_idx);
         }
-    }
-
-    /* Disable the posix mmap and xpmem 'devices'. ONLY for now - use sysv for mm .
-     * This will be removed after multi-rail is supported */
-    if ((!strcmp(resource->dev_name,"posix") || !strcmp(resource->dev_name, "xpmem")) &&
-        (device_enabled)) {
-        device_enabled  = 0;
-        ucs_info("posix and xpmem are currently unavailable");
     }
 
     return device_enabled;
@@ -343,6 +337,13 @@ static void ucp_free_resources(ucp_context_t *context)
     ucs_free(context->pd_rscs);
 }
 
+static int ucp_pd_rsc_compare_name(const void *a, const void *b)
+{
+    const uct_pd_resource_desc_t *pd1 = a;
+    const uct_pd_resource_desc_t *pd2 = b;
+    return strcmp(pd1->pd_name, pd2->pd_name);
+}
+
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                        const ucp_config_t *config)
 {
@@ -381,6 +382,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     if (status != UCS_OK) {
         goto err;
     }
+
+    /* Sort pd's by name, to increase the likelihood of reusing the same ep
+     * configuration (since remote pd map is part of the key).
+     */
+    qsort(pd_rscs, num_pd_resources, sizeof(*pd_rscs), ucp_pd_rsc_compare_name);
 
     /* Error check: Make sure there is at least one PD */
     if (num_pd_resources == 0) {

@@ -8,6 +8,7 @@
 #include "stub_ep.h"
 
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
 #include <string.h>
@@ -45,6 +46,11 @@ typedef struct {
 
 #define UCP_ADDRESS_FLAG_LAST         0x80   /* Last address in the list */
 #define UCP_ADDRESS_FLAG_EMPTY        0x80   /* Device without TL addresses */
+#define UCP_ADDRESS_FLAG_PD_ALLOC     0x40   /* PD can register  */
+#define UCP_ADDRESS_FLAG_PD_REG       0x20   /* PD can allocate */
+#define UCP_ADDRESS_FLAG_PD_MASK      ~(UCP_ADDRESS_FLAG_EMPTY | \
+                                        UCP_ADDRESS_FLAG_PD_ALLOC | \
+                                        UCP_ADDRESS_FLAG_PD_REG)
 
 
 static size_t ucp_address_string_packed_size(const char *s)
@@ -194,18 +200,16 @@ static ucs_status_t
 ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
                             uct_ep_addr_t *addr)
 {
-    ucp_ep_op_t optype;
-    uct_ep_h uct_ep;
+    ucp_lane_index_t lane;
 
-    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
-        uct_ep = ep->uct_eps[optype];
-        if (ucp_ep_config(ep)->rscs[optype] == tl_index) {
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_ep_get_rsc_index(ep, lane) == tl_index) {
             /*
              * If this is a stub endpoint, it will return the underlying next_ep
              * address, and the length will be correct because the resource index
              * is of the next_ep.
              */
-            return uct_ep_get_address(uct_ep, addr);
+            return uct_ep_get_address(ep->uct_eps[lane], addr);
         }
     }
 
@@ -222,9 +226,11 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_context_h context = worker->context;
     const ucp_address_packed_device_t *dev;
     uct_iface_attr_t *iface_attr;
+    ucp_rsc_index_t pd_index;
     ucs_status_t status;
     ucp_rsc_index_t i;
     size_t tl_addr_len;
+    uint64_t pd_flags;
     unsigned index;
     void *ptr;
 
@@ -244,8 +250,14 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     for (dev = devices; dev < devices + num_devices; ++dev) {
 
         /* PD index */
-        *(uint8_t*)ptr = context->tl_rscs[dev->rsc_index].pd_index |
-                         ((dev->tl_bitmap == 0) ? UCP_ADDRESS_FLAG_EMPTY : 0);
+        pd_index       = context->tl_rscs[dev->rsc_index].pd_index;
+        pd_flags       = context->pd_attrs[pd_index].cap.flags;
+        ucs_assert_always(!(pd_index & ~UCP_ADDRESS_FLAG_PD_MASK));
+
+        *(uint8_t*)ptr = pd_index |
+                         ((dev->tl_bitmap == 0)          ? UCP_ADDRESS_FLAG_EMPTY    : 0) |
+                         ((pd_flags & UCT_PD_FLAG_ALLOC) ? UCP_ADDRESS_FLAG_PD_ALLOC : 0) |
+                         ((pd_flags & UCT_PD_FLAG_REG)   ? UCP_ADDRESS_FLAG_PD_REG   : 0);
         ++ptr;
 
         /* Device address length */
@@ -371,8 +383,10 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
     unsigned address_count;
     int last_dev, last_tl;
     int empty_dev;
+    uint64_t pd_flags;
     size_t dev_addr_len;
     size_t tl_addr_len;
+    uint8_t pd_byte;
     const void *ptr;
     const void *aptr;
 
@@ -392,7 +406,6 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
         }
 
         /* pd_index */
-        pd_index     = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_EMPTY;
         empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
         ++ptr;
 
@@ -437,8 +450,11 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
         }
 
         /* pd_index */
-        pd_index     = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_EMPTY;
-        empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
+        pd_byte      = (*(uint8_t*)ptr);
+        pd_index     = pd_byte & UCP_ADDRESS_FLAG_PD_MASK;
+        pd_flags     = (pd_byte & UCP_ADDRESS_FLAG_PD_ALLOC) ? UCT_PD_FLAG_ALLOC : 0;
+        pd_flags    |= (pd_byte & UCP_ADDRESS_FLAG_PD_REG)   ? UCT_PD_FLAG_REG   : 0;
+        empty_dev    = pd_byte & UCP_ADDRESS_FLAG_EMPTY;
         ++ptr;
 
         /* device address length */
@@ -464,6 +480,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             address->dev_addr     = dev_addr;
             address->dev_addr_len = dev_addr_len;
             address->pd_index     = pd_index;
+            address->pd_flags     = pd_flags;
             address->tl_addr      = ptr;
             address->tl_addr_len  = tl_addr_len;
             ++address;

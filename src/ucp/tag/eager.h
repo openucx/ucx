@@ -11,6 +11,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/proto/proto.h>
 
 
@@ -65,7 +66,7 @@ static inline ucs_status_t ucp_tag_send_eager_short(ucp_ep_t *ep, ucp_tag_t tag,
 {
     UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
     UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
-    return uct_ep_am_short(ep->uct_eps[UCP_EP_OP_AM], UCP_AM_ID_EAGER_ONLY, tag,
+    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY, tag,
                            buffer, length);
 }
 

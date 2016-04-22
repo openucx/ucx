@@ -41,9 +41,10 @@ public:
                                                                ucp_rkey_h rkey,
                                                                std::string& expected_data);
 protected:
-    void test_blocking_xfer(blocking_send_func_t send, size_t alignment, bool is_ep_flush);
+    void test_blocking_xfer(blocking_send_func_t send, size_t alignment,
+                            bool malloc_allocate, bool is_ep_flush);
     void test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send, size_t alignment,
-                                               bool is_ep_flush);
+                                               bool malloc_allocate, bool is_ep_flush);
 
     static ucp_params_t get_ctx_params();
 };

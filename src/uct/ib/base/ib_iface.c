@@ -169,8 +169,9 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_ib_address_t *ib_addr = (void*)dev_addr;
 
-    ib_addr->lid = uct_ib_iface_port_attr(iface)->lid;
-    ib_addr->gid = iface->gid;
+    ib_addr->lid    = uct_ib_iface_port_attr(iface)->lid;
+    ib_addr->dev_id = uct_ib_iface_device(iface)->dev_attr.vendor_part_id;
+    ib_addr->gid    = iface->gid;
     return UCS_OK;
 }
 
@@ -178,7 +179,8 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *add
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     const uct_ib_address_t *ib_addr = (const void*)addr;
-    return ib_addr->gid.global.subnet_prefix == iface->gid.global.subnet_prefix;
+    return (ib_addr->gid.global.subnet_prefix == iface->gid.global.subnet_prefix) &&
+           (ib_addr->dev_id == uct_ib_iface_device(iface)->dev_attr.vendor_part_id);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,

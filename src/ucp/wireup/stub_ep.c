@@ -12,9 +12,10 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
+#include <ucp/core/ucp_ep.inl>
 
-UCS_CLASS_DECLARE(ucp_stub_ep_t, ucp_ep_h, ucp_ep_op_t, unsigned,
-                  const ucp_address_entry_t*);
+
+UCS_CLASS_DECLARE(ucp_stub_ep_t, ucp_ep_h);
 
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(ucp_stub_ep_t, uct_ep_t);
@@ -44,11 +45,12 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
     ucp_ep_h ep = stub_ep->ep;
     ucs_queue_head_t tmp_pending_queue;
     uct_pending_req_t *req;
+    ucp_lane_index_t lane;
     ucs_status_t status;
     uct_ep_h uct_ep;
-    ucp_ep_op_t optype;
 
     ucs_assert(stub_ep->connected);
+    ucs_assert(stub_ep->next_ep != NULL);
 
     /* If we still have pending wireup messages, send them out first */
     if (stub_ep->pending_count != 0) {
@@ -70,15 +72,13 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
     }
 
     /* Switch to real transport */
-    ep->uct_eps[stub_ep->optype] = uct_ep;
-    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
-        if (ucp_ep_config(ep)->dups[optype] == stub_ep->optype) {
-            ep->uct_eps[optype] = uct_ep;
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ep->uct_eps[lane] == &stub_ep->super) {
+            ep->uct_eps[lane] = uct_ep;
         }
     }
 
     /* Destroy stub endpoint (destroys aux_ep as well) */
-    optype = stub_ep->optype;
     uct_ep_destroy(&stub_ep->super);
     stub_ep = NULL;
 
@@ -197,7 +197,6 @@ static ssize_t ucp_stub_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
     if (id == UCP_AM_ID_WIREUP) {
         return uct_ep_am_bcopy(ucp_stub_ep_get_wireup_msg_ep(stub_ep),
                                UCP_AM_ID_WIREUP, pack_cb, arg);
-
     }
 
     return UCS_ERR_NO_RESOURCE;
@@ -231,36 +230,7 @@ static uct_iface_t ucp_stub_iface = {
 };
 
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_stub_ep_create, ucp_stub_ep_t, uct_ep_t,
-                                ucp_ep_h, ucp_ep_op_t, unsigned,
-                                const ucp_address_entry_t*);
-
-static double ucp_wireup_aux_score_func(ucp_worker_h worker,
-                                        uct_iface_attr_t *iface_attr,
-                                        char *reason, size_t max)
-{
-    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY)) {
-        strncpy(reason, "am_bcopy for wireup", max);
-        return 0.0;
-    }
-
-    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
-        strncpy(reason, "connecting to iface", max);
-        return 0.0;
-    }
-
-    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
-        strncpy(reason, "async am callback", max);
-        return 0.0;
-    }
-
-    if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
-        strncpy(reason, "pending", max);
-        return 0.0;
-    }
-
-    return (1e-3 / iface_attr->latency) +
-           (1e3 * ucs_max(iface_attr->cap.am.max_bcopy, iface_attr->cap.am.max_short));
-}
+                                ucp_ep_h);
 
 static ucs_status_t
 ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
@@ -275,10 +245,9 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
-    status = ucp_select_transport(ep, address_list, address_count,
-                                  UCP_NULL_RESOURCE, &stub_ep->aux_rsc_index,
-                                  &aux_addr_index, ucp_wireup_aux_score_func,
-                                  "auxiliary");
+    status = ucp_wireup_select_aux_transport(ep, address_list, address_count,
+                                             &stub_ep->aux_rsc_index,
+                                             &aux_addr_index);
     if (status != UCS_OK) {
         return status;
     }
@@ -300,31 +269,17 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
     return UCS_OK;
 }
 
-UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep, ucp_ep_op_t optype,
-                    unsigned address_count, const ucp_address_entry_t *address_list)
+UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
 {
-    ucs_status_t status;
-
     self->super.iface   = &ucp_stub_iface;
     self->ep            = ep;
     self->aux_ep        = NULL;
     self->next_ep       = NULL;
-    self->optype        = optype;
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
     self->connected     = 0;
     ucs_queue_head_init(&self->pending_q);
-
-    if (address_count > 0) {
-        status = ucp_stub_ep_connect(&self->super, address_count, address_list);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    ucs_trace("ep %p: created stub ep %p to %s for %s [next_ep %p aux_ep %p] ",
-              ep, self, ucp_ep_peer_name(ep), ucp_wireup_ep_ops[optype].title,
-              self->next_ep, self->aux_ep);
+    ucs_trace("ep %p: created stub ep %p to %s ", ep, self, ucp_ep_peer_name(ep));
     return UCS_OK;
 }
 
@@ -360,16 +315,15 @@ ucp_rsc_index_t ucp_stub_ep_get_aux_rsc_index(uct_ep_h uct_ep)
     return stub_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, unsigned address_count,
+ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
+                                 int connect_aux, unsigned address_count,
                                  const ucp_address_entry_t *address_list)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
     ucp_ep_h ep            = stub_ep->ep;
     ucp_worker_h worker    = ep->worker;
-    ucp_rsc_index_t rsc_index;
     ucs_status_t status;
 
-    rsc_index = ucp_ep_config(ep)->rscs[stub_ep->optype];
     status = uct_ep_create(worker->ifaces[rsc_index], &stub_ep->next_ep);
     if (status != UCS_OK) {
         goto err;
@@ -380,7 +334,7 @@ ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, unsigned address_count,
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
 
     /* we need to create an auxiliary transport only for active messages */
-    if (stub_ep->optype == UCP_EP_OP_AM) {
+    if (connect_aux) {
         status = ucp_stub_ep_connect_aux(stub_ep, address_count, address_list);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;

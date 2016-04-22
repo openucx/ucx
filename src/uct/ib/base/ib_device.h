@@ -51,6 +51,7 @@ enum {
  */
 typedef struct uct_ib_address {
     uint16_t           lid;
+    uint16_t           dev_id;
     union ibv_gid      gid;
 } UCS_S_PACKED uct_ib_address_t;
 

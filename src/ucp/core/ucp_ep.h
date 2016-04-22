@@ -26,40 +26,56 @@ enum {
 };
 
 
-/**
- * Endpoint operation types
+/* Lanes configuration.
+ * Every lane is a UCT endpoint to the same remote worker.
  */
-typedef enum ucp_ep_op {
-    UCP_EP_OP_AM,      /* Active messages */
-    UCP_EP_OP_RMA,     /* Remote memory access */
-    UCP_EP_OP_AMO,     /* Atomic operations */
-    UCP_EP_OP_LAST
-} ucp_ep_op_t;
+typedef struct ucp_ep_config_key {
+    /* Lookup for rma and amo lanes:
+     * Every group of UCP_PD_INDEX_BITS consecutive bits in the map (in total
+     * UCP_MAX_LANES such groups) is a bitmap. All bits in it are zero, except
+     * the pd_index-th bit of that lane. If the lane is unused, all bits are zero.
+     * For example, the bitmap '00000100' means the lane remote pd_index is 2.
+     * It allows to quickly lookup
+     */
+    ucp_pd_lane_map_t      rma_lane_map;
+    ucp_pd_lane_map_t      amo_lane_map;
+
+    /* Bitmap of remote pds which are reachable from this endpoint (with any set
+     * of transports which could be selected in the future)
+     */
+    ucp_pd_map_t           reachable_pd_map;
+
+    ucp_lane_index_t       am_lane;             /* Lane for AM (can be NULL) */
+    ucp_lane_index_t       wireup_msg_lane;     /* Lane for wireup messages (can be NULL) */
+    ucp_rsc_index_t        lanes[UCP_MAX_LANES];/* Resource index for every lane */
+    ucp_lane_index_t       num_lanes;           /* Number of lanes */
+} ucp_ep_config_key_t;
+
+
+/**
+ * Configuration for RMA protocols
+ */
+typedef struct ucp_ep_rma_config {
+    size_t                 max_put_short;    /* Maximal payload of put short */
+    size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
+    size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
+} ucp_ep_rma_config_t;
 
 
 typedef struct ucp_ep_config {
-    /* Transport configuration */
-    ucp_rsc_index_t        rscs[UCP_EP_OP_LAST]; /* Resource index for every operation */
-    ucp_ep_op_t            dups[UCP_EP_OP_LAST]; /* List of which resources are
-                                                    duplicate of others. if an
-                                                    entry is not UCP_EP_OP_LAST,
-                                                    it's the index of the first
-                                                    instance of the resource. */
 
-    /* Limits for protocols using short message only */
+    /* A key which uniquely defines the configuration, and all other fields of
+     * configuration (in the current worker) and defined only by it.
+     */
+    ucp_ep_config_key_t    key;
+
+    /* Limits for active-message based protocols */
     size_t                 max_eager_short;  /* Maximal payload of eager short */
-    size_t                 max_put_short;    /* Maximal payload of put short */
     size_t                 max_am_short;     /* Maximal payload of am short */
-
-    /* Limits for bcopy operations */
     size_t                 max_am_bcopy;     /* Maximal total size of am_bcopy */
-    size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
-    size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
-
-    /* Limits for zero-copy operations */
     size_t                 max_am_zcopy;     /* Maximal total size of am_zcopy */
-    size_t                 max_put_zcopy;    /* Maximal total size of put_zcopy */
-    size_t                 max_get_zcopy;    /* Maximal total size of get_zcopy */
+
+    ucp_ep_rma_config_t    rma[UCP_MAX_LANES];
 
     /* Threshold for switching from put_short to put_bcopy */
     size_t                 bcopy_thresh;
@@ -85,11 +101,8 @@ typedef struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uct_ep_h                      uct_eps[UCP_EP_OP_LAST]; /* Transports for operations */
-
-    ucp_rsc_index_t               rma_dst_pdi;   /* Destination protection domain index for RMA */
-    ucp_rsc_index_t               amo_dst_pdi;   /* Destination protection domain index for AMO */
-    uint8_t                       cfg_index;     /* Configuration index */
+    uint16_t                      cfg_index;     /* Configuration index */
+    ucp_lane_index_t              am_lane;       /* Cached value */
     uint8_t                       flags;         /* Endpoint flags */
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
@@ -98,6 +111,9 @@ typedef struct ucp_ep {
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_NAME_MAX];
 #endif
+
+    /* TODO allocate ep dynamically according to number of lanes */
+    uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
 } ucp_ep_t;
 
@@ -110,6 +126,8 @@ ucs_status_t ucp_ep_create_connected(ucp_worker_h worker, uint64_t dest_uuid,
 ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
                                 const char *message, ucp_ep_h *ep_p);
 
+int ucp_ep_is_stub(ucp_ep_h ep);
+
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 
 ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
@@ -120,18 +138,9 @@ void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
 
 ucs_status_t ucp_ep_pending_req_release(uct_pending_req_t *self);
 
-void ucp_ep_send_reply(ucp_request_t *req, ucp_ep_op_t optype, int progress);
+void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 
-int ucp_ep_is_op_primary(ucp_ep_h ep, ucp_ep_op_t optype);
-
-static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
-{
-#if ENABLE_DEBUG_DATA
-    return ep->peer_name;
-#else
-    return "??";
-#endif
-}
-
+int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
+                           const ucp_ep_config_key_t *key2);
 
 #endif

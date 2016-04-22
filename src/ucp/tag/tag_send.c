@@ -46,7 +46,7 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
         }
     } else {
         /* zcopy */
-        status = ucp_request_send_buffer_reg(req, UCP_EP_OP_AM);
+        status = ucp_request_send_buffer_reg(req, ucp_ep_get_am_lane(req->send.ep));
         if (status != UCS_OK) {
             return status;
         }
@@ -117,7 +117,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    ucp_ep_add_pending(ep, ep->uct_eps[UCP_EP_OP_AM], req, 1);
+    ucp_ep_add_pending(ep, ucp_ep_get_am_uct_ep(ep), req, 1);
     ucp_worker_progress(ep->worker);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
@@ -201,14 +201,17 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
                                  uintptr_t remote_request, int progress)
 {
     ucp_request_t *req;
+    ucp_ep_h ep;
 
     ucs_trace_req("send_sync_ack sender_uuid %"PRIx64" remote_request 0x%lx",
                   sender_uuid, remote_request);
 
     req = ucp_worker_allocate_reply(worker, sender_uuid);
+    ep                             = req->send.ep;
     req->send.uct.func             = ucp_proto_progress_am_bcopy_single;
     req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
     req->send.proto.remote_request = remote_request;
     req->send.proto.status         = UCS_OK;
-    ucp_ep_send_reply(req, UCP_EP_OP_AM, progress);
+
+    ucp_ep_add_pending(ep, ucp_ep_get_am_uct_ep(ep), req, progress);
 }

@@ -108,6 +108,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_pd_h uct_pd, size_t *length_p, void **a
         return UCS_ERR_IO_ERROR;
     }
 
+    ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
+              mr->addr, mr->addr + mr->length, uct_ib_device_name(&pd->dev),
+              mr->lkey, mr->rkey);
+
     UCS_STATS_UPDATE_COUNTER(pd->stats, UCT_IB_PD_STAT_MEM_ALLOC, +1);
     *address_p = mr->addr;
     *length_p  = mr->length;
@@ -137,6 +141,10 @@ static ucs_status_t uct_ib_mem_reg(uct_pd_h uct_pd, void *address, size_t length
                   address, length, UCT_IB_MEM_ACCESS_FLAGS);
         return UCS_ERR_IO_ERROR;
     }
+
+    ucs_trace("registered memory %p..%p on %s lkey 0x%x rkey 0x%x",
+              address, address + length, uct_ib_device_name(&pd->dev), mr->lkey,
+              mr->rkey);
 
     UCS_STATS_UPDATE_COUNTER(pd->stats, UCT_IB_PD_STAT_MEM_REG, +1);
     *memh_p = mr;
