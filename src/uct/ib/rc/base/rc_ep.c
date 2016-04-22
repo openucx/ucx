@@ -27,6 +27,9 @@ static ucs_stats_class_t uct_rc_ep_stats_class = {
 };
 #endif
 
+static void uct_rc_ep_fc_purge(uct_rc_ep_t *ep);
+
+
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
     struct ibv_qp_cap cap;
@@ -45,9 +48,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
         goto err_qp_destroy;
     }
 
-    self->unsignaled = 0;
-    self->sl         = iface->config.sl;          /* TODO multi-rail */
-    self->path_bits  = iface->super.path_bits[0]; /* TODO multi-rail */
+    self->unsignaled        = 0;
+    self->sl                = iface->config.sl;          /* TODO multi-rail */
+    self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
+    self->fc_wnd            = iface->config.fc_wnd_size;
+    self->flags             = 0;
+    self->fc_grant_req.func = uct_rc_ep_fc_grant;
+    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)self->fc_grant_req.priv);
+
+    /* Check that FC protocol fits AM id
+     * (just in case AM id space gets extended) */
+    UCS_STATIC_ASSERT(UCT_RC_EP_FC_MASK < UINT8_MAX);
+
     ucs_queue_head_init(&self->outstanding);
     ucs_arbiter_group_init(&self->arb_group);
 
@@ -70,6 +82,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     uct_rc_iface_remove_ep(iface, self);
 
+    uct_rc_ep_fc_purge(self);
     ucs_arbiter_group_cleanup(&self->arb_group);
 
     UCS_STATS_NODE_FREE(self->stats);
@@ -198,9 +211,10 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               char *buffer, size_t max)
 {
     uct_rc_hdr_t *rch = data;
+    uint8_t am_wo_fc = rch->am_id & ~UCT_RC_EP_FC_MASK; /* mask out FC bits*/
 
-    snprintf(buffer, max, " am %d ", rch->am_id);
-    uct_iface_dump_am(iface, type, rch->am_id, rch + 1, length - sizeof(*rch),
+    snprintf(buffer, max, " am %d ", am_wo_fc);
+    uct_iface_dump_am(iface, type, am_wo_fc, rch + 1, length - sizeof(*rch),
                       buffer + strlen(buffer), max - strlen(buffer));
 }
 
@@ -239,12 +253,18 @@ static int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
            !ucs_mpool_is_empty(&iface->tx.mp);
 }
 
+static inline int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
+{
+    return ((ep->available > 0) && (ep->fc_wnd > 0));
+}
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
-    if ((ep->available > 0) && uct_rc_iface_has_tx_resources(iface)) {
+    if (uct_rc_ep_has_tx_resources(ep) &&
+        uct_rc_iface_has_tx_resources(iface)) {
         return UCS_ERR_BUSY;
     }
 
@@ -252,7 +272,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)n->priv);
     ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)n->priv);
 
-    if (ep->available > 0) {
+    if (uct_rc_ep_has_tx_resources(ep)) {
         /* If we have ep (but not iface) resources, we need to schedule the ep */
         ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
     }
@@ -279,7 +299,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
         ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
-        if (ep->available <= 0) {
+        if (! uct_rc_ep_has_tx_resources(ep)) {
             /* No ep resources */
             return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
         } else {
@@ -296,20 +316,57 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg)
 {
-    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_pending_callback_t cb = arg;
+    uct_pending_req_t *req    = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_rc_ep_t *ep           = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                                 uct_rc_ep_t, arb_group);
 
-    cb(req);
+    /* Invoke user's callback only if it is not internal FC message */
+    if (ucs_likely(req != &ep->fc_grant_req)){
+        cb(req);
+    }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
 void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
+    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->arb_group,
                             uct_rc_ep_abriter_purge_cb, cb);
+}
+
+static void uct_rc_ep_fc_purge(uct_rc_ep_t *ep)
+{
+    uct_pending_req_t *req;
+    ucs_arbiter_elem_t *tail = ep->arb_group.tail;
+    uct_rc_iface_t *iface    = ucs_derived_of(ep->super.super.iface,
+                                              uct_rc_iface_t);
+
+    if (tail == NULL) {
+        return; /* empty group */
+    }
+
+    if (tail == tail->next) {
+        /* Just one element. Most probably it is FC grant message, because user
+         * have to purge ep before to delete it. If there are more than one
+         * elements and FC grant is among them, it should have been cleared by
+         * normal purge */
+        req = ucs_container_of(tail, uct_pending_req_t, priv);
+        if (req == &ep->fc_grant_req) {
+            ucs_arbiter_group_head_desched(&iface->tx.arbiter, tail);
+            ep->arb_group.tail = NULL;
+        }
+    }
+}
+
+ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
+{
+    uct_rc_ep_t *ep = ucs_container_of(self, uct_rc_ep_t, fc_grant_req);
+    uct_ib_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ib_iface_t);
+
+    return (ucs_derived_of(iface->ops, uct_rc_iface_ops_t))->fc_ctrl(ep);
 }
 
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \

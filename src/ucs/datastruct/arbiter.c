@@ -46,8 +46,8 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group, ucs_arbiter_
     group->tail = elem;   /* Update group tail */
 }
 
-static void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
-                                           ucs_arbiter_elem_t *head)
+void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
+                                    ucs_arbiter_elem_t *head)
 {
     ucs_arbiter_elem_t *next;
 

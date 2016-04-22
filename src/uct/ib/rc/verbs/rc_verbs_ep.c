@@ -380,9 +380,11 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     UCT_CHECK_AM_ID(id);
     UCT_CHECK_LENGTH(sizeof(am) + length, iface->config.max_inline, "am_short");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
 
     am.rc_hdr.am_id             = id;
     am.am_hdr                   = hdr;
+
     iface->inl_sge[0].addr      = (uintptr_t)&am;
     iface->inl_sge[0].length    = sizeof(am);
     iface->inl_sge[1].addr      = (uintptr_t)buffer;
@@ -390,6 +392,7 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
+    UCT_RC_UPDATE_FC_WND(&ep->super);
     return UCS_OK;
 }
 
@@ -406,6 +409,7 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_CHECK_AM_ID(id);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
 
     desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
@@ -421,6 +425,7 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
+    UCT_RC_UPDATE_FC_WND(&ep->super);
     return length;
 }
 
@@ -452,6 +457,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_CHECK_LENGTH(header_length + length, iface->super.super.config.seg_size,
                      "am_zcopy payload");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
     UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     if (comp == NULL) {
@@ -483,6 +489,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);
+    UCT_RC_UPDATE_FC_WND(&ep->super);
     return UCS_INPROGRESS;
 }
 
@@ -644,6 +651,33 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
     }
     UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     return UCS_INPROGRESS;
+}
+
+ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_rc_ep_t *rc_ep)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_ep->super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
+    uct_rc_hdr_t hdr;
+    struct ibv_send_wr fc_wr;
+
+    /* Do not check FC WND here to avoid head-to-head deadlock.
+     * Credits grant should be sent regardless of FC wnd state. */
+    ucs_assert(sizeof(hdr) <= iface->config.max_inline);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    hdr.am_id                     = UCT_RC_EP_FC_PURE_GRANT;
+
+    fc_wr.sg_list                 = iface->inl_sge;
+    fc_wr.num_sge                 = 1;
+    fc_wr.opcode                  = IBV_WR_SEND;
+    fc_wr.next                    = NULL;
+
+    iface->inl_sge[0].addr        = (uintptr_t)&hdr;
+    iface->inl_sge[0].length      = sizeof(hdr);
+
+    uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, IBV_SEND_INLINE);
+    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)

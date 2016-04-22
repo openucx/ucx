@@ -19,6 +19,38 @@ enum {
     UCT_RC_EP_STAT_LAST
 };
 
+/*
+ * Auxillary AM ID bits used by FC protocol.
+ */
+enum {
+
+    /* Soft Credit Request: indicates that peer needs to piggy-back credits
+     * grant to counter AM (if any). Can be bundled with
+     * UCT_RC_EP_FC_FLAG_GRANT  */
+    UCT_RC_EP_FC_FLAG_SOFT_REQ  = UCS_BIT(UCT_AM_ID_BITS),
+
+    /* Hard Credit Request: indicates that wnd is close to be exhausted.
+     * The peer must send separate AM with credit grant as soon as it
+     * receives AM  with this bit set. Can be bundled with
+     * UCT_RC_EP_FC_FLAG_GRANT */
+    UCT_RC_EP_FC_FLAG_HARD_REQ  = UCS_BIT((UCT_AM_ID_BITS) + 1),
+
+    /* Credit Grant: ep should update its FC wnd as soon as it receives AM with
+     * this bit set. Can be bundled with either soft or hard request bits */
+    UCT_RC_EP_FC_FLAG_GRANT     = UCS_BIT((UCT_AM_ID_BITS) + 2),
+
+    /* Special FC AM with Credit Grant: Just an empty message indicating
+     * credit grant. Can't be bundled with any other FC flag (as it consumes
+     * all 3 FC bits). */
+    UCT_RC_EP_FC_PURE_GRANT     = (UCT_RC_EP_FC_FLAG_HARD_REQ |
+                                   UCT_RC_EP_FC_FLAG_SOFT_REQ |
+                                   UCT_RC_EP_FC_FLAG_GRANT)
+};
+
+/*
+ * FC protocol header mask
+ */
+#define UCT_RC_EP_FC_MASK UCT_RC_EP_FC_PURE_GRANT
 
 /*
  * Macro to generate functions for AMO completions.
@@ -41,6 +73,26 @@ enum {
         return UCS_ERR_NO_RESOURCE; \
     }
 
+/*
+ * check for FC credits and add FC protocol bits (if any)
+ */
+#define UCT_RC_CHECK_FC_WND(_iface, _ep, _am_id) \
+    do { \
+        if (ucs_unlikely((_ep)->fc_wnd <= (_iface)->config.fc_soft_thresh)) { \
+            if ((_ep)->fc_wnd <= 0) { \
+                return UCS_ERR_NO_RESOURCE; \
+            } \
+            (_am_id) |= uct_rc_ep_fc_req_moderation(_iface, _ep); \
+        } \
+        (_am_id) |= uct_rc_ep_get_fc_hdr((_ep)->flags); /* take grant bit */ \
+    } while (0)
+
+#define UCT_RC_UPDATE_FC_WND(_ep) \
+    do { \
+        (_ep)->fc_wnd--; \
+        (_ep)->flags = 0; \
+    } while (0)
+
 
 struct uct_rc_ep {
     uct_base_ep_t       super;
@@ -48,10 +100,17 @@ struct uct_rc_ep {
     ucs_queue_head_t    outstanding;
     uint16_t            unsignaled;
     int16_t             available;
+
+    /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
+    int16_t             fc_wnd;
+
+    /* used only for FC protocol at this point (3 higher bits) */
+    uint8_t             flags;
     uint8_t             sl;
     uint8_t             path_bits;
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
+    uct_pending_req_t   fc_grant_req;
     UCS_STATS_NODE_DECLARE(stats);
 };
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
@@ -86,6 +145,8 @@ void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg);
+
+ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 1)(uct_rc_iface_send_op_t *op);
@@ -151,6 +212,21 @@ uct_rc_ep_tx_posted(uct_rc_ep_t *ep, int signaled)
     } else {
         ++ep->unsignaled;
     }
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rc_ep_get_fc_hdr(uint8_t id)
+{
+    return id & UCT_RC_EP_FC_MASK;
+}
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_rc_ep_fc_req_moderation(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+{
+    return (ep->fc_wnd == iface->config.fc_hard_thresh) ?
+            UCT_RC_EP_FC_FLAG_HARD_REQ :
+           (ep->fc_wnd == iface->config.fc_soft_thresh) ?
+            UCT_RC_EP_FC_FLAG_SOFT_REQ : 0;
 }
 
 #endif

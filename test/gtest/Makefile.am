@@ -122,6 +122,10 @@ gtest_SOURCES += \
 	uct/test_ud_pending.cc \
 	uct/test_ud_ds.cc
 endif
+if HAVE_TL_RC
+gtest_SOURCES += \
+	uct/test_rc_flow_control.cc
+endif	
 endif
 
 noinst_HEADERS = \

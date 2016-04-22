@@ -28,7 +28,7 @@ ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
-static uct_ib_iface_ops_t uct_rc_verbs_iface_ops;
+static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 
 static UCS_F_NOINLINE unsigned
 uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
@@ -76,7 +76,7 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
     return uct_rc_verbs_iface_post_recv_always(iface, count);
 }
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     uct_rc_verbs_ep_t *ep;
@@ -114,7 +114,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t 
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 {
     uct_ib_iface_recv_desc_t *desc;
@@ -142,10 +142,14 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
                                   wc[i].wr_id, wc[i].status);
             uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_RC, &wc[i],
                                        hdr, uct_rc_ep_am_packet_dump);
-            uct_ib_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
-                                   wc[i].byte_len - sizeof(*hdr), desc);
-        }
 
+            if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
+                uct_rc_iface_handle_fc(&iface->super, &wc[i], desc);
+            } else {
+                uct_ib_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
+                                       wc[i].byte_len - sizeof(*hdr), desc);
+            }
+        }
         iface->super.rx.available += ret;
         status = UCS_OK;
     } else if (ret == 0) {
@@ -334,7 +338,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_pd_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_iface_t, uct_iface_t);
 
 
-static uct_ib_iface_ops_t uct_rc_verbs_iface_ops = {
+static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
+    {
     {
     .iface_query              = uct_rc_verbs_iface_query,
     .iface_flush              = uct_rc_iface_flush,
@@ -374,6 +379,8 @@ static uct_ib_iface_ops_t uct_rc_verbs_iface_ops = {
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    },
+    .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl
 };
 
 static ucs_status_t uct_rc_verbs_query_resources(uct_pd_h pd,

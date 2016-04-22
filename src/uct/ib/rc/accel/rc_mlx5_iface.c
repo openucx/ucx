@@ -37,7 +37,7 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 };
 #endif
 
-static uct_ib_iface_ops_t uct_rc_mlx5_iface_ops;
+static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
 
 static inline uct_rc_mlx5_srq_seg_t*
 uct_rc_mlx5_iface_get_srq_wqe(uct_rc_mlx5_iface_t *iface, uint16_t index)
@@ -427,7 +427,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_pd_h,
                                  const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
-static uct_ib_iface_ops_t uct_rc_mlx5_iface_ops = {
+static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
+    {
     {
     .iface_query              = uct_rc_mlx5_iface_query,
     .iface_flush              = uct_rc_iface_flush,
@@ -467,6 +468,7 @@ static uct_ib_iface_ops_t uct_rc_mlx5_iface_ops = {
     },
     .arm_tx_cq                = uct_rc_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_rc_mlx5_iface_arm_rx_cq,
+    }
 };
 
 
