@@ -172,8 +172,9 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap);
 
-void uct_rc_iface_handle_fc(uct_rc_iface_t *iface, struct ibv_wc *wc,
-                            uct_ib_iface_recv_desc_t *desc);
+ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
+                                    uct_rc_hdr_t *hdr, unsigned length,
+                                    void *desc);
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
                                                   unsigned qp_num)
