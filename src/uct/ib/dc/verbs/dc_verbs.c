@@ -46,7 +46,7 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     uct_dc_iface_query(&iface->super, iface_attr);
     ucs_debug("max_inline is %d", iface->super.config.max_inline);
     uct_rc_verbs_iface_query_common(&iface->super.super, iface_attr, iface->super.config.max_inline, iface->super.config.max_inline);
-    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_SHORT|UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     return UCS_OK;
 }
@@ -92,7 +92,7 @@ uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
         send_flags |= IBV_SEND_SIGNALED;
     }
 
-    wr->exp_send_flags    = send_flags | IBV_SEND_SIGNALED |IBV_SEND_INLINE;
+    wr->exp_send_flags    = send_flags;
     wr->wr_id             = iface->super.tx.dcis[dci].unsignaled;
     wr->dc.ah             = ep->ah;
     wr->dc.dct_number     = ep->dest_qpn;
@@ -108,8 +108,20 @@ uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
         ucs_fatal("ibv_post_send() returned %d (%m)", ret);
     }
 
-    uct_rc_txqp_posted(&iface->super.tx.dcis[dci], &iface->super.super, 
-                       1, send_flags & IBV_SEND_SIGNALED);
+    uct_rc_verbs_txqp_posted(&iface->super.tx.dcis[dci], &iface->dcis_txcnt[dci], 
+                             &iface->super.super, send_flags & IBV_SEND_SIGNALED);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_verbs_iface_post_send_desc(uct_dc_verbs_iface_t *iface, 
+                                  uct_dc_verbs_ep_t *ep, int dci,
+                                  struct ibv_exp_send_wr *wr,
+                                  uct_rc_iface_send_desc_t *desc, int send_flags)
+{
+    UCT_RC_VERBS_FILL_DESC_WR(wr, desc);
+    uct_dc_verbs_iface_post_send(iface, ep, dci, wr, send_flags);
+    uct_rc_txqp_add_send_op(&iface->super.tx.dcis[dci], &desc->super, 
+                            iface->dcis_txcnt[dci].pi);
 }
 
 ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
@@ -128,6 +140,32 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     return UCS_OK;
 }
+
+                               
+
+ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                 uct_pack_callback_t pack_cb, void *arg)
+{
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
+    uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
+    uct_rc_iface_send_desc_t *desc;
+    struct ibv_exp_send_wr wr;
+    struct ibv_sge sge;
+    size_t length;
+    int dci;
+
+    UCT_CHECK_AM_ID(id);
+    UCT_DC_CHECK_RES(&iface->super, &ep->super, dci);
+    UCT_RC_IFACE_GET_TX_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp, desc);
+
+    length = uct_rc_verbs_copy_data_to_desc(desc, id, pack_cb, arg);
+    UCT_RC_VERBS_FILL_BCOPY_WR(wr, sge, length, wr.exp_opcode);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
+    uct_dc_verbs_iface_post_send_desc(iface, ep, dci, &wr, desc, 0);
+    return length;
+}
+
 
 static inline ucs_status_t uct_dc_verbs_flush_dcis(uct_dc_iface_t *iface) 
 {
@@ -194,8 +232,10 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ucs_assert_always(count == 1);
         dci = uct_dc_iface_dci_find(&iface->super, wc[i].qp_num);
-        uct_rc_txqp_available_add(&iface->super.tx.dcis[dci], count);
+        uct_rc_verbs_txqp_completed(&iface->super.tx.dcis[dci], &iface->dcis_txcnt[dci], count);
         ucs_trace_poll("dc tx completion on dc %d cound %d", dci, count);
+
+        uct_rc_txqp_completion(&iface->super.tx.dcis[dci], iface->dcis_txcnt[dci].ci);
     }
 }
 
@@ -213,25 +253,29 @@ static void uct_dc_verbs_iface_progress(void *arg)
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t)(uct_iface_t*);
 
-static uct_ib_iface_ops_t uct_dc_verbs_iface_ops = {
+static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
     {
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
-    .iface_query              = uct_dc_verbs_iface_query,
-    .iface_get_device_address = uct_ib_iface_get_device_address,
-    .iface_is_reachable       = uct_ib_iface_is_reachable,
-    .iface_release_am_desc    = uct_ib_iface_release_am_desc, 
-    .iface_get_address        = uct_dc_iface_get_address,
+        {
+            .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t),
+            .iface_query              = uct_dc_verbs_iface_query,
+            .iface_get_device_address = uct_ib_iface_get_device_address,
+            .iface_is_reachable       = uct_ib_iface_is_reachable,
+            .iface_release_am_desc    = uct_ib_iface_release_am_desc, 
+            .iface_get_address        = uct_dc_iface_get_address,
 
-    .iface_flush              = uct_dc_verbs_iface_flush,
+            .iface_flush              = uct_dc_verbs_iface_flush,
 
-    .ep_create_connected      = uct_dc_verbs_ep_create_connected,
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_ep_t),
+            .ep_create_connected      = uct_dc_verbs_ep_create_connected,
+            .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_ep_t),
 
-    .ep_am_short              = uct_dc_verbs_ep_am_short,
-    .ep_flush                 = uct_dc_verbs_ep_flush
+            .ep_am_short              = uct_dc_verbs_ep_am_short,
+            .ep_am_bcopy              = uct_dc_verbs_ep_am_bcopy,
+            .ep_flush                 = uct_dc_verbs_ep_flush
+        },
+        .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
+        .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
     },
-    .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-    .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .fc_ctrl                  = NULL /* TODO: */
 };
 
 void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)
@@ -273,7 +317,14 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
         goto out;
     }
 
+    self->dcis_txcnt = ucs_malloc(self->super.tx.ndci * sizeof(uct_rc_verbs_txcnt_t), "dc");
+    if (self->dcis_txcnt == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
     for (i = 0; i < self->super.tx.ndci; i++) {
+        uct_rc_verbs_txcnt_init(&self->dcis_txcnt[i]);
         uct_rc_txqp_available_set(&self->super.tx.dcis[i], self->super.super.config.tx_qp_len);
     }
     
@@ -288,6 +339,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_iface_t)
     ucs_trace_func("");
     uct_worker_progress_unregister(self->super.super.super.super.worker,
                                    uct_dc_verbs_iface_progress, self);
+    ucs_free(self->dcis_txcnt);
 }
 
 UCS_CLASS_DEFINE(uct_dc_verbs_iface_t, uct_dc_iface_t);

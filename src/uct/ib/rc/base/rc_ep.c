@@ -17,12 +17,12 @@
 
 
 #if ENABLE_STATS
-static ucs_stats_class_t uct_rc_ep_stats_class = {
-    .name = "rc_ep",
-    .num_counters = UCT_RC_EP_STAT_LAST,
+static ucs_stats_class_t uct_rc_txqp_stats_class = {
+    .name = "rc_txqp",
+    .num_counters = UCT_RC_TXQP_STAT_LAST,
     .counter_names = {
-        [UCT_RC_EP_STAT_QP_FULL]          = "qp_full",
-        [UCT_RC_EP_STAT_SINGAL]           = "signal"
+        [UCT_RC_TXQP_STAT_QP_FULL]          = "qp_full",
+        [UCT_RC_TXQP_STAT_SIGNAL]           = "signal"
     }
 };
 #endif
@@ -32,11 +32,24 @@ static void uct_rc_ep_fc_purge(uct_rc_ep_t *ep);
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               int qp_type, struct ibv_qp_cap *cap)
 {
+    ucs_status_t status; 
+
     txqp->unsignaled = 0;
     txqp->available  = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
-    return uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap);
+    status = UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
+                                  iface->stats);
+    if (status != UCS_OK) {
+       return status;
+    }
+
+    status = uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap);
+    if (status != UCS_OK) {
+        UCS_STATS_NODE_FREE(txqp->stats);
+    }
+
+    return status;
 }
 
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
@@ -56,8 +69,21 @@ void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
         }
         op->handler(op);
     }
+    UCS_STATS_NODE_FREE(txqp->stats);
 }
 
+void uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize)
+{
+    fc->fc_wnd     = winsize;
+    fc->flags      = 0;
+
+    fc->fc_grant_req.func = uct_rc_fc_grant;
+    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)fc->fc_grant_req.priv);
+}
+
+void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
+{
+}
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
@@ -68,22 +94,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
-    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_ep_stats_class,
-                                  self->super.stats);
-    if (status != UCS_OK) {
-        goto err_qp_destroy;
-    }
-
-    self->unsignaled        = 0;
     self->sl                = iface->super.sl;           /* TODO multi-rail */
     self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
-    self->fc_wnd            = iface->config.fc_wnd_size;
-    self->flags             = 0;
-    self->fc_grant_req.func = uct_rc_ep_fc_grant;
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)self->fc_grant_req.priv);
 
     /* Check that FC protocol fits AM id
      * (just in case AM id space gets extended) */
@@ -91,13 +106,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     ucs_arbiter_group_init(&self->arb_group);
 
+    uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size);
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
-
-err_qp_destroy:
-    ibv_destroy_qp(self->txqp.qp);
-err:
-    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
@@ -111,8 +122,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     uct_rc_ep_fc_purge(self);
     ucs_arbiter_group_cleanup(&self->arb_group);
 
-    UCS_STATS_NODE_FREE(self->stats);
     uct_rc_txqp_cleanup(&self->txqp);
+    uct_rc_fc_cleanup(&self->fc);
 }
 
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
@@ -213,9 +224,9 @@ void uct_rc_ep_reset_qp(uct_rc_ep_t *ep)
 
     memset(&qp_attr, 0, sizeof(qp_attr));
     qp_attr.qp_state = IBV_QPS_RESET;
-    ret = ibv_modify_qp(ep->qp, &qp_attr, IBV_QP_STATE);
+    ret = ibv_modify_qp(ep->txqp.qp, &qp_attr, IBV_QP_STATE);
     if (ret != 0) {
-        ucs_warn("modify qp 0x%x to RESET failed: %m", ep->qp->qp_num);
+        ucs_warn("modify qp 0x%x to RESET failed: %m", ep->txqp.qp->qp_num);
     }
 }
 
@@ -268,7 +279,7 @@ static int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 
 static inline int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
-    return ((ep->available > 0) && (ep->fc_wnd > 0));
+    return ((ep->txqp.available > 0) && (ep->fc.fc_wnd > 0));
 }
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
@@ -335,7 +346,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                  uct_rc_ep_t, arb_group);
 
     /* Invoke user's callback only if it is not internal FC message */
-    if (ucs_likely(req != &ep->fc_grant_req)){
+    if (ucs_likely(req != &ep->fc.fc_grant_req)){
         cb(req);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -367,16 +378,16 @@ static void uct_rc_ep_fc_purge(uct_rc_ep_t *ep)
          * elements and FC grant is among them, it should have been cleared by
          * normal purge */
         req = ucs_container_of(tail, uct_pending_req_t, priv);
-        if (req == &ep->fc_grant_req) {
+        if (req == &ep->fc.fc_grant_req) {
             ucs_arbiter_group_head_desched(&iface->tx.arbiter, tail);
             ep->arb_group.tail = NULL;
         }
     }
 }
 
-ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
+ucs_status_t uct_rc_fc_grant(uct_pending_req_t *self)
 {
-    uct_rc_ep_t *ep = ucs_container_of(self, uct_rc_ep_t, fc_grant_req);
+    uct_rc_ep_t *ep = ucs_container_of(self, uct_rc_ep_t, fc.fc_grant_req);
     uct_ib_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ib_iface_t);
 
     return (ucs_derived_of(iface->ops, uct_rc_iface_ops_t))->fc_ctrl(ep);

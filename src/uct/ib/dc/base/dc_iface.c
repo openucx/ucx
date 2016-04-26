@@ -102,7 +102,7 @@ static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface)
 
     iface->tx.ndci = 8; /* TODO: make configurable */
 
-    iface->tx.dcis = ucs_calloc(iface->tx.ndci,  sizeof(uct_rc_txqp_t), "dc");
+    iface->tx.dcis = ucs_malloc(iface->tx.ndci * sizeof(uct_rc_txqp_t), "dc");
     if (iface->tx.dcis == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -131,7 +131,7 @@ create_err:
     return status;
 }
 
-UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config)
 {

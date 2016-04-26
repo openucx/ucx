@@ -28,12 +28,8 @@ typedef struct uct_rc_verbs_iface_config {
  * RC verbs communication context.
  */
 typedef struct uct_rc_verbs_ep {
-    uct_rc_ep_t        super;
-
-    struct {
-        uint16_t       post_count;
-        uint16_t       completion_count;
-    } tx;
+    uct_rc_ep_t            super;
+    uct_rc_verbs_txcnt_t   txcnt;
 } uct_rc_verbs_ep_t;
 
 

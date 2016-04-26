@@ -28,6 +28,10 @@
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
                              return UCS_ERR_NO_RESOURCE);
 
+#define UCT_RC_IFACE_GET_TX_BCOPY_DESC(_iface, _mp, _desc) \
+    UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
+                             return UCS_ERR_NO_RESOURCE); \
+    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 
 enum {
     UCT_RC_IFACE_STAT_RX_COMPLETION,

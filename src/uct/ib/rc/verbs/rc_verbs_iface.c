@@ -54,7 +54,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     uct_rc_verbs_ep_t *ep;
-    unsigned count;
+    uint16_t count;
     int i;
     unsigned num_wcs = iface->super.super.config.tx_max_poll;
     struct ibv_wc wc[num_wcs];
@@ -65,12 +65,9 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         ucs_assert(ep != NULL);
-
-        uct_rc_txqp_available_add(&ep->super.txqp, count);
-        ep->tx.completion_count     += count;
-
+        uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         uct_rc_ep_process_tx_completion(&iface->super, &ep->super,
-                                        ep->tx.completion_count);
+                                        ep->txcnt.ci);
     }
 }
 

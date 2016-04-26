@@ -188,14 +188,14 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
     int16_t      cur_wnd;
     ucs_arbiter_elem_t* elem;
     uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, qp_num);
-    uint8_t fc_hdr    = uct_rc_ep_get_fc_hdr(hdr->am_id);
+    uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(hdr->am_id);
 
     if (fc_hdr & UCT_RC_EP_FC_FLAG_GRANT) {
         /* Got either grant flag or special FC grant message */
-        cur_wnd = ep->fc_wnd;
+        cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc_wnd = iface->config.fc_wnd_size;
+        ep->fc.fc_wnd = iface->config.fc_wnd_size;
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0
@@ -215,14 +215,14 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
     if (fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ) {
         /* Got soft credit request. Mark ep that it needs to grant
          * credits to the peer in outgoing AM (if any). */
-        ep->flags |= UCT_RC_EP_FC_FLAG_GRANT;
+        ep->fc.flags |= UCT_RC_EP_FC_FLAG_GRANT;
 
     } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
         /* Got hard credit request. Send grant to the peer immediately */
-        status = uct_rc_ep_fc_grant(&ep->fc_grant_req);
+        status = uct_rc_fc_grant(&ep->fc.fc_grant_req);
 
         if (status == UCS_ERR_NO_RESOURCE){
-            elem =(ucs_arbiter_elem_t*) ep->fc_grant_req.priv;
+            elem =(ucs_arbiter_elem_t*) ep->fc.fc_grant_req.priv;
             ucs_arbiter_group_push_elem(&ep->arb_group, elem);
         } else {
             ucs_assert_always(status == UCS_OK);

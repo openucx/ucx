@@ -35,7 +35,7 @@ typedef struct uct_dc_iface {
 } uct_dc_iface_t;
 
 
-UCS_CLASS_DECLARE(uct_dc_iface_t, uct_ib_iface_ops_t*, uct_pd_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_dc_iface_t, uct_rc_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char *, unsigned, unsigned, uct_dc_iface_config_t*)
 
 extern ucs_config_field_t uct_dc_iface_config_table[];
@@ -69,9 +69,7 @@ static inline ucs_status_t uct_dc_iface_dci_get(uct_dc_iface_t *iface, uct_dc_ep
     
     /* TODO: actual dci selection logic */
     *dci = 0;
-    if (iface->tx.dcis[*dci].available <= 0) {
-        return UCS_ERR_NO_RESOURCE;
-    }
+    UCT_RC_CHECK_TXQP(&iface->super, &iface->tx.dcis[*dci]);
     return UCS_OK;
 }
 

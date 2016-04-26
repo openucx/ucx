@@ -51,7 +51,7 @@ public:
     }
 
     void set_fc_attributes(entity *e, int wnd, int s_thresh, int h_thresh) {
-        rc_iface(e)->config.fc_wnd_size    = rc_ep(e)->fc_wnd = wnd;
+        rc_iface(e)->config.fc_wnd_size    = rc_ep(e)->fc.fc_wnd = wnd;
         rc_iface(e)->config.fc_soft_thresh = s_thresh;
         rc_iface(e)->config.fc_hard_thresh = h_thresh;
 
@@ -122,7 +122,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
 
     /* Set tx resources of m2 to 0 for FC grant message
      * to be added to the pending group */
-    rc_ep(m_e2)->available = 0;
+    rc_ep(m_e2)->txqp.available = 0;
 
     set_fc_attributes(m_e1, test_wnd, test_wnd, 1);
 
@@ -143,7 +143,7 @@ UCS_TEST_P(test_rc_flow_control, pending_purge)
 
     /* Set tx resources of m2 to 0 for FC grant message
      * to be added to the pending group*/
-    rc_ep(m_e2)->available = 0;
+    rc_ep(m_e2)->txqp.available = 0;
 
     set_fc_attributes(m_e1, test_wnd, test_wnd, 1);
 
@@ -177,7 +177,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     req_count = 0;
 
     /* Disable send capabilities of m_e2 */
-    rc_iface(m_e2)->tx.cq_available = 0;
+    rc_ep(m_e2)->txqp.available = 0;
 
     set_fc_attributes(m_e1, test_wnd, test_wnd, h_thresh);
 
@@ -185,7 +185,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
         req[i].uct.func = am_send;
         req[i].ep = m_e2->ep(0);
         EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &req[i].uct), UCS_OK);
-        rc_ep(m_e1)->fc_wnd = h_thresh;
+        rc_ep(m_e1)->fc.fc_wnd = h_thresh;
         send_am_messages(m_e1, 1, UCS_OK); /* send AM with FC hard request */
         progress_loop();
     }
@@ -206,7 +206,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     progress_loop();
 
     /* Check that only num_pend + 1 (for FC grant) messages were sent */
-    EXPECT_EQ(rc_ep(m_e2)->available, available - (num_pend + 1));
+    EXPECT_EQ(rc_ep(m_e2)->txqp.available, available - (num_pend + 1));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_flow_control, rc)

@@ -16,6 +16,7 @@ typedef struct uct_dc_verbs_iface {
     struct ibv_exp_send_wr      inl_am_wr;
     struct ibv_exp_send_wr      inl_rwrite_wr;
     uct_rc_verbs_iface_common_t verbs_common;
+    uct_rc_verbs_txcnt_t       *dcis_txcnt;
 } uct_dc_verbs_iface_t;
 
 typedef struct uct_dc_verbs_ep {

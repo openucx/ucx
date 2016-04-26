@@ -119,3 +119,8 @@ void uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *self)
 {
     memset(self->inl_sge, 0, sizeof(self->inl_sge));
 }
+
+void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
+{
+    txcnt->pi = txcnt->ci = 0;
+}
