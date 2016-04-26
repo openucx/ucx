@@ -174,7 +174,7 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
     ucs_container_of((queue)->head, type, member)
 
 /**
- * Convenience macro to get the head element of a non-empty queue.
+ * Convenience macro to get the tail element of a non-empty queue.
  *
  * @param queue   Non-empty queue whose head element to get.
  * @param type    Container element type.

@@ -14,8 +14,9 @@ static size_t ucp_proto_pack(void *dest, void *arg)
 
     switch (req->send.proto.am_id) {
     case UCP_AM_ID_EAGER_SYNC_ACK:
+    case UCP_AM_ID_RNDV_ATS:
         rep_hdr->reqptr = req->send.proto.remote_request;
-        rep_hdr->status  = req->send.proto.status;
+        rep_hdr->status = req->send.proto.status;
         return sizeof(*rep_hdr);
     }
 

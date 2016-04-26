@@ -57,7 +57,10 @@ enum {
 
     UCP_AM_ID_EAGER_SYNC_ONLY   =  6, /* Single packet eager-sync */
     UCP_AM_ID_EAGER_SYNC_FIRST  =  7, /* First eager-sync fragment */
-    UCP_AM_ID_EAGER_SYNC_ACK    =  8, /* Eager-sync acknowldge */
+    UCP_AM_ID_EAGER_SYNC_ACK    =  8, /* Eager-sync acknowledge */
+
+    UCP_AM_ID_RNDV_RTS          =  9, /* Ready-to-Send to init rendezvous */
+    UCP_AM_ID_RNDV_ATS          =  10,/* Ack-to-Send after finishing a get operation */
 
     UCP_AM_ID_LAST
 };

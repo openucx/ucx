@@ -310,7 +310,7 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
 
     uct_mm_set_fifo_ptrs(iface->shared_mem, &ctl, &iface->recv_fifo_elements);
 
-    /* Make sure head and tail are cahe-aligned, and not on same cacheline, to
+    /* Make sure head and tail are cache-aligned, and not on same cacheline, to
      * avoid false-sharing.
      */
     ucs_assert_always((((uintptr_t)&ctl->head) % UCS_SYS_CACHE_LINE_SIZE) == 0);

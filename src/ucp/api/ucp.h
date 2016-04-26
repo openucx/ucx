@@ -285,7 +285,7 @@ typedef struct ucp_generic_dt_ops {
 typedef struct ucp_params {
     /**
      * UCP @ref ucp_feature "features" that are used for library
-     * initialization. It is recommend for applications only request
+     * initialization. It is recommended for applications only to request
      * the features that are required for an optimal functionality
      */
     uint64_t                    features;
@@ -1075,7 +1075,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
- *                          responsible to released the handle using
+ *                          responsible to release the handle using
  *                          @ref ucp_request_release "ucp_request_release()"
  *                          routine.
  */
@@ -1151,14 +1151,14 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  *                          "ucp_tag_msg_recv_nb()" in order to receive the data
  *                          and release the resources associated with the
  *                          message handle.
+ *                          If false (0), ucp_tag_msg_recv_nb() cannot be called
+ *                          after this function call.
  * @param [out] info        If the matching message is found the descriptor is
  *                          filled with the details about the message.
  *
  * @return NULL                      - No match found.
  * @return Message handle (not NULL) - If message is matched the message handle
- *                                   is returned.
- *
- * @todo Clarify release logic for remote == 0.
+ *                                     is returned.
  */
 ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_t tag_mask, int remove,

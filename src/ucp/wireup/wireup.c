@@ -557,7 +557,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
 
     ucs_trace("ep %p: connect lanes", ep);
 
-    /* establish connections on all underlying endpoint */
+    /* establish connections on all underlying endpoints */
     conn_flag = UCP_EP_FLAG_LOCAL_CONNECTED;
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         status = ucp_wireup_connect_lane(ep, lane, address_count, address_list,

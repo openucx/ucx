@@ -11,28 +11,29 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.h>
-
+#include <ucp/proto/proto.h>
 
 /*
  * Rendezvous RTS
  */
 typedef struct {
     ucp_tag_hdr_t             super;
-    size_t                    total_len;
-} UCS_S_PACKED ucp_rts_hdr_t;
-
-
+    ucp_request_hdr_t         req;      /* request on the rndv initiator side */
+    uint64_t                  address;  /* holds the address of the data on the sender's side */
+    size_t                    size;     /* size of the data for sending */
+    /* packed rkey follows */
+} UCS_S_PACKED ucp_rndv_rts_hdr_t;
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
+void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
+                      ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
-void ucp_rndv_unexp_match(ucp_recv_desc_t *rdesc, ucp_request_t *req,
-                          void *buffer, size_t count, ucp_datatype_t datatype);
+ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self);
 
-
-static inline size_t ucp_rndv_total_len(ucp_rts_hdr_t *hdr)
+static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {
-    return hdr->total_len;
+    return hdr->size;
 }
 
 #endif

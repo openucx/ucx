@@ -39,7 +39,7 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
                 info->length = ucp_eager_total_len(ucs_container_of(hdr, ucp_eager_hdr_t, super),
                                                    flags, rdesc->length - rdesc->hdr_len);
             } else {
-                info->length = ucp_rndv_total_len(ucs_container_of(hdr, ucp_rts_hdr_t, super));
+                info->length = ucp_rndv_total_len(ucs_container_of(hdr, ucp_rndv_rts_hdr_t, super));
             }
 
             if (remove) {

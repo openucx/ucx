@@ -21,7 +21,7 @@
  */
 typedef struct {
     uint64_t                  sender_uuid;
-    uint64_t                  reqptr;
+    uintptr_t                 reqptr;
 } UCS_S_PACKED ucp_request_hdr_t;
 
 
@@ -57,7 +57,7 @@ ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self);
 
 /*
  * Make sure the remote worker would be able to send replies to our endpoint.
- * Should be used before a sending a message which requires a reply.
+ * Should be used before sending a message which requires a reply.
  */
 static inline void ucp_ep_connect_remote(ucp_ep_h ep)
 {

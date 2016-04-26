@@ -14,9 +14,10 @@
 
 
 enum {
-    UCP_WIREUP_LANE_USAGE_AM  = UCS_BIT(0),
-    UCP_WIREUP_LANE_USAGE_RMA = UCS_BIT(1),
-    UCP_WIREUP_LANE_USAGE_AMO = UCS_BIT(2)
+    UCP_WIREUP_LANE_USAGE_AM   = UCS_BIT(0),
+    UCP_WIREUP_LANE_USAGE_RMA  = UCS_BIT(1),
+    UCP_WIREUP_LANE_USAGE_AMO  = UCS_BIT(2),
+    UCP_WIREUP_LANE_USAGE_RNDV = UCS_BIT(3)
 };
 
 
@@ -176,7 +177,10 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         addr_index_map |= UCS_BIT(addr_index);
     }
 
-    /* For each local resource try to find the best remote address to connect to */
+    /* For each local resource try to find the best remote address to connect to.
+     * Pick the best local resource to satisfy the criteria.
+     * best one has the highest score (from the dedicated score_func) and
+     * has a reachable tl on the remote peer */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
         iface_attr   = &worker->iface_attrs[rsc_index];
@@ -495,6 +499,14 @@ static double ucp_wireup_am_score_func(const uct_md_attr_t *md_attr,
     return 1e-3 / (iface_attr->latency + iface_attr->overhead + remote_iface_attr->overhead);
 }
 
+static double ucp_wireup_rndv_score_func(const uct_md_attr_t *md_attr,
+                                         const uct_iface_attr_t *iface_attr,
+                                         const ucp_wireup_iface_attr_t *remote_iface_attr)
+{
+    /* highest bandwidth */
+    return iface_attr->bandwidth;
+}
+
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
                                            const ucp_address_entry_t *address_list,
                                            ucp_wireup_lane_desc_t *lane_descs,
@@ -546,6 +558,45 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
     return UCS_OK;
 }
 
+static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count,
+                                             const ucp_address_entry_t *address_list,
+                                             ucp_wireup_lane_desc_t *lane_descs,
+                                             ucp_lane_index_t *num_lanes_p)
+{
+    ucp_wireup_criteria_t criteria;
+    ucp_rsc_index_t rsc_index;
+    ucs_status_t status;
+    unsigned addr_index;
+    double score;
+
+    if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG)) {
+        return UCS_OK;
+    }
+
+    /* Select one lane for the Rendezvous protocol (for the actual data. not for rts) */
+    criteria.title              = "rendezvous";
+    criteria.local_md_flags     = UCT_MD_FLAG_REG;
+    criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
+    criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY |
+                                  UCT_IFACE_FLAG_PENDING;
+    criteria.calc_score         = ucp_wireup_rndv_score_func;
+
+    if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
+        criteria.remote_iface_flags |= UCT_IFACE_FLAG_WAKEUP;
+    }
+
+    status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
+                                         -1, 0, &rsc_index, &addr_index, &score);
+    if (status == UCS_OK) {
+        ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
+                                 address_list[addr_index].md_index, score,
+                                 UCP_WIREUP_LANE_USAGE_RNDV);
+    }
+
+    return UCS_OK;
+}
+
 static ucp_lane_index_t
 ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                   const ucp_address_entry_t *address_list,
@@ -564,6 +615,8 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
         addr_index = lane_descs[lane].addr_index;
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
 
+        /* if the current lane satisfies the wireup criteria, choose it for wireup.
+         * if it doesn't take a lane with a p2p transport */
         if (ucp_wireup_check_flags(resource,
                                    worker->iface_attrs[rsc_index].cap.flags,
                                    ucp_wireup_aux_criteria.local_iface_flags,
@@ -637,6 +690,12 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
         return status;
     }
 
+    status = ucp_wireup_add_rndv_lane(ep, address_count, address_list,
+                                      lane_descs, &key->num_lanes);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     /* User should not create endpoints unless requested communication features */
     if (key->num_lanes == 0) {
         ucs_error("No transports selected to %s", ucp_ep_peer_name(ep));
@@ -651,9 +710,10 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
      * - arrange lane description in the EP configuration
      * - create remote MD bitmap
      * - create bitmap of lanes used for RMA and AMO
-     * - if AM lane exists and fits for wireup messages, select it fot his purpose.
+     * - if AM lane exists and fits for wireup messages, select it for this purpose.
      */
     key->am_lane   = UCP_NULL_LANE;
+    key->rndv_lane = UCP_NULL_LANE;
     for (lane = 0; lane < key->num_lanes; ++lane) {
         rsc_index          = lane_descs[lane].rsc_index;
         dst_md_index       = lane_descs[lane].dst_md_index;
@@ -671,6 +731,10 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
             key->amo_lanes[num_amo_lanes] = lane;
             ++num_amo_lanes;
+        }
+        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RNDV) {
+            ucs_assert(key->rndv_lane == UCP_NULL_LANE);
+            key->rndv_lane = lane;
         }
     }
 

@@ -77,7 +77,9 @@ ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t lane)
     status = uct_md_mem_reg(uct_md, (void*)req->send.buffer, req->send.length,
                             &req->send.state.dt.contig.memh);
     if (status != UCS_OK) {
-        ucs_error("failed to register user buffer: %s",
+        ucs_error("failed to register user buffer [address %p len %zu pd %s]: %s",
+                  req->send.buffer, req->send.length,
+                  ucp_ep_md_attr(req->send.ep, lane)->component_name,
                   ucs_status_string(status));
     }
     return status;
