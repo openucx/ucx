@@ -113,9 +113,7 @@ struct uct_ud_ctl_hdr {
         } conn_rep;
         uint32_t data;
     };
-#if ENABLE_DEBUG_DATA == 1
     uct_ud_peer_name_t peer;
-#endif
 } UCS_S_PACKED;
 
 

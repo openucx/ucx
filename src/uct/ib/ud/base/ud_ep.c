@@ -12,26 +12,25 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 
-#if ENABLE_DEBUG_DATA == 1
 static void uct_ud_peer_name(uct_ud_peer_name_t *peer) 
 {
     gethostname(peer->name, sizeof(peer->name));
     peer->pid = getpid();
 }
 
+static void uct_ud_ep_set_state(uct_ud_ep_t *ep, uint32_t state)
+{
+    ep->flags |= state;
+}
+
+#if ENABLE_DEBUG_DATA
 static void uct_ud_peer_copy(uct_ud_peer_name_t *dst, uct_ud_peer_name_t *src)
 {
     memcpy(dst, src, sizeof(*src));
 }
 
-static void uct_ud_ep_set_state(uct_ud_ep_t *ep, uint32_t state)
-{
-    ep->state.flags |= state;
-}
 #else
-#define  uct_ud_peer_name(peer)
 #define  uct_ud_peer_copy(dst, src)
-#define  uct_ud_ep_set_state(ep, state)
 #endif
 
 
@@ -442,15 +441,18 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
-        uct_ud_peer_copy(&ep->state.peer, &ctl->peer);
-        uct_ud_ep_set_state(ep, UCT_UD_EP_STATE_PRIVATE);
+        uct_ud_peer_copy(&ep->peer, &ctl->peer);
+        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
             /* simultanuous CREQ */
             ep->dest_ep_id = uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id);
             ep->rx.ooo_pkts.head_sn = neth->psn;
-            uct_ud_peer_copy(&ep->state.peer, &ctl->peer);
-            ucs_debug("simultanuous CREQ ep=%p (iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, iface, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+            uct_ud_peer_copy(&ep->peer, &ctl->peer);
+            ucs_debug("simultanuous CREQ ep=%p"
+                      "(iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
+                      ep, iface, ep->conn_id, ep->ep_id, 
+                      ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
             if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
                 /* our own creq was sent, treat incoming creq as ack and remove our own
                  * from tx window
@@ -468,7 +470,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
     uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
-    uct_ud_ep_set_state(ep, UCT_UD_EP_STATE_CREQ_RCVD);
+    uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_RCVD);
 }
 
 static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_hdr_t *ctl)
@@ -480,8 +482,8 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_
                       ep->dest_ep_id == ctl->conn_rep.src_ep_id);
     ep->dest_ep_id = ctl->conn_rep.src_ep_id;
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
-    uct_ud_peer_copy(&ep->state.peer, &ctl->peer);
-    uct_ud_ep_set_state(ep, UCT_UD_EP_STATE_CREP_RCVD);
+    uct_ud_peer_copy(&ep->peer, &ctl->peer);
+    uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_RCVD);
 }
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
