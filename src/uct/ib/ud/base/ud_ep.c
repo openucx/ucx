@@ -12,6 +12,29 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 
+#if ENABLE_DEBUG_DATA == 1
+static void uct_ud_peer_name(uct_ud_peer_name_t *peer) 
+{
+    gethostname(peer->name, sizeof(peer->name));
+    peer->pid = getpid();
+}
+
+static void uct_ud_peer_copy(uct_ud_peer_name_t *dst, uct_ud_peer_name_t *src)
+{
+    memcpy(dst, src, sizeof(*src));
+}
+
+static void uct_ud_ep_set_state(uct_ud_ep_t *ep, uint32_t state)
+{
+    ep->state.flags |= state;
+}
+#else
+#define  uct_ud_peer_name(peer)
+#define  uct_ud_peer_copy(dst, src)
+#define  uct_ud_ep_set_state(ep, state)
+#endif
+
+
 static void uct_ud_ep_resend_start(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     ep->resend.max_psn   = ep->tx.psn - 1;
@@ -66,18 +89,18 @@ static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
-    ep->tx.psn         = 1;
+    ep->tx.psn         = UCT_UD_INITIAL_PSN;
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
     ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
-    ep->tx.acked_psn   = 0;
+    ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
     ucs_queue_head_init(&ep->tx.window);
 
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
-    ep->resend.psn       = 1;
-    ep->resend.max_psn   = 0;
+    ep->resend.psn       = ep->tx.psn;
+    ep->resend.max_psn   = ep->tx.acked_psn;
 
-    ep->rx.acked_psn = 0;
+    ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
                        UCS_STATS_ARG(ep->rx.stats));
 }
@@ -419,12 +442,21 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
+        uct_ud_peer_copy(&ep->state.peer, &ctl->peer);
+        uct_ud_ep_set_state(ep, UCT_UD_EP_STATE_PRIVATE);
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-            /* simultaniuos CREQ */
+            /* simultanuous CREQ */
             ep->dest_ep_id = uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id);
             ep->rx.ooo_pkts.head_sn = neth->psn;
-            ucs_debug("created ep=%p (iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, iface, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+            uct_ud_peer_copy(&ep->state.peer, &ctl->peer);
+            ucs_debug("simultanuous CREQ ep=%p (iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)", ep, iface, ep->conn_id, ep->ep_id, ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+            if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
+                /* our own creq was sent, treat incoming creq as ack and remove our own
+                 * from tx window
+                 */
+                uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
+            }
         }
     }
 
@@ -436,6 +468,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
     uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
+    uct_ud_ep_set_state(ep, UCT_UD_EP_STATE_CREQ_RCVD);
 }
 
 static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_hdr_t *ctl)
@@ -447,6 +480,8 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_
                       ep->dest_ep_id == ctl->conn_rep.src_ep_id);
     ep->dest_ep_id = ctl->conn_rep.src_ep_id;
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
+    uct_ud_peer_copy(&ep->state.peer, &ctl->peer);
+    uct_ud_ep_set_state(ep, UCT_UD_EP_STATE_CREP_RCVD);
 }
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
@@ -491,6 +526,8 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq->conn_req.conn_id        = ep->conn_id;
     memcpy(&creq->conn_req.ib_addr, &ib_addr, sizeof(ib_addr));
     memcpy(&creq->conn_req.ep_addr, &ep_addr, sizeof(ep_addr));
+
+    uct_ud_peer_name(&creq->peer);
 
     skb->len = sizeof(*neth) + sizeof(*creq);
     return skb;
@@ -667,6 +704,8 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     crep->type               = UCT_UD_PACKET_CREP;
     crep->conn_rep.src_ep_id = ep->ep_id;
 
+    uct_ud_peer_name(&crep->peer);
+
     skb->len = sizeof(*neth) + sizeof(*crep);
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREP);
     return skb;
@@ -685,6 +724,11 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
         return NULL;
     }
+
+    /* creq or crep must remove creq packet from window */
+    ucs_assertv_always(!(uct_ud_ep_is_connected(ep) &&
+                       (sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_CTL)),
+                       "ep(%p): CREQ resend on endpoint which is already connected", ep);
 
     skb = uct_ud_iface_res_skb_get(iface);
     ucs_assert_always(skb != NULL);

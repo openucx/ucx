@@ -53,15 +53,30 @@ static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
         ctl_hdr = (uct_ud_ctl_hdr_t *)(neth+1);
         switch(ctl_hdr->type) {
         case UCT_UD_PACKET_CREQ:
+#if ENABLE_DEBUG_DATA == 0
             n = snprintf(p, max, "CREQ: qp 0x%x lid %d epid %d cid %d ",
                          uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.qp_num),
                          ctl_hdr->conn_req.ib_addr.lid,
                          uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.ep_id),
                          ctl_hdr->conn_req.conn_id);
+#else 
+            n = snprintf(p, max, "CREQ[%s : %d]: qp 0x%x lid %d epid %d cid %d ",
+                         ctl_hdr->peer.name, ctl_hdr->peer.pid,
+                         uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.qp_num),
+                         ctl_hdr->conn_req.ib_addr.lid,
+                         uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.ep_id),
+                         ctl_hdr->conn_req.conn_id);
+#endif
             p += n; max -= n;
             break;
         case UCT_UD_PACKET_CREP:
+#if ENABLE_DEBUG_DATA == 0
             n = snprintf(p, max, "CREP: src_ep_id=%d ", ctl_hdr->conn_rep.src_ep_id);
+#else
+            n = snprintf(p, max, "CREP[%s : %d]: src_ep_id=%d ", 
+                         ctl_hdr->peer.name, ctl_hdr->peer.pid,
+                         ctl_hdr->conn_rep.src_ep_id);
+#endif
             p += n; max -= n;
             break;
         default:
@@ -99,8 +114,15 @@ static int uct_ud_dump_ep(char *p, int max, uct_ud_ep_t *ep)
     if (ep == NULL) {
         n = snprintf(p, max, "ep=%p ", ep);
     } else {
+#if ENABLE_DEBUG_DATA == 1
+        n = snprintf(p, max, "ep=%p cid:%d 0x%x->0x%x %s:%d ", 
+                     ep, ep->conn_id, ep->ep_id, ep->dest_ep_id, 
+                     strlen(ep->state.peer.name) ? ep->state.peer.name : "unknown",
+                     ep->state.peer.pid);
+#else
         n = snprintf(p, max, "ep=%p cid:%d 0x%x->0x%x ", 
                      ep, ep->conn_id, ep->ep_id, ep->dest_ep_id);
+#endif
     }
     return n;
 } 

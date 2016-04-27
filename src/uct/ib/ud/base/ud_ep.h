@@ -198,6 +198,17 @@ enum {
                                                     * were picked by async thread and queued */
 };
 
+typedef struct uct_ud_peer_name {
+    char name[16];
+    int  pid;
+} uct_ud_peer_name_t;
+
+enum {
+    UCT_UD_EP_STATE_PRIVATE    = UCS_BIT(0),
+    UCT_UD_EP_STATE_CREQ_RCVD  = UCS_BIT(1),
+    UCT_UD_EP_STATE_CREP_RCVD  = UCS_BIT(2)
+};
+
 struct uct_ud_ep {
     uct_base_ep_t           super;
     uint32_t                ep_id;
@@ -234,6 +245,12 @@ struct uct_ud_ep {
     uint8_t          flags;
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
+#if ENABLE_DEBUG_DATA == 1
+    struct {
+        uct_ud_peer_name_t  peer;
+        uint32_t            flags;
+    } state;
+#endif
 };
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)

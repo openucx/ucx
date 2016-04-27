@@ -21,6 +21,7 @@
 #define UCT_UD_HASH_SIZE        997
 #define UCT_UD_RX_BATCH_MIN     8
 
+#define UCT_UD_INITIAL_PSN      1   /* initial packet serial number */
 /* congestion avoidance settings. See ud_ep.h for details */
 #define UCT_UD_CA_AI_VALUE      1   /* window += AI_VALUE */
 #define UCT_UD_CA_MD_FACTOR     2   /* window = window/factor */
