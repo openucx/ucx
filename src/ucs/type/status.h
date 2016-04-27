@@ -59,13 +59,13 @@ typedef enum {
     UCS_ERR_LAST                   = -100
 } UCS_S_PACKED ucs_status_t ;
 
-#define USC_IS_LINK_ERROR(code) \
-    ((code <= UCS_ERR_FIRST_LINK_FAILURE) && \
-     (code >= UCS_ERR_LAST_LINK_FAILURE)
+#define USC_IS_LINK_ERROR(_code) \
+    (((_code) <= UCS_ERR_FIRST_LINK_FAILURE) && \
+     ((_code) >= UCS_ERR_LAST_LINK_FAILURE)
 
-#define USC_IS_ENDPOINT_ERROR(code) \
-    ((code <= UCS_ERR_FIRST_ENDPOINT_FAILURE) && \
-     (code >= UCS_ERR_LAST_ENDPOINT_FAILURE)
+#define USC_IS_ENDPOINT_ERROR(_code) \
+    (((_code) <= UCS_ERR_FIRST_ENDPOINT_FAILURE) && \
+     ((_code) >= UCS_ERR_LAST_ENDPOINT_FAILURE)
 
 /**
  * A pointer can represent one of these values:
