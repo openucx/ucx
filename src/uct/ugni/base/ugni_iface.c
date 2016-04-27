@@ -49,7 +49,7 @@ void uct_ugni_progress(void *arg)
     ucs_trace_async("Completion received on %p", desc);
 
     if (NULL != desc->comp_cb) {
-        uct_invoke_completion(desc->comp_cb);
+        uct_invoke_completion(desc->comp_cb, UCS_OK);
     }
     --iface->outstanding;
     --desc->ep->outstanding;

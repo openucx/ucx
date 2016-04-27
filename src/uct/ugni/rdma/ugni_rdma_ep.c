@@ -13,10 +13,10 @@
 #include <uct/ugni/base/ugni_device.h>
 
 /* Endpoint operations */
-static inline void uct_ugni_invoke_orig_comp(uct_ugni_rdma_fetch_desc_t *fma)
+static inline void uct_ugni_invoke_orig_comp(uct_ugni_rdma_fetch_desc_t *fma, ucs_status_t status)
 {
     if (ucs_likely(NULL != fma->orig_comp_cb)) {
-        uct_invoke_completion(fma->orig_comp_cb);
+        uct_invoke_completion(fma->orig_comp_cb, status);
     }
 }
 
@@ -223,14 +223,14 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t le
 #define LEN_64 (sizeof(uint64_t)) /* Length fetch and add for 64 bit */
 #define LEN_32 (sizeof(uint32_t)) /* Length fetch and add for 32 bit */
 
-static void uct_ugni_amo_unpack64(uct_completion_t *self)
+static void uct_ugni_amo_unpack64(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
     /* Call the orignal callback and skip padding */
     *(uint64_t *)fma->user_buffer = *(uint64_t *)(fma + 1);
-    uct_ugni_invoke_orig_comp(fma);
+    uct_ugni_invoke_orig_comp(fma, status);
 }
 
 ucs_status_t uct_ugni_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
@@ -301,14 +301,14 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
-static void uct_ugni_amo_unpack32(uct_completion_t *self)
+static void uct_ugni_amo_unpack32(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
     /* Call the orignal callback and skip padding */
     *(uint32_t *)fma->user_buffer = *(uint32_t *)(fma + 1);
-    uct_ugni_invoke_orig_comp(fma);
+    uct_ugni_invoke_orig_comp(fma, status);
 }
 
 ucs_status_t uct_ugni_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
@@ -427,7 +427,7 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
 
 /* Align to the next 4 bytes */
 
-static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
+static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
@@ -436,7 +436,7 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
     fma->super.unpack_cb(fma->user_buffer, (char *)(fma + 1) + fma->padding,
                          fma->super.desc.length - fma->padding - fma->tail);
 
-    uct_ugni_invoke_orig_comp(fma);
+    uct_ugni_invoke_orig_comp(fma, status);
 }
 
 #define UGNI_GET_ALIGN (4)
@@ -556,7 +556,7 @@ static void assemble_composed_unaligned(uct_ugni_rdma_fetch_desc_t *fma_head)
     }
 }
 
-static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
+static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *rdma = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
@@ -569,7 +569,7 @@ static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
     /* Check if messages is completed */
     if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
         assemble_composed_unaligned(head_fma);
-        uct_ugni_invoke_orig_comp(head_fma);
+        uct_ugni_invoke_orig_comp(head_fma, status);
         head_fma->super.not_ready_to_free = 0;
         ucs_mpool_put(head_fma);
     } else {
@@ -578,7 +578,7 @@ static void uct_ugni_unalign_rdma_composed_cb(uct_completion_t *self)
 
 }
 
-static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self)
+static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
@@ -595,7 +595,7 @@ static void uct_ugni_unalign_fma_composed_cb(uct_completion_t *self)
     if (head_fma->network_completed_bytes == head_fma->expected_bytes) {
         assemble_composed_unaligned(head_fma);
         /* Call the orignal callback and skip padding */
-        uct_ugni_invoke_orig_comp(head_fma);
+        uct_ugni_invoke_orig_comp(head_fma, status);
         if(head_fma->head != NULL) {
             head_fma->head->super.not_ready_to_free = 0;
             ucs_mpool_put(head_fma->head);
