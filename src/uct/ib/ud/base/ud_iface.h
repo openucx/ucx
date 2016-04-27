@@ -113,6 +113,7 @@ struct uct_ud_ctl_hdr {
         } conn_rep;
         uint32_t data;
     };
+    uct_ud_peer_name_t peer;
 } UCS_S_PACKED;
 
 

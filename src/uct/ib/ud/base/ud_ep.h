@@ -196,7 +196,16 @@ enum {
 enum {
     UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS = UCS_BIT(0), /* set if there are zcopy completions that
                                                     * were picked by async thread and queued */
+    /* debug flags */
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1),
+    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(2),
+    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(3)
 };
+
+typedef struct uct_ud_peer_name {
+    char name[16];
+    int  pid;
+} uct_ud_peer_name_t;
 
 struct uct_ud_ep {
     uct_base_ep_t           super;
@@ -234,6 +243,9 @@ struct uct_ud_ep {
     uint8_t          flags;
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
+#if ENABLE_DEBUG_DATA
+    uct_ud_peer_name_t  peer;
+#endif
 };
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)

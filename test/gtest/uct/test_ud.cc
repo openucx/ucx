@@ -21,7 +21,7 @@ public:
         return UCS_OK;
     }
 
-    static ucs_status_t drop_crep(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    static ucs_status_t drop_ctl(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     {
         if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
             return UCS_ERR_BUSY;
@@ -270,10 +270,10 @@ UCS_TEST_P(test_ud, ack_req_window) {
 }
 
 /* simulate retransmission of the CREQ packet */
-UCS_TEST_P(test_ud, creq_drop) {
+UCS_TEST_P(test_ud, crep_drop1) {
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
-    ep(m_e1, 0)->rx.rx_hook = drop_crep;
+    ep(m_e1, 0)->rx.rx_hook = drop_ctl;
     short_progress_loop(50);
     /* remove filter. Go to sleep. CREQ will be retransmitted */
     ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
@@ -289,12 +289,31 @@ UCS_TEST_P(test_ud, creq_drop) {
     check_connection();
 }
 
+/* check that creq is not left on tx window if
+ * both sides connect simultaniously. That is
+ * creq is treated like crep if creq was sent
+ */
+UCS_TEST_P(test_ud, crep_drop2) {
+    m_e1->connect_to_iface(0, *m_e2);
+    m_e2->connect_to_iface(0, *m_e1);
+
+    ep(m_e1, 0)->rx.rx_hook = drop_ctl;
+    ep(m_e2, 0)->rx.rx_hook = drop_ctl;
+    short_progress_loop();
+
+    /* expect creq sent and empty window */
+    EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
+    EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
+    EXPECT_EQ(1, ep(m_e2, 0)->tx.acked_psn);
+    EXPECT_EQ(2, ep(m_e2, 0)->tx.psn);
+}
+
 UCS_TEST_P(test_ud, creq_flush) {
     ucs_status_t status;
 
     m_e1->connect_to_iface(0, *m_e2);
     /* setup filter to drop crep */
-    ep(m_e1, 0)->rx.rx_hook = drop_crep;
+    ep(m_e1, 0)->rx.rx_hook = drop_ctl;
     short_progress_loop(50);
     /* do flush while ep is being connected it must return in progress */
     status = uct_iface_flush(m_e1->iface());
@@ -439,6 +458,7 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
 
     EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
+    EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
     EXPECT_EQ(0, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 
     check_connection();
