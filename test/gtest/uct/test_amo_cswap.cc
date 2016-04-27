@@ -13,7 +13,7 @@ public:
     static const uint64_t MISS = 0;
 
     template <typename T>
-    static void cswap_reply_cb(uct_completion_t *self) {
+    static void cswap_reply_cb(uct_completion_t *self, ucs_status_t status) {
         completion *comp = ucs_container_of(self, completion, uct);
         worker* w = comp->w;
         T dataval = comp->result;

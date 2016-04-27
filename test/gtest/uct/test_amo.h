@@ -39,7 +39,7 @@ public:
     static uint64_t rand64();
     static uint64_t hash64(uint64_t value);
 
-    static void atomic_reply_cb(uct_completion_t *self);
+    static void atomic_reply_cb(uct_completion_t *self, ucs_status_t status);
 
     void run_workers(send_func_t send, const mapped_buffer& recvbuf,
                      std::vector<uint64_t> initial_values, bool advance);

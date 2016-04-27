@@ -624,10 +624,10 @@ void uct_ud_iface_dispatch_zcopy_comps_do(uct_ud_iface_t *iface)
     uct_ud_ep_t *ep;
 
     do {
-        skb = ucs_queue_pull_elem_non_empty(&iface->tx.zcopy_comp_q, uct_ud_send_skb_t, queue);   
+        skb = ucs_queue_pull_elem_non_empty(&iface->tx.zcopy_comp_q, uct_ud_send_skb_t, queue);
         ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
         zdesc = uct_ud_zcopy_desc(skb);
-        uct_invoke_completion(zdesc->comp);
+        uct_invoke_completion(zdesc->comp, UCS_OK);
         ep = (uct_ud_ep_t *)zdesc->payload;
         ep->flags &= ~UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS;
         skb->flags = 0;

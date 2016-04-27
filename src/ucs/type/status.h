@@ -11,6 +11,13 @@
 
 /**
  * Status codes
+ *
+ * @note In order to evaluate the necessary steps to recover from a certain
+ * error, all error codes which can be returned by the external API are grouped
+ * by the largest entity permanently effected by the error. Each group ranges
+ * between its UCS_ERR_FIRST_<name> and UCS_ERR_LAST_<name> enum values.
+ * For example, if a link fails it may be suffecient to destroy (and possibly
+ * replace) it, in contrast to an endpoint-level error.
  */
 typedef enum {
     /* Operation completed successfully */
@@ -42,9 +49,23 @@ typedef enum {
     UCS_ERR_TIMED_OUT              = -20,
     UCS_ERR_EXCEEDS_LIMIT          = -21,
     UCS_ERR_UNSUPPORTED            = -22,
+
+    UCS_ERR_FIRST_LINK_FAILURE     = -40,
+    UCS_ERR_LAST_LINK_FAILURE      = -59,
+    UCS_ERR_FIRST_ENDPOINT_FAILURE = -60,
+    UCS_ERR_LAST_ENDPOINT_FAILURE  = -79,
+    UCS_ERR_ENDPOINT_TIMEOUT       = -80,
+
     UCS_ERR_LAST                   = -100
 } UCS_S_PACKED ucs_status_t ;
 
+#define USC_IS_LINK_ERROR(_code) \
+    (((_code) <= UCS_ERR_FIRST_LINK_FAILURE) && \
+     ((_code) >= UCS_ERR_LAST_LINK_FAILURE)
+
+#define USC_IS_ENDPOINT_ERROR(_code) \
+    (((_code) <= UCS_ERR_FIRST_ENDPOINT_FAILURE) && \
+     ((_code) >= UCS_ERR_LAST_ENDPOINT_FAILURE)
 
 /**
  * A pointer can represent one of these values:

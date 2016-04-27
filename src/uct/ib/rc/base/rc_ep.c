@@ -225,7 +225,7 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
     VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
     desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
     if (desc->super.user_comp) {
-        uct_invoke_completion(desc->super.user_comp);
+        uct_invoke_completion(desc->super.user_comp, UCS_OK);
     }
     ucs_mpool_put(desc);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
@@ -243,7 +243,7 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op)
 
 void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
 {
-    uct_invoke_completion(op->user_comp);
+    uct_invoke_completion(op->user_comp, UCS_OK);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
@@ -387,7 +387,7 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
             *dest = *value; \
         } \
         \
-        uct_invoke_completion(desc->super.user_comp); \
+        uct_invoke_completion(desc->super.user_comp, UCS_OK); \
         ucs_mpool_put(desc); \
         UCT_IB_INSTRUMENT_RECORD_SEND_OP(op); \
   }
