@@ -84,6 +84,7 @@ uct_rc_mlx5_ep_inline_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
     struct mlx5_wqe_raddr_seg    *raddr;
     struct mlx5_wqe_inl_data_seg *inl;
     uct_rc_am_short_hdr_t        *am;
+    uct_rc_hdr_t                 *rc_hdr;
     unsigned wqe_size;
     unsigned sig_flag;
 
@@ -102,6 +103,17 @@ uct_rc_mlx5_ep_inline_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
         am->rc_hdr.am_id = am_id;
         am->am_hdr       = am_hdr;
         uct_ib_mlx5_inline_copy(am + 1, buffer, length, &ep->tx.wq);
+        sig_flag         = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
+                                                      MLX5_WQE_CTRL_CQ_UPDATE);
+        break;
+
+    case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW:
+        /* Send empty AM with just AM id (used by FC) */
+        wqe_size         = sizeof(*ctrl) + sizeof(*inl) + sizeof(*rc_hdr);
+        inl              = (void*)(ctrl + 1);
+        inl->byte_count  = htonl(sizeof(*rc_hdr) | MLX5_INLINE_SEG);
+        rc_hdr           = (void*)(inl + 1);
+        rc_hdr->am_id    = am_id;
         sig_flag         = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
                                                       MLX5_WQE_CTRL_CQ_UPDATE);
         break;
@@ -696,31 +708,15 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_rc_ep_t *rc_ep)
 {
-    uct_rc_mlx5_ep_t *ep       = ucs_derived_of(rc_ep, uct_rc_mlx5_ep_t);
-    uct_rc_mlx5_iface_t *iface = ucs_derived_of(rc_ep->super.super.iface,
-                                                uct_rc_mlx5_iface_t);
-    struct mlx5_wqe_ctrl_seg     *ctrl;
-    struct mlx5_wqe_inl_data_seg *inl;
-    uct_rc_hdr_t                 *hdr;
-    unsigned wqe_size;
-    unsigned sig_flag;
+    uct_rc_mlx5_ep_t *ep = ucs_derived_of(rc_ep, uct_rc_mlx5_ep_t);
+    ucs_status_t status;
 
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    ctrl             = ep->tx.wq.curr;
-    wqe_size         = sizeof(*ctrl) + sizeof(*inl) + sizeof(*hdr);
-    UCT_CHECK_LENGTH(wqe_size, UCT_RC_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
-                     "fc_grant");
+    status = uct_rc_mlx5_ep_inline_post(ep, MLX5_OPCODE_SEND|
+                                        UCT_RC_MLX5_OPCODE_FLAG_RAW, NULL, 0,
+                                        UCT_RC_EP_FC_PURE_GRANT, 0, 0, 0);
 
-    inl              = (void*)(ctrl + 1);
-    inl->byte_count  = htonl(sizeof(*hdr) | MLX5_INLINE_SEG);
-    hdr              = (void*)(inl + 1);
-    hdr->am_id       = UCT_RC_EP_FC_PURE_GRANT;
-    sig_flag         = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
-                       MLX5_WQE_CTRL_CQ_UPDATE);
-
-    uct_rc_mlx5_post_send(ep, ctrl, MLX5_OPCODE_SEND, 0, sig_flag, wqe_size);
-    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, 0);
-    return UCS_OK;
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, AM, SHORT, 0);
+    return status;
 }
 
 
