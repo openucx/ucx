@@ -675,6 +675,29 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
     free(perf->ucp.peers);
 }
 
+static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
+                                                  ucs_status_t status)
+{
+    unsigned group_size  = rte_call(perf, group_size);
+    ucs_status_t collective_status = UCS_OK;
+    struct iovec vec;
+    void *req = NULL;
+    unsigned i;
+
+    vec.iov_base = &status;
+    vec.iov_len  = sizeof(status);
+
+    rte_call(perf, post_vec, &vec, 1, &req);
+    rte_call(perf, exchange_vec, req);
+    for (i = 0; i < group_size; ++i) {
+        rte_call(perf, recv_vec, i, &vec, 1, req);
+        if (status != UCS_OK) {
+            collective_status = status;
+        }
+    }
+    return collective_status;
+}
+
 static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
                                                   uint64_t features)
 {
@@ -693,6 +716,9 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
 
     status = ucp_worker_get_address(perf->ucp.worker, &address, &address_length);
     if (status != UCS_OK) {
+        if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("ucp_worker_get_address() failed: %s", ucs_status_string(status));
+        }
         goto err;
     }
 
@@ -705,6 +731,9 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
         status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
                                &rkey_buffer, &rkey_size);
         if (status != UCS_OK) {
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_rkey_pack() failed: %s", ucs_status_string(status));
+            }
             ucp_worker_release_address(perf->ucp.worker, address);
             goto err;
         }
@@ -781,12 +810,16 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
         free(rkey_buffer);
     }
 
-    rte_call(perf, barrier);
-    return UCS_OK;
+    status = ucp_perf_test_exchange_status(perf, UCS_OK);
+    if (status != UCS_OK) {
+        ucp_perf_test_destroy_eps(perf, group_size);
+    }
+    return status;
 
 err_destroy_eps:
     ucp_perf_test_destroy_eps(perf, group_size);
 err:
+    (void)ucp_perf_test_exchange_status(perf, status);
     return status;
 }
 
@@ -1004,6 +1037,7 @@ err:
 static void ucp_perf_cleanup(ucx_perf_context_t *perf)
 {
     ucp_perf_test_cleanup_endpoints(perf);
+    rte_call(perf, barrier);
     ucp_perf_test_free_mem(perf);
     ucp_worker_destroy(perf->ucp.worker);
     ucp_cleanup(perf->ucp.context);
