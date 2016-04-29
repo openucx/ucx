@@ -167,12 +167,13 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     int test_wnd = 4;
     int h_thresh = 1;
     int num_pend = 2;
+    int available = rc_ep(m_e2)->available;
     pending_send_request_t req[num_pend];
 
     req_count = 0;
 
     /* Disable send capabilities of m_e2 */
-    rc_ep(m_e2)->available = 0;
+    rc_iface(m_e2)->tx.cq_available = 0;
 
     set_fc_attributes(m_e1, test_wnd, test_wnd, h_thresh);
 
@@ -190,7 +191,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
      * The second FC grant should not be added to the group! */
 
     /* Now force dispatching of m_e2 pending group */
-    rc_ep(m_e2)->available               = num_pend + 1;
+    rc_iface(m_e2)->tx.cq_available = 2;
 
     /* Make sure this AM message is signalled to force pendings dispatch */
     rc_iface(m_e2)->config.tx_moderation = 0;
@@ -201,7 +202,8 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     short_progress_loop();
 
     /* Check that only num_pend + 1 (for FC grant) messages were sent */
-    EXPECT_EQ(rc_ep(m_e2)->available, 0);
+    EXPECT_EQ(rc_ep(m_e2)->available, available - (num_pend + 1));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_flow_control, rc)
+_UCT_INSTANTIATE_TEST_CASE(test_rc_flow_control, rc_mlx5)

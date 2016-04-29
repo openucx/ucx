@@ -180,14 +180,14 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-void uct_rc_iface_handle_fc(uct_rc_iface_t *iface, struct ibv_wc *wc,
-                            uct_ib_iface_recv_desc_t *desc)
+ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
+                                    uct_rc_hdr_t *hdr, unsigned length,
+                                    void *desc)
 {
     ucs_status_t status;
     int16_t      cur_wnd;
     ucs_arbiter_elem_t* elem;
-    uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, wc->qp_num);
-    uct_rc_hdr_t *hdr = uct_ib_iface_recv_desc_hdr(&iface->super, desc);
+    uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, qp_num);
     uint8_t fc_hdr    = uct_rc_ep_get_fc_hdr(hdr->am_id);
 
     if (fc_hdr & UCT_RC_EP_FC_FLAG_GRANT) {
@@ -208,8 +208,7 @@ void uct_rc_iface_handle_fc(uct_rc_iface_t *iface, struct ibv_wc *wc,
         if  (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
             /* Special FC grant message can't be bundled with any other FC
              * request. Stop processing this AM and do not invoke AM handler */
-            ucs_mpool_put_inline(desc);
-            return;
+            return UCS_OK;
         }
     }
 
@@ -229,8 +228,10 @@ void uct_rc_iface_handle_fc(uct_rc_iface_t *iface, struct ibv_wc *wc,
             ucs_assert_always(status == UCS_OK);
         }
     }
-    uct_ib_iface_invoke_am(&iface->super, (hdr->am_id & ~UCT_RC_EP_FC_MASK),
-                           hdr + 1, wc->byte_len - sizeof(*hdr), desc);
+
+    return uct_iface_invoke_am(&iface->super.super,
+                               (hdr->am_id & ~UCT_RC_EP_FC_MASK),
+                               hdr + 1, length, desc);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,

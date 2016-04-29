@@ -147,6 +147,7 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
     uct_rc_hdr_t *hdr;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
+    unsigned qp_num;
     uint16_t wqe_ctr;
     uint16_t max_batch;
     ucs_status_t status;
@@ -187,8 +188,16 @@ uct_rc_mlx5_iface_poll_rx(uct_rc_mlx5_iface_t *iface)
                        uct_rc_ep_am_packet_dump);
 
     udesc  = (char*)desc + iface->super.super.config.rx_headroom_offset;
-    status = uct_iface_invoke_am(&iface->super.super.super, hdr->am_id, hdr + 1,
-                                 byte_len - sizeof(*hdr), udesc);
+
+    if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
+        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        status = uct_rc_iface_handle_fc(&iface->super, qp_num, hdr,
+                                        byte_len - sizeof(*hdr), udesc);
+    } else {
+        status = uct_iface_invoke_am(&iface->super.super.super, hdr->am_id,
+                                     hdr + 1, byte_len - sizeof(*hdr), udesc);
+    }
+
     if ((status == UCS_OK) && (wqe_ctr == ((iface->rx.ready_idx + 1) & iface->rx.mask))) {
         /* If the descriptor was not used - if there are no "holes", we can just
          * reuse it on the receive queue. Otherwise, ready pointer will stay behind
@@ -468,7 +477,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     },
     .arm_tx_cq                = uct_rc_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_rc_mlx5_iface_arm_rx_cq,
-    }
+    },
+    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl
 };
 
 

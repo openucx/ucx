@@ -118,6 +118,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 {
     uct_ib_iface_recv_desc_t *desc;
+    void         *udesc;
     uct_rc_hdr_t *hdr;
     int i, ret;
     ucs_status_t status;
@@ -144,7 +145,15 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
                                        hdr, uct_rc_ep_am_packet_dump);
 
             if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
-                uct_rc_iface_handle_fc(&iface->super, &wc[i], desc);
+                udesc = (char*)desc + iface->super.super.config.rx_headroom_offset;
+                status = uct_rc_iface_handle_fc(&iface->super, wc[i].qp_num, hdr,
+                                                wc[i].byte_len - sizeof(*hdr),
+                                                udesc);
+                if (status == UCS_OK) {
+                    ucs_mpool_put_inline(desc);
+                } else{
+                    uct_recv_desc_iface(udesc) = &iface->super.super.super.super;
+                }
             } else {
                 uct_ib_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
                                        wc[i].byte_len - sizeof(*hdr), desc);

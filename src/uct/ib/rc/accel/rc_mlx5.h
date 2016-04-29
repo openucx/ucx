@@ -162,6 +162,8 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep);
 
+ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_rc_ep_t *rc_ep);
+
 void uct_rc_mlx5_iface_progress(void *arg);
 
 #endif
