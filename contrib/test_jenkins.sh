@@ -121,6 +121,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     done
 
+    for mm_device in sysv posix; do
+        echo Running ucx_perf kit with shared memory
+        mpirun -np 2 -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $mm_device $opt_perftest_common -x mm
+    done
+
     rm -f ./active_message
 
     echo "Running memory hook on MPI"
