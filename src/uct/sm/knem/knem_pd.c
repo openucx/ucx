@@ -139,7 +139,7 @@ static ucs_status_t uct_knem_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     uct_knem_key_t *key = (uct_knem_key_t *)memh;
     packed->cookie  = (uint64_t)key->cookie;
     packed->address = (uintptr_t)key->address;
-    ucs_trace("packed rkey: cookie %"PRIu64" address %"PRIxPTR,
+    ucs_trace("packed rkey: cookie 0x%"PRIx64" address %"PRIxPTR,
               key->cookie, key->address);
     return UCS_OK;
 }
@@ -160,7 +160,7 @@ static ucs_status_t uct_knem_rkey_unpack(uct_pd_component_t *pdc,
     key->address = packed->address;
     *handle_p = NULL;
     *rkey_p = (uintptr_t)key;
-    ucs_trace("unpacked rkey: key %p cookie %"PRIu64" address %"PRIxPTR,
+    ucs_trace("unpacked rkey: key %p cookie 0x%"PRIx64" address %"PRIxPTR,
               key, key->cookie, key->address);
     return UCS_OK;
 }

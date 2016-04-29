@@ -141,7 +141,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 
 #define uct_mm_trace_data(_remote_addr, _rkey, _fmt, ...) \
-     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
+     ucs_trace_data(_fmt " to 0x%"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
 
 ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
@@ -165,7 +165,7 @@ ssize_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     size_t length;
 
     length = pack_cb((void *)(rkey + remote_addr), arg);
-    uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [size %zu]", length);
+    uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [arg %p size %zu]", arg, length);
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, BCOPY, length);
     return length;
 }
