@@ -729,7 +729,8 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
 
     /* creq or crep must remove creq packet from window */
     ucs_assertv_always(!(uct_ud_ep_is_connected(ep) &&
-                       (sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_CTL)),
+                       (sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_CTL) &&
+                       !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_AM)),
                        "ep(%p): CREQ resend on endpoint which is already connected", ep);
 
     skb = uct_ud_iface_res_skb_get(iface);
