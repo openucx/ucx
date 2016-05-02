@@ -462,3 +462,12 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct i
     *cap  = qp_init_attr.cap;
     return UCS_OK;
 }
+
+
+void uct_rc_am_zcopy_handler(uct_rc_iface_send_op_t *op)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    uct_invoke_completion(desc->super.user_comp, UCS_OK);
+    ucs_mpool_put(desc);
+    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
+}

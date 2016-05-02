@@ -23,15 +23,32 @@
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
 
+#define UCT_RC_CHECK_AM_SHORT(am_id, length, max_inline) \
+     UCT_CHECK_AM_ID(am_id); \
+     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + length, max_inline, "am_short");
+
+
+#define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \
+    UCT_CHECK_AM_ID(_id); \
+    UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, _desc_size, "am_zcopy header"); \
+    UCT_CHECK_LENGTH(_header_length + _length, _seg_size, "am_zcopy payload");
+
 
 #define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
                              return UCS_ERR_NO_RESOURCE);
 
-#define UCT_RC_IFACE_GET_TX_BCOPY_DESC(_iface, _mp, _desc) \
+#define UCT_RC_IFACE_GET_TX_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, _arg, _length) \
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
                              return UCS_ERR_NO_RESOURCE); \
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+    uct_rc_bcopy_desc_fill(_desc, _id, _pack_cb, _arg, _length);
+
+#define UCT_RC_IFACE_GET_TX_ZCOPY_DESC(_iface, _mp, _desc, \
+                                       _id, _header, _header_length, _comp, _send_flags) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc); \
+    uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
+    uct_rc_zcopy_desc_set_header(_desc, _id, _header, _header_length);
+
 
 enum {
     UCT_RC_IFACE_STAT_RX_COMPLETION,
@@ -200,8 +217,45 @@ uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
     return &iface->tx.ops[(iface->tx.next_op++) & iface->config.tx_ops_mask];
 }
 
-#define UCT_RC_CHECK_AM_SHORT(am_id, length, max_inline) \
-     UCT_CHECK_AM_ID(am_id); \
-     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + length, max_inline, "am_short");
+
+static inline void 
+uct_rc_bcopy_desc_fill(uct_rc_iface_send_desc_t *desc, uint8_t id, 
+                       uct_pack_callback_t pack_cb, void *arg, size_t *length)
+{
+    uct_rc_hdr_t *rch;
+
+    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; 
+    rch = (uct_rc_hdr_t *)(desc + 1);
+    rch->am_id = id;
+    *length = pack_cb(rch + 1, arg);
+}
+
+void uct_rc_am_zcopy_handler(uct_rc_iface_send_op_t *op);
+
+static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
+                                                    uct_completion_t *comp,
+                                                    int *send_flags)
+{
+    if (comp == NULL) {
+        desc->super.handler   = (uct_rc_send_handler_t)ucs_mpool_put;
+        *send_flags           = 0;
+    } else {
+        desc->super.handler   = uct_rc_am_zcopy_handler;
+        desc->super.user_comp = comp;
+        *send_flags           = IBV_SEND_SIGNALED;
+    }
+}
+
+static inline void uct_rc_zcopy_desc_set_header(uct_rc_iface_send_desc_t *desc,
+                                                uint8_t id, const void *header,
+                                                unsigned header_length)
+{
+     uct_rc_hdr_t *rch;
+
+    /* Header buffer: active message ID + user header */
+    rch = (uct_rc_hdr_t *)(desc + 1);
+    rch->am_id = id;
+    memcpy(rch + 1, header, header_length);
+}
 
 #endif

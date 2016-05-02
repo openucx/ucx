@@ -171,13 +171,13 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     int test_wnd = 4;
     int h_thresh = 1;
     int num_pend = 2;
-    int available = rc_ep(m_e2)->available;
+    int available = rc_ep(m_e2)->txqp.available;
     pending_send_request_t req[num_pend];
 
     req_count = 0;
 
     /* Disable send capabilities of m_e2 */
-    rc_ep(m_e2)->txqp.available = 0;
+    rc_iface(m_e2)->tx.cq_available = 0;
 
     set_fc_attributes(m_e1, test_wnd, test_wnd, h_thresh);
 

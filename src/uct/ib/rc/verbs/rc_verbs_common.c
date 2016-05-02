@@ -124,3 +124,4 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 {
     txcnt->pi = txcnt->ci = 0;
 }
+

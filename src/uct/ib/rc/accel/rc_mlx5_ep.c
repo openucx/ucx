@@ -107,7 +107,7 @@ uct_rc_mlx5_ep_inline_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
         inl->byte_count  = htonl(sizeof(*rc_hdr) | MLX5_INLINE_SEG);
         rc_hdr           = (void*)(inl + 1);
         rc_hdr->am_id    = am_id;
-        sig_flag         = uct_rc_iface_tx_moderation(&iface->super, &ep->super,
+        sig_flag         = uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                       MLX5_WQE_CTRL_CQ_UPDATE);
         break;
 

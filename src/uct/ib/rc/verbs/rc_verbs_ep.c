@@ -378,23 +378,16 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_CHECK_AM_ID(id);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
-    UCT_RC_IFACE_GET_TX_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc);
 
-    length = uct_rc_verbs_copy_data_to_desc(desc, id, pack_cb, arg);
+    UCT_RC_IFACE_GET_TX_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
+                                   id, pack_cb, arg, &length);
+
     UCT_RC_VERBS_FILL_BCOPY_WR(wr, sge, length, wr.opcode);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
     UCT_RC_UPDATE_FC_WND(&ep->super);
     return length;
-}
-
-static void uct_rc_verbs_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op)
-{
-    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    uct_invoke_completion(desc->super.user_comp, UCS_OK);
-    ucs_mpool_put(desc);
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
@@ -404,48 +397,23 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    struct ibv_mr *mr = memh;
     uct_rc_iface_send_desc_t *desc;
     struct ibv_send_wr wr;
     struct ibv_sge sge[2];
-    uct_rc_hdr_t *rch;
     int send_flags;
 
-    UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(sizeof(*rch) + header_length, iface->config.short_desc_size,
-                     "am_zcopy header");
-    UCT_CHECK_LENGTH(header_length + length, iface->super.super.config.seg_size,
-                     "am_zcopy payload");
+    UCT_RC_CHECK_AM_ZCOPY(id, header_length, length, 
+                          iface->config.short_desc_size,
+                          iface->super.super.config.seg_size);
+
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
-    UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->short_desc_mp, desc);
 
-    if (comp == NULL) {
-        desc->super.handler   = (uct_rc_send_handler_t)ucs_mpool_put;
-        send_flags            = 0;
-    } else {
-        desc->super.handler   = uct_rc_verbs_ep_am_zcopy_handler;
-        desc->super.user_comp = comp;
-        send_flags            = IBV_SEND_SIGNALED;
-    }
+    UCT_RC_IFACE_GET_TX_ZCOPY_DESC(&iface->super, &iface->short_desc_mp, desc,
+                                   id, header, header_length, comp, &send_flags);
 
-    /* Header buffer: active message ID + user header */
-    rch = (void*)(desc + 1);
-    rch->am_id = id;
-    memcpy(rch + 1, header, header_length);
-
-    wr.sg_list    = sge;
-    wr.opcode     = IBV_WR_SEND;
-    sge[0].length = sizeof(*rch) + header_length;
-
-    if (ucs_unlikely(length == 0)) {
-        wr.num_sge    = 1;
-    } else {
-        wr.num_sge    = 2;
-        sge[1].addr   = (uintptr_t)payload;
-        sge[1].length = length;
-        sge[1].lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
-    }
+    uct_rc_verbs_zcopy_sge_fill(sge, header_length, payload, length, memh);
+    UCT_RC_VERBS_FILL_ZCOPY_WR(wr, sge, wr.opcode);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);

@@ -96,6 +96,8 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     ucs_status_t status;
     unsigned num_wcs = iface->super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
+    uct_ib_iface_recv_desc_t *desc;
+
 
     status = uct_ib_poll_cq(iface->super.recv_cq, &num_wcs, wc);
     if (status != UCS_OK) {
@@ -106,13 +108,22 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 
         uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, &wc[i],
                                    hdr, uct_rc_ep_am_packet_dump);
-          if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
-              uct_rc_iface_handle_fc(iface, &wc[i], (uct_ib_iface_recv_desc_t *)wc[i].wr_id);
-          } else {
-              uct_ib_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
-                                     wc[i].byte_len - sizeof(*hdr), 
-                                     (uct_ib_iface_recv_desc_t *)wc[i].wr_id);
-          }
+        desc = (uct_ib_iface_recv_desc_t *)wc[i].wr_id;
+        if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
+            void *udesc;
+            udesc = (char*)desc + iface->super.config.rx_headroom_offset;
+            status = uct_rc_iface_handle_fc(iface, wc[i].qp_num, hdr,
+                                            wc[i].byte_len - sizeof(*hdr),
+                                            udesc);
+            if (status == UCS_OK) {
+                ucs_mpool_put_inline(desc);
+            } else {
+                uct_recv_desc_iface(udesc) = &iface->super.super.super;
+            }
+        } else {
+            uct_ib_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
+                                   wc[i].byte_len - sizeof(*hdr), desc);
+        }
     }
     iface->rx.available += num_wcs;
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
@@ -137,24 +148,12 @@ uct_rc_verbs_iface_common_fill_inl_sge(uct_rc_verbs_iface_common_t *iface,
     iface->inl_sge[1].length    = length;
 }
 
-static inline size_t 
-uct_rc_verbs_copy_data_to_desc(uct_rc_iface_send_desc_t *desc, uint8_t id, 
-                               uct_pack_callback_t pack_cb, void *arg)
-{
-    uct_rc_hdr_t *rch;
-
-    rch = (void*)(desc + 1);
-    rch->am_id = id;
-    return pack_cb(rch + 1, arg);
-}
-
 #define UCT_RC_VERBS_FILL_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
     _wr.sg_list = &_sge; \
     _wr.num_sge = 1; \
     _sge.length = sizeof(uct_rc_hdr_t) + _length; \
     _wr_opcode = IBV_WR_SEND;
 
-#endif
 
 #define UCT_RC_VERBS_FILL_DESC_WR(_wr, _desc) \
     { \
@@ -165,3 +164,20 @@ uct_rc_verbs_copy_data_to_desc(uct_rc_iface_send_desc_t *desc, uint8_t id,
         sge->lkey      = (_desc)->lkey; \
     }
 
+#define UCT_RC_VERBS_FILL_ZCOPY_WR(_wr, _sge, _wr_opcode) \
+    _wr.sg_list = _sge; \
+    _wr_opcode  = IBV_WR_SEND; \
+    _wr.num_sge = 2;
+
+static inline void uct_rc_verbs_zcopy_sge_fill(struct ibv_sge *sge,
+                                               unsigned header_length, const void *payload,
+                                               size_t length, uct_mem_h memh)
+{
+    sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
+
+    sge[1].addr   = (uintptr_t)payload;
+    sge[1].length = length;
+    sge[1].lkey   = (memh == UCT_INVALID_MEM_HANDLE) ? 0 : ((struct ibv_mr *)memh)->lkey;
+}
+
+#endif
