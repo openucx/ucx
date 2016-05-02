@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/tag/eager.h>
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/queue.h>
@@ -32,8 +33,9 @@ typedef struct {
     ucp_rsc_index_t   rsc_index;
     unsigned          addr_index;
     ucp_rsc_index_t   dst_pd_index;
-    double            score;
     uint32_t          usage;
+    double            rma_score;
+    double            amo_score;
 } ucp_wireup_lane_desc_t;
 
 
@@ -725,14 +727,28 @@ ucp_wireup_address_list_remove_pd(ucp_address_entry_t *address_list,
     }
 }
 
-static int ucp_wireup_compare_lane_desc_score(const void *elem1, const void *elem2)
+static int ucp_wireup_compare_score(double score1, double score2)
+{
+    /* sort from highest score to lowest */
+    return (score1 < score2) ? 1 : ((score1 > score2) ? -1 : 0);
+}
+
+static int ucp_wireup_compare_lane_rma_score(const void *elem1, const void *elem2)
 {
     const ucp_wireup_lane_desc_t *desc1 = elem1;
     const ucp_wireup_lane_desc_t *desc2 = elem2;
 
-    /* sort from highest score to lowest */
-    return (desc1->score < desc2->score) ? 1 :
-                    ((desc1->score > desc2->score) ? -1 : 0);
+    return ucp_wireup_compare_score(desc1->rma_score, desc2->rma_score);
+}
+
+static int ucp_wireup_compare_lane_amo_score(const void *elem1, const void *elem2,
+                                             void *arg)
+{
+    const ucp_lane_index_t *lane1  = elem1;
+    const ucp_lane_index_t *lane2  = elem2;
+    const ucp_wireup_lane_desc_t *lanes = arg;
+
+    return ucp_wireup_compare_score(lanes[*lane1].amo_score, lanes[*lane2].amo_score);
 }
 
 static UCS_F_NOINLINE ucs_status_t
@@ -825,8 +841,9 @@ static ucs_status_t ucp_wireup_select_transports(ucp_ep_h ep, unsigned address_c
     ucp_worker_h worker   = ep->worker;
     ucp_context_h context = worker->context;
     ucp_wireup_lane_desc_t lane_descs[UCP_MAX_LANES];
-    ucp_lane_index_t lane, num_lanes;
+    ucp_lane_index_t lane, num_lanes, num_amo_lanes;
     ucp_rsc_index_t rsc_index, dst_pd_index;
+    uct_iface_attr_t *iface_attr;
     ucp_ep_config_key_t key;
     ucs_status_t status;
     unsigned addr_index;
@@ -892,18 +909,20 @@ static ucs_status_t ucp_wireup_select_transports(ucp_ep_h ep, unsigned address_c
         return UCS_ERR_UNREACHABLE;
     }
 
-    /* Sort lanes according to RMA score
-     * TODO do it for AMOs as well
-     */
+    /* Sort lanes according to RMA score */
     for (lane = 0; lane < num_lanes; ++lane) {
-        rsc_index = lane_descs[lane].rsc_index;
-        lane_descs[lane].score =
-                        ucp_wireup_rma_score_func(worker,
-                                                  &worker->iface_attrs[rsc_index],
-                                                  NULL, 0);
+        rsc_index  = lane_descs[lane].rsc_index;
+        iface_attr = &worker->iface_attrs[rsc_index];
+        lane_descs[lane].rma_score = ucp_wireup_rma_score_func(worker, iface_attr,
+                                                               NULL, 0);
+        lane_descs[lane].amo_score = ucp_wireup_amo_score_func(worker, iface_attr,
+                                                               NULL, 0);
     }
     qsort(lane_descs, num_lanes, sizeof(*lane_descs),
-          ucp_wireup_compare_lane_desc_score);
+          ucp_wireup_compare_lane_rma_score);
+
+    num_amo_lanes       = 0;
+    memset(&key.amo_lanes, 0, sizeof(key.amo_lanes));
 
     /* Construct the endpoint configuration key:
      * - arrange lane description in the EP configuration
@@ -941,12 +960,20 @@ static ucs_status_t ucp_wireup_select_transports(ucp_ep_h ep, unsigned address_c
 
         /* RMA, AMO - add to lanes map and remote pd map */
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
-            key.rma_lane_map  |= UCS_BIT(dst_pd_index + lane * UCP_PD_INDEX_BITS);
+            key.rma_lane_map |= UCS_BIT(dst_pd_index + lane * UCP_PD_INDEX_BITS);
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
-            /* TODO different priority map for atomics */
-            key.amo_lane_map  |= UCS_BIT(dst_pd_index + lane * UCP_PD_INDEX_BITS);
+            key.amo_lanes[num_amo_lanes] = lane;
+            ++num_amo_lanes;
         }
+    }
+
+    /* Sort and add AMO lanes */
+    ucs_qsort_r(key.amo_lanes, num_amo_lanes, sizeof(*key.amo_lanes),
+                ucp_wireup_compare_lane_amo_score, lane_descs);
+    for (lane = 0; lane < num_amo_lanes; ++lane) {
+        dst_pd_index      = lane_descs[key.amo_lanes[lane]].dst_pd_index;
+        key.amo_lane_map |= UCS_BIT(dst_pd_index + lane * UCP_PD_INDEX_BITS);
     }
 
     /* Add all reachable remote pd's */
@@ -981,13 +1008,15 @@ static ucs_status_t ucp_wireup_select_transports(ucp_ep_h ep, unsigned address_c
                   " to pd[%d], for%s%s%s%s", ep, lane, rsc_index,
                   UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
                   lane_descs[lane].dst_pd_index,
-                  (key.am_lane        == lane          )        ? " [active message]"       : "",
-                  ucp_lane_map_get_lane(key.rma_lane_map, lane) ? " [remote memory access]" : "",
-                  ucp_lane_map_get_lane(key.amo_lane_map, lane) ? " [atomic operations]"    : "",
-                  (key.wireup_msg_lane == lane         )        ? " [wireup messages]"      : "");
+                  (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM)  ? " [active message]"       : "",
+                  (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) ? " [remote memory access]" : "",
+                  (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) ? " [atomic operations]"    : "",
+                  (key.wireup_msg_lane == lane         )               ? " [wireup messages]"      : "");
     }
-    ucs_debug("ep %p: rma_lane_map 0x%"PRIx64" amo_lane_map 0x%"PRIx64" reachable_pds 0x%x",
-              ep, key.rma_lane_map, key.amo_lane_map, key.reachable_pd_map);
+    ucs_debug("ep %p: am_lane %d wirep_lane %d rma_lane_map 0x%"PRIx64
+              " amo_lane_map 0x%"PRIx64" reachable_pds 0x%x",
+              ep, key.am_lane, key.wireup_msg_lane, key.rma_lane_map,
+              key.amo_lane_map, key.reachable_pd_map);
 
     /* Allocate/reuse configuration index */
     ep->cfg_index = ucp_worker_get_ep_config(worker, &key);

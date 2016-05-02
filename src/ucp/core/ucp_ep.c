@@ -262,7 +262,8 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->amo_lane_map     != key2->amo_lane_map) ||
         (key1->reachable_pd_map != key2->reachable_pd_map) ||
         (key1->am_lane          != key2->am_lane) ||
-        (key1->wireup_msg_lane  != key2->wireup_msg_lane))
+        (key1->wireup_msg_lane  != key2->wireup_msg_lane) ||
+        memcmp(&key1->amo_lanes, &key2->amo_lanes, sizeof(key1->amo_lanes)))
     {
         return 0;
     }
