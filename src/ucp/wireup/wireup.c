@@ -220,6 +220,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     const ucp_address_entry_t *ae;
     ucp_rsc_index_t rsc_index;
     double score, best_score;
+    uint16_t tl_name_csum;
     char tls_info[256];
     char tl_reason[64];
     char *p, *endp;
@@ -234,8 +235,9 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     *endp      = 0;
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        resource   = &context->tl_rscs[rsc_index].tl_rsc;
-        iface      = worker->ifaces[rsc_index];
+        resource     = &context->tl_rscs[rsc_index].tl_rsc;
+        tl_name_csum = context->tl_rscs[rsc_index].tl_name_csum;
+        iface        = worker->ifaces[rsc_index];
 
         /* Get local device score */
         score = score_func(worker, &worker->iface_attrs[rsc_index], tl_reason,
@@ -253,7 +255,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         reachable = 0;
         for (ae = address_list; ae < address_list + address_count; ++ae) {
             /* Must be reachable device address, on same transport */
-            reachable = !strcmp(ae->tl_name, resource->tl_name) &&
+            reachable = (tl_name_csum == ae->tl_name_csum) &&
                         uct_iface_is_reachable(iface, ae->dev_addr) &&
                         ucs_test_all_flags(ae->pd_flags, remote_pd_flags);
             if (reachable) {
@@ -352,7 +354,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                 p += strlen(p);
             }
         }
-        snprintf(p, end - p, "%s(%zu)]", ae->tl_name, ae->tl_addr_len);
+        snprintf(p, end - p, "0x%4x(%zu)]", ae->tl_name_csum, ae->tl_addr_len);
         p += strlen(p);
     }
 

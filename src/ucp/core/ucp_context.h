@@ -106,6 +106,7 @@ typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
 typedef struct ucp_tl_resource_desc {
     uct_tl_resource_desc_t        tl_rsc;   /* UCT resource descriptor */
     ucp_rsc_index_t               pd_index; /* Protection domain index (within the context) */
+    uint16_t                      tl_name_csum; /* Checksum of transport name */
 } ucp_tl_resource_desc_t;
 
 
