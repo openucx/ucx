@@ -134,7 +134,7 @@ out:
 }
 
 static inline void 
-uct_rc_verbs_iface_common_fill_inl_sge(uct_rc_verbs_iface_common_t *iface,
+uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                        uct_rc_am_short_hdr_t *am,
                                        uint8_t id, uint64_t hdr,
                                        const void *buffer, unsigned length)
@@ -148,12 +148,32 @@ uct_rc_verbs_iface_common_fill_inl_sge(uct_rc_verbs_iface_common_t *iface,
     iface->inl_sge[1].length    = length;
 }
 
-#define UCT_RC_VERBS_FILL_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
+#define UCT_RC_VERBS_FILL_INL_PUT_WR(_iface, _raddr, _rkey, _buf, _len) \
+    _iface->inl_rwrite_wr.wr.rdma.remote_addr = _raddr; \
+    _iface->inl_rwrite_wr.wr.rdma.rkey        = _rkey; \
+    _iface->verbs_common.inl_sge[0].addr      = (uintptr_t)_buf; \
+    _iface->verbs_common.inl_sge[0].length    = _len;
+
+
+#define UCT_RC_VERBS_FILL_AM_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
     _wr.sg_list = &_sge; \
     _wr.num_sge = 1; \
     _sge.length = sizeof(uct_rc_hdr_t) + _length; \
     _wr_opcode = IBV_WR_SEND;
 
+#define UCT_RC_VERBS_FILL_AM_ZCOPY_WR(_wr, _sge, _wr_opcode) \
+    _wr.sg_list = _sge; \
+    _wr_opcode  = IBV_WR_SEND; \
+    _wr.num_sge = 2;
+
+#define UCT_RC_VERBS_FILL_RDMA_WR(_wr, _wr_opcode, _opcode, \
+                                  _sge, _length, _raddr, _rkey) \
+    _wr.wr.rdma.remote_addr = _raddr; \
+    _wr.wr.rdma.rkey        = _rkey; \
+    _wr.sg_list             = &_sge; \
+    _wr.num_sge             = 1; \
+    _wr_opcode              = _opcode; \
+    _sge.length             = _length;
 
 #define UCT_RC_VERBS_FILL_DESC_WR(_wr, _desc) \
     { \
@@ -164,14 +184,9 @@ uct_rc_verbs_iface_common_fill_inl_sge(uct_rc_verbs_iface_common_t *iface,
         sge->lkey      = (_desc)->lkey; \
     }
 
-#define UCT_RC_VERBS_FILL_ZCOPY_WR(_wr, _sge, _wr_opcode) \
-    _wr.sg_list = _sge; \
-    _wr_opcode  = IBV_WR_SEND; \
-    _wr.num_sge = 2;
-
-static inline void uct_rc_verbs_zcopy_sge_fill(struct ibv_sge *sge,
-                                               unsigned header_length, const void *payload,
-                                               size_t length, uct_mem_h memh)
+static inline void uct_rc_verbs_am_zcopy_sge_fill(struct ibv_sge *sge,
+                                                  unsigned header_length, const void *payload,
+                                                  size_t length, uct_mem_h memh)
 {
     sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
 
@@ -179,5 +194,15 @@ static inline void uct_rc_verbs_zcopy_sge_fill(struct ibv_sge *sge,
     sge[1].length = length;
     sge[1].lkey   = (memh == UCT_INVALID_MEM_HANDLE) ? 0 : ((struct ibv_mr *)memh)->lkey;
 }
+
+
+static inline void uct_rc_verbs_rdma_zcopy_sge_fill(struct ibv_sge *sge,
+                                                    const void *buffer,
+                                                    size_t length, struct ibv_mr *mr)
+{
+    sge->addr   = (uintptr_t)buffer;
+    sge->lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
+}
+
 
 #endif

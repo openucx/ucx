@@ -38,16 +38,32 @@
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
                              return UCS_ERR_NO_RESOURCE);
 
-#define UCT_RC_IFACE_GET_TX_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, _arg, _length) \
-    UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
-                             return UCS_ERR_NO_RESOURCE); \
+#define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, _arg, _length) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     uct_rc_bcopy_desc_fill(_desc, _id, _pack_cb, _arg, _length);
 
-#define UCT_RC_IFACE_GET_TX_ZCOPY_DESC(_iface, _mp, _desc, \
-                                       _id, _header, _header_length, _comp, _send_flags) \
+#define UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, \
+                                          _id, _header, _header_length, _comp, _send_flags) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc); \
     uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
     uct_rc_zcopy_desc_set_header(_desc, _id, _header, _header_length);
+
+#define UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(_iface, _mp, _desc, _pack_cb, _arg, _length) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+    _length = pack_cb(_desc + 1, _arg); \
+    UCT_SKIP_ZERO_LENGTH(_length, _desc);
+
+#define UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(_iface, _mp, _desc, _unpack_cb, _comp, _arg, _length) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    ucs_assert(_length <= (_iface)->super.config.seg_size); \
+    _desc->super.handler     = (_comp == NULL) ? \
+                                uct_rc_ep_get_bcopy_handler_no_completion : \
+                                uct_rc_ep_get_bcopy_handler; \
+    _desc->super.unpack_arg  = _arg; \
+    _desc->super.user_comp   = _comp; \
+    _desc->super.length      = _length; \
+    _desc->unpack_cb         = _unpack_cb;
 
 
 enum {
