@@ -16,6 +16,7 @@ libucs_la_LIBADD   = \
 	$(top_builddir)/src/ucm/libucm.la
 
 nobase_dist_libucs_la_HEADERS = \
+	algorithm/crc.h \
 	algorithm/qsort_r.h \
 	arch/aarch64/bitops.h \
 	arch/aarch64/cpu.h \
@@ -75,6 +76,7 @@ noinst_HEADERS = \
 	async/async_int.h
 
 libucs_la_SOURCES = \
+	algorithm/crc.c \
 	algorithm/qsort_r.c \
 	arch/ppc64/timebase.c \
 	arch/x86_64/cpu.c \
