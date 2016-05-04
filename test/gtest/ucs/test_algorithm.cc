@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/algorithm/crc.h>
 #include <ucs/algorithm/qsort_r.h>
 }
 #include <vector>
@@ -23,6 +24,8 @@ protected:
         EXPECT_TRUE(MAGIC == arg);
         return compare_func(elem1, elem2);
     }
+
+
 
     static void * MAGIC;
 };
@@ -45,4 +48,11 @@ UCS_TEST_F(test_algorithm, qsort_r) {
         ucs_qsort_r(&vec[0], nmemb, sizeof(int), compare_func_r, MAGIC);
         ASSERT_EQ(vec2, vec);
     }
+}
+
+UCS_TEST_F(test_algorithm, crc16_string) {
+    UCS_TEST_MESSAGE << "crc16 of '123456789' is 0x" << std::hex <<
+                    ucs_crc16_string("123456789") << std::dec;
+    EXPECT_NE(ucs_crc16_string("123456789"),
+              ucs_crc16_string("12345"));
 }
