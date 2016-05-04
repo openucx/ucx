@@ -90,6 +90,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_wakeup.cc \
 	ucp/ucp_test.cc \
 	\
+	ucs/test_algorithm.cc \
 	ucs/test_arbiter.cc \
 	ucs/test_async.cc \
 	ucs/test_callbackq.cc \
