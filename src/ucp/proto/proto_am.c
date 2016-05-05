@@ -25,10 +25,11 @@ static size_t ucp_proto_pack(void *dest, void *arg)
 
 ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
 {
+    ucs_status_t status;
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    ucs_status_t status = ucp_do_am_bcopy_single(self, req->send.proto.am_id,
-                                                 ucp_proto_pack);
+    status = ucp_do_am_bcopy_single(self, req->send.proto.am_id,
+                                    ucp_proto_pack);
     if (status == UCS_OK) {
         ucs_mpool_put(req);
     }

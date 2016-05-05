@@ -195,9 +195,9 @@ static size_t ucp_tag_pack_eager_sync_first_generic(void *dest, void *arg)
 
 static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
 {
+    ucs_status_t status;
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
-    ucs_status_t status;
 
     status = ucp_tag_send_eager_short(ep, req->send.tag, req->send.buffer,
                                       req->send.length);
@@ -205,8 +205,8 @@ static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
         return status;
     }
 
-    ucp_request_complete(req, req->cb.send, UCS_OK);
-    return UCS_OK;
+    ucp_request_complete(req, req->cb.send, status);
+    return status;
 }
 
 static ucs_status_t ucp_tag_eager_contig_bcopy_single(uct_pending_req_t *self)
@@ -277,7 +277,8 @@ static void ucp_tag_eager_contig_zcopy_completion(uct_completion_t *self,
     ucp_tag_eager_contig_zcopy_req_complete(req);
 }
 
-static void ucp_tag_eager_generic_complere(uct_pending_req_t *self)
+static void ucp_tag_eager_generic_complete(uct_pending_req_t *self,
+                                           ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_request_generic_dt_finish(req);
@@ -287,30 +288,30 @@ static void ucp_tag_eager_generic_complere(uct_pending_req_t *self)
 static ucs_status_t ucp_tag_eager_generic_single(uct_pending_req_t *self)
 {
     ucs_status_t status;
-
     status = ucp_do_am_bcopy_single(self, UCP_AM_ID_EAGER_ONLY,
                                     ucp_tag_pack_eager_only_generic);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucp_tag_eager_generic_complere(self);
+    ucp_tag_eager_generic_complete(self, status);
     return UCS_OK;
 }
 
 static ucs_status_t ucp_tag_eager_generic_multi(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_multi(self,
-                                                UCP_AM_ID_EAGER_FIRST,
-                                                UCP_AM_ID_EAGER_MIDDLE,
-                                                UCP_AM_ID_EAGER_LAST,
-                                                sizeof(ucp_eager_first_hdr_t),
-                                                sizeof(ucp_eager_hdr_t),
-                                                ucp_tag_pack_eager_first_generic,
-                                                ucp_tag_pack_eager_middle_generic,
-                                                ucp_tag_pack_eager_last_generic);
+    ucs_status_t status;
+    status = ucp_do_am_bcopy_multi(self,
+                                   UCP_AM_ID_EAGER_FIRST,
+                                   UCP_AM_ID_EAGER_MIDDLE,
+                                   UCP_AM_ID_EAGER_LAST,
+                                   sizeof(ucp_eager_first_hdr_t),
+                                   sizeof(ucp_eager_hdr_t),
+                                   ucp_tag_pack_eager_first_generic,
+                                   ucp_tag_pack_eager_middle_generic,
+                                   ucp_tag_pack_eager_last_generic);
     if (status == UCS_OK) {
-        ucp_tag_eager_generic_complere(self);
+        ucp_tag_eager_generic_complete(self, status);
     }
     return status;
 }
@@ -345,8 +346,9 @@ void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag)
 
 static ucs_status_t ucp_tag_eager_sync_contig_bcopy_single(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY,
-                                                 ucp_tag_pack_eager_sync_only_contig);
+    ucs_status_t status;
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY,
+                                    ucp_tag_pack_eager_sync_only_contig);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
@@ -356,15 +358,16 @@ static ucs_status_t ucp_tag_eager_sync_contig_bcopy_single(uct_pending_req_t *se
 
 static ucs_status_t ucp_tag_eager_sync_contig_bcopy_multi(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_multi(self,
-                                                UCP_AM_ID_EAGER_SYNC_FIRST,
-                                                UCP_AM_ID_EAGER_MIDDLE,
-                                                UCP_AM_ID_EAGER_LAST,
-                                                sizeof(ucp_eager_sync_first_hdr_t),
-                                                sizeof(ucp_eager_hdr_t),
-                                                ucp_tag_pack_eager_sync_first_contig,
-                                                ucp_tag_pack_eager_middle_contig,
-                                                ucp_tag_pack_eager_last_contig);
+    ucs_status_t status;
+    status = ucp_do_am_bcopy_multi(self,
+                                   UCP_AM_ID_EAGER_SYNC_FIRST,
+                                   UCP_AM_ID_EAGER_MIDDLE,
+                                   UCP_AM_ID_EAGER_LAST,
+                                   sizeof(ucp_eager_sync_first_hdr_t),
+                                   sizeof(ucp_eager_hdr_t),
+                                   ucp_tag_pack_eager_sync_first_contig,
+                                   ucp_tag_pack_eager_middle_contig,
+                                   ucp_tag_pack_eager_last_contig);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
@@ -417,7 +420,8 @@ static void ucp_tag_eager_sync_contig_zcopy_completion(uct_completion_t *self,
     ucp_tag_eager_sync_contig_zcopy_req_complete(req);
 }
 
-static inline void ucp_tag_eager_sync_generic_complete(uct_pending_req_t *self)
+static inline void ucp_tag_eager_sync_generic_complete(uct_pending_req_t *self,
+                                                       ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_request_generic_dt_finish(req);
@@ -427,28 +431,28 @@ static inline void ucp_tag_eager_sync_generic_complete(uct_pending_req_t *self)
 static ucs_status_t ucp_tag_eager_sync_generic_single(uct_pending_req_t *self)
 {
     ucs_status_t status;
-
     status = ucp_do_am_bcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY,
                                     ucp_tag_pack_eager_sync_only_generic);
     if (status == UCS_OK) {
-        ucp_tag_eager_sync_generic_complete(self);
+        ucp_tag_eager_sync_generic_complete(self, status);
     }
     return UCS_OK;
 }
 
 static ucs_status_t ucp_tag_eager_sync_generic_multi(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_multi(self,
-                                                UCP_AM_ID_EAGER_SYNC_FIRST,
-                                                UCP_AM_ID_EAGER_MIDDLE,
-                                                UCP_AM_ID_EAGER_LAST,
-                                                sizeof(ucp_eager_sync_first_hdr_t),
-                                                sizeof(ucp_eager_hdr_t),
-                                                ucp_tag_pack_eager_sync_first_generic,
-                                                ucp_tag_pack_eager_middle_generic,
-                                                ucp_tag_pack_eager_last_generic);
+    ucs_status_t status;
+    status = ucp_do_am_bcopy_multi(self,
+                                   UCP_AM_ID_EAGER_SYNC_FIRST,
+                                   UCP_AM_ID_EAGER_MIDDLE,
+                                   UCP_AM_ID_EAGER_LAST,
+                                   sizeof(ucp_eager_sync_first_hdr_t),
+                                   sizeof(ucp_eager_hdr_t),
+                                   ucp_tag_pack_eager_sync_first_generic,
+                                   ucp_tag_pack_eager_middle_generic,
+                                   ucp_tag_pack_eager_last_generic);
     if (status == UCS_OK) {
-        ucp_tag_eager_sync_generic_complete(self);
+        ucp_tag_eager_sync_generic_complete(self, status);
     }
     return status;
 }
