@@ -18,6 +18,30 @@ typedef struct uct_rc_verbs_txcnt {
     uint16_t       ci;      /* consumer (ibv_poll_cq) completion count */
 } uct_rc_verbs_txcnt_t;
 
+/**
+ * RC/DC verbs interface configuration
+ */
+typedef struct uct_rc_verbs_iface_config {
+    uct_rc_iface_config_t  super;
+    size_t                 max_am_hdr;
+    /* TODO flags for exp APIs */
+} uct_rc_verbs_iface_config_t;
+
+extern ucs_config_field_t uct_rc_verbs_iface_config_table[];
+
+typedef struct uct_rc_verbs_iface_common {
+    struct ibv_sge         inl_sge[2];
+    ucs_mpool_t            short_desc_mp;
+
+    /* TODO: make a separate datatype */
+    struct {
+        size_t                 short_desc_size;
+        uct_rc_send_handler_t  atomic32_handler;
+        uct_rc_send_handler_t  atomic64_handler;
+        size_t                 max_inline;
+    } config;
+} uct_rc_verbs_iface_common_t;
+
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
@@ -36,17 +60,16 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
     uct_rc_txqp_available_add(txqp, count);
 }
 
+ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
+                                            uct_rc_iface_t *rc_iface,
+                                            uct_rc_verbs_iface_config_t *config);
 
-typedef struct uct_rc_verbs_iface_common {
-    struct ibv_sge         inl_sge[2];
-} uct_rc_verbs_iface_common_t;
-
-void uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface);
+void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
 ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface);
 
-void uct_rc_verbs_iface_query_common(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr, 
-                                     int max_inline, int short_desc_size);
+void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
+                                     uct_rc_iface_t *rc_iface, uct_iface_attr_t *iface_attr);
 
 unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max);
 

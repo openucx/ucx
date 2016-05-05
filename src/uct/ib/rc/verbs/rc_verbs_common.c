@@ -12,6 +12,18 @@
 #include <uct/ib/rc/base/rc_iface.h>
 
 
+ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
+  {"RC_", "", NULL,
+   ucs_offsetof(uct_rc_verbs_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+
+  {"MAX_AM_HDR", "128",
+   "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
+   "not support zero-copy active messages.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {NULL}
+};
+
 static int
 uct_rc_verbs_is_ext_atomic_supported(struct ibv_exp_device_attr *dev_attr,
                                      size_t atomic_size)
@@ -25,13 +37,13 @@ uct_rc_verbs_is_ext_atomic_supported(struct ibv_exp_device_attr *dev_attr,
 #endif
 }
 
-void uct_rc_verbs_iface_query_common(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr, 
-                                     int max_inline, int short_desc_size)
+void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
+                                     uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     struct ibv_exp_device_attr *dev_attr = &uct_ib_iface_device(&iface->super)->dev_attr;
 
     /* PUT */
-    iface_attr->cap.put.max_short = max_inline;
+    iface_attr->cap.put.max_short = verbs_iface->config.max_inline;
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
 
@@ -40,14 +52,14 @@ void uct_rc_verbs_iface_query_common(uct_rc_iface_t *iface, uct_iface_attr_t *if
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
 
     /* AM */
-    iface_attr->cap.am.max_short  = max_inline - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_short  = verbs_iface->config.max_inline - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size
                                     - sizeof(uct_rc_hdr_t);
 
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size
                                     - sizeof(uct_rc_hdr_t);
     /* TODO: may need to change for dc/rc */
-    iface_attr->cap.am.max_hdr    = short_desc_size - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_hdr    = verbs_iface->config.short_desc_size - sizeof(uct_rc_hdr_t);
 
     /*
      * Atomics.
@@ -115,9 +127,49 @@ ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface)
     return UCS_OK;
 }
 
-void uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *self)
+void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *self)
 {
+    ucs_mpool_cleanup(&self->short_desc_mp, 1);
+}
+
+
+ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *self,
+                                            uct_rc_iface_t *rc_iface,
+                                            uct_rc_verbs_iface_config_t *config)
+{
+    ucs_status_t status;
+    size_t am_hdr_size;
+    struct ibv_exp_device_attr *dev_attr;
+
     memset(self->inl_sge, 0, sizeof(self->inl_sge));
+
+    /* Configuration */
+    am_hdr_size = ucs_max(config->max_am_hdr, sizeof(uct_rc_hdr_t));
+    self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
+    dev_attr = &uct_ib_iface_device(&rc_iface->super)->dev_attr;
+    if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) || IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr)) {
+        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be0;
+        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be0;
+    } else if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr)) {
+        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be1;
+        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be1;
+    }
+
+    /* Create AM headers and Atomic mempool */
+    status = uct_iface_mpool_init(&rc_iface->super.super,
+                                  &self->short_desc_mp,
+                                  sizeof(uct_rc_iface_send_desc_t) +
+                                      self->config.short_desc_size,
+                                  sizeof(uct_rc_iface_send_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->super.super.tx.mp,
+                                  rc_iface->config.tx_qp_len,
+                                  uct_rc_iface_send_desc_init,
+                                  "rc_verbs_short_desc");
+    if (status != UCS_OK) {
+        return status; 
+    }
+    return UCS_OK;
 }
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)

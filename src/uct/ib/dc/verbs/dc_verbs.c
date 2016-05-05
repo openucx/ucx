@@ -45,7 +45,9 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
 
     uct_dc_iface_query(&iface->super, iface_attr);
     ucs_debug("max_inline is %d", iface->super.config.max_inline);
-    uct_rc_verbs_iface_query_common(&iface->super.super, iface_attr, iface->super.config.max_inline, iface->super.config.max_inline);
+    uct_rc_verbs_iface_common_query(&iface->verbs_common, 
+                                    &iface->super.super, iface_attr);
+    /*TODO: remove flags once we have a full functionality */
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_ZCOPY|
                                       UCT_IFACE_FLAG_AM_BCOPY|
                                       UCT_IFACE_FLAG_AM_SHORT|
@@ -309,12 +311,11 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     int dci, send_flags;
 
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, length, 
-                          iface->super.config.max_inline,
+                          iface->verbs_common.config.short_desc_size,
                           iface->super.super.super.config.seg_size);
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super, dci);
-    /* TODO: change to dedicated mpool */
-    UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp, desc, 
+    UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp, desc, 
                                       id, header, header_length, comp, &send_flags);
     uct_rc_verbs_am_zcopy_sge_fill(sge, header_length, payload, length, memh);
     UCT_RC_VERBS_FILL_AM_ZCOPY_WR(wr, sge, wr.exp_opcode);
@@ -475,7 +476,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, config);
 
-    uct_rc_verbs_iface_common_init(&self->verbs_common);
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super, &config->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_dc_verbs_iface_init_wrs(self);
 
     status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super);
@@ -496,7 +501,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     
     uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self);
     ucs_debug("created iface %p", self);
+    return UCS_OK;
 out:
+    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
     return status;
 }
 
@@ -506,6 +513,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_iface_t)
     uct_worker_progress_unregister(self->super.super.super.super.worker,
                                    uct_dc_verbs_iface_progress, self);
     ucs_free(self->dcis_txcnt);
+    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
 
 UCS_CLASS_DEFINE(uct_dc_verbs_iface_t, uct_dc_iface_t);

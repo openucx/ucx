@@ -139,7 +139,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, pd, worker, dev_name, rx_headroom,
-                              rx_priv_len, &config->super);
+                              rx_priv_len, &config->super.super);
 
     /* create DC target */
     status = uct_dc_iface_tgt_create(self);
@@ -173,8 +173,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
 
 ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"IB_", "", NULL,
-        ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+    {"DC_", "", NULL,
+        ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_config_table)},
     {NULL}
 };
 

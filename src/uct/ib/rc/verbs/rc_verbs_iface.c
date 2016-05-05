@@ -16,19 +16,6 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
-
-ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_verbs_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
-
-  {"MAX_AM_HDR", "128",
-   "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
-   "not support zero-copy active messages.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {NULL}
-};
-
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 
 static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
@@ -87,9 +74,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
     uct_rc_iface_query(&iface->super, iface_attr);
-    uct_rc_verbs_iface_query_common(&iface->super, iface_attr, 
-                                    iface->config.max_inline,
-                                    iface->config.short_desc_size);
+    uct_rc_verbs_iface_common_query(&iface->verbs_common, &iface->super, iface_attr);
     return UCS_OK;
 }
 
@@ -99,8 +84,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
 {
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
-    struct ibv_exp_device_attr *dev_attr;
-    size_t am_hdr_size;
     ucs_status_t status;
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
@@ -109,6 +92,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
                               worker, dev_name, rx_headroom, 0, &config->super);
 
     /* Initialize inline work request */
+    /* TODO: move to common macro */
     memset(&self->inl_am_wr, 0, sizeof(self->inl_am_wr));
     self->inl_am_wr.sg_list                 = self->verbs_common.inl_sge;
     self->inl_am_wr.num_sge                 = 2;
@@ -121,18 +105,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     self->inl_rwrite_wr.opcode              = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.send_flags          = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 
-    uct_rc_verbs_iface_common_init(&self->verbs_common);
-
-    /* Configuration */
-    am_hdr_size = ucs_max(config->max_am_hdr, sizeof(uct_rc_hdr_t));
-    self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
-    dev_attr = &uct_ib_iface_device(&self->super.super)->dev_attr;
-    if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) || IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr)) {
-        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be0;
-        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be0;
-    } else if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr)) {
-        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be1;
-        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be1;
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common, 
+                                            &self->super, config);
+    if (status != UCS_OK) {
+        return status;
     }
 
     /* Create a dummy QP in order to find out max_inline */
@@ -141,39 +117,23 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
         goto err;
     }
     ibv_destroy_qp(qp);
-    self->config.max_inline = cap.max_inline_data;
+    self->verbs_common.config.max_inline = cap.max_inline_data;
 
-    /* Create AH headers and Atomic mempool */
-    status = uct_iface_mpool_init(&self->super.super.super,
-                                  &self->short_desc_mp,
-                                  sizeof(uct_rc_iface_send_desc_t) +
-                                      self->config.short_desc_size,
-                                  sizeof(uct_rc_iface_send_desc_t),
-                                  UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.super.tx.mp,
-                                  self->super.config.tx_qp_len,
-                                  uct_rc_iface_send_desc_init,
-                                  "rc_verbs_short_desc");
-    if (status != UCS_OK) {
-        goto err;
-    }
-    
     status = uct_rc_verbs_iface_prepost_recvs_common(&self->super);
     if (status != UCS_OK) {
-        goto err_destroy_short_desc_mp;
+        goto err;
     }
 
     return UCS_OK;
 
-err_destroy_short_desc_mp:
-    ucs_mpool_cleanup(&self->short_desc_mp, 1);
 err:
+    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
     return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    ucs_mpool_cleanup(&self->short_desc_mp, 1);
+    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);

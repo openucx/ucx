@@ -9,12 +9,17 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 
+#include <uct/ib/rc/verbs/rc_verbs_common.h>
+
 typedef uct_ib_qpnum_t uct_dc_iface_addr_t;
 typedef struct uct_dc_ep uct_dc_ep_t;
 
 /* TODO: derive from rc config */
 typedef struct uct_dc_iface_config {
-    uct_rc_iface_config_t    super;
+    /* work around to do multiple inheritance:
+     * dc_verbs needs both dc_iface_config and verbs_common_iface config 
+     */
+    uct_rc_verbs_iface_config_t   super;
     int ndcis;
     int tx_policy;
 } uct_dc_iface_config_t;
