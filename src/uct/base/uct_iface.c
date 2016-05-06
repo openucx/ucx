@@ -188,13 +188,15 @@ void uct_iface_close(uct_iface_h iface)
     iface->ops.iface_close(iface);
 }
 
-static ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface)
+static ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                         uct_completion_t *comp)
 {
     UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
 }
 
-static ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep)
+static ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                      uct_completion_t *comp)
 {
     UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;

@@ -127,16 +127,21 @@ void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
     ucs_list_del(&ep->list);
 }
 
-ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
     ucs_status_t status;
     unsigned count;
     uct_rc_ep_t *ep;
 
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     count = 0;
     ucs_list_for_each(ep, &iface->ep_list, list) {
-        status = uct_ep_flush(&ep->super.super);
+        status = uct_ep_flush(&ep->super.super, 0, NULL);
         if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
             ++count;
         } else if (status != UCS_OK) {

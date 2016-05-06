@@ -628,11 +628,16 @@ ucs_status_t uct_rc_verbs_ep_nop(uct_rc_verbs_ep_t *ep)
 #endif
 }
 
-ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep)
+ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                   uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     if (ep->super.available == iface->super.config.tx_qp_len) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);

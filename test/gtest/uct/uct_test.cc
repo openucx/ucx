@@ -152,7 +152,7 @@ void uct_test::flush() const {
         flushed = true;
         FOR_EACH_ENTITY(iter) {
             (*iter)->progress();
-            ucs_status_t status = uct_iface_flush((*iter)->iface());
+            ucs_status_t status = uct_iface_flush((*iter)->iface(), 0, NULL);
             if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
                 flushed = false;
             } else {
@@ -398,7 +398,7 @@ void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
         uct_worker_progress(m_worker);
-        status = uct_iface_flush(m_iface);
+        status = uct_iface_flush(m_iface, 0, NULL);
     } while (status == UCS_INPROGRESS);
     ASSERT_UCS_OK(status);
 }

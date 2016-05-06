@@ -684,10 +684,15 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
                                  comp);
 }
 
-ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep)
+ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                  uct_completion_t *comp)
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     if (ep->super.available == ep->tx.wq.bb_max) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);

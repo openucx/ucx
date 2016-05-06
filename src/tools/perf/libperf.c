@@ -243,7 +243,7 @@ void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
     ucs_status_t status;
 
     do {
-        status = uct_iface_flush(perf->uct.iface);
+        status = uct_iface_flush(perf->uct.iface, 0, NULL);
         uct_worker_progress(perf->uct.worker);
     } while (status == UCS_INPROGRESS);
 }

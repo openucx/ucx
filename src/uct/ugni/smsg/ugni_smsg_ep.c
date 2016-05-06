@@ -115,7 +115,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_ep_t)
     ucs_status_t status;
 
     do {
-        status = iface->super.super.super.ops.ep_flush(&self->super.super.super);
+        status = iface->super.super.super.ops.ep_flush(&self->super.super.super, 0, NULL);
     } while(UCS_INPROGRESS == status);
 
     progress_remote_cq(iface);

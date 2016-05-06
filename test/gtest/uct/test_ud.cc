@@ -316,7 +316,7 @@ UCS_TEST_P(test_ud, creq_flush) {
     ep(m_e1, 0)->rx.rx_hook = drop_ctl;
     short_progress_loop(50);
     /* do flush while ep is being connected it must return in progress */
-    status = uct_iface_flush(m_e1->iface());
+    status = uct_iface_flush(m_e1->iface(), 0, NULL);
     EXPECT_EQ(UCS_INPROGRESS, status);
 }
 

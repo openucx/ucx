@@ -212,9 +212,14 @@ void uct_cm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
     uct_pending_queue_purge(priv, &iface->notify_q, priv->ep == ep, cb);
 }
 
-ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep)
+ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                             uct_completion_t *comp)
 {
     ucs_status_t status;
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = uct_cm_iface_flush_do(tl_ep->iface);
     if (status == UCS_OK) {

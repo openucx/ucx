@@ -163,7 +163,9 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
-ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface);
+ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp);
+
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
 /**

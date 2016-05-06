@@ -662,12 +662,18 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h)
+ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
+                             uct_completion_t *comp)
 {
     ucs_status_t status;
     uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, 
                                            uct_ud_iface_t);
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     uct_ud_enter(iface);
     status = uct_ud_ep_flush_nolock(iface, ep);
     if (status == UCS_OK) {
@@ -1011,7 +1017,7 @@ void  uct_ud_ep_disconnect(uct_ep_h ep)
     uct_ud_ep_pending_purge(ep, NULL);
 
     /* scedule flush */
-    uct_ud_ep_flush(ep);
+    uct_ud_ep_flush(ep, 0, NULL);
 
     /* TODO: at leat in debug mode keep and check ep state  */
 }

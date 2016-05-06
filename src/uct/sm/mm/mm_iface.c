@@ -61,8 +61,13 @@ void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put(mm_desc);
 }
 
-ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_mm_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp)
 {
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     ucs_memory_cpu_store_fence();
     UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;

@@ -1054,11 +1054,29 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief
+ * @brief Flush outstanding communication operations on an interface.
+ *
+ * @param [in]    iface  Interface to flush communications from.
+ * @param [in]    flags  Flags that control completion semantic (currently
+ *                        unsupported - set to 0).
+ * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
+ *                        Can be NULL, which means that the call will return the
+ *                        current state of the interface and no completion will
+ *                        be generated in case of outstanding communciations.
+ *                        If it is not NULL completion counter is decremented
+ *                        by 1 when the call completes. Completion callback is
+ *                        called when the counter reaches 0.
+ *
+ *
+ * @return UCS_OK         - No outstanding communications left.
+ *         UCS_INPROGRESS - Some communication operations are still in progress.
+ *                           If non-NULL 'comp' is provided, it will be updated
+ *                           upon completion of these operations.
  */
-UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface)
+UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface, unsigned flags,
+                                            uct_completion_t *comp)
 {
-    return iface->ops.iface_flush(iface);
+    return iface->ops.iface_flush(iface, flags, comp);
 }
 
 
@@ -1311,11 +1329,28 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief
+ * @brief Flush outstanding communication operations on an endpoint.
+ *
+ * @param [in]    ep     Endpoint to flush communications from.
+ * @param [in]    flags  Flags that control completion semantic (currently
+ *                        unsupported - set to 0).
+ * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
+ *                        Can be NULL, which means that the call will return the
+ *                        current state of the endpoint and no completion will
+ *                        be generated in case of outstanding communciations.
+ *                        If it is not NULL completion counter is decremented
+ *                        by 1 when the call completes. Completion callback is
+ *                        called when the counter reaches 0.
+ *
+ * @return UCS_OK         - No outstanding communications left.
+ *         UCS_INPROGRESS - Some communication operations are still in progress.
+ *                           If non-NULL 'comp' is provided, it will be updated
+ *                           upon completion of these operations.
  */
-UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep)
+UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
+                                         uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_flush(ep);
+    return ep->iface->ops.ep_flush(ep, flags, comp);
 }
 
 #endif

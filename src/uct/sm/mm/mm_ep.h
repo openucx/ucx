@@ -74,7 +74,8 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
 
-ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep);
+ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                             uct_completion_t *comp);
 
 ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
 
