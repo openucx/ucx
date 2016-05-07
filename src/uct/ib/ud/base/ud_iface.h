@@ -31,18 +31,22 @@ typedef struct uct_ud_iface_config {
 
 struct uct_ud_iface_peer {
     uct_ud_iface_peer_t   *next;
-    uct_sockaddr_ib_t      dest_iface;
+    union ibv_gid          dgid;
+    uint16_t               dlid;
+    uint32_t               dst_qpn;
     uint32_t               conn_id_last;
     ucs_list_link_t        ep_list; /* ep list ordered by connection id */
 };
 
 static inline int uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b) {
-    return a->dest_iface.qp_num - b->dest_iface.qp_num ||  
-           a->dest_iface.lid - b->dest_iface.lid;
+    return (int)a->dst_qpn - (int)b->dst_qpn ||
+           memcmp(a->dgid.raw, b->dgid.raw, sizeof(union ibv_gid)) ||
+           (int)a->dlid - (int)b->dlid;
 }
 
 static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a) {
-    return a->dest_iface.lid % UCT_UD_HASH_SIZE; 
+    return (a->dlid + a->dgid.global.interface_id + a->dgid.global.subnet_prefix)
+                    % UCT_UD_HASH_SIZE;
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
@@ -58,10 +62,6 @@ typedef struct uct_ud_iface_ops {
                                         int solicited);
 } uct_ud_iface_ops_t;
 
-
-struct uct_ud_iface_addr {
-    uct_ib_uint24_t qp_num;
-};
 
 struct uct_ud_iface {
     uct_ib_iface_t           super;
@@ -100,20 +100,20 @@ UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_pd_h, uct_worker_h,
                   const char *, unsigned, unsigned, uct_ud_iface_config_t*)
 
 struct uct_ud_ctl_hdr {
-    uint8_t type;
-    uint8_t reserved[3];
+    uint8_t                    type;
+    uint8_t                    reserved[3];
     union {
         struct {
-            uct_ib_address_t   ib_addr;
             uct_ud_ep_addr_t   ep_addr;
             uint32_t           conn_id;
         } conn_req;
         struct {
-            uint32_t src_ep_id;
+            uint32_t           src_ep_id;
         } conn_rep;
-        uint32_t data;
+        uint32_t               data;
     };
-    uct_ud_peer_name_t peer;
+    uct_ud_peer_name_t         peer;
+    /* For CREQ packet, IB address follows */
 } UCS_S_PACKED;
 
 
@@ -155,6 +155,11 @@ uct_ud_iface_res_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
     }
 }
 
+static inline uct_ib_address_t* uct_ud_creq_ib_addr(uct_ud_ctl_hdr_t *conn_req)
+{
+    ucs_assert(conn_req->type == UCT_UD_PACKET_CREQ);
+    return (uct_ib_address_t*)(conn_req + 1);
+}
 
 static UCS_F_ALWAYS_INLINE void uct_ud_enter(uct_ud_iface_t *iface)
 {

@@ -140,19 +140,14 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
          return UCS_ERR_IO_ERROR;
     }
 
-    ucs_assert((ib_addr->lid & ep->path_bits) == 0);
     qp_attr.qp_state              = IBV_QPS_RTR;
-    qp_attr.ah_attr.dlid          = ib_addr->lid | ep->path_bits;
-    qp_attr.ah_attr.sl            = iface->super.sl;
-    qp_attr.ah_attr.src_path_bits = ep->path_bits;
-    qp_attr.ah_attr.static_rate   = 0;
-    qp_attr.ah_attr.is_global     = 0; /* TODO RoCE */
-    qp_attr.ah_attr.port_num      = iface->super.port_num;
     qp_attr.dest_qp_num           = uct_ib_unpack_uint24(rc_addr->qp_num);
     qp_attr.rq_psn                = 0;
     qp_attr.path_mtu              = iface->config.path_mtu;
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
+    uct_ib_iface_fill_ah_attr(&iface->super, ib_addr, ep->path_bits,
+                              &qp_attr.ah_attr);
     ret = ibv_modify_qp(ep->qp, &qp_attr,
                         IBV_QP_STATE              |
                         IBV_QP_AV                 |

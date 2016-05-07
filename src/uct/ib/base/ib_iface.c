@@ -148,30 +148,12 @@ void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
-ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
-{
-    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    uct_sockaddr_ib_t *ib_addr = (uct_sockaddr_ib_t*)addr;
-
-    /* TODO LMC */
-    ib_addr->sib_family    = UCT_AF_INFINIBAND;
-    ib_addr->lid           = uct_ib_iface_port_attr(iface)->lid;
-    ib_addr->id            = 0;
-    ib_addr->guid          = iface->gid.global.interface_id;
-    ib_addr->subnet_prefix = iface->gid.global.subnet_prefix;
-    ib_addr->qp_num        = 0;
-    return UCS_OK;
-}
-
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    uct_ib_address_t *ib_addr = (void*)dev_addr;
-
-    ib_addr->lid    = uct_ib_iface_port_attr(iface)->lid;
-    ib_addr->dev_id = uct_ib_iface_device(iface)->dev_attr.vendor_part_id;
-    ib_addr->gid    = iface->gid;
+    uct_ib_address_pack(uct_ib_iface_device(iface), iface->port_num,
+                        iface->addr_scope, &iface->gid, (void*)dev_addr);
     return UCS_OK;
 }
 
@@ -179,8 +161,62 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *add
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     const uct_ib_address_t *ib_addr = (const void*)addr;
-    return (ib_addr->gid.global.subnet_prefix == iface->gid.global.subnet_prefix) &&
+    union ibv_gid gid;
+    uint8_t is_global;
+    uint16_t lid;
+
+    uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
+    return (gid.global.subnet_prefix == iface->gid.global.subnet_prefix) &&
            (ib_addr->dev_id == uct_ib_iface_device(iface)->dev_attr.vendor_part_id);
+}
+
+void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
+                               uint8_t src_path_bits, struct ibv_ah_attr *ah_attr)
+{
+    memset(ah_attr, 0, sizeof(*ah_attr));
+
+    uct_ib_address_unpack(ib_addr, &ah_attr->dlid, &ah_attr->is_global,
+                          &ah_attr->grh.dgid);
+    ah_attr->sl            = iface->sl;
+    ah_attr->src_path_bits = src_path_bits;
+    ah_attr->port_num      = iface->port_num;
+}
+
+ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
+                                    const uct_ib_address_t *ib_addr,
+                                    uint8_t src_path_bits,
+                                    struct ibv_ah **ah_p)
+{
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+    char buf[128];
+    char *p, *endp;
+
+    uct_ib_iface_fill_ah_attr(iface, ib_addr, src_path_bits, &ah_attr);
+    ah = ibv_create_ah(uct_ib_iface_pd(iface)->pd, &ah_attr);
+
+    if (ah == NULL) {
+        p    = buf;
+        endp = buf + sizeof(buf);
+        snprintf(p, endp - p, "dlid=%d sl=%d port=%d path_bits=%d",
+                 ah_attr.dlid, ah_attr.sl, ah_attr.port_num, ah_attr.src_path_bits);
+        p += strlen(p);
+
+        if (ah_attr.is_global) {
+            snprintf(p, endp - p, "dgid=");
+            p += strlen(p);
+            inet_ntop(AF_INET6, &ah_attr.grh.dgid, p, endp - p);
+            p += strlen(p);
+            snprintf(p, endp - p, " sgid_index=%d", ah_attr.grh.sgid_index);
+        }
+
+        ucs_error("ibv_create_ah(%s) on %s:%d failed: %m", buf,
+                  uct_ib_device_name(uct_ib_iface_device(iface)), iface->port_num);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    *ah_p = ah;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -404,6 +440,18 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
         goto err_destroy_recv_cq;
     }
 
+    /* Address score and size */
+    if (self->gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) {
+        self->addr_scope = UCT_IB_ADDRESS_SCOPE_LINK_LOCAL;
+    } else if ((self->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                    UCT_IB_SITE_LOCAL_PREFIX)
+    {
+        self->addr_scope = UCT_IB_ADDRESS_SCOPE_SITE_LOCAL;
+    } else {
+        self->addr_scope = UCT_IB_ADDRESS_SCOPE_GLOBAL;
+    }
+    self->addr_size = uct_ib_address_size(self->addr_scope);
+
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
@@ -472,19 +520,6 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     return count;
 }
 
-struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid)
-{
-    uct_ib_pd_t *ib_pd = ucs_derived_of(iface->super.pd, uct_ib_pd_t);
-    struct ibv_ah_attr ah_attr;
-
-    memset(&ah_attr, 0, sizeof(ah_attr));
-    ah_attr.port_num  = iface->port_num;
-    ah_attr.sl        = iface->sl;
-    ah_attr.is_global = 0;
-    ah_attr.dlid      = dlid;
-    return ibv_create_ah(ib_pd->pd, &ah_attr);
-}
-
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {
@@ -518,7 +553,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     memset(iface_attr, 0, sizeof(*iface_attr));
 
-    iface_attr->device_addr_len = sizeof(uct_ib_address_t);
+    iface_attr->device_addr_len = iface->addr_size;
 
     switch (active_speed) {
     case 1: /* SDR */
