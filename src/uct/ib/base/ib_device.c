@@ -340,6 +340,118 @@ uint8_t uct_ib_to_fabric_time(double time)
     }
 }
 
+size_t uct_ib_address_size(uct_ib_address_scope_t scope)
+{
+    switch (scope) {
+    case UCT_IB_ADDRESS_SCOPE_LINK_LOCAL:
+        return sizeof(uct_ib_address_t) +
+               sizeof(uint16_t); /* lid */
+    case UCT_IB_ADDRESS_SCOPE_SITE_LOCAL:
+        return sizeof(uct_ib_address_t) +
+               sizeof(uint16_t) + /* lid */
+               sizeof(uint64_t) + /* if_id */
+               sizeof(uint16_t);  /* subnet16 */
+    case UCT_IB_ADDRESS_SCOPE_GLOBAL:
+        return sizeof(uct_ib_address_t) +
+               sizeof(uint16_t) + /* lid */
+               sizeof(uint64_t) + /* if_id */
+               sizeof(uint64_t);  /* subney64 */
+    default:
+        ucs_fatal("Invalid IB address scope: %d", scope);
+    }
+}
+
+void uct_ib_address_pack(uct_ib_device_t *dev, uint8_t port_num,
+                         uct_ib_address_scope_t scope, const union ibv_gid *gid,
+                         uct_ib_address_t *ib_addr)
+{
+    void *ptr = ib_addr + 1;
+
+    ib_addr->flags  = 0;
+    ib_addr->dev_id = dev->dev_attr.vendor_part_id;
+
+    /* LID */
+    /* TODO check IB link layer of the port */
+    ib_addr->flags |= UCT_IB_ADDRESS_FLAG_LID;
+    *(uint16_t*)ptr = uct_ib_device_port_attr(dev, port_num)->lid;
+    ptr += sizeof(uint16_t);
+
+    if (scope >= UCT_IB_ADDRESS_SCOPE_SITE_LOCAL) {
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
+        *(uint64_t*)ptr = gid->global.interface_id;
+        ptr += sizeof(uint64_t);
+
+        if (scope >= UCT_IB_ADDRESS_SCOPE_GLOBAL) {
+            /* Global */
+            ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
+            *(uint64_t*)ptr = gid->global.subnet_prefix;
+        } else {
+            /* Site-local */
+            ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
+            *(uint16_t*)ptr = gid->global.subnet_prefix >> 48;
+        }
+    }
+}
+
+void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
+                           uint8_t *is_global, union ibv_gid *gid)
+{
+    const void *ptr = ib_addr + 1;
+
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
+        *lid = *(uint16_t*)ptr;
+        ptr += sizeof(uint16_t);
+    } else {
+        *lid = 0;
+    }
+
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
+        gid->global.interface_id = *(uint64_t*)ptr;
+        ptr += sizeof(uint64_t);
+    } else {
+        gid->global.interface_id = 0;
+    }
+
+    gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
+    *is_global                = 0;
+
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
+        gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
+                                    ((uint64_t)*(uint16_t*)ptr << 48);
+        *is_global                = 1;
+    }
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
+        gid->global.subnet_prefix = *(uint64_t*)ptr;
+        *is_global                = 1;
+    }
+}
+
+const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
+                               size_t max)
+{
+    union ibv_gid gid;
+    uint8_t is_global;
+    uint16_t lid;
+    char *p, *endp;
+
+    uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
+
+    if (is_global) {
+        p    = buf;
+        endp = buf + max;
+        if (lid != 0) {
+            snprintf(p, endp - p, "lid %d ", lid);
+            p += strlen(p);
+        }
+        inet_ntop(AF_INET6, &gid, p, endp - p);
+    } else {
+        snprintf(buf, max, "lid %d", lid);
+    }
+
+    return buf;
+}
+
+
 ucs_status_t uct_ib_device_query_tl_resources(uct_ib_device_t *dev,
                                               const char *tl_name, unsigned flags,
                                               uct_tl_resource_desc_t **resources_p,

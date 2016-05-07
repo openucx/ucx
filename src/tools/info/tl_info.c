@@ -132,6 +132,14 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
         }
         printf("#           connection:%s\n", buf);
 
+        printf("#       device address: %zu bytes\n", iface_attr.device_addr_len);
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+            printf("#        iface address: %zu bytes\n", iface_attr.iface_addr_len);
+        }
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+            printf("#           ep address: %zu bytes\n", iface_attr.ep_addr_len);
+        }
+
         buf[0] = '\0';
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |

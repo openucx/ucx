@@ -130,8 +130,6 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_pd_ops_t);
         PRINT_SIZE(uct_tl_resource_desc_t);
         PRINT_SIZE(uct_rkey_bundle_t);
-        PRINT_SIZE(uct_sockaddr_ib_t);
-        PRINT_SIZE(uct_sockaddr_ib_subnet_t);
         PRINT_SIZE(uct_sockaddr_ugni_t);
 
 #if HAVE_IB
