@@ -320,7 +320,7 @@ static ucs_status_t uct_mm_iface_create_signal_fd(uct_mm_iface_t *iface)
 {
     ucs_status_t status;
     socklen_t addrlen;
-    sa_family_t bind_addr;
+    struct sockaddr_un bind_addr;
     int ret;
 
     /* Create a UNIX domain socket to send and receive wakeup signal from remote processes */
@@ -338,7 +338,8 @@ static ucs_status_t uct_mm_iface_create_signal_fd(uct_mm_iface_t *iface)
     }
 
     /* Bind the signal socket to automatic address */
-    bind_addr = AF_UNIX;
+    bind_addr.sun_family = AF_UNIX;
+    memset(bind_addr.sun_path, 0, sizeof(bind_addr.sun_path));
     ret = bind(iface->signal_fd, (struct sockaddr*)&bind_addr, sizeof(sa_family_t));
     if (ret < 0) {
         ucs_error("Failed to auto-bind unix domain socket: %m");
