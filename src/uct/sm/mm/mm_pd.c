@@ -72,7 +72,7 @@ ucs_status_t uct_mm_mem_reg(uct_pd_h pd, void *address, size_t length,
     ucs_status_t status;
     uct_mm_seg_t *seg;
 
-    seg = ucs_malloc(sizeof(*seg), "mm_seg");
+    seg = ucs_calloc(1, sizeof(*seg), "mm_seg");
     if (NULL == seg) {
         ucs_error("Failed to allocate memory for mm segment");
         return UCS_ERR_NO_MEMORY;
