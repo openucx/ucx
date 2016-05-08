@@ -51,6 +51,11 @@ ucs_status_t uct_query_pd_resources(uct_pd_resource_desc_t **resources_p,
             continue;
         }
 
+        if (num_pd_resources == 0) {
+            ucs_free(pd_resources);
+            continue;
+        }
+
         tmp = ucs_realloc(resources,
                           sizeof(*resources) * (num_resources + num_pd_resources),
                           "pd_resources");
@@ -136,6 +141,11 @@ ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
         if (status != UCS_OK) {
             ucs_debug("Failed to query %s resources: %s", tlc->name,
                       ucs_status_string(status));
+            continue;
+        }
+
+        if (num_tl_resources == 0) {
+            ucs_free(tl_resources);
             continue;
         }
 
