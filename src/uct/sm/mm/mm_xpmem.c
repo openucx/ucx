@@ -12,16 +12,16 @@
 #include <ucs/debug/log.h>
 #include "xpmem.h"
 
+
 static ucs_status_t uct_xpmem_query()
 {
-    int ver;
+    int version;
 
-    ver = xpmem_version();
-    if (ver < 0) {
-        ucs_debug("Failed to query XPMEM version %d, %m", ver);
+    version = xpmem_version();
+    if (version < 0) {
+        ucs_debug("Failed to query XPMEM version %d, %m", version);
         return UCS_ERR_UNSUPPORTED;
     }
-
     return UCS_OK;
 }
 
@@ -30,45 +30,40 @@ static size_t uct_xpmem_get_path_size(uct_pd_h pd)
     return 0;
 }
 
-static ucs_status_t uct_xmpem_reg(void *address, size_t size, 
-                                  uct_mm_id_t *mmid_p)
+static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_p)
 {
-    xpmem_segid_t segid; /* 64bit ID */
-    const size_t page_size = ucs_get_page_size();
-    void*  addr_aligned   = (void *)ucs_align_down((uintptr_t)address, page_size);
-    off_t  diff = (uintptr_t)address - (uintptr_t)addr_aligned;
-    size_t length_aligned = ucs_align_up(diff + size, page_size);
+    xpmem_segid_t segid;
+    void *start, *end;
 
-    ucs_assert_always(address >= addr_aligned);
+    start = ucs_align_down_pow2_ptr(address, ucs_get_page_size());
+    end   = ucs_align_up_pow2_ptr(address + size, ucs_get_page_size());
+    ucs_assert_always(start <= end);
 
-    segid = xpmem_make(addr_aligned, length_aligned, XPMEM_PERMIT_MODE, (void *)0666);
+    segid = xpmem_make(start, end - start, XPMEM_PERMIT_MODE, (void*)0666);
+    VALGRIND_MAKE_MEM_DEFINED(&segid, sizeof(segid));
     if (segid < 0) {
-        ucs_error("Failed to register memory with xpmem (addr: %p, len: %zu): %m",
-                  address, size);
+        ucs_error("Failed to register %p..%p with xpmem: %m",
+                  start, end);
         return UCS_ERR_IO_ERROR;
     }
 
+    ucs_trace("xpmem registered %p..%p segment 0x%llx", start, end, segid);
     *mmid_p = segid;
-
-    ucs_debug("Calling reg for address %p cookie %lu", address, *mmid_p);
     return UCS_OK;
 }
 
 static ucs_status_t uct_xpmem_dereg(uct_mm_id_t mmid)
 {
-    int rc;
-    xpmem_segid_t segid = (xpmem_segid_t)mmid;
+    int ret;
 
-    ucs_debug("Calling dereg for cookie %lu", mmid);
-
-    ucs_assert_always(segid > 0);
-    rc = xpmem_remove(segid);
-    if (rc < 0) {
-        /* No error since there a chance that it already
-         * was released or deregistered */
-        ucs_debug("Failed to de-register memory: %m");
+    ret = xpmem_remove(mmid);
+    if (ret < 0) {
+        /* No error since there a chance that it already was released
+         * or deregistered */
+        ucs_debug("Failed to remove xpmem segment 0x%"PRIx64": %m", mmid);
     }
 
+    ucs_trace("xpmem removed segment 0x%"PRIx64, mmid);
     return UCS_OK;
 }
 
@@ -76,106 +71,128 @@ static ucs_status_t uct_xpmem_attach(uct_mm_id_t mmid, size_t length,
                                      void *remote_address, void **local_address,
                                      uint64_t *cookie, const char *path)
 {
-    xpmem_segid_t segid = (xpmem_segid_t)mmid;
-    xpmem_apid_t apid;
     struct xpmem_addr addr;
     ucs_status_t status;
-    const size_t page_size = ucs_get_page_size();
-    void*  addr_aligned  = (void *)ucs_align_down((uintptr_t)remote_address, page_size);
-    off_t  diff = (uintptr_t)remote_address - (uintptr_t)addr_aligned;
+    ptrdiff_t offset;
+    void *address;
 
-    ucs_debug("Calling attach for address %p", remote_address);
-
-    apid = xpmem_get(segid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
-    if (apid < 0) {
-        ucs_error("Failed to xpmem_get: %m");
+    addr.offset = 0;
+    addr.apid   = xpmem_get(mmid, XPMEM_RDWR, XPMEM_PERMIT_MODE, NULL);
+    VALGRIND_MAKE_MEM_DEFINED(&addr.apid, sizeof(addr.apid));
+    if (addr.apid < 0) {
+        ucs_error("Failed to acquire xpmem segment 0x%"PRIx64": %m", mmid);
         status = UCS_ERR_IO_ERROR;
         goto err_xget;
     }
 
-    addr.apid = apid;
-    addr.offset = diff;
+    ucs_trace("xpmem acquired segment 0x%"PRIx64" apid 0x%llx remote_address %p",
+              mmid, addr.apid, remote_address);
 
-    *local_address = xpmem_attach(addr, length, NULL);
-    if (*local_address < 0) {
-        ucs_error("Failed to xpmem_attach: %m");
+    offset  = ((uintptr_t)remote_address) % ucs_get_page_size();
+    address = xpmem_attach(addr, length + offset, NULL);
+    VALGRIND_MAKE_MEM_DEFINED(&address, sizeof(address));
+    if (address == MAP_FAILED) {
+        ucs_error("Failed to attach xpmem segment 0x%"PRIx64" apid 0x%llx "
+                  "with length %zu: %m", mmid, addr.apid, length);
         status = UCS_ERR_IO_ERROR;
         goto err_xattach;
     }
-    *cookie = apid;
 
+    VALGRIND_MAKE_MEM_DEFINED(address + offset, length);
+
+    *local_address = address + offset;
+    *cookie        = addr.apid;
+
+    ucs_trace("xpmem attached segment 0x%"PRIx64" apid 0x%llx %p..%p at %p (+%zd)",
+              mmid, addr.apid, remote_address, remote_address + length, address, offset);
     return UCS_OK;
 
 err_xattach:
-    xpmem_release(apid);
+    xpmem_release(addr.apid);
 err_xget:
     return status;
 }
 
 static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
 {
-    int rc;
+    xpmem_apid_t apid = mm_desc->cookie;
+    void *address;
+    int ret;
 
-    ucs_debug("Calling detach with address %p cookie %lu",
-              mm_desc->address, mm_desc->cookie);
+    address = ucs_align_down_pow2_ptr(mm_desc->address, ucs_get_page_size());
 
-    rc = xpmem_detach(mm_desc->address);
-    if (rc < 0) {
+    ucs_trace("xpmem detaching address %p", address);
+    ret = xpmem_detach(address);
+    if (ret < 0) {
         ucs_error("Failed to xpmem_detach: %m");
         return UCS_ERR_IO_ERROR;
     }
 
-    rc = xpmem_release((xpmem_apid_t) mm_desc->cookie);
-    if (rc < 0) {
-        ucs_error("Failed to xpmem_release: %m");
+    VALGRIND_MAKE_MEM_UNDEFINED(mm_desc->address, mm_desc->length);
+
+    ucs_trace("xpmem releasing segment apid 0x%llx", apid);
+    ret = xpmem_release(apid);
+    if (ret < 0) {
+        ucs_error("Failed to release xpmem segment apid 0x%llx", apid);
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t
-                                    hugetlb, void **address_p,
+static ucs_status_t uct_xpmem_alloc(uct_pd_h pd, size_t *length_p,
+                                    ucs_ternary_value_t hugetlb, void **address_p,
                                     uct_mm_id_t *mmid_p, const char **path_p
                                     UCS_MEMTRACK_ARG)
 {
-    ucs_status_t status = UCS_ERR_NO_MEMORY;
-    const size_t page_size = ucs_get_page_size();
-    const size_t length_aligned = ucs_align_up(*length_p, page_size);
+    size_t length_aligned;
+    ucs_status_t status;
+    void *address;
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
         status = UCS_ERR_INVALID_PARAM;
-        goto err;
+        goto out;
     }
 
     /* TBD: any ideas for better allocation */
-    *address_p = ucs_memalign(page_size, length_aligned, "XPMEM memory");
-    if (NULL == *address_p) {
-        ucs_error("Failed to allocate %zu bytes of memory", *length_p);
-        goto err;
+    length_aligned = ucs_align_up(*length_p, ucs_get_page_size());
+    address        = ucs_memalign(ucs_get_page_size(), length_aligned,
+                                  UCS_MEMTRACK_VAL_ALWAYS);
+    if (NULL == address) {
+        ucs_error("Failed to allocate %zu bytes of memory", length_aligned);
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
-    ucs_debug("Calling alloc with address %p", *address_p);
-    status = uct_xmpem_reg(*address_p, length_aligned, mmid_p);
+    ucs_trace("xpmem allocated address %p length %zu", address, length_aligned);
+
+    status = uct_xmpem_reg(address, length_aligned, mmid_p);
     if (UCS_OK != status) {
         ucs_free(*address_p);
+        goto out;
     }
-err:
+
+    VALGRIND_MAKE_MEM_DEFINED(address, length_aligned);
+
+    *address_p = address;
+    status     = UCS_OK;
+
+out:
     return status;
 }
 
-static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mm_id, size_t length,
+static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mmid, size_t length,
                                    const char *path)
 {
-    ucs_status_t status = uct_xpmem_dereg(mm_id);
+    ucs_status_t status;
 
+    status = uct_xpmem_dereg(mmid);
     if (UCS_OK != status) {
         return status;
     }
 
     ucs_free(address);
-    ucs_debug("Calling free with address %p, cookie %lu", address, mm_id);
     return UCS_OK;
 }
 

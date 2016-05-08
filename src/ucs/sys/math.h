@@ -54,6 +54,12 @@
 #define ucs_align_up_pow2(_n, _alignment) \
     ucs_align_down_pow2((_n) + (_alignment) - 1, _alignment)
 
+#define ucs_align_down_pow2_ptr(_ptr, _alignment) \
+    ((typeof(_ptr))ucs_align_down_pow2((uintptr_t)(_ptr), (_alignment)))
+
+#define ucs_align_up_pow2_ptr(_ptr, _alignment) \
+    ((typeof(_ptr))ucs_align_up_pow2((uintptr_t)(_ptr), (_alignment)))
+
 #define ucs_roundup_pow2(n) \
     ({ \
         typeof(n) pow2; \
