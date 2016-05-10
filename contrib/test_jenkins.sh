@@ -99,6 +99,23 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     ldd $ucx_inst/bin/ucx_perftest
     echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
+    # compile and run UCP hello world example
+    gcc -o ./ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c -lucp -I${ucx_inst}/include -L${ucx_inst}/lib
+
+    echo Running UCP hello world server
+    ./ucp_hello_world &
+    hw_pid=$!
+
+    sleep 1
+
+    echo Running UCP hello world client
+    ./ucp_hello_world $(hostname)
+
+    # make sure server process in not running
+    wait $hw_pid
+
+    rm -f ./ucp_hello_world
+
     # compile and then run UCT example to make sure it's not broken by UCX API changes
     mpicc -o ./active_message $ucx_inst/share/ucx/examples/active_message.c -luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
