@@ -47,8 +47,6 @@ enum {
 typedef struct sock_rte_group {
     int                          is_server;
     int                          connfd;
-    void                         *self;
-    size_t                       self_size;
 } sock_rte_group_t;
 
 
@@ -175,7 +173,8 @@ static int safe_recv(int sock, void *data, size_t size)
 }
 
 static void print_progress(char **test_names, unsigned num_names,
-                           ucx_perf_result_t *result, unsigned flags, int final)
+                           const ucx_perf_result_t *result, unsigned flags,
+                           int final)
 {
     static const char *fmt_csv     =  "%.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f\n";
     static const char *fmt_numeric =  "%'14.0f %9.3f %9.3f %9.3f %10.2f %10.2f %'11.0f %'11.0f\n";
@@ -355,7 +354,7 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("\n");
 }
 
-const char *__basename(const char *path)
+static const char *__basename(const char *path)
 {
     const char *p = strrchr(path, '/');
     return (p == NULL) ? path : p;
@@ -586,18 +585,18 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int argc, char **ar
     return UCS_OK;
 }
 
-unsigned sock_rte_group_size(void *rte_group)
+static unsigned sock_rte_group_size(void *rte_group)
 {
     return 2;
 }
 
-unsigned sock_rte_group_index(void *rte_group)
+static unsigned sock_rte_group_index(void *rte_group)
 {
     sock_rte_group_t *group = rte_group;
     return group->is_server ? 0 : 1;
 }
 
-void sock_rte_barrier(void *rte_group)
+static void sock_rte_barrier(void *rte_group)
 {
     sock_rte_group_t *group = rte_group;
     const unsigned magic = 0xdeadbeef;
@@ -612,91 +611,61 @@ void sock_rte_barrier(void *rte_group)
     ucs_assert(sync == magic);
 }
 
-void sock_rte_send(void *rte_group, unsigned dest, void *value, size_t size)
+static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,
+                              int iovcnt, void **req)
 {
     sock_rte_group_t *group = rte_group;
-    unsigned me = sock_rte_group_index(rte_group);
+    size_t size;
+    int i;
 
-    if (dest == me) {
-        group->self = realloc(group->self, group->self_size + size);
-        memcpy(group->self + group->self_size, value, size);
-        group->self_size += size;
-    } else if (dest == 1 - me) {
-        safe_send(group->connfd, value, size);
+    size = 0;
+    for (i = 0; i < iovcnt; ++i) {
+        size += iovec[i].iov_len;
+    }
+
+    safe_send(group->connfd, &size, sizeof(size));
+    for (i = 0; i < iovcnt; ++i) {
+        safe_send(group->connfd, iovec[i].iov_base, iovec[i].iov_len);
     }
 }
 
-void sock_rte_recv(void *rte_group, unsigned src, void *value, size_t size)
+static void sock_rte_recv(void *rte_group, unsigned src, void *buffer,
+                          size_t max, void *req)
 {
     sock_rte_group_t *group = rte_group;
-    unsigned me = sock_rte_group_index(rte_group);
-    void *prev_self;
-
-    if (src == me) {
-        ucs_assert(group->self_size >= size);
-        memcpy(value, group->self, size);
-        group->self_size -= size;
-
-        prev_self = group->self;
-        group->self = malloc(group->self_size);
-        memcpy(group->self, prev_self + size, group->self_size);
-    } else if (src == 1 - me) {
-        safe_recv(group->connfd, value, size);
-    }
-}
-
-void sock_rte_post_vec(void *rte_group, struct iovec * iovec, size_t num, void **req)
-{
-    int i, j;
-    int group_size;
     int group_index;
-
-    group_size = sock_rte_group_size(rte_group);
-    group_index = sock_rte_group_index(rte_group);
-
-    for (i = 0; i < group_size; ++i) {
-        if (i != group_index) {
-            for (j = 0; j < num; ++j) {
-                sock_rte_send(rte_group, i, iovec[j].iov_base, iovec[j].iov_len);
-            }
-        }
-    }
-}
-
-void sock_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
-{
-    int i, group_index;
+    size_t size;
 
     group_index = sock_rte_group_index(rte_group);
-    if (dest != group_index) {
-        for (i = 0; i < num; ++i) {
-            sock_rte_recv(rte_group, dest, iovec[i].iov_base, iovec[i].iov_len);
-        }
+    if (src == group_index) {
+        return;
     }
+
+    ucs_assert_always(src == (1 - group_index));
+    safe_recv(group->connfd, &size, sizeof(size));
+    ucs_assert_always(size <= max);
+    safe_recv(group->connfd, buffer, size);
 }
 
-void sock_rte_exchange_vec(void *rte_group, void * req)
+static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
+                            void *arg, int is_final)
 {
+    struct perftest_context *ctx = arg;
+    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
+                   is_final);
 }
 
-static void sock_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
-{
-    struct perftest_context *ctx =
-                    ucs_container_of(rte_group, struct perftest_context, sock_rte_group);
-    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
-}
-
-ucx_perf_rte_t sock_rte = {
+static ucx_perf_rte_t sock_rte = {
     .group_size    = sock_rte_group_size,
     .group_index   = sock_rte_group_index,
     .barrier       = sock_rte_barrier,
     .post_vec      = sock_rte_post_vec,
-    .recv_vec      = sock_rte_recv_vec,
-    .exchange_vec  = sock_rte_exchange_vec,
+    .recv          = sock_rte_recv,
+    .exchange_vec  = (void*)ucs_empty_function,
     .report        = sock_rte_report,
 };
 
-ucs_status_t setup_sock_rte(struct perftest_context *ctx)
+static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 {
     struct sockaddr_in inaddr;
     struct hostent *he;
@@ -788,10 +757,9 @@ ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
-    ctx->sock_rte_group.self      = NULL;
-    ctx->sock_rte_group.self_size = 0;
     ctx->params.rte_group         = &ctx->sock_rte_group;
     ctx->params.rte               = &sock_rte;
+    ctx->params.report_arg        = ctx;
     return UCS_OK;
 
 err_close_sockfd:
@@ -803,104 +771,111 @@ err:
 static ucs_status_t cleanup_sock_rte(struct perftest_context *ctx)
 {
     close(ctx->sock_rte_group.connfd);
-    free(ctx->sock_rte_group.self);
     return UCS_OK;
 }
 
 #if HAVE_MPI
-unsigned mpi_rte_group_size(void *rte_group)
+static unsigned mpi_rte_group_size(void *rte_group)
 {
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     return size;
 }
 
-unsigned mpi_rte_group_index(void *rte_group)
+static unsigned mpi_rte_group_index(void *rte_group)
 {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     return rank;
 }
 
-void mpi_rte_barrier(void *rte_group)
+static void mpi_rte_barrier(void *rte_group)
 {
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-void mpi_rte_post_vec(void *rte_group, struct iovec * iovec, size_t num, void **req)
+static void mpi_rte_post_vec(void *rte_group, const struct iovec *iovec,
+                             int iovcnt, void **req)
 {
-    int i, j;
     int group_size;
-    int group_index;
+    int my_rank;
+    int dest, i;
 
-    MPI_Comm_rank(MPI_COMM_WORLD, &group_index);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &group_size);
 
-    for (i = 0; i < group_size; ++i) {
-        if (i != group_index) {
-            for (j = 0; j < num; ++j) {
-                MPI_Send(iovec[j].iov_base, iovec[j].iov_len, MPI_CHAR, i,
-                         1, MPI_COMM_WORLD);
-            }
+    for (dest = 0; dest < group_size; ++dest) {
+        if (dest == my_rank) {
+            continue;
+        }
+
+        for (i = 0; i < iovcnt; ++i) {
+            MPI_Send(iovec[i].iov_base, iovec[i].iov_len, MPI_BYTE, dest,
+                     i == (iovcnt - 1), /* Send last iov with tag == 1 */
+                     MPI_COMM_WORLD);
         }
     }
 
     *req = (void*)(uintptr_t)1;
 }
 
-void mpi_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
+static void mpi_rte_recv(void *rte_group, unsigned src, void *buffer, size_t max,
+                         void *req)
 {
-    int i, group_index;
+    MPI_Status status;
+    size_t offset;
+    int my_rank;
+    int count;
 
-    MPI_Comm_rank(MPI_COMM_WORLD, &group_index);
-    if (dest != group_index) {
-        for (i = 0; i < num; ++i) {
-            MPI_Recv(iovec[i].iov_base, iovec[i].iov_len, MPI_CHAR, dest, 1,
-                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        }
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    if (src == my_rank) {
+        return;
     }
+
+    offset = 0;
+    do {
+        ucs_assert_always(offset < max);
+        MPI_Recv(buffer + offset, max - offset, MPI_BYTE, src, MPI_ANY_TAG,
+                 MPI_COMM_WORLD, &status);
+        MPI_Get_count(&status, MPI_BYTE, &count);
+        offset += count;
+    } while (status.MPI_TAG != 1);
 }
 
-void mpi_rte_exchange_vec(void *rte_group, void * req)
+static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
+                           void *arg, int is_final)
 {
-    MPI_Barrier(MPI_COMM_WORLD);
+    struct perftest_context *ctx = arg;
+    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
+                   is_final);
 }
 
-static void mpi_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
-{
-    struct perftest_context *ctx = rte_group;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags, is_final);
-}
-
-ucx_perf_rte_t mpi_rte = {
+static ucx_perf_rte_t mpi_rte = {
     .group_size    = mpi_rte_group_size,
     .group_index   = mpi_rte_group_index,
     .barrier       = mpi_rte_barrier,
     .post_vec      = mpi_rte_post_vec,
-    .recv_vec      = mpi_rte_recv_vec,
-    .exchange_vec  = mpi_rte_exchange_vec,
+    .recv          = mpi_rte_recv,
+    .exchange_vec  = (void*)ucs_empty_function,
     .report        = mpi_rte_report,
 };
 #elif HAVE_RTE
-unsigned ext_rte_group_size(void *rte_group)
+static unsigned ext_rte_group_size(void *rte_group)
 {
-    struct perftest_context *ctx = (struct perftest_context *)rte_group;
-    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+    rte_group_t group = (rte_group_t)rte_group;
     return rte_group_size(group);
 }
 
-unsigned ext_rte_group_index(void *rte_group)
+static unsigned ext_rte_group_index(void *rte_group)
 {
-    struct perftest_context *ctx = (struct perftest_context *)rte_group;
-    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+    rte_group_t group = (rte_group_t)rte_group;
     return rte_group_rank(group);
 }
 
-void ext_rte_barrier(void *rte_group)
+static void ext_rte_barrier(void *rte_group)
 {
+    rte_group_t group = (rte_group_t)rte_group;
     int rc;
-    struct perftest_context *ctx = (struct perftest_context *)rte_group;
-    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
 
     rc = rte_barrier(group);
     if (RTE_SUCCESS != rc) {
@@ -908,29 +883,29 @@ void ext_rte_barrier(void *rte_group)
     }
 }
 
-void ext_rte_post_vec(void *rte_group, struct iovec* iovec, size_t num, void **req)
+static void ext_rte_post_vec(void *rte_group, const struct iovec* iovec,
+                             int iovcnt, void **req)
 {
-    int i, rc;
-    struct perftest_context *ctx = (struct perftest_context *)rte_group;
-    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+    rte_group_t group = (rte_group_t)rte_group;
     rte_srs_session_t session;
     rte_iovec_t *r_vec;
+    int i, rc;
 
     rc = rte_srs_session_create(group, 0, &session);
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_srs_session_create");
     }
 
-    r_vec = calloc(num, sizeof(rte_iovec_t));
+    r_vec = calloc(iovcnt, sizeof(rte_iovec_t));
     if (r_vec == NULL) {
         return;
     }
-    for (i = 0; i < num; ++i) {
+    for (i = 0; i < iovcnt; ++i) {
         r_vec[i].iov_base = iovec[i].iov_base;
-        r_vec[i].type = rte_datatype_uint8_t;
-        r_vec[i].count = iovec[i].iov_len;
+        r_vec[i].type     = rte_datatype_uint8_t;
+        r_vec[i].count    = iovec[i].iov_len;
     }
-    rc = rte_srs_set_data(session, "KEY_PERF", r_vec, num);
+    rc = rte_srs_set_data(session, "KEY_PERF", r_vec, iovcnt);
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_srs_set_data");
     }
@@ -938,65 +913,64 @@ void ext_rte_post_vec(void *rte_group, struct iovec* iovec, size_t num, void **r
     free(r_vec);
 }
 
-void ext_rte_recv_vec(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req)
+static void ext_rte_recv(void *rte_group, unsigned src, void *buffer,
+                         size_t max, void *req)
 {
-    struct perftest_context *ctx = (struct perftest_context *)rte_group;
-    rte_group_t group = (rte_group_t)ctx->sock_rte_group.self;
+    rte_group_t group         = (rte_group_t)rte_group;
     rte_srs_session_t session = (rte_srs_session_t)req;
-    void *buffer = NULL;
+    void *rte_buffer = NULL;
+    rte_iovec_t r_vec;
+    uint32_t offset;
     int size;
-    uint32_t offset = 0;
-    rte_iovec_t *r_vec;
-    int i, rc;
+    int rc;
 
-    rc = rte_srs_get_data(session, rte_group_index_to_ec(group, dest),
-                     "KEY_PERF", &buffer, &size);
+    rc = rte_srs_get_data(session, rte_group_index_to_ec(group, src),
+                          "KEY_PERF", &rte_buffer, &size);
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_srs_get_data");
-    }
-    r_vec = calloc(num, sizeof(rte_iovec_t));
-    if (r_vec == NULL) {
-        ucs_error("Failed to allocate memory");
         return;
     }
-    for (i = 0; i < num; ++i) {
-        r_vec[i].iov_base = iovec[i].iov_base;
-        r_vec[i].type = rte_datatype_uint8_t;
-        r_vec[i].count = iovec[i].iov_len;
-        rte_unpack(&r_vec[i], buffer, &offset);
-    }
+
+    r_vec.iov_base = buffer;
+    r_vec.type     = rte_datatype_uint8_t;
+    r_vec.count    = max;
+
+    offset = 0;
+    rte_unpack(&r_vec, rte_buffer, &offset);
+
     rc = rte_srs_session_destroy(session);
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_srs_session_destroy");
     }
-    free(buffer);
-    free(r_vec);
+    free(rte_buffer);
 }
 
-void ext_rte_exchange_vec(void *rte_group, void * req)
+static void ext_rte_exchange_vec(void *rte_group, void * req)
 {
     rte_srs_session_t session = (rte_srs_session_t)req;
     int rc;
+
     rc = rte_srs_exchange_data(session);
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_srs_exchange_data");
     }
 }
 
-static void ext_rte_report(void *rte_group, ucx_perf_result_t *result, int is_final)
+static void ext_rte_report(void *rte_group, const ucx_perf_result_t *result,
+                           void *arg, int is_final)
 {
-    struct perftest_context *ctx = (struct perftest_context *)rte_group;
+    struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
                    is_final);
 }
 
-ucx_perf_rte_t ext_rte = {
+static ucx_perf_rte_t ext_rte = {
     .group_size    = ext_rte_group_size,
     .group_index   = ext_rte_group_index,
     .barrier       = ext_rte_barrier,
     .report        = ext_rte_report,
     .post_vec      = ext_rte_post_vec,
-    .recv_vec      = ext_rte_recv_vec,
+    .recv          = ext_rte_recv,
     .exchange_vec  = ext_rte_exchange_vec,
 };
 #endif
@@ -1019,10 +993,9 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
-    ctx->sock_rte_group.self      = NULL;
-    ctx->sock_rte_group.self_size = 0;
-    ctx->params.rte_group         = ctx;
+    ctx->params.rte_group         = NULL;
     ctx->params.rte               = &mpi_rte;
+    ctx->params.report_arg        = ctx;
 #elif HAVE_RTE
     rte_group_t group;
 
@@ -1031,10 +1004,9 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
-    ctx->sock_rte_group.self      = group;
-    ctx->sock_rte_group.self_size = 0;
-    ctx->params.rte_group         = ctx;
+    ctx->params.rte_group         = group;
     ctx->params.rte               = &ext_rte;
+    ctx->params.report_arg        = ctx;
 #endif
     return UCS_OK;
 }

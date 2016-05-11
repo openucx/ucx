@@ -114,12 +114,15 @@ typedef struct ucx_perf_rte {
     void        (*barrier)(void *rte_group);
 
     /* Direct modex */
-    void        (*post_vec)(void *rte_group, struct iovec *iovec, size_t num, void **req);
-    void        (*recv_vec)(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req);
-    void        (*exchange_vec)(void *rte_group, void * req);
+    void        (*post_vec)(void *rte_group, const struct iovec *iovec,
+                            int iovcnt, void **req);
+    void        (*recv)(void *rte_group, unsigned src, void *buffer, size_t max,
+                        void *req);
+    void        (*exchange_vec)(void *rte_group, void *req);
 
     /* Handle results */
-    void        (*report)(void *rte_group, ucx_perf_result_t *result, int is_final);
+    void        (*report)(void *rte_group, const ucx_perf_result_t *result,
+                          void *arg, int is_final);
 
 } ucx_perf_rte_t;
 
@@ -148,6 +151,7 @@ typedef struct ucx_perf_params {
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */
+    void                   *report_arg;     /* Custom argument for report function */
 
     struct {
         char                   dev_name[UCT_DEVICE_NAME_MAX]; /* Device name to use */
