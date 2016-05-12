@@ -45,4 +45,6 @@ typedef struct uct_ugni_smsg_header {
     uint32_t length;
 } uct_ugni_smsg_header_t;
 
+ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface);
+
 #endif

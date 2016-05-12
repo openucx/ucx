@@ -134,7 +134,8 @@ static void uct_ugni_smsg_handle_remote_overflow(uct_ugni_smsg_iface_t *iface){
     }
 }
 
-static ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface){
+ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface)
+{
     gni_return_t ugni_rc;
     gni_cq_entry_t event_data;
     uct_ugni_ep_t tl_ep;
