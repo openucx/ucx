@@ -1,6 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+# Copyright (C) ARM, Ltd. 2016. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -48,6 +49,9 @@ AS_IF([test "x$enable_backtrace_detail" == xyes],
 	if test "x$BT" == "x1"; then
 		AC_CHECK_FUNCS([cplus_demangle])
 		AC_DEFINE([HAVE_DETAILED_BACKTRACE], 1, [Enable detailed backtrace])
+        case ${host} in
+            aarch64*) CFLAGS="$CFLAGS -funwind-tables" ;;
+        esac
 	else
 		AC_MSG_WARN([detailed backtrace is not supported])
 	fi
