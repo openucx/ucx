@@ -110,6 +110,9 @@ AS_IF([test "x$with_avx" != xyes],
       [COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [no],
                        [#include <smmintrin.h>
                        int main() { return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3)); }])
+       COMPILER_OPTION([sse42], [SSE 4.2], [-msse4.2], [no],
+                       [#include <popcntintrin.h>
+                        int main() { return _mm_popcnt_u32(0x101) - 2; }])
       ])
 
 CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
