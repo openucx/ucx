@@ -145,62 +145,62 @@ typedef struct uct_tl_resource_desc {
  */
 enum {
     /* Active message capabilities */
-    UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0), /**< Short active message */
-    UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1), /**< Buffered active message */
-    UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2), /**< Zero-copy active message */
-
-    UCT_IFACE_FLAG_PENDING        = UCS_BIT(3), /**< Pending operations */
+    UCT_IFACE_FLAG_AM_SHORT         = UCS_BIT(0), /**< Short active message */
+    UCT_IFACE_FLAG_AM_BCOPY         = UCS_BIT(1), /**< Buffered active message */
+    UCT_IFACE_FLAG_AM_ZCOPY         = UCS_BIT(2), /**< Zero-copy active message */
 
     /* PUT capabilities */
-    UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4), /**< Short put */
-    UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5), /**< Buffered put */
-    UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6), /**< Zero-copy put */
+    UCT_IFACE_FLAG_PUT_SHORT        = UCS_BIT(4), /**< Short put */
+    UCT_IFACE_FLAG_PUT_BCOPY        = UCS_BIT(5), /**< Buffered put */
+    UCT_IFACE_FLAG_PUT_ZCOPY        = UCS_BIT(6), /**< Zero-copy put */
 
     /* GET capabilities */
-    UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8), /**< Short get */
-    UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9), /**< Buffered get */
-    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10), /**< Zero-copy get */
+    UCT_IFACE_FLAG_GET_SHORT        = UCS_BIT(8), /**< Short get */
+    UCT_IFACE_FLAG_GET_BCOPY        = UCS_BIT(9), /**< Buffered get */
+    UCT_IFACE_FLAG_GET_ZCOPY        = UCS_BIT(10), /**< Zero-copy get */
 
     /* Atomic operations capabilities */
-    UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16), /**< 32bit atomic add */
-    UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17), /**< 64bit atomic add */
-    UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18), /**< 32bit atomic fetch-and-add */
-    UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19), /**< 64bit atomic fetch-and-add */
-    UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20), /**< 32bit atomic swap */
-    UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21), /**< 64bit atomic swap */
-    UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22), /**< 32bit atomic compare-and-swap */
-    UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23), /**< 64bit atomic compare-and-swap */
+    UCT_IFACE_FLAG_ATOMIC_ADD32     = UCS_BIT(12), /**< 32bit atomic add */
+    UCT_IFACE_FLAG_ATOMIC_ADD64     = UCS_BIT(13), /**< 64bit atomic add */
+    UCT_IFACE_FLAG_ATOMIC_FADD32    = UCS_BIT(14), /**< 32bit atomic fetch-and-add */
+    UCT_IFACE_FLAG_ATOMIC_FADD64    = UCS_BIT(15), /**< 64bit atomic fetch-and-add */
+    UCT_IFACE_FLAG_ATOMIC_SWAP32    = UCS_BIT(16), /**< 32bit atomic swap */
+    UCT_IFACE_FLAG_ATOMIC_SWAP64    = UCS_BIT(17), /**< 64bit atomic swap */
+    UCT_IFACE_FLAG_ATOMIC_CSWAP32   = UCS_BIT(18), /**< 32bit atomic compare-and-swap */
+    UCT_IFACE_FLAG_ATOMIC_CSWAP64   = UCS_BIT(19), /**< 64bit atomic compare-and-swap */
+
+    /* Connection establishment */
+    UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(24), /**< Supports connecting to interface */
+    UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(25), /**< Supports connecting to specific endpoint */
+
+    /* Special transport flags */
+    UCT_IFACE_FLAG_AM_DUP           = UCS_BIT(27), /**< Active messages may be received with duplicates
+                                                        This happens if the transport does not keep enough
+                                                        information to detect retransmissions */
+
+    /* Active message callback invocation */
+    UCT_IFACE_FLAG_AM_CB_SYNC       = UCS_BIT(28), /**< Interface supports setting active message callback
+                                                        which is invoked only from the calling context of
+                                                        uct_worker_progress() */
+    UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(29), /**< Interface supports setting active message callback
+                                                        which will be invoked within a reasonable amount of
+                                                        time if uct_worker_progress() is not being called.
+                                                        The callback can be invoked from any progress context
+                                                        and it may also be invoked when uct_worker_progress()
+                                                        is called. */
+
+    UCT_IFACE_FLAG_WAKEUP           = UCS_BIT(30), /**< Event notification supported */
+
+    UCT_IFACE_FLAG_PENDING          = UCS_BIT(31), /**< Pending operations */
+
 
     /* Error handling capabilities */
     UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF  = UCS_BIT(32), /**< Invalid buffer for short operation */
     UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF  = UCS_BIT(33), /**< Invalid buffer for buffered operation */
     UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
     UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /**< Invalid AM id on remote */
-    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**< Remote memory access */
-    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN  = UCS_BIT(36), /**< Invalid length for buffered operation */
-
-    /* Connection establishment */
-    UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
-    UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(41), /**< Supports connecting to specific endpoint */
-
-    /* Special transport flags */
-    UCT_IFACE_FLAG_AM_DUP           = UCS_BIT(43), /**< Active messages may be received with duplicates
-                                                        This happens if the transport does not keep enough
-                                                        information to detect retransmissions */
-
-    /* Active message callback invocation */
-    UCT_IFACE_FLAG_AM_CB_SYNC       = UCS_BIT(44), /**< Interface supports setting active message callback
-                                                        which is invoked only from the calling context of
-                                                        uct_worker_progress() */
-    UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(45), /**< Interface supports setting active message callback
-                                                        which will be invoked within a reasonable amount of 
-                                                        time if uct_worker_progress() is not being called.
-                                                        The callback can be invoked from any progress context
-                                                        and it may also be invoked when uct_worker_progress() 
-                                                        is called. */
-
-    /* Event notification */
-    UCT_IFACE_FLAG_WAKEUP = UCS_BIT(46), /**< Event notification supported */
+    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(36), /**< Remote memory access */
+    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN  = UCS_BIT(37), /**< Invalid length for buffered operation */
 };
 
 

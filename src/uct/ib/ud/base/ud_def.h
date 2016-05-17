@@ -185,6 +185,16 @@ typedef struct uct_ud_put_hdr {
 } UCS_S_PACKED uct_ud_put_hdr_t;
 
 
+struct uct_ud_iface_addr {
+    uct_ib_uint24_t     qp_num;
+};
+
+
+struct uct_ud_ep_addr {
+    uct_ud_iface_addr_t iface_addr;
+    uct_ib_uint24_t     ep_id;
+};
+
 
 static inline uint32_t uct_ud_neth_get_dest_id(uct_ud_neth_t *neth)
 {

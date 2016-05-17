@@ -130,7 +130,7 @@ static inline ucp_pd_lane_map_t ucp_ep_pd_map_expand(ucp_pd_map_t pd_map)
         ucp_lane_index_t lane; \
         \
         UCP_EP_RESOLVE_RKEY(_ep, _rkey, amo, config, lane, _uct_rkey); \
-        _uct_ep      = (_ep)->uct_eps[lane]; \
+        _uct_ep      = (_ep)->uct_eps[config->key.amo_lanes[lane]]; \
     }
 
 #endif

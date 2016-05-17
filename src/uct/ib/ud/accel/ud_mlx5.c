@@ -463,12 +463,12 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                          const uct_ib_address_t *ib_addr,
                          const uct_ud_iface_addr_t *if_addr)
 {
+    ucs_status_t status;
     struct ibv_ah *ah;
 
-    ah = uct_ib_create_ah(&iface->super.super, ib_addr->lid);
-    if (ah == NULL) {
-        ucs_error("failed to create address handle: %m");
-        return UCS_ERR_INVALID_ADDR;
+    status = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ah);
+    if (status != UCS_OK) {
+        return status;
     }
 
     uct_ib_mlx5_get_av(ah, &ep->av);
@@ -493,6 +493,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
+    char buf[128];
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
@@ -520,7 +521,8 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     }
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qp=%x lid=%d)", uct_ib_unpack_uint24(if_addr->qp_num), ib_addr->lid);
+        ucs_trace_data("TX: CREQ (qpn 0x%x %s)", uct_ib_unpack_uint24(if_addr->qp_num),
+                       uct_ib_address_str(ib_addr, buf, sizeof(buf)));
         uct_ud_mlx5_ep_tx_ctl_skb(&ep->super, skb, 1);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }

@@ -38,7 +38,10 @@ typedef struct ucp_ep_config_key {
      * It allows to quickly lookup
      */
     ucp_pd_lane_map_t      rma_lane_map;
+
+    /* AMO lanes point to another indirect lookup array */
     ucp_pd_lane_map_t      amo_lane_map;
+    ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
 
     /* Bitmap of remote pds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future)

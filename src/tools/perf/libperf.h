@@ -114,8 +114,8 @@ typedef struct ucx_perf_rte {
     void        (*barrier)(void *rte_group);
 
     /* Direct modex */
-    void        (*post_vec)(void *rte_group, struct iovec *iovec, size_t num, void **req);
-    void        (*recv_vec)(void *rte_group, unsigned dest, struct iovec *iovec, size_t num, void * req);
+    void        (*post_vec)(void *rte_group, const struct iovec *iovec, int iovcnt, void **req);
+    size_t      (*recv)(void *rte_group, unsigned src, void *buffer, size_t max, void *req);
     void        (*exchange_vec)(void *rte_group, void * req);
 
     /* Handle results */

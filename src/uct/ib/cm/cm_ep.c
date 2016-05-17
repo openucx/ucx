@@ -29,7 +29,9 @@ static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, uct_iface_t *tl_iface,
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
-    self->dest_addr       = *(const uct_ib_address_t*)dev_addr;
+
+    uct_ib_address_unpack((const uct_ib_address_t*)dev_addr, &self->dlid,
+                          &self->is_global, &self->dgid);
     self->dest_service_id = *(const uint32_t*)iface_addr;
     return UCS_OK;
 }
@@ -50,13 +52,18 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
 {
     uct_cm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_cm_iface_t);
 
-    path->dgid                      = ep->dest_addr.gid;
     path->sgid                      = iface->super.gid;
-    path->dlid                      = htons(ep->dest_addr.lid);
+    path->dlid                      = htons(ep->dlid);
     path->slid                      = htons(uct_ib_iface_port_attr(&iface->super)->lid);
+    if (ep->is_global) {
+        path->dgid                  = ep->dgid;
+        path->hop_limit             = 64;
+    } else {
+        memset(&path->dgid, 0, sizeof(path->dgid));
+        path->hop_limit             = 0;
+    }
     path->raw_traffic               = 0; /* IB traffic */
     path->flow_label                = 0;
-    path->hop_limit                 = 0;
     path->traffic_class             = 0;
     path->reversible                = htonl(1); /* IBCM currently only supports reversible paths */
     path->numb_path                 = 0;

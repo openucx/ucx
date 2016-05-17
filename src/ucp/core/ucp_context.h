@@ -39,6 +39,7 @@ UCP_UINT_TYPE(UCP_PD_LANE_MAP_BITS)  ucp_pd_lane_map_t;
 
 /* Forward declarations */
 typedef struct ucp_request           ucp_request_t;
+typedef struct ucp_wireup_tl_info    ucp_wireup_tl_info_t;
 typedef struct ucp_address_entry     ucp_address_entry_t;
 typedef struct ucp_stub_ep           ucp_stub_ep_t;
 
@@ -106,6 +107,7 @@ typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
 typedef struct ucp_tl_resource_desc {
     uct_tl_resource_desc_t        tl_rsc;   /* UCT resource descriptor */
     ucp_rsc_index_t               pd_index; /* Protection domain index (within the context) */
+    uint16_t                      tl_name_csum; /* Checksum of transport name */
 } ucp_tl_resource_desc_t;
 
 

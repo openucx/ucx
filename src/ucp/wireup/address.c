@@ -19,8 +19,8 @@
  *
  * [ uuid(64bit) | worker_name(string) ]
  * [ device1_pd_index | device1_address(var) ]
- *    [ tl1_name(string) | tl1_address(var) ]
- *    [ tl2_name(string) | tl2_address(var) ]
+ *    [ tl1_name_csum(string) | tl1_info | tl1_address(var) ]
+ *    [ tl2_name_csum(string) | tl2_info | tl2_address(var) ]
  *    ...
  * [ device2_pd_index | device2_address(var) ]
  *    ...
@@ -82,11 +82,6 @@ static const void* ucp_address_unpack_string(const void *src, char *s, size_t ma
     return src + length + 1;
 }
 
-static const void* ucp_address_skip_string(const void *src)
-{
-    return src + (*(const uint8_t*)src) + 1;
-}
-
 static ucp_address_packed_device_t*
 ucp_address_get_device(const char *name, ucp_address_packed_device_t *devices,
                        ucp_rsc_index_t *num_devices_p)
@@ -134,6 +129,10 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
         dev = ucp_address_get_device(context->tl_rscs[i].tl_rsc.dev_name,
                                      devices, &num_devices);
 
+        dev->tl_addrs_size += sizeof(uint16_t); /* tl name checksum */
+        dev->tl_addrs_size += 1;                /* address length */
+        dev->tl_addrs_size += sizeof(ucp_wireup_tl_info_t); /* transport info */
+
         iface_attr = &worker->iface_attrs[i];
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
                     dev->tl_addrs_size += iface_attr->iface_addr_len;
@@ -150,9 +149,6 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
         dev->rsc_index      = i;
         dev->dev_addr_len   = iface_attr->device_addr_len;
         dev->tl_bitmap     |= mask;
-
-        dev->tl_addrs_size += 1; /* address length */
-        dev->tl_addrs_size += ucp_address_string_packed_size(context->tl_rscs[i].tl_rsc.tl_name);
     }
 
     *devices_p     = devices;
@@ -215,6 +211,15 @@ ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
 
     ucs_bug("provided ucp_ep without required transport");
     return UCS_ERR_INVALID_ADDR;
+}
+
+static void ucp_address_pack_tl_info(ucp_wireup_tl_info_t *tl_info,
+                                     const uct_iface_attr_t *iface_attr)
+{
+    UCS_STATIC_ASSERT(UCP_WIREUP_TL_CAP_FLAGS <= UINT32_MAX);
+    tl_info->tl_caps   = iface_attr->cap.flags & UCP_WIREUP_TL_CAP_FLAGS;
+    tl_info->overhead  = iface_attr->overhead;
+    tl_info->bandwidth = iface_attr->bandwidth;
 }
 
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
@@ -281,8 +286,13 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                 continue;
             }
 
-            /* Transport name */
-            ptr = ucp_address_pack_string(context->tl_rscs[i].tl_rsc.tl_name, ptr);
+            /* Transport name checksum */
+            *(uint16_t*)ptr = context->tl_rscs[i].tl_name_csum;
+            ptr += sizeof(uint16_t);
+
+            /* TODO Transport information */
+            ucp_address_pack_tl_info(ptr, &worker->iface_attrs[i]);
+            ptr += sizeof(ucp_wireup_tl_info_t);
 
             /* Transport address length */
             iface_attr = &worker->iface_attrs[i];
@@ -418,7 +428,8 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
 
         last_tl = empty_dev;
         while (!last_tl) {
-            ptr = ucp_address_skip_string(ptr); /* tl_name */
+            ptr += sizeof(uint16_t);             /* tl_name_csum */
+            ptr += sizeof(ucp_wireup_tl_info_t); /* tl_info */
 
             /* tl address length */
             tl_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;
@@ -469,8 +480,12 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
         last_tl = empty_dev;
         while (!last_tl) {
             /* tl name */
-            ptr = ucp_address_unpack_string(ptr, address->tl_name,
-                                            UCT_TL_NAME_MAX);
+            address->tl_name_csum = *(uint16_t*)ptr;
+            ptr += sizeof(uint16_t);
+
+            /* tl_name_csum */
+            address->tl_info      = *(const ucp_wireup_tl_info_t*)ptr;
+            ptr += sizeof(ucp_wireup_tl_info_t);
 
             /* tl address length */
             tl_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;

@@ -108,7 +108,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
                        &address_list);
     EXPECT_EQ(ent1->worker()->uuid, uuid);
     EXPECT_EQ(std::string(ucp_worker_get_name(ent1->worker())), std::string(name));
-    EXPECT_LE(address_count, ent1->ucph()->num_tls);
+    EXPECT_LE(address_count, static_cast<unsigned>(ent1->ucph()->num_tls));
 
     /* TODO test addresses */
 
