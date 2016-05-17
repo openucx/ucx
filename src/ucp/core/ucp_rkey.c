@@ -6,6 +6,7 @@
 
 #include "ucp_mm.h"
 #include "ucp_request.h"
+#include "ucp_ep.inl"
 
 #include <inttypes.h>
 
@@ -14,7 +15,7 @@ static ucp_rkey_t ucp_mem_dummy_rkey = {
     .pd_map = 0
 };
 
-static uint64_t ucp_mem_dummy_buffer = 0;
+static ucp_pd_map_t ucp_mem_dummy_buffer = 0;
 
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
@@ -23,8 +24,9 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     void *rkey_buffer, *p;
     size_t size, pd_size;
     ucs_status_t status;
+    char UCS_V_UNUSED buf[128];
 
-    ucs_trace("packing rkeys for buffer %p memh %p pd_map 0x%"PRIx64,
+    ucs_trace("packing rkeys for buffer %p memh %p pd_map 0x%x",
               memh->address, memh, memh->pd_map);
 
     if (memh->length == 0) {
@@ -34,7 +36,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         return UCS_OK;
     }
 
-    size = sizeof(uint64_t);
+    size = sizeof(ucp_pd_map_t);
     for (pd_index = 0; pd_index < context->num_pds; ++pd_index) {
         size += sizeof(uint8_t);
         pd_size = context->pd_attrs[pd_index].rkey_packed_size;
@@ -51,8 +53,8 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     p = rkey_buffer;
 
     /* Write the PD map */
-    *(uint64_t*)p = memh->pd_map;
-    p += sizeof(uint64_t);
+    *(ucp_pd_map_t*)p = memh->pd_map;
+    p += sizeof(ucp_pd_map_t);
 
     /* Write both size and rkey_buffer for each UCT rkey */
     uct_memh_index = 0;
@@ -64,6 +66,11 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         pd_size = context->pd_attrs[pd_index].rkey_packed_size;
         *((uint8_t*)p++) = pd_size;
         uct_pd_mkey_pack(context->pds[pd_index], memh->uct[uct_memh_index], p);
+
+        ucs_trace("rkey[%d]=%s for pd[%d]=%s", uct_memh_index,
+                  ucs_log_dump_hex(p, pd_size, buf, sizeof(buf)), pd_index,
+                  context->pd_rscs[pd_index].pd_name);
+
         ++uct_memh_index;
         p += pd_size;
     }
@@ -100,16 +107,16 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     ucs_status_t status;
     ucp_rkey_h rkey;
     uint8_t pd_size;
-    uint64_t pd_map;
+    ucp_pd_map_t pd_map;
     void *p;
 
     /* Count the number of remote PDs in the rkey buffer */
     p = rkey_buffer;
 
     /* Read remote PD map */
-    pd_map   = *(uint64_t*)p;
+    pd_map   = *(ucp_pd_map_t*)p;
 
-    ucs_trace("unpacking rkey with pd_map 0x%"PRIx64, pd_map);
+    ucs_trace("unpacking rkey with pd_map 0x%x", pd_map);
 
     if (pd_map == 0) {
         /* Dummy key return ok */
@@ -118,7 +125,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     }
 
     pd_count = ucs_count_one_bits(pd_map);
-    p       += sizeof(uint64_t);
+    p       += sizeof(ucp_pd_map_t);
 
     /* Allocate rkey handle which holds UCT rkeys for all remote PDs.
      * We keep all of them to handle a future transport switch.
@@ -149,9 +156,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         ucs_assert(pd_map & 1);
 
         /* Unpack only reachable rkeys */
-        if ((remote_pd_index == ep->rma_dst_pdi) ||
-            (remote_pd_index == ep->amo_dst_pdi))
-        {
+        if (UCS_BIT(remote_pd_index) & ucp_ep_config(ep)->key.reachable_pd_map) {
             ucs_assert(rkey_index < pd_count);
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
             if (status != UCS_OK) {

@@ -137,8 +137,9 @@ public:
     }
 
     template <typename T, typename F>
-    void test(F f) {
-        test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T), false);
+    void test(F f, bool malloc_allocate) {
+        test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T),
+                           malloc_allocate, false);
     }
 
 };
@@ -153,19 +154,23 @@ public:
 };
 
 UCS_TEST_P(test_ucp_atomic32, atomic_add) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_add<uint32_t>);
+    test<uint32_t>(&test_ucp_atomic32::blocking_add<uint32_t>, false);
+    test<uint32_t>(&test_ucp_atomic32::blocking_add<uint32_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic32, atomic_fadd) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_fadd<uint32_t>);
+    test<uint32_t>(&test_ucp_atomic32::blocking_fadd<uint32_t>, false);
+    test<uint32_t>(&test_ucp_atomic32::blocking_fadd<uint32_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic32, atomic_swap) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_swap<uint32_t>);
+    test<uint32_t>(&test_ucp_atomic32::blocking_swap<uint32_t>, false);
+    test<uint32_t>(&test_ucp_atomic32::blocking_swap<uint32_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic32, atomic_cswap) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_cswap<uint32_t>);
+    test<uint32_t>(&test_ucp_atomic32::blocking_cswap<uint32_t>, false);
+    test<uint32_t>(&test_ucp_atomic32::blocking_cswap<uint32_t>, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
@@ -180,24 +185,29 @@ public:
 };
 
 UCS_TEST_P(test_ucp_atomic64, atomic_add) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_add<uint64_t>);
+    test<uint64_t>(&test_ucp_atomic64::blocking_add<uint64_t>, false);
+    test<uint64_t>(&test_ucp_atomic64::blocking_add<uint64_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic64, atomic_fadd) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_fadd<uint64_t>);
+    test<uint64_t>(&test_ucp_atomic64::blocking_fadd<uint64_t>, false);
+    test<uint64_t>(&test_ucp_atomic64::blocking_fadd<uint64_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic64, atomic_swap) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_swap<uint64_t>);
+    test<uint64_t>(&test_ucp_atomic64::blocking_swap<uint64_t>, false);
+    test<uint64_t>(&test_ucp_atomic64::blocking_swap<uint64_t>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic64, atomic_cswap) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>);
+    test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>, false);
+    test<uint64_t>(&test_ucp_atomic64::blocking_cswap<uint64_t>, true);
 }
 
 #if ENABLE_PARAMS_CHECK
 UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_add) {
-    test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64);
+    test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64, false);
+    test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64, true);
 }
 #endif
 

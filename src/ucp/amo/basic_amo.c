@@ -5,6 +5,7 @@
 */
 
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/log.h>
 #include <inttypes.h>
@@ -22,12 +23,12 @@
     { \
         ucs_status_t status; \
         uct_rkey_t uct_rkey; \
+        uct_ep_h uct_ep; \
         \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
-        uct_rkey = UCP_RKEY_LOOKUP(_ep, _rkey, ep->amo_dst_pdi); \
         for (;;) { \
-            status = _uct_func((_ep)->uct_eps[UCP_EP_OP_AMO], _param, \
-                               _remote_addr, uct_rkey); \
+            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, uct_ep, uct_rkey); \
+            status = _uct_func(uct_ep, _param, _remote_addr, uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
                 return status; \
             } \
@@ -41,16 +42,15 @@
         uct_completion_t comp; \
         ucs_status_t status; \
         uct_rkey_t uct_rkey; \
+        uct_ep_h uct_ep; \
         \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
-        uct_rkey   = UCP_RKEY_LOOKUP(_ep, _rkey, ep->amo_dst_pdi); \
         comp.count = 2; \
         \
         for (;;) { \
-            status = _uct_func((_ep)->uct_eps[UCP_EP_OP_AMO], \
-                               UCS_PP_TUPLE_BREAK _params, \
-                               _remote_addr, uct_rkey, \
-                               _result, &comp); \
+            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, uct_ep, uct_rkey); \
+            status = _uct_func(uct_ep, UCS_PP_TUPLE_BREAK _params, \
+                               _remote_addr, uct_rkey, _result, &comp); \
             if (ucs_likely(status == UCS_OK)) { \
                 goto out; \
             } else if (status == UCS_INPROGRESS) { \

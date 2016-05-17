@@ -14,15 +14,33 @@
 #include <ucs/type/component.h>
 
 
-#define UCP_MAX_RESOURCES         UINT8_MAX
-#define UCP_MAX_PDS               (sizeof(uint64_t) * 8)
-#define UCP_WORKER_NAME_MAX       32
-#define UCP_NULL_RESOURCE         ((ucp_rsc_index_t)-1)
+#define UCP_WORKER_NAME_MAX          32   /* Worker name for debugging */
+#define UCP_MIN_BCOPY                64   /* Minimal size for bcopy */
 
-typedef uint8_t                   ucp_rsc_index_t;
-typedef struct ucp_request        ucp_request_t;
-typedef struct ucp_address_entry  ucp_address_entry_t;
-typedef struct ucp_stub_ep        ucp_stub_ep_t;
+/* Resources */
+#define UCP_MAX_RESOURCES            UINT8_MAX
+#define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
+typedef uint8_t                      ucp_rsc_index_t;
+
+/* PDs */
+#define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE(UCS_PP_TOKENPASTE(uint, _bits), _t)
+#define UCP_PD_INDEX_BITS            8  /* How many bits are in PD index */
+#define UCP_MAX_PDS                  (1ul << UCP_PD_INDEX_BITS)
+UCP_UINT_TYPE(UCP_PD_INDEX_BITS)     ucp_pd_map_t;
+
+/* Lanes */
+#define UCP_MAX_LANES                8
+#define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
+typedef uint8_t                      ucp_lane_index_t;
+
+/* PD-lane map */
+#define UCP_PD_LANE_MAP_BITS         64 /* should be UCP_PD_INDEX_BITS * UCP_MAX_LANES */
+UCP_UINT_TYPE(UCP_PD_LANE_MAP_BITS)  ucp_pd_lane_map_t;
+
+/* Forward declarations */
+typedef struct ucp_request           ucp_request_t;
+typedef struct ucp_address_entry     ucp_address_entry_t;
+typedef struct ucp_stub_ep           ucp_stub_ep_t;
 
 
 /**

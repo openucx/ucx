@@ -31,7 +31,7 @@ enum {
  * Calculates a score of specific wireup.
  */
 typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
-                                              uct_iface_attr_t *iface_attr,
+                                              const uct_iface_attr_t *iface_attr,
                                               char *reason, size_t max);
 
 
@@ -40,7 +40,10 @@ typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
  */
 typedef struct ucp_wireup_msg {
     uint8_t          type;                /* Message type */
-    uint8_t          tli[UCP_EP_OP_LAST]; /* Index of runtime address for every operation */
+    uint8_t          tli[UCP_MAX_LANES];  /* Index of runtime address for every operation.
+                                             We need this in order to connect the
+                                             transports correctly when getting a reply
+                                             message. */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
@@ -52,22 +55,17 @@ typedef struct ucp_wireup_ep_op {
 } ucp_wireup_ep_op_t;
 
 
-extern ucp_wireup_ep_op_t ucp_wireup_ep_ops[];
-
-
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
-ucs_status_t ucp_select_transport(ucp_ep_h ep,
-                                  const ucp_address_entry_t *address_list,
-                                  unsigned address_count, ucp_rsc_index_t pd_index,
-                                  ucp_rsc_index_t *rsc_index_p,
-                                  unsigned *dst_addr_index_p,
-                                  ucp_wireup_score_function_t score_func,
-                                  const char *title);
+ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
+                                             const ucp_address_entry_t *address_list,
+                                             unsigned address_count,
+                                             ucp_rsc_index_t *rsc_index_p,
+                                             unsigned *addr_index_p);
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
-ucs_status_t ucp_ep_init_trasports(ucp_ep_h ep, unsigned address_count,
+ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
                                    const ucp_address_entry_t *address_list);
 
 #endif

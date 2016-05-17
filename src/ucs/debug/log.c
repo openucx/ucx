@@ -286,7 +286,7 @@ overflow:
 }
 
 
-void ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max)
+const char * ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max)
 {
     static const char hexchars[] = "0123456789abcdef";
     char *p, *endp;
@@ -308,6 +308,7 @@ void ucs_log_dump_hex(const void* data, size_t length, char *buf, size_t max)
         ++i;
     }
     *p = 0;
+    return buf;
 }
 
 void ucs_log_early_init()

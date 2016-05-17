@@ -25,7 +25,6 @@ public:
         return params;
     }
 
-
 protected:
     void tag_send(ucp_ep_h from, ucp_worker_h to, int count = 1);
 
@@ -230,4 +229,75 @@ UCS_TEST_P(test_ucp_wireup, stress_connect2) {
     }
 }
 
+class test_ucp_wireup_rma : public ucp_test {
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.features |= UCP_FEATURE_RMA;
+        return params;
+    }
+
+protected:
+    void rma_send(ucp_ep_h from, ucp_worker_h to);
+};
+
+void test_ucp_wireup_rma::rma_send(ucp_ep_h from, ucp_worker_h to)
+{
+    uint64_t send_data = 0x12121212;
+    uint64_t recv_data = 0;
+    ucs_status_t status;
+    void *rkey_buffer;
+    size_t rkey_size;
+    ucp_rkey_h rkey;
+    ucp_mem_h memh;
+    void *ptr;
+
+    ptr = &recv_data;
+    status = ucp_mem_map(to->context, &ptr, sizeof(recv_data), 0, &memh);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_rkey_pack(to->context, memh, &rkey_buffer, &rkey_size);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_ep_rkey_unpack(from, rkey_buffer, &rkey);
+    ASSERT_UCS_OK(status);
+
+    ucp_rkey_buffer_release(rkey_buffer);
+
+    status = ucp_put(from, &send_data, sizeof(send_data), (uintptr_t)&recv_data, rkey);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_ep_flush(from);
+    ASSERT_UCS_OK(status);
+
+    while (recv_data != send_data);
+
+    ucp_rkey_destroy(rkey);
+
+    ucp_mem_unmap(to->context, memh);
+}
+
+UCS_TEST_P(test_ucp_wireup_rma, one_sided_wireup) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    rma_send(ent1->ep(), ent2->worker());
+    ent1->flush_worker();
+}
+
+UCS_TEST_P(test_ucp_wireup_rma, two_sided_wireup) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    ent2->connect(ent1);
+
+    rma_send(ent1->ep(), ent2->worker());
+    ent1->flush_worker();
+    rma_send(ent2->ep(), ent1->worker());
+    ent2->flush_worker();
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_rma)

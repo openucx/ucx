@@ -19,6 +19,7 @@ struct ucp_address_entry {
     size_t                     dev_addr_len;             /* Device address length */
     char                       tl_name[UCT_TL_NAME_MAX]; /* Transport name */
     ucp_rsc_index_t            pd_index;                 /* Protection domain index */
+    uint64_t                   pd_flags;                 /* PD reg/alloc flags */
     union {
         const uct_iface_addr_t *iface_addr;    /* Interface address */
         const uct_ep_addr_t    *ep_addr;       /* Endpoint address */

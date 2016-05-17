@@ -9,7 +9,9 @@
 
 
 void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send,
-                                                             size_t alignment, bool is_ep_flush)
+                                                             size_t alignment,
+                                                             bool malloc_allocate,
+                                                             bool is_ep_flush)
 {
     static const int max_iter = 300 / ucs::test_time_multiplier();
     static const size_t size = ucs_max((size_t)rand() % (12*1024), alignment);
@@ -22,7 +24,14 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     pe1->connect(pe0);
 
     ucp_mem_h memh;
-    void *memheap = NULL;
+    void *memheap;
+
+    if (malloc_allocate) {
+        memheap = malloc(memheap_size);
+    } else {
+        memheap = NULL;
+    }
+
     status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
     ASSERT_UCS_OK(status);
 
@@ -74,10 +83,14 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(pe1->ucph(), memh);
     ASSERT_UCS_OK(status);
+
+    if (malloc_allocate) {
+        free(memheap);
+    }
 }
 
 void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alignment,
-                                          bool is_ep_flush)
+                                          bool malloc_allocate, bool is_ep_flush)
 {
     static const size_t memheap_size = 3 * 1024;
     entity *pe0 = create_entity();
@@ -89,7 +102,14 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     pe1->connect(pe0);
 
     ucp_mem_h memh;
-    void *memheap = NULL;
+    void *memheap;
+
+    if (malloc_allocate) {
+        memheap = malloc(memheap_size);
+    } else {
+        memheap = NULL;
+    }
+
     status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
     ASSERT_UCS_OK(status);
 
@@ -144,6 +164,10 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
     status = ucp_mem_unmap(pe1->ucph(), memh);
     ASSERT_UCS_OK(status);
+
+    if (malloc_allocate) {
+        free(memheap);
+    }
 }
 
 ucp_params_t test_ucp_memheap::get_ctx_params() {

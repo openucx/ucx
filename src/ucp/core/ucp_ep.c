@@ -7,9 +7,11 @@
 #include "ucp_ep.h"
 #include "ucp_request.h"
 #include "ucp_worker.h"
+#include "ucp_ep.inl"
 
 #include <ucp/wireup/stub_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/tag/eager.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <string.h>
@@ -29,9 +31,8 @@ static ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 
     ep->worker               = worker;
     ep->dest_uuid            = dest_uuid;
-    ep->rma_dst_pdi          = UCP_NULL_RESOURCE;
-    ep->amo_dst_pdi          = UCP_NULL_RESOURCE;
     ep->cfg_index            = 0;
+    ep->am_lane              = UCP_NULL_LANE;
     ep->flags                = 0;
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
@@ -64,7 +65,7 @@ ucs_status_t ucp_ep_create_connected(ucp_worker_h worker, uint64_t dest_uuid,
     }
 
     /* initialize transport endpoints */
-    status = ucp_ep_init_trasports(ep, address_count, address_list);
+    status = ucp_wireup_init_lanes(ep, address_count, address_list);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -82,7 +83,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
                                 const char *message, ucp_ep_h *ep_p)
 {
     ucs_status_t status;
-    ucp_ep_op_t optype;
+    ucp_ep_config_key_t key;
     ucp_ep_h ep = NULL;
 
     status = ucp_ep_new(worker, dest_uuid, "??", message, &ep);
@@ -90,25 +91,36 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
         goto err;
     }
 
-    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
-        status = ucp_stub_ep_create(ep, optype, 0, NULL, &ep->uct_eps[optype]);
-        if (status != UCS_OK) {
-            goto err_destroy_uct_eps;
-        }
+    /* all operations will use the first lane, which is a stub endpoint */
+    key.rma_lane_map     = 1;
+    key.amo_lane_map     = 1;
+    key.reachable_pd_map = -1; /* TODO */
+    key.am_lane          = 0;
+    key.wireup_msg_lane  = 0;
+    key.lanes[0]         = UCP_NULL_RESOURCE;
+    key.num_lanes        = 1;
+
+    ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
+    ep->am_lane          = 0;
+
+    status = ucp_stub_ep_create(ep, &ep->uct_eps[0]);
+    if (status != UCS_OK) {
+        goto err_destroy_uct_eps;
     }
 
     *ep_p = ep;
     return UCS_OK;
 
 err_destroy_uct_eps:
-    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
-        if (ep->uct_eps[optype] != NULL) {
-            uct_ep_destroy(ep->uct_eps[optype]);
-        }
-    }
+    uct_ep_destroy(ep->uct_eps[0]);
     ucp_ep_delete(ep);
 err:
     return status;
+}
+
+int ucp_ep_is_stub(ucp_ep_h ep)
+{
+    return ucp_ep_get_rsc_index(ep, 0) == UCP_NULL_RESOURCE;
 }
 
 ucs_status_t ucp_ep_pending_req_release(uct_pending_req_t *self)
@@ -215,17 +227,13 @@ out:
 
 static void ucp_ep_destory_uct_eps(ucp_ep_h ep)
 {
+    ucp_lane_index_t lane;
     uct_ep_h uct_ep;
-    int optype;
 
-    for (optype = 0; optype < UCP_EP_OP_LAST; ++optype) {
-        if (!ucp_ep_is_op_primary(ep, optype)) {
-            continue;
-        }
-
-        uct_ep = ep->uct_eps[optype];
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ep->uct_eps[lane];
         uct_ep_pending_purge(uct_ep, ucp_ep_pending_req_release);
-        ucs_debug("destroy ep %p op %d uct_ep %p", ep, optype, uct_ep);
+        ucs_debug("destroy ep %p op %d uct_ep %p", ep, lane, uct_ep);
         uct_ep_destroy(uct_ep);
     }
 }
@@ -244,15 +252,115 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_free(ep);
 }
 
-void ucp_ep_send_reply(ucp_request_t *req, ucp_ep_op_t optype, int progress)
+int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
+                           const ucp_ep_config_key_t *key2)
 {
-    ucp_ep_h ep = req->send.ep;
-    ucp_ep_add_pending(ep, ep->uct_eps[optype], req, progress);
+    ucp_lane_index_t lane;
+
+    if ((key1->num_lanes        != key2->num_lanes) ||
+        (key1->rma_lane_map     != key2->rma_lane_map) ||
+        (key1->amo_lane_map     != key2->amo_lane_map) ||
+        (key1->reachable_pd_map != key2->reachable_pd_map) ||
+        (key1->am_lane          != key2->am_lane) ||
+        (key1->wireup_msg_lane  != key2->wireup_msg_lane))
+    {
+        return 0;
+    }
+
+    for (lane = 0; lane < key1->num_lanes; ++lane) {
+        if (key1->lanes[lane] != key2->lanes[lane]) {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
-int ucp_ep_is_op_primary(ucp_ep_h ep, ucp_ep_op_t optype)
+void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 {
-    ucp_ep_config_t *config = ucp_ep_config(ep);
-    return (config->rscs[optype] != UCP_NULL_RESOURCE) && /* exists */
-           (config->dups[optype] == UCP_EP_OP_LAST);      /* not a duplicate */
+    ucp_context_h context = worker->context;
+    ucp_ep_rma_config_t *rma_config;
+    uct_iface_attr_t *iface_attr;
+    ucp_rsc_index_t rsc_index;
+    uct_pd_attr_t *pd_attr;
+    ucp_lane_index_t lane;
+    double zcopy_thresh;
+
+    /* Default thresholds */
+    config->zcopy_thresh      = SIZE_MAX;
+    config->sync_zcopy_thresh = -1;
+    config->bcopy_thresh      = context->config.ext.bcopy_thresh;
+    config->rndv_thresh       = SIZE_MAX;
+    config->sync_rndv_thresh  = SIZE_MAX;
+
+    /* Configuration for active messages */
+    if (config->key.am_lane != UCP_NULL_LANE) {
+        lane        = config->key.am_lane;
+        rsc_index   = config->key.lanes[lane];
+        if (rsc_index != UCP_NULL_RESOURCE) {
+            iface_attr  = &worker->iface_attrs[rsc_index];
+            pd_attr     = &context->pd_attrs[context->tl_rscs[rsc_index].pd_index];
+
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+                config->max_eager_short  = iface_attr->cap.am.max_short -
+                                           sizeof(ucp_eager_hdr_t);
+                config->max_am_short     = iface_attr->cap.am.max_short -
+                                           sizeof(uint64_t);
+            }
+
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+                config->max_am_bcopy     = iface_attr->cap.am.max_bcopy;
+            }
+
+            if ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) &&
+                (pd_attr->cap.flags & UCT_PD_FLAG_REG))
+            {
+                config->max_am_zcopy  = iface_attr->cap.am.max_zcopy;
+
+                if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                    /* auto */
+                    zcopy_thresh = pd_attr->reg_cost.overhead / (
+                                            (1.0 / context->config.ext.bcopy_bw) -
+                                            (1.0 / iface_attr->bandwidth) -
+                                            pd_attr->reg_cost.growth);
+                    if (zcopy_thresh < 0) {
+                        config->zcopy_thresh      = SIZE_MAX;
+                        config->sync_zcopy_thresh = -1;
+                    } else {
+                        config->zcopy_thresh      = zcopy_thresh;
+                        config->sync_zcopy_thresh = zcopy_thresh;
+                    }
+                } else {
+                    config->zcopy_thresh      = context->config.ext.zcopy_thresh;
+                    config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
+                }
+            }
+        } else {
+            config->max_am_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
+        }
+    }
+
+    /* Configuration for remote memory access */
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        if (ucp_lane_map_get_lane(config->key.rma_lane_map, lane) == 0) {
+            continue;
+        }
+
+        rma_config = &config->rma[lane];
+        rsc_index  = config->key.lanes[lane];
+        iface_attr = &worker->iface_attrs[rsc_index];
+        if (rsc_index != UCP_NULL_RESOURCE) {
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
+                rma_config->max_put_short = iface_attr->cap.put.max_short;
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
+                rma_config->max_put_bcopy = iface_attr->cap.put.max_bcopy;
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
+                rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
+            }
+        } else {
+            rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
+        }
+    }
 }

@@ -62,54 +62,77 @@ public:
 };
 
 
-UCS_TEST_P(test_ucp_rma, blocking_put) {
+UCS_TEST_P(test_ucp_rma, blocking_put_allocated) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
-                       1, false);
+                       1, false, false);
+}
+
+UCS_TEST_P(test_ucp_rma, blocking_put_registered) {
+    test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_put_nbi_flush_worker) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
-                       1, false);
+                       1, false, false);
+    test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_put_nbi_flush_ep) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
-                       1, true);
+                       1, false, true);
+    test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       1, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_worker) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
-                       1, false);
+                       1, false, false);
+    test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_ep) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
-                       1, true);
+                       1, false, true);
+    test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       1, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma, blocking_get) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
-                       1, false);
+                       1, false, false);
+    test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
+                       1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_get_nbi_flush_worker) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
-                       1, false);
+                       1, false, false);
+    test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_get_nbi_flush_ep) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
-                       1, true);
+                       1, false, true);
+    test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       1, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_get_nbi_flush_worker) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
-                       1, false);
+                       1, false, false);
+    test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_get_nbi_flush_ep) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
-                       1, true);
+                       1, false, true);
+    test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       1, true, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_rma)
