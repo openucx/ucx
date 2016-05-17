@@ -8,12 +8,31 @@
 #ifndef UCP_WIREUP_H_
 #define UCP_WIREUP_H_
 
-#include "address.h"
-
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
 #include <uct/api/uct.h>
+
+
+/* Transport capabilities used for wireup decision */
+#define UCP_WIREUP_TL_CAP_FLAGS \
+    (UCT_IFACE_FLAG_AM_SHORT | \
+     UCT_IFACE_FLAG_AM_BCOPY | \
+     UCT_IFACE_FLAG_AM_ZCOPY | \
+     UCT_IFACE_FLAG_PUT_SHORT | \
+     UCT_IFACE_FLAG_PUT_BCOPY | \
+     UCT_IFACE_FLAG_PUT_ZCOPY | \
+     UCT_IFACE_FLAG_GET_SHORT | \
+     UCT_IFACE_FLAG_GET_BCOPY | \
+     UCT_IFACE_FLAG_GET_ZCOPY | \
+     UCT_IFACE_FLAG_ATOMIC_ADD32 | \
+     UCT_IFACE_FLAG_ATOMIC_ADD64 | \
+     UCT_IFACE_FLAG_ATOMIC_FADD32 | \
+     UCT_IFACE_FLAG_ATOMIC_FADD64 | \
+     UCT_IFACE_FLAG_ATOMIC_SWAP32 | \
+     UCT_IFACE_FLAG_ATOMIC_SWAP64 | \
+     UCT_IFACE_FLAG_ATOMIC_CSWAP32 | \
+     UCT_IFACE_FLAG_ATOMIC_CSWAP64)
 
 
 /**
@@ -28,11 +47,39 @@ enum {
 
 
 /**
- * Calculates a score of specific wireup.
+ * Criteria for transport selection.
  */
-typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
-                                              const uct_iface_attr_t *iface_attr,
-                                              char *reason, size_t max);
+typedef struct {
+    const char  *title;            /* Name of the criteria for debugging */
+    uint64_t    local_pd_flags;    /* Required local PD flags */
+    uint64_t    remote_pd_flags;   /* Required remote PD flags */
+    uint64_t    local_iface_flags; /* Required local iface flags */
+    uint64_t    remote_iface_flags;/* Required remote iface flags */
+
+    /**
+     * Calculates score of a potential transport.
+     *
+     * @param [in]  pd_attr      Local PD attributes.
+     * @param [in]  iface_attr   Local interface attributes.
+     * @param [in]  remote_info  Remote peer attributes.
+     *
+     * @return Transport score, the higher the better.
+     */
+    double      (*calc_score)(const uct_pd_attr_t *pd_attr,
+                              const uct_iface_attr_t *iface_attr,
+                              const ucp_wireup_tl_info_t *remote_info);
+
+} ucp_wireup_criteria_t;
+
+
+/**
+ * Transport capabilities and performance.
+ */
+struct ucp_wireup_tl_info {
+    uint32_t                   tl_caps;
+    float                      overhead;
+    float                      bandwidth;
+};
 
 
 /**
@@ -46,13 +93,6 @@ typedef struct ucp_wireup_msg {
                                              message. */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
-
-
-typedef struct ucp_wireup_ep_op {
-    const char                  *title;
-    uint64_t                    features;
-    ucp_wireup_score_function_t score_func;
-} ucp_wireup_ep_op_t;
 
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);

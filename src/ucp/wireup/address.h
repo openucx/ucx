@@ -7,6 +7,8 @@
 #ifndef UCP_ADDRESS_H_
 #define UCP_ADDRESS_H_
 
+#include "wireup.h"
+
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 
@@ -20,12 +22,13 @@ struct ucp_address_entry {
     uint16_t                   tl_name_csum;   /* Checksum of transport name */
     ucp_rsc_index_t            pd_index;       /* Protection domain index */
     uint64_t                   pd_flags;       /* PD reg/alloc flags */
+    ucp_wireup_tl_info_t       tl_info;        /* Transport information */
+    size_t                     tl_addr_len;    /* Transport address length */
     union {
         const uct_iface_addr_t *iface_addr;    /* Interface address */
         const uct_ep_addr_t    *ep_addr;       /* Endpoint address */
         const void             *tl_addr;
     };
-    size_t                     tl_addr_len;
 };
 
 
