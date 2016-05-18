@@ -35,9 +35,13 @@ libucxperf_la_SOURCES = \
 	uct_tests.cc \
 	ucp_tests.cc
 libucxperf_la_LDFLAGS = \
-	$(RTE_LDFLAGS)
+	$(RTE_LDFLAGS) \
+	$(OPENMP_CFLAGS)
 libucxperf_la_CXXFLAGS = \
-	-nostdlib -fno-exceptions -fno-rtti
+	-nostdlib -fno-exceptions -fno-rtti \
+	$(OPENMP_CFLAGS)
+libucxperf_la_CFLAGS = \
+	$(OPENMP_CFLAGS)
 libucxperf_la_LIBADD = \
 	$(abs_top_builddir)/src/uct/libuct.la \
 	$(abs_top_builddir)/src/ucp/libucp.la \
@@ -46,7 +50,10 @@ libucxperf_la_LIBADD = \
 
 ucx_perftest_SOURCES  = perftest.c
 ucx_perftest_LDFLAGS    = \
-     $(RTE_LDFLAGS)
+     $(RTE_LDFLAGS) \
+     $(OPENMP_CFLAGS)
+ucx_perftest_CFLAGS   = \
+     $(OPENMP_CFLAGS)
 ucx_perftest_LDADD    = \
      $(abs_top_builddir)/src/uct/libuct.la \
      $(abs_top_builddir)/src/ucp/libucp.la \

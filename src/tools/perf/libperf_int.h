@@ -1,5 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) The University of Tennessee and The University
+*               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -30,6 +32,7 @@ struct ucx_perf_context {
     /* Buffers */
     void                         *send_buffer;
     void                         *recv_buffer;
+    ptrdiff_t                    offset;
 
     /* Measurements */
     ucs_time_t                   start_time;
@@ -87,7 +90,7 @@ struct ucp_peer {
     while (!ucx_perf_context_done(perf))
 
 #define rte_call(_perf, _func, ...) \
-    (_perf)->params.rte->_func((_perf)->params.rte_group, ## __VA_ARGS__)
+    ((_perf)->params.rte->_func((_perf)->params.rte_group, ## __VA_ARGS__))
 
 
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf);
