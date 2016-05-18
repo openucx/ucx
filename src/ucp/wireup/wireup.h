@@ -4,7 +4,6 @@
  * See file LICENSE for terms.
  */
 
-
 #ifndef UCP_WIREUP_H_
 #define UCP_WIREUP_H_
 
@@ -13,6 +12,7 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_worker.h>
 #include <uct/api/uct.h>
 
 
@@ -28,14 +28,6 @@ enum {
 
 
 /**
- * Calculates a score of specific wireup.
- */
-typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
-                                              const uct_iface_attr_t *iface_attr,
-                                              char *reason, size_t max);
-
-
-/**
  * Packet structure for wireup requests.
  */
 typedef struct ucp_wireup_msg {
@@ -48,11 +40,12 @@ typedef struct ucp_wireup_msg {
 } UCS_S_PACKED ucp_wireup_msg_t;
 
 
-typedef struct ucp_wireup_ep_op {
-    const char                  *title;
-    uint64_t                    features;
-    ucp_wireup_score_function_t score_func;
-} ucp_wireup_ep_op_t;
+/**
+ * Calculates a score of specific wireup.
+ */
+typedef double (*ucp_wireup_score_function_t)(ucp_worker_h worker,
+                                              const uct_iface_attr_t *iface_attr,
+                                              char *reason, size_t max);
 
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
@@ -67,5 +60,16 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
                                    const ucp_address_entry_t *address_list);
+
+ucs_status_t ucp_wireup_select_transports(ucp_ep_h ep, unsigned address_count,
+                                          const ucp_address_entry_t *address_list,
+                                          unsigned *addr_indices);
+
+
+static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return !(worker->iface_attrs[rsc_index].cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+}
+
 
 #endif

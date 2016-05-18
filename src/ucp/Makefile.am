@@ -56,5 +56,6 @@ libucp_la_SOURCES = \
 	tag/tag_recv.c \
 	tag/tag_send.c \
 	wireup/address.c \
+	wireup/select.c \
 	wireup/stub_ep.c \
 	wireup/wireup.c
