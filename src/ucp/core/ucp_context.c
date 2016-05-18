@@ -8,6 +8,7 @@
 
 
 #include <ucs/config/parser.h>
+#include <ucs/algorithm/crc.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
@@ -255,26 +256,26 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
 {
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
-    unsigned num_resources;
+    unsigned num_tl_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
 
     *num_resources_p = 0;
 
     /* check what are the available uct resources */
-    status = uct_pd_query_tl_resources(pd, &tl_resources, &num_resources);
+    status = uct_pd_query_tl_resources(pd, &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto err;
     }
 
-    if (num_resources == 0) {
+    if (num_tl_resources == 0) {
         ucs_debug("No tl resources found for pd %s", context->pd_rscs[pd_index].pd_name);
         goto out_free_resources;
     }
 
     tmp = ucs_realloc(context->tl_rscs,
-                      sizeof(*context->tl_rscs) * (context->num_tls + num_resources),
+                      sizeof(*context->tl_rscs) * (context->num_tls + num_tl_resources),
                       "ucp resources");
     if (tmp == NULL) {
         ucs_error("Failed to allocate resources");
@@ -289,10 +290,12 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
 
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
-    for (i = 0; i < num_resources; ++i) {
+    for (i = 0; i < num_tl_resources; ++i) {
         if (ucp_is_resource_enabled(&tl_resources[i], config, masks)) {
             context->tl_rscs[context->num_tls].tl_rsc   = tl_resources[i];
             context->tl_rscs[context->num_tls].pd_index = pd_index;
+            context->tl_rscs[context->num_tls].tl_name_csum =
+                            ucs_crc16_string(tl_resources[i].tl_name);
             ++context->num_tls;
             ++(*num_resources_p);
         }
@@ -320,6 +323,27 @@ static void ucp_check_unavailable_devices(const str_names_array_t *devices, uint
             }
         }
     }
+}
+
+static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
+{
+    ucp_tl_resource_desc_t *rsc1, *rsc2;
+
+    /* Make there we don't have two different transports with same checksum. */
+    for (rsc1 = context->tl_rscs; rsc1 < context->tl_rscs + context->num_tls; ++rsc1) {
+        for (rsc2 = context->tl_rscs; rsc2 < rsc1; ++rsc2) {
+            if ((rsc1->tl_name_csum == rsc2->tl_name_csum) &&
+                strcmp(rsc1->tl_rsc.tl_name, rsc2->tl_rsc.tl_name))
+            {
+                ucs_error("Transports '%s' and '%s' have same checksum (0x%x), "
+                          "please rename one of them to avoid collision",
+                          rsc1->tl_rsc.tl_name, rsc2->tl_rsc.tl_name,
+                          rsc1->tl_name_csum);
+                return UCS_ERR_ALREADY_EXISTS;
+            }
+        }
+    }
+    return UCS_OK;
 }
 
 static void ucp_free_resources(ucp_context_t *context)
@@ -489,6 +513,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
                   context->num_tls, UCP_MAX_RESOURCES);
         status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err_free_context_resources;
+    }
+
+    status = ucp_check_tl_names(context);
+    if (status != UCS_OK) {
         goto err_free_context_resources;
     }
 
