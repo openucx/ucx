@@ -94,7 +94,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
     return UCS_OK;
 }
 
-static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface)
+static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface, uct_dc_iface_config_t *config)
 {
     ucs_status_t status;
     int i;
@@ -119,7 +119,7 @@ static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface)
             goto create_err;
         }
     }
-    iface->config.max_inline = cap.max_inline_data;
+    config->max_inline = cap.max_inline_data;
     return UCS_OK;
 
 create_err:
@@ -148,7 +148,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,
     }
 
     /* create DC initiators */
-    status = uct_dc_iface_dcis_create(self);
+    status = uct_dc_iface_dcis_create(self, config);
     if (status != UCS_OK) {
         ibv_exp_destroy_dct(self->rx.dct);
         return status;

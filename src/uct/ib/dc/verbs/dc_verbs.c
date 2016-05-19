@@ -44,7 +44,6 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
 
     uct_dc_iface_query(&iface->super, iface_attr);
-    ucs_debug("max_inline is %d", iface->super.config.max_inline);
     uct_rc_verbs_iface_common_query(&iface->verbs_common, 
                                     &iface->super.super, iface_attr);
     /*TODO: remove flags once we have a full functionality */
@@ -209,7 +208,7 @@ ucs_status_t uct_dc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     int dci;
 
-    UCT_CHECK_LENGTH(length, iface->super.config.max_inline, "put_short");
+    UCT_CHECK_LENGTH(length, iface->verbs_common.config.max_inline, "put_short");
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super, dci);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
@@ -264,7 +263,7 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_am_short_hdr_t am;
     int dci;
 
-    UCT_RC_CHECK_AM_SHORT(id, length, iface->super.config.max_inline);
+    UCT_RC_CHECK_AM_SHORT(id, length, iface->verbs_common.config.max_inline);
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super, dci);
     uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, &am, id, hdr, buffer, length);
@@ -475,6 +474,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, pd,
                               worker, dev_name, rx_headroom, 0, config);
+
+    self->verbs_common.config.max_inline = config->max_inline;
 
     status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super, &config->super);
     if (status != UCS_OK) {

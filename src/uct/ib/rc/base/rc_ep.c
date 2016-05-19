@@ -207,7 +207,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
 
     ucs_debug("connected rc qp 0x%x on %s:%d to lid %d(+%d) sl %d remote_qp 0x%x"
               " mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
-              ep->qp->qp_num, uct_ib_device_name(uct_ib_iface_device(&iface->super)),
+              ep->txqp.qp->qp_num, uct_ib_device_name(uct_ib_iface_device(&iface->super)),
               iface->super.port_num, qp_attr.ah_attr.dlid, ep->path_bits,
               qp_attr.ah_attr.sl, qp_attr.dest_qp_num,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,

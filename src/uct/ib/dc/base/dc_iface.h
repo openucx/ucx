@@ -22,6 +22,7 @@ typedef struct uct_dc_iface_config {
     uct_rc_verbs_iface_config_t   super;
     int ndcis;
     int tx_policy;
+    int max_inline;
 } uct_dc_iface_config_t;
 
 typedef struct uct_dc_iface { 
@@ -34,7 +35,6 @@ typedef struct uct_dc_iface {
         struct ibv_exp_dct *dct;
     } rx;
     struct {
-        int max_inline;
         int tx_policy;
     } config;
 } uct_dc_iface_t;
