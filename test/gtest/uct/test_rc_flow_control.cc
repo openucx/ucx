@@ -62,6 +62,10 @@ public:
             EXPECT_EQ(uct_ep_am_short(e->ep(0), 0, 0, NULL, 0), expected);
         }
     }
+    
+    virtual void short_progress_loop(double delta_ms=10.0) const {
+        uct_test::short_progress_loop(delta_ms);
+    }
 
     static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length, void *desc) {
         return UCS_OK;
