@@ -167,8 +167,7 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *add
     uint16_t lid;
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
-    return (gid.global.subnet_prefix == iface->gid.global.subnet_prefix) &&
-           (ib_addr->dev_id == uct_ib_iface_device(iface)->dev_attr.vendor_part_id);
+    return (gid.global.subnet_prefix == iface->gid.global.subnet_prefix);
 }
 
 void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,

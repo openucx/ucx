@@ -73,7 +73,6 @@ enum {
  */
 typedef struct uct_ib_address {
     uint8_t            flags;
-    uint16_t           dev_id; /* TODO remove this */
     /* Following fields appear in this order (if specified by flags) :
      * - uint16_t lid
      * - uint64_t if_id

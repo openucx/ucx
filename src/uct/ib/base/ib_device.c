@@ -379,7 +379,6 @@ void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_scope_t scope,
     void *ptr = ib_addr + 1;
 
     ib_addr->flags  = 0;
-    ib_addr->dev_id = dev->dev_attr.vendor_part_id;
 
     /* LID */
     /* TODO check IB link layer of the port */
