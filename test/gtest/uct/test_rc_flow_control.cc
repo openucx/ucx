@@ -63,7 +63,7 @@ public:
         }
     }
     
-    virtual void short_progress_loop(double delta_ms=10.0) const {
+    void progress_loop(double delta_ms=10.0) {
         uct_test::short_progress_loop(delta_ms);
     }
 
@@ -110,7 +110,7 @@ UCS_TEST_P(test_rc_flow_control, general)
     send_am_messages(m_e1, test_wnd, UCS_OK);
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
 
-    short_progress_loop();
+    progress_loop();
     send_am_messages(m_e1, 1, UCS_OK);
 }
 
@@ -127,7 +127,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     set_fc_attributes(m_e1, test_wnd, test_wnd, 1);
 
     send_am_messages(m_e1, test_wnd, UCS_OK);
-    short_progress_loop();
+    progress_loop();
 
     m_e2->destroy_ep(0);
     ASSERT_TRUE(rc_iface(m_e2)->tx.arbiter.current == NULL);
@@ -150,7 +150,7 @@ UCS_TEST_P(test_rc_flow_control, pending_purge)
     req_count = 0;
 
     send_am_messages(m_e1, test_wnd, UCS_OK);
-    short_progress_loop();
+    progress_loop();
 
     /* Now m2 ep should have FC grant message in the pending queue.
      * Add some user pending requests as well */
@@ -187,7 +187,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
         EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &req[i].uct), UCS_OK);
         rc_ep(m_e1)->fc_wnd = h_thresh;
         send_am_messages(m_e1, 1, UCS_OK); /* send AM with FC hard request */
-        short_progress_loop();
+        progress_loop();
     }
 
     /* Now pending group of m_e2 endpoint should look like:
@@ -203,7 +203,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
 
     /* Avoid modifying of ep->available by send completions */
     rc_iface(m_e2)->config.tx_moderation = 10;
-    short_progress_loop();
+    progress_loop();
 
     /* Check that only num_pend + 1 (for FC grant) messages were sent */
     EXPECT_EQ(rc_ep(m_e2)->available, available - (num_pend + 1));
