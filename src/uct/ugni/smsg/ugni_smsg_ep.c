@@ -118,6 +118,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_ep_t)
         status = iface->super.super.super.ops.ep_flush(&self->super.super.super);
     } while(UCS_INPROGRESS == status);
 
+    progress_remote_cq(iface);
+
     uct_ugni_smsg_mbox_dereg(iface, self->smsg_attr);
     ucs_mpool_put(self->smsg_attr);
 }
