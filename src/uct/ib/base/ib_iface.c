@@ -152,8 +152,9 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    uct_ib_address_pack(uct_ib_iface_device(iface), iface->port_num,
-                        iface->addr_scope, &iface->gid, (void*)dev_addr);
+    uct_ib_address_pack(uct_ib_iface_device(iface), iface->addr_scope,
+                        &iface->gid, uct_ib_iface_port_attr(iface)->lid,
+                        (void*)dev_addr);
     return UCS_OK;
 }
 
@@ -440,17 +441,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
         goto err_destroy_recv_cq;
     }
 
-    /* Address score and size */
-    if (self->gid.global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) {
-        self->addr_scope = UCT_IB_ADDRESS_SCOPE_LINK_LOCAL;
-    } else if ((self->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                    UCT_IB_SITE_LOCAL_PREFIX)
-    {
-        self->addr_scope = UCT_IB_ADDRESS_SCOPE_SITE_LOCAL;
-    } else {
-        self->addr_scope = UCT_IB_ADDRESS_SCOPE_GLOBAL;
-    }
-    self->addr_size = uct_ib_address_size(self->addr_scope);
+    /* Address scope and size */
+    self->addr_scope = uct_ib_address_scope(self->gid.global.subnet_prefix);
+    self->addr_size  = uct_ib_address_size(self->addr_scope);
 
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,

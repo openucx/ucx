@@ -340,6 +340,17 @@ uint8_t uct_ib_to_fabric_time(double time)
     }
 }
 
+uct_ib_address_scope_t uct_ib_address_scope(uint64_t subnet_prefix)
+{
+    if (subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) {
+        return UCT_IB_ADDRESS_SCOPE_LINK_LOCAL;
+    } else if ((subnet_prefix & UCT_IB_SITE_LOCAL_MASK) == UCT_IB_SITE_LOCAL_PREFIX) {
+        return UCT_IB_ADDRESS_SCOPE_SITE_LOCAL;
+    } else {
+        return UCT_IB_ADDRESS_SCOPE_GLOBAL;
+    }
+}
+
 size_t uct_ib_address_size(uct_ib_address_scope_t scope)
 {
     switch (scope) {
@@ -361,8 +372,8 @@ size_t uct_ib_address_size(uct_ib_address_scope_t scope)
     }
 }
 
-void uct_ib_address_pack(uct_ib_device_t *dev, uint8_t port_num,
-                         uct_ib_address_scope_t scope, const union ibv_gid *gid,
+void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_scope_t scope,
+                         const union ibv_gid *gid, uint16_t lid,
                          uct_ib_address_t *ib_addr)
 {
     void *ptr = ib_addr + 1;
@@ -373,7 +384,7 @@ void uct_ib_address_pack(uct_ib_device_t *dev, uint8_t port_num,
     /* LID */
     /* TODO check IB link layer of the port */
     ib_addr->flags |= UCT_IB_ADDRESS_FLAG_LID;
-    *(uint16_t*)ptr = uct_ib_device_port_attr(dev, port_num)->lid;
+    *(uint16_t*)ptr = lid;
     ptr += sizeof(uint16_t);
 
     if (scope >= UCT_IB_ADDRESS_SCOPE_SITE_LOCAL) {

@@ -150,6 +150,12 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu);
 
 
 /**
+ * @return IB address scope of a given subnet prefix (according to IBTA 4.1.1 12).
+ */
+uct_ib_address_scope_t uct_ib_address_scope(uint64_t subnet_prefix);
+
+
+/**
  * @return IB address size of the given link scope.
  */
 size_t uct_ib_address_size(uct_ib_address_scope_t scope);
@@ -158,16 +164,16 @@ size_t uct_ib_address_size(uct_ib_address_scope_t scope);
 /**
  * Pack IB address.
  *
- * @param [in]  dev        IB device.
- * @param [in]  port_num   Port number whose address to pack.
+ * @param [in]  dev        IB device. TODO remove this.
  * @param [in]  scope      Address scope.
  * @param [in]  gid        GID address to pack.
+ * @param [in]  lid        LID address to pack.
  * @param [out] ib_addr    Filled with packed ib address. Size of the structure
  *                         must be at least what @ref uct_ib_address_size() returns
  *                         for the given scope.
  */
-void uct_ib_address_pack(uct_ib_device_t *dev, uint8_t port_num,
-                         uct_ib_address_scope_t scope, const union ibv_gid *gid,
+void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_scope_t scope,
+                         const union ibv_gid *gid, uint16_t lid,
                          uct_ib_address_t *ib_addr);
 
 

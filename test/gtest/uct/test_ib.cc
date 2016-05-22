@@ -8,9 +8,10 @@ extern "C" {
 #include <poll.h>
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
+#include <uct/ib/base/ib_device.h>
+#include <uct/ib/base/ib_iface.h>
 }
 #include <common/test.h>
-#include <uct/ib/base/ib_iface.h>
 #include "uct_test.h"
 
 class test_uct_ib : public uct_test {
@@ -125,8 +126,35 @@ public:
         return ret;
     }
 
-    void cleanup() {
-        uct_test::cleanup();
+    void test_address_pack(uct_ib_address_scope_t scope, uint64_t subnet_prefix) {
+        static const uint16_t lid_in = 0x1ee7;
+        union ibv_gid gid_in, gid_out;
+        uct_ib_address_t *ib_addr;
+        uint16_t lid_out;
+        uint8_t is_global;
+
+        ib_addr = (uct_ib_address_t*)malloc(uct_ib_address_size(scope));
+
+        gid_in.global.subnet_prefix = subnet_prefix;
+        gid_in.global.interface_id  = 0xdeadbeef;
+        uct_ib_address_pack(ib_device(m_e1), scope, &gid_in, lid_in, ib_addr);
+
+        uct_ib_address_unpack(ib_addr, &lid_out, &is_global, &gid_out);
+
+        EXPECT_EQ((scope != UCT_IB_ADDRESS_SCOPE_LINK_LOCAL), is_global);
+        EXPECT_EQ(lid_in, lid_out);
+
+        if (is_global) {
+            EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
+            EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
+        }
+
+        free(ib_addr);
+    }
+
+    uct_ib_device_t *ib_device(entity *entity) {
+        uct_ib_iface_t *iface = ucs_derived_of(entity->iface(), uct_ib_iface_t);
+        return uct_ib_iface_device(iface);
     }
 
 protected:
@@ -168,5 +196,13 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
 
     free(recv_buffer);
 }
+
+UCS_TEST_P(test_uct_ib, address_pack) {
+    initialize();
+    test_address_pack(UCT_IB_ADDRESS_SCOPE_LINK_LOCAL, UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_ADDRESS_SCOPE_SITE_LOCAL, UCT_IB_SITE_LOCAL_PREFIX | htonll(0x7200));
+    test_address_pack(UCT_IB_ADDRESS_SCOPE_GLOBAL,     0xdeadfeedbeefa880ul);
+}
+
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
