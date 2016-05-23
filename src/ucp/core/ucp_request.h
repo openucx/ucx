@@ -87,6 +87,7 @@ struct ucp_request {
             ucp_ep_h              ep;
             const void            *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
+            uct_mem_h             mem;
 
             union {
                 ucp_tag_t         tag;      /* Tagged send */
