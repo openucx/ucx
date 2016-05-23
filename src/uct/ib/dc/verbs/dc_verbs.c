@@ -84,8 +84,8 @@ uct_dc_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
         return status;
     }
 
-    ep->ah = uct_ib_create_ah(&iface->super.super.super, ib_addr->lid);
-    if (ep->ah == NULL) {
+    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr, 0, &ep->ah);
+    if (status != UCS_OK) {
         *new_ep_p = NULL;
         return UCS_ERR_INVALID_ADDR;
     }
