@@ -46,7 +46,7 @@ uct_ud_iface_cep_cleanup_eps(uct_ud_iface_t *iface, uct_ud_iface_peer_t *peer)
         if (ep->conn_id < peer->conn_id_last) {
             /* active connection should already be cleaned by owner */
             ucs_warn("iface (%p) peer (qpn=%d lid=%d) cleanup with %d endpoints still active",
-                     iface, peer->dest_iface.qp_num, peer->dest_iface.lid, 
+                     iface, peer->dst_qpn, peer->dlid,
                      (int)ucs_list_length(&peer->ep_list));
             continue;
         }
@@ -73,19 +73,29 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
 }
 
 static uct_ud_iface_peer_t *
+uct_ud_iface_cep_lookup_addr(uct_ud_iface_t *iface, uint16_t dlid,
+                             const union ibv_gid *dgid, uint32_t dest_qpn)
+{
+    uct_ud_iface_peer_t key;
+    key.dlid    = dlid;
+    key.dgid    = *dgid;
+    key.dst_qpn = dest_qpn;
+    return sglib_hashed_uct_ud_iface_peer_t_find_member(iface->peers, &key);
+}
+
+static uct_ud_iface_peer_t *
 uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface, 
                              const uct_ib_address_t *src_ib_addr,
                              const uct_ud_iface_addr_t *src_if_addr)
 {
-    uct_ud_iface_peer_t *peer, key;
+    uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
+    union ibv_gid dgid;
+    uint8_t is_global;
+    uint16_t dlid;
 
-    key.dest_iface.qp_num = uct_ib_unpack_uint24(src_if_addr->qp_num);
-    key.dest_iface.lid    = src_ib_addr->lid;
-
-    peer = sglib_hashed_uct_ud_iface_peer_t_find_member(iface->peers, &key);
-    return peer;
+    uct_ib_address_unpack(src_ib_addr, &dlid, &is_global, &dgid);
+    return uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
 }
-
 
 static uct_ud_ep_t *
 uct_ud_iface_cep_lookup_ep(uct_ud_iface_peer_t *peer, uint32_t conn_id)
@@ -128,17 +138,24 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
                                      const uct_ud_iface_addr_t *src_if_addr,
                                      uct_ud_ep_t *ep, uint32_t conn_id)
 {
+    uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
     uct_ud_iface_peer_t *peer;
+    union ibv_gid dgid;
+    uint8_t is_global;
     uct_ud_ep_t *cep;
+    uint16_t dlid;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
-    if (!peer) {
-        peer = (uct_ud_iface_peer_t *)malloc(sizeof(*peer));
-        if (!peer) {
+    uct_ib_address_unpack(src_ib_addr, &dlid, &is_global, &dgid);
+    peer = uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
+    if (peer == NULL) {
+        peer = malloc(sizeof *peer);
+        if (peer == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
-        peer->dest_iface.qp_num = uct_ib_unpack_uint24(src_if_addr->qp_num);
-        peer->dest_iface.lid    = src_ib_addr->lid;
+
+        peer->dlid    = dlid;
+        peer->dgid    = dgid;
+        peer->dst_qpn = dest_qpn;
         sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
         ucs_list_head_init(&peer->ep_list);
         peer->conn_id_last = 0;
@@ -182,7 +199,7 @@ uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
     uct_ud_ep_t *ep;
 
     peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
-    if (!peer) {
+    if (peer == NULL) {
         return NULL;
     }
 
@@ -201,7 +218,6 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
     uct_ud_iface_peer_t *peer;
 
     peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
-
     ucs_assert_always(peer != NULL);
     ucs_assert_always(peer->conn_id_last > 0);
     ucs_assert_always(ep->conn_id + 1 == peer->conn_id_last);
@@ -373,6 +389,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_pd_h pd,
 {
     unsigned rx_priv_len, rx_hdr_len;
     ucs_status_t status;
+    size_t data_size;
     int mtu;
 
     ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%u ud_rx_priv_len=%u",
@@ -422,14 +439,16 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_pd_h pd,
         goto err_qp;
     }
 
+    data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;
+    data_size = ucs_max(data_size, self->super.config.seg_size);
+    data_size = ucs_max(data_size, sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline);
+
     status = uct_iface_mpool_init(&self->super.super, &self->tx.mp,
-                                sizeof(uct_ud_send_skb_t) + 
-                                ucs_max(sizeof(uct_ud_zcopy_desc_t) + self->config.max_inline, 
-                                               self->super.config.seg_size),
-                                sizeof(uct_ud_send_skb_t),
-                                UCS_SYS_CACHE_LINE_SIZE,
-                                &config->super.tx.mp, self->config.tx_qp_len,
-                                uct_ud_iface_send_skb_init, "ud_tx_skb");
+                                  sizeof(uct_ud_send_skb_t) + data_size,
+                                  sizeof(uct_ud_send_skb_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &config->super.tx.mp, self->config.tx_qp_len,
+                                  uct_ud_iface_send_skb_init, "ud_tx_skb");
     if (status != UCS_OK) {
         goto err_mpool;
     }

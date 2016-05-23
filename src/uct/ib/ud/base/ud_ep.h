@@ -160,11 +160,6 @@ do { \
  * psn % UCT_UD_RESENDS_PER_ACK = 0
  */
 
-struct uct_ud_ep_addr {
-    uct_ib_uint24_t qp_num;
-    uct_ib_uint24_t ep_id;
-};
-
 /* 
  * Endpoint pending control operations. The operations
  * are executed in time of progress along with

@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/stats/stats.h>
+#include <infiniband/arch.h>
 
 
 #define UCT_IB_QPN_ORDER            24  /* How many bits can be an IB QP number */
@@ -31,6 +32,9 @@
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
 #define UCT_IB_DEV_MAX_PORTS        2
 #define UCT_IB_QKEY                 0x1ee7a330
+#define UCT_IB_LINK_LOCAL_PREFIX    ntohll(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
+#define UCT_IB_SITE_LOCAL_PREFIX    ntohll(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_SITE_LOCAL_MASK      ntohll(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 
 
 enum {
@@ -46,13 +50,36 @@ enum {
 };
 
 
+typedef enum {
+    UCT_IB_ADDRESS_SCOPE_LINK_LOCAL,   /* Subnet-local address */
+    UCT_IB_ADDRESS_SCOPE_SITE_LOCAL,   /* Site local, 16-bit subnet prefix */
+    UCT_IB_ADDRESS_SCOPE_GLOBAL        /* Global, 64-bit subnet prefix */
+} uct_ib_address_scope_t;
+
+
+/**
+ * Flags which specify which address fields are present
+ */
+enum {
+    UCT_IB_ADDRESS_FLAG_LID      = UCS_BIT(0),
+    UCT_IB_ADDRESS_FLAG_IF_ID    = UCS_BIT(1),
+    UCT_IB_ADDRESS_FLAG_SUBNET16 = UCS_BIT(2),
+    UCT_IB_ADDRESS_FLAG_SUBNET64 = UCS_BIT(3)
+};
+
+
 /**
  * IB network address
  */
 typedef struct uct_ib_address {
-    uint16_t           lid;
-    uint16_t           dev_id;
-    union ibv_gid      gid;
+    uint8_t            flags;
+    uint16_t           dev_id; /* TODO remove this */
+    /* Following fields appear in this order (if specified by flags) :
+     * - uint16_t lid
+     * - uint64_t if_id
+     * - uint16_t subnet16
+     * - uint64_t subnet64
+     */
 } UCS_S_PACKED uct_ib_address_t;
 
 
@@ -120,6 +147,53 @@ uint8_t uct_ib_to_fabric_time(double time);
  * @return MTU in bytes.
  */
 size_t uct_ib_mtu_value(enum ibv_mtu mtu);
+
+
+/**
+ * @return IB address scope of a given subnet prefix (according to IBTA 4.1.1 12).
+ */
+uct_ib_address_scope_t uct_ib_address_scope(uint64_t subnet_prefix);
+
+
+/**
+ * @return IB address size of the given link scope.
+ */
+size_t uct_ib_address_size(uct_ib_address_scope_t scope);
+
+
+/**
+ * Pack IB address.
+ *
+ * @param [in]  dev        IB device. TODO remove this.
+ * @param [in]  scope      Address scope.
+ * @param [in]  gid        GID address to pack.
+ * @param [in]  lid        LID address to pack.
+ * @param [out] ib_addr    Filled with packed ib address. Size of the structure
+ *                         must be at least what @ref uct_ib_address_size() returns
+ *                         for the given scope.
+ */
+void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_scope_t scope,
+                         const union ibv_gid *gid, uint16_t lid,
+                         uct_ib_address_t *ib_addr);
+
+
+/**
+ * Unpack IB address.
+ *
+ * @param [in]  ib_addr    IB address to unpack.
+ * @param [out] lid        Filled with address LID, or 0 if not present.
+ * @param [out] is_global  Filled with 0, or 1 if the address is IB global
+ */
+void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
+                           uint8_t *is_global, union ibv_gid *gid);
+
+
+/**
+ * Convert IB address to a human-readable string.
+ */
+const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
+                               size_t max);
+
 
 /**
  * find device mtu. This function can be used before ib

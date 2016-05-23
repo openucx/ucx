@@ -87,6 +87,8 @@ struct uct_ib_iface {
     uint16_t                pkey_value;
     uint8_t                 port_num;
     uint8_t                 sl;
+    uct_ib_address_scope_t  addr_scope;
+    uint8_t                 addr_size;
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
@@ -183,8 +185,6 @@ uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
     }
 }
 
-ucs_status_t uct_ib_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
-
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 
@@ -231,7 +231,13 @@ typedef struct uct_ib_recv_wr {
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
 
-struct ibv_ah *uct_ib_create_ah(uct_ib_iface_t *iface, uint16_t dlid);
+void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
+                               uint8_t src_path_bits, struct ibv_ah_attr *ah_attr);
+
+ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
+                                    const uct_ib_address_t *ib_addr,
+                                    uint8_t src_path_bits,
+                                    struct ibv_ah **ah_p);
 
 ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
                                       uct_wakeup_h wakeup);

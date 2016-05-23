@@ -231,7 +231,7 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_ep_addr_t *ep_addr = (uct_ud_ep_addr_t *)addr;
 
-    uct_ib_pack_uint24(ep_addr->qp_num, iface->qp->qp_num);
+    uct_ib_pack_uint24(ep_addr->iface_addr.qp_num, iface->qp->qp_num);
     uct_ib_pack_uint24(ep_addr->ep_id, ep->ep_id);
     return UCS_OK;
 }
@@ -242,17 +242,19 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
 {   
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    char buf[128];
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
-    ucs_debug("%s:%d lid %d qpn 0x%x ep_id %u ep %p connected to IFACE dlid %d qpn 0x%x",
+    ucs_debug("%s:%d lid %d qpn 0x%x epid %u ep %p connected to IFACE %s qpn 0x%x",
               ibv_get_device_name(dev->ibv_context->device),
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, ep, 
-              ib_addr->lid, uct_ib_unpack_uint24(if_addr->qp_num));
+              uct_ib_address_str(ib_addr, buf, sizeof(buf)),
+              uct_ib_unpack_uint24(if_addr->qp_num));
 
     return UCS_OK;
 }
@@ -330,6 +332,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    char buf[128];
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_trace_func("");
@@ -339,14 +342,14 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
-    ucs_debug("%s:%d slid=%d qpn=%d ep=%u connected to dlid=%d qpn=%d ep=%u", 
+    ucs_debug("%s:%d slid %d qpn 0x%x epid %u connected to %s qpn 0x%x epid %u",
               ibv_get_device_name(dev->ibv_context->device),
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
               ep->ep_id, 
-              ib_addr->lid, uct_ib_unpack_uint24(ep_addr->qp_num), ep->dest_ep_id);
-
+              uct_ib_address_str(ib_addr, buf, sizeof(buf)),
+              uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num), ep->dest_ep_id);
     return UCS_OK;
 }
 
@@ -415,13 +418,12 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ucs_assert_always(status == UCS_OK);
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
-    status = iface_h->ops.ep_connect_to_ep(ep_h, 
-                                           (void *)&ctl->conn_req.ib_addr, 
-                                           (void *)&ctl->conn_req.ep_addr);
+    status = uct_ep_connect_to_ep(ep_h, (void*)uct_ud_creq_ib_addr(ctl),
+                                  (void*)&ctl->conn_req.ep_addr);
     ucs_assert_always(status == UCS_OK);
 
-    status = uct_ud_iface_cep_insert(iface, &ctl->conn_req.ib_addr, 
-                                     (const uct_ud_iface_addr_t *)&ctl->conn_req.ep_addr, 
+    status = uct_ud_iface_cep_insert(iface, uct_ud_creq_ib_addr(ctl),
+                                     &ctl->conn_req.ep_addr.iface_addr,
                                      ep, ctl->conn_req.conn_id);
     ucs_assert_always(status == UCS_OK);
     return ep;
@@ -434,8 +436,8 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREQ);
 
-    ep = uct_ud_iface_cep_lookup(iface, &ctl->conn_req.ib_addr, 
-                                 (const uct_ud_iface_addr_t *)&ctl->conn_req.ep_addr, 
+    ep = uct_ud_iface_cep_lookup(iface, uct_ud_creq_ib_addr(ctl),
+                                 &ctl->conn_req.ep_addr.iface_addr,
                                  ctl->conn_req.conn_id);
     if (!ep) {
         ep = uct_ud_ep_create_passive(iface, ctl);
@@ -488,28 +490,14 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_
 
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 {
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    uct_ud_ctl_hdr_t *creq;
     uct_ud_send_skb_t *skb;
     uct_ud_neth_t *neth;
-    uct_ud_ctl_hdr_t *creq;
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-    uct_ud_ep_addr_t ep_addr;
-    uct_ib_address_t ib_addr;
     ucs_status_t status;
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
-
-    memset(&ep_addr, 0, sizeof(ep_addr)); /* make coverity happy */
-    status = uct_ud_ep_get_address(&ep->super.super, (void *)&ep_addr);
-    if (status != UCS_OK) {
-        return NULL;
-    }
-
-    status = uct_ib_iface_get_device_address(&iface->super.super.super, 
-                                             (void *)&ib_addr);
-    if (status != UCS_OK) {
-        return NULL;
-    }
 
     skb = uct_ud_iface_get_tx_skb(iface, ep);
     if (!skb) {
@@ -526,12 +514,22 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 
     creq->type                    = UCT_UD_PACKET_CREQ;
     creq->conn_req.conn_id        = ep->conn_id;
-    memcpy(&creq->conn_req.ib_addr, &ib_addr, sizeof(ib_addr));
-    memcpy(&creq->conn_req.ep_addr, &ep_addr, sizeof(ep_addr));
+
+    status = uct_ud_ep_get_address(&ep->super.super,
+                                   (void*)&creq->conn_req.ep_addr);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    status = uct_ib_iface_get_device_address(&iface->super.super.super,
+                                             (uct_device_addr_t*)uct_ud_creq_ib_addr(creq));
+    if (status != UCS_OK) {
+        return NULL;
+    }
 
     uct_ud_peer_name(&creq->peer);
 
-    skb->len = sizeof(*neth) + sizeof(*creq);
+    skb->len = sizeof(*neth) + sizeof(*creq) + iface->super.addr_size;
     return skb;
 }
 
@@ -550,7 +548,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     if (ucs_unlikely(dest_id == UCT_UD_EP_NULL_ID)) {
         /* must be connection request packet */
         uct_ud_iface_log_rx(iface, NULL, neth, byte_len);
-        ucs_assert_always(sizeof(*neth) + sizeof(uct_ud_ctl_hdr_t) == byte_len);
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     }

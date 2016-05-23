@@ -12,6 +12,7 @@
 static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
                              char *p, int max, uct_ud_neth_t *neth, int pkt_len)
 {
+    char buf[128];
     int n, ret = 0;
     uint32_t dest_id;
     uint32_t am_id;
@@ -53,16 +54,16 @@ static void uct_ud_dump_neth(uct_ud_iface_t *iface, uct_am_trace_type_t type,
         ctl_hdr = (uct_ud_ctl_hdr_t *)(neth+1);
         switch(ctl_hdr->type) {
         case UCT_UD_PACKET_CREQ:
-            n = snprintf(p, max, "CREQ[%s : %d]: qp 0x%x lid %d epid %d cid %d ",
+            n = snprintf(p, max, "CREQ from %s:%d qp 0x%x %s epid %d cid %d ",
                          ctl_hdr->peer.name, ctl_hdr->peer.pid,
-                         uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.qp_num),
-                         ctl_hdr->conn_req.ib_addr.lid,
+                         uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.iface_addr.qp_num),
+                         uct_ib_address_str(uct_ud_creq_ib_addr(ctl_hdr), buf, sizeof(buf)),
                          uct_ib_unpack_uint24(ctl_hdr->conn_req.ep_addr.ep_id),
                          ctl_hdr->conn_req.conn_id);
             p += n; max -= n;
             break;
         case UCT_UD_PACKET_CREP:
-            n = snprintf(p, max, "CREP[%s : %d]: src_ep_id=%d ", 
+            n = snprintf(p, max, "CREP from %s:%d src_ep_id=%d ",
                          ctl_hdr->peer.name, ctl_hdr->peer.pid,
                          ctl_hdr->conn_rep.src_ep_id);
             p += n; max -= n;
