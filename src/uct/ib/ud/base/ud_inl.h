@@ -12,7 +12,18 @@ uct_ud_ep_ctl_op_add(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 }
 
-/* check iface resources:tx_queue and skbs and return skb */
+/* 
+ * check iface resources:tx_queue and return 
+ * prefetched/cached skb 
+ *
+ * NOTE: caller must not return skn to mpool until it is 
+ * removed from the cache 
+ * skb is removed from cache by 
+ *  uct_ud_iface_complete_tx_inl()
+ *  uct_ud_iface_complete_tx_skb()
+ *
+ * In case of error flow caller must do nothing with the skb
+ */
 static UCS_F_ALWAYS_INLINE 
 uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
                                            uct_ud_ep_t *ep)
@@ -32,6 +43,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
             UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
             return NULL;
         }
+        iface->tx.skb = skb;
     }
     VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
     ucs_prefetch(skb->neth);
