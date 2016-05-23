@@ -7,6 +7,8 @@
 #ifndef UCT_RC_VERBS_COMMON_H
 #define UCT_RC_VERBS_COMMON_H
 
+#include <ucs/arch/bitops.h>
+
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 
@@ -206,6 +208,60 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
         sge->addr      = (uintptr_t)(desc + 1); \
         sge->lkey      = (_desc)->lkey; \
     }
+
+#define UCT_RC_VERBS_FILL_ATOMIC_WR(_wr, _wr_opcode, _sge, _opcode, \
+                                    _compare_add, _swap, _remote_addr, _rkey) \
+    _wr.sg_list               = &_sge; \
+    _wr.num_sge               = 1; \
+    _wr_opcode                = _opcode; \
+    _wr.wr.atomic.compare_add = _compare_add; \
+    _wr.wr.atomic.swap        = _swap; \
+    _wr.wr.atomic.remote_addr = _remote_addr; \
+    _wr.wr.atomic.rkey        = _rkey;  \
+    _sge.length               = sizeof(uint64_t);
+
+static inline uct_rc_send_handler_t 
+uct_rc_verbs_atomic_handler(uct_rc_verbs_iface_common_t *iface, uint32_t length)
+{
+    ucs_assert((length == sizeof(uint32_t)) || (length == sizeof(uint64_t)));
+    switch (length) {
+        case sizeof(uint32_t):
+            return iface->config.atomic32_handler;
+        case sizeof(uint64_t):
+            return iface->config.atomic64_handler;
+    }
+    return NULL;
+}
+
+static inline void 
+uct_rc_verbs_fill_ext_atomic_wr(struct ibv_exp_send_wr *wr, struct ibv_sge *sge,
+                                int opcode, uint32_t length, uint32_t compare_mask,
+                                uint64_t compare_add, uint64_t swap, uint64_t remote_addr,
+                                uct_rkey_t rkey)
+{
+    sge->length        = length;
+    wr->sg_list        = sge;
+    wr->num_sge        = 1;
+    wr->exp_opcode     = opcode;
+    wr->comp_mask      = 0;
+
+    wr->ext_op.masked_atomics.log_arg_sz  = ucs_ilog2(length);
+    wr->ext_op.masked_atomics.remote_addr = remote_addr;
+    wr->ext_op.masked_atomics.rkey        = rkey;
+
+    switch (opcode) {
+    case IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP:
+        wr->ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_mask = compare_mask;
+        wr->ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_val  = compare_add;
+        wr->ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_mask    = (uint64_t)(-1);
+        wr->ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_val     = swap;
+        break;
+    case IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD:
+        wr->ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val        = compare_add;
+        wr->ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = 0;
+        break;
+    }
+}
 
 static inline void uct_rc_verbs_am_zcopy_sge_fill(struct ibv_sge *sge,
                                                   unsigned header_length, const void *payload,

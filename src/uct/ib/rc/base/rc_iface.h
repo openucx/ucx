@@ -66,6 +66,18 @@
     _desc->unpack_cb         = _unpack_cb;
 
 
+#define UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(_iface, _mp, _desc) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    _desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; 
+
+#define UCT_RC_IFACE_GET_TX_ATOMIC_DESC(_iface, _mp, _desc, _handler, _result, _comp) \
+    UCT_CHECK_PARAM(_comp != NULL, "completion must be non-NULL"); \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    _desc->super.handler   = _handler; \
+    _desc->super.buffer    = _result; \
+    _desc->super.user_comp = _comp; 
+
+
 enum {
     UCT_RC_IFACE_STAT_RX_COMPLETION,
     UCT_RC_IFACE_STAT_TX_COMPLETION,
