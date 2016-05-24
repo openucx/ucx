@@ -102,32 +102,45 @@ static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface, uct_dc_iface
 
     iface->tx.ndci = 8; /* TODO: make configurable */
 
-    iface->tx.dcis = ucs_malloc(iface->tx.ndci * sizeof(uct_rc_txqp_t), "dc");
+    iface->tx.dcis = ucs_malloc(iface->tx.ndci * sizeof(uct_dc_dci_t), "dc");
     if (iface->tx.dcis == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
+    iface->tx.dcis_stack = ucs_malloc(iface->tx.ndci * sizeof(uint8_t), "dc");
+    if (iface->tx.dcis_stack == NULL) {
+        free(iface->tx.dcis);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    iface->tx.stack_top = 0;
+
     for (i = 0; i < iface->tx.ndci; i++) {
-        status = uct_rc_txqp_init(&iface->tx.dcis[i], &iface->super, 
+        status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super, 
                                   IBV_EXP_QPT_DC_INI, &cap);
         if (status != UCS_OK) {
             goto create_err;
         }
 
-        status = uct_dc_iface_dci_connect(iface, &iface->tx.dcis[i]);
+        status = uct_dc_iface_dci_connect(iface, &iface->tx.dcis[i].txqp);
         if (status != UCS_OK) {
             goto create_err;
         }
+
+        iface->tx.dcis_stack[i] = i;
+        iface->tx.dcis[i].ep    = NULL;
     }
     config->max_inline = cap.max_inline_data;
     return UCS_OK;
 
 create_err:
     for (;i >= 0; i--) {
-        if (iface->tx.dcis[i].qp) { 
-            ibv_destroy_qp(iface->tx.dcis[i].qp);
+        if (iface->tx.dcis[i].txqp.qp) { 
+            ibv_destroy_qp(iface->tx.dcis[i].txqp.qp);
         }
     }
+    ucs_free(iface->tx.dcis);
+    ucs_free(iface->tx.dcis_stack);
     return status;
 }
 
@@ -164,9 +177,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     ibv_exp_destroy_dct(self->rx.dct);
 
     for (i = 0; i < self->tx.ndci; i++) {
-        uct_rc_txqp_cleanup(&self->tx.dcis[i]);
+        uct_rc_txqp_cleanup(&self->tx.dcis[i].txqp);
     }
     ucs_free(self->tx.dcis);
+    ucs_free(self->tx.dcis_stack);
 }
 
 

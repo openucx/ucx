@@ -12,6 +12,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_ep_t, uct_dc_iface_t *iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super);
     ucs_arbiter_group_init(&self->pending_group);
+    self->dci = UCT_DC_EP_NO_DCI;
     return UCS_OK;
 }
 

@@ -25,11 +25,19 @@ typedef struct uct_dc_iface_config {
     int max_inline;
 } uct_dc_iface_config_t;
 
+typedef struct uct_dc_dci {
+    uct_rc_txqp_t   txqp;
+    uct_dc_ep_t     *ep;        /* points to an endpoint that currently own
+                                   the dci */
+} uct_dc_dci_t;
+
 typedef struct uct_dc_iface { 
     uct_rc_iface_t super;
     struct {
-        uct_rc_txqp_t *dcis;
-        int ndci;
+        uct_dc_dci_t  *dcis;
+        uint8_t       *dcis_stack;
+        uint8_t       stack_top;
+        uint8_t       ndci;
     } tx;
     struct { 
         struct ibv_exp_dct *dct;
@@ -54,7 +62,7 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
-static inline int uct_dc_iface_dci_find(uct_dc_iface_t *iface, uint32_t qp_num)
+static inline uint8_t uct_dc_iface_dci_find(uct_dc_iface_t *iface, uint32_t qp_num)
 {
     /* linear search is most probably the best way to go
      * because the number of dcis is usually small 
@@ -62,30 +70,11 @@ static inline int uct_dc_iface_dci_find(uct_dc_iface_t *iface, uint32_t qp_num)
     int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
-        if (iface->tx.dcis[i].qp->qp_num == qp_num) {
+        if (iface->tx.dcis[i].txqp.qp->qp_num == qp_num) {
             return i;
         }
     }
     ucs_fatal("DCI (qpnum=%d) does not exist", qp_num); 
 }
-
-static inline ucs_status_t uct_dc_iface_dci_get(uct_dc_iface_t *iface, uct_dc_ep_t *ep, int *dci)
-{
-    
-    /* TODO: actual dci selection logic */
-    *dci = 0;
-    UCT_RC_CHECK_TXQP(&iface->super, &iface->tx.dcis[*dci]);
-    return UCS_OK;
-}
-
-#define UCT_DC_CHECK_RES(_iface, _ep, _dci) \
-    { \
-        ucs_status_t status; \
-        UCT_RC_CHECK_CQE(&(_iface)->super); \
-        status = uct_dc_iface_dci_get(_iface, _ep, &_dci); \
-        if (ucs_unlikely(status != UCS_OK)) { \
-            return status; \
-        } \
-    }
 
 #endif
