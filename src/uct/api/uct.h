@@ -1056,6 +1056,13 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  * @ingroup UCT_RESOURCE
  * @brief Flush outstanding communication operations on an interface.
  *
+ * Flushes all outstanding communications issued on the interface prior to
+ * this call. The operations are completed at the origin or at the target
+ * as well. The exact completion semantic depends on the provided parameters.
+ *
+ * @note Currently only one completion type is supported. It guaranties that
+ * the data transfer is completed but the target buffer may not be updated yet.
+ *
  * @param [in]    iface  Interface to flush communications from.
  * @param [in]    flags  Flags that control completion semantic (currently
  *                        unsupported - set to 0).
@@ -1330,6 +1337,13 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
 /**
  * @ingroup UCT_RESOURCE
  * @brief Flush outstanding communication operations on an endpoint.
+ *
+ * Flushes all outstanding communications issued on the endpoint prior to
+ * this call. The operations are completed at the origin or at the target
+ * as well. The exact completion semantic depends on the provided parameters.
+ *
+ * @note Currently only one completion type is supported. It guaranties that
+ * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    ep     Endpoint to flush communications from.
  * @param [in]    flags  Flags that control completion semantic (currently
