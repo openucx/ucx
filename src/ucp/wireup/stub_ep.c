@@ -307,7 +307,7 @@ ucp_rsc_index_t ucp_stub_ep_get_aux_rsc_index(uct_ep_h uct_ep)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
 
-    if (uct_ep->iface != &ucp_stub_iface) {
+    if (!ucp_stub_ep_test(uct_ep)) {
         return UCP_NULL_RESOURCE;
     }
 
@@ -323,6 +323,8 @@ ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
     ucp_ep_h ep            = stub_ep->ep;
     ucp_worker_h worker    = ep->worker;
     ucs_status_t status;
+
+    ucs_assert(ucp_stub_ep_test(uct_ep));
 
     status = uct_ep_create(worker->ifaces[rsc_index], &stub_ep->next_ep);
     if (status != UCS_OK) {
@@ -353,7 +355,7 @@ void ucp_stub_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
 
-    ucs_assert(uct_ep->iface == &ucp_stub_iface);
+    ucs_assert(ucp_stub_ep_test(uct_ep));
     ucs_assert(stub_ep->next_ep == NULL);
     stub_ep->next_ep = next_ep;
 }
@@ -362,9 +364,14 @@ void ucp_stub_ep_remote_connected(uct_ep_h uct_ep)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
 
-    ucs_assert(uct_ep->iface == &ucp_stub_iface);
+    ucs_assert(ucp_stub_ep_test(uct_ep));
     ucs_assert(stub_ep->next_ep != NULL);
     ucs_trace("ep %p: stub ep %p is remote-connected", stub_ep->ep, stub_ep);
     stub_ep->connected = 1;
     ucp_worker_stub_ep_add(stub_ep->ep->worker, stub_ep);
+}
+
+int ucp_stub_ep_test(uct_ep_h uct_ep)
+{
+    return uct_ep->iface == &ucp_stub_iface;
 }

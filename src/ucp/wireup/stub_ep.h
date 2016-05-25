@@ -65,6 +65,9 @@ void ucp_stub_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 
 void ucp_stub_ep_remote_connected(uct_ep_h uct_ep);
 
+int ucp_stub_ep_test(uct_ep_h uct_ep);
+
 void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep);
+
 
 #endif
