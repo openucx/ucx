@@ -401,17 +401,25 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
 #if _USE_ZCOPY
     ucp_ep_config_t *config;
     ucp_lane_index_t lane;
-
+retry:
     UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, lane, uct_rkey);
     uct_ep = ep->uct_eps[lane];
     rma_config = &config->rma[lane];
+
     if (length <= rma_config->max_get_bcopy) {
         status = uct_ep_get_bcopy(uct_ep,
                                   (uct_unpack_callback_t)memcpy,
                                   (void *)buffer, length,
                                   remote_addr,
                                   uct_rkey, &comp);
-        ++comp.count;
+        if (status == UCS_INPROGRESS) {
+            ++comp.count;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            ucp_worker_progress(ep->worker);
+            goto retry;
+        } else if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
     } else {
         uct_pd_h uct_pd = ucp_ep_pd(ep, lane);
         uct_mem_h mem;
