@@ -63,19 +63,16 @@ private:
 
         static void barrier(void *rte_group);
 
-        static void send(void *rte_group, unsigned dest, void *value, size_t size);
+        static void post_vec(void *rte_group, const struct iovec *iovec,
+                             int iovcnt, void **req);
 
-        static void recv(void *rte_group, unsigned src,  void *value, size_t size);
-
-        static void post_vec(void *rte_group, struct iovec *iovec, size_t num,
-                             void **req);
-
-        static void recv_vec(void *rte_group, unsigned dest, struct iovec *iovec,
-                             size_t num, void * req);
+        static void recv(void *rte_group, unsigned src, void *buffer,
+                         size_t max, void *req);
 
         static void exchange_vec(void *rte_group, void * req);
 
-        static void report(void *rte_group, ucx_perf_result_t *result, int is_final);
+        static void report(void *rte_group, const ucx_perf_result_t *result,
+                           void *arg, int is_final);
 
         static ucx_perf_rte_t test_rte;
 
@@ -83,7 +80,6 @@ private:
         const unsigned m_index;
         rte_comm       &m_send;
         rte_comm       &m_recv;
-        rte_comm       m_self;
     };
 
     struct thread_arg {

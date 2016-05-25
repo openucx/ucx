@@ -67,69 +67,45 @@ void test_perf::rte::barrier(void *rte_group) {
     ucs_assert_always(dummy == magic);
 }
 
-void test_perf::rte::send(void *rte_group, unsigned dest, void *value,
-                                      size_t size)
+void test_perf::rte::post_vec(void *rte_group, const struct iovec *iovec,
+                              int iovcnt, void **req)
 {
     rte *self = reinterpret_cast<rte*>(rte_group);
-    if (dest == self->m_index) {
-        self->m_self.push(value, size);
-    } else if (dest == 1 - self->m_index) {
-        self->m_send.push(value, size);
-    }
-}
-
-void test_perf::rte::recv(void *rte_group, unsigned src, void *value,
-                                      size_t size)
-{
-    rte *self = reinterpret_cast<rte*>(rte_group);
-    if (src == self->m_index) {
-        self->m_self.pop(value, size);
-    } else if (src == 1 - self->m_index) {
-        self->m_recv.pop(value, size);
-    }
-}
-
-void test_perf::rte::post_vec(void *rte_group, struct iovec *iovec,
-                                          size_t num, void **req)
-{
+    size_t size;
     int i;
-    size_t j;
-    int group_size;
-    int group_index;
-    rte *self = reinterpret_cast<rte*>(rte_group);
 
-    group_size = self->group_size(rte_group);
-    group_index = self->group_index(rte_group);
+    size = 0;
+    for (i = 0; i < iovcnt; ++i) {
+        size += iovec[i].iov_len;
+    }
 
-    for (i = 0; i < group_size; ++i) {
-        if (i != group_index) {
-            for (j = 0; j < num; ++j) {
-                self->send(rte_group, i, iovec[j].iov_base, iovec[j].iov_len);
-            }
-        }
+    self->m_send.push(&size, sizeof(size));
+    for (i = 0; i < iovcnt; ++i) {
+        self->m_send.push(iovec[i].iov_base, iovec[i].iov_len);
     }
 }
 
-void test_perf::rte::recv_vec(void *rte_group, unsigned dest,
-                                          struct iovec *iovec, size_t num, void* req)
+void test_perf::rte::recv(void *rte_group, unsigned src, void *buffer,
+                          size_t max, void *req)
 {
-    int group_index;
-    size_t i;
     rte *self = reinterpret_cast<rte*>(rte_group);
+    size_t size;
 
-    group_index = self->group_index(rte_group);
-    if (dest != (unsigned)group_index) {
-        for (i = 0; i < num; ++i) {
-            self->recv(rte_group, dest, iovec[i].iov_base, iovec[i].iov_len);
-        }
+    if (src != 1 - self->m_index) {
+        return;
     }
+
+    self->m_recv.pop(&size, sizeof(size));
+    ucs_assert_always(size <= max);
+    self->m_recv.pop(buffer, size);
 }
 
-void test_perf::rte::exchange_vec(void *rte_group, void * req) {
+void test_perf::rte::exchange_vec(void *rte_group, void * req)
+{
 }
 
-void test_perf::rte::report(void *rte_group, ucx_perf_result_t *result,
-                                        int is_final)
+void test_perf::rte::report(void *rte_group, const ucx_perf_result_t *result,
+                            void *arg, int is_final)
 {
 }
 
@@ -138,7 +114,7 @@ ucx_perf_rte_t test_perf::rte::test_rte = {
     rte::group_index,
     rte::barrier,
     rte::post_vec,
-    rte::recv_vec,
+    rte::recv,
     rte::exchange_vec,
     rte::report,
 };
@@ -213,6 +189,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.report_interval = 1.0;
     params.rte_group       = NULL;
     params.rte             = &rte::test_rte;
+    params.report_arg      = NULL;
     strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
     strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
     params.uct.data_layout = test.data_layout;

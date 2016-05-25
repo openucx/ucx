@@ -128,7 +128,7 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf, ucx_perf_counter_t 
 
     if (perf->current.time - perf->prev.time >= perf->report_interval) {
         ucx_perf_calc_result(perf, &result);
-        rte_call(perf, report, &result, 0);
+        rte_call(perf, report, &result, perf->params.report_arg, 0);
         perf->prev = perf->current;
     }
 }
