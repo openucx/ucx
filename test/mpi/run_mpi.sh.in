@@ -208,7 +208,7 @@ main()
 	parse_args "$@"
 	adjust_run_params
 
-	if (strings $MPIRUN|grep -qi orte) && (strings $MPIRUN|grep -qi mca_base)
+	if (strings $MPIRUN|grep -qi orte) && ($MPIRUN -h|grep -q "Open MPI")
 	then
 		run_open_mpi
 	else
