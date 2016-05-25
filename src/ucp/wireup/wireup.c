@@ -133,6 +133,22 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     return UCS_OK;
 }
 
+/* @return AMO lane amo_index in the pd map */
+static ucp_lane_index_t ucp_ep_get_amo_lane_index(const ucp_ep_config_key_t *key,
+                                                  ucp_lane_index_t lane)
+{
+    ucp_lane_index_t i;
+
+    for (i = 0; i < UCP_MAX_LANES; ++i) {
+        if (key->amo_lanes[i] == lane) {
+            return i;
+        } else if (key->amo_lanes[i] == UCP_NULL_LANE) {
+            break;
+        }
+    }
+    return UCP_NULL_LANE;
+}
+
 static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
                                              unsigned address_count,
                                              const ucp_address_entry_t *address_list)
@@ -140,7 +156,7 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
     ucp_worker_h worker = ep->worker;
     const ucp_address_entry_t *address;
     ucp_rsc_index_t rsc_index;
-    ucp_lane_index_t lane;
+    ucp_lane_index_t lane, amo_index;
     ucs_status_t status;
     ucp_pd_map_t UCS_V_UNUSED pd_map;
 
@@ -161,10 +177,14 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
                     "lane=%d ai=%d pd_map=0x%x pd_index=%d", lane, tli[lane],
                     pd_map, address->pd_index);
 
-        pd_map = ucp_lane_map_get_lane(ucp_ep_config(ep)->key.amo_lane_map, lane);
-        ucs_assertv((pd_map == 0) || (pd_map == UCS_BIT(address->pd_index)),
-                    "lane=%d ai=%d pd_map=0x%x pd_index=%d", lane, tli[lane],
-                    pd_map, address->pd_index);
+        amo_index = ucp_ep_get_amo_lane_index(&ucp_ep_config(ep)->key, lane);
+        if (amo_index != UCP_NULL_LANE) {
+            pd_map = ucp_lane_map_get_lane(ucp_ep_config(ep)->key.amo_lane_map,
+                                           amo_index);
+            ucs_assertv((pd_map == 0) || (pd_map == UCS_BIT(address->pd_index)),
+                        "lane=%d ai=%d pd_map=0x%x pd_index=%d", lane, tli[lane],
+                        pd_map, address->pd_index);
+        }
 
         status = uct_ep_connect_to_ep(ep->uct_eps[lane], address->dev_addr,
                                       address->ep_addr);
@@ -426,7 +446,7 @@ static void ucp_wireup_print_config(ucp_context_h context,
                                     uint8_t *addr_indices)
 {
     char lane_info[128], *p, *endp;
-    ucp_lane_index_t lane;
+    ucp_lane_index_t lane, amo_index;
     ucp_rsc_index_t rsc_index;
     ucp_pd_map_t pd_map;
 
@@ -461,10 +481,13 @@ static void ucp_wireup_print_config(ucp_context_h context,
             p += strlen(p);
         }
 
-        pd_map = ucp_lane_map_get_lane(key->amo_lane_map, lane);
-        if (pd_map) {
-            snprintf(p, endp - p, "[amo->pd%d]", ucs_ffs64(pd_map));
-            p += strlen(p);
+        amo_index = ucp_ep_get_amo_lane_index(key, lane);
+        if (amo_index != UCP_NULL_LANE) {
+            pd_map = ucp_lane_map_get_lane(key->amo_lane_map, amo_index);
+            if (pd_map) {
+                snprintf(p, endp - p, "[amo[%d]->pd%d]", amo_index, ucs_ffs64(pd_map));
+                p += strlen(p);
+            }
         }
 
         if (key->wireup_msg_lane == lane) {

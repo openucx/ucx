@@ -7,6 +7,7 @@
 #include "wireup.h"
 #include "address.h"
 
+#include <ucs/algorithm/qsort_r.h>
 #include <ucp/core/ucp_ep.inl>
 #include <string.h>
 #include <inttypes.h>
@@ -18,12 +19,14 @@ enum {
     UCP_WIREUP_LANE_USAGE_AMO = UCS_BIT(2)
 };
 
+
 typedef struct {
     ucp_rsc_index_t   rsc_index;
     unsigned          addr_index;
     ucp_rsc_index_t   dst_pd_index;
-    double            score;
     uint32_t          usage;
+    double            rma_score;
+    double            amo_score;
 } ucp_wireup_lane_desc_t;
 
 
@@ -281,22 +284,40 @@ ucp_wireup_add_lane_desc(ucp_wireup_lane_desc_t *lane_descs,
     lane_desc->addr_index   = addr_index;
     lane_desc->dst_pd_index = dst_pd_index;
     lane_desc->usage        = usage;
-    lane_desc->score        = 0.0;
+    lane_desc->rma_score    = 0.0;
+    lane_desc->amo_score    = 0.0;
 
 out_update_score:
     if (usage & UCP_WIREUP_LANE_USAGE_RMA) {
-        lane_desc->score = score;
+        lane_desc->rma_score = score;
+    }
+    if (usage & UCP_WIREUP_LANE_USAGE_AMO) {
+        lane_desc->amo_score = score;
     }
 }
 
-static int ucp_wireup_compare_lane_desc_score(const void *elem1, const void *elem2)
+static int ucp_wireup_compare_score(double score1, double score2)
+{
+    /* sort from highest score to lowest */
+    return (score1 < score2) ? 1 : ((score1 > score2) ? -1 : 0);
+}
+
+static int ucp_wireup_compare_lane_rma_score(const void *elem1, const void *elem2)
 {
     const ucp_wireup_lane_desc_t *desc1 = elem1;
     const ucp_wireup_lane_desc_t *desc2 = elem2;
 
-    /* sort from highest score to lowest */
-    return (desc1->score < desc2->score) ? 1 :
-                    ((desc1->score > desc2->score) ? -1 : 0);
+    return ucp_wireup_compare_score(desc1->rma_score, desc2->rma_score);
+}
+
+static int ucp_wireup_compare_lane_amo_score(const void *elem1, const void *elem2,
+                                             void *arg)
+{
+    const ucp_lane_index_t *lane1  = elem1;
+    const ucp_lane_index_t *lane2  = elem2;
+    const ucp_wireup_lane_desc_t *lanes = arg;
+
+    return ucp_wireup_compare_score(lanes[*lane1].amo_score, lanes[*lane2].amo_score);
 }
 
 static UCS_F_NOINLINE ucs_status_t
@@ -589,6 +610,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
                                      ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker            = ep->worker;
+    ucp_lane_index_t num_amo_lanes = 0;
     ucp_wireup_lane_desc_t lane_descs[UCP_MAX_LANES];
     ucp_rsc_index_t rsc_index, dst_pd_index;
     ucp_lane_index_t lane;
@@ -623,7 +645,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
 
     /* Sort lanes according to RMA score */
     qsort(lane_descs, key->num_lanes, sizeof(*lane_descs),
-          ucp_wireup_compare_lane_desc_score);
+          ucp_wireup_compare_lane_rma_score);
 
     /* Construct the endpoint configuration key:
      * - arrange lane description in the EP configuration
@@ -647,8 +669,20 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
             key->rma_lane_map |= UCS_BIT(dst_pd_index + lane * UCP_PD_INDEX_BITS);
         }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
-            /* TODO different priority map for atomics */
+            key->amo_lanes[num_amo_lanes] = lane;
+            ++num_amo_lanes;
+        }
+    }
+
+    /* Sort and add AMO lanes */
+    ucs_qsort_r(key->amo_lanes, num_amo_lanes, sizeof(*key->amo_lanes),
+                ucp_wireup_compare_lane_amo_score, lane_descs);
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        if (lane < num_amo_lanes) {
+            dst_pd_index      = lane_descs[key->amo_lanes[lane]].dst_pd_index;
             key->amo_lane_map |= UCS_BIT(dst_pd_index + lane * UCP_PD_INDEX_BITS);
+        } else {
+            key->amo_lanes[lane] = UCP_NULL_LANE;
         }
     }
 

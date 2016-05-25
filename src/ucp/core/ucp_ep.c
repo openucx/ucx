@@ -38,6 +38,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     key.am_lane          = UCP_NULL_RESOURCE;
     key.wireup_msg_lane  = UCP_NULL_LANE;
     key.num_lanes        = 0;
+    memset(key.amo_lanes, UCP_NULL_LANE, sizeof(key.amo_lanes));
 
     ep->worker           = worker;
     ep->dest_uuid        = dest_uuid;
@@ -249,6 +250,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     if ((key1->num_lanes        != key2->num_lanes) ||
         (key1->rma_lane_map     != key2->rma_lane_map) ||
         (key1->amo_lane_map     != key2->amo_lane_map) ||
+        memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
         (key1->reachable_pd_map != key2->reachable_pd_map) ||
         (key1->am_lane          != key2->am_lane) ||
         (key1->wireup_msg_lane  != key2->wireup_msg_lane))
