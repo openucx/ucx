@@ -11,6 +11,8 @@ extern "C" {
 }
 
 
+std::string ucp_test::m_last_err_msg;
+
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 {
     std::vector<std::string>::const_iterator iter;
@@ -174,6 +176,11 @@ ucs_log_func_rc_t ucp_test::empty_log_handler(const char *file, unsigned line,
                                               va_list ap)
 {
     if (level == UCS_LOG_LEVEL_ERROR) {
+        std::string msg;
+        msg.resize(256);
+        vsnprintf(&msg[0], msg.size() - 1, message, ap);
+        msg.resize(strlen(&msg[0]));
+        m_last_err_msg = msg;
         level = UCS_LOG_LEVEL_DEBUG;
     }
 
@@ -216,7 +223,7 @@ void ucp_test::entity::connect(const ucp_test::entity* other) {
     restore_errors();
     if (status == UCS_ERR_UNREACHABLE) {
         ucp_worker_release_address(other->worker(), address);
-        UCS_TEST_SKIP_R("could not find a valid transport");
+        UCS_TEST_SKIP_R(m_last_err_msg);
     }
 
     ASSERT_UCS_OK(status);

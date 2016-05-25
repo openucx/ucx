@@ -87,7 +87,7 @@ private:
                                                const char *prefix, const char *message,
                                                va_list ap);
 
-
+    static std::string m_last_err_msg;
     ucs::ptr_vector<entity> m_entities;
 };
 
