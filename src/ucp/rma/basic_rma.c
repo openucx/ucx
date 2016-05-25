@@ -32,7 +32,6 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t frag_length;
     ssize_t packed_len;
     uct_ep_h uct_ep;
 
@@ -45,7 +44,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 #if _USE_ZCOPY
     ucp_ep_config_t *config;
     ucp_lane_index_t lane;
-retry:
+
     UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, lane, uct_rkey);
     uct_ep = ep->uct_eps[lane];
     rma_config = &config->rma[lane];
@@ -70,7 +69,7 @@ retry:
         uct_mem_h mem;
         uct_pd_h uct_pd = ucp_ep_pd(ep, lane);
 
-        uct_comp.count = 1;
+        uct_comp.count = 2;
 
         status = uct_pd_mem_reg(uct_pd, (void*)buffer, length, &mem);
         if (status != UCS_OK) {
@@ -78,26 +77,20 @@ retry:
                       ucs_status_string(status));
         }
         for(;;) {
-            frag_length = ucs_min(length, config->max_am_zcopy);
             status = uct_ep_put_zcopy(uct_ep,
-                                      buffer, frag_length,
+                                      buffer, length,
                                       mem, remote_addr,
                                       uct_rkey, &uct_comp);
 
-            length -= frag_length;
-            ++uct_comp.count;
-            if (length == 0) {
-                /* Put is completed - return success */
-                ucp_worker_progress(ep->worker);
-                status = UCS_OK;
-                break;
-            }
             ucp_worker_progress(ep->worker);
+
             if (UCS_ERR_NO_RESOURCE == status) {
                 continue;
             }
-            buffer += frag_length;
-            remote_addr += frag_length;
+
+            /* Put is completed - return success */
+            status = UCS_OK;
+            break;
         }
         while (1 < uct_comp.count) {
             ucp_worker_progress(ep->worker);
@@ -154,31 +147,19 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     uct_rkey_t uct_rkey;
     uct_ep_h uct_ep;
 
+    UCP_RMA_CHECK_PARAMS(req->send.buffer, req->send.length);
+
 #if _USE_ZCOPY
     ucp_ep_config_t *config;
     ucp_lane_index_t lane;
 
     UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, lane, uct_rkey);
     uct_ep = ep->uct_eps[lane];
-    for (;;) {
-        size_t frag_length = ucs_min(req->send.length, config->max_am_zcopy);
-        status = uct_ep_put_zcopy(uct_ep,
-                                  req->send.buffer, frag_length,
-                                  req->send.mem, req->send.rma.remote_addr,
-                                  uct_rkey, NULL);
 
-        if (ucs_likely(status == UCS_OK || status == UCS_INPROGRESS)) {
-            req->send.length -= frag_length;
-            if (req->send.length == 0) {
-                /* Put is completed - return success */
-                break;
-            }
-            req->send.buffer += frag_length;
-            req->send.rma.remote_addr += frag_length;
-        } else {
-            break;
-        }
-    }
+    status = uct_ep_put_zcopy(uct_ep,
+                              req->send.buffer, req->send.length,
+                              req->send.mem, req->send.rma.remote_addr,
+                              uct_rkey, NULL);
 #else
     ucp_ep_rma_config_t *rma_config;
     ssize_t packed_len;
@@ -281,25 +262,12 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
             ucs_error("failed to register user buffer: %s",
                       ucs_status_string(status));
         }
-        for (;;) {
-            size_t frag_length = ucs_min(length, config->max_am_zcopy);
-            status = uct_ep_put_zcopy(uct_ep,
-                                      buffer, frag_length,
-                                      mem, remote_addr,
-                                      uct_rkey, NULL);
 
-            if (ucs_likely(status == UCS_OK || status == UCS_INPROGRESS)) {
-                length -= frag_length;
-                if (length == 0) {
-                    /* Put is completed - return success */
-                    break;
-                }
-                buffer += frag_length;
-                remote_addr += frag_length;
-            } else {
-                break;
-            }
-        }
+        status = uct_ep_put_zcopy(uct_ep,
+                                  buffer, length,
+                                  mem, remote_addr,
+                                  uct_rkey, NULL);
+
     }
 
     if (ucs_unlikely(UCS_ERR_NO_RESOURCE == status)) {
@@ -393,7 +361,6 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
     uct_completion_t comp;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t frag_length;
     uct_ep_h uct_ep;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
@@ -430,23 +397,14 @@ retry:
             ucs_error("failed to register user buffer: %s",
                       ucs_status_string(status));
         }
-        for(;;) {
-            frag_length = ucs_min(length, config->max_am_zcopy);
+
+        comp.count = 2;
+
             status = uct_ep_get_zcopy(uct_ep, buffer,
-                                      frag_length,
+                                      length,
                                       mem, remote_addr,
                                       uct_rkey, &comp);
 
-            length -= frag_length;
-            ++comp.count;
-            if (length == 0) {
-                   /* Get is completed - return success */
-                   break;
-            }
-
-            buffer += frag_length;
-            remote_addr += frag_length;
-        }
     }
 #else
     for (;;) {
@@ -497,7 +455,6 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
     ucp_ep_t *ep       = req->send.ep;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t frag_length;
     uct_ep_h uct_ep;
 
 #if _USE_ZCOPY
@@ -507,28 +464,16 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
     UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, lane, uct_rkey);
     uct_ep = ep->uct_eps[lane];
 
-    for (;;) {
-        frag_length = ucs_min(config->max_am_zcopy, req->send.length);
-        status = uct_ep_get_zcopy(uct_ep, (void *)req->send.buffer,
-                                  frag_length,
-                                  req->send.mem, req->send.rma.remote_addr,
-                                  uct_rkey, NULL);
-        if (ucs_likely(status == UCS_OK || status == UCS_INPROGRESS)) {
-            /* Get was initiated */
-            req->send.length -= frag_length;
-            req->send.buffer += frag_length;
-            req->send.rma.remote_addr += frag_length;
-            if (req->send.length == 0) {
-                /* Get was posted */
-                ucp_request_complete(req, void);
-                status = UCS_OK;
-                break;
-            }
-        } else {
-            /* Error - abort */
-            break;
-        }
+    status = uct_ep_get_zcopy(uct_ep, (void *)req->send.buffer,
+                              req->send.length,
+                              req->send.mem, req->send.rma.remote_addr,
+                              uct_rkey, NULL);
+
+    if (ucs_likely(status == UCS_OK || status == UCS_INPROGRESS)) {
+        ucp_request_complete(req, void);
+        status = UCS_OK;
     }
+
 #else
     ucp_ep_rma_config_t *rma_config;
 
@@ -569,7 +514,6 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t frag_length;
     uct_ep_h uct_ep;
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
@@ -612,10 +556,9 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                       ucs_status_string(status));
             return status;
         }
-        for (;;) {
-            frag_length = ucs_min(config->max_am_zcopy, length);
+        comp.count = 2;
             status = uct_ep_get_zcopy(uct_ep, buffer,
-                                      frag_length,
+                                      length,
                                       mem, remote_addr,
                                       uct_rkey, &comp);
 
@@ -630,18 +573,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                 ucp_add_pending_rma(req, ep, uct_ep, buffer, length, remote_addr,
                                     rkey, ucp_progress_get_nbi);
                 status = UCS_INPROGRESS;
-                break;
             }
-            length -= frag_length;
-            ++comp.count;
-            if (length == 0) {
-                   /* Get is completed - return success */
-                   break;
-            }
-
-            buffer += frag_length;
-            remote_addr += frag_length;
-        }
     }
 #else
     for (;;) {
