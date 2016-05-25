@@ -17,10 +17,11 @@
 #include <string.h>
 
 
-static ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
-                               const char *peer_name, const char *message,
-                               ucp_ep_h *ep_p)
+ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
+                        const char *peer_name, const char *message,
+                        ucp_ep_h *ep_p)
 {
+    ucp_ep_config_key_t key;
     ucp_ep_h ep;
 
     ep = ucs_calloc(1, sizeof(*ep), "ucp ep");
@@ -29,11 +30,20 @@ static ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ep->worker               = worker;
-    ep->dest_uuid            = dest_uuid;
-    ep->cfg_index            = 0;
-    ep->am_lane              = UCP_NULL_LANE;
-    ep->flags                = 0;
+    /* EP configuration without any lanes */
+    memset(&key, 0, sizeof(key));
+    key.rma_lane_map     = 0;
+    key.amo_lane_map     = 0;
+    key.reachable_pd_map = 0;
+    key.am_lane          = UCP_NULL_RESOURCE;
+    key.wireup_msg_lane  = UCP_NULL_LANE;
+    key.num_lanes        = 0;
+
+    ep->worker           = worker;
+    ep->dest_uuid        = dest_uuid;
+    ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
+    ep->am_lane          = UCP_NULL_LANE;
+    ep->flags            = 0;
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
@@ -51,34 +61,6 @@ static void ucp_ep_delete(ucp_ep_h ep)
     ucs_free(ep);
 }
 
-ucs_status_t ucp_ep_create_connected(ucp_worker_h worker, uint64_t dest_uuid,
-                                     const char *peer_name, unsigned address_count,
-                                     const ucp_address_entry_t *address_list,
-                                     const char *message, ucp_ep_h *ep_p)
-{
-    ucs_status_t status;
-    ucp_ep_h ep = NULL;
-
-    status = ucp_ep_new(worker, dest_uuid, peer_name, message, &ep);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, address_count, address_list);
-    if (status != UCS_OK) {
-        goto err_delete;
-    }
-
-    *ep_p = ep;
-    return UCS_OK;
-
-err_delete:
-    ucp_ep_delete(ep);
-err:
-    return status;
-}
-
 ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
                                 const char *message, ucp_ep_h *ep_p)
 {
@@ -94,7 +76,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     /* all operations will use the first lane, which is a stub endpoint */
     key.rma_lane_map     = 1;
     key.amo_lane_map     = 1;
-    key.reachable_pd_map = -1; /* TODO */
+    key.reachable_pd_map = 0; /* TODO */
     key.am_lane          = 0;
     key.wireup_msg_lane  = 0;
     key.lanes[0]         = UCP_NULL_RESOURCE;
@@ -174,10 +156,11 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
                            ucp_ep_h *ep_p)
 {
     char peer_name[UCP_WORKER_NAME_MAX];
+    uint8_t addr_indices[UCP_MAX_LANES];
+    ucp_address_entry_t *address_list;
+    unsigned address_count;
     ucs_status_t status;
     uint64_t dest_uuid;
-    unsigned address_count;
-    ucp_address_entry_t *address_list;
     ucp_ep_h ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -199,10 +182,16 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
         goto out_free_address;
     }
 
-    status = ucp_ep_create_connected(worker, dest_uuid, peer_name, address_count,
-                                     address_list, " from api call", &ep);
+    /* allocate endpoint */
+    status = ucp_ep_new(worker, dest_uuid, peer_name, "from api call", &ep);
     if (status != UCS_OK) {
         goto out_free_address;
+    }
+
+    /* initialize transport endpoints */
+    status = ucp_wireup_init_lanes(ep, address_count, address_list, addr_indices);
+    if (status != UCS_OK) {
+        goto err_destroy_ep;
     }
 
     /* send initial wireup message */
