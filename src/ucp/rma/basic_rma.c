@@ -45,7 +45,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 #if _USE_ZCOPY
     ucp_ep_config_t *config;
     ucp_lane_index_t lane;
-
+retry:
     UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, lane, uct_rkey);
     uct_ep = ep->uct_eps[lane];
     rma_config = &config->rma[lane];
@@ -54,6 +54,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
         status = uct_ep_put_short(uct_ep, buffer,
                                   length, remote_addr,
                                   uct_rkey);
+        ucp_worker_progress(ep->worker);
     } else  if (length <= rma_config->max_put_bcopy) {
         ucp_memcpy_pack_context_t pack_ctx;
         pack_ctx.src    = buffer;
