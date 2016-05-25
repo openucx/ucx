@@ -127,6 +127,10 @@ if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/test_rc_flow_control.cc
 endif	
+if HAVE_TL_DC
+gtest_SOURCES += \
+	uct/test_dc.cc
+endif
 endif
 
 noinst_HEADERS = \

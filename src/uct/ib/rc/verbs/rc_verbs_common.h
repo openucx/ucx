@@ -117,7 +117,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 {
     uct_rc_hdr_t *hdr;
-    int i;
+    unsigned i;
     ucs_status_t status;
     unsigned num_wcs = iface->super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
@@ -242,7 +242,7 @@ uct_rc_verbs_fill_ext_atomic_wr(struct ibv_exp_send_wr *wr, struct ibv_sge *sge,
     sge->length        = length;
     wr->sg_list        = sge;
     wr->num_sge        = 1;
-    wr->exp_opcode     = opcode;
+    wr->exp_opcode     = (enum ibv_exp_wr_opcode)opcode;
     wr->comp_mask      = 0;
 
     wr->ext_op.masked_atomics.log_arg_sz  = ucs_ilog2(length);

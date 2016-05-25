@@ -261,7 +261,8 @@ ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) { \
             ucs_fatal("Receive completion with error: %s", ibv_wc_status_str(wc[i].status)); \
         } \
-        hdr = uct_ib_iface_recv_desc_hdr(iface, (void*)wc[i].wr_id); \
+        hdr = (typeof(hdr))uct_ib_iface_recv_desc_hdr(iface, \
+                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id); \
         VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len); \
         UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_RX, __FUNCTION__, \
                               wc[i].wr_id, wc[i].status); \
