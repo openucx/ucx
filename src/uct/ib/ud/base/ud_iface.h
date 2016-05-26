@@ -62,7 +62,6 @@ typedef struct uct_ud_iface_ops {
                                         int solicited);
 } uct_ud_iface_ops_t;
 
-
 struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;

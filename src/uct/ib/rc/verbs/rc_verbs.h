@@ -11,27 +11,15 @@
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
 
-
-/**
- * RC mlx5 interface configuration
- */
-typedef struct uct_rc_verbs_iface_config {
-    uct_rc_iface_config_t  super;
-    size_t                 max_am_hdr;
-    /* TODO flags for exp APIs */
-} uct_rc_verbs_iface_config_t;
+#include "rc_verbs_common.h"
 
 
 /**
  * RC verbs communication context.
  */
 typedef struct uct_rc_verbs_ep {
-    uct_rc_ep_t        super;
-
-    struct {
-        uint16_t       post_count;
-        uint16_t       completion_count;
-    } tx;
+    uct_rc_ep_t            super;
+    uct_rc_verbs_txcnt_t   txcnt;
 } uct_rc_verbs_ep_t;
 
 
@@ -40,18 +28,9 @@ typedef struct uct_rc_verbs_ep {
  */
 typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t     super;
-
-    ucs_mpool_t        short_desc_mp;
-    struct ibv_send_wr inl_am_wr;
-    struct ibv_send_wr inl_rwrite_wr;
-    struct ibv_sge     inl_sge[2];
-
-    struct {
-        size_t               short_desc_size;
-        uct_rc_send_handler_t  atomic32_handler;
-        uct_rc_send_handler_t  atomic64_handler;
-        size_t               max_inline;
-    } config;
+    struct ibv_send_wr          inl_am_wr;
+    struct ibv_send_wr          inl_rwrite_wr;
+    uct_rc_verbs_iface_common_t verbs_common;
 } uct_rc_verbs_iface_t;
 
 

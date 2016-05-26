@@ -12,6 +12,7 @@
 #include <uct/api/uct.h>
 #include <ucs/stats/stats.h>
 #include <infiniband/arch.h>
+#include <ucs/debug/log.h>
 
 
 #define UCT_IB_QPN_ORDER            24  /* How many bits can be an IB QP number */
@@ -35,6 +36,7 @@
 #define UCT_IB_LINK_LOCAL_PREFIX    ntohll(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX    ntohll(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_SITE_LOCAL_MASK      ntohll(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_DC_KEY               0x1234
 
 
 enum {
@@ -209,6 +211,23 @@ static inline struct ibv_exp_port_attr*
 uct_ib_device_port_attr(uct_ib_device_t *dev, uint8_t port_num)
 {
     return &dev->port_attr[port_num - dev->first_port];
+}
+
+
+static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
+{
+    int ret;
+
+    ret = ibv_poll_cq(cq, *count, wcs);
+    if (ucs_unlikely(ret < 0)) {
+        ucs_fatal("Failed to poll receive CQ");
+    }
+
+    if (ret == 0) {
+        return UCS_ERR_NO_PROGRESS;
+    }
+    *count = ret;
+    return UCS_OK;
 }
 
 #endif

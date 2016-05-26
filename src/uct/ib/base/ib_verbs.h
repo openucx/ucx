@@ -186,5 +186,8 @@ static inline uint32_t uct_ib_unpack_uint24(const uct_ib_uint24_t buf)
     return buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16);
 }
 
+typedef struct uct_ib_qpnum {
+    uct_ib_uint24_t qp_num;
+} uct_ib_qpnum_t;
 
 #endif /* UCT_IB_VERBS_H */

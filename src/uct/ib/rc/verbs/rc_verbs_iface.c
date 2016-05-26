@@ -5,6 +5,7 @@
 */
 
 #include "rc_verbs.h"
+#include "rc_verbs_common.h"
 
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_device.h>
@@ -15,47 +16,7 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
-
-ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_verbs_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
-
-  {"MAX_AM_HDR", "128",
-   "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
-   "not support zero-copy active messages.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {NULL}
-};
-
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
-
-static UCS_F_NOINLINE unsigned
-uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
-{
-    struct ibv_recv_wr *bad_wr;
-    uct_ib_recv_wr_t *wrs;
-    unsigned count;
-    int ret;
-
-    wrs  = ucs_alloca(sizeof *wrs  * max);
-
-    count = uct_ib_iface_prepare_rx_wrs(&iface->super.super, &iface->super.rx.mp,
-                                        wrs, max);
-    if (count == 0) {
-        return 0;
-    }
-
-    UCT_IB_INSTRUMENT_RECORD_RECV_WR_LEN("uct_rc_verbs_iface_post_recv_always",
-                                         &wrs[0].ibwr);
-    ret = ibv_post_srq_recv(iface->super.rx.srq, &wrs[0].ibwr, &bad_wr);
-    if (ret != 0) {
-        ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
-    }
-    iface->super.rx.available -= count;
-
-    return count;
-}
 
 static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
                                                     int fill)
@@ -73,101 +34,28 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
         count = batch;
     }
 
-    return uct_rc_verbs_iface_post_recv_always(iface, count);
+    return uct_rc_verbs_iface_post_recv_always(&iface->super, count);
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {
     uct_rc_verbs_ep_t *ep;
-    unsigned count;
-    int i, ret;
+    uint16_t count;
+    int i;
     unsigned num_wcs = iface->super.super.config.tx_max_poll;
     struct ibv_wc wc[num_wcs];
+    ucs_status_t status;
 
-    ret = ibv_poll_cq(iface->super.super.send_cq, num_wcs, wc);
-    if (ucs_unlikely(ret <= 0)) {
-        if (ucs_unlikely(ret < 0)) {
-            ucs_fatal("Failed to poll send CQ");
-        }
-        return;
-    }
-
-    for (i = 0; i < ret; ++i) {
-        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            ucs_fatal("Send completion with error: %s", ibv_wc_status_str(wc[i].status));
-        }
-
-        UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
-
+    UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super, i, wc, num_wcs) {
+        count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         ucs_assert(ep != NULL);
-
-        count = wc[i].wr_id + 1; /* Number of sends with WC completes in batch */
-        ep->super.available         += count;
-        ep->tx.completion_count     += count;
-        ++iface->super.tx.cq_available;
-
+        uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         uct_rc_ep_process_tx_completion(&iface->super, &ep->super,
-                                        ep->tx.completion_count);
+                                        ep->txcnt.ci);
     }
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
-{
-    uct_ib_iface_recv_desc_t *desc;
-    void         *udesc;
-    uct_rc_hdr_t *hdr;
-    int i, ret;
-    ucs_status_t status;
-    unsigned num_wcs = iface->super.super.config.rx_max_poll;
-    struct ibv_wc wc[num_wcs];
-
-    ret = ibv_poll_cq(iface->super.super.recv_cq, num_wcs, wc);
-    if (ret > 0) {
-        for (i = 0; i < ret; ++i) {
-            if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-                ucs_fatal("Receive completion with error: %s", ibv_wc_status_str(wc[i].status));
-            }
-
-            UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
-
-            desc = (void*)wc[i].wr_id;
-            hdr = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-            VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
-
-            UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_RX,
-                                  "uct_rc_verbs_iface_poll_rx",
-                                  wc[i].wr_id, wc[i].status);
-            uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_RC, &wc[i],
-                                       hdr, uct_rc_ep_am_packet_dump);
-
-            if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
-                udesc = (char*)desc + iface->super.super.config.rx_headroom_offset;
-                status = uct_rc_iface_handle_fc(&iface->super, wc[i].qp_num, hdr,
-                                                wc[i].byte_len - sizeof(*hdr),
-                                                udesc);
-                if (status == UCS_OK) {
-                    ucs_mpool_put_inline(desc);
-                } else{
-                    uct_recv_desc_iface(udesc) = &iface->super.super.super.super;
-                }
-            } else {
-                uct_ib_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
-                                       wc[i].byte_len - sizeof(*hdr), desc);
-            }
-        }
-        iface->super.rx.available += ret;
-        status = UCS_OK;
-    } else if (ret == 0) {
-        status = UCS_ERR_NO_PROGRESS;
-    } else {
-        ucs_fatal("Failed to poll receive CQ");
-    }
-    uct_rc_verbs_iface_post_recv(iface, 0);
-    return status;
 }
 
 void uct_rc_verbs_iface_progress(void *arg)
@@ -175,82 +63,18 @@ void uct_rc_verbs_iface_progress(void *arg)
     uct_rc_verbs_iface_t *iface = arg;
     ucs_status_t status;
 
-    status = uct_rc_verbs_iface_poll_rx(iface);
+    status = uct_rc_verbs_iface_poll_rx_common(&iface->super);
     if (status == UCS_ERR_NO_PROGRESS) {
         uct_rc_verbs_iface_poll_tx(iface);
     }
 }
 
-static inline int
-uct_rc_verbs_is_ext_atomic_supported(struct ibv_exp_device_attr *dev_attr,
-                                           size_t atomic_size)
-{
-#ifdef HAVE_IB_EXT_ATOMICS
-    struct ibv_exp_ext_atomics_params ext_atom = dev_attr->ext_atom;
-    return (ext_atom.log_max_atomic_inline >= ucs_ilog2(atomic_size)) &&
-           (ext_atom.log_atomic_arg_sizes & atomic_size);
-#else
-      return 0;
-#endif
-}
-
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
-    struct ibv_exp_device_attr *dev_attr =
-                    &uct_ib_iface_device(&iface->super.super)->dev_attr;
 
     uct_rc_iface_query(&iface->super, iface_attr);
-
-    /* PUT */
-    iface_attr->cap.put.max_short = iface->config.max_inline;
-    iface_attr->cap.put.max_bcopy = iface->super.super.config.seg_size;
-    iface_attr->cap.put.max_zcopy =
-                        uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
-
-    /* GET */
-    iface_attr->cap.get.max_bcopy = iface->super.super.config.seg_size;
-    iface_attr->cap.get.max_zcopy =
-                    uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz;
-
-    /* AM */
-    iface_attr->cap.am.max_short  = iface->config.max_inline
-                                        - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.max_bcopy  = iface->super.super.config.seg_size
-                                        - sizeof(uct_rc_hdr_t);
-
-    iface_attr->cap.am.max_zcopy  = iface->super.super.config.seg_size
-                                            - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.max_hdr    = iface->config.short_desc_size
-                                            - sizeof(uct_rc_hdr_t);
-
-    /*
-     * Atomics.
-     * Need to make sure device support at least one kind of atomics.
-     */
-    if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) ||
-        IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr) ||
-        IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr))
-    {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
-                                 UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                                 UCT_IFACE_FLAG_ATOMIC_CSWAP64;
-
-        if (uct_rc_verbs_is_ext_atomic_supported(dev_attr, sizeof(uint32_t))) {
-            iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                                     UCT_IFACE_FLAG_ATOMIC_FADD32 |
-                                     UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                                     UCT_IFACE_FLAG_ATOMIC_CSWAP32;
-        }
-
-        if (uct_rc_verbs_is_ext_atomic_supported(dev_attr, sizeof(uint64_t))) {
-            iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64;
-        }
-    }
-
-    /* Software overhead */
-    iface_attr->overhead = 75e-9;
-
+    uct_rc_verbs_iface_common_query(&iface->verbs_common, &iface->super, iface_attr);
     return UCS_OK;
 }
 
@@ -260,8 +84,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
 {
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
-    struct ibv_exp_device_attr *dev_attr;
-    size_t am_hdr_size;
     ucs_status_t status;
     struct ibv_qp_cap cap;
     struct ibv_qp *qp;
@@ -270,74 +92,48 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_pd_h pd, uct_worker_h worke
                               worker, dev_name, rx_headroom, 0, &config->super);
 
     /* Initialize inline work request */
+    /* TODO: move to common macro */
     memset(&self->inl_am_wr, 0, sizeof(self->inl_am_wr));
-    self->inl_am_wr.sg_list                 = self->inl_sge;
+    self->inl_am_wr.sg_list                 = self->verbs_common.inl_sge;
     self->inl_am_wr.num_sge                 = 2;
     self->inl_am_wr.opcode                  = IBV_WR_SEND;
     self->inl_am_wr.send_flags              = IBV_SEND_INLINE;
 
     memset(&self->inl_rwrite_wr, 0, sizeof(self->inl_rwrite_wr));
-    self->inl_rwrite_wr.sg_list             = self->inl_sge;
+    self->inl_rwrite_wr.sg_list             = self->verbs_common.inl_sge;
     self->inl_rwrite_wr.num_sge             = 1;
     self->inl_rwrite_wr.opcode              = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.send_flags          = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 
-    memset(self->inl_sge, 0, sizeof(self->inl_sge));
-
-    /* Configuration */
-    am_hdr_size = ucs_max(config->max_am_hdr, sizeof(uct_rc_hdr_t));
-    self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
-    dev_attr = &uct_ib_iface_device(&self->super.super)->dev_attr;
-    if (IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) || IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr)) {
-        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be0;
-        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be0;
-    } else if (IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr)) {
-        self->config.atomic32_handler = uct_rc_ep_atomic_handler_32_be1;
-        self->config.atomic64_handler = uct_rc_ep_atomic_handler_64_be1;
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common, 
+                                            &self->super, config);
+    if (status != UCS_OK) {
+        return status;
     }
 
     /* Create a dummy QP in order to find out max_inline */
-    status = uct_rc_iface_qp_create(&self->super, &qp, &cap);
+    status = uct_rc_iface_qp_create(&self->super, IBV_QPT_RC, &qp, &cap);
     if (status != UCS_OK) {
         goto err;
     }
     ibv_destroy_qp(qp);
-    self->config.max_inline = cap.max_inline_data;
+    self->verbs_common.config.max_inline = cap.max_inline_data;
 
-    /* Create AH headers and Atomic mempool */
-    status = uct_iface_mpool_init(&self->super.super.super,
-                                  &self->short_desc_mp,
-                                  sizeof(uct_rc_iface_send_desc_t) +
-                                      self->config.short_desc_size,
-                                  sizeof(uct_rc_iface_send_desc_t),
-                                  UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.super.tx.mp,
-                                  self->super.config.tx_qp_len,
-                                  uct_rc_iface_send_desc_init,
-                                  "rc_verbs_short_desc");
+    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super);
     if (status != UCS_OK) {
         goto err;
     }
 
-    while (self->super.rx.available > 0) {
-        if (uct_rc_verbs_iface_post_recv(self, 1) == 0) {
-            ucs_error("failed to post receives");
-            status = UCS_ERR_NO_MEMORY;
-            goto err_destroy_short_desc_mp;
-        }
-    }
-
     return UCS_OK;
 
-err_destroy_short_desc_mp:
-    ucs_mpool_cleanup(&self->short_desc_mp, 1);
 err:
+    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
     return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
-    ucs_mpool_cleanup(&self->short_desc_mp, 1);
+    uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_iface_t, uct_rc_iface_t);
