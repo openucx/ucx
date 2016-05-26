@@ -40,7 +40,7 @@
 #define ucs_assertv_always(_expression, _fmt, ...) \
     do { \
         if (!ucs_likely(_expression)) { \
-            __ucs_abort(__FILE__, __LINE__, __FUNCTION__, "Assertion `%s' failed: "_fmt, \
+            __ucs_abort(__FILE__, __LINE__, __FUNCTION__, "Assertion `%s' failed: " _fmt, \
                         #_expression, ## __VA_ARGS__); \
         } \
     } while (0)
