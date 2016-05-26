@@ -1058,7 +1058,7 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  *
  * Flushes all outstanding communications issued on the interface prior to
  * this call. The operations are completed at the origin or at the target
- * as well. The exact completion semantic depends on the provided parameters.
+ * as well. The exact completion semantic depends on @a flags parameter.
  *
  * @note Currently only one completion type is supported. It guaranties that
  * the data transfer is completed but the target buffer may not be updated yet.
@@ -1340,7 +1340,7 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
  *
  * Flushes all outstanding communications issued on the endpoint prior to
  * this call. The operations are completed at the origin or at the target
- * as well. The exact completion semantic depends on the provided parameters.
+ * as well. The exact completion semantic depends on @a flags parameter.
  *
  * @note Currently only one completion type is supported. It guaranties that
  * the data transfer is completed but the target buffer may not be updated yet.
