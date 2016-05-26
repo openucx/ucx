@@ -401,7 +401,9 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
      * if the selected transport can be connected directly to the remote
      * interface, just create a connected UCT endpoint.
      */
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+    if ((iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) &&
+        ((ep->uct_eps[lane] == NULL) || ucp_stub_ep_test(ep->uct_eps[lane])))
+    {
         /* create an endpoint connected to the remote interface */
         ucs_assert(address_list[addr_index].tl_addr_len > 0);
         status = uct_ep_create_connected(worker->ifaces[rsc_index],
