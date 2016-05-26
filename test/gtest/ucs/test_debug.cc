@@ -108,7 +108,9 @@ UCS_TEST_F(test_debug, print_backtrace) {
 
     /* Some functions that should appear */
     EXPECT_TRUE(strstr(data, "print_backtrace") != NULL);
+#ifdef HAVE_DETAILED_BACKTRACE
     EXPECT_TRUE(strstr(data, "main") != NULL);
+#endif
 
     free(data);
 }
