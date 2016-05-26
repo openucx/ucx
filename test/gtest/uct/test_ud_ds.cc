@@ -24,8 +24,8 @@ public:
         m_e2 = create_entity(0);
         m_entities.push_back(m_e2);
 
-        uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t*)&if_adr1);
-        uct_iface_get_address(m_e2->iface(), (uct_iface_addr_t*)&if_adr2);
+        uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t*)(void *)&if_adr1);
+        uct_iface_get_address(m_e2->iface(), (uct_iface_addr_t*)(void *)&if_adr2);
 
         ib_adr1 = (uct_ib_address_t*)malloc(ucs_derived_of(m_e1->iface(), uct_ib_iface_t)->addr_size);
         ib_adr2 = (uct_ib_address_t*)malloc(ucs_derived_of(m_e2->iface(), uct_ib_iface_t)->addr_size);

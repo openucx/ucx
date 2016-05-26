@@ -110,7 +110,8 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
      * UCP_MEM_FLAG_ZERO_REG flag is passed to it. */
     status = ucp_mem_map(e->ucph(), &ptr, 0, 0, &memh[0]);
     ASSERT_UCS_OK(status);
-    status = ucp_mem_map(e->ucph(), (void**)&dummy, 0, 0, &memh[1]);
+    ptr = dummy;
+    status = ucp_mem_map(e->ucph(), &ptr, 0, 0, &memh[1]);
     ASSERT_UCS_OK(status);
 
     for (i = 0; i < buf_num; i++) {
