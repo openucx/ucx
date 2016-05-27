@@ -133,7 +133,6 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     double score, best_score;
     char tls_info[256];
     char *p, *endp;
-    uct_iface_h iface;
     uct_iface_attr_t *iface_attr;
     uct_pd_attr_t *pd_attr;
     uint64_t addr_index_map;
@@ -177,7 +176,6 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     /* For each local resource try to find the best remote address to connect to */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
-        iface        = worker->ifaces[rsc_index];
         iface_attr   = &worker->iface_attrs[rsc_index];
         pd_attr      = &context->pd_attrs[context->tl_rscs[rsc_index].pd_index];
 
