@@ -236,11 +236,18 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
     ucs_mpool_cleanup(&self->free_mbox, 1);
 }
 
-static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface)
+static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                              uct_completion_t *comp)
 {
     uct_ugni_smsg_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_smsg_iface_t);
+    ucs_status_t status;
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     /* Always progress to local cq to get back send credits */
-    ucs_status_t status = progress_local_cq(iface);
+    status = progress_local_cq(iface);
 
     if (UCS_OK == status) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
@@ -251,9 +258,14 @@ static ucs_status_t uct_ugni_smsg_iface_flush(uct_iface_h tl_iface)
     return status;
 }
 
-static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep)
+static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                           uct_completion_t *comp)
 {
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     if (0 == ep->super.outstanding) {
         /* We progress the local CQ anyways because we may get back send credits */
@@ -261,7 +273,7 @@ static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep)
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_ep->iface, uct_base_iface_t));
         return UCS_OK;
     } else {
-        return uct_ugni_smsg_iface_flush(tl_ep->iface);
+        return uct_ugni_smsg_iface_flush(tl_ep->iface, 0, NULL);
     }
 }
 

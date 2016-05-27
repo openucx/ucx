@@ -397,7 +397,7 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker)
             continue;
         }
 
-        while (uct_iface_flush(worker->ifaces[rsc_index]) != UCS_OK) {
+        while (uct_iface_flush(worker->ifaces[rsc_index], 0, NULL) != UCS_OK) {
             ucp_worker_progress(worker);
         }
     }
@@ -412,7 +412,7 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep)
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         for (;;) {
-            status = uct_ep_flush(ep->uct_eps[lane]);
+            status = uct_ep_flush(ep->uct_eps[lane], 0, NULL);
             if (status == UCS_OK) {
                 break;
             } else if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {

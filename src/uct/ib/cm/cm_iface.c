@@ -64,9 +64,14 @@ ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface)
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp)
 {
     ucs_status_t status;
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = uct_cm_iface_flush_do(tl_iface);
     if (status == UCS_OK) {

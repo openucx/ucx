@@ -81,7 +81,9 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_cm_ep_t, uct_ep_t, uct_iface_h,
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_ep_t, uct_ep_t);
 
 ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *iface_addr);
-ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface);
+ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp);
+
 ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_ep);
 
 ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
@@ -90,7 +92,8 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
 ucs_status_t uct_cm_ep_pending_add(uct_ep_h ep, uct_pending_req_t *req);
 void         uct_cm_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
 
-ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep);
+ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                             uct_completion_t *comp);
 
 
 #define uct_cm_iface_trace_data(_iface, _type, _hdr, _fmt, ...) \

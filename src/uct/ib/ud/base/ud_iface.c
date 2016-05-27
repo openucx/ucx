@@ -546,7 +546,8 @@ uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr)
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                uct_completion_t *comp)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
     uct_ud_ep_t *ep;
@@ -554,6 +555,11 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface)
     int i, count;
 
     ucs_trace_func("");
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     uct_ud_enter(iface);
 
     count = 0;

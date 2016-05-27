@@ -245,7 +245,8 @@ struct uct_ud_ep {
 
 UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 
-ucs_status_t uct_ud_ep_flush(uct_ep_h ep);
+ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
+                             uct_completion_t *comp);
 /* internal flush */
 ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 

@@ -63,9 +63,15 @@ void uct_ugni_progress(void *arg)
     return;
 }
 
-ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
+ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                  uct_completion_t *comp)
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (0 == iface->outstanding) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
         return UCS_OK;
@@ -75,11 +81,16 @@ ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface)
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep)
+ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                               uct_completion_t *comp)
 {
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                            uct_ugni_iface_t);
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     if (0 == ep->outstanding) {
         UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));

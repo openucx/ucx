@@ -305,7 +305,7 @@ UCS_TEST_P(test_uct_stats, flush)
     uint64_t v;
 
     if (sender_ep()) {
-        status = uct_ep_flush(sender_ep());
+        status = uct_ep_flush(sender_ep(), 0, NULL);
         EXPECT_UCS_OK(status);
         v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FLUSH);
         EXPECT_EQ(1UL, v);
@@ -313,7 +313,7 @@ UCS_TEST_P(test_uct_stats, flush)
         EXPECT_EQ(0UL, v);
     }
 
-    status = uct_iface_flush(sender().iface());
+    status = uct_iface_flush(sender().iface(), 0, NULL);
     EXPECT_UCS_OK(status);
     v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FLUSH);
     EXPECT_EQ(1UL, v);
@@ -337,7 +337,7 @@ UCS_TEST_P(test_uct_stats, flush_wait_iface)
     fill_tx_q(0);
     count_wait = 0;
     do {
-        status = uct_iface_flush(sender().iface());
+        status = uct_iface_flush(sender().iface(), 0, NULL);
         if (status == UCS_INPROGRESS) {
             count_wait++;
         }
@@ -363,7 +363,7 @@ UCS_TEST_P(test_uct_stats, flush_wait_ep)
     fill_tx_q(0);
     count_wait = 0;
     do {
-        status = uct_ep_flush(sender_ep());
+        status = uct_ep_flush(sender_ep(), 0, NULL);
         if (status == UCS_INPROGRESS) {
             count_wait++;
         }

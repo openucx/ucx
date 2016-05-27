@@ -121,7 +121,8 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
                                             uint64_t remote_addr, uct_rkey_t rkey,
                                             uint32_t *result, uct_completion_t *comp);
 
-ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep);
+ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                   uct_completion_t *comp);
 
 void uct_rc_verbs_iface_progress(void *arg);
 

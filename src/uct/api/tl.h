@@ -28,7 +28,8 @@ typedef struct uct_iface_ops {
     ucs_status_t (*iface_query)(uct_iface_h iface,
                                 uct_iface_attr_t *iface_attr);
 
-    ucs_status_t (*iface_flush)(uct_iface_h iface);
+    ucs_status_t (*iface_flush)(uct_iface_h iface, unsigned flags,
+                                uct_completion_t *comp);
 
     void         (*iface_release_am_desc)(uct_iface_h iface, void *desc);
 
@@ -148,7 +149,8 @@ typedef struct uct_iface_ops {
 
     /* Synchronization */
 
-    ucs_status_t (*ep_flush)(uct_ep_h ep);
+    ucs_status_t (*ep_flush)(uct_ep_h ep, unsigned flags,
+                             uct_completion_t *comp);
 
 } uct_iface_ops_t;
 
