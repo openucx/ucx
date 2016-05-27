@@ -44,9 +44,9 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
 {
     ucp_ep_h ep = stub_ep->ep;
     ucs_queue_head_t tmp_pending_queue;
-    uct_pending_req_t *req;
+    uct_pending_req_t *uct_req;
     ucp_lane_index_t lane;
-    ucs_status_t status;
+    ucp_request_t *req;
     uct_ep_h uct_ep;
 
     ucs_assert(stub_ep->connected);
@@ -67,8 +67,8 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
      * the stub progress function
      */
     ucs_queue_head_init(&tmp_pending_queue);
-    ucs_queue_for_each_extract(req, &stub_ep->pending_q, priv, 1) {
-        ucs_queue_push(&tmp_pending_queue, ucp_stub_ep_req_priv(req));
+    ucs_queue_for_each_extract(uct_req, &stub_ep->pending_q, priv, 1) {
+        ucs_queue_push(&tmp_pending_queue, ucp_stub_ep_req_priv(uct_req));
     }
 
     /* Switch to real transport */
@@ -83,10 +83,10 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
     stub_ep = NULL;
 
     /* Replay pending requests */
-    ucs_queue_for_each_extract(req, &tmp_pending_queue, priv, 1) {
-        do {
-            status = ucp_ep_add_pending_uct(ep, uct_ep, req);
-        } while (status != UCS_OK);
+    ucs_queue_for_each_extract(uct_req, &tmp_pending_queue, priv, 1) {
+        req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        ucs_assert(req->send.ep == ep);
+        ucp_request_start_send(req);
         --ep->worker->stub_pend_count;
     }
 }
@@ -134,7 +134,7 @@ static ucs_status_t ucp_stub_ep_pending_req_release(uct_pending_req_t *self)
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_stub_ep_t *stub_ep = proxy_req->send.proxy.stub_ep;
 
-    ucp_ep_pending_req_release(proxy_req->send.proxy.req);
+    ucp_request_release_pending_send(proxy_req->send.proxy.req);
     ucs_atomic_add32(&stub_ep->pending_count, -1);
     ucs_mpool_put(proxy_req);
     return UCS_OK;
@@ -184,7 +184,7 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep, uct_pending_callback_t cb)
     ucs_assert_always(ucs_queue_is_empty(&stub_ep->pending_q));
 
     if (stub_ep->aux_ep != NULL) {
-        ucs_assert_always(cb == ucp_ep_pending_req_release);
+        ucs_assert_always(cb == ucp_request_release_pending_send);
         uct_ep_pending_purge(stub_ep->aux_ep, ucp_stub_ep_pending_req_release);
     }
 }

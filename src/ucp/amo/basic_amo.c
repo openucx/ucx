@@ -23,12 +23,13 @@
     { \
         ucs_status_t status; \
         uct_rkey_t uct_rkey; \
-        uct_ep_h uct_ep; \
+        ucp_lane_index_t lane; \
         \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
         for (;;) { \
-            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, uct_ep, uct_rkey); \
-            status = _uct_func(uct_ep, _param, _remote_addr, uct_rkey); \
+            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
+            status = _uct_func((_ep)->uct_eps[lane], _param, _remote_addr, \
+                               uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
                 return status; \
             } \
@@ -42,14 +43,14 @@
         uct_completion_t comp; \
         ucs_status_t status; \
         uct_rkey_t uct_rkey; \
-        uct_ep_h uct_ep; \
+        ucp_lane_index_t lane; \
         \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
         comp.count = 2; \
         \
         for (;;) { \
-            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, uct_ep, uct_rkey); \
-            status = _uct_func(uct_ep, UCS_PP_TUPLE_BREAK _params, \
+            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
+            status = _uct_func((_ep)->uct_eps[lane], UCS_PP_TUPLE_BREAK _params, \
                                _remote_addr, uct_rkey, _result, &comp); \
             if (ucs_likely(status == UCS_OK)) { \
                 goto out; \

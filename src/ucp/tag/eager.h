@@ -56,7 +56,7 @@ extern const ucp_proto_t ucp_tag_eager_sync_proto;
 
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
-                                 uintptr_t remote_request, int progress);
+                                 uintptr_t remote_request);
 
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag);
 
@@ -108,7 +108,7 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
                             &((ucp_eager_sync_hdr_t*)data)->req :
                             &((ucp_eager_sync_first_hdr_t*)data)->req;
             ucp_tag_eager_sync_send_ack(worker, req_hdr->sender_uuid,
-                                        req_hdr->reqptr, 1);
+                                        req_hdr->reqptr);
         }
     }
 

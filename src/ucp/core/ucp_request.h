@@ -76,8 +76,8 @@ struct ucp_request {
                 ucp_wireup_msg_t  wireup;
 
                 struct {
-                    uint64_t      remote_addr; /* remote address */
-                    ucp_rkey_h    rkey;        /* Rkey */
+                    uint64_t      remote_addr; /* Remote address */
+                    ucp_rkey_h    rkey;     /* Remote memory key */
                 } rma;
 
                 struct {
@@ -92,19 +92,20 @@ struct ucp_request {
                 } proxy;
             };
 
-            ucp_frag_state_t      state;
-            uct_pending_req_t     uct;      /* Pending request */
-            uct_completion_t      uct_comp;
+            ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
+            ucp_frag_state_t      state;    /* Position in the send buffer */
+            uct_pending_req_t     uct;      /* UCT pending request */
+            uct_completion_t      uct_comp; /* UCT completion */
         } send;
 
         struct {
             ucs_queue_elem_t      queue;    /* Expected queue element */
             void                  *buffer;  /* Buffer to receive data to */
-            size_t                count;    /* Receive count */
             ucp_datatype_t        datatype; /* Receive type */
+            size_t                count;    /* Receive count */
             ucp_tag_t             tag;      /* Expected tag */
             ucp_tag_t             tag_mask; /* Expected tag mask */
-            ucp_tag_recv_callback_t   cb;   /* Completion callback */
+            ucp_tag_recv_callback_t cb;     /* Completion callback */
             ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_frag_state_t      state;
         } recv;
@@ -124,5 +125,18 @@ typedef struct ucp_recv_desc {
 
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
+
+/**
+ * Start sending a request.
+ *
+ * @param [in]  req   Request to start.
+ *
+ * @return UCS_OK - completed (callback will not be called)
+ *         UCS_INPROGRESS - started but not completed
+ *         other error - failure
+ */
+ucs_status_t ucp_request_start_send(ucp_request_t *req);
+
+ucs_status_t ucp_request_release_pending_send(uct_pending_req_t *self);
 
 #endif
