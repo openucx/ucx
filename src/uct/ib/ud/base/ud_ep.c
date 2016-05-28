@@ -960,11 +960,12 @@ static ucs_arbiter_cb_result_t
 uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
                         void *arg)
 {
-    uct_pending_callback_t cb = (uct_pending_callback_t)arg;
     uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), 
                                        uct_ud_ep_t, tx.pending.group);
     uct_pending_req_t *req;
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    uct_purge_cb_args_t *cb_args    = arg;
+    uct_pending_purge_callback_t cb = cb_args->cb;
 
     if (&ep->tx.pending.elem == elem) { 
         /* return ignored by arbiter */
@@ -972,7 +973,7 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     }
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     if (cb) {
-        cb(req);
+        cb(req, cb_args->arg);
     } else {
         ucs_warn("ep=%p cancelling user pending request %p", ep, req);
     }
@@ -983,15 +984,17 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
 }
 
 
-void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_callback_t cb)
+void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
+                             void *arg)
 {
     uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, 
                                            uct_ud_iface_t);
+    uct_purge_cb_args_t args = {cb, arg};    
 
     uct_ud_enter(iface);
     ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->tx.pending.group,
-                            uct_ud_ep_pending_purge_cb, cb);
+                            uct_ud_ep_pending_purge_cb, &args);
     if (uct_ud_ep_ctl_op_isany(ep)) {
         ucs_arbiter_group_push_elem(&ep->tx.pending.group,
                                     &ep->tx.pending.elem);
@@ -1014,7 +1017,7 @@ void  uct_ud_ep_disconnect(uct_ep_h ep)
 
     ucs_trace_func("");
     /* cancel user pending */
-    uct_ud_ep_pending_purge(ep, NULL);
+    uct_ud_ep_pending_purge(ep, NULL, NULL);
 
     /* scedule flush */
     uct_ud_ep_flush(ep, 0, NULL);

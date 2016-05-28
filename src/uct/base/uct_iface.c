@@ -202,6 +202,84 @@ static ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     return UCS_OK;
 }
 
+static void uct_ep_failed_purge_cb(uct_pending_req_t *self, void *arg)
+{
+    uct_pending_req_push((ucs_queue_head_t*)arg, self);
+}
+
+static void uct_ep_failed_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
+                                void *arg)
+{
+    uct_failed_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                               uct_failed_iface_t);
+    uct_pending_req_t *req;
+
+    ucs_queue_for_each_extract(req, &iface->pend_q, priv, 1) {
+        if (cb != NULL) {
+            cb(req, arg);
+        } else {
+            ucs_warn("ep=%p cancelling user pending request %p", tl_ep, req);
+        }
+    }
+}
+
+static void uct_ep_failed_destroy(uct_ep_h tl_ep)
+{
+    /* Warn user if some pending reqs left*/
+    uct_ep_failed_purge (tl_ep, NULL, NULL);
+
+    ucs_free(tl_ep->iface);
+    ucs_free(tl_ep);
+}
+
+void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
+{
+    uct_failed_iface_t *f_iface;
+    uct_iface_ops_t    *ops;
+
+    /* TBD: consider allocating one instance per interface
+     * rather than for each endpoint */
+    f_iface = ucs_malloc(sizeof(*f_iface), "failed iface");
+    if (f_iface == NULL) {
+        ucs_error("Could not create failed iface (nomem)");
+        return;
+    }
+
+    ucs_queue_head_init(&f_iface->pend_q);
+    ops = &f_iface->super.ops;
+
+    /* Move all pending requests to the queue. 
+     * Failed ep will use that queue for purge. */
+    uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
+
+    ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_flush           = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_destroy         = uct_ep_failed_destroy;
+    ops->ep_pending_add     = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_purge   = uct_ep_failed_purge;
+    ops->ep_put_short       = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_put_bcopy       = (void*)ucs_empty_function_return_bc_ep_timeout;
+    ops->ep_put_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_get_bcopy       = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_get_zcopy       = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_am_short        = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_am_bcopy        = (void*)ucs_empty_function_return_bc_ep_timeout;
+    ops->ep_am_zcopy        = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_add64    = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_fadd64   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_swap64   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_cswap64  = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_add32    = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_fadd32   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_swap32   = (void*)ucs_empty_function_return_ep_timeout;
+    ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
+    
+    ucs_class_call_cleanup_chain(cls, tl_ep, -1);
+
+    tl_ep->iface = &f_iface->super;
+}
+
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
 

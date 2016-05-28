@@ -146,15 +146,19 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               void *data, size_t length, size_t valid_length,
                               char *buffer, size_t max);
 
-void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op);
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op,
+                                 ucs_status_t status);
 
-void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op);
+void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
+                                               ucs_status_t status);
 
-void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op);
+void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
+                                             ucs_status_t status);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
 
-void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
+void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
+                             void*arg);
 
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
@@ -165,10 +169,14 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
-void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op);
-void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 1)(uct_rc_iface_send_op_t *op);
-void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op);
-void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op);
+void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
+                                                   ucs_status_t status);
+void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 1)(uct_rc_iface_send_op_t *op,
+                                                   ucs_status_t status);
+void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op,
+                                                   ucs_status_t status);
+void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op,
+                                                   ucs_status_t status);
 
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               int qp_type, struct ibv_qp_cap *cap);
@@ -237,7 +245,7 @@ uct_rc_txqp_completion(uct_rc_txqp_t *txqp, uint16_t sn)
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        op->handler(op);
+        op->handler(op, UCS_OK);
     }
     UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }

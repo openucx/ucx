@@ -164,7 +164,8 @@ UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
                   const char*, unsigned, unsigned, uct_rc_iface_config_t*)
 
 
-typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op /*, void *inline_data */);
+typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op,
+                                      ucs_status_t status);
 
 
 struct uct_rc_iface_send_op {

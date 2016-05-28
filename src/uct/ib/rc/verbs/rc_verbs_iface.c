@@ -37,6 +37,21 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
     return uct_rc_verbs_iface_post_recv_always(&iface->super, count);
 }
 
+static void uct_rc_verbs_handle_failure(uct_rc_verbs_ep_t *ep,
+                                        uct_rc_verbs_iface_t *iface,
+                                        struct ibv_wc *wc)
+{
+    extern ucs_class_t UCS_CLASS_NAME(uct_rc_verbs_ep_t);
+    if (ep != NULL) {
+        ucs_error("Send completion with error: %s",
+                  ibv_wc_status_str(wc->status));
+
+        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t),
+                          &ep->super.super.super,
+                          &iface->super.super.super.super);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
 {

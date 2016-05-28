@@ -1327,10 +1327,13 @@ UCT_INLINE_API ucs_status_t uct_ep_pending_add(uct_ep_h ep, uct_pending_req_t *r
  *
  * @param [in]  ep  Endpoint to remove pending requests from.
  * @param [in]  cb  Callback to pass the removed requests to.
+ * @param [in]  arg Argument to pass to the @a cb callback.
  */
-UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb)
+UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
+                                         uct_pending_purge_callback_t cb,
+                                         void *arg)
 {
-    ep->iface->ops.ep_pending_purge(ep, cb);
+    ep->iface->ops.ep_pending_purge(ep, cb, arg);
 }
 
 

@@ -55,10 +55,11 @@ static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbit
                                                             void *arg){
     uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_pending_callback_t cb = arg;
+    uct_purge_cb_args_t *cb_args    = arg;
+    uct_pending_purge_callback_t cb = cb_args->cb;
 
     if (NULL != cb) {
-        cb(req);
+        cb(req, cb_args->arg);
     } else {
         ucs_warn("ep=%p cancelling user pending request %p", ep, req);
     }
@@ -68,12 +69,14 @@ static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbit
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
-void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb){
+void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
+                               void *arg){
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_purge_cb_args_t args = {cb, arg};
 
     ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
-                            uct_ugni_ep_abriter_purge_cb, cb);
+                            uct_ugni_ep_abriter_purge_cb, &args);
 }
 
 ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface, const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep){

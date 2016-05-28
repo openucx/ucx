@@ -50,7 +50,8 @@ struct uct_ugni_iface;
 uct_ugni_ep_t *uct_ugni_iface_lookup_ep(struct uct_ugni_iface *iface, uintptr_t hash_key);
 ucs_status_t ugni_connect_ep(struct uct_ugni_iface *iface, const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep);
 ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
-void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb);
+void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
+                               void *arg);
 ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
                                                     ucs_arbiter_elem_t *elem,
                                                     void *arg);

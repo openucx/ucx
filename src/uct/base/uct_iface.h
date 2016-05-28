@@ -163,6 +163,15 @@ UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
 
 
 /**
+ * Stub interface used for failed endpoints
+ */
+typedef struct uct_failed_iface {
+    uct_iface_t       super;
+    ucs_queue_head_t  pend_q;
+} uct_failed_iface_t;
+
+
+/**
  * Base structure of all endpoints.
  */
 typedef struct uct_base_ep {
@@ -296,6 +305,12 @@ typedef struct {
 } uct_pending_req_priv_t;
 
 
+typedef struct {
+    uct_pending_purge_callback_t cb;
+    void *arg;
+} uct_purge_cb_args_t;
+
+
 /**
  * Add a pending request to the queue.
  */
@@ -348,7 +363,7 @@ typedef struct {
  * @param _cb     Callback for purging the request.
  * @return Callback return value.
  */
-#define uct_pending_queue_purge(_priv, _queue, _cond, _cb) \
+#define uct_pending_queue_purge(_priv, _queue, _cond, _cb, _arg) \
     { \
         uct_pending_req_priv_t *_base_priv; \
         ucs_queue_iter_t _iter; \
@@ -357,7 +372,7 @@ typedef struct {
             _priv = ucs_derived_of(_base_priv, typeof(*_priv)); \
             if (_cond) { \
                 ucs_queue_del_iter(_queue, _iter); \
-                (void)_cb(ucs_container_of(_base_priv, uct_pending_req_t, priv)); \
+                (void)_cb(ucs_container_of(_base_priv, uct_pending_req_t, priv), _arg); \
             } \
         } \
     }
@@ -421,6 +436,8 @@ void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
                        uint8_t id, const void *data, size_t length,
                        char *buffer, size_t max);
 
+
+void uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h tl_iface);
 
 /**
  * Invoke active message handler.

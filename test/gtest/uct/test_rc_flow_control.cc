@@ -81,10 +81,9 @@ public:
         return status;
     }
 
-    static ucs_status_t pending_cb(uct_pending_req_t *self)
+    static void purge_cb(uct_pending_req_t *self, void *arg)
     {
         req_count++;
-        return UCS_OK;
     }
 
     virtual void cleanup() {
@@ -158,7 +157,7 @@ UCS_TEST_P(test_rc_flow_control, pending_purge)
         EXPECT_EQ(uct_ep_pending_add(m_e2->ep(0), &reqs[i]), UCS_OK);
     }
 
-    uct_ep_pending_purge(m_e2->ep(0), pending_cb);
+    uct_ep_pending_purge(m_e2->ep(0), purge_cb, NULL);
     EXPECT_EQ(num_pend_sends, req_count);
 }
 
