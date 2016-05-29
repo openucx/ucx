@@ -433,7 +433,7 @@ static ucs_status_t ucp_tag_eager_sync_generic_single(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_tag_eager_sync_generic_complete(self);
     }
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t ucp_tag_eager_sync_generic_multi(uct_pending_req_t *self)
