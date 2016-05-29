@@ -205,7 +205,7 @@ static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
         return status;
     }
 
-    ucp_request_complete(req, req->cb.send, UCS_OK);
+    ucp_request_complete_send(req, UCS_OK);
     return UCS_OK;
 }
 
@@ -215,7 +215,7 @@ static ucs_status_t ucp_tag_eager_contig_bcopy_single(uct_pending_req_t *self)
                                                  ucp_tag_pack_eager_only_contig);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_complete(req, req->cb.send, UCS_OK);
+        ucp_request_complete_send(req, UCS_OK);
     }
     return status;
 }
@@ -233,7 +233,7 @@ static ucs_status_t ucp_tag_eager_contig_bcopy_multi(uct_pending_req_t *self)
                                                 ucp_tag_pack_eager_last_contig);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_complete(req, req->cb.send, UCS_OK);
+        ucp_request_complete_send(req, UCS_OK);
     }
     return status;
 }
@@ -241,7 +241,7 @@ static ucs_status_t ucp_tag_eager_contig_bcopy_multi(uct_pending_req_t *self)
 static void ucp_tag_eager_contig_zcopy_req_complete(ucp_request_t *req)
 {
     ucp_request_send_buffer_dereg(req, ucp_ep_get_am_lane(req->send.ep));
-    ucp_request_complete(req, req->cb.send, UCS_OK);
+    ucp_request_complete_send(req, UCS_OK);
 }
 
 static ucs_status_t ucp_tag_eager_contig_zcopy_single(uct_pending_req_t *self)
@@ -281,7 +281,7 @@ static void ucp_tag_eager_generic_complere(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_request_generic_dt_finish(req);
-    ucp_request_complete(req, req->cb.send, UCS_OK);
+    ucp_request_complete_send(req, UCS_OK);
 }
 
 static ucs_status_t ucp_tag_eager_generic_single(uct_pending_req_t *self)
@@ -339,7 +339,7 @@ void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag)
     ucs_assertv(!(req->flags & flag), "req->flags=%d flag=%d", req->flags, flag);
     req->flags |= flag;
     if (ucs_test_all_flags(req->flags, all_completed)) {
-        ucp_request_complete(req, req->cb.send, UCS_OK);
+        ucp_request_complete_send(req, UCS_OK);
     }
 }
 

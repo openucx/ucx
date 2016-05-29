@@ -4,9 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#include "ucp_request.h"
 #include "ucp_context.h"
 #include "ucp_worker.h"
+#include "ucp_request.inl"
 
 #include <ucp/tag/match.h>
 #include <ucs/datastruct/mpool.inl>
@@ -41,7 +41,7 @@ void ucp_request_cancel(ucp_worker_h worker, void *request)
 
     if (req->flags & UCP_REQUEST_FLAG_EXPECTED) {
         ucp_tag_cancel_expected(worker->context, req);
-        ucp_request_complete(req, req->cb.tag_recv, UCS_ERR_CANCELED, NULL);
+        ucp_request_complete_recv(req, UCS_ERR_CANCELED, NULL);
     }
 }
 

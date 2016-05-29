@@ -128,11 +128,11 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                   ucp_tag_t tag, ucp_send_callback_t cb)
 {
     ucp_send_req_init(req, ep);
-    req->cb.send           = cb;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
-    req->send.state.offset = 0;
+    req->send.cb           = cb;
     req->send.tag          = tag;
+    req->send.state.offset = 0;
 }
 
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
