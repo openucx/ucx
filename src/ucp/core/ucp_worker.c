@@ -272,7 +272,7 @@ unsigned ucp_worker_get_ep_config(ucp_worker_h worker,
 
     if (worker->ep_config_count >= worker->ep_config_max) {
         /* TODO support larger number of configurations */
-        ucs_fatal("too many ep configurations");
+        ucs_fatal("too many ep configurations: %d", worker->ep_config_count);
     }
 
     /* Create new configuration */
@@ -296,7 +296,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     unsigned config_count;
     unsigned name_length;
 
-    config_count = ucs_min((context->num_tls + 1) * context->num_tls, UINT8_MAX);
+    config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
+                           UINT8_MAX);
 
     worker = ucs_calloc(1, sizeof(*worker) +
                            sizeof(*worker->ep_config) * config_count,

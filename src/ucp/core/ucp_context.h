@@ -39,6 +39,7 @@ UCP_UINT_TYPE(UCP_PD_LANE_MAP_BITS)  ucp_pd_lane_map_t;
 
 /* Forward declarations */
 typedef struct ucp_request           ucp_request_t;
+typedef struct ucp_wireup_tl_info    ucp_wireup_iface_attr_t;
 typedef struct ucp_address_entry     ucp_address_entry_t;
 typedef struct ucp_stub_ep           ucp_stub_ep_t;
 
