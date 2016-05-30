@@ -75,6 +75,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     }
 
     /* all operations will use the first lane, which is a stub endpoint */
+    memset(&key, 0, sizeof(key));
     key.rma_lane_map     = 1;
     key.amo_lane_map     = 1;
     key.reachable_pd_map = 0; /* TODO */
@@ -82,6 +83,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     key.wireup_msg_lane  = 0;
     key.lanes[0]         = UCP_NULL_RESOURCE;
     key.num_lanes        = 1;
+    memset(key.amo_lanes, UCP_NULL_LANE, sizeof(key.amo_lanes));
 
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = 0;
