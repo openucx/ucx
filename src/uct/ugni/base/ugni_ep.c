@@ -59,6 +59,8 @@ static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbit
 
     if (NULL != cb) {
         cb(req);
+    } else {
+        ucs_warn("ep=%p cancelling user pending request %p", ep, req);
     }
 
     ep->arb_size--;
@@ -140,7 +142,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
                   gni_err_str[ugni_rc], ugni_rc);
     }
     sglib_hashed_uct_ugni_ep_t_delete(iface->eps, self);
+    uct_ugni_ep_pending_purge(&self->super.super, NULL);
 }
+
 UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_ep_t, uct_ep_t, uct_iface_t*,
                           const uct_device_addr_t *, const uct_iface_addr_t*);
