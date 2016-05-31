@@ -166,7 +166,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     make $make_opt all
 
     echo "Running ucx_info"
-    $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b
+    $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b -p
 
     export GTEST_RANDOM_SEED=0
     export GTEST_SHUFFLE=1
