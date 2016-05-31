@@ -5,10 +5,40 @@
  */
 
 #include "ucp_request.h"
+#include "ucp_ep.inl"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt_generic.h>
+#include <inttypes.h>
 
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_put(ucp_request_t *req)
+{
+    if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
+        ucs_mpool_put(req);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_trace_data("completing send request %p (%p), %s", req, req + 1,
+                   ucs_status_string(status));
+    req->send.cb(req + 1, status);
+    ucp_request_put(req);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status,
+                          ucp_tag_recv_info_t *info)
+{
+    ucs_trace_data("completing recv request %p (%p) stag 0x%"PRIx64" len %zu, %s",
+                   req, req + 1, info->sender_tag, info->length,
+                   ucs_status_string(status));
+    req->recv.cb(req + 1, status, info);
+    ucp_request_put(req);
+}
 
 static UCS_F_ALWAYS_INLINE size_t
 ucp_request_generic_dt_pack(ucp_request_t *req, void *dest, size_t length)

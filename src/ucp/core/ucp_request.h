@@ -43,21 +43,6 @@ enum {
 };
 
 
-/*
- * - Mark the request as completed
- * - If it has a callback - call it.
- * - Otherwise - the request might be released - if so, return it to mpool.
- */
-#define ucp_request_complete(_req, _cb, ...) \
-    { \
-        ucs_trace_data("completing request %p (%p) flags 0x%x", (_req), \
-                       (_req) + 1, (_req)->flags); \
-        (_cb)((_req) + 1, ## __VA_ARGS__); \
-        if (((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) { \
-            ucs_mpool_put(_req); \
-        } \
-    }
-
 typedef struct ucp_send_state {
     size_t                        offset;
     union {
@@ -78,15 +63,12 @@ struct ucp_request {
     uint16_t                      flags;   /* Request flags */
 
     union {
-        ucp_send_callback_t       send;
-        ucp_tag_recv_callback_t   tag_recv;
-    } cb;
-
-    union {
         struct {
             ucp_ep_h              ep;
             const void            *buffer;  /* Send buffer */
             ucp_datatype_t        datatype; /* Send type */
+            size_t                length;   /* Total length, in bytes */
+            ucp_send_callback_t   cb;       /* Completion callback */
 
             union {
                 ucp_tag_t         tag;      /* Tagged send */
@@ -110,7 +92,6 @@ struct ucp_request {
                 } proxy;
             };
 
-            size_t                length;   /* Total length, in bytes */
             ucp_frag_state_t      state;
             uct_pending_req_t     uct;      /* Pending request */
             uct_completion_t      uct_comp;
@@ -123,6 +104,7 @@ struct ucp_request {
             ucp_datatype_t        datatype; /* Receive type */
             ucp_tag_t             tag;      /* Expected tag */
             ucp_tag_t             tag_mask; /* Expected tag mask */
+            ucp_tag_recv_callback_t   cb;   /* Completion callback */
             ucp_tag_recv_info_t   info;     /* Completion info to fill */
             ucp_frag_state_t      state;
         } recv;

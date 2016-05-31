@@ -10,8 +10,9 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_request.h>
 #include <ucp/dt/dt_contig.h>
+
+#include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/mpool.inl>
 #include <ucp/core/ucp_ep.inl>
 
@@ -120,7 +121,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
         if (ucs_likely(status == UCS_OK || status == UCS_INPROGRESS)) {
             req->send.length -= packed_len;
             if (req->send.length == 0) {
-                ucp_request_complete(req, void);
+                ucp_request_put(req);
                 break;
             }
 
@@ -312,7 +313,7 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
             req->send.rma.remote_addr += frag_length;
             if (req->send.length == 0) {
                 /* Get was posted */
-                ucp_request_complete(req, void);
+                ucp_request_put(req);
                 status = UCS_OK;
                 break;
             }

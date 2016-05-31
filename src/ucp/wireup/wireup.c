@@ -9,6 +9,7 @@
 #include "stub_ep.h"
 
 #include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt_contig.h>
 #include <ucp/tag/eager.h>
@@ -64,7 +65,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     }
 
 out:
-    ucp_request_complete(req, req->cb.send, UCS_OK);
+    ucp_request_complete_send(req, UCS_OK);
     return UCS_OK;
 }
 
@@ -103,9 +104,9 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     }
 
     req->flags                   = UCP_REQUEST_FLAG_RELEASED;
-    req->cb.send                 = ucp_wireup_msg_send_completion;
-    req->send.uct.func           = ucp_wireup_msg_progress;
+    req->send.cb                 = ucp_wireup_msg_send_completion;
     req->send.wireup.type        = type;
+    req->send.uct.func           = ucp_wireup_msg_progress;
 
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, order,

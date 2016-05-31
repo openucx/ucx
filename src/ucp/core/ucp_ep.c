@@ -5,9 +5,9 @@
 */
 
 #include "ucp_ep.h"
-#include "ucp_request.h"
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
+#include "ucp_request.inl"
 
 #include <ucp/wireup/stub_ep.h>
 #include <ucp/wireup/wireup.h>
@@ -112,7 +112,7 @@ ucs_status_t ucp_ep_pending_req_release(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    ucp_request_complete(req, req->cb.send, UCS_ERR_CANCELED)
+    ucp_request_complete_send(req, UCS_ERR_CANCELED);
     return UCS_OK;
 }
 

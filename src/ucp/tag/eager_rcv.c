@@ -10,6 +10,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucs/datastruct/queue.h>
+#include <ucp/core/ucp_request.inl>
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -57,7 +58,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
             /* Last fragment completes the request */
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
                 ucs_queue_del_iter(&context->tag.expected, iter);
-                ucp_request_complete(req, req->cb.tag_recv, status, &req->recv.info);
+                ucp_request_complete_recv(req, status, &req->recv.info);
             } else {
                 req->recv.state.offset += recv_len;
             }
