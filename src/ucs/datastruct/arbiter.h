@@ -230,6 +230,25 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
     }
 }
 
+/**
+ * Deschedule already scheduled group. If the group is not scheduled, the operation
+ * will have no effect
+ *
+ * @param [in]  arbiter  Arbiter object that  group on.
+ * @param [in]  group    Group to deschedule.
+ */
+
+static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
+                                             ucs_arbiter_group_t *group)
+{
+    if (ucs_unlikely(!ucs_arbiter_group_is_empty(group))) {
+        ucs_arbiter_elem_t *head;
+
+        head = group->tail->next;
+        ucs_arbiter_group_head_desched(arbiter, head);
+        head->list.next = NULL;
+    }
+}
 
 /**
  * Dispatch work elements in the arbiter. For every group, up to per_group work
