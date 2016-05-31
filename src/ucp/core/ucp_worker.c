@@ -536,12 +536,19 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
         return status;
     }
 
+    status = ucp_worker_arm(worker);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     events = ucs_malloc(context->num_tls * sizeof(*events), "wakeup events");
     if (events == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
     do {
+        ucs_debug("epoll_wait loop with epfd %d maxevents %d timeout %d",
+                   epoll_fd, context->num_tls, -1);
         res = epoll_wait(epoll_fd, events, context->num_tls, -1);
     } while ((res == -1) && (errno == EINTR));
 

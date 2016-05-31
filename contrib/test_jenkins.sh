@@ -79,7 +79,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # todo: check in -devel mode as well
     ../contrib/configure-release --with-mpi --prefix=$ucx_inst
     make $make_opt install
-    
+
     # Prevent out tests from using installed UCX libraries
     export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
 
@@ -94,26 +94,30 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     cat $ucx_inst_ptest/test_types | sort -R > $ucx_inst_ptest/test_types_short
 
     opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
-    
+
     # show UCX libraries being used 
     ldd $ucx_inst/bin/ucx_perftest
     echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
     # compile and run UCP hello world example
-    gcc -o ./ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c -lucp -I${ucx_inst}/include -L${ucx_inst}/lib
+    gcc -o ./ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
-    echo Running UCP hello world server
-    ./ucp_hello_world &
-    hw_pid=$!
+    UCP_TEST_HELLO_WORLD_PORT=$(( 10000 + ${BASHPID} ))
+    for test_mode in -w -f -b ; do
+        echo Running UCP hello world server with mode ${test_mode}
+        ./ucp_hello_world ${test_mode} -p ${UCP_TEST_HELLO_WORLD_PORT} &
+        hw_server_pid=$!
 
-    sleep 1
+        sleep 1
 
-    echo Running UCP hello world client
-    ./ucp_hello_world $(hostname)
+        #need to be ran in background to reflect application PID in $!
+        echo Running UCP hello world client with mode ${test_mode}
+        ./ucp_hello_world ${test_mode} -n $(hostname) -p ${UCP_TEST_HELLO_WORLD_PORT} &
+        hw_client_pid=$!
 
-    # make sure server process in not running
-    wait $hw_pid
-
+        # make sure server process in not running
+        wait ${hw_server_pid} ${hw_client_pid}
+    done
     rm -f ./ucp_hello_world
 
     # compile and then run UCT example to make sure it's not broken by UCX API changes
