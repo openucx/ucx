@@ -131,7 +131,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
         ucs_error("error detaching from remote FIFO");
     }
 
-    ucs_arbiter_group_cleanup(&self->arb_group);
+    uct_mm_ep_pending_purge(&self->super.super, NULL);
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
@@ -404,8 +404,13 @@ static ucs_arbiter_cb_result_t uct_mm_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_pending_callback_t cb = arg;
-
-    cb(req);
+    uct_mm_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                       uct_mm_ep_t, arb_group);
+    if (cb != NULL) {
+        cb(req);
+    } else {
+        ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+    }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
