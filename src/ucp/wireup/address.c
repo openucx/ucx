@@ -129,10 +129,6 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
         dev = ucp_address_get_device(context->tl_rscs[i].tl_rsc.dev_name,
                                      devices, &num_devices);
 
-        dev->tl_addrs_size += sizeof(uint16_t); /* tl name checksum */
-        dev->tl_addrs_size += 1;                /* address length */
-        dev->tl_addrs_size += sizeof(ucp_wireup_iface_attr_t); /* transport info */
-
         iface_attr = &worker->iface_attrs[i];
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
                     dev->tl_addrs_size += iface_attr->iface_addr_len;
@@ -146,6 +142,9 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
             continue;
         }
 
+        dev->tl_addrs_size += sizeof(uint16_t); /* tl name checksum */
+        dev->tl_addrs_size += sizeof(ucp_wireup_iface_attr_t); /* transport info */
+        dev->tl_addrs_size += 1;                /* address length */
         dev->rsc_index      = i;
         dev->dev_addr_len   = iface_attr->device_addr_len;
         dev->tl_bitmap     |= mask;
@@ -289,7 +288,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             *(uint16_t*)ptr = context->tl_rscs[i].tl_name_csum;
             ptr += sizeof(uint16_t);
 
-            /* TODO Transport information */
+            /* Transport information */
             ucp_address_pack_tl_info(ptr, &worker->iface_attrs[i]);
             ptr += sizeof(ucp_wireup_iface_attr_t);
 
@@ -340,8 +339,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     }
 
 out:
-    ucs_assertv(buffer + size == ptr, "buffer=%p size=%zu ptr=%p", buffer, size,
-                ptr);
+    ucs_assertv(buffer + size == ptr, "buffer=%p size=%zu ptr=%p ptr-buffer=%zd",
+                buffer, size, ptr, ptr - buffer);
     return UCS_OK;
 }
 
