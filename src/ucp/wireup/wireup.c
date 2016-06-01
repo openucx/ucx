@@ -279,6 +279,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
     ucp_ep_h ep = ucp_worker_ep_find(worker, uuid);
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     ucs_status_t status;
+    int ack;
 
     if (ep == NULL) {
         ucs_debug("ignoring connection reply - not exists");
@@ -295,20 +296,23 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
         }
 
         ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
-
-        /* If remote is connected - just send an ACK (because we already sent the address)
-         * Otherwise - send a REPLY message with the ep addresses.
-         */
-        memset(rsc_tli, -1, sizeof(rsc_tli));
-        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
-        if (status != UCS_OK) {
-            return;
-        }
+        ack = 1;
+    } else {
+        ack = 0;
     }
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
         ucp_wireup_ep_remote_connected(ep);
         ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    }
+
+    if (ack) {
+        /* Send ACK without any address, we've already sent it as part of the request */
+        memset(rsc_tli, -1, sizeof(rsc_tli));
+        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
+        if (status != UCS_OK) {
+            return;
+        }
     }
 }
 

@@ -110,7 +110,9 @@ static uct_ep_h ucp_stub_ep_get_wireup_msg_ep(ucp_stub_ep_t *stub_ep)
     } else {
         wireup_msg_ep = stub_ep->aux_ep;
     }
-    ucs_assert(wireup_msg_ep != NULL);
+    ucs_assertv(wireup_msg_ep != NULL,
+                "ep=%p stub_ep=%p connected=%d next_ep=%p aux_ep=%p", stub_ep->ep,
+                stub_ep, stub_ep->connected, stub_ep->next_ep, stub_ep->aux_ep);
     return wireup_msg_ep;
 }
 
@@ -263,8 +265,8 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
         return status;
     }
 
-    ucs_debug("ep %p: created aux_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
-              ep, stub_ep->aux_ep, ucp_ep_peer_name(ep),
+    ucs_debug("ep %p: stub_ep %p created aux_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
+              ep, stub_ep, stub_ep->aux_ep, ucp_ep_peer_name(ep),
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[aux_addr_index].tl_rsc));
     return UCS_OK;
 }
