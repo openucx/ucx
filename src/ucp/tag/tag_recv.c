@@ -72,12 +72,10 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
     ucp_dt_generic_t *dt_gen;
     ucp_request_t *req;
 
-    req = ucs_mpool_get_inline(&worker->req_mp);
+    req = ucp_request_get(worker);
     if (req == NULL) {
         return NULL;
     }
-
-    VALGRIND_MAKE_MEM_DEFINED(req + 1,  worker->context->config.request.size);
 
     req->flags             = UCP_REQUEST_FLAG_EXPECTED;
     req->recv.state.offset = 0;

@@ -94,10 +94,10 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
 
 static inline ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
-                 size_t zcopy_thresh, size_t rndv_thresh, const ucp_proto_t *proto)
+                 size_t zcopy_thresh, size_t rndv_thresh, ucp_send_callback_t cb,
+                 const ucp_proto_t *proto)
 {
     ucs_status_t status;
-    ucp_ep_h ep = req->send.ep;
 
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
@@ -117,22 +117,44 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    ucp_ep_add_pending(ep, ucp_ep_get_am_uct_ep(ep), req, 1);
-    ucp_worker_progress(ep->worker);
+    /*
+     * Start the request.
+     * If it is completed immediately, release the request and return the status.
+     * Otherwise, return the request.
+     */
+    status = ucp_request_start_send(req);
+    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        ucs_trace_req("releasing send request %p, returning status %s", req,
+                      ucs_status_string(status));
+        ucs_mpool_put(req);
+        return UCS_STATUS_PTR(status);
+    }
+
     ucs_trace_req("returning send request %p", req);
+    req->send.cb = cb;
     return req + 1;
+}
+
+/* Will be called if request is completed internally before returned to user */
+static void ucp_tag_stub_send_completion(void *request, ucs_status_t status)
+{
+    ucs_assertv(status == UCS_OK, "status=%s", ucs_status_string(status));
 }
 
 static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                   const void* buffer, uintptr_t datatype,
-                                  ucp_tag_t tag, ucp_send_callback_t cb)
+                                  ucp_tag_t tag)
 {
-    ucp_send_req_init(req, ep);
+    req->flags             = 0;
+    req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
-    req->send.cb           = cb;
+    req->send.cb           = ucp_tag_stub_send_completion;
     req->send.tag          = tag;
     req->send.state.offset = 0;
+#if ENABLE_ASSERT
+    req->send.lane         = UCP_NULL_LANE;
+#endif
 }
 
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
@@ -156,31 +178,30 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
         }
     }
 
-    req = ucs_mpool_get_inline(&ep->worker->req_mp);
+    req = ucp_request_get(ep->worker);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, cb);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
 
     return ucp_tag_send_req(req, count,
                             ucp_ep_config(ep)->max_eager_short,
                             ucp_ep_config(ep)->zcopy_thresh,
                             ucp_ep_config(ep)->rndv_thresh,
-                            &ucp_tag_eager_proto);
+                            cb, &ucp_tag_eager_proto);
 }
 
 ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                       ucp_datatype_t datatype, ucp_tag_t tag,
                                       ucp_send_callback_t cb)
 {
-    ucp_worker_h worker = ep->worker;
     ucp_request_t *req;
 
     ucs_trace_req("send_sync_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    req = ucs_mpool_get_inline(&worker->req_mp);
+    req = ucp_request_get(ep->worker);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
@@ -188,30 +209,27 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, cb);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
 
     return ucp_tag_send_req(req, count,
-                            -1,
+                            -1, /* disable short method */
                             ucp_ep_config(ep)->sync_zcopy_thresh,
                             ucp_ep_config(ep)->sync_rndv_thresh,
-                            &ucp_tag_eager_sync_proto);
+                            cb, &ucp_tag_eager_sync_proto);
 }
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
-                                 uintptr_t remote_request, int progress)
+                                 uintptr_t remote_request)
 {
     ucp_request_t *req;
-    ucp_ep_h ep;
 
     ucs_trace_req("send_sync_ack sender_uuid %"PRIx64" remote_request 0x%lx",
                   sender_uuid, remote_request);
 
     req = ucp_worker_allocate_reply(worker, sender_uuid);
-    ep                             = req->send.ep;
     req->send.uct.func             = ucp_proto_progress_am_bcopy_single;
     req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;
     req->send.proto.remote_request = remote_request;
     req->send.proto.status         = UCS_OK;
-
-    ucp_ep_add_pending(ep, ucp_ep_get_am_uct_ep(ep), req, progress);
+    ucp_request_start_send(req);
 }

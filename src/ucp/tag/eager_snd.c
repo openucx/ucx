@@ -199,8 +199,9 @@ static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
     ucp_ep_t *ep = req->send.ep;
     ucs_status_t status;
 
-    status = ucp_tag_send_eager_short(ep, req->send.tag, req->send.buffer,
-                                      req->send.length);
+    req->send.lane = ucp_ep_get_am_lane(ep);
+    status = uct_ep_am_short(ep->uct_eps[req->send.lane], UCP_AM_ID_EAGER_ONLY,
+                             req->send.tag, req->send.buffer, req->send.length);
     if (status != UCS_OK) {
         return status;
     }
@@ -240,7 +241,7 @@ static ucs_status_t ucp_tag_eager_contig_bcopy_multi(uct_pending_req_t *self)
 
 static void ucp_tag_eager_contig_zcopy_req_complete(ucp_request_t *req)
 {
-    ucp_request_send_buffer_dereg(req, ucp_ep_get_am_lane(req->send.ep));
+    ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
     ucp_request_complete_send(req, UCS_OK);
 }
 
@@ -374,7 +375,7 @@ static ucs_status_t ucp_tag_eager_sync_contig_bcopy_multi(uct_pending_req_t *sel
 
 static inline void ucp_tag_eager_sync_contig_zcopy_req_complete(ucp_request_t *req)
 {
-    ucp_request_send_buffer_dereg(req, ucp_ep_get_am_lane(req->send.ep));
+    ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
     ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
 }
 

@@ -67,12 +67,4 @@ static inline void ucp_ep_connect_remote(ucp_ep_h ep)
 }
 
 
-static inline void ucp_send_req_init(ucp_request_t* req, ucp_ep_h ep)
-{
-    VALGRIND_MAKE_MEM_DEFINED(req + 1, ep->worker->context->config.request.size);
-    req->flags             = 0;
-    req->send.ep           = ep;
-}
-
-
 #endif

@@ -30,16 +30,6 @@ static size_t ucp_wireup_msg_pack(void *dest, void *arg)
     return sizeof(ucp_wireup_msg_t) + req->send.length;
 }
 
-static uct_ep_h ucp_wireup_msg_uct_ep(ucp_ep_h ep, uint8_t type)
-{
-    ucp_lane_index_t lane = ucp_ep_get_wireup_msg_lane(ep);
-    if ((lane == UCP_NULL_LANE) || (type == UCP_WIREUP_MSG_ACK)) {
-        return ucp_ep_get_am_uct_ep(ep);
-    } else {
-        return ep->uct_eps[lane];
-    }
-}
-
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
@@ -55,8 +45,13 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     }
 
     /* send the active message */
-    packed_len = uct_ep_am_bcopy(ucp_wireup_msg_uct_ep(ep, req->send.wireup.type),
-                                 UCP_AM_ID_WIREUP, ucp_wireup_msg_pack, req);
+    if (req->send.wireup.type == UCP_WIREUP_MSG_ACK) {
+        req->send.lane = ucp_ep_get_am_lane(ep);
+    } else {
+        req->send.lane = ucp_ep_get_wireup_msg_lane(ep);
+    }
+    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_WIREUP,
+                                 ucp_wireup_msg_pack, req);
     if (packed_len < 0) {
         if (packed_len != UCS_ERR_NO_RESOURCE) {
             ucs_error("failed to send wireup: %s", ucs_status_string(packed_len));
@@ -104,6 +99,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     }
 
     req->flags                   = UCP_REQUEST_FLAG_RELEASED;
+    req->send.ep                 = ep;
     req->send.cb                 = ucp_wireup_msg_send_completion;
     req->send.wireup.type        = type;
     req->send.uct.func           = ucp_wireup_msg_progress;
@@ -130,7 +126,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
         }
     }
 
-    ucp_ep_add_pending(ep, ucp_wireup_msg_uct_ep(ep, type), req, 0);
+    ucp_request_start_send(req);
     return UCS_OK;
 }
 
@@ -283,6 +279,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
     ucp_ep_h ep = ucp_worker_ep_find(worker, uuid);
     ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     ucs_status_t status;
+    int ack;
 
     if (ep == NULL) {
         ucs_debug("ignoring connection reply - not exists");
@@ -299,20 +296,23 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
         }
 
         ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
-
-        /* If remote is connected - just send an ACK (because we already sent the address)
-         * Otherwise - send a REPLY message with the ep addresses.
-         */
-        memset(rsc_tli, -1, sizeof(rsc_tli));
-        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
-        if (status != UCS_OK) {
-            return;
-        }
+        ack = 1;
+    } else {
+        ack = 0;
     }
 
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
         ucp_wireup_ep_remote_connected(ep);
         ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    }
+
+    if (ack) {
+        /* Send ACK without any address, we've already sent it as part of the request */
+        memset(rsc_tli, -1, sizeof(rsc_tli));
+        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
+        if (status != UCS_OK) {
+            return;
+        }
     }
 }
 
@@ -612,7 +612,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
 
     /* TODO make sure such lane would exist */
     rsc_index = ucp_stub_ep_get_aux_rsc_index(
-                    ucp_wireup_msg_uct_ep(ep, UCP_WIREUP_MSG_REQUEST));
+                    ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)]);
     if (rsc_index != UCP_NULL_RESOURCE) {
         tl_bitmap |= UCS_BIT(rsc_index);
     }

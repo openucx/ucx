@@ -108,53 +108,6 @@ int ucp_ep_is_stub(ucp_ep_h ep)
     return ucp_ep_get_rsc_index(ep, 0) == UCP_NULL_RESOURCE;
 }
 
-ucs_status_t ucp_ep_pending_req_release(uct_pending_req_t *self)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-
-    ucp_request_complete_send(req, UCS_ERR_CANCELED);
-    return UCS_OK;
-}
-
-ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
-                                    uct_pending_req_t *req)
-{
-    ucs_status_t status;
-
-    ucs_assertv(req->func != NULL, "req=%p", req);
-
-    status = uct_ep_pending_add(uct_ep, req);
-    if (status != UCS_ERR_BUSY) {
-        ucs_assert(status == UCS_OK);
-        ucs_trace_data("ep %p: added pending uct request %p to uct_ep %p", ep,
-                       req, uct_ep);
-        return UCS_OK; /* Added to pending */
-    }
-
-    /* Forced progress */
-    status = req->func(req);
-    if (status == UCS_OK) {
-        return UCS_OK; /* Completed the operation */
-    }
-
-    return UCS_ERR_NO_PROGRESS;
-}
-
-void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
-                        int progress)
-{
-    ucs_status_t status;
-
-    req->send.ep = ep;
-    status = ucp_ep_add_pending_uct(ep, uct_ep, &req->send.uct);
-    while (status != UCS_OK) {
-        if (progress) {
-            ucp_worker_progress(ep->worker);
-        }
-        status = ucp_ep_add_pending_uct(ep, uct_ep, &req->send.uct);
-    }
-}
-
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
                            ucp_ep_h *ep_p)
 {
@@ -224,7 +177,7 @@ static void ucp_ep_destory_uct_eps(ucp_ep_h ep)
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = ep->uct_eps[lane];
-        uct_ep_pending_purge(uct_ep, ucp_ep_pending_req_release);
+        uct_ep_pending_purge(uct_ep, ucp_request_release_pending_send);
         ucs_debug("destroy ep %p op %d uct_ep %p", ep, lane, uct_ep);
         uct_ep_destroy(uct_ep);
     }

@@ -5,6 +5,7 @@
 */
 
 #include "ucp_worker.h"
+#include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/stub_ep.h>
@@ -607,15 +608,14 @@ err:
 ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid)
 {
     ucp_request_t *req;
-    ucp_ep_h ep;
 
-    req = ucs_mpool_get_inline(&worker->req_mp);
+    req = ucp_request_get(worker);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }
 
-    ep = ucp_worker_get_reply_ep(worker, dest_uuid);
-    ucp_send_req_init(req, ep);
+    req->flags   = 0;
+    req->send.ep = ucp_worker_get_reply_ep(worker, dest_uuid);
     return req;
 }
 

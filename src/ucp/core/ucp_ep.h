@@ -132,14 +132,6 @@ int ucp_ep_is_stub(ucp_ep_h ep);
 
 void ucp_ep_destroy_uct_ep_safe(ucp_ep_h ep, uct_ep_h uct_ep);
 
-ucs_status_t ucp_ep_add_pending_uct(ucp_ep_h ep, uct_ep_h uct_ep,
-                                    uct_pending_req_t *req);
-
-void ucp_ep_add_pending(ucp_ep_h ep, uct_ep_h uct_ep, ucp_request_t *req,
-                        int progress);
-
-ucs_status_t ucp_ep_pending_req_release(uct_pending_req_t *self);
-
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,

@@ -27,7 +27,8 @@ static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
 
 static inline ucp_lane_index_t ucp_ep_get_wireup_msg_lane(ucp_ep_h ep)
 {
-    return ucp_ep_config(ep)->key.wireup_msg_lane;
+    ucp_lane_index_t lane = ucp_ep_config(ep)->key.wireup_msg_lane;
+    return (lane == UCP_NULL_LANE) ? ucp_ep_get_am_lane(ep) : lane;
 }
 
 static inline uct_ep_h ucp_ep_get_am_uct_ep(ucp_ep_h ep)
@@ -108,29 +109,27 @@ static inline ucp_pd_lane_map_t ucp_ep_pd_map_expand(ucp_pd_map_t pd_map)
         \
         /* Find the first lane which supports one of the remote pd's in the rkey*/ \
         bit_index    = ucs_ffs64(ep_lane_map & rkey_pd_map); \
-        lane         = bit_index / UCP_PD_INDEX_BITS; \
+        _lane        = bit_index / UCP_PD_INDEX_BITS; \
         dst_pd_index = bit_index % UCP_PD_INDEX_BITS; \
         rkey_index   = ucs_count_one_bits(rkey_pd_map & UCS_MASK(dst_pd_index)); \
         _uct_rkey    = (_rkey)->uct[rkey_index].rkey; \
     }
 
-#define UCP_EP_RESOLVE_RKEY_RMA(_ep, _rkey, _uct_ep, _uct_rkey, _rma_config) \
+#define UCP_EP_RESOLVE_RKEY_RMA(_ep, _rkey, _lane, _uct_rkey, _rma_config) \
     { \
         ucp_ep_config_t *config; \
-        ucp_lane_index_t lane; \
         \
-        UCP_EP_RESOLVE_RKEY(_ep, _rkey, rma, config, lane, _uct_rkey); \
-        _uct_ep      = (_ep)->uct_eps[lane]; \
-        _rma_config  = &config->rma[lane]; \
+        UCP_EP_RESOLVE_RKEY(_ep, _rkey, rma, config, _lane, _uct_rkey); \
+        _rma_config  = &config->rma[(_lane)]; \
     }
 
-#define UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, _uct_ep, _uct_rkey) \
+#define UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, _lane, _uct_rkey) \
     { \
         ucp_ep_config_t *config; \
-        ucp_lane_index_t lane; \
+        ucp_lane_index_t amo_index; \
         \
-        UCP_EP_RESOLVE_RKEY(_ep, _rkey, amo, config, lane, _uct_rkey); \
-        _uct_ep      = (_ep)->uct_eps[config->key.amo_lanes[lane]]; \
+        UCP_EP_RESOLVE_RKEY(_ep, _rkey, amo, config, amo_index, _uct_rkey); \
+        _lane        = config->key.amo_lanes[amo_index]; \
     }
 
 #endif

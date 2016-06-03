@@ -134,7 +134,7 @@ static ucs_status_t ucp_eager_sync_only_handler(void *arg, void *data,
     if (status == UCS_OK) {
         eagers_hdr = data;
         ucp_tag_eager_sync_send_ack(arg, eagers_hdr->req.sender_uuid,
-                                    eagers_hdr->req.reqptr, 0);
+                                    eagers_hdr->req.reqptr);
     }
     return status;
 }
@@ -153,7 +153,7 @@ static ucs_status_t ucp_eager_sync_first_handler(void *arg, void *data,
     if (status == UCS_OK) {
         eagers_first_hdr = data;
         ucp_tag_eager_sync_send_ack(arg, eagers_first_hdr->req.sender_uuid,
-                                    eagers_first_hdr->req.reqptr, 0);
+                                    eagers_first_hdr->req.reqptr);
     }
     return status;
 }

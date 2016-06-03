@@ -5,12 +5,25 @@
  */
 
 #include "ucp_request.h"
+#include "ucp_worker.h"
 #include "ucp_ep.inl"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt_generic.h>
+#include <ucs/datastruct/mpool.inl>
 #include <inttypes.h>
 
+
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_request_get(ucp_worker_h worker)
+{
+    ucp_request_t *req = ucs_mpool_get_inline(&worker->req_mp);
+
+    if (req != NULL) {
+        VALGRIND_MAKE_MEM_DEFINED(req + 1,  worker->context->config.request.size);
+    }
+    return req;
+}
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
