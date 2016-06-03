@@ -246,6 +246,11 @@ void ucp_test::entity::disconnect() {
     m_ep.reset();
 }
 
+void ucp_test::entity::destroy_worker() {
+    disconnect();
+    m_worker.reset();
+}
+
 ucp_ep_h ucp_test::entity::ep() const {
     return m_ep;
 }

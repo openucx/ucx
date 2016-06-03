@@ -17,7 +17,7 @@ extern "C" {
 }
 
 
-class test_ucp_wireup : public ucp_test {
+class test_ucp_wireup_tag : public ucp_test {
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -35,7 +35,7 @@ protected:
     void wait(void *req);
 };
 
-void test_ucp_wireup::tag_send(ucp_ep_h from, ucp_worker_h to, int count)
+void test_ucp_wireup_tag::tag_send(ucp_ep_h from, ucp_worker_h to, int count)
 {
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const uint64_t TAG = 0xdeadbeef;
@@ -69,16 +69,16 @@ void test_ucp_wireup::tag_send(ucp_ep_h from, ucp_worker_h to, int count)
     }
 }
 
-void test_ucp_wireup::send_completion(void *request, ucs_status_t status)
+void test_ucp_wireup_tag::send_completion(void *request, ucs_status_t status)
 {
 }
 
-void test_ucp_wireup::recv_completion(void *request, ucs_status_t status,
+void test_ucp_wireup_tag::recv_completion(void *request, ucs_status_t status,
                                       ucp_tag_recv_info_t *info)
 {
 }
 
-void test_ucp_wireup::wait(void *req)
+void test_ucp_wireup_tag::wait(void *req)
 {
     do {
         progress();
@@ -86,7 +86,7 @@ void test_ucp_wireup::wait(void *req)
     ucp_request_release(req);
 }
 
-UCS_TEST_P(test_ucp_wireup, address) {
+UCS_TEST_P(test_ucp_wireup_tag, address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
@@ -116,7 +116,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     ucs_free(buffer);
 }
 
-UCS_TEST_P(test_ucp_wireup, empty_address) {
+UCS_TEST_P(test_ucp_wireup_tag, empty_address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
@@ -145,7 +145,7 @@ UCS_TEST_P(test_ucp_wireup, empty_address) {
 }
 
 
-UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup_tag, one_sided_wireup) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
@@ -154,7 +154,7 @@ UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
     ent1->flush_worker();
 }
 
-UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup_tag, two_sided_wireup) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
@@ -167,7 +167,7 @@ UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
     ent2->flush_worker();
 }
 
-UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
+UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_before) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
@@ -183,7 +183,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
     ucp_ep_destroy(ep);
 }
 
-UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
+UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_after) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
@@ -203,7 +203,7 @@ UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
     ucp_ep_destroy(ep);
 }
 
-UCS_TEST_P(test_ucp_wireup, stress_connect) {
+UCS_TEST_P(test_ucp_wireup_tag, stress_connect) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
@@ -216,7 +216,7 @@ UCS_TEST_P(test_ucp_wireup, stress_connect) {
     }
 }
 
-UCS_TEST_P(test_ucp_wireup, stress_connect2) {
+UCS_TEST_P(test_ucp_wireup_tag, stress_connect2) {
     entity *ent1 = create_entity();
     entity *ent2 = create_entity();
 
@@ -227,6 +227,25 @@ UCS_TEST_P(test_ucp_wireup, stress_connect2) {
         ent1->disconnect();
         ent2->disconnect();
     }
+}
+
+UCS_TEST_P(test_ucp_wireup_tag, connect_disconnect) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    ent2->connect(ent1);
+    ent1->disconnect();
+    ent2->disconnect();
+}
+
+UCS_TEST_P(test_ucp_wireup_tag, disconnect_nonexistent) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    ent2->destroy_worker();
+    ent1->disconnect();
 }
 
 class test_ucp_wireup_rma : public ucp_test {
@@ -299,5 +318,24 @@ UCS_TEST_P(test_ucp_wireup_rma, two_sided_wireup) {
     ent2->flush_worker();
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)
+UCS_TEST_P(test_ucp_wireup_rma, connect_disconnect) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    ent2->connect(ent1);
+    ent1->disconnect();
+    ent2->disconnect();
+}
+
+UCS_TEST_P(test_ucp_wireup_rma, disconnect_nonexistent) {
+    entity *ent1 = create_entity();
+    entity *ent2 = create_entity();
+
+    ent1->connect(ent2);
+    ent2->destroy_worker();
+    ent1->disconnect();
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_tag)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_rma)
