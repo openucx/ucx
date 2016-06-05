@@ -6,71 +6,72 @@
  * See file LICENSE for terms.
  */
 
-#include "ib_pd.h"
+#include "ib_md.h"
+
 #include "ib_device.h"
 
 #include <ucs/arch/atomic.h>
 #include <pthread.h>
 
 
-#define UCT_IB_PD_PREFIX         "ib"
+#define UCT_IB_MD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
-static ucs_config_field_t uct_ib_pd_config_table[] = {
+static ucs_config_field_t uct_ib_md_config_table[] = {
   {"", "", NULL,
-   ucs_offsetof(uct_ib_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_pd_config_table)},
+   ucs_offsetof(uct_ib_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
   {"RCACHE", "try", "Enable using memory registration cache",
-   ucs_offsetof(uct_ib_pd_config_t, rcache.enable), UCS_CONFIG_TYPE_TERNARY},
+   ucs_offsetof(uct_ib_md_config_t, rcache.enable), UCS_CONFIG_TYPE_TERNARY},
 
   {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
-   ucs_offsetof(uct_ib_pd_config_t, rcache.event_prio), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_ib_md_config_t, rcache.event_prio), UCS_CONFIG_TYPE_UINT},
 
   {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
-   ucs_offsetof(uct_ib_pd_config_t, rcache.overhead), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_ib_md_config_t, rcache.overhead), UCS_CONFIG_TYPE_TIME},
 
   {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-   ucs_offsetof(uct_ib_pd_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
 
   {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-   ucs_offsetof(uct_ib_pd_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+   ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
 
   {"FORK_INIT", "try",
    "Initialize a fork-safe IB library with ibv_fork_init().",
-   ucs_offsetof(uct_ib_pd_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
+   ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
 
 #if ENABLE_STATS
-static ucs_stats_class_t uct_ib_pd_stats_class = {
+static ucs_stats_class_t uct_ib_md_stats_class = {
     .name           = "",
-    .num_counters   = UCT_IB_PD_STAT_LAST,
+    .num_counters   = UCT_IB_MD_STAT_LAST,
     .counter_names = {
-        [UCT_IB_PD_STAT_MEM_ALLOC]   = "mem_alloc",
-        [UCT_IB_PD_STAT_MEM_REG]     = "mem_reg"
+        [UCT_IB_MD_STAT_MEM_ALLOC]   = "mem_alloc",
+        [UCT_IB_MD_STAT_MEM_REG]     = "mem_reg"
     }
 };
 #endif
 
-static ucs_status_t uct_ib_pd_query(uct_pd_h uct_pd, uct_pd_attr_t *pd_attr)
+static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
-    uct_ib_pd_t *pd = ucs_derived_of(uct_pd, uct_ib_pd_t);
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
-    pd_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
-    pd_attr->cap.flags     = UCT_PD_FLAG_REG;
-    pd_attr->rkey_packed_size = sizeof(uint32_t);
+    md_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
+    md_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
+    md_attr->cap.flags     = UCT_MD_FLAG_REG;
+    md_attr->rkey_packed_size = sizeof(uint32_t);
 
-    if (IBV_EXP_HAVE_CONTIG_PAGES(&pd->dev.dev_attr)) {
-        pd_attr->cap.flags |= UCT_PD_FLAG_ALLOC;
+    if (IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr)) {
+        md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
 
-    pd_attr->reg_cost      = pd->reg_cost;
-    pd_attr->local_cpus    = pd->dev.local_cpus;
+    md_attr->reg_cost      = md->reg_cost;
+    md_attr->local_cpus    = md->dev.local_cpus;
     return UCS_OK;
 }
 
@@ -87,12 +88,12 @@ static ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_alloc(uct_pd_h uct_pd, size_t *length_p, void **address_p,
+static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                                      uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
-    uct_ib_pd_t *pd = ucs_derived_of(uct_pd, uct_ib_pd_t);
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     struct ibv_exp_reg_mr_in in = {
-        pd->pd,
+        md->pd,
         NULL,
         ucs_memtrack_adjust_alloc_size(*length_p),
         UCT_IB_MEM_ACCESS_FLAGS | IBV_EXP_ACCESS_ALLOCATE_MR,
@@ -109,10 +110,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_pd_h uct_pd, size_t *length_p, void **a
     }
 
     ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
-              mr->addr, mr->addr + mr->length, uct_ib_device_name(&pd->dev),
+              mr->addr, mr->addr + mr->length, uct_ib_device_name(&md->dev),
               mr->lkey, mr->rkey);
 
-    UCS_STATS_UPDATE_COUNTER(pd->stats, UCT_IB_PD_STAT_MEM_ALLOC, +1);
+    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
     *address_p = mr->addr;
     *length_p  = mr->length;
     ucs_memtrack_allocated(address_p, length_p UCS_MEMTRACK_VAL);
@@ -120,7 +121,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_pd_h uct_pd, size_t *length_p, void **a
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_free(uct_pd_h pd, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_free(uct_md_h md, uct_mem_h memh)
 {
     struct ibv_mr *mr = memh;
     void UCS_V_UNUSED *address = mr->addr;
@@ -129,13 +130,13 @@ static ucs_status_t uct_ib_mem_free(uct_pd_h pd, uct_mem_h memh)
     return uct_ib_dereg_mr(mr);
 }
 
-static ucs_status_t uct_ib_mem_reg(uct_pd_h uct_pd, void *address, size_t length,
+static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
                                    uct_mem_h *memh_p)
 {
-    uct_ib_pd_t *pd = ucs_derived_of(uct_pd, uct_ib_pd_t);
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     struct ibv_mr *mr;
 
-    mr = ibv_reg_mr(pd->pd, address, length, UCT_IB_MEM_ACCESS_FLAGS);
+    mr = ibv_reg_mr(md->pd, address, length, UCT_IB_MEM_ACCESS_FLAGS);
     if (mr == NULL) {
         ucs_error("ibv_reg_mr(address=%p, length=%zu, flags=0x%x) failed: %m",
                   address, length, UCT_IB_MEM_ACCESS_FLAGS);
@@ -143,21 +144,21 @@ static ucs_status_t uct_ib_mem_reg(uct_pd_h uct_pd, void *address, size_t length
     }
 
     ucs_trace("registered memory %p..%p on %s lkey 0x%x rkey 0x%x",
-              address, address + length, uct_ib_device_name(&pd->dev), mr->lkey,
+              address, address + length, uct_ib_device_name(&md->dev), mr->lkey,
               mr->rkey);
 
-    UCS_STATS_UPDATE_COUNTER(pd->stats, UCT_IB_PD_STAT_MEM_REG, +1);
+    UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
     *memh_p = mr;
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_dereg(uct_pd_h uct_pd, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
 {
     struct ibv_mr *mr = memh;
     return uct_ib_dereg_mr(mr);
 }
 
-static ucs_status_t uct_ib_mkey_pack(uct_pd_h pd, uct_mem_h memh,
+static ucs_status_t uct_ib_mkey_pack(uct_md_h md, uct_mem_h memh,
                                      void *rkey_buffer)
 {
     struct ibv_mr *mr = memh;
@@ -166,7 +167,7 @@ static ucs_status_t uct_ib_mkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_rkey_unpack(uct_pd_component_t *pdc,
+static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
                                        const void *rkey_buffer, uct_rkey_t *rkey_p,
                                        void **handle_p)
 {
@@ -178,11 +179,11 @@ static ucs_status_t uct_ib_rkey_unpack(uct_pd_component_t *pdc,
     return UCS_OK;
 }
 
-static void uct_ib_pd_close(uct_pd_h pd);
+static void uct_ib_md_close(uct_md_h md);
 
-static uct_pd_ops_t uct_ib_pd_ops = {
-    .close        = uct_ib_pd_close,
-    .query        = uct_ib_pd_query,
+static uct_md_ops_t uct_ib_md_ops = {
+    .close        = uct_ib_md_close,
+    .query        = uct_ib_md_query,
     .mem_alloc    = uct_ib_mem_alloc,
     .mem_free     = uct_ib_mem_free,
     .mem_reg      = uct_ib_mem_reg,
@@ -209,7 +210,7 @@ static void uct_ib_rcache_region_set_stub_mr(uct_ib_rcache_region_t *region)
 }
 
 static ucs_status_t
-uct_ib_mem_rcache_alloc(uct_pd_h uct_pd, size_t *length_p, void **address_p,
+uct_ib_mem_rcache_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                         uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     uct_ib_rcache_region_t *region;
@@ -220,7 +221,7 @@ uct_ib_mem_rcache_alloc(uct_pd_h uct_pd, size_t *length_p, void **address_p,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_ib_mem_alloc(uct_pd, length_p, address_p,
+    status = uct_ib_mem_alloc(uct_md, length_p, address_p,
                               (uct_mem_h *)&region->mr UCS_MEMTRACK_VAL);
     if (status != UCS_OK) {
         ucs_free(region);
@@ -235,24 +236,24 @@ uct_ib_mem_rcache_alloc(uct_pd_h uct_pd, size_t *length_p, void **address_p,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_rcache_free(uct_pd_h uct_pd, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_rcache_free(uct_md_h uct_md, uct_mem_h memh)
 {
     uct_ib_rcache_region_t *region = uct_ib_rache_region_from_memh(memh);
     ucs_status_t status;
 
-    status = uct_ib_mem_free(uct_pd, region->mr);
+    status = uct_ib_mem_free(uct_md, region->mr);
     ucs_free(region);
     return status;
 }
 
-static ucs_status_t uct_ib_mem_rcache_reg(uct_pd_h uct_pd, void *address,
+static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
                                           size_t length, uct_mem_h *memh_p)
 {
-    uct_ib_pd_t *pd = ucs_derived_of(uct_pd, uct_ib_pd_t);
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
 
-    status = ucs_rcache_get(pd->rcache, address, length, PROT_READ|PROT_WRITE,
+    status = ucs_rcache_get(md->rcache, address, length, PROT_READ|PROT_WRITE,
                             &rregion);
     if (status != UCS_OK) {
         return status;
@@ -263,18 +264,18 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_pd_h uct_pd, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_rcache_dereg(uct_pd_h uct_pd, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 {
-    uct_ib_pd_t *pd = ucs_derived_of(uct_pd, uct_ib_pd_t);
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_rcache_region_t *region = uct_ib_rache_region_from_memh(memh);
 
-    ucs_rcache_region_put(pd->rcache, &region->super);
+    ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
 }
 
-static uct_pd_ops_t uct_ib_pd_rcache_ops = {
-    .close        = uct_ib_pd_close,
-    .query        = uct_ib_pd_query,
+static uct_md_ops_t uct_ib_md_rcache_ops = {
+    .close        = uct_ib_md_close,
+    .query        = uct_ib_md_query,
     .mem_alloc    = uct_ib_mem_rcache_alloc,
     .mem_free     = uct_ib_mem_rcache_free,
     .mem_reg      = uct_ib_mem_rcache_reg,
@@ -287,10 +288,10 @@ static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache
                                              ucs_rcache_region_t *rregion)
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
-    uct_ib_pd_t *pd = context;
+    uct_ib_md_t *md = context;
     ucs_status_t status;
 
-    status = uct_ib_mem_reg(&pd->super, (void*)region->super.super.start,
+    status = uct_ib_mem_reg(&md->super, (void*)region->super.super.start,
                             region->super.super.end - region->super.super.start,
                             (uct_mem_h *)&region->mr);
     if (status != UCS_OK) {
@@ -305,9 +306,9 @@ static void uct_ib_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
                                        ucs_rcache_region_t *rregion)
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
-    uct_ib_pd_t *pd = context;
+    uct_ib_md_t *md = context;
 
-    (void)uct_ib_mem_dereg(&pd->super, region->mr);
+    (void)uct_ib_mem_dereg(&md->super, region->mr);
     region->mr           = NULL;
     region->stub_mr.lkey = 0;
     region->stub_mr.rkey = 0;
@@ -327,15 +328,15 @@ static ucs_rcache_ops_t uct_ib_rcache_ops = {
     .dump_region = uct_ib_rcache_dump_region_cb
 };
 
-static void uct_ib_make_pd_name(char pd_name[UCT_PD_NAME_MAX], struct ibv_device *device)
+static void uct_ib_make_md_name(char md_name[UCT_MD_NAME_MAX], struct ibv_device *device)
 {
-    snprintf(pd_name, UCT_PD_NAME_MAX, "%s/%s", UCT_IB_PD_PREFIX, device->name);
+    snprintf(md_name, UCT_MD_NAME_MAX, "%s/%s", UCT_IB_MD_PREFIX, device->name);
 }
 
-static ucs_status_t uct_ib_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+static ucs_status_t uct_ib_query_md_resources(uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p)
 {
-    uct_pd_resource_desc_t *resources;
+    uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
@@ -355,7 +356,7 @@ static ucs_status_t uct_ib_query_pd_resources(uct_pd_resource_desc_t **resources
     }
 
     for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_pd_name(resources[i].pd_name, device_list[i]);
+        uct_ib_make_md_name(resources[i].md_name, device_list[i]);
     }
 
     *resources_p     = resources;
@@ -389,15 +390,15 @@ static void uct_ib_fork_warn_enable()
 }
 
 static ucs_status_t
-uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd_h *pd_p)
+uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
-    const uct_ib_pd_config_t *pd_config = ucs_derived_of(uct_pd_config, uct_ib_pd_config_t);
+    const uct_ib_md_config_t *md_config = ucs_derived_of(uct_md_config, uct_ib_md_config_t);
     struct ibv_device **ib_device_list, *ib_device;
-    char tmp_pd_name[UCT_PD_NAME_MAX];
+    char tmp_md_name[UCT_MD_NAME_MAX];
     ucs_rcache_params_t rcache_params;
     ucs_status_t status;
     int i, num_devices, ret;
-    uct_ib_pd_t *pd;
+    uct_ib_md_t *md;
 
     /* Get device list from driver */
     ib_device_list = ibv_get_device_list(&num_devices);
@@ -409,8 +410,8 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
 
     ib_device = NULL;
     for (i = 0; i < num_devices; ++i) {
-        uct_ib_make_pd_name(tmp_pd_name, ib_device_list[i]);
-        if (!strcmp(tmp_pd_name, pd_name)) {
+        uct_ib_make_md_name(tmp_md_name, ib_device_list[i]);
+        if (!strcmp(tmp_md_name, md_name)) {
             ib_device = ib_device_list[i];
             break;
         }
@@ -420,26 +421,26 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
         goto out_free_dev_list;
     }
 
-    pd = ucs_malloc(sizeof(*pd), "ib_pd");
-    if (pd == NULL) {
+    md = ucs_malloc(sizeof(*md), "ib_md");
+    if (md == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto out_free_dev_list;
     }
 
-    pd->super.ops       = &uct_ib_pd_ops;
-    pd->super.component = &uct_ib_pdc;
+    md->super.ops       = &uct_ib_md_ops;
+    md->super.component = &uct_ib_mdc;
 
     /* Create statistics */
-    status = UCS_STATS_NODE_ALLOC(&pd->stats, &uct_ib_pd_stats_class, NULL,
-                                  "%s-%p", ibv_get_device_name(ib_device), pd);
+    status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class, NULL,
+                                  "%s-%p", ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
-        goto err_free_pd;
+        goto err_free_md;
     }
 
-    if (pd_config->fork_init != UCS_NO) {
+    if (md_config->fork_init != UCS_NO) {
         ret = ibv_fork_init();
         if (ret) {
-            if (pd_config->fork_init == UCS_YES) {
+            if (md_config->fork_init == UCS_YES) {
                 ucs_error("ibv_fork_init() failed: %m");
                 status = UCS_ERR_IO_ERROR;
                 goto err_release_stats;
@@ -449,36 +450,36 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
         }
     }
 
-    status = uct_ib_device_init(&pd->dev, ib_device UCS_STATS_ARG(pd->stats));
+    status = uct_ib_device_init(&md->dev, ib_device UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
     }
 
-    /* Allocate protection domain */
-    pd->pd = ibv_alloc_pd(pd->dev.ibv_context);
-    if (pd->pd == NULL) {
+    /* Allocate memory domain */
+    md->pd = ibv_alloc_pd(md->dev.ibv_context);
+    if (md->pd == NULL) {
         ucs_error("ibv_alloc_pd() failed: %m");
         status = UCS_ERR_NO_MEMORY;
         goto err_cleanup_device;
     }
 
-    pd->rcache   = NULL;
-    pd->reg_cost = pd_config->uc_reg_cost;
+    md->rcache   = NULL;
+    md->reg_cost = md_config->uc_reg_cost;
 
-    if (pd_config->rcache.enable != UCS_NO) {
+    if (md_config->rcache.enable != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
-        rcache_params.ucm_event_priority = pd_config->rcache.event_prio;
-        rcache_params.context            = pd;
+        rcache_params.ucm_event_priority = md_config->rcache.event_prio;
+        rcache_params.context            = md;
         rcache_params.ops                = &uct_ib_rcache_ops;
-        status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&pd->dev)
-                                   UCS_STATS_ARG(pd->stats), &pd->rcache);
+        status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev)
+                                   UCS_STATS_ARG(md->stats), &md->rcache);
         if (status == UCS_OK) {
-            pd->super.ops         = &uct_ib_pd_rcache_ops;
-            pd->reg_cost.overhead = pd_config->rcache.overhead;
-            pd->reg_cost.growth   = 0; /* It's close enough to 0 */
+            md->super.ops         = &uct_ib_md_rcache_ops;
+            md->reg_cost.overhead = md_config->rcache.overhead;
+            md->reg_cost.growth   = 0; /* It's close enough to 0 */
         } else {
-            ucs_assert(pd->rcache == NULL);
-            if (pd_config->rcache.enable == UCS_YES) {
+            ucs_assert(md->rcache == NULL);
+            if (md_config->rcache.enable == UCS_YES) {
                 ucs_error("Failed to create registration cache: %s",
                           ucs_status_string(status));
                 goto err_dealloc_pd;
@@ -489,7 +490,7 @@ uct_ib_pd_open(const char *pd_name, const uct_pd_config_t *uct_pd_config, uct_pd
         }
     }
 
-    *pd_p = &pd->super;
+    *md_p = &md->super;
     status = UCS_OK;
 
 out_free_dev_list:
@@ -498,31 +499,31 @@ out:
     return status;
 
 err_dealloc_pd:
-    ibv_dealloc_pd(pd->pd);
+    ibv_dealloc_pd(md->pd);
 err_cleanup_device:
-    uct_ib_device_cleanup(&pd->dev);
+    uct_ib_device_cleanup(&md->dev);
 err_release_stats:
-    UCS_STATS_NODE_FREE(pd->stats);
-err_free_pd:
-    ucs_free(pd);
+    UCS_STATS_NODE_FREE(md->stats);
+err_free_md:
+    ucs_free(md);
     goto out_free_dev_list;
 }
 
-static void uct_ib_pd_close(uct_pd_h uct_pd)
+static void uct_ib_md_close(uct_md_h uct_md)
 {
-    uct_ib_pd_t *pd = ucs_derived_of(uct_pd, uct_ib_pd_t);
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
-    if (pd->rcache != NULL) {
-        ucs_rcache_destroy(pd->rcache);
+    if (md->rcache != NULL) {
+        ucs_rcache_destroy(md->rcache);
     }
-    ibv_dealloc_pd(pd->pd);
-    uct_ib_device_cleanup(&pd->dev);
-    UCS_STATS_NODE_FREE(pd->stats);
-    ucs_free(pd);
+    ibv_dealloc_pd(md->pd);
+    uct_ib_device_cleanup(&md->dev);
+    UCS_STATS_NODE_FREE(md->stats);
+    ucs_free(md);
 }
 
-UCT_PD_COMPONENT_DEFINE(uct_ib_pdc, UCT_IB_PD_PREFIX,
-                        uct_ib_query_pd_resources, uct_ib_pd_open, NULL,
+UCT_MD_COMPONENT_DEFINE(uct_ib_mdc, UCT_IB_MD_PREFIX,
+                        uct_ib_query_md_resources, uct_ib_md_open, NULL,
                         uct_ib_rkey_unpack,
                         (void*)ucs_empty_function_return_success /* release */,
-                        "IB_", uct_ib_pd_config_table, uct_ib_pd_config_t);
+                        "IB_", uct_ib_md_config_table, uct_ib_md_config_t);

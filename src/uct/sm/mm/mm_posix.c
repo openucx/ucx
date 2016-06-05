@@ -5,13 +5,13 @@
  * See file LICENSE for terms.
  */
 
-#include "mm_pd.h"
 #include "mm_iface.h"
 
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <sys/mman.h>
 #include <ucs/sys/sys.h>
+#include "mm_md.h"
 
 #define UCT_MM_POSIX_SHM_OPEN_MODE  (0666)
 #define UCT_MM_POSIX_MMAP_PROT      (PROT_READ | PROT_WRITE)
@@ -19,15 +19,15 @@
 #define UCT_MM_POSIX_SHM_OPEN       UCS_BIT(1)
 #define UCT_MM_POSIX_CTRL_BITS      2
 
-typedef struct uct_posix_pd_config {
-    uct_mm_pd_config_t      super;
+typedef struct uct_posix_md_config {
+    uct_mm_md_config_t      super;
     char                    *path;
     ucs_ternary_value_t     use_shm_open;
-} uct_posix_pd_config_t;
+} uct_posix_md_config_t;
 
-static ucs_config_field_t uct_posix_pd_config_table[] = {
+static ucs_config_field_t uct_posix_md_config_table[] = {
   {"MM_", "", NULL,
-   ucs_offsetof(uct_posix_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_pd_config_table)},
+   ucs_offsetof(uct_posix_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
 
   {"USE_SHM_OPEN", "try", "Use shm_open() for opening a file for memory mapping. "
    "Possible values are:\n"
@@ -36,10 +36,10 @@ static ucs_config_field_t uct_posix_pd_config_table[] = {
    " try - Try to use shm_open() and if it fails, use open().\n"
    "If shm_open() is used, the path to the file defaults to /dev/shm.\n"
    "If open() is used, the path to the file is specified in the parameter bellow (DIR).",
-   ucs_offsetof(uct_posix_pd_config_t, use_shm_open), UCS_CONFIG_TYPE_TERNARY},
+   ucs_offsetof(uct_posix_md_config_t, use_shm_open), UCS_CONFIG_TYPE_TERNARY},
 
   {"DIR", "/tmp", "The path to the backing file in case open() is used.",
-   ucs_offsetof(uct_posix_pd_config_t, path), UCS_CONFIG_TYPE_STRING},
+   ucs_offsetof(uct_posix_md_config_t, path), UCS_CONFIG_TYPE_STRING},
 
   {NULL}
 };
@@ -96,11 +96,11 @@ out:
     return status;
 }
 
-static size_t uct_posix_get_path_size(uct_pd_h pd)
+static size_t uct_posix_get_path_size(uct_md_h md)
 {
-    uct_mm_pd_t *mm_pd = ucs_derived_of(pd, uct_mm_pd_t);
-    uct_posix_pd_config_t *posix_config = ucs_derived_of(mm_pd->config,
-                                                         uct_posix_pd_config_t);
+    uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
+    uct_posix_md_config_t *posix_config = ucs_derived_of(mm_md->config,
+                                                         uct_posix_md_config_t);
 
     /* if shm_open is requested, the path to the backing file is /dev/shm
      * by default. however, if shm_open isn't used, in case UCS_NO was set for
@@ -196,7 +196,7 @@ err:
 }
 
 static ucs_status_t
-uct_posix_open_backing_file(char *file_name, uint64_t *uuid, uct_posix_pd_config_t *config,
+uct_posix_open_backing_file(char *file_name, uint64_t *uuid, uct_posix_md_config_t *config,
                             size_t length, int *shm_fd, const char **path_p)
 {
     ucs_status_t status;
@@ -234,7 +234,7 @@ out:
 }
 
 static ucs_status_t
-uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
+uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                 void **address_p, uct_mm_id_t *mmid_p, const char **path_p
                 UCS_MEMTRACK_ARG)
 {
@@ -242,9 +242,9 @@ uct_posix_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
     int shm_fd = -1;
     uint64_t uuid;
     char *file_name;
-    uct_mm_pd_t *mm_pd = ucs_derived_of(pd, uct_mm_pd_t);
-    uct_posix_pd_config_t *posix_config = ucs_derived_of(mm_pd->config,
-                                                         uct_posix_pd_config_t);
+    uct_mm_md_t *mm_md = ucs_derived_of(md, uct_mm_md_t);
+    uct_posix_md_config_t *posix_config = ucs_derived_of(mm_md->config,
+                                                         uct_posix_md_config_t);
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);
@@ -468,5 +468,5 @@ static uct_mm_mapper_ops_t uct_posix_mapper_ops = {
    .free    = uct_posix_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_posix_pd, "posix", &uct_posix_mapper_ops, uct_posix, "POSIX_")
-UCT_PD_REGISTER_TL(&uct_posix_pd, &uct_mm_tl);
+UCT_MM_COMPONENT_DEFINE(uct_posix_md, "posix", &uct_posix_mapper_ops, uct_posix, "POSIX_")
+UCT_MD_REGISTER_TL(&uct_posix_md, &uct_mm_tl);

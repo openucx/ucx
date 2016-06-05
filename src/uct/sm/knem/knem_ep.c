@@ -7,8 +7,8 @@
 #include <knem_io.h>
 
 #include "knem_ep.h"
-#include "knem_pd.h"
 #include <ucs/debug/log.h>
+#include "knem_md.h"
 
 static UCS_CLASS_INIT_FUNC(uct_knem_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
@@ -47,7 +47,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const void *buffer,
     struct knem_cmd_inline_copy icopy;
     struct knem_cmd_param_iovec knem_iov[1];
     uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface, uct_knem_iface_t);
-    int knem_fd = knem_iface->knem_pd->knem_fd;
+    int knem_fd = knem_iface->knem_md->knem_fd;
     int rc;
 
     UCT_KNEM_ZERO_LENGTH_POST(length);

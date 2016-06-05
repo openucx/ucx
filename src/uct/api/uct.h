@@ -54,15 +54,15 @@
  */
 
 /**
- * @defgroup UCT_PD    UCT Protection Domain
+ * @defgroup UCT_MD    UCT Memory Domain
  * @ingroup UCT_API
  * @{
- * The Protection Domain abstracts resources required for network communication,
+ * The Memory Domain abstracts resources required for network communication,
  * which typically includes memory, transport mechanisms, compute and 
  * network resources. It is an isolation  mechanism that can be employed 
  * by the applications for isolating resources between multiple programming models. 
- * The attributes of the Protection Domain are defined by the structure @ref uct_pd_attr(). 
- * The communication and memory operations are defined in the context of Protection Domain.
+ * The attributes of the Memory Domain are defined by the structure @ref uct_md_attr(). 
+ * The communication and memory operations are defined in the context of Memory Domain.
  *
  * @}
  */
@@ -94,13 +94,13 @@
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Protection domain resource descriptor.
+ * @brief Memory domain resource descriptor.
  *
- * This structure describes a protection domain resource.
+ * This structure describes a memory domain resource.
  */
-typedef struct uct_pd_resource_desc {
-    char                     pd_name[UCT_PD_NAME_MAX]; /**< Protection domain name */
-} uct_pd_resource_desc_t;
+typedef struct uct_md_resource_desc {
+    char                     md_name[UCT_MD_NAME_MAX]; /**< Memory domain name */
+} uct_md_resource_desc_t;
 
 
 /**
@@ -209,7 +209,7 @@ enum {
  * @brief  Memory allocation methods.
  */
 typedef enum {
-    UCT_ALLOC_METHOD_PD,   /**< Allocate using protection domain */
+    UCT_ALLOC_METHOD_MD,   /**< Allocate using memory domain */
     UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap usign libc allocator */
     UCT_ALLOC_METHOD_MMAP, /**< Allocate from OS using mmap() syscall */
     UCT_ALLOC_METHOD_HUGE, /**< Allocate huge pages */
@@ -286,59 +286,59 @@ struct uct_iface_attr {
 
 
 /**
- * @ingroup UCT_PD
- * @brief  Protection domain capability flags.
+ * @ingroup UCT_MD
+ * @brief  Memory domain capability flags.
  */
 enum {
-    UCT_PD_FLAG_ALLOC     = UCS_BIT(0),  /**< PD support memory allocation */
-    UCT_PD_FLAG_REG       = UCS_BIT(1),  /**< PD support memory registration */
+    UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD support memory allocation */
+    UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD support memory registration */
 };
 
 
 /**
- * @ingroup UCT_PD
- * @brief  Protection domain attributes.
+ * @ingroup UCT_MD
+ * @brief  Memory domain attributes.
  *
- * This structure defines the attributes of a Protection Domain which includes
+ * This structure defines the attributes of a Memory Domain which includes
  * maximum memory that can be allocated, credentials required for accessing the memory, 
  * and CPU mask indicating the proximity of CPUs. 
  */
-struct uct_pd_attr {
+struct uct_md_attr {
     struct {
         size_t               max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
-        uint64_t             flags;     /**< UCT_PD_FLAG_xx */
+        uint64_t             flags;     /**< UCT_MD_FLAG_xx */
     } cap;
 
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
                                              (time,seconds) as a linear function
                                              of the buffer size. */
 
-    char                     component_name[UCT_PD_COMPONENT_NAME_MAX]; /**< PD component name */
+    char                     component_name[UCT_MD_COMPONENT_NAME_MAX]; /**< MD component name */
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
     cpu_set_t                local_cpus;    /**< Mask of CPUs near the resource */
 };
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  * @brief Describes a memory allocated by UCT. 
  * 
  * This structure describes the memory block which includes the address, size, and
- * Protection Domain used for allocation. This structure is passed to interface 
+ * Memory Domain used for allocation. This structure is passed to interface 
  * and the memory is allocated by memory allocation functions @ref uct_mem_alloc.
  */
 typedef struct uct_allocated_memory {
     void                     *address; /**< Address of allocated memory */
     size_t                   length;   /**< Real size of allocated memory */
     uct_alloc_method_t       method;   /**< Method used to allocate the memory */
-    uct_pd_h                 pd;       /**< if method==PD: PD used to allocate the memory */
-    uct_mem_h                memh;     /**< if method==PD: PD memory handle */
+    uct_md_h                 md;       /**< if method==MD: MD used to allocate the memory */
+    uct_mem_h                memh;     /**< if method==MD: MD memory handle */
 } uct_allocated_memory_t;
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  * @brief Remote key with its type
  *
  * This structure describes the credentials (typically key) and information 
@@ -393,7 +393,7 @@ extern const char *uct_alloc_method_names[];
  * @ingroup UCT_RESOURCE
  * @brief Query for memory resources.
  *
- * Obtain the list of protection domain resources available on the current system.
+ * Obtain the list of memory domain resources available on the current system.
  *
  * @param [out] resources_p     Filled with a pointer to an array of resource
  *                              descriptors.
@@ -401,72 +401,72 @@ extern const char *uct_alloc_method_names[];
  *
  * @return Error code.
  */
-ucs_status_t uct_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+ucs_status_t uct_query_md_resources(uct_md_resource_desc_t **resources_p,
                                     unsigned *num_resources_p);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Release the list of resources returned from @ref uct_query_pd_resources.
+ * @brief Release the list of resources returned from @ref uct_query_md_resources.
  *
  * This routine releases the memory associated with the list of resources
- * allocated by @ref uct_query_pd_resources.
+ * allocated by @ref uct_query_md_resources.
  *
  * @param [in] resources  Array of resource descriptors to release.
  */
-void uct_release_pd_resource_list(uct_pd_resource_desc_t *resources);
+void uct_release_md_resource_list(uct_md_resource_desc_t *resources);
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Open a protection domain.
+ * @brief Open a memory domain.
  *
- * Open a specific protection domain. All communications and memory operations
- * are performed in the context of a specific protection domain. Therefore it
+ * Open a specific memory domain. All communications and memory operations
+ * are performed in the context of a specific memory domain. Therefore it
  * must be created before communication resources.
  *
- * @param [in]  pd_name         Protection domain name, as returned from @ref
- *                              uct_query_pd_resources.
- * @param [in]  config          PD configuration options. Should be obtained
- *                              from uct_pd_config_read() function, or point to
- *                              PD-specific structure which extends uct_pd_config_t.
- * @param [out] pd_p            Filled with a handle to the protection domain.
+ * @param [in]  md_name         Memory domain name, as returned from @ref
+ *                              uct_query_md_resources.
+ * @param [in]  config          MD configuration options. Should be obtained
+ *                              from uct_md_config_read() function, or point to
+ *                              MD-specific structure which extends uct_md_config_t.
+ * @param [out] md_p            Filled with a handle to the memory domain.
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_open(const char *pd_name, const uct_pd_config_t *config,
-                         uct_pd_h *pd_p);
+ucs_status_t uct_md_open(const char *md_name, const uct_md_config_t *config,
+                         uct_md_h *md_p);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Close a protection domain.
+ * @brief Close a memory domain.
  *
- * @param [in]  pd               Protection domain to close.
+ * @param [in]  md               Memory domain to close.
  */
-void uct_pd_close(uct_pd_h pd);
+void uct_md_close(uct_md_h md);
 
 
 /**
  * @ingroup UCT_RESOURCE
  * @brief Query for transport resources.
  *
- * This routine queries the @ref uct_pd_t "protection domain" for communication
+ * This routine queries the @ref uct_md_t "memory domain" for communication
  * resources that are available for it.
  *
- * @param [in]  pd              Handle to protection domain.
+ * @param [in]  md              Handle to memory domain.
  * @param [out] resources_p     Filled with a pointer to an array of resource
  *                              descriptors.
  * @param [out] num_resources_p Filled with the number of resources in the array.
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_query_tl_resources(uct_pd_h pd,
+ucs_status_t uct_md_query_tl_resources(uct_md_h md,
                                        uct_tl_resource_desc_t **resources_p,
                                        unsigned *num_resources_p);
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Release the list of resources returned from @ref uct_pd_query_tl_resources.
+ * @brief Release the list of resources returned from @ref uct_md_query_tl_resources.
  *
  * This routine releases the memory associated with the list of resources
  * allocated by @ref uct_query_tl_resources.
@@ -579,7 +579,7 @@ ucs_status_t uct_iface_config_read(const char *tl_name, const char *env_prefix,
 /**
  * @ingroup UCT_RESOURCE
  * @brief Release configuration memory returned from uct_iface_config_read() or
- * from uct_pd_config_read().
+ * from uct_md_config_read().
  *
  * @param [in]  config        Configuration to release.
  */
@@ -588,7 +588,7 @@ void uct_config_release(void *config);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Print interface/PD configuration to a stream.
+ * @brief Print interface/MD configuration to a stream.
  *
  * @param [in]  config        Configuration to print.
  * @param [in]  stream        Output stream to print to.
@@ -601,7 +601,7 @@ void uct_config_print(const void *config, FILE *stream, const char *title,
 
 /**
  * @ingroup UCT_CONTEXT
- * @brief Modify interface/PD configuration.
+ * @brief Modify interface/MD configuration.
  *
  * @param [in]  config        Configuration to modify.
  * @param [in]  name          Configuration variable name.
@@ -616,7 +616,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
  * @ingroup UCT_RESOURCE
  * @brief Open a communication interface.
  *
- * @param [in]  pd            Protection domain to create the interface on.
+ * @param [in]  md            Memory domain to create the interface on.
  * @param [in]  worker        Handle to worker which will be used to progress
  *                             communications on this interface.
  * @param [in]  tl_name       Transport name.
@@ -629,7 +629,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
  *
  * @return Error code.
  */
-ucs_status_t uct_iface_open(uct_pd_h pd, uct_worker_h worker,
+ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             const char *tl_name, const char *dev_name,
                             size_t rx_headroom, const uct_iface_config_t *config,
                             uct_iface_h *iface_p);
@@ -893,23 +893,23 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
 
 
 /**
- * @ingroup UCT_PD
- * @brief Query for protection domain attributes. *
+ * @ingroup UCT_MD
+ * @brief Query for memory domain attributes. *
  *
- * @param [in]  pd       Protection domain to query.
- * @param [out] pd_attr  Filled with protection domain attributes.
+ * @param [in]  md       Memory domain to query.
+ * @param [out] md_attr  Filled with memory domain attributes.
  */
-ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy sends and remote access.
  *
- *  Allocate memory on the protection domain. In order to use this function, PD
- * must support @ref UCT_PD_FLAG_ALLOC flag.
+ *  Allocate memory on the memory domain. In order to use this function, MD
+ * must support @ref UCT_MD_FLAG_ALLOC flag.
  *
- * @param [in]     pd          Protection domain to allocate memory on.
+ * @param [in]     md          Memory domain to allocate memory on.
  * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
  *                              return, filled with the actual size that was allocated,
  *                              which may be larger than the one requested. Must be >0.
@@ -917,52 +917,52 @@ ucs_status_t uct_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
  *                              usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
-ucs_status_t uct_pd_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               const char *name, uct_mem_h *memh_p);
 
 /**
- * @ingroup UCT_PD
- * @brief Release memory allocated by @ref uct_pd_mem_alloc.
+ * @ingroup UCT_MD
+ * @brief Release memory allocated by @ref uct_md_mem_alloc.
  *
- * @param [in]     pd          Protection domain memory was allocateed on.
- * @param [in]     memh        Memory handle, as returned from @ref uct_pd_mem_alloc.
+ * @param [in]     md          Memory domain memory was allocateed on.
+ * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
  */
-ucs_status_t uct_pd_mem_free(uct_pd_h pd, uct_mem_h memh);
+ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  * @brief Register memory for zero-copy sends and remote access.
  *
- *  Register memory on the protection domain. In order to use this function, PD
- * must support @ref UCT_PD_FLAG_REG flag.
+ *  Register memory on the memory domain. In order to use this function, MD
+ * must support @ref UCT_MD_FLAG_REG flag.
  *
- * @param [in]     pd        Protection domain to register memory on.
+ * @param [in]     md        Memory domain to register memory on.
  * @param [out]    address   Memory to register.
  * @param [in]     length    Size of memory to register. Must be >0.
  * @param [out]    memh_p    Filled with handle for allocated region.
  */
-ucs_status_t uct_pd_mem_reg(uct_pd_h pd, void *address, size_t length,
+ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
                             uct_mem_h *memh_p);
 
 
 /**
- * @ingroup UCT_PD
- * @brief Undo the operation of @ref uct_pd_mem_reg().
+ * @ingroup UCT_MD
+ * @brief Undo the operation of @ref uct_md_mem_reg().
  *
- * @param [in]  pd          Protection domain which was used to register the memory.
+ * @param [in]  md          Memory domain which was used to register the memory.
  * @paran [in]  memh        Local access key to memory region.
  */
-ucs_status_t uct_pd_mem_dereg(uct_pd_h pd, uct_mem_h memh);
+ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy communications and remote access.
  *
  * Allocate potentially registered memory. Every one of the provided allocation
  * methods will be used, in turn, to perform the allocation, until one succeeds.
- *  Whenever the PD method is encountered, every one of the provided PDs will be
+ *  Whenever the MD method is encountered, every one of the provided MDs will be
  * used, in turn, to allocate the memory, until one succeeds, or they are
  * exhausted. In this case the next allocation method from the initial list will
  * be attempted.
@@ -971,22 +971,22 @@ ucs_status_t uct_pd_mem_dereg(uct_pd_h pd, uct_mem_h memh);
  *                             larger, for example because of alignment restrictions.
  * @param [in]     methods     Array of memory allocation methods to attempt.
  * @param [in]     num_method  Length of 'methods' array.
- * @param [in]     pds         Array of protection domains to attempt to allocate
- *                             the memory with, for PD allocation method.
- * @param [in]     num_pds     Length of 'pds' array. May be empty, in such case
- *                             'pds' may be NULL, and PD allocation method will
+ * @param [in]     mds         Array of memory domains to attempt to allocate
+ *                             the memory with, for MD allocation method.
+ * @param [in]     num_mds     Length of 'mds' array. May be empty, in such case
+ *                             'mds' may be NULL, and MD allocation method will
  *                             be skipped.
  * @param [in]     name        Name of the allocation. Used for memory statistics.
  * @param [out]    mem         In case of success, filled with information about
  *                              the allocated memory. @ref uct_allocated_memory_t.
  */
 ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
-                           unsigned num_methods, uct_pd_h *pds, unsigned num_pds,
+                           unsigned num_methods, uct_md_h *mds, unsigned num_mds,
                            const char *name, uct_allocated_memory_t *mem);
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  * @brief Release allocated memory.
  *
  * Release the memory allocated by @ref uct_mem_alloc.
@@ -998,9 +998,9 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 
 /**
  * @ingroup RESOURCE
- * @brief Read the configuration of the PD component.
+ * @brief Read the configuration of the MD component.
  *
- * @param [in]  name          Name of the PD or the PD component.
+ * @param [in]  name          Name of the MD or the MD component.
  * @param [in]  env_prefix    If non-NULL, search for environment variables
  *                            starting with this UCT_<prefix>_. Otherwise, search
  *                            for environment variables starting with just UCT_.
@@ -1010,27 +1010,27 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_config_read(const char *name, const char *env_prefix,
+ucs_status_t uct_md_config_read(const char *name, const char *env_prefix,
                                 const char *filename,
-                                uct_pd_config_t **config_p);
+                                uct_md_config_t **config_p);
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  *
  * @brief Pack a remote key.
  *
- * @param [in]  pd           Handle to protection domain.
+ * @param [in]  md           Handle to memory domain.
  * @param [in]  memh         Local key, whose remote key should be packed.
  * @param [out] rkey_buffer  Filled with packed remote key.
  *
  * @return Error code.
  */
-ucs_status_t uct_pd_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
+ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  *
  * @brief Unpack a remote key.
  *
@@ -1043,7 +1043,7 @@ ucs_status_t uct_rkey_unpack(const void *rkey_buffer, uct_rkey_bundle_t *rkey_ob
 
 
 /**
- * @ingroup UCT_PD
+ * @ingroup UCT_MD
  *
  * @brief Release a remote key.
  *

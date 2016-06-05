@@ -14,7 +14,7 @@
 
 
 #define UCT_UGNI_MAX_TYPE_NAME     (10)
-#define UCT_UGNI_PD_NAME   "ugni"
+#define UCT_UGNI_MD_NAME   "ugni"
 
 typedef struct uct_ugni_device {
     gni_nic_device_t type;                      /**< Device type */

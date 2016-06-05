@@ -7,9 +7,8 @@
 #ifndef UCT_KNEM_IFACE_H
 #define UCT_KNEM_IFACE_H
 
-#include "knem_pd.h"
-
 #include <uct/base/uct_iface.h>
+#include "knem_md.h"
 
 
 #define UCT_KNEM_TL_NAME "knem"
@@ -22,7 +21,7 @@ typedef struct uct_knem_iface_config {
 
 typedef struct uct_knem_iface {
     uct_base_iface_t        super;
-    uct_knem_pd_t        *knem_pd;
+    uct_knem_md_t        *knem_md;
 } uct_knem_iface_t;
 
 

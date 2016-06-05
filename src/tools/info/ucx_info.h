@@ -40,10 +40,10 @@ void print_proto_info(ucs_config_print_flags_t print_flags);
 
 /**
  * @ingroup RESOURCE
- * @brief Print PD component configuration to a stream.
+ * @brief Print MD component configuration to a stream.
  *
  * @param [in]  print_flags   Controls how the configuration is printed.
  */
-void uct_pd_component_config_print(ucs_config_print_flags_t print_flags);
+void uct_md_component_config_print(ucs_config_print_flags_t print_flags);
 
 #endif

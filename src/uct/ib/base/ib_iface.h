@@ -7,13 +7,12 @@
 #ifndef UCT_IB_IFACE_H
 #define UCT_IB_IFACE_H
 
-#include "ib_pd.h"
-
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
+#include "ib_md.h"
 
 
 /* Forward declarations */
@@ -107,7 +106,7 @@ struct uct_ib_iface {
     uct_ib_iface_ops_t      *ops;
 
 };
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_pd_h, uct_worker_h, const char*,
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h, const char*,
                   unsigned, unsigned, unsigned, unsigned, size_t, uct_ib_iface_config_t*)
 
 
@@ -196,14 +195,14 @@ int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *add
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr);
 
-static inline uct_ib_pd_t* uct_ib_iface_pd(uct_ib_iface_t *iface)
+static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)
 {
-    return ucs_derived_of(iface->super.pd, uct_ib_pd_t);
+    return ucs_derived_of(iface->super.md, uct_ib_md_t);
 }
 
 static inline uct_ib_device_t* uct_ib_iface_device(uct_ib_iface_t *iface)
 {
-    return &uct_ib_iface_pd(iface)->dev;
+    return &uct_ib_iface_md(iface)->dev;
 }
 
 static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)

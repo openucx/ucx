@@ -5,8 +5,6 @@
 */
 
 #include "ib_device.h"
-#include "ib_pd.h"
-
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
@@ -15,6 +13,7 @@
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <sched.h>
+#include "ib_md.h"
 
 
 #if ENABLE_STATS
@@ -561,10 +560,10 @@ err:
     return UCS_ERR_NO_DEVICE;
 }
 
-ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_pd_h pd, int *p_mtu)
+ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
 {
 
-    uct_ib_device_t *dev = &ucs_derived_of(pd, uct_ib_pd_t)->dev;
+    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint8_t port_num;
     ucs_status_t status;
 

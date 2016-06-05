@@ -13,8 +13,8 @@
 
 
 #define UCT_TL_NAME_MAX          10
-#define UCT_PD_COMPONENT_NAME_MAX  8
-#define UCT_PD_NAME_MAX          16
+#define UCT_MD_COMPONENT_NAME_MAX  8
+#define UCT_MD_NAME_MAX          16
 #define UCT_DEVICE_NAME_MAX      32
 #define UCT_PENDING_REQ_PRIV_LEN 32
 #define UCT_AM_ID_BITS           5
@@ -52,19 +52,19 @@ enum uct_am_trace_type {
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_wakeup        *uct_wakeup_h;
 typedef struct uct_iface_config  uct_iface_config_t;
-typedef struct uct_pd_config     uct_pd_config_t;
+typedef struct uct_md_config     uct_md_config_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef void *                   uct_mem_h;
 typedef uintptr_t                uct_rkey_t;
-typedef struct uct_pd            *uct_pd_h;
-typedef struct uct_pd_ops        uct_pd_ops_t;
+typedef struct uct_md            *uct_md_h;
+typedef struct uct_md_ops        uct_md_ops_t;
 typedef void                     *uct_rkey_ctx_h;
 typedef struct uct_iface_attr    uct_iface_attr_t;
-typedef struct uct_pd_attr       uct_pd_attr_t;
+typedef struct uct_md_attr       uct_md_attr_t;
 typedef struct uct_completion    uct_completion_t;
 typedef struct uct_pending_req   uct_pending_req_t;
 typedef struct uct_worker        *uct_worker_h;
-typedef struct uct_pd            uct_pd_t;
+typedef struct uct_md            uct_md_t;
 typedef enum uct_am_trace_type   uct_am_trace_type_t;
 typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;

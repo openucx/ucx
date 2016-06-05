@@ -4,12 +4,13 @@
  * See file LICENSE for terms.
  */
 
+#include "ugni_md.h"
+
 #include "ucs/debug/memtrack.h"
 #include "ucs/type/class.h"
 
-#include "uct/base/uct_pd.h"
+#include "uct/base/uct_md.h"
 #include "ugni_iface.h"
-#include "ugni_pd.h"
 
 /* Forward declarations */
 
@@ -18,12 +19,12 @@ UCS_CONFIG_DEFINE_ARRAY(ugni_alloc_methods, sizeof(uct_alloc_method_t),
 
 pthread_mutex_t uct_ugni_global_lock = PTHREAD_MUTEX_INITIALIZER;
 
-/* For Cray devices we have only one PD */
-static ucs_status_t uct_ugni_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+/* For Cray devices we have only one MD */
+static ucs_status_t uct_ugni_query_md_resources(uct_md_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p)
 {
     if (getenv("PMI_GNI_PTAG") != NULL) {
-        return uct_single_pd_resource(&uct_ugni_pd_component, resources_p, num_resources_p);
+        return uct_single_md_resource(&uct_ugni_md_component, resources_p, num_resources_p);
     } else {
         *resources_p     = NULL;
         *num_resources_p = 0;
@@ -42,24 +43,24 @@ uct_ugni_job_info_t job_info = {
 
 #define UCT_UGNI_RKEY_MAGIC  0xdeadbeefLL
 
-static ucs_status_t uct_ugni_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
+static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    pd_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
-    pd_attr->cap.flags         = UCT_PD_FLAG_REG;
-    pd_attr->cap.max_alloc     = 0;
-    pd_attr->cap.max_reg       = ULONG_MAX;
-    pd_attr->reg_cost.overhead = 1000.0e-9;
-    pd_attr->reg_cost.growth   = 0.007e-9;
-    memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
+    md_attr->rkey_packed_size  = 3 * sizeof(uint64_t);
+    md_attr->cap.flags         = UCT_MD_FLAG_REG;
+    md_attr->cap.max_alloc     = 0;
+    md_attr->cap.max_reg       = ULONG_MAX;
+    md_attr->reg_cost.overhead = 1000.0e-9;
+    md_attr->reg_cost.growth   = 0.007e-9;
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_mem_reg(uct_pd_h pd, void *address, size_t length,
+static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
                                      uct_mem_h *memh_p)
 {
     ucs_status_t status;
     gni_return_t ugni_rc;
-    uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
+    uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
     gni_mem_handle_t * mem_hndl = NULL;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
@@ -75,7 +76,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_pd_h pd, void *address, size_t length,
         goto mem_err;
     }
 
-    ugni_rc = GNI_MemRegister(ugni_pd->nic_handle, (uint64_t)address,
+    ugni_rc = GNI_MemRegister(ugni_md->nic_handle, (uint64_t)address,
                               length, NULL,
                               GNI_MEM_READWRITE | GNI_MEM_RELAXED_PI_ORDERING,
                               -1, mem_hndl);
@@ -98,16 +99,16 @@ mem_err:
     return status;
 }
 
-static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_mem_h memh)
+static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
-    uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
+    uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
     gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
     gni_return_t ugni_rc;
     ucs_status_t status = UCS_OK;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    ugni_rc = GNI_MemDeregister(ugni_pd->nic_handle, mem_hndl);
+    ugni_rc = GNI_MemDeregister(ugni_md->nic_handle, mem_hndl);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed, Error status: %s %d",
                  gni_err_str[ugni_rc], ugni_rc);
@@ -119,7 +120,7 @@ static ucs_status_t uct_ugni_mem_dereg(uct_pd_h pd, uct_mem_h memh)
     return status;
 }
 
-static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
+static ucs_status_t uct_ugni_rkey_pack(uct_md_h md, uct_mem_h memh,
                                        void *rkey_buffer)
 {
     gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
@@ -132,7 +133,7 @@ static ucs_status_t uct_ugni_rkey_pack(uct_pd_h pd, uct_mem_h memh,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey,
+static ucs_status_t uct_ugni_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey,
                                           void *handle)
 {
     ucs_assert(NULL == handle);
@@ -140,7 +141,7 @@ static ucs_status_t uct_ugni_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rk
     return UCS_OK;
 }
 
-static ucs_status_t uct_ugni_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer,
+static ucs_status_t uct_ugni_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
                                          uct_rkey_t *rkey_p, void **handle_p)
 {
     const uint64_t *ptr = rkey_buffer;
@@ -245,34 +246,34 @@ err_zero:
     return status;
 }
 
-static void uct_ugni_pd_close(uct_pd_h pd)
+static void uct_ugni_md_close(uct_md_h md)
 {
     gni_return_t ugni_rc;
-    uct_ugni_pd_t *ugni_pd = ucs_derived_of(pd, uct_ugni_pd_t);
+    uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
 
     pthread_mutex_lock(&uct_ugni_global_lock);
-    ugni_pd->ref_count--;
-    if (!ugni_pd->ref_count) {
-        ugni_rc = GNI_CdmDestroy(ugni_pd->cdm_handle);
+    ugni_md->ref_count--;
+    if (!ugni_md->ref_count) {
+        ugni_rc = GNI_CdmDestroy(ugni_md->cdm_handle);
         if (GNI_RC_SUCCESS != ugni_rc) {
             ucs_warn("GNI_CdmDestroy error status: %s (%d)",
                      gni_err_str[ugni_rc], ugni_rc);
         }
-        ucs_debug("PD GNI_CdmDestroy");
+        ucs_debug("MD GNI_CdmDestroy");
     }
     pthread_mutex_unlock(&uct_ugni_global_lock);
 }
 
-static ucs_status_t uct_ugni_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
-                                     uct_pd_h *pd_p)
+static ucs_status_t uct_ugni_md_open(const char *md_name, const uct_md_config_t *md_config,
+                                     uct_md_h *md_p)
 {
     int domain_id;
     ucs_status_t status = UCS_OK;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
-    static uct_pd_ops_t pd_ops = {
-        .close        = uct_ugni_pd_close,
-        .query        = uct_ugni_pd_query,
+    static uct_md_ops_t md_ops = {
+        .close        = uct_ugni_md_close,
+        .query        = uct_ugni_md_query,
         .mem_alloc    = (void*)ucs_empty_function,
         .mem_free     = (void*)ucs_empty_function,
         .mem_reg      = uct_ugni_mem_reg,
@@ -280,30 +281,30 @@ static ucs_status_t uct_ugni_pd_open(const char *pd_name, const uct_pd_config_t 
         .mkey_pack     = uct_ugni_rkey_pack
     };
 
-    static uct_ugni_pd_t pd = {
-        .super.ops          = &pd_ops,
-        .super.component    = &uct_ugni_pd_component,
+    static uct_ugni_md_t md = {
+        .super.ops          = &md_ops,
+        .super.component    = &uct_ugni_md_component,
         .ref_count          = 0
     };
 
-    *pd_p = &pd.super;
+    *md_p = &md.super;
 
-    if (!pd.ref_count) {
+    if (!md.ref_count) {
         status = init_device_list(&job_info);
         if (UCS_OK != status) {
             ucs_error("Failed to init device list, Error status: %d", status);
             goto error;
         }
         status = uct_ugni_init_nic(0, &domain_id,
-                                   &pd.cdm_handle, &pd.nic_handle,
-                                   &pd.address);
+                                   &md.cdm_handle, &md.nic_handle,
+                                   &md.address);
         if (UCS_OK != status) {
             ucs_error("Failed to UGNI NIC, Error status: %d", status);
             goto error;
         }
     }
 
-    pd.ref_count++;
+    md.ref_count++;
 
 error:
     pthread_mutex_unlock(&uct_ugni_global_lock);
@@ -334,13 +335,13 @@ uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name)
     return NULL;
 }
 
-UCT_PD_COMPONENT_DEFINE(uct_ugni_pd_component,
-                        UCT_UGNI_PD_NAME,
-                        uct_ugni_query_pd_resources,
-                        uct_ugni_pd_open,
+UCT_MD_COMPONENT_DEFINE(uct_ugni_md_component,
+                        UCT_UGNI_MD_NAME,
+                        uct_ugni_query_md_resources,
+                        uct_ugni_md_open,
                         NULL,
                         uct_ugni_rkey_unpack,
                         uct_ugni_rkey_release,
                         "UGNI_",
-                        uct_pd_config_table,
-                        uct_pd_config_t);
+                        uct_md_config_table,
+                        uct_md_config_t);
