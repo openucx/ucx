@@ -43,6 +43,8 @@ public:
 
         void disconnect();
 
+        void destroy_worker();
+
         ucp_ep_h ep() const;
 
         ucp_worker_h worker() const;

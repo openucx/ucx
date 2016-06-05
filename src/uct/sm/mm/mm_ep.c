@@ -40,8 +40,12 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
              */
             uct_mm_iface_recv_messages(iface);
         } else {
-            ucs_error("failed to send %sconnect signal: %m",
-                      (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
+            if ((sig == UCT_MM_IFACE_SIGNAL_DISCONNECT) && (errno == ECONNREFUSED)) {
+                ucs_debug("failed to send disconnect signal: connection refused");
+            } else {
+                ucs_error("failed to send %sconnect signal: %m",
+                          (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
+            }
             return UCS_ERR_IO_ERROR;
         }
     }
