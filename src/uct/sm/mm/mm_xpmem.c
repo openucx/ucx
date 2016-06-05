@@ -5,7 +5,7 @@
  * See file LICENSE for terms.
  */
 
-#include "mm_pd.h"
+#include "mm_md.h"
 #include "mm_iface.h"
 
 #include <ucs/debug/memtrack.h>
@@ -25,7 +25,7 @@ static ucs_status_t uct_xpmem_query()
     return UCS_OK;
 }
 
-static size_t uct_xpmem_get_path_size(uct_pd_h pd)
+static size_t uct_xpmem_get_path_size(uct_md_h md)
 {
     return 0;
 }
@@ -140,7 +140,7 @@ static ucs_status_t uct_xpmem_detach(uct_mm_remote_seg_t *mm_desc)
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_alloc(uct_pd_h pd, size_t *length_p,
+static ucs_status_t uct_xpmem_alloc(uct_md_h md, size_t *length_p,
                                     ucs_ternary_value_t hugetlb, void **address_p,
                                     uct_mm_id_t *mmid_p, const char **path_p
                                     UCS_MEMTRACK_ARG)
@@ -207,5 +207,5 @@ static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
     .free    = uct_xpmem_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_xpmem_pd, "xpmem", &uct_xpmem_mapper_ops, uct, "XPMEM_")
-UCT_PD_REGISTER_TL(&uct_xpmem_pd, &uct_mm_tl);
+UCT_MM_COMPONENT_DEFINE(uct_xpmem_md, "xpmem", &uct_xpmem_mapper_ops, uct, "XPMEM_")
+UCT_MD_REGISTER_TL(&uct_xpmem_md, &uct_mm_tl);

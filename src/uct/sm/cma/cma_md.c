@@ -7,11 +7,11 @@
 
 #define _GNU_SOURCE
 #include <sys/uio.h>
-#include "cma_pd.h"
+#include "cma_md.h"
 
-uct_pd_component_t uct_cma_pd_component;
+uct_md_component_t uct_cma_md_component;
 
-static ucs_status_t uct_cma_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+static ucs_status_t uct_cma_query_md_resources(uct_md_resource_desc_t **resources_p,
                                                unsigned *num_resources_p)
 {
     ssize_t delivered;
@@ -33,12 +33,12 @@ static ucs_status_t uct_cma_query_pd_resources(uct_pd_resource_desc_t **resource
         return UCS_OK;
     }
 
-    return uct_single_pd_resource(&uct_cma_pd_component,
+    return uct_single_md_resource(&uct_cma_md_component,
                                   resources_p,
                                   num_resources_p);
 }
 
-static ucs_status_t uct_cma_mem_reg(uct_pd_h pd, void *address, size_t length,
+static ucs_status_t uct_cma_mem_reg(uct_md_h md, void *address, size_t length,
                         uct_mem_h *memh_p)
 {
     /* For testing we have to make sure that
@@ -49,42 +49,42 @@ static ucs_status_t uct_cma_mem_reg(uct_pd_h pd, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cma_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
-                                    uct_pd_h *pd_p)
+static ucs_status_t uct_cma_md_open(const char *md_name, const uct_md_config_t *md_config,
+                                    uct_md_h *md_p)
 {
-    static uct_pd_ops_t pd_ops = {
+    static uct_md_ops_t md_ops = {
         .close        = (void*)ucs_empty_function,
-        .query        = uct_cma_pd_query,
+        .query        = uct_cma_md_query,
         .mem_alloc    = (void*)ucs_empty_function_return_success,
         .mem_free     = (void*)ucs_empty_function_return_success,
         .mkey_pack    = (void*)ucs_empty_function_return_success,
         .mem_reg      = uct_cma_mem_reg,
         .mem_dereg    = (void*)ucs_empty_function_return_success
     };
-    static uct_pd_t pd = {
-        .ops          = &pd_ops,
-        .component    = &uct_cma_pd_component
+    static uct_md_t md = {
+        .ops          = &md_ops,
+        .component    = &uct_cma_md_component
     };
 
-    *pd_p = &pd;
+    *md_p = &md;
     return UCS_OK;
 }
 
-UCT_PD_COMPONENT_DEFINE(uct_cma_pd_component, "cma",
-        uct_cma_query_pd_resources, uct_cma_pd_open, NULL,
+UCT_MD_COMPONENT_DEFINE(uct_cma_md_component, "cma",
+        uct_cma_query_md_resources, uct_cma_md_open, NULL,
         ucs_empty_function_return_success,
-        ucs_empty_function_return_success, "CMA_", uct_pd_config_table,
-        uct_pd_config_t)
+        ucs_empty_function_return_success, "CMA_", uct_md_config_table,
+        uct_md_config_t)
 
-ucs_status_t uct_cma_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
+ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    pd_attr->rkey_packed_size  = 0;
-    pd_attr->cap.flags         = UCT_PD_FLAG_REG;
-    pd_attr->cap.max_alloc     = 0;
-    pd_attr->cap.max_reg       = ULONG_MAX;
-    pd_attr->reg_cost.overhead = 5e-9;
-    pd_attr->reg_cost.growth   = 0;
+    md_attr->rkey_packed_size  = 0;
+    md_attr->cap.flags         = UCT_MD_FLAG_REG;
+    md_attr->cap.max_alloc     = 0;
+    md_attr->cap.max_reg       = ULONG_MAX;
+    md_attr->reg_cost.overhead = 5e-9;
+    md_attr->reg_cost.growth   = 0;
 
-    memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }

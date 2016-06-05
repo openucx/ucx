@@ -5,12 +5,12 @@
 * See file LICENSE for terms.
 */
 
-#ifndef UCT_MM_PD_H_
-#define UCT_MM_PD_H_
+#ifndef UCT_MM_MD_H_
+#define UCT_MM_MD_H_
 
 #include "mm_def.h"
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
@@ -19,7 +19,7 @@
 /* Shared memory ID */
 typedef uint64_t uct_mm_id_t;
 
-extern ucs_config_field_t uct_mm_pd_config_table[];
+extern ucs_config_field_t uct_mm_md_config_table[];
 
 /*
  * Descriptor of the mapped memory
@@ -33,20 +33,20 @@ struct uct_mm_remote_seg {
 };
 
 /*
- * Memory mapper operations - MM uses them to implement PD and TL functionality.
+ * Memory mapper operations - MM uses them to implement MD and TL functionality.
  */
 typedef struct uct_mm_mapper_ops {
 
     ucs_status_t (*query)();
 
-    size_t       (*get_path_size)(uct_pd_h pd);
+    size_t       (*get_path_size)(uct_md_h md);
 
     ucs_status_t (*reg)(void *address, size_t size, 
                         uct_mm_id_t *mmid_p);
 
     ucs_status_t (*dereg)(uct_mm_id_t mm_id);
 
-    ucs_status_t (*alloc)(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
+    ucs_status_t (*alloc)(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                           void **address_p, uct_mm_id_t *mmid_p, const char **path_p
                           UCS_MEMTRACK_ARG);
 
@@ -62,19 +62,19 @@ typedef struct uct_mm_mapper_ops {
 } uct_mm_mapper_ops_t;
 
 
-/* Extract mapper ops from PD component */
-#define uct_mm_pdc_mapper_ops(_pdc) \
-    ((uct_mm_mapper_ops_t*)(_pdc)->priv)
+/* Extract mapper ops from MD component */
+#define uct_mm_mdc_mapper_ops(_mdc) \
+    ((uct_mm_mapper_ops_t*)(_mdc)->priv)
 
-/* Extract mapped ops from PD */
-#define uct_mm_pd_mapper_ops(_pd) \
-    uct_mm_pdc_mapper_ops((_pd)->component)
+/* Extract mapped ops from MD */
+#define uct_mm_md_mapper_ops(_md) \
+    uct_mm_mdc_mapper_ops((_md)->component)
 
 
 /*
  * Define a memory-mapper component for MM.
  *
- * @param _var          Variable for PD component.
+ * @param _var          Variable for MD component.
  * @param _name         String which is the component name.
  * @param _ops          Mapper operations, of type uct_mm_mapper_ops_t.
  * @param _prefix       Prefix for defining the vars config table and config struct.
@@ -82,12 +82,12 @@ typedef struct uct_mm_mapper_ops {
  */
 #define UCT_MM_COMPONENT_DEFINE(_var, _name, _ops, _prefix, _cfg_prefix) \
     \
-    uct_pd_component_t _var; \
+    uct_md_component_t _var; \
     \
-    static ucs_status_t _var##_query_pd_resources(uct_pd_resource_desc_t **resources_p, \
+    static ucs_status_t _var##_query_md_resources(uct_md_resource_desc_t **resources_p, \
                                                    unsigned *num_resources_p) { \
         if ((_ops)->query() == UCS_OK) { \
-            return uct_single_pd_resource(&_var, resources_p, num_resources_p); \
+            return uct_single_md_resource(&_var, resources_p, num_resources_p); \
         } else { \
             *resources_p = NULL; \
             *num_resources_p = 0; \
@@ -95,17 +95,17 @@ typedef struct uct_mm_mapper_ops {
         } \
     } \
     \
-    static ucs_status_t _var##_pd_open(const char *pd_name, const uct_pd_config_t *pd_config, \
-                                       uct_pd_h *pd_p) \
+    static ucs_status_t _var##_md_open(const char *md_name, const uct_md_config_t *md_config, \
+                                       uct_md_h *md_p) \
     { \
-        return uct_mm_pd_open(pd_name, pd_config, pd_p, &_var); \
+        return uct_mm_md_open(md_name, md_config, md_p, &_var); \
     } \
     \
-    UCT_PD_COMPONENT_DEFINE(_var, _name, \
-                            _var##_query_pd_resources, _var##_pd_open, _ops, \
+    UCT_MD_COMPONENT_DEFINE(_var, _name, \
+                            _var##_query_md_resources, _var##_md_open, _ops, \
                             uct_mm_rkey_unpack, \
-                            uct_mm_rkey_release, _cfg_prefix, _prefix##_pd_config_table, \
-                            _prefix##_pd_config_t)
+                            uct_mm_rkey_release, _cfg_prefix, _prefix##_md_config_table, \
+                            _prefix##_md_config_t)
 
 
 /**
@@ -131,34 +131,34 @@ typedef struct uct_mm_packed_rkey {
 
 
 /**
- * MM PD
+ * MM MD
  */
-typedef struct uct_mm_pd {
-    uct_pd_t           super;
-    uct_mm_pd_config_t *config;
-} uct_mm_pd_t;
+typedef struct uct_mm_md {
+    uct_md_t           super;
+    uct_mm_md_config_t *config;
+} uct_mm_md_t;
 
 
-ucs_status_t uct_mm_mem_alloc(uct_pd_h pd, size_t *length_p, void **address_p,
+ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               uct_mem_h *memh_p UCS_MEMTRACK_ARG);
 
-ucs_status_t uct_mm_mem_free(uct_pd_h pd, uct_mem_h memh);
+ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh);
 
-ucs_status_t uct_mm_mem_reg(uct_pd_h pd, void *address, size_t length,
+ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
                             uct_mem_h *memh_p);
 
-ucs_status_t uct_mm_mem_dereg(uct_pd_h pd, uct_mem_h memh);
+ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh);
 
-ucs_status_t uct_mm_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
-ucs_status_t uct_mm_mkey_pack(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
+ucs_status_t uct_mm_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
 
-ucs_status_t uct_mm_rkey_unpack(uct_pd_component_t *pdc, const void *rkey_buffer,
+ucs_status_t uct_mm_rkey_unpack(uct_md_component_t *mdc, const void *rkey_buffer,
                                 uct_rkey_t *rkey_p, void **handle_p);
 
-ucs_status_t uct_mm_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey, void *handle);
+ucs_status_t uct_mm_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey, void *handle);
 
-ucs_status_t uct_mm_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
-                            uct_pd_h *pd_p, uct_pd_component_t *_var);
+ucs_status_t uct_mm_md_open(const char *md_name, const uct_md_config_t *md_config,
+                            uct_md_h *md_p, uct_md_component_t *_var);
 
 #endif

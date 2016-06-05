@@ -5,7 +5,7 @@
  */
 
 #include "cuda_iface.h"
-#include "cuda_pd.h"
+#include "cuda_md.h"
 #include "cuda_ep.h"
 
 #include <ucs/type/class.h>
@@ -81,11 +81,11 @@ static uct_iface_ops_t uct_cuda_iface_ops = {
     .ep_am_short         = uct_cuda_ep_am_short,
 };
 
-static UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_pd_h pd, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_cuda_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_iface_ops, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_iface_ops, md, worker,
                               tl_config UCS_STATS_ARG(NULL));
 
     if (strcmp(dev_name, UCT_CUDA_DEV_NAME) != 0) {
@@ -102,12 +102,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_cuda_iface_t, uct_base_iface_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_iface_t, uct_iface_t, uct_pd_h, uct_worker_h,
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
                           const char*, size_t, const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_iface_t, uct_iface_t);
 
 
-static ucs_status_t uct_cuda_query_tl_resources(uct_pd_h pd,
+static ucs_status_t uct_cuda_query_tl_resources(uct_md_h md,
                                                 uct_tl_resource_desc_t **resource_p,
                                                 unsigned *num_resources_p)
 {
@@ -137,4 +137,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cuda_tl,
                         "CUDA_",
                         uct_cuda_iface_config_table,
                         uct_cuda_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_cuda_pd, &uct_cuda_tl);
+UCT_MD_REGISTER_TL(&uct_cuda_md, &uct_cuda_tl);

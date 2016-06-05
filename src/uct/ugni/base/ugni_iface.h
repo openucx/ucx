@@ -7,7 +7,7 @@
 #include "uct/api/uct.h"
 #include "ugni_ep.h"
 #include "ugni_device.h"
-#include "ugni_pd.h"
+#include "ugni_md.h"
 
 #define UCT_UGNI_RDMA_TL_NAME   "ugni_rdma"
 
@@ -31,7 +31,7 @@ typedef struct uct_ugni_iface {
     ucs_arbiter_t           arbiter;
 } uct_ugni_iface_t;
 
-UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_pd_h, uct_worker_h, const char *, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t*))
+UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_md_h, uct_worker_h, const char *, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t*))
 
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);
@@ -71,7 +71,7 @@ static inline uct_ugni_device_t * uct_ugni_iface_device(uct_ugni_iface_t *iface)
 
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk);
 void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh);
-ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
+ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p);
 #endif

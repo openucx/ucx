@@ -5,24 +5,24 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_KNEM_PD_H_
-#define UCT_KNEM_PD_H_
+#ifndef UCT_KNEM_MD_H_
+#define UCT_KNEM_MD_H_
 
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/status.h>
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 
-extern uct_pd_component_t uct_knem_pd_component;
-ucs_status_t uct_knem_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+extern uct_md_component_t uct_knem_md_component;
+ucs_status_t uct_knem_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 /**
- * @brief KNEM PD descriptor
+ * @brief KNEM MD descriptor
  */
-typedef struct uct_knem_pd {
-    struct uct_pd super; /**< Domain info */
+typedef struct uct_knem_md {
+    struct uct_md super; /**< Domain info */
     int knem_fd;         /**< File descriptor for /dev/knem */
-} uct_knem_pd_t;
+} uct_knem_md_t;
 
 /**
  * @brief KNEM packed and remote key

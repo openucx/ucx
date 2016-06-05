@@ -4,8 +4,8 @@
 * See file LICENSE for terms.
 */
 
-#ifndef UCT_PD_H_
-#define UCT_PD_H_
+#ifndef UCT_MD_H_
+#define UCT_MD_H_
 
 #include "uct_iface.h"
 
@@ -16,125 +16,125 @@
 #include <ucs/config/parser.h>
 
 
-typedef struct uct_pd_component uct_pd_component_t;
-struct uct_pd_component {
-    ucs_status_t           (*query_resources)(uct_pd_resource_desc_t **resources_p,
+typedef struct uct_md_component uct_md_component_t;
+struct uct_md_component {
+    ucs_status_t           (*query_resources)(uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
-    ucs_status_t           (*pd_open)(const char *pd_name, const uct_pd_config_t *config,
-                                      uct_pd_h *pd_p);
+    ucs_status_t           (*md_open)(const char *md_name, const uct_md_config_t *config,
+                                      uct_md_h *md_p);
 
-    ucs_status_t           (*rkey_unpack)(uct_pd_component_t *pdc, const void *rkey_buffer,
+    ucs_status_t           (*rkey_unpack)(uct_md_component_t *mdc, const void *rkey_buffer,
                                           uct_rkey_t *rkey_p, void **handle_p);
 
-    ucs_status_t           (*rkey_release)(uct_pd_component_t *pdc, uct_rkey_t rkey,
+    ucs_status_t           (*rkey_release)(uct_md_component_t *mdc, uct_rkey_t rkey,
                                            void *handle);
 
-    const char             name[UCT_PD_COMPONENT_NAME_MAX];
+    const char             name[UCT_MD_COMPONENT_NAME_MAX];
     void                   *priv;
     const char             *cfg_prefix;        /**< Prefix for configuration environment vars */
-    ucs_config_field_t     *pd_config_table;   /**< Defines PD configuration options */
-    size_t                 pd_config_size;     /**< PD configuration structure size */
-    ucs_list_link_t        tl_list;            /* List of uct_pd_registered_tl_t */
+    ucs_config_field_t     *md_config_table;   /**< Defines MD configuration options */
+    size_t                 md_config_size;     /**< MD configuration structure size */
+    ucs_list_link_t        tl_list;            /* List of uct_md_registered_tl_t */
     ucs_list_link_t        list;
 };
 
 
 /**
- * "Base" structure which defines PD configuration options.
- * Specific PDs extend this structure.
+ * "Base" structure which defines MD configuration options.
+ * Specific MDs extend this structure.
  */
-struct uct_pd_config {
+struct uct_md_config {
 };
 
 
 /**
- * PD->Transport
+ * MD->Transport
  */
-typedef struct uct_pd_registered_tl {
+typedef struct uct_md_registered_tl {
     ucs_list_link_t        list;
     uct_tl_component_t     *tl;
-} uct_pd_registered_tl_t;
+} uct_md_registered_tl_t;
 
 
 /**
- * Define a PD component.
+ * Define a MD component.
  *
- * @param _pdc           PD component structure to initialize.
- * @param _name          PD component name.
- * @param _query         Function to query PD resources.
- * @param _open          Function to open a PD.
+ * @param _mdc           MD component structure to initialize.
+ * @param _name          MD component name.
+ * @param _query         Function to query MD resources.
+ * @param _open          Function to open a MD.
  * @param _priv          Custom private data.
  * @param _rkey_unpack   Function to unpack a remote key buffer to handle.
  * @param _rkey_release  Function to release a remote key handle.
  * @param _cfg_prefix    Prefix for configuration environment vars.
- * @param _cfg_table     Defines the PDC's configuration values.
- * @param _cfg_struct    PDC configuration structure.
+ * @param _cfg_table     Defines the MDC's configuration values.
+ * @param _cfg_struct    MDC configuration structure.
  */
-#define UCT_PD_COMPONENT_DEFINE(_pdc, _name, _query, _open, _priv, \
+#define UCT_MD_COMPONENT_DEFINE(_mdc, _name, _query, _open, _priv, \
                                 _rkey_unpack, _rkey_release, \
                                 _cfg_prefix, _cfg_table, _cfg_struct) \
     \
-    uct_pd_component_t _pdc = { \
+    uct_md_component_t _mdc = { \
         .query_resources = _query, \
-        .pd_open         = _open, \
+        .md_open         = _open, \
         .cfg_prefix      = _cfg_prefix, \
-        .pd_config_table = _cfg_table, \
-        .pd_config_size  = sizeof(_cfg_struct), \
+        .md_config_table = _cfg_table, \
+        .md_config_size  = sizeof(_cfg_struct), \
         .priv            = _priv, \
         .rkey_unpack     = _rkey_unpack, \
         .rkey_release    = _rkey_release, \
         .name            = _name, \
-        .tl_list         = { &_pdc.tl_list, &_pdc.tl_list } \
+        .tl_list         = { &_mdc.tl_list, &_mdc.tl_list } \
     }; \
     UCS_STATIC_INIT { \
-        ucs_list_add_tail(&uct_pd_components_list, &_pdc.list); \
+        ucs_list_add_tail(&uct_md_components_list, &_mdc.list); \
     }
 
 
 /**
- * Add a transport component to a pd component
- * (same transport component can be added to multiple pd components).
+ * Add a transport component to a md component
+ * (same transport component can be added to multiple md components).
  *
- * @param _pdc           Pointer to PD component to add the TL component to.
+ * @param _mdc           Pointer to MD component to add the TL component to.
  * @param _tlc           Pointer to TL component.
  */
-#define UCT_PD_REGISTER_TL(_pdc, _tlc) \
+#define UCT_MD_REGISTER_TL(_mdc, _tlc) \
     UCS_STATIC_INIT { \
-        static uct_pd_registered_tl_t reg; \
+        static uct_md_registered_tl_t reg; \
         reg.tl = (_tlc); \
-        ucs_list_add_tail(&(_pdc)->tl_list, &reg.list); \
+        ucs_list_add_tail(&(_mdc)->tl_list, &reg.list); \
     }
 
 
 /**
- * Protection domain operations
+ * Memory domain operations
  */
-struct uct_pd_ops {
-    void         (*close)(uct_pd_h pd);
+struct uct_md_ops {
+    void         (*close)(uct_md_h md);
 
-    ucs_status_t (*query)(uct_pd_h pd, uct_pd_attr_t *pd_attr);
+    ucs_status_t (*query)(uct_md_h md, uct_md_attr_t *md_attr);
 
-    ucs_status_t (*mem_alloc)(uct_pd_h pd, size_t *length_p, void **address_p,
+    ucs_status_t (*mem_alloc)(uct_md_h md, size_t *length_p, void **address_p,
                               uct_mem_h *memh_p UCS_MEMTRACK_ARG);
 
-    ucs_status_t (*mem_free)(uct_pd_h pd, uct_mem_h memh);
+    ucs_status_t (*mem_free)(uct_md_h md, uct_mem_h memh);
 
-    ucs_status_t (*mem_reg)(uct_pd_h pd, void *address, size_t length,
+    ucs_status_t (*mem_reg)(uct_md_h md, void *address, size_t length,
                             uct_mem_h *memh_p);
 
-    ucs_status_t (*mem_dereg)(uct_pd_h pd, uct_mem_h memh);
+    ucs_status_t (*mem_dereg)(uct_md_h md, uct_mem_h memh);
 
-    ucs_status_t (*mkey_pack)(uct_pd_h pd, uct_mem_h memh, void *rkey_buffer);
+    ucs_status_t (*mkey_pack)(uct_md_h md, uct_mem_h memh, void *rkey_buffer);
 };
 
 
 /**
- * Protection domain
+ * Memory domain
  */
-struct uct_pd {
-    uct_pd_ops_t           *ops;
-    uct_pd_component_t     *component;
+struct uct_md {
+    uct_md_ops_t           *ops;
+    uct_md_component_t     *component;
 };
 
 
@@ -158,8 +158,8 @@ struct uct_worker {
 };
 
 
-ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
-                                    uct_pd_resource_desc_t **resources_p,
+ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
+                                    uct_md_resource_desc_t **resources_p,
                                     unsigned *num_resources_p);
 
 
@@ -199,7 +199,7 @@ ucs_status_t uct_single_pd_resource(uct_pd_component_t *pdc,
     }
 
 
-extern ucs_list_link_t uct_pd_components_list;
-extern ucs_config_field_t uct_pd_config_table[];
+extern ucs_list_link_t uct_md_components_list;
+extern ucs_config_field_t uct_md_config_table[];
 
 #endif

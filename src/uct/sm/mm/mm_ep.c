@@ -66,7 +66,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     /* Attach the address's memory */
     size_to_attach = UCT_MM_GET_FIFO_SIZE(iface);
     status =
-        uct_mm_pd_mapper_ops(iface->super.pd)->attach(addr->id,
+        uct_mm_md_mapper_ops(iface->super.md)->attach(addr->id,
                                                       size_to_attach,
                                                       (void *)addr->vaddr,
                                                       &self->mapped_desc.address,
@@ -86,7 +86,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     /* Send connect message to remote side so it will start polling */
     status = uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_CONNECT);
     if (status != UCS_OK) {
-        uct_mm_pd_mapper_ops(iface->super.pd)->detach(&self->mapped_desc);
+        uct_mm_md_mapper_ops(iface->super.md)->detach(&self->mapped_desc);
         return status;
     }
 
@@ -121,7 +121,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
          remote_seg != NULL; remote_seg = sglib_hashed_uct_mm_remote_seg_t_it_next(&iter)) {
             sglib_hashed_uct_mm_remote_seg_t_delete(self->remote_segments_hash, remote_seg);
             /* detach the remote proceess's descriptors segment */
-            status = uct_mm_pd_mapper_ops(iface->super.pd)->detach(remote_seg);
+            status = uct_mm_md_mapper_ops(iface->super.md)->detach(remote_seg);
             if (status != UCS_OK) {
                 ucs_warn("Unable to detach shared memory segment of descriptors: %s",
                          ucs_status_string(status));
@@ -130,7 +130,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     }
 
     /* detach the remote proceess's shared memory segment (remote recv FIFO) */
-    status = uct_mm_pd_mapper_ops(iface->super.pd)->detach(&self->mapped_desc);
+    status = uct_mm_md_mapper_ops(iface->super.md)->detach(&self->mapped_desc);
     if (status != UCS_OK) {
         ucs_error("error detaching from remote FIFO");
     }
@@ -193,7 +193,7 @@ void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm
             ucs_fatal("Failed to allocated memory for a remote segment identifier. %m");
         }
 
-        status = uct_mm_pd_mapper_ops(iface->super.pd)->attach(elem->desc_mmid,
+        status = uct_mm_md_mapper_ops(iface->super.md)->attach(elem->desc_mmid,
                                                                elem->desc_mpool_size,
                                                                elem->desc_chunk_base_addr,
                                                                &remote_seg->address,

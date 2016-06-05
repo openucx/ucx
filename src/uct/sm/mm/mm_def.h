@@ -6,7 +6,7 @@
 #ifndef UCT_MM_H
 #define UCT_MM_H
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <ucs/sys/math.h>
 #include <ucs/datastruct/queue.h>
 #include <uct/api/uct_def.h>
@@ -48,10 +48,10 @@ enum {
 #define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
           ucs_likely(((_head) - (_tail)) < (_fifo_size))
 
-typedef struct uct_mm_pd_config {
-    uct_pd_config_t      super;
+typedef struct uct_mm_md_config {
+    uct_md_config_t      super;
     ucs_ternary_value_t  hugetlb_mode;     /* Enable using huge pages */
-} uct_mm_pd_config_t;
+} uct_mm_md_config_t;
 
 
 typedef struct uct_mm_iface_addr {

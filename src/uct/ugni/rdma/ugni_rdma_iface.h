@@ -7,7 +7,7 @@
 #ifndef UCT_UGNI_IFACE_H
 #define UCT_UGNI_IFACE_H
 
-#include <uct/ugni/base/ugni_pd.h>
+#include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_rdma_ep.h"

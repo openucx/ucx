@@ -102,7 +102,7 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
         goto err;
     }
 
-    ucs_assert(perf->uct.send_mem.pd == perf->uct.pd);
+    ucs_assert(perf->uct.send_mem.md == perf->uct.md);
     perf->send_buffer = perf->uct.send_mem.address;
 
     status = uct_iface_mem_alloc(perf->uct.iface, 
@@ -113,7 +113,7 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
         goto err_free_send;
     }
 
-    ucs_assert(perf->uct.recv_mem.pd == perf->uct.pd);
+    ucs_assert(perf->uct.recv_mem.md == perf->uct.md);
     perf->recv_buffer = perf->uct.recv_mem.address;
 
     ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
@@ -420,7 +420,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     uct_iface_addr_t *iface_addr;
     uct_ep_addr_t *ep_addr;
     uct_iface_attr_t iface_attr;
-    uct_pd_attr_t pd_attr;
+    uct_md_attr_t md_attr;
     void *rkey_buffer;
     ucs_status_t status;
     struct iovec vec[5];
@@ -440,13 +440,13 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    status = uct_pd_query(perf->uct.pd, &pd_attr);
+    status = uct_md_query(perf->uct.md, &md_attr);
     if (status != UCS_OK) {
-        ucs_error("Failed to uct_pd_query: %s", ucs_status_string(status));
+        ucs_error("Failed to uct_md_query: %s", ucs_status_string(status));
         goto err_free;
     }
 
-    info.rkey_size          = pd_attr.rkey_packed_size;
+    info.rkey_size          = md_attr.rkey_packed_size;
     info.uct.dev_addr_len   = iface_attr.device_addr_len;
     info.uct.iface_addr_len = iface_attr.iface_addr_len;
     info.uct.ep_addr_len    = iface_attr.ep_addr_len;
@@ -473,7 +473,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
     }
 
-    status = uct_pd_mkey_pack(perf->uct.pd, perf->uct.recv_mem.memh, rkey_buffer);
+    status = uct_md_mkey_pack(perf->uct.md, perf->uct.recv_mem.memh, rkey_buffer);
     if (status != UCS_OK) {
         ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
         goto err_free;
@@ -845,37 +845,37 @@ static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* par
     perf->report_interval = -1;
 }
 
-static ucs_status_t uct_perf_create_pd(ucx_perf_context_t *perf)
+static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
 {
-    uct_pd_resource_desc_t *pd_resources;
+    uct_md_resource_desc_t *md_resources;
     uct_tl_resource_desc_t *tl_resources;
-    unsigned i, num_pd_resources;
+    unsigned i, num_md_resources;
     unsigned j, num_tl_resources;
     ucs_status_t status;
-    uct_pd_h pd;
-    uct_pd_config_t *pd_config;
+    uct_md_h md;
+    uct_md_config_t *md_config;
 
-    status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
+    status = uct_query_md_resources(&md_resources, &num_md_resources);
     if (status != UCS_OK) {
         goto out;
     }
 
-    for (i = 0; i < num_pd_resources; ++i) {
-        status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL, &pd_config);
+    for (i = 0; i < num_md_resources; ++i) {
+        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
         if (status != UCS_OK) {
-            goto out_release_pd_resources;
+            goto out_release_md_resources;
         }
 
-        status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
-        uct_config_release(pd_config);
+        status = uct_md_open(md_resources[i].md_name, md_config, &md);
+        uct_config_release(md_config);
         if (status != UCS_OK) {
-            goto out_release_pd_resources;
+            goto out_release_md_resources;
         }
 
-        status = uct_pd_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+        status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
         if (status != UCS_OK) {
-            uct_pd_close(pd);
-            goto out_release_pd_resources;
+            uct_md_close(md);
+            goto out_release_md_resources;
         }
 
         for (j = 0; j < num_tl_resources; ++j) {
@@ -883,13 +883,13 @@ static ucs_status_t uct_perf_create_pd(ucx_perf_context_t *perf)
                 !strcmp(perf->params.uct.dev_name, tl_resources[j].dev_name))
             {
                 uct_release_tl_resource_list(tl_resources);
-                perf->uct.pd = pd;
+                perf->uct.md = md;
                 status = UCS_OK;
-                goto out_release_pd_resources;
+                goto out_release_md_resources;
             }
         }
 
-        uct_pd_close(pd);
+        uct_md_close(md);
         uct_release_tl_resource_list(tl_resources);
     }
 
@@ -897,8 +897,8 @@ static ucs_status_t uct_perf_create_pd(ucx_perf_context_t *perf)
               perf->params.uct.dev_name);
     status = UCS_ERR_NO_DEVICE;
 
-out_release_pd_resources:
-    uct_release_pd_resource_list(pd_resources);
+out_release_md_resources:
+    uct_release_md_resource_list(md_resources);
 out:
     return status;
 }
@@ -919,22 +919,22 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto out_cleanup_async;
     }
 
-    status = uct_perf_create_pd(perf);
+    status = uct_perf_create_md(perf);
     if (status != UCS_OK) {
         goto out_destroy_worker;
     }
 
     status = uct_iface_config_read(params->uct.tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
-        goto out_destroy_pd;
+        goto out_destroy_md;
     }
 
-    status = uct_iface_open(perf->uct.pd, perf->uct.worker, params->uct.tl_name,
+    status = uct_iface_open(perf->uct.md, perf->uct.worker, params->uct.tl_name,
                             params->uct.dev_name, 0, iface_config, &perf->uct.iface);
     uct_config_release(iface_config);
     if (status != UCS_OK) {
         ucs_error("Failed to open iface: %s", ucs_status_string(status));
-        goto out_destroy_pd;
+        goto out_destroy_md;
     }
 
     status = uct_perf_test_check_capabilities(params, perf->uct.iface);
@@ -959,8 +959,8 @@ out_free_mem:
     uct_perf_test_free_mem(perf);
 out_iface_close:
     uct_iface_close(perf->uct.iface);
-out_destroy_pd:
-    uct_pd_close(perf->uct.pd);
+out_destroy_md:
+    uct_md_close(perf->uct.md);
 out_destroy_worker:
     uct_worker_destroy(perf->uct.worker);
 out_cleanup_async:
@@ -974,7 +974,7 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
     uct_perf_test_cleanup_endpoints(perf);
     uct_perf_test_free_mem(perf);
     uct_iface_close(perf->uct.iface);
-    uct_pd_close(perf->uct.pd);
+    uct_md_close(perf->uct.md);
     uct_worker_destroy(perf->uct.worker);
     ucs_async_context_cleanup(&perf->uct.async);
 }

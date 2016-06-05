@@ -8,7 +8,7 @@
 #define UCT_UGNI_IFACE_H
 
 #include <gni_pub.h>
-#include <uct/ugni/base/ugni_pd.h>
+#include <uct/ugni/base/ugni_md.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_smsg_ep.h"

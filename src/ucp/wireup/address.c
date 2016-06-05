@@ -18,17 +18,17 @@
  * Packed address layout:
  *
  * [ uuid(64bit) | worker_name(string) ]
- * [ device1_pd_index | device1_address(var) ]
+ * [ device1_md_index | device1_address(var) ]
  *    [ tl1_name_csum(string) | tl1_info | tl1_address(var) ]
  *    [ tl2_name_csum(string) | tl2_info | tl2_address(var) ]
  *    ...
- * [ device2_pd_index | device2_address(var) ]
+ * [ device2_md_index | device2_address(var) ]
  *    ...
  *
  *   * Last address in the tl address list, it's address will have the flag LAST.
- *   * If a device does not have tl addresses, it's pd_index will have the flag
+ *   * If a device does not have tl addresses, it's md_index will have the flag
  *     EMPTY.
- *   * If the address list is empty, then it will contain only a single pd_index
+ *   * If the address list is empty, then it will contain only a single md_index
  *     which equals to UCP_NULL_RESOURCE.
  *
  */
@@ -46,11 +46,11 @@ typedef struct {
 
 #define UCP_ADDRESS_FLAG_LAST         0x80   /* Last address in the list */
 #define UCP_ADDRESS_FLAG_EMPTY        0x80   /* Device without TL addresses */
-#define UCP_ADDRESS_FLAG_PD_ALLOC     0x40   /* PD can register  */
-#define UCP_ADDRESS_FLAG_PD_REG       0x20   /* PD can allocate */
-#define UCP_ADDRESS_FLAG_PD_MASK      ~(UCP_ADDRESS_FLAG_EMPTY | \
-                                        UCP_ADDRESS_FLAG_PD_ALLOC | \
-                                        UCP_ADDRESS_FLAG_PD_REG)
+#define UCP_ADDRESS_FLAG_MD_ALLOC     0x40   /* MD can register  */
+#define UCP_ADDRESS_FLAG_MD_REG       0x20   /* MD can allocate */
+#define UCP_ADDRESS_FLAG_MD_MASK      ~(UCP_ADDRESS_FLAG_EMPTY | \
+                                        UCP_ADDRESS_FLAG_MD_ALLOC | \
+                                        UCP_ADDRESS_FLAG_MD_REG)
 
 
 static size_t ucp_address_string_packed_size(const char *s)
@@ -166,10 +166,10 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
            ucp_address_string_packed_size(ucp_worker_get_name(worker));
 
     if (num_devices == 0) {
-        size += 1;                      /* NULL pd_index */
+        size += 1;                      /* NULL md_index */
     } else {
         for (dev = devices; dev < devices + num_devices; ++dev) {
-            size += 1;                  /* device pd_index */
+            size += 1;                  /* device md_index */
             size += 1;                  /* device address length */
             size += dev->dev_addr_len;  /* device address */
             size += dev->tl_addrs_size; /* transport addresses */
@@ -229,11 +229,11 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_context_h context = worker->context;
     const ucp_address_packed_device_t *dev;
     uct_iface_attr_t *iface_attr;
-    ucp_rsc_index_t pd_index;
+    ucp_rsc_index_t md_index;
     ucs_status_t status;
     ucp_rsc_index_t i;
     size_t tl_addr_len;
-    uint64_t pd_flags;
+    uint64_t md_flags;
     unsigned index;
     void *ptr;
 
@@ -252,15 +252,15 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     for (dev = devices; dev < devices + num_devices; ++dev) {
 
-        /* PD index */
-        pd_index       = context->tl_rscs[dev->rsc_index].pd_index;
-        pd_flags       = context->pd_attrs[pd_index].cap.flags;
-        ucs_assert_always(!(pd_index & ~UCP_ADDRESS_FLAG_PD_MASK));
+        /* MD index */
+        md_index       = context->tl_rscs[dev->rsc_index].md_index;
+        md_flags       = context->md_attrs[md_index].cap.flags;
+        ucs_assert_always(!(md_index & ~UCP_ADDRESS_FLAG_MD_MASK));
 
-        *(uint8_t*)ptr = pd_index |
+        *(uint8_t*)ptr = md_index |
                          ((dev->tl_bitmap == 0)          ? UCP_ADDRESS_FLAG_EMPTY    : 0) |
-                         ((pd_flags & UCT_PD_FLAG_ALLOC) ? UCP_ADDRESS_FLAG_PD_ALLOC : 0) |
-                         ((pd_flags & UCT_PD_FLAG_REG)   ? UCP_ADDRESS_FLAG_PD_REG   : 0);
+                         ((md_flags & UCT_MD_FLAG_ALLOC) ? UCP_ADDRESS_FLAG_MD_ALLOC : 0) |
+                         ((md_flags & UCT_MD_FLAG_REG)   ? UCP_ADDRESS_FLAG_MD_REG   : 0);
         ++ptr;
 
         /* Device address length */
@@ -328,10 +328,10 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
 
             ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT
-                      " pd_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",
+                      " md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",
                       index,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[i].tl_rsc),
-                      pd_flags, worker->iface_attrs[i].cap.flags,
+                      md_flags, worker->iface_attrs[i].cap.flags,
                       worker->iface_attrs[i].bandwidth,
                       worker->iface_attrs[i].overhead);
             ++index;
@@ -397,14 +397,14 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
 {
     ucp_address_entry_t *address_list, *address;
     const uct_device_addr_t *dev_addr;
-    ucp_rsc_index_t pd_index;
+    ucp_rsc_index_t md_index;
     unsigned address_count;
     int last_dev, last_tl;
     int empty_dev;
-    uint64_t pd_flags;
+    uint64_t md_flags;
     size_t dev_addr_len;
     size_t tl_addr_len;
-    uint8_t pd_byte;
+    uint8_t md_byte;
     const void *ptr;
     const void *aptr;
 
@@ -423,7 +423,7 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             break;
         }
 
-        /* pd_index */
+        /* md_index */
         empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
         ++ptr;
 
@@ -468,12 +468,12 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             break;
         }
 
-        /* pd_index */
-        pd_byte      = (*(uint8_t*)ptr);
-        pd_index     = pd_byte & UCP_ADDRESS_FLAG_PD_MASK;
-        pd_flags     = (pd_byte & UCP_ADDRESS_FLAG_PD_ALLOC) ? UCT_PD_FLAG_ALLOC : 0;
-        pd_flags    |= (pd_byte & UCP_ADDRESS_FLAG_PD_REG)   ? UCT_PD_FLAG_REG   : 0;
-        empty_dev    = pd_byte & UCP_ADDRESS_FLAG_EMPTY;
+        /* md_index */
+        md_byte      = (*(uint8_t*)ptr);
+        md_index     = md_byte & UCP_ADDRESS_FLAG_MD_MASK;
+        md_flags     = (md_byte & UCP_ADDRESS_FLAG_MD_ALLOC) ? UCT_MD_FLAG_ALLOC : 0;
+        md_flags    |= (md_byte & UCP_ADDRESS_FLAG_MD_REG)   ? UCT_MD_FLAG_REG   : 0;
+        empty_dev    = md_byte & UCP_ADDRESS_FLAG_EMPTY;
         ++ptr;
 
         /* device address length */
@@ -502,14 +502,14 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
 
             address->dev_addr     = dev_addr;
             address->dev_addr_len = dev_addr_len;
-            address->pd_index     = pd_index;
-            address->pd_flags     = pd_flags;
+            address->md_index     = md_index;
+            address->md_flags     = md_flags;
             address->tl_addr      = ptr;
             address->tl_addr_len  = tl_addr_len;
 
-            ucs_trace("unpack addr[%d] : pd_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",
+            ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",
                       (int)(address - address_list),
-                      address->pd_flags, address->iface_attr.cap_flags,
+                      address->md_flags, address->iface_attr.cap_flags,
                       address->iface_attr.bandwidth, address->iface_attr.overhead);
             ++address;
 

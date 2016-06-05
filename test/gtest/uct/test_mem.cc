@@ -19,8 +19,8 @@ protected:
     void check_mem(const uct_allocated_memory &mem, size_t min_length) {
         EXPECT_TRUE(mem.address != 0);
         EXPECT_GE(mem.length, min_length);
-        if (mem.method == UCT_ALLOC_METHOD_PD) {
-            EXPECT_TRUE(mem.pd != NULL);
+        if (mem.method == UCT_ALLOC_METHOD_MD) {
+            EXPECT_TRUE(mem.md != NULL);
             EXPECT_TRUE(mem.memh != UCT_INVALID_MEM_HANDLE);
         } else {
             EXPECT_TRUE((mem.method == GetParam()) ||
@@ -51,49 +51,49 @@ UCS_TEST_P(test_mem, nopd_alloc) {
 UCS_TEST_P(test_mem, pd_alloc) {
     uct_alloc_method_t methods[3];
     uct_allocated_memory mem;
-    uct_pd_resource_desc_t *pd_resources;
-    uct_pd_attr_t pd_attr;
-    unsigned i, num_pd_resources;
+    uct_md_resource_desc_t *md_resources;
+    uct_md_attr_t md_attr;
+    unsigned i, num_md_resources;
     ucs_status_t status;
-    uct_pd_h pd;
-    uct_pd_config_t *pd_config;
+    uct_md_h pd;
+    uct_md_config_t *md_config;
 
-    status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
+    status = uct_query_md_resources(&md_resources, &num_md_resources);
     ASSERT_UCS_OK(status);
 
-    methods[0] = UCT_ALLOC_METHOD_PD;
+    methods[0] = UCT_ALLOC_METHOD_MD;
     methods[1] = GetParam();
     methods[2] = UCT_ALLOC_METHOD_HEAP;
 
-    for (i = 0; i < num_pd_resources; ++i) {
+    for (i = 0; i < num_md_resources; ++i) {
 
-        status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL, &pd_config);
+        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
-        uct_config_release(pd_config);
+        status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+        uct_config_release(md_config);
         ASSERT_UCS_OK(status);
 
-        status = uct_pd_query(pd, &pd_attr);
+        status = uct_md_query(pd, &md_attr);
         ASSERT_UCS_OK(status);
 
         status = uct_mem_alloc(min_length, methods, 3, &pd, 1, "test", &mem);
         ASSERT_UCS_OK(status);
 
-        if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
-            EXPECT_EQ(UCT_ALLOC_METHOD_PD, mem.method);
+        if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
+            EXPECT_EQ(UCT_ALLOC_METHOD_MD, mem.method);
         } else {
-            EXPECT_NE(UCT_ALLOC_METHOD_PD, mem.method);
+            EXPECT_NE(UCT_ALLOC_METHOD_MD, mem.method);
         }
 
         check_mem(mem, min_length);
 
         uct_mem_free(&mem);
 
-        uct_pd_close(pd);
+        uct_md_close(pd);
     }
 
-    uct_release_pd_resource_list(pd_resources);
+    uct_release_md_resource_list(md_resources);
 }
 
 INSTANTIATE_TEST_CASE_P(alloc_methods, test_mem,

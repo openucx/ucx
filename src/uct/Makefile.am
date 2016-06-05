@@ -23,12 +23,12 @@ nobase_dist_libuct_la_HEADERS = \
 
 noinst_HEADERS = \
 	base/addr.h \
-	base/uct_pd.h \
+	base/uct_md.h \
 	base/uct_iface.h \
 	base/uct_log.h
 
 libuct_la_SOURCES = \
-	base/uct_pd.c \
+	base/uct_md.c \
 	base/uct_mem.c \
 	base/uct_iface.c
 
@@ -40,14 +40,14 @@ noinst_HEADERS += \
 	ib/base/ib_iface.h \
 	ib/base/ib_instr.h \
 	ib/base/ib_log.h \
-	ib/base/ib_pd.h \
+	ib/base/ib_md.h \
 	ib/base/ib_verbs.h
 
 libuct_la_SOURCES += \
 	ib/base/ib_device.c \
 	ib/base/ib_iface.c \
 	ib/base/ib_log.c \
-	ib/base/ib_pd.c
+	ib/base/ib_md.c
 
 if HAVE_MLX5_HW
 libuct_la_SOURCES += \
@@ -125,7 +125,7 @@ libuct_la_LDFLAGS  += $(CRAY_UGNI_LIBS)
 libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
 
 noinst_HEADERS += \
-    ugni/base/ugni_pd.h \
+    ugni/base/ugni_md.h \
     ugni/base/ugni_device.h \
     ugni/base/ugni_iface.h \
     ugni/base/ugni_ep.h \
@@ -137,7 +137,7 @@ noinst_HEADERS += \
     ugni/smsg/ugni_smsg_ep.h
 
 libuct_la_SOURCES += \
-    ugni/base/ugni_pd.c \
+    ugni/base/ugni_md.c \
     ugni/base/ugni_device.c \
     ugni/base/ugni_iface.c \
     ugni/base/ugni_ep.c \
@@ -151,12 +151,12 @@ endif
 
 if HAVE_CUDA
 noinst_HEADERS += \
-    cuda/cuda_pd.h \
+    cuda/cuda_md.h \
     cuda/cuda_iface.h \
     cuda/cuda_ep.h
 
 libuct_la_SOURCES += \
-    cuda/cuda_pd.c \
+    cuda/cuda_md.c \
     cuda/cuda_iface.c \
     cuda/cuda_ep.c
 endif
@@ -167,13 +167,13 @@ noinst_HEADERS += \
     sm/mm/mm_iface.h \
     sm/mm/mm_ep.h \
     sm/mm/mm_def.h \
-    sm/mm/mm_pd.h
+    sm/mm/mm_md.h
 
 libuct_la_SOURCES += \
     sm/base/sm_iface.c \
     sm/mm/mm_iface.c \
     sm/mm/mm_ep.c \
-    sm/mm/mm_pd.c \
+    sm/mm/mm_md.c \
     sm/mm/mm_sysv.c \
     sm/mm/mm_posix.c
 
@@ -191,12 +191,12 @@ if HAVE_CMA
 noinst_HEADERS += \
 	sm/cma/cma_iface.h \
 	sm/cma/cma_ep.h \
-	sm/cma/cma_pd.h
+	sm/cma/cma_md.h
 
 libuct_la_SOURCES += \
 	sm/cma/cma_iface.c \
 	sm/cma/cma_ep.c \
-	sm/cma/cma_pd.c
+	sm/cma/cma_md.c
 endif
 
 # Inria's KNEM 
@@ -204,10 +204,10 @@ if HAVE_KNEM
 noinst_HEADERS += \
 	sm/knem/knem_iface.h \
 	sm/knem/knem_ep.h \
-	sm/knem/knem_pd.h
+	sm/knem/knem_md.h
 
 libuct_la_SOURCES += \
 	sm/knem/knem_iface.c \
 	sm/knem/knem_ep.c \
-	sm/knem/knem_pd.c
+	sm/knem/knem_md.c
 endif

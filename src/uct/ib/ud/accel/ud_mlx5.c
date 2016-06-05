@@ -6,7 +6,7 @@
 
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_iface.h>
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <uct/base/uct_log.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
@@ -611,7 +611,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
-                           uct_pd_h pd, uct_worker_h worker,
+                           uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
@@ -623,7 +623,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              pd, worker,
+                              md, worker,
                               dev_name, rx_headroom, 0, config);
 
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
@@ -691,20 +691,20 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
 
 UCS_CLASS_DEFINE(uct_ud_mlx5_iface_t, uct_ud_iface_t);
 
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_mlx5_iface_t, uct_iface_t, uct_pd_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_mlx5_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h,
                                  const char*, size_t, const uct_iface_config_t*);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_mlx5_iface_t, uct_iface_t);
 
 static ucs_status_t
-uct_ud_mlx5_query_resources(uct_pd_h pd,
+uct_ud_mlx5_query_resources(uct_md_h md,
                             uct_tl_resource_desc_t **resources_p,
                             unsigned *num_resources_p)
 {
     ucs_trace_func("");
     /* TODO take transport overhead into account */
-    return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
+    return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
                                             "ud_mlx5", UCT_IB_DEVICE_FLAG_MLX5_PRM,
                                             resources_p, num_resources_p);
 }
@@ -716,4 +716,4 @@ UCT_TL_COMPONENT_DEFINE(uct_ud_mlx5_tl,
                         "UD_MLX5_",
                         uct_ud_iface_config_table,
                         uct_ud_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_ib_pdc, &uct_ud_mlx5_tl);
+UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_ud_mlx5_tl);

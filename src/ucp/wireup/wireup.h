@@ -30,21 +30,21 @@ enum {
  */
 typedef struct {
     const char  *title;            /* Name of the criteria for debugging */
-    uint64_t    local_pd_flags;    /* Required local PD flags */
-    uint64_t    remote_pd_flags;   /* Required remote PD flags */
+    uint64_t    local_md_flags;    /* Required local MD flags */
+    uint64_t    remote_md_flags;   /* Required remote MD flags */
     uint64_t    local_iface_flags; /* Required local interface flags */
     uint64_t    remote_iface_flags;/* Required remote interface flags */
 
     /**
      * Calculates score of a potential transport.
      *
-     * @param [in]  pd_attr      Local PD attributes.
+     * @param [in]  md_attr      Local MD attributes.
      * @param [in]  iface_attr   Local interface attributes.
      * @param [in]  remote_info  Remote peer attributes.
      *
      * @return Transport score, the higher the better.
      */
-    double      (*calc_score)(const uct_pd_attr_t *pd_attr,
+    double      (*calc_score)(const uct_md_attr_t *md_attr,
                               const uct_iface_attr_t *iface_attr,
                               const ucp_wireup_iface_attr_t *remote_iface_attr);
 

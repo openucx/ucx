@@ -4,15 +4,15 @@
  * See file LICENSE for terms.
  */
 
-#include "cma_pd.h"
+#include "cma_md.h"
 #include "cma_iface.h"
 #include "cma_ep.h"
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <uct/sm/base/sm_iface.h>
 
 
-UCT_PD_REGISTER_TL(&uct_cma_pd_component, &uct_cma_tl);
+UCT_MD_REGISTER_TL(&uct_cma_md_component, &uct_cma_tl);
 
 static ucs_config_field_t uct_cma_iface_config_table[] = {
     {"", "ALLOC=huge,mmap,heap", NULL,
@@ -63,11 +63,11 @@ static uct_iface_ops_t uct_cma_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
 };
 
-static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_pd_h pd, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cma_iface_ops, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cma_iface_ops, md, worker,
                               tl_config UCS_STATS_ARG(NULL));
     return UCS_OK;
 }
@@ -78,12 +78,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cma_iface_t)
 
 UCS_CLASS_DEFINE(uct_cma_iface_t, uct_base_iface_t);
 
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_iface_t, uct_iface_t, uct_pd_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const char *, size_t,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
 
-static ucs_status_t uct_cma_query_tl_resources(uct_pd_h pd,
+static ucs_status_t uct_cma_query_tl_resources(uct_md_h md,
                                               uct_tl_resource_desc_t **resource_p,
                                               unsigned *num_resources_p)
 {
@@ -98,7 +98,7 @@ static ucs_status_t uct_cma_query_tl_resources(uct_pd_h pd,
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
                       UCT_CMA_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                      pd->component->name);
+                      md->component->name);
     resource->dev_type = UCT_DEVICE_TYPE_SHM;
 
     *num_resources_p = 1;

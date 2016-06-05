@@ -6,7 +6,7 @@
 
 #include "ib_iface.h"
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/type/component.h>
@@ -193,7 +193,7 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
     char *p, *endp;
 
     uct_ib_iface_fill_ah_attr(iface, ib_addr, src_path_bits, &ah_attr);
-    ah = ibv_create_ah(uct_ib_iface_pd(iface)->pd, &ah_attr);
+    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
 
     if (ah == NULL) {
         p    = buf;
@@ -353,16 +353,16 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
  * @param rx_hdr_len    Length of transport network header.
  * @param mss           Maximal segment size (transport limit).
  */
-UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
                     size_t mss, uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev = &ucs_derived_of(pd, uct_ib_pd_t)->dev;
+    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
     uint8_t port_num;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
                               &config->super UCS_STATS_ARG(dev->stats));
 
     status = uct_ib_device_find_port(dev, dev_name, &port_num);
