@@ -8,12 +8,11 @@
 #define UCT_UGNI_IFACE_H
 
 #include <gni_pub.h>
-#include <uct/ugni/base/ugni_pd.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <uct/ugni/base/ugni_iface.h>
 #include "ugni_udt_ep.h"
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 
 typedef void uct_ugni_udt_desc_t;
 

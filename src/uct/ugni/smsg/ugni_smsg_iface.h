@@ -8,9 +8,9 @@
 #define UCT_UGNI_IFACE_H
 
 #include <gni_pub.h>
-#include <uct/ugni/base/ugni_pd.h>
 #include <uct/ugni/base/ugni_device.h>
 #include <uct/ugni/base/ugni_iface.h>
+#include "../base/ugni_md.h"
 #include "ugni_smsg_ep.h"
 
 #define SMSG_MAX_SIZE 65535

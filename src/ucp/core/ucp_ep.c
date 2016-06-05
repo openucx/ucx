@@ -34,7 +34,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     memset(&key, 0, sizeof(key));
     key.rma_lane_map     = 0;
     key.amo_lane_map     = 0;
-    key.reachable_pd_map = 0;
+    key.reachable_md_map = 0;
     key.am_lane          = UCP_NULL_RESOURCE;
     key.wireup_msg_lane  = UCP_NULL_LANE;
     key.num_lanes        = 0;
@@ -78,7 +78,7 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
     memset(&key, 0, sizeof(key));
     key.rma_lane_map     = 1;
     key.amo_lane_map     = 1;
-    key.reachable_pd_map = 0; /* TODO */
+    key.reachable_md_map = 0; /* TODO */
     key.am_lane          = 0;
     key.wireup_msg_lane  = 0;
     key.lanes[0]         = UCP_NULL_RESOURCE;
@@ -206,7 +206,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->rma_lane_map     != key2->rma_lane_map) ||
         (key1->amo_lane_map     != key2->amo_lane_map) ||
         memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
-        (key1->reachable_pd_map != key2->reachable_pd_map) ||
+        (key1->reachable_md_map != key2->reachable_md_map) ||
         (key1->am_lane          != key2->am_lane) ||
         (key1->wireup_msg_lane  != key2->wireup_msg_lane))
     {
@@ -228,7 +228,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_ep_rma_config_t *rma_config;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t rsc_index;
-    uct_pd_attr_t *pd_attr;
+    uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
     double zcopy_thresh;
 
@@ -245,7 +245,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane];
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr  = &worker->iface_attrs[rsc_index];
-            pd_attr     = &context->pd_attrs[context->tl_rscs[rsc_index].pd_index];
+            md_attr     = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
                 config->max_eager_short  = iface_attr->cap.am.max_short -
@@ -259,16 +259,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             }
 
             if ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) &&
-                (pd_attr->cap.flags & UCT_PD_FLAG_REG))
+                (md_attr->cap.flags & UCT_MD_FLAG_REG))
             {
                 config->max_am_zcopy  = iface_attr->cap.am.max_zcopy;
 
                 if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
                     /* auto */
-                    zcopy_thresh = pd_attr->reg_cost.overhead / (
+                    zcopy_thresh = md_attr->reg_cost.overhead / (
                                             (1.0 / context->config.ext.bcopy_bw) -
                                             (1.0 / iface_attr->bandwidth) -
-                                            pd_attr->reg_cost.growth);
+                                            md_attr->reg_cost.growth);
                     if (zcopy_thresh < 0) {
                         config->zcopy_thresh      = SIZE_MAX;
                         config->sync_zcopy_thresh = -1;

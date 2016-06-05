@@ -9,8 +9,6 @@
 #define UCT_MM_IFACE_H
 
 #include "mm_def.h"
-#include "mm_pd.h"
-
 #include <uct/base/uct_iface.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/memtrack.h>
@@ -19,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <sys/shm.h>
 #include <sys/un.h>
+#include "mm_md.h"
 
 
 #define UCT_MM_TL_NAME "mm"

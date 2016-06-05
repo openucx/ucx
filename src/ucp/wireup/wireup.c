@@ -130,7 +130,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     return UCS_OK;
 }
 
-/* @return AMO lane amo_index in the pd map */
+/* @return AMO lane amo_index in the md map */
 static ucp_lane_index_t ucp_ep_get_amo_lane_index(const ucp_ep_config_key_t *key,
                                                   ucp_lane_index_t lane)
 {
@@ -155,7 +155,7 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, amo_index;
     ucs_status_t status;
-    ucp_pd_map_t UCS_V_UNUSED pd_map;
+    ucp_md_map_t UCS_V_UNUSED md_map;
 
     ucs_trace("ep %p: connect local transports", ep);
 
@@ -168,19 +168,19 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
         address = &address_list[tli[lane]];
         ucs_assert(address->tl_addr_len > 0);
 
-        /* Check that if the lane is used for RMA/AMO, destination pd index matches */
-        pd_map = ucp_lane_map_get_lane(ucp_ep_config(ep)->key.rma_lane_map, lane);
-        ucs_assertv((pd_map == 0) || (pd_map == UCS_BIT(address->pd_index)),
-                    "lane=%d ai=%d pd_map=0x%x pd_index=%d", lane, tli[lane],
-                    pd_map, address->pd_index);
+        /* Check that if the lane is used for RMA/AMO, destination md index matches */
+        md_map = ucp_lane_map_get_lane(ucp_ep_config(ep)->key.rma_lane_map, lane);
+        ucs_assertv((md_map == 0) || (md_map == UCS_BIT(address->md_index)),
+                    "lane=%d ai=%d md_map=0x%x md_index=%d", lane, tli[lane],
+                    md_map, address->md_index);
 
         amo_index = ucp_ep_get_amo_lane_index(&ucp_ep_config(ep)->key, lane);
         if (amo_index != UCP_NULL_LANE) {
-            pd_map = ucp_lane_map_get_lane(ucp_ep_config(ep)->key.amo_lane_map,
+            md_map = ucp_lane_map_get_lane(ucp_ep_config(ep)->key.amo_lane_map,
                                            amo_index);
-            ucs_assertv((pd_map == 0) || (pd_map == UCS_BIT(address->pd_index)),
-                        "lane=%d ai=%d pd_map=0x%x pd_index=%d", lane, tli[lane],
-                        pd_map, address->pd_index);
+            ucs_assertv((md_map == 0) || (md_map == UCS_BIT(address->md_index)),
+                        "lane=%d ai=%d md_map=0x%x md_index=%d", lane, tli[lane],
+                        md_map, address->md_index);
         }
 
         status = uct_ep_connect_to_ep(ep->uct_eps[lane], address->dev_addr,
@@ -449,17 +449,17 @@ static void ucp_wireup_print_config(ucp_context_h context,
     char lane_info[128], *p, *endp;
     ucp_lane_index_t lane, amo_index;
     ucp_rsc_index_t rsc_index;
-    ucp_pd_map_t pd_map;
+    ucp_md_map_t md_map;
 
     if (!ucs_log_enabled(UCS_LOG_LEVEL_DEBUG)) {
         return;
     }
 
     ucs_debug("%s: am_lane %d wirep_lane %d rma_lane_map 0x%"PRIx64
-              " amo_lane_map 0x%"PRIx64" reachable_pds 0x%x",
+              " amo_lane_map 0x%"PRIx64" reachable_mds 0x%x",
               title, key->am_lane, key->wireup_msg_lane,
               key->rma_lane_map, key->amo_lane_map,
-              key->reachable_pd_map);
+              key->reachable_md_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
         p         = lane_info;
@@ -476,17 +476,17 @@ static void ucp_wireup_print_config(ucp_context_h context,
             p += strlen(p);
         }
 
-        pd_map = ucp_lane_map_get_lane(key->rma_lane_map, lane);
-        if (pd_map) {
-            snprintf(p, endp - p, "[rma->pd%d]", ucs_ffs64(pd_map));
+        md_map = ucp_lane_map_get_lane(key->rma_lane_map, lane);
+        if (md_map) {
+            snprintf(p, endp - p, "[rma->md%d]", ucs_ffs64(md_map));
             p += strlen(p);
         }
 
         amo_index = ucp_ep_get_amo_lane_index(key, lane);
         if (amo_index != UCP_NULL_LANE) {
-            pd_map = ucp_lane_map_get_lane(key->amo_lane_map, amo_index);
-            if (pd_map) {
-                snprintf(p, endp - p, "[amo[%d]->pd%d]", amo_index, ucs_ffs64(pd_map));
+            md_map = ucp_lane_map_get_lane(key->amo_lane_map, amo_index);
+            if (md_map) {
+                snprintf(p, endp - p, "[amo[%d]->md%d]", amo_index, ucs_ffs64(md_map));
                 p += strlen(p);
             }
         }
@@ -523,7 +523,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
         goto err;
     }
 
-    key.reachable_pd_map |= ucp_ep_config(ep)->key.reachable_pd_map;
+    key.reachable_md_map |= ucp_ep_config(ep)->key.reachable_md_map;
 
     new_cfg_index = ucp_worker_get_ep_config(worker, &key);
     if ((ep->cfg_index == new_cfg_index)) {
@@ -658,7 +658,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                 break;
             }
         }
-        snprintf(p, end - p, "/pd[%d]", ae->pd_index);
+        snprintf(p, end - p, "/md[%d]", ae->md_index);
         p += strlen(p);
 
         for (lane = 0; lane < UCP_MAX_LANES; ++lane) {

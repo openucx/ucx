@@ -7,7 +7,7 @@
 
 #include <uct/api/uct.h>
 #include "uct_iface.h"
-#include "uct_pd.h"
+#include "uct_md.h"
 
 
 #if ENABLE_STATS
@@ -223,7 +223,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
@@ -235,7 +235,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_pd_h pd,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
-    self->pd            = pd;
+    self->md            = md;
     self->worker        = worker;
     self->am_tracer     = NULL;
     self->am_tracer_arg = NULL;
@@ -353,7 +353,7 @@ ucs_config_field_t uct_iface_config_table[] = {
    "up to this limit, the actual size can be lower due to transport constraints.",
    ucs_offsetof(uct_iface_config_t, max_bcopy), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"ALLOC", "huge,pd,mmap,heap",
+  {"ALLOC", "huge,md,mmap,heap",
    "Priority of methods to allocate intermediate buffers for communication",
    ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
 

@@ -8,7 +8,7 @@
 
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_iface.h>
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
@@ -216,7 +216,7 @@ static void uct_cm_iface_release_desc(uct_iface_t *tl_iface, void *desc)
     ucs_free(desc - iface->super.config.rx_headroom_offset);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
@@ -226,7 +226,7 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_pd_h pd, uct_worker_h worker,
 
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, md, worker,
                               dev_name, rx_headroom, 0 /* rx_priv_len */,
                               0 /* rx_hdr_len */, 1 /* tx_cq_len */,
                               IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
@@ -332,7 +332,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_cm_iface_t, uct_ib_iface_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_iface_t, uct_iface_t, uct_pd_h, uct_worker_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
                                  const char*, size_t, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_iface_t, uct_iface_t);
 
@@ -388,11 +388,11 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .arm_rx_cq                = (void*)ucs_empty_function_return_success,
 };
 
-static ucs_status_t uct_cm_query_resources(uct_pd_h pd,
+static ucs_status_t uct_cm_query_resources(uct_md_h md,
                                            uct_tl_resource_desc_t **resources_p,
                                            unsigned *num_resources_p)
 {
-    return uct_ib_device_query_tl_resources(&ucs_derived_of(pd, uct_ib_pd_t)->dev,
+    return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
                                             "cm", 0, /* TODO require IB link layer? */
                                             resources_p, num_resources_p);
 }
@@ -404,4 +404,4 @@ UCT_TL_COMPONENT_DEFINE(uct_cm_tl,
                         "CM_",
                         uct_cm_iface_config_table,
                         uct_cm_iface_config_t);
-UCT_PD_REGISTER_TL(&uct_ib_pdc, &uct_cm_tl);
+UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_cm_tl);

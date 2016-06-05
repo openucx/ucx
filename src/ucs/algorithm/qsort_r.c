@@ -96,7 +96,7 @@ ucs_qsort_med3(char *a, char *b, char *c, ucs_qsort_r_compare_cb_t *compare,
 void ucs_qsort_r(void *base, size_t nmemb, size_t size,
                  ucs_qsort_r_compare_cb_t *compare, void *arg)
 {
-    char *pa, *pb, *pc, *pd, *pl, *pm, *pn;
+    char *pa, *pb, *pc, *md, *pl, *pm, *pn;
     int d, r, swaptype, swap_cnt;
 
 loop:
@@ -129,7 +129,7 @@ loop:
     ucs_qsort_swap(base, pm);
     pa = pb = (char*)base + size;
 
-    pc = pd = (char*)base + (nmemb - 1) * size;
+    pc = md = (char*)base + (nmemb - 1) * size;
     for (;;) {
         while ((pb <= pc) && (r = compare(pb, base, arg)) <= 0) {
             if (r == 0) {
@@ -142,8 +142,8 @@ loop:
         while ((pb <= pc) && (r = compare(pc, base, arg)) >= 0) {
             if (r == 0) {
                 swap_cnt = 1;
-                ucs_qsort_swap(pc, pd);
-                pd -= size;
+                ucs_qsort_swap(pc, md);
+                md -= size;
             }
             pc -= size;
         }
@@ -171,14 +171,14 @@ loop:
     r  = ucs_min(pa - (char*)base, pb - pa);
     ucs_qsort_vecswap(base, pb - r, r);
 
-    r  = ucs_min(pd - pc, pn - pd - size);
+    r  = ucs_min(md - pc, pn - md - size);
     ucs_qsort_vecswap(pb, pn - r, r);
 
     if ((r = pb - pa) > size) {
         ucs_qsort_r(base, r / size, size, compare, arg);
     }
 
-    if ((r = pd - pc) > size) {
+    if ((r = md - pc) > size) {
         /* Iterate rather than recurse to save stack space */
         base  = pn - r;
         nmemb = r / size;

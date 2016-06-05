@@ -63,7 +63,7 @@ static const char *size_limit_to_str(size_t size)
     }
 }
 
-static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
+static void print_iface_info(uct_worker_h worker, uct_md_h md,
                              uct_tl_resource_desc_t *resource)
 {
     uct_iface_config_t *iface_config;
@@ -79,7 +79,7 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
 
     printf("#   Device: %s\n", resource->dev_name);
 
-    status = uct_iface_open(pd, worker, resource->tl_name, resource->dev_name,
+    status = uct_iface_open(md, worker, resource->tl_name, resource->dev_name,
                             0, iface_config, &iface);
     uct_config_release(iface_config);
 
@@ -181,7 +181,7 @@ static void print_iface_info(uct_worker_h worker, uct_pd_h pd,
     printf("#\n");
 }
 
-static ucs_status_t print_tl_info(uct_pd_h pd, const char *tl_name,
+static ucs_status_t print_tl_info(uct_md_h md, const char *tl_name,
                                   uct_tl_resource_desc_t *resources,
                                   unsigned num_resources,
                                   int print_opts,
@@ -212,7 +212,7 @@ static ucs_status_t print_tl_info(uct_pd_h pd, const char *tl_name,
     }
     for (i = 0; i < num_resources; ++i) {
         ucs_assert(!strcmp(tl_name, resources[i].tl_name));
-        print_iface_info(worker, pd, &resources[i]);
+        print_iface_info(worker, md, &resources[i]);
     }
 
     uct_worker_destroy(worker);
@@ -221,7 +221,7 @@ out:
     return status;
 }
 
-static void print_pd_info(const char *pd_name, int print_opts,
+static void print_md_info(const char *md_name, int print_opts,
                           ucs_config_print_flags_t print_flags,
                           const char *req_tl_name)
 {
@@ -229,26 +229,26 @@ static void print_pd_info(const char *pd_name, int print_opts,
     unsigned resource_index, j, num_resources, count;
     ucs_status_t status;
     const char *tl_name;
-    uct_pd_config_t *pd_config;
-    uct_pd_attr_t pd_attr;
-    uct_pd_h pd;
+    uct_md_config_t *md_config;
+    uct_md_attr_t md_attr;
+    uct_md_h md;
 
-    status = uct_pd_config_read(pd_name, NULL, NULL, &pd_config);
+    status = uct_md_config_read(md_name, NULL, NULL, &md_config);
     if (status != UCS_OK) {
         goto out;
     }
 
-    status = uct_pd_open(pd_name, pd_config, &pd);
-    uct_config_release(pd_config);
+    status = uct_md_open(md_name, md_config, &md);
+    uct_config_release(md_config);
     if (status != UCS_OK) {
-        printf("# < failed to open protection domain %s >\n", pd_name);
+        printf("# < failed to open memory domain %s >\n", md_name);
         goto out;
     }
 
-    status = uct_pd_query_tl_resources(pd, &resources, &num_resources);
+    status = uct_md_query_tl_resources(md, &resources, &num_resources);
     if (status != UCS_OK) {
-        printf("#   < failed to query protection domain resources >\n");
-        goto out_close_pd;
+        printf("#   < failed to query memory domain resources >\n");
+        goto out_close_md;
     }
 
     if (req_tl_name != NULL) {
@@ -260,33 +260,33 @@ static void print_pd_info(const char *pd_name, int print_opts,
             ++resource_index;
         }
         if (resource_index == num_resources) {
-            /* no selected transport on the PD */
+            /* no selected transport on the MD */
             goto out_free_list;
         }
     }
 
-    status = uct_pd_query(pd, &pd_attr);
+    status = uct_md_query(md, &md_attr);
     if (status != UCS_OK) {
-        printf("# < failed to query protection domain >\n");
+        printf("# < failed to query memory domain >\n");
         goto out_free_list;
     } else {
         printf("#\n");
-        printf("# Protection domain: %s\n", pd_name);
-        printf("#   component:        %s\n", pd_attr.component_name);
-        if (pd_attr.cap.flags & UCT_PD_FLAG_ALLOC) {
+        printf("# Memory domain: %s\n", md_name);
+        printf("#   component:        %s\n", md_attr.component_name);
+        if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
             printf("#   allocate:         %s\n",
-                   size_limit_to_str(pd_attr.cap.max_alloc));
+                   size_limit_to_str(md_attr.cap.max_alloc));
         }
-        if (pd_attr.cap.flags & UCT_PD_FLAG_REG) {
+        if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
             printf("#   register:         %s, cost: %.0f",
-                   size_limit_to_str(pd_attr.cap.max_reg),
-                   pd_attr.reg_cost.overhead * 1e9);
-            if (pd_attr.reg_cost.growth * 1e9 > 1e-3) {
-                printf("+(%.3f*<SIZE>)", pd_attr.reg_cost.growth * 1e9);
+                   size_limit_to_str(md_attr.cap.max_reg),
+                   md_attr.reg_cost.overhead * 1e9);
+            if (md_attr.reg_cost.growth * 1e9 > 1e-3) {
+                printf("+(%.3f*<SIZE>)", md_attr.reg_cost.growth * 1e9);
             }
             printf(" nsec\n");
         }
-        printf("#   remote key:       %zu bytes\n", pd_attr.rkey_packed_size);
+        printf("#   remote key:       %zu bytes\n", md_attr.rkey_packed_size);
     }
 
     if (num_resources == 0) {
@@ -309,7 +309,7 @@ static void print_pd_info(const char *pd_name, int print_opts,
         }
 
         if ((req_tl_name == NULL) || !strcmp(tl_name, req_tl_name)) {
-            print_tl_info(pd, tl_name, &resources[resource_index], count,
+            print_tl_info(md, tl_name, &resources[resource_index], count,
                           print_opts, print_flags);
         }
 
@@ -318,8 +318,8 @@ static void print_pd_info(const char *pd_name, int print_opts,
 
 out_free_list:
     uct_release_tl_resource_list(resources);
-out_close_pd:
-    uct_pd_close(pd);
+out_close_md:
+    uct_md_close(md);
 out:
     ;
 }
@@ -327,21 +327,21 @@ out:
 void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
                     const char *req_tl_name)
 {
-    uct_pd_resource_desc_t *resources;
+    uct_md_resource_desc_t *resources;
     unsigned i, num_resources;
     ucs_status_t status;
 
-    status = uct_query_pd_resources(&resources, &num_resources);
+    status = uct_query_md_resources(&resources, &num_resources);
     if (status != UCS_OK) {
-        printf("#   < failed to query PD resources >\n");
+        printf("#   < failed to query MD resources >\n");
         goto out;
     }
 
     for (i = 0; i < num_resources; ++i) {
-        print_pd_info(resources[i].pd_name, print_opts, print_flags, req_tl_name);
+        print_md_info(resources[i].md_name, print_opts, print_flags, req_tl_name);
     }
 
-    uct_release_pd_resource_list(resources);
+    uct_release_md_resource_list(resources);
 out:
     ;
 }

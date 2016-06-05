@@ -263,7 +263,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
                                                UCT_UD_MIN_INLINE);
 
 #if HAVE_VERBS_EXP_H
-    qp_init_attr.pd                  = uct_ib_iface_pd(&self->super)->pd;
+    qp_init_attr.pd                  = uct_ib_iface_md(&self->super)->pd;
     qp_init_attr.comp_mask           = IBV_QP_INIT_ATTR_PD;
     /* TODO: inline rcv */
 #if 0
@@ -383,7 +383,7 @@ void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface)
     ucs_twheel_cleanup(&iface->async.slow_timer);
 }
 
-UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned ud_rx_priv_len, uct_ud_iface_config_t *config)
 {
@@ -407,7 +407,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_pd_h pd,
         return UCS_ERR_INVALID_PARAM; 
     }
 
-    status = uct_ib_device_mtu(dev_name, pd, &mtu);
+    status = uct_ib_device_mtu(dev_name, md, &mtu);
     if (status != UCS_OK) {
         return status;
     }
@@ -416,7 +416,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_pd_h pd,
                   sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t);
     rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, pd, worker, dev_name,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, dev_name,
                               rx_headroom, rx_priv_len, rx_hdr_len,
                               config->super.tx.queue_len, mtu, &config->super);
  

@@ -198,7 +198,7 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
  * find device mtu. This function can be used before ib
  * interface is created.
  */
-ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_pd_h pd, int *p_mtu);
+ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu);
 
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,

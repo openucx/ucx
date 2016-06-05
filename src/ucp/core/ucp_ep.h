@@ -31,22 +31,22 @@ enum {
  */
 typedef struct ucp_ep_config_key {
     /* Lookup for rma and amo lanes:
-     * Every group of UCP_PD_INDEX_BITS consecutive bits in the map (in total
+     * Every group of UCP_MD_INDEX_BITS consecutive bits in the map (in total
      * UCP_MAX_LANES such groups) is a bitmap. All bits in it are zero, except
-     * the pd_index-th bit of that lane. If the lane is unused, all bits are zero.
-     * For example, the bitmap '00000100' means the lane remote pd_index is 2.
+     * the md_index-th bit of that lane. If the lane is unused, all bits are zero.
+     * For example, the bitmap '00000100' means the lane remote md_index is 2.
      * It allows to quickly lookup
      */
-    ucp_pd_lane_map_t      rma_lane_map;
+    ucp_md_lane_map_t      rma_lane_map;
 
     /* AMO lanes point to another indirect lookup array */
-    ucp_pd_lane_map_t      amo_lane_map;
+    ucp_md_lane_map_t      amo_lane_map;
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
 
-    /* Bitmap of remote pds which are reachable from this endpoint (with any set
+    /* Bitmap of remote mds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future)
      */
-    ucp_pd_map_t           reachable_pd_map;
+    ucp_md_map_t           reachable_md_map;
 
     ucp_lane_index_t       am_lane;             /* Lane for AM (can be NULL) */
     ucp_lane_index_t       wireup_msg_lane;     /* Lane for wireup messages (can be NULL) */

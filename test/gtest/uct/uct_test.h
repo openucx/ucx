@@ -21,7 +21,7 @@ extern "C" {
 struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
-    std::string pd_name;
+    std::string md_name;
     cpu_set_t   local_cpus;
     std::string tl_name;
     std::string dev_name;
@@ -47,7 +47,7 @@ protected:
     class entity {
     public:
         entity(const resource& resource, uct_iface_config_t *iface_config,
-               size_t rx_headroom, uct_pd_config_t *pd_config);
+               size_t rx_headroom, uct_md_config_t *md_config);
 
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle) const;
@@ -57,7 +57,7 @@ protected:
 
         void progress() const;
 
-        uct_pd_h pd() const;
+        uct_md_h pd() const;
 
         uct_worker_h worker() const;
 
@@ -95,7 +95,7 @@ protected:
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
 
-        ucs::handle<uct_pd_h>      m_pd;
+        ucs::handle<uct_md_h>      m_pd;
         mutable async_wrapper      m_async;
         ucs::handle<uct_worker_h>  m_worker;
         ucs::handle<uct_iface_h>   m_iface;
@@ -163,7 +163,7 @@ protected:
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
-    uct_pd_config_t         *m_pd_config;
+    uct_md_config_t         *m_md_config;
 
 };
 
