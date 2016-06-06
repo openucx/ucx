@@ -71,7 +71,8 @@ libuct_la_SOURCES += \
 	ib/rc/base/rc_ep.c \
 	ib/rc/base/rc_iface.c \
 	ib/rc/verbs/rc_verbs_ep.c \
-	ib/rc/verbs/rc_verbs_iface.c
+	ib/rc/verbs/rc_verbs_iface.c \
+	ib/rc/verbs/rc_verbs_common.c
 
 if HAVE_MLX5_HW
 noinst_HEADERS += \

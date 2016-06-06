@@ -313,44 +313,27 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
-    uct_ib_iface_recv_desc_t *desc;
-    int i, ret;
+    int i;
     char *packet;
     ucs_status_t status;
     unsigned num_wcs = iface->super.super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
 
-
-    ret = ibv_poll_cq(iface->super.super.recv_cq, num_wcs, wc);
-    if (ret == 0) {
-        status = UCS_ERR_NO_PROGRESS;
+    status = uct_ib_poll_cq(iface->super.super.recv_cq, &num_wcs, wc);
+    if (status != UCS_OK) {
         goto out;
-    } 
-    if (ucs_unlikely(ret < 0)) {
-        ucs_fatal("Failed to poll receive CQ");
     }
 
-    for (i = 0; i < ret; ++i) {
-        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            ucs_fatal("Receive completion with error: %s", 
-                      ibv_wc_status_str(wc[i].status));
-        }
+    UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
 
-        desc = (void*)wc[i].wr_id;
-        ucs_trace_data("pkt rcvd: buf=%p len=%d", desc, wc[i].byte_len);
-        packet = uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
-        VALGRIND_MAKE_MEM_DEFINED(packet, wc[i].byte_len);
-
-        UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_RX,
-                              "uct_ud_verbs_iface_poll_rx",
-                              wc[i].wr_id, wc[i].status);
         uct_ud_ep_process_rx(&iface->super, 
                              (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                              wc[i].byte_len - UCT_IB_GRH_LEN,
-                             (uct_ud_recv_skb_t *)desc, is_async); 
+                             (uct_ud_recv_skb_t *)wc[i].wr_id, 
+                             is_async); 
+
     }
-    iface->super.rx.available += ret;
-    status = UCS_OK;
+    iface->super.rx.available += num_wcs;
 out:
     uct_ud_verbs_iface_post_recv(iface);
     return status;
