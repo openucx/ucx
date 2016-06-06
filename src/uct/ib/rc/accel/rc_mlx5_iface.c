@@ -346,6 +346,7 @@ static ucs_status_t uct_rc_mlx5_iface_init_rx(uct_rc_mlx5_iface_t *iface)
     iface->rx.ready_idx       = -1;
     iface->rx.sw_pi           = -1;
     iface->rx.mask            = srq_info.tail;
+    iface->rx.tail            = srq_info.tail;
 
     for (i = srq_info.head; i <= srq_info.tail; ++i) {
         seg = uct_rc_mlx5_iface_get_srq_wqe(iface, i);
@@ -355,6 +356,27 @@ static ucs_status_t uct_rc_mlx5_iface_init_rx(uct_rc_mlx5_iface_t *iface)
     }
 
     return UCS_OK;
+}
+
+void uct_rc_mlx5_iface_clean_rx(uct_rc_mlx5_iface_t *iface)
+{
+    uct_ib_mlx5_srq_info_t srq_info;
+    uct_rc_mlx5_srq_seg_t *seg;
+    ucs_status_t status;
+    unsigned index, next;
+
+    status = uct_ib_mlx5_get_srq_info(iface->super.rx.srq, &srq_info);
+    ucs_assert_always(status == UCS_OK);
+
+    /* Restore order of all segments which the driver has put on its free list */
+    index = iface->rx.tail;
+    while (index != srq_info.tail) {
+        seg = uct_rc_mlx5_iface_get_srq_wqe(iface, index);
+        next = ntohs(seg->srq.next_wqe_index);
+        seg->srq.next_wqe_index = htons((index + 1) & iface->rx.mask);
+        index = next;
+    }
+    iface->rx.tail = index;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_pd_h pd, uct_worker_h worker,

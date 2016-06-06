@@ -89,6 +89,7 @@ typedef struct {
         uint16_t           ready_idx;  /* what is ready to be posted to hw */
         uint16_t           sw_pi;      /* what is posted to hw */
         uint16_t           mask;
+        uint16_t           tail;       /* tail in the driver */
     } rx;
 
     UCS_STATS_NODE_DECLARE(stats);
@@ -165,5 +166,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_rc_ep_t *rc_ep);
 
 void uct_rc_mlx5_iface_progress(void *arg);
+
+void uct_rc_mlx5_iface_clean_rx(uct_rc_mlx5_iface_t *iface);
 
 #endif
