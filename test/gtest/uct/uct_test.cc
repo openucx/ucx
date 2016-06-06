@@ -27,14 +27,14 @@ uct_test::uct_test() {
     status = uct_iface_config_read(GetParam()->tl_name.c_str(), NULL, NULL,
                                    &m_iface_config);
     ASSERT_UCS_OK(status);
-    status = uct_pd_config_read(GetParam()->pd_name.c_str(), NULL, NULL,
-                                &m_pd_config);
+    status = uct_md_config_read(GetParam()->md_name.c_str(), NULL, NULL,
+                                &m_md_config);
     ASSERT_UCS_OK(status);
 }
 
 uct_test::~uct_test() {
     uct_config_release(m_iface_config);
-    uct_config_release(m_pd_config);
+    uct_config_release(m_md_config);
 }
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name,
@@ -42,47 +42,47 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
     static std::vector<resource> all_resources;
 
     if (all_resources.empty()) {
-        uct_pd_resource_desc_t *pd_resources;
-        unsigned num_pd_resources;
+        uct_md_resource_desc_t *md_resources;
+        unsigned num_md_resources;
         uct_tl_resource_desc_t *tl_resources;
         unsigned num_tl_resources;
         ucs_status_t status;
 
-        status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
+        status = uct_query_md_resources(&md_resources, &num_md_resources);
         ASSERT_UCS_OK(status);
 
-        for (unsigned i = 0; i < num_pd_resources; ++i) {
-            uct_pd_h pd;
-            uct_pd_config_t *pd_config;
-            status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL,
-                                        &pd_config);
+        for (unsigned i = 0; i < num_md_resources; ++i) {
+            uct_md_h pd;
+            uct_md_config_t *md_config;
+            status = uct_md_config_read(md_resources[i].md_name, NULL, NULL,
+                                        &md_config);
             ASSERT_UCS_OK(status);
 
-            status = uct_pd_open(pd_resources[i].pd_name, pd_config, &pd);
-            uct_config_release(pd_config);
+            status = uct_md_open(md_resources[i].md_name, md_config, &pd);
+            uct_config_release(md_config);
             ASSERT_UCS_OK(status);
 
-            uct_pd_attr_t pd_attr;
-            status = uct_pd_query(pd, &pd_attr);
+            uct_md_attr_t md_attr;
+            status = uct_md_query(pd, &md_attr);
             ASSERT_UCS_OK(status);
 
-            status = uct_pd_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+            status = uct_md_query_tl_resources(pd, &tl_resources, &num_tl_resources);
             ASSERT_UCS_OK(status);
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
                 resource rsc;
-                rsc.pd_name    = pd_resources[i].pd_name,
-                rsc.local_cpus = pd_attr.local_cpus,
+                rsc.md_name    = md_resources[i].md_name,
+                rsc.local_cpus = md_attr.local_cpus,
                 rsc.tl_name    = tl_resources[j].tl_name,
                 rsc.dev_name   = tl_resources[j].dev_name;
                 all_resources.push_back(rsc);
             }
 
             uct_release_tl_resource_list(tl_resources);
-            uct_pd_close(pd);
+            uct_md_close(pd);
         }
 
-        uct_release_pd_resource_list(pd_resources);
+        uct_release_md_resource_list(md_resources);
     }
 
     return filter_resources(all_resources, tl_name);
@@ -115,7 +115,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
     status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
 
     if (status == UCS_ERR_NO_ELEM) {
-        status = uct_config_modify(m_pd_config, name.c_str(), value.c_str());
+        status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
         if (status == UCS_ERR_NO_ELEM) {
             test_base::modify_config(name, value);
         } else if (status != UCS_OK) {
@@ -131,7 +131,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
 
 uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
     entity *new_ent = new entity(*GetParam(), m_iface_config, rx_headroom,
-                                 m_pd_config);
+                                 m_md_config);
     return new_ent;
 }
 
@@ -184,14 +184,14 @@ void uct_test::twait(int delta_ms) {
 }
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
-                         size_t rx_headroom, uct_pd_config_t *pd_config) {
+                         size_t rx_headroom, uct_md_config_t *md_config) {
     ucs_status_t status;
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
 
-    UCS_TEST_CREATE_HANDLE(uct_pd_h, m_pd, uct_pd_close,
-                           uct_pd_open, resource.pd_name.c_str(), pd_config);
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_pd, uct_md_close,
+                           uct_md_open, resource.md_name.c_str(), md_config);
 
     UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
                            uct_iface_open, m_pd, m_worker, resource.tl_name.c_str(),
@@ -206,17 +206,17 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                  uct_rkey_bundle *rkey_bundle) const {
     ucs_status_t status;
     void *rkey_buffer;
-    uct_pd_attr_t pd_attr;
+    uct_md_attr_t md_attr;
 
-    status = uct_pd_query(m_pd, &pd_attr);
+    status = uct_md_query(m_pd, &md_attr);
     ASSERT_UCS_OK(status);
 
     status = uct_iface_mem_alloc(m_iface, length, "test", mem);
     ASSERT_UCS_OK(status);
 
-    rkey_buffer = malloc(pd_attr.rkey_packed_size);
+    rkey_buffer = malloc(md_attr.rkey_packed_size);
 
-    status = uct_pd_mkey_pack(m_pd, mem->memh, rkey_buffer);
+    status = uct_md_mkey_pack(m_pd, mem->memh, rkey_buffer);
     ASSERT_UCS_OK(status);
 
     status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
@@ -240,7 +240,7 @@ void uct_test::entity::progress() const {
     m_async.check_miss();
 }
 
-uct_pd_h uct_test::entity::pd() const {
+uct_md_h uct_test::entity::pd() const {
     return m_pd;
 }
 
@@ -420,7 +420,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
     } else {
         m_mem.method  = UCT_ALLOC_METHOD_LAST;
         m_mem.address = NULL;
-        m_mem.pd      = NULL;
+        m_mem.md      = NULL;
         m_mem.memh    = UCT_INVALID_MEM_HANDLE;
         m_mem.length  = 0;
         m_buf         = NULL;

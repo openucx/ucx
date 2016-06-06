@@ -102,7 +102,7 @@ ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_ugni_query_tl_resources(uct_pd_h pd, const char *tl_name,
+ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p)
 {
@@ -265,7 +265,7 @@ ucs_status_t uct_ugni_init_nic(int device_index,
     *domain_id = job_info.pmi_rank_id + job_info.pmi_num_of_ranks * ugni_domain_global_counter;
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
         GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL;
-    ucs_debug("Creating new PD domain with id %d (%d + %d * %d)",
+    ucs_debug("Creating new command domain with id %d (%d + %d * %d)",
               *domain_id, job_info.pmi_rank_id,
               job_info.pmi_num_of_ranks, ugni_domain_global_counter);
     ugni_rc = GNI_CdmCreate(*domain_id, job_info.ptag, job_info.cookie,
@@ -347,7 +347,7 @@ ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface)
     return UCS_OK;
 }
 
-UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
+UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, uct_iface_ops_t *uct_ugni_iface_ops,
                            const uct_iface_config_t *tl_config
                            UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
@@ -360,7 +360,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
     return UCS_ERR_NO_DEVICE;
   }
 
-  UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, pd, worker,
+  UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, md, worker,
                              tl_config UCS_STATS_ARG(NULL));
 
   self->dev      = dev;
@@ -376,7 +376,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_pd_h pd, uct_worker_h worker,
 }
 
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
-                          uct_pd_h, uct_worker_h,
+                          uct_md_h, uct_worker_h,
                           const char*, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t *));
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t){

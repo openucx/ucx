@@ -22,20 +22,20 @@
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
 
-/* PDs */
+/* MDs */
 #define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE(UCS_PP_TOKENPASTE(uint, _bits), _t)
-#define UCP_PD_INDEX_BITS            8  /* How many bits are in PD index */
-#define UCP_MAX_PDS                  (1ul << UCP_PD_INDEX_BITS)
-UCP_UINT_TYPE(UCP_PD_INDEX_BITS)     ucp_pd_map_t;
+#define UCP_MD_INDEX_BITS            8  /* How many bits are in MD index */
+#define UCP_MAX_MDS                  (1ul << UCP_MD_INDEX_BITS)
+UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 /* Lanes */
 #define UCP_MAX_LANES                8
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
 
-/* PD-lane map */
-#define UCP_PD_LANE_MAP_BITS         64 /* should be UCP_PD_INDEX_BITS * UCP_MAX_LANES */
-UCP_UINT_TYPE(UCP_PD_LANE_MAP_BITS)  ucp_pd_lane_map_t;
+/* MD-lane map */
+#define UCP_MD_LANE_MAP_BITS         64 /* should be UCP_MD_INDEX_BITS * UCP_MAX_LANES */
+UCP_UINT_TYPE(UCP_MD_LANE_MAP_BITS)  ucp_md_lane_map_t;
 
 /* Forward declarations */
 typedef struct ucp_request           ucp_request_t;
@@ -106,7 +106,7 @@ typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
  */
 typedef struct ucp_tl_resource_desc {
     uct_tl_resource_desc_t        tl_rsc;   /* UCT resource descriptor */
-    ucp_rsc_index_t               pd_index; /* Protection domain index (within the context) */
+    ucp_rsc_index_t               md_index; /* Memory domain index (within the context) */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
 } ucp_tl_resource_desc_t;
 
@@ -124,10 +124,10 @@ typedef struct ucp_tl_alias {
  * UCP context
  */
 typedef struct ucp_context {
-    uct_pd_resource_desc_t        *pd_rscs;   /* Protection domain resources */
-    uct_pd_h                      *pds;       /* Protection domain handles */
-    uct_pd_attr_t                 *pd_attrs;  /* Protection domain attributes */
-    ucp_rsc_index_t               num_pds;    /* Number of protection domains */
+    uct_md_resource_desc_t        *md_rscs;   /* Memory domain resources */
+    uct_md_h                      *mds;       /* Memory domain handles */
+    uct_md_attr_t                 *md_attrs;  /* Memory domain attributes */
+    ucp_rsc_index_t               num_mds;    /* Number of memory domains */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
@@ -148,13 +148,13 @@ typedef struct ucp_context {
             ucp_request_cleanup_callback_t cleanup; /* Cleanup user callback */
         } request;
 
-        /* Array of allocation methods, a mix of PD allocation methods and non-PD */
+        /* Array of allocation methods, a mix of MD allocation methods and non-MD */
         struct {
             /* Allocation method */
             uct_alloc_method_t    method;
 
-            /* PD name to use, if method is PD */
-            char                  pdc_name[UCT_PD_COMPONENT_NAME_MAX];
+            /* MD name to use, if method is MD */
+            char                  mdc_name[UCT_MD_COMPONENT_NAME_MAX];
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 

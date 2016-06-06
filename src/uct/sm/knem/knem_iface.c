@@ -4,15 +4,15 @@
  * See file LICENSE for terms.
  */
 
-#include "knem_pd.h"
+#include "knem_md.h"
 #include "knem_iface.h"
 #include "knem_ep.h"
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <uct/sm/base/sm_iface.h>
 
 
-UCT_PD_REGISTER_TL(&uct_knem_pd_component, &uct_knem_tl);
+UCT_MD_REGISTER_TL(&uct_knem_md_component, &uct_knem_tl);
 
 static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
                                          uct_iface_attr_t *iface_attr)
@@ -48,13 +48,13 @@ static uct_iface_ops_t uct_knem_iface_ops = {
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_ep_t),
 };
 
-static UCS_CLASS_INIT_FUNC(uct_knem_iface_t, uct_pd_h pd, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_knem_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_knem_iface_ops, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_knem_iface_ops, md, worker,
                               tl_config UCS_STATS_ARG(NULL));
-    self->knem_pd = (uct_knem_pd_t *)pd;
+    self->knem_md = (uct_knem_md_t *)md;
     return UCS_OK;
 }
 
@@ -65,12 +65,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_knem_iface_t)
 
 UCS_CLASS_DEFINE(uct_knem_iface_t, uct_base_iface_t);
 
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_knem_iface_t, uct_iface_t, uct_pd_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_knem_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const char *, size_t,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_knem_iface_t, uct_iface_t);
 
-static ucs_status_t uct_knem_query_tl_resources(uct_pd_h pd,
+static ucs_status_t uct_knem_query_tl_resources(uct_md_h md,
                                                 uct_tl_resource_desc_t **resource_p,
                                                 unsigned *num_resources_p)
 {
@@ -85,7 +85,7 @@ static ucs_status_t uct_knem_query_tl_resources(uct_pd_h pd,
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
                       UCT_KNEM_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                      pd->component->name);
+                      md->component->name);
     resource->dev_type = UCT_DEVICE_TYPE_SHM;
 
     *num_resources_p = 1;

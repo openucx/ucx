@@ -7,7 +7,7 @@
 #include "sm_iface.h"
 
 #include <uct/base/uct_iface.h>
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <ucs/sys/sys.h>
 
 
@@ -17,7 +17,7 @@ static uint64_t uct_sm_iface_node_guid(uct_base_iface_t *iface)
      * they won't seem reachable one to another. Their 'name' will create the
      * uniqueness in the address */
     return ucs_machine_guid() *
-           ucs_string_to_id(iface->pd->component->name);
+           ucs_string_to_id(iface->md->component->name);
 }
 
 ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,

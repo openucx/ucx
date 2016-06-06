@@ -6,44 +6,44 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_IB_PD_H_
-#define UCT_IB_PD_H_
+#ifndef UCT_IB_MD_H_
+#define UCT_IB_MD_H_
 
 #include "ib_device.h"
 
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/rcache.h>
 
 
 /**
- * IB PD statistics counters
+ * IB MD statistics counters
  */
 enum {
-    UCT_IB_PD_STAT_MEM_ALLOC,
-    UCT_IB_PD_STAT_MEM_REG,
-    UCT_IB_PD_STAT_LAST
+    UCT_IB_MD_STAT_MEM_ALLOC,
+    UCT_IB_MD_STAT_MEM_REG,
+    UCT_IB_MD_STAT_LAST
 };
 
 
 /**
  * IB memory domain.
  */
-typedef struct uct_ib_pd {
-    uct_pd_t                 super;
+typedef struct uct_ib_md {
+    uct_md_t                 super;
     ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
-    struct ibv_pd            *pd;       /**< IB protection domain */
+    struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     UCS_STATS_NODE_DECLARE(stats);
-} uct_ib_pd_t;
+} uct_ib_md_t;
 
 
 /**
  * IB memory domain configuration.
  */
-typedef struct uct_ib_pd_config {
-    uct_pd_config_t          super;
+typedef struct uct_ib_md_config {
+    uct_md_config_t          super;
 
     struct {
         ucs_ternary_value_t  enable;       /**< Enable registration cache */
@@ -56,7 +56,7 @@ typedef struct uct_ib_pd_config {
 
     unsigned                fork_init;     /**< Use ibv_fork_init() */
 
-} uct_ib_pd_config_t;
+} uct_ib_md_config_t;
 
 
 /**
@@ -76,6 +76,6 @@ typedef struct uct_ib_rcache_region {
 } uct_ib_rcache_region_t;
 
 
-extern uct_pd_component_t uct_ib_pdc;
+extern uct_md_component_t uct_ib_mdc;
 
 #endif

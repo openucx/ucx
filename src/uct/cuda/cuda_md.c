@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include "cuda_pd.h"
+#include "cuda_md.h"
 
 #include <string.h>
 #include <limits.h>
@@ -14,25 +14,25 @@
 #include <ucs/type/class.h>
 
 
-static ucs_status_t uct_cuda_pd_query(uct_pd_h pd, uct_pd_attr_t *pd_attr)
+static ucs_status_t uct_cuda_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    pd_attr->cap.flags         = UCT_PD_FLAG_REG;
-    pd_attr->cap.max_alloc     = 0;
-    pd_attr->cap.max_reg       = ULONG_MAX;
-    pd_attr->rkey_packed_size  = 0;
-    pd_attr->reg_cost.overhead = 0;
-    pd_attr->reg_cost.growth   = 0;
-    memset(&pd_attr->local_cpus, 0xff, sizeof(pd_attr->local_cpus));
+    md_attr->cap.flags         = UCT_MD_FLAG_REG;
+    md_attr->cap.max_alloc     = 0;
+    md_attr->cap.max_reg       = ULONG_MAX;
+    md_attr->rkey_packed_size  = 0;
+    md_attr->reg_cost.overhead = 0;
+    md_attr->reg_cost.growth   = 0;
+    memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_mkey_pack(uct_pd_h pd, uct_mem_h memh,
+static ucs_status_t uct_cuda_mkey_pack(uct_md_h md, uct_mem_h memh,
                                       void *rkey_buffer)
 {
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_rkey_unpack(uct_pd_component_t *pdc,
+static ucs_status_t uct_cuda_rkey_unpack(uct_md_component_t *mdc,
                                          const void *rkey_buffer, uct_rkey_t *rkey_p,
                                          void **handle_p)
 {
@@ -41,13 +41,13 @@ static ucs_status_t uct_cuda_rkey_unpack(uct_pd_component_t *pdc,
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_rkey_release(uct_pd_component_t *pdc, uct_rkey_t rkey,
+static ucs_status_t uct_cuda_rkey_release(uct_md_component_t *mdc, uct_rkey_t rkey,
                                           void *handle)
 {
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_mem_reg(uct_pd_h pd, void *address, size_t length,
+static ucs_status_t uct_cuda_mem_reg(uct_md_h md, void *address, size_t length,
                                      uct_mem_h *memh_p)
 {
     ucs_status_t rc;
@@ -64,39 +64,39 @@ static ucs_status_t uct_cuda_mem_reg(uct_pd_h pd, void *address, size_t length,
     return rc;
 }
 
-static ucs_status_t uct_cuda_mem_dereg(uct_pd_h pd, uct_mem_h memh)
+static ucs_status_t uct_cuda_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
     ucs_free(memh);
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_query_pd_resources(uct_pd_resource_desc_t **resources_p,
+static ucs_status_t uct_cuda_query_md_resources(uct_md_resource_desc_t **resources_p,
                                                 unsigned *num_resources_p)
 {
-    return uct_single_pd_resource(&uct_cuda_pd, resources_p, num_resources_p);
+    return uct_single_md_resource(&uct_cuda_md, resources_p, num_resources_p);
 }
 
-static ucs_status_t uct_cuda_pd_open(const char *pd_name, const uct_pd_config_t *pd_config,
-                                     uct_pd_h *pd_p)
+static ucs_status_t uct_cuda_md_open(const char *md_name, const uct_md_config_t *md_config,
+                                     uct_md_h *md_p)
 {
-    static uct_pd_ops_t pd_ops = {
+    static uct_md_ops_t md_ops = {
         .close        = (void*)ucs_empty_function,
-        .query        = uct_cuda_pd_query,
+        .query        = uct_cuda_md_query,
         .mkey_pack    = uct_cuda_mkey_pack,
         .mem_reg      = uct_cuda_mem_reg,
         .mem_dereg    = uct_cuda_mem_dereg
     };
-    static uct_pd_t pd = {
-        .ops          = &pd_ops,
-        .component    = &uct_cuda_pd
+    static uct_md_t md = {
+        .ops          = &md_ops,
+        .component    = &uct_cuda_md
     };
 
-    *pd_p = &pd;
+    *md_p = &md;
     return UCS_OK;
 }
 
-UCT_PD_COMPONENT_DEFINE(uct_cuda_pd, UCT_CUDA_PD_NAME,
-                        uct_cuda_query_pd_resources, uct_cuda_pd_open, NULL,
+UCT_MD_COMPONENT_DEFINE(uct_cuda_md, UCT_CUDA_MD_NAME,
+                        uct_cuda_query_md_resources, uct_cuda_md_open, NULL,
                         uct_cuda_rkey_unpack, uct_cuda_rkey_release, "CUDA_",
-                        uct_pd_config_table, uct_pd_config_t);
+                        uct_md_config_table, uct_md_config_t);
 

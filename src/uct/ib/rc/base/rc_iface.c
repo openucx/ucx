@@ -239,14 +239,14 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
                                hdr + 1, length, desc);
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,
+UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
                     unsigned rx_priv_len, uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, pd, worker, dev_name, rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, dev_name, rx_headroom,
                               rx_priv_len, sizeof(uct_rc_hdr_t), config->tx.cq_len,
                               SIZE_MAX, &config->super);
 
@@ -322,7 +322,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_pd_h pd,
     srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
     srq_init_attr.attr.srq_limit = 0;
     srq_init_attr.srq_context    = self;
-    self->rx.srq = ibv_create_srq(uct_ib_iface_pd(&self->super)->pd, &srq_init_attr);
+    self->rx.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
     if (self->rx.srq == NULL) {
         ucs_error("failed to create SRQ: %m");
         status = UCS_ERR_IO_ERROR;
@@ -416,7 +416,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
     qp_init_attr.sq_sig_all          = 0;
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
-    qp_init_attr.pd                  = uct_ib_iface_pd(&iface->super)->pd;
+    qp_init_attr.pd                  = uct_ib_iface_md(&iface->super)->pd;
 
 #  if HAVE_IB_EXT_ATOMICS
     qp_init_attr.comp_mask          |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
@@ -437,7 +437,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
-    qp = ibv_create_qp(uct_ib_iface_pd(&iface->super)->pd, &qp_init_attr);
+    qp = ibv_create_qp(uct_ib_iface_md(&iface->super)->pd, &qp_init_attr);
 #endif
     if (qp == NULL) {
         ucs_error("failed to create qp: %m");

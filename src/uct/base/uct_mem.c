@@ -5,7 +5,7 @@
 */
 
 #include "uct_iface.h"
-#include "uct_pd.h"
+#include "uct_md.h"
 
 #include <ucs/arch/cpu.h>
 
@@ -24,7 +24,7 @@ typedef struct {
 
 
 const char *uct_alloc_method_names[] = {
-    [UCT_ALLOC_METHOD_PD]   = "pd",
+    [UCT_ALLOC_METHOD_MD]   = "md",
     [UCT_ALLOC_METHOD_HEAP] = "heap",
     [UCT_ALLOC_METHOD_MMAP] = "mmap",
     [UCT_ALLOC_METHOD_HUGE] = "huge",
@@ -33,16 +33,16 @@ const char *uct_alloc_method_names[] = {
 
 
 ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
-                           unsigned num_methods, uct_pd_h *pds, unsigned num_pds,
+                           unsigned num_methods, uct_md_h *mds, unsigned num_mds,
                            const char *alloc_name, uct_allocated_memory_t *mem)
 {
     uct_alloc_method_t *method;
-    uct_pd_attr_t pd_attr;
+    uct_md_attr_t md_attr;
     ucs_status_t status;
     size_t alloc_length;
-    unsigned pd_index;
+    unsigned md_index;
     uct_mem_h memh;
-    uct_pd_h pd;
+    uct_md_h md;
     void *address;
     int shmid;
 
@@ -60,38 +60,38 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
         ucs_debug("trying allocation method %s", uct_alloc_method_names[*method]);
 
         switch (*method) {
-        case UCT_ALLOC_METHOD_PD:
-            /* Allocate with one of the specified protection domains */
-            for (pd_index = 0; pd_index < num_pds; ++pd_index) {
-                pd = pds[pd_index];
-                status = uct_pd_query(pd, &pd_attr);
+        case UCT_ALLOC_METHOD_MD:
+            /* Allocate with one of the specified memory domains */
+            for (md_index = 0; md_index < num_mds; ++md_index) {
+                md = mds[md_index];
+                status = uct_md_query(md, &md_attr);
                 if (status != UCS_OK) {
-                    ucs_error("Failed to query PD");
+                    ucs_error("Failed to query MD");
                     return status;
                 }
 
-                /* Check if PD supports allocation */
-                if (!(pd_attr.cap.flags & UCT_PD_FLAG_ALLOC)) {
+                /* Check if MD supports allocation */
+                if (!(md_attr.cap.flags & UCT_MD_FLAG_ALLOC)) {
                     continue;
                 }
 
-                /* Allocate memory using the PD.
+                /* Allocate memory using the MD.
                  * If the allocation fails, it's considered an error and we don't
-                 * fall-back, because this PD already exposed support for memory
+                 * fall-back, because this MD already exposed support for memory
                  * allocation.
                  */
                 alloc_length = min_length;
-                status = uct_pd_mem_alloc(pd, &alloc_length, &address,
+                status = uct_md_mem_alloc(md, &alloc_length, &address,
                                           alloc_name, &memh);
                 if (status != UCS_OK) {
-                    ucs_error("failed to allocate %zu bytes using pd %s: %s",
-                              alloc_length, pd->component->name,
+                    ucs_error("failed to allocate %zu bytes using md %s: %s",
+                              alloc_length, md->component->name,
                               ucs_status_string(status));
                     return status;
                 }
 
                 ucs_assert(memh != UCT_INVALID_MEM_HANDLE);
-                mem->pd   = pd;
+                mem->md   = md;
                 mem->memh = memh;
                 goto allocated;
 
@@ -104,7 +104,7 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
             address = ucs_memalign(UCS_SYS_CACHE_LINE_SIZE, alloc_length
                                    UCS_MEMTRACK_VAL);
             if (address != NULL) {
-                goto allocated_without_pd;
+                goto allocated_without_md;
             }
 
             ucs_debug("failed to allocate %zu bytes from the heap", alloc_length);
@@ -116,7 +116,7 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
             address = ucs_mmap(NULL, alloc_length, PROT_READ|PROT_WRITE,
                                MAP_PRIVATE|MAP_ANON, -1, 0 UCS_MEMTRACK_VAL);
             if (address != MAP_FAILED) {
-                goto allocated_without_pd;
+                goto allocated_without_md;
             }
 
             ucs_debug("failed to mmap %zu bytes: %m", alloc_length);
@@ -128,7 +128,7 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
             status = ucs_sysv_alloc(&alloc_length, &address, SHM_HUGETLB, &shmid
                                     UCS_MEMTRACK_VAL);
             if (status == UCS_OK) {
-                goto allocated_without_pd;
+                goto allocated_without_md;
             }
 
             ucs_debug("failed to allocate %zu bytes from hugetlb: %s",
@@ -144,13 +144,13 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
     ucs_debug("Could not allocate memory with any of the provided methods");
     return UCS_ERR_NO_MEMORY;
 
-allocated_without_pd:
-    mem->pd      = NULL;
+allocated_without_md:
+    mem->md      = NULL;
     mem->memh    = UCT_INVALID_MEM_HANDLE;
 allocated:
     ucs_debug("allocated %zu bytes at %p using %s", alloc_length, address,
-              (mem->pd == NULL) ? uct_alloc_method_names[*method]
-                                : mem->pd->component->name);
+              (mem->md == NULL) ? uct_alloc_method_names[*method]
+                                : mem->md->component->name);
     mem->address = address;
     mem->length  = alloc_length;
     mem->method  = *method;
@@ -162,8 +162,8 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
     int ret;
 
     switch (mem->method) {
-    case UCT_ALLOC_METHOD_PD:
-        return uct_pd_mem_free(mem->pd, mem->memh);
+    case UCT_ALLOC_METHOD_MD:
+        return uct_md_mem_free(mem->md, mem->memh);
 
     case UCT_ALLOC_METHOD_HEAP:
         ucs_free(mem->address);
@@ -191,39 +191,39 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length,
                                  const char *name, uct_allocated_memory_t *mem)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    uct_pd_attr_t pd_attr;
+    uct_md_attr_t md_attr;
     ucs_status_t status;
 
     status = uct_mem_alloc(length, iface->config.alloc_methods,
-                           iface->config.num_alloc_methods, &iface->pd, 1,
+                           iface->config.num_alloc_methods, &iface->md, 1,
                            name, mem);
     if (status != UCS_OK) {
         goto err;
     }
 
-    /* If the memory was not allocated using PD, register it */
-    if (mem->method != UCT_ALLOC_METHOD_PD) {
+    /* If the memory was not allocated using MD, register it */
+    if (mem->method != UCT_ALLOC_METHOD_MD) {
 
-        status = uct_pd_query(iface->pd, &pd_attr);
+        status = uct_md_query(iface->md, &md_attr);
         if (status != UCS_OK) {
             goto err_free;
         }
 
-        /* If PD does not support registration, allow only the PD method */
-        if (!(pd_attr.cap.flags & UCT_PD_FLAG_REG)) {
-            ucs_error("%s pd does not supprt registration, so cannot use any allocation "
-                      "method except 'pd'", iface->pd->component->name);
+        /* If MD does not support registration, allow only the MD method */
+        if (!(md_attr.cap.flags & UCT_MD_FLAG_REG)) {
+            ucs_error("%s md does not supprt registration, so cannot use any allocation "
+                      "method except 'md'", iface->md->component->name);
             status = UCS_ERR_NO_MEMORY;
             goto err_free;
         }
 
-        status = uct_pd_mem_reg(iface->pd, mem->address, mem->length, &mem->memh);
+        status = uct_md_mem_reg(iface->md, mem->address, mem->length, &mem->memh);
         if (status != UCS_OK) {
             goto err_free;
         }
 
         ucs_assert(mem->memh != UCT_INVALID_MEM_HANDLE);
-        mem->pd = iface->pd;
+        mem->md = iface->md;
     }
 
     return UCS_OK;
@@ -236,8 +236,8 @@ err:
 
 void uct_iface_mem_free(const uct_allocated_memory_t *mem)
 {
-    if (mem->method != UCT_ALLOC_METHOD_PD) {
-        uct_pd_mem_dereg(mem->pd, mem->memh);
+    if (mem->method != UCT_ALLOC_METHOD_MD) {
+        uct_md_mem_dereg(mem->md, mem->memh);
     }
     uct_mem_free(mem);
 }
@@ -263,7 +263,7 @@ static ucs_status_t uct_iface_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
     }
 
     ucs_assert(mem.memh != UCT_INVALID_MEM_HANDLE);
-    ucs_assert(mem.pd == iface->pd);
+    ucs_assert(mem.md == iface->md);
 
     hdr         = mem.address;
     hdr->method = mem.method;
@@ -286,7 +286,7 @@ static void uct_iface_mp_chunk_release(ucs_mpool_t *mp, void *chunk)
     mem.method  = hdr->method;
     mem.memh    = hdr->memh;
     mem.length  = hdr->length;
-    mem.pd      = iface->pd;
+    mem.md      = iface->md;
 
     uct_iface_mem_free(&mem);
 }

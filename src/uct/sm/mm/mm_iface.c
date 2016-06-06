@@ -15,7 +15,7 @@
 
 
 static ucs_config_field_t uct_mm_iface_config_table[] = {
-    {"", "ALLOC=pd", NULL,
+    {"", "ALLOC=md", NULL,
      ucs_offsetof(uct_mm_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -288,7 +288,7 @@ static void uct_mm_iface_free_rx_descs(uct_mm_iface_t *iface, unsigned num_elems
 }
 
 ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
-                                      uct_mm_iface_config_t *config, uct_pd_h pd)
+                                      uct_mm_iface_config_t *config, uct_md_h md)
 {
     uct_mm_fifo_ctl_t *ctl;
     size_t size_to_alloc;
@@ -297,7 +297,7 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
     /* allocate the receive FIFO */
     size_to_alloc = UCT_MM_GET_FIFO_SIZE(iface);
 
-    status = uct_mm_pd_mapper_ops(pd)->alloc(pd, &size_to_alloc, config->hugetlb_mode,
+    status = uct_mm_md_mapper_ops(md)->alloc(md, &size_to_alloc, config->hugetlb_mode,
                                              &iface->shared_mem, &iface->fifo_mm_id,
                                              &iface->path UCS_MEMTRACK_NAME("mm fifo"));
     if (status != UCS_OK) {
@@ -411,7 +411,7 @@ static void uct_mm_iface_singal_handler(void *arg)
     uct_mm_iface_recv_messages(arg);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
+static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
@@ -420,7 +420,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     ucs_status_t status;
     unsigned i;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_mm_iface_ops, pd, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_mm_iface_ops, md, worker,
                               tl_config UCS_STATS_ARG(NULL));
 
     ucs_trace_func("Creating an MM iface=%p worker=%p", self, worker);
@@ -461,7 +461,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_pd_h pd, uct_worker_h worker,
     /* create the receive FIFO */
     /* use specific allocator to allocate and attach memory and check the
      * requested hugetlb allocation mode */
-    status = uct_mm_allocate_fifo_mem(self, mm_config, pd);
+    status = uct_mm_allocate_fifo_mem(self, mm_config, md);
     if (status != UCS_OK) {
         goto err;
     }
@@ -532,7 +532,7 @@ destroy_recv_mpool:
 err_close_signal_fd:
     close(self->signal_fd);
 err_free_fifo:
-    uct_mm_pd_mapper_ops(pd)->free(self->shared_mem, self->fifo_mm_id,
+    uct_mm_md_mapper_ops(md)->free(self->shared_mem, self->fifo_mm_id,
                                    UCT_MM_GET_FIFO_SIZE(self), self->path);
 err:
     return status;
@@ -559,7 +559,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     size_to_free = UCT_MM_GET_FIFO_SIZE(self);
 
     /* release the memory allocated for the FIFO */
-    status = uct_mm_pd_mapper_ops(self->super.pd)->free(self->shared_mem,
+    status = uct_mm_md_mapper_ops(self->super.md)->free(self->shared_mem,
                                                         self->fifo_mm_id,
                                                         size_to_free, self->path);
     if (status != UCS_OK) {
@@ -571,12 +571,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
 
 UCS_CLASS_DEFINE(uct_mm_iface_t, uct_base_iface_t);
 
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_iface_t, uct_iface_t, uct_pd_h,
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const char *, size_t,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);
 
-static ucs_status_t uct_mm_query_tl_resources(uct_pd_h pd,
+static ucs_status_t uct_mm_query_tl_resources(uct_md_h md,
                                               uct_tl_resource_desc_t **resource_p,
                                               unsigned *num_resources_p)
 {
@@ -591,7 +591,7 @@ static ucs_status_t uct_mm_query_tl_resources(uct_pd_h pd,
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
                       UCT_MM_TL_NAME);
     ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name), "%s",
-                      pd->component->name);
+                      md->component->name);
     resource->dev_type = UCT_DEVICE_TYPE_SHM;
 
     *num_resources_p = 1;

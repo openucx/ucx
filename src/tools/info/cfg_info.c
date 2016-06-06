@@ -26,8 +26,8 @@ void print_ucp_config(ucs_config_print_flags_t print_flags)
 
 void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
 {
-    uct_pd_resource_desc_t *pd_resources;
-    unsigned pd_rsc_index, num_pd_resources;
+    uct_md_resource_desc_t *md_resources;
+    unsigned md_rsc_index, num_md_resources;
     uct_tl_resource_desc_t *tl_resources;
     unsigned tl_rsc_index, num_tl_resources;
     uct_iface_config_t *config;
@@ -35,34 +35,34 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
     char cfg_title[UCT_TL_NAME_MAX + 128];
     unsigned i, num_tls;
     ucs_status_t status;
-    uct_pd_h pd;
-    uct_pd_config_t *pd_config;
+    uct_md_h md;
+    uct_md_config_t *md_config;
 
-    status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
+    status = uct_query_md_resources(&md_resources, &num_md_resources);
     if (status != UCS_OK) {
         return;
     }
 
-    uct_pd_component_config_print(print_flags);
+    uct_md_component_config_print(print_flags);
 
     num_tls = 0;
-    for (pd_rsc_index = 0; pd_rsc_index < num_pd_resources; ++pd_rsc_index) {
+    for (md_rsc_index = 0; md_rsc_index < num_md_resources; ++md_rsc_index) {
 
-        status = uct_pd_config_read(pd_resources[pd_rsc_index].pd_name, NULL,
-                                    NULL, &pd_config);
+        status = uct_md_config_read(md_resources[md_rsc_index].md_name, NULL,
+                                    NULL, &md_config);
         if (status != UCS_OK) {
             continue;
         }
 
-        status = uct_pd_open(pd_resources[pd_rsc_index].pd_name, pd_config, &pd);
-        uct_config_release(pd_config);
+        status = uct_md_open(md_resources[md_rsc_index].md_name, md_config, &md);
+        uct_config_release(md_config);
         if (status != UCS_OK) {
             continue;
         }
 
-        status = uct_pd_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+        status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
         if (status != UCS_OK) {
-            uct_pd_close(pd);
+            uct_md_close(md);
             continue;
         }
 
@@ -88,10 +88,10 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
         }
 
         uct_release_tl_resource_list(tl_resources);
-        uct_pd_close(pd);
+        uct_md_close(md);
     }
 
-    uct_release_pd_resource_list(pd_resources);
+    uct_release_md_resource_list(md_resources);
 
     for (i = 0; i < num_tls; ++i) {
         snprintf(cfg_title, sizeof(cfg_title), "%s transport configuration",

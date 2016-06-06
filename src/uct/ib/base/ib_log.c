@@ -27,7 +27,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
     size_t total_valid_len = 0;;
     char *s    = buf;
     char *ends = buf + max;
-    void *pd   = data;
+    void *md   = data;
     size_t len;
     int i;
 
@@ -39,11 +39,11 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                      sg_list[i].addr, sg_list[i].length, sg_list[i].lkey);
         }
 
-        len = ucs_min(sg_list[i].length, (void*)data + sizeof(data) - pd);
-        memcpy(pd, (void*)sg_list[i].addr, len);
+        len = ucs_min(sg_list[i].length, (void*)data + sizeof(data) - md);
+        memcpy(md, (void*)sg_list[i].addr, len);
 
         s               += strlen(s);
-        pd              += len;
+        md              += len;
         total_len       += len;
         total_valid_len += sg_list[i].length;
     }

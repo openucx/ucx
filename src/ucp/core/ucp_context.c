@@ -51,11 +51,11 @@ static ucs_config_field_t ucp_config_table[] = {
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"ALLOC_PRIO", "pd:sysv,pd:posix,huge,pd:*,mmap,heap",
+  {"ALLOC_PRIO", "md:sysv,md:posix,huge,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
-   "an allocation method (huge, mmap, libc) or pd:<NAME> which means to use the\n"
-   "specified protection domain for allocation. NAME can be either a PD component\n"
-   "name, or a wildcard - '*' - which expands to all PD components.",
+   "an allocation method (huge, mmap, libc) or md:<NAME> which means to use the\n"
+   "specified memory domain for allocation. NAME can be either a MD component\n"
+   "name, or a wildcard - '*' - which expands to all MD components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"BCOPY_THRESH", "0",
@@ -249,7 +249,7 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
 }
 
 static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
-                                         uct_pd_h pd, ucp_rsc_index_t pd_index,
+                                         uct_md_h md, ucp_rsc_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
                                          uint64_t *masks)
@@ -263,14 +263,14 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     *num_resources_p = 0;
 
     /* check what are the available uct resources */
-    status = uct_pd_query_tl_resources(pd, &tl_resources, &num_tl_resources);
+    status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto err;
     }
 
     if (num_tl_resources == 0) {
-        ucs_debug("No tl resources found for pd %s", context->pd_rscs[pd_index].pd_name);
+        ucs_debug("No tl resources found for md %s", context->md_rscs[md_index].md_name);
         goto out_free_resources;
     }
 
@@ -293,7 +293,7 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     for (i = 0; i < num_tl_resources; ++i) {
         if (ucp_is_resource_enabled(&tl_resources[i], config, masks)) {
             context->tl_rscs[context->num_tls].tl_rsc   = tl_resources[i];
-            context->tl_rscs[context->num_tls].pd_index = pd_index;
+            context->tl_rscs[context->num_tls].md_index = md_index;
             context->tl_rscs[context->num_tls].tl_name_csum =
                             ucs_crc16_string(tl_resources[i].tl_name);
             ++context->num_tls;
@@ -351,34 +351,34 @@ static void ucp_free_resources(ucp_context_t *context)
     ucp_rsc_index_t i;
 
     ucs_free(context->tl_rscs);
-    for (i = 0; i < context->num_pds; ++i) {
-        if (context->pds[i] != NULL) {
-            uct_pd_close(context->pds[i]);
+    for (i = 0; i < context->num_mds; ++i) {
+        if (context->mds[i] != NULL) {
+            uct_md_close(context->mds[i]);
         }
     }
-    ucs_free(context->pd_attrs);
-    ucs_free(context->pds);
-    ucs_free(context->pd_rscs);
+    ucs_free(context->md_attrs);
+    ucs_free(context->mds);
+    ucs_free(context->md_rscs);
 }
 
-static int ucp_pd_rsc_compare_name(const void *a, const void *b)
+static int ucp_md_rsc_compare_name(const void *a, const void *b)
 {
-    const uct_pd_resource_desc_t *pd1 = a;
-    const uct_pd_resource_desc_t *pd2 = b;
-    return strcmp(pd1->pd_name, pd2->pd_name);
+    const uct_md_resource_desc_t *md1 = a;
+    const uct_md_resource_desc_t *md2 = b;
+    return strcmp(md1->md_name, md2->md_name);
 }
 
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                        const ucp_config_t *config)
 {
     unsigned num_tl_resources;
-    unsigned num_pd_resources;
-    uct_pd_resource_desc_t *pd_rscs;
+    unsigned num_md_resources;
+    uct_md_resource_desc_t *md_rscs;
     ucs_status_t status;
     ucp_rsc_index_t i;
-    unsigned pd_index;
-    uct_pd_h pd;
-    uct_pd_config_t *pd_config;
+    unsigned md_index;
+    uct_md_h md;
+    uct_md_config_t *md_config;
     uint64_t masks[UCT_DEVICE_TYPE_LAST] = {0};
 
     /* if we got here then num_resources > 0.
@@ -401,100 +401,100 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err;
     }
 
-    /* List protection domain resources */
-    status = uct_query_pd_resources(&pd_rscs, &num_pd_resources);
+    /* List memory domain resources */
+    status = uct_query_md_resources(&md_rscs, &num_md_resources);
     if (status != UCS_OK) {
         goto err;
     }
 
-    /* Sort pd's by name, to increase the likelihood of reusing the same ep
-     * configuration (since remote pd map is part of the key).
+    /* Sort md's by name, to increase the likelihood of reusing the same ep
+     * configuration (since remote md map is part of the key).
      */
-    qsort(pd_rscs, num_pd_resources, sizeof(*pd_rscs), ucp_pd_rsc_compare_name);
+    qsort(md_rscs, num_md_resources, sizeof(*md_rscs), ucp_md_rsc_compare_name);
 
-    /* Error check: Make sure there is at least one PD */
-    if (num_pd_resources == 0) {
-        ucs_error("No pd resources found");
+    /* Error check: Make sure there is at least one MD */
+    if (num_md_resources == 0) {
+        ucs_error("No md resources found");
         status = UCS_ERR_NO_DEVICE;
-        goto err_release_pd_resources;
+        goto err_release_md_resources;
     }
 
-    if (num_pd_resources >= UCP_MAX_PDS) {
-        ucs_error("Only up to %ld PDs are supported", UCP_MAX_PDS);
+    if (num_md_resources >= UCP_MAX_MDS) {
+        ucs_error("Only up to %ld memory domains are supported", UCP_MAX_MDS);
         status = UCS_ERR_EXCEEDS_LIMIT;
-        goto err_release_pd_resources;
+        goto err_release_md_resources;
     }
 
-    context->num_pds  = 0;
-    context->pd_rscs  = NULL;
-    context->pds      = NULL;
-    context->pd_attrs = NULL;
+    context->num_mds  = 0;
+    context->md_rscs  = NULL;
+    context->mds      = NULL;
+    context->md_attrs = NULL;
     context->num_tls  = 0;
     context->tl_rscs  = NULL;
 
-    /* Allocate array of PD resources we would actually use */
-    context->pd_rscs = ucs_calloc(num_pd_resources, sizeof(*context->pd_rscs),
-                                  "ucp_pd_resources");
-    if (context->pd_rscs == NULL) {
+    /* Allocate array of MD resources we would actually use */
+    context->md_rscs = ucs_calloc(num_md_resources, sizeof(*context->md_rscs),
+                                  "ucp_md_resources");
+    if (context->md_rscs == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context_resources;
     }
 
-    /* Allocate array of protection domains */
-    context->pds = ucs_calloc(num_pd_resources, sizeof(*context->pds), "ucp_pds");
-    if (context->pds == NULL) {
+    /* Allocate array of memory domains */
+    context->mds = ucs_calloc(num_md_resources, sizeof(*context->mds), "ucp_mds");
+    if (context->mds == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context_resources;
     }
 
-    /* Allocate array of protection domains attributes */
-    context->pd_attrs = ucs_calloc(num_pd_resources, sizeof(*context->pd_attrs),
-                                   "ucp_pd_attrs");
-    if (context->pd_attrs == NULL) {
+    /* Allocate array of memory domains attributes */
+    context->md_attrs = ucs_calloc(num_md_resources, sizeof(*context->md_attrs),
+                                   "ucp_md_attrs");
+    if (context->md_attrs == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_context_resources;
     }
 
-    /* Open all protection domains, keep only those which have at least one TL
+    /* Open all memory domains, keep only those which have at least one TL
      * resources selected on them.
      */
-    pd_index = 0;
-    for (i = 0; i < num_pd_resources; ++i) {
-        status = uct_pd_config_read(pd_rscs[i].pd_name, NULL, NULL, &pd_config);
+    md_index = 0;
+    for (i = 0; i < num_md_resources; ++i) {
+        status = uct_md_config_read(md_rscs[i].md_name, NULL, NULL, &md_config);
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }
 
-        status = uct_pd_open(pd_rscs[i].pd_name, pd_config, &pd);
-        uct_config_release(pd_config);
+        status = uct_md_open(md_rscs[i].md_name, md_config, &md);
+        uct_config_release(md_config);
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }
 
-        context->pd_rscs[pd_index] = pd_rscs[i];
-        context->pds[pd_index]     = pd;
+        context->md_rscs[md_index] = md_rscs[i];
+        context->mds[md_index]     = md;
 
-        /* Save PD attributes */
-        status = uct_pd_query(pd, &context->pd_attrs[pd_index]);
+        /* Save MD attributes */
+        status = uct_md_query(md, &context->md_attrs[md_index]);
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }
 
-        /* Add communication resources of each PD */
-        status = ucp_add_tl_resources(context, pd, pd_index, config,
+        /* Add communication resources of each MD */
+        status = ucp_add_tl_resources(context, md, md_index, config,
                                       &num_tl_resources, masks);
         if (status != UCS_OK) {
             goto err_free_context_resources;
         }
 
-        /* If the PD does not have transport resources, don't use it */
+        /* If the MD does not have transport resources, don't use it */
         if (num_tl_resources > 0) {
-            ++pd_index;
-            ++context->num_pds;
+            ++md_index;
+            ++context->num_mds;
         } else {
-            ucs_debug("closing pd %s because it has no selected transport resources",
-                      pd_rscs[i].pd_name);
-            uct_pd_close(pd);
+            ucs_debug("closing md %s because it has no selected transport resources",
+                      md_rscs[i].md_name);
+            uct_md_close(md);
         }
     }
 
@@ -521,13 +521,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_free_context_resources;
     }
 
-    uct_release_pd_resource_list(pd_rscs);
+    uct_release_md_resource_list(md_rscs);
     return UCS_OK;
 
 err_free_context_resources:
     ucp_free_resources(context);
-err_release_pd_resources:
-    uct_release_pd_resource_list(pd_rscs);
+err_release_md_resources:
+    uct_release_md_resource_list(md_rscs);
 err:
     return status;
 }
@@ -572,25 +572,25 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     /* Parse the allocation methods specified in the configuration */
     for (i = 0; i < num_alloc_methods; ++i) {
         method_name = config->alloc_prio.methods[i];
-        if (!strncasecmp(method_name, "pd:", 3)) {
-            /* If the method name begins with 'pd:', treat it as protection domain
+        if (!strncasecmp(method_name, "md:", 3)) {
+            /* If the method name begins with 'md:', treat it as memory domain
              * component name.
              */
-            context->config.alloc_methods[i].method = UCT_ALLOC_METHOD_PD;
-            strncpy(context->config.alloc_methods[i].pdc_name,
-                    method_name + 3, UCT_PD_COMPONENT_NAME_MAX);
-            ucs_debug("allocation method[%d] is pd '%s'", i, method_name + 3);
+            context->config.alloc_methods[i].method = UCT_ALLOC_METHOD_MD;
+            strncpy(context->config.alloc_methods[i].mdc_name,
+                    method_name + 3, UCT_MD_COMPONENT_NAME_MAX);
+            ucs_debug("allocation method[%d] is md '%s'", i, method_name + 3);
         } else {
             /* Otherwise, this is specific allocation method name.
              */
             context->config.alloc_methods[i].method = UCT_ALLOC_METHOD_LAST;
             for (method = 0; method < UCT_ALLOC_METHOD_LAST; ++method) {
-                if ((method != UCT_ALLOC_METHOD_PD) &&
+                if ((method != UCT_ALLOC_METHOD_MD) &&
                     !strcmp(method_name, uct_alloc_method_names[method]))
                 {
                     /* Found the allocation method in the internal name list */
                     context->config.alloc_methods[i].method = method;
-                    strcpy(context->config.alloc_methods[i].pdc_name, "");
+                    strcpy(context->config.alloc_methods[i].mdc_name, "");
                     ucs_debug("allocation method[%d] is '%s'", i, method_name);
                     break;
                 }

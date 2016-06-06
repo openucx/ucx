@@ -16,7 +16,7 @@ class test_pd : public testing::TestWithParam<std::string>,
 public:
     UCS_TEST_BASE_IMPL;
 
-    static std::vector<std::string> enum_pds(const std::string& pdc_name);
+    static std::vector<std::string> enum_mds(const std::string& mdc_name);
 
     test_pd();
 
@@ -28,38 +28,38 @@ protected:
 
     void test_registration();
 
-    uct_pd_h pd() {
+    uct_md_h pd() {
         return m_pd;
     }
 
 private:
-    ucs::handle<uct_pd_config_t*> m_pd_config;
-    ucs::handle<uct_pd_h>         m_pd;
+    ucs::handle<uct_md_config_t*> m_md_config;
+    ucs::handle<uct_md_h>         m_pd;
 };
 
-std::vector<std::string> test_pd::enum_pds(const std::string& pdc_name) {
+std::vector<std::string> test_pd::enum_mds(const std::string& mdc_name) {
     static std::vector<std::string> all_pds;
     std::vector<std::string> result;
 
     if (all_pds.empty()) {
-        uct_pd_resource_desc_t *pd_resources;
-        unsigned num_pd_resources;
+        uct_md_resource_desc_t *md_resources;
+        unsigned num_md_resources;
         ucs_status_t status;
 
-        status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
+        status = uct_query_md_resources(&md_resources, &num_md_resources);
         ASSERT_UCS_OK(status);
 
-        for (unsigned i = 0; i < num_pd_resources; ++i) {
-            all_pds.push_back(pd_resources[i].pd_name);
+        for (unsigned i = 0; i < num_md_resources; ++i) {
+            all_pds.push_back(md_resources[i].md_name);
         }
 
-        uct_release_pd_resource_list(pd_resources);
+        uct_release_md_resource_list(md_resources);
     }
 
     for (std::vector<std::string>::iterator iter = all_pds.begin();
                     iter != all_pds.end(); ++iter)
     {
-        if (iter->substr(0, pdc_name.length()) == pdc_name) {
+        if (iter->substr(0, mdc_name.length()) == mdc_name) {
             result.push_back(*iter);
         }
     }
@@ -68,16 +68,16 @@ std::vector<std::string> test_pd::enum_pds(const std::string& pdc_name) {
 
 test_pd::test_pd()
 {
-    UCS_TEST_CREATE_HANDLE(uct_pd_config_t*, m_pd_config,
-                           (void (*)(uct_pd_config_t*))uct_config_release,
-                           uct_pd_config_read, GetParam().c_str(), NULL, NULL);
+    UCS_TEST_CREATE_HANDLE(uct_md_config_t*, m_md_config,
+                           (void (*)(uct_md_config_t*))uct_config_release,
+                           uct_md_config_read, GetParam().c_str(), NULL, NULL);
 }
 
 void test_pd::init()
 {
     ucs::test_base::init();
-    UCS_TEST_CREATE_HANDLE(uct_pd_h, m_pd, uct_pd_close, uct_pd_open,
-                           GetParam().c_str(), m_pd_config);
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_pd, uct_md_close, uct_md_open,
+                           GetParam().c_str(), m_md_config);
 }
 
 void test_pd::cleanup()
@@ -88,7 +88,7 @@ void test_pd::cleanup()
 
 void test_pd::modify_config(const std::string& name, const std::string& value)
 {
-    ucs_status_t status = uct_config_modify(m_pd_config, name.c_str(), value.c_str());
+    ucs_status_t status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
         return ucs::test_base::modify_config(name, value);
     } else {
@@ -98,10 +98,10 @@ void test_pd::modify_config(const std::string& name, const std::string& value)
 
 void test_pd::check_caps(uint64_t flags, const std::string& name)
 {
-    uct_pd_attr_t pd_attr;
-    ucs_status_t status = uct_pd_query(pd(), &pd_attr);
+    uct_md_attr_t md_attr;
+    ucs_status_t status = uct_md_query(pd(), &md_attr);
     ASSERT_UCS_OK(status);
-    if (!ucs_test_all_flags(pd_attr.cap.flags, flags)) {
+    if (!ucs_test_all_flags(md_attr.cap.flags, flags)) {
         std::stringstream ss;
         ss << name << " is not supported by " << GetParam();
         UCS_TEST_SKIP_R(ss.str());
@@ -114,7 +114,7 @@ UCS_TEST_P(test_pd, alloc) {
     void *address;
     uct_mem_h memh;
 
-    check_caps(UCT_PD_FLAG_ALLOC, "allocation");
+    check_caps(UCT_MD_FLAG_ALLOC, "allocation");
 
     for (unsigned i = 0; i < 300; ++i) {
         size = orig_size = rand() % 65536;
@@ -122,7 +122,7 @@ UCS_TEST_P(test_pd, alloc) {
             continue;
         }
 
-        status = uct_pd_mem_alloc(pd(), &size, &address, "test", &memh);
+        status = uct_md_mem_alloc(pd(), &size, &address, "test", &memh);
         if (size == 0) {
             EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
             continue;
@@ -134,7 +134,7 @@ UCS_TEST_P(test_pd, alloc) {
         EXPECT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
 
         memset(address, 0xBB, size);
-        uct_pd_mem_free(pd(), memh);
+        uct_md_mem_free(pd(), memh);
     }
 }
 
@@ -144,7 +144,7 @@ UCS_TEST_P(test_pd, reg) {
     void *address;
     uct_mem_h memh;
 
-    check_caps(UCT_PD_FLAG_REG, "registration");
+    check_caps(UCT_MD_FLAG_REG, "registration");
 
     for (unsigned i = 0; i < 300; ++i) {
         size = rand() % 65536;
@@ -157,13 +157,13 @@ UCS_TEST_P(test_pd, reg) {
 
         memset(address, 0xBB, size);
 
-        status = uct_pd_mem_reg(pd(), address, size, &memh);
+        status = uct_md_mem_reg(pd(), address, size, &memh);
 
         ASSERT_UCS_OK(status);
         ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
         EXPECT_EQ('\xBB', *((char*)address + size - 1));
 
-        status = uct_pd_mem_dereg(pd(), memh);
+        status = uct_md_mem_dereg(pd(), memh);
         ASSERT_UCS_OK(status);
         EXPECT_EQ('\xBB', *((char*)address + size - 1));
 
@@ -175,7 +175,7 @@ UCS_TEST_P(test_pd, reg_perf) {
     static const unsigned count = 10000;
     ucs_status_t status;
 
-    check_caps(UCT_PD_FLAG_REG, "registration");
+    check_caps(UCT_MD_FLAG_REG, "registration");
 
     for (size_t size = 4096; size <= 4 * 1024 * 1024; size *= 2) {
         void *ptr = malloc(size);
@@ -185,11 +185,11 @@ UCS_TEST_P(test_pd, reg_perf) {
         ucs_time_t start_time = ucs_get_time();
         for (unsigned i = 0; i < count; ++i) {
             uct_mem_h memh;
-            status = uct_pd_mem_reg(pd(), ptr, size, &memh);
+            status = uct_md_mem_reg(pd(), ptr, size, &memh);
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
 
-            status = uct_pd_mem_dereg(pd(), memh);
+            status = uct_md_mem_dereg(pd(), memh);
             ASSERT_UCS_OK(status);
         }
         ucs_time_t end_time = ucs_get_time();
@@ -214,8 +214,8 @@ UCS_TEST_P(test_pd, reg_perf) {
                    ib, \
                    ugni \
                    )
-#define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _pdc_name) \
-    INSTANTIATE_TEST_CASE_P(_pdc_name, _test_case, \
-                            testing::ValuesIn(_test_case::enum_pds(#_pdc_name)));
+#define _UCT_PD_INSTANTIATE_TEST_CASE(_test_case, _mdc_name) \
+    INSTANTIATE_TEST_CASE_P(_mdc_name, _test_case, \
+                            testing::ValuesIn(_test_case::enum_mds(#_mdc_name)));
 
 UCT_PD_INSTANTIATE_TEST_CASE(test_pd)

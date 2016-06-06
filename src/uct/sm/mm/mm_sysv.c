@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include "mm_pd.h"
+#include "mm_md.h"
 #include "mm_iface.h"
 
 #include <ucs/debug/memtrack.h>
@@ -14,19 +14,19 @@
 #define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #define UCT_MM_SYSV_MSTR (UCT_MM_SYSV_PERM | IPC_CREAT | IPC_EXCL)
 
-typedef struct uct_sysv_pd_config {
-    uct_mm_pd_config_t      super;
-} uct_sysv_pd_config_t;
+typedef struct uct_sysv_md_config {
+    uct_mm_md_config_t      super;
+} uct_sysv_md_config_t;
 
-static ucs_config_field_t uct_sysv_pd_config_table[] = {
+static ucs_config_field_t uct_sysv_md_config_table[] = {
   {"MM_", "", NULL,
-   ucs_offsetof(uct_sysv_pd_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_pd_config_table)},
+   ucs_offsetof(uct_sysv_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_mm_md_config_table)},
 
   {NULL}
 };
 
 static ucs_status_t
-uct_sysv_alloc(uct_pd_h pd, size_t *length_p, ucs_ternary_value_t hugetlb,
+uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
                void **address_p, uct_mm_id_t *mmid_p, const char **path_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status = UCS_ERR_NO_MEMORY;
@@ -102,7 +102,7 @@ static ucs_status_t uct_sysv_free(void *address, uct_mm_id_t mm_id, size_t lengt
     return ucs_sysv_free(address);
 }
 
-static size_t uct_sysv_get_path_size(uct_pd_h pd)
+static size_t uct_sysv_get_path_size(uct_md_h md)
 {
     return 0;
 }
@@ -118,5 +118,5 @@ static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
    .free    = uct_sysv_free
 };
 
-UCT_MM_COMPONENT_DEFINE(uct_sysv_pd, "sysv", &uct_sysv_mapper_ops, uct_sysv, "SYSV_")
-UCT_PD_REGISTER_TL(&uct_sysv_pd, &uct_mm_tl);
+UCT_MM_COMPONENT_DEFINE(uct_sysv_md, "sysv", &uct_sysv_mapper_ops, uct_sysv, "SYSV_")
+UCT_MD_REGISTER_TL(&uct_sysv_md, &uct_mm_tl);

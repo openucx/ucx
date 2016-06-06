@@ -28,8 +28,8 @@ struct iface_info {
     /* Communication interface context */
     uct_iface_h iface;
 
-    /* Protection domain */
-    uct_pd_h pd;
+    /* Memory domain */
+    uct_md_h pd;
 
     /* Workers represent allocated resources in a communication thread */
     uct_worker_h worker;
@@ -81,25 +81,25 @@ static ucs_status_t dev_tl_lookup(const char *dev_name, const char *tl_name, str
     int i;
     int j;
     ucs_status_t status;
-    uct_pd_resource_desc_t *pd_resources; /* Protection domain resource descriptor */
+    uct_md_resource_desc_t *md_resources; /* Memory domain resource descriptor */
     uct_tl_resource_desc_t *tl_resources; /*Communication resource descriptor */
-    unsigned num_pd_resources; /* Number of protected domain */
+    unsigned num_md_resources; /* Number of protected domain */
     unsigned num_tl_resources; /* Number of transport resources resource objects created */
-    uct_pd_config_t *pd_config;
+    uct_md_config_t *md_config;
 
-    status = uct_query_pd_resources(&pd_resources, &num_pd_resources);
+    status = uct_query_md_resources(&md_resources, &num_md_resources);
     CHKERR_JUMP(UCS_OK != status, "query for protected domain resources", error_ret);
 
     /* Iterate through protected domain resources */
-    for (i = 0; i < num_pd_resources; ++i) {
-        status = uct_pd_config_read(pd_resources[i].pd_name, NULL, NULL, &pd_config);
+    for (i = 0; i < num_md_resources; ++i) {
+        status = uct_md_config_read(md_resources[i].md_name, NULL, NULL, &md_config);
         CHKERR_JUMP(UCS_OK != status, "read PD config", release_pd);
 
-        status = uct_pd_open(pd_resources[i].pd_name, pd_config, &iface_p->pd);
-        uct_config_release(pd_config);
+        status = uct_md_open(md_resources[i].md_name, md_config, &iface_p->pd);
+        uct_config_release(md_config);
         CHKERR_JUMP(UCS_OK != status, "open protected domains", release_pd);
 
-        status = uct_pd_query_tl_resources(iface_p->pd, &tl_resources, &num_tl_resources);
+        status = uct_md_query_tl_resources(iface_p->pd, &tl_resources, &num_tl_resources);
         CHKERR_JUMP(UCS_OK != status, "query transport resources", close_pd);
 
         /* Go through each available transport and find the proper name */
@@ -116,18 +116,18 @@ static ucs_status_t dev_tl_lookup(const char *dev_name, const char *tl_name, str
             }
         }
         uct_release_tl_resource_list(tl_resources);
-        uct_pd_close(iface_p->pd);
+        uct_md_close(iface_p->pd);
     }
 
     fprintf(stderr, "No supported (dev/tl) found (%s/%s)\n", dev_name, tl_name);
     status = UCS_ERR_UNSUPPORTED;
 
 release_pd:
-    uct_release_pd_resource_list(pd_resources);
+    uct_release_md_resource_list(md_resources);
 error_ret:
     return status;
 close_pd:
-    uct_pd_close(iface_p->pd);
+    uct_md_close(iface_p->pd);
     goto release_pd;
 }
 
@@ -282,7 +282,7 @@ out_free_dev_addrs:
     free(own_dev);
 out_destroy_iface:
     uct_iface_close(if_info.iface);
-    uct_pd_close(if_info.pd);
+    uct_md_close(if_info.pd);
 out_destroy_worker:
     uct_worker_destroy(if_info.worker);
 out_cleanup_async:

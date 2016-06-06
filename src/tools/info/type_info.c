@@ -17,7 +17,7 @@
 #include <ucs/time/timerq.h>
 #include <ucs/time/timer_wheel.h>
 #include <ucs/type/class.h>
-#include <uct/base/uct_pd.h>
+#include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
@@ -123,11 +123,11 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_iface_attr_t);
         PRINT_SIZE(uct_iface_config_t);
         PRINT_SIZE(uct_iface_mpool_config_t);
-        PRINT_SIZE(uct_pd_config_t);
+        PRINT_SIZE(uct_md_config_t);
         PRINT_SIZE(uct_iface_ops_t);
-        PRINT_SIZE(uct_pd_t);
-        PRINT_SIZE(uct_pd_attr_t);
-        PRINT_SIZE(uct_pd_ops_t);
+        PRINT_SIZE(uct_md_t);
+        PRINT_SIZE(uct_md_attr_t);
+        PRINT_SIZE(uct_md_ops_t);
         PRINT_SIZE(uct_tl_resource_desc_t);
         PRINT_SIZE(uct_rkey_bundle_t);
         PRINT_SIZE(uct_sockaddr_ugni_t);
@@ -136,7 +136,7 @@ void print_type_info(const char * tl_name)
         printf("\nIB:\n");
         PRINT_SIZE(uct_ib_address_t);
         PRINT_SIZE(uct_ib_device_t);
-        PRINT_SIZE(uct_ib_pd_t);
+        PRINT_SIZE(uct_ib_md_t);
         PRINT_SIZE(uct_ib_rcache_region_t);
         PRINT_SIZE(uct_ib_iface_t);
         PRINT_SIZE(uct_ib_iface_config_t);
@@ -218,7 +218,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ugni_iface_t);
         PRINT_SIZE(uct_ugni_iface_addr_t);
         PRINT_SIZE(uct_ugni_iface_config_t);
-        PRINT_SIZE(uct_ugni_pd_t);
+        PRINT_SIZE(uct_ugni_md_t);
         printf("\n");
     }
 #endif

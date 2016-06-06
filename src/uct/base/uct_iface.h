@@ -115,7 +115,7 @@ enum {
 /**
  * Declare classes for structs defined in api/tl.h
  */
-UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_pd_h);
+UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_md_h);
 UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);
 
 
@@ -145,7 +145,7 @@ typedef struct uct_wakeup {
  */
 typedef struct uct_base_iface {
     uct_iface_t       super;
-    uct_pd_h          pd;                    /* PD this interface is using */
+    uct_md_h          md;                    /* MD this interface is using */
     uct_worker_h      worker;                /* Worker this interface is on */
     UCS_STATS_NODE_DECLARE(stats);           /* Statistics */
     uct_am_handler_t  am[UCT_AM_ID_MAX];     /* Active message table */
@@ -158,7 +158,7 @@ typedef struct uct_base_iface {
     } config;
 
 } uct_base_iface_t;
-UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_pd_h, uct_worker_h,
+UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
                   const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
 
 
@@ -176,11 +176,11 @@ UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
  * Transport component.
  */
 typedef struct uct_tl_component {
-    ucs_status_t           (*query_resources)(uct_pd_h pd,
+    ucs_status_t           (*query_resources)(uct_md_h md,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
 
-    ucs_status_t           (*iface_open)(uct_pd_h pd, uct_worker_h worker,
+    ucs_status_t           (*iface_open)(uct_md_h md, uct_worker_h worker,
                                          const char *dev_name, size_t rx_headroom,
                                          const uct_iface_config_t *config,
                                          uct_iface_h *iface_p);
