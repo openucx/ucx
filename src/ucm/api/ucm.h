@@ -26,16 +26,20 @@ BEGIN_C_DECLS
  */
 typedef enum ucm_event_type {
     /* Native events */
-    UCM_EVENT_MMAP        = UCS_BIT(0),
-    UCM_EVENT_MUNMAP      = UCS_BIT(1),
-    UCM_EVENT_MREMAP      = UCS_BIT(2),
-    UCM_EVENT_SHMAT       = UCS_BIT(3),
-    UCM_EVENT_SHMDT       = UCS_BIT(4),
-    UCM_EVENT_SBRK        = UCS_BIT(5),
+    UCM_EVENT_MMAP            = UCS_BIT(0),
+    UCM_EVENT_MUNMAP          = UCS_BIT(1),
+    UCM_EVENT_MREMAP          = UCS_BIT(2),
+    UCM_EVENT_SHMAT           = UCS_BIT(3),
+    UCM_EVENT_SHMDT           = UCS_BIT(4),
+    UCM_EVENT_SBRK            = UCS_BIT(5),
 
     /* Aggregate events */
-    UCM_EVENT_VM_MAPPED   = UCS_BIT(16),
-    UCM_EVENT_VM_UNMAPPED = UCS_BIT(17)
+    UCM_EVENT_VM_MAPPED       = UCS_BIT(16),
+    UCM_EVENT_VM_UNMAPPED     = UCS_BIT(17),
+
+    /* Auxiliary flags */
+    UCM_EVENT_FLAG_NO_INSTALL = UCS_BIT(24)
+
 } ucm_event_type_t;
 
 
@@ -196,6 +200,10 @@ ucs_status_t ucm_config_modify(const char *name, const char *value);
  *                           >= 0 - called after the original implementation.
  * @param [in]  cb         Event-handling callback.
  * @param [in]  arg        User-defined argument for the callback.
+ *
+ * @note If UCM_EVENT_FLAG_NO_INSTALL flag is passed in @a events argument,
+ *       only @cb handler will be registered for @a events. No memory
+ *       events/hooks will be installed.
  *
  * @return Status code.
  */

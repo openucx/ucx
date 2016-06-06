@@ -375,9 +375,11 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucm_event_install(events);
-    if (status != UCS_OK) {
-        return status;
+    if (!(events & UCM_EVENT_FLAG_NO_INSTALL)) {
+        status = ucm_event_install(events);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     handler = malloc(sizeof(*handler));
