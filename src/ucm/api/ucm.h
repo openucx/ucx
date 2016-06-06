@@ -26,16 +26,20 @@ BEGIN_C_DECLS
  */
 typedef enum ucm_event_type {
     /* Native events */
-    UCM_EVENT_MMAP        = UCS_BIT(0),
-    UCM_EVENT_MUNMAP      = UCS_BIT(1),
-    UCM_EVENT_MREMAP      = UCS_BIT(2),
-    UCM_EVENT_SHMAT       = UCS_BIT(3),
-    UCM_EVENT_SHMDT       = UCS_BIT(4),
-    UCM_EVENT_SBRK        = UCS_BIT(5),
+    UCM_EVENT_MMAP           = UCS_BIT(0),
+    UCM_EVENT_MUNMAP         = UCS_BIT(1),
+    UCM_EVENT_MREMAP         = UCS_BIT(2),
+    UCM_EVENT_SHMAT          = UCS_BIT(3),
+    UCM_EVENT_SHMDT          = UCS_BIT(4),
+    UCM_EVENT_SBRK           = UCS_BIT(5),
 
     /* Aggregate events */
-    UCM_EVENT_VM_MAPPED   = UCS_BIT(16),
-    UCM_EVENT_VM_UNMAPPED = UCS_BIT(17)
+    UCM_EVENT_VM_MAPPED      = UCS_BIT(16),
+    UCM_EVENT_VM_UNMAPPED    = UCS_BIT(17),
+
+    /* Auxiliary flags */
+    UCM_EVENT_AUX_NO_INSTALL = UCS_BIT(24)
+
 } ucm_event_type_t;
 
 
