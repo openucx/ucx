@@ -1,6 +1,9 @@
 #!/bin/sh -eEx
 #
-# Run this from UCX build directory
+# Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# Run this from UCX build directory.
 #
 
 rev=$(git rev-parse --short HEAD)
