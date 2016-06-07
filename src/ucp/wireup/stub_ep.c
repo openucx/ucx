@@ -188,14 +188,9 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep,
     ucs_assert_always(ucs_queue_is_empty(&stub_ep->pending_q));
 
     if (stub_ep->aux_ep != NULL) {
-<<<<<<< HEAD
         ucs_assert_always(cb == ucp_request_release_pending_send);
-        uct_ep_pending_purge(stub_ep->aux_ep, ucp_stub_ep_pending_req_release);
-=======
-        ucs_assert_always(cb == ucp_ep_pending_req_release);
         uct_ep_pending_purge(stub_ep->aux_ep, ucp_stub_ep_pending_req_release,
                              arg);
->>>>>>> UCT: RC error handling
     }
 }
 

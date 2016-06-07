@@ -16,9 +16,9 @@ class test_error_handling : public uct_test {
 public:
     virtual void init() {
         uct_test::init();
-        
+
         set_config("LOG_LEVEL=fatal");
-        
+
         /* To reduce test execution time decrease retransmition timeouts
          * where it is relevant */
         if (GetParam()->tl_name == "rc") {
@@ -44,7 +44,7 @@ public:
         req_count++;
         return UCS_OK;
     }
-    
+
     static void purge_cb(uct_pending_req_t *self, void *arg)
     {
         req_count++;
@@ -69,6 +69,8 @@ int test_error_handling::req_count = 0;
 
 UCS_TEST_P(test_error_handling, peer_failure)
 {
+    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+
     m_e2->destroy_ep(0);
     EXPECT_EQ(uct_ep_put_short(m_e1->ep(0), NULL, 0, 0, 0), UCS_OK);
 
@@ -118,6 +120,8 @@ UCS_TEST_P(test_error_handling, peer_failure)
 
 UCS_TEST_P(test_error_handling, purge_failed_ep)
 {
+    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+
     ucs_status_t status;
     int num_pend_sends = 3;
     uct_pending_req_t reqs[num_pend_sends];
@@ -144,7 +148,5 @@ UCS_TEST_P(test_error_handling, purge_failed_ep)
     EXPECT_EQ(num_pend_sends, req_count);
 }
 
-/* Run it for RC only for now. More transports to be added when error
- * handling is implemented for them. */
-_UCT_INSTANTIATE_TEST_CASE(test_error_handling, rc)
+UCT_INSTANTIATE_TEST_CASE(test_error_handling)
 

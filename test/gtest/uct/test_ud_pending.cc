@@ -64,7 +64,7 @@ public:
         req_count++;
         return UCS_OK;
     }
-    
+
     static void purge_cb(uct_pending_req_t *r, void *arg)
     {
         req_count++;

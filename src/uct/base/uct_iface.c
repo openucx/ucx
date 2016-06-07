@@ -248,7 +248,7 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ucs_queue_head_init(&f_iface->pend_q);
     ops = &f_iface->super.ops;
 
-    /* Move all pending requests to the queue. 
+    /* Move all pending requests to the queue.
      * Failed ep will use that queue for purge. */
     uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
 
@@ -274,7 +274,7 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ops->ep_atomic_fadd32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_swap32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
-    
+
     ucs_class_call_cleanup_chain(cls, tl_ep, -1);
 
     tl_ep->iface = &f_iface->super;

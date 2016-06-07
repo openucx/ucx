@@ -61,6 +61,8 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     /* TODO: may need to change for dc/rc */
     iface_attr->cap.am.max_hdr    = verbs_iface->config.short_desc_size - sizeof(uct_rc_hdr_t);
 
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+
     /*
      * Atomics.
      * Need to make sure device support at least one kind of atomics.
@@ -167,7 +169,7 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *self,
                                   uct_rc_iface_send_desc_init,
                                   "rc_verbs_short_desc");
     if (status != UCS_OK) {
-        return status; 
+        return status;
     }
     return UCS_OK;
 }

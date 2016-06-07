@@ -52,7 +52,6 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
 
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
 {
-    uct_rc_iface_send_op_t *op;
     int ret;
 
     ret = ibv_destroy_qp(txqp->qp);
@@ -60,13 +59,7 @@ void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
         ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
     }
 
-    ucs_queue_for_each_extract(op, &txqp->outstanding, queue, 1) {
-        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            ucs_warn("destroying rc ep %p with uncompleted operation %p",
-                     txqp, op);
-        }
-        op->handler(op);
-    }
+    uct_rc_purge_outstanding(txqp, UCS_ERR_CANCELED, 1);
     UCS_STATS_NODE_FREE(txqp->stats);
 }
 
@@ -111,8 +104,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_rc_iface_t);
-
+    uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface,
+                                           uct_rc_iface_t);
     ucs_debug("destroy rc ep %p", self);
 
     uct_rc_iface_remove_ep(iface, self);
@@ -238,41 +231,35 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                       buffer + strlen(buffer), max - strlen(buffer));
 }
 
-void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op,
-                                 ucs_status_t status)
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
     VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
-    
-    if (status == UCS_OK) {
-        desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
-    }
-    if (desc->super.user_comp) {
-        uct_invoke_completion(desc->super.user_comp, status);
-    }
+
+    desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
+
+    uct_invoke_completion(desc->super.user_comp, UCS_OK);
+
     ucs_mpool_put(desc);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
-void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
-                                               ucs_status_t status)
+void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
     VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
-    
-    if (status == UCS_OK) {
-        desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
-    }
+
+    desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
+
     ucs_mpool_put(desc);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
-void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
-                                             ucs_status_t status)
+void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
 {
-    uct_invoke_completion(op->user_comp, status);
+    uct_invoke_completion(op->user_comp, UCS_OK);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
@@ -375,12 +362,38 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
     return (ucs_derived_of(iface->ops, uct_rc_iface_ops_t))->fc_ctrl(ep);
 }
 
+void uct_rc_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
+                              int is_log)
+{
+    uct_rc_iface_send_op_t *op;
+    uct_rc_iface_send_desc_t *desc;
+
+    ucs_queue_for_each_extract(op, &txqp->outstanding, queue, 1) {
+        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
+            if (is_log != 0) {
+                ucs_warn("destroying rc ep %p with uncompleted operation %p",
+                         txqp, op);
+            }
+
+            if (op->user_comp != NULL) {
+                /* This must be uct_rc_ep_get_bcopy_handler,
+                 * uct_rc_ep_send_completion_proxy_handler,
+                 * one of the atomic handlers,
+                 * so invoke user completion */
+                uct_invoke_completion(op->user_comp, status);
+            }
+        }
+        desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+        ucs_mpool_put(desc);
+    }
+}
+
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
-            (uct_rc_iface_send_op_t *op, ucs_status_t status) \
+            (uct_rc_iface_send_op_t *op) \
     { \
         uct_rc_iface_send_desc_t *desc = \
-        ucs_derived_of(op, uct_rc_iface_send_desc_t); \
+            ucs_derived_of(op, uct_rc_iface_send_desc_t); \
         uint##_num_bits##_t *value = (void*)(desc + 1); \
         uint##_num_bits##_t *dest = desc->super.buffer; \
         \
@@ -393,7 +406,7 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
             *dest = *value; \
         } \
         \
-        uct_invoke_completion(desc->super.user_comp, status); \
+        uct_invoke_completion(desc->super.user_comp, UCS_OK); \
         ucs_mpool_put(desc); \
         UCT_IB_INSTRUMENT_RECORD_SEND_OP(op); \
   }

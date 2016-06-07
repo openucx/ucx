@@ -37,14 +37,16 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
     return uct_rc_verbs_iface_post_recv_always(&iface->super, count);
 }
 
-static void uct_rc_verbs_handle_failure(uct_rc_verbs_ep_t *ep,
-                                        uct_rc_verbs_iface_t *iface,
-                                        struct ibv_wc *wc)
+static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_rc_verbs_ep_t *ep,
+                                                       uct_rc_verbs_iface_t *iface,
+                                                       struct ibv_wc *wc)
 {
     extern ucs_class_t UCS_CLASS_NAME(uct_rc_verbs_ep_t);
     if (ep != NULL) {
         ucs_error("Send completion with error: %s",
                   ibv_wc_status_str(wc->status));
+
+        uct_rc_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t),
                           &ep->super.super.super,
@@ -66,7 +68,12 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
-        ucs_assert(ep != NULL);
+
+        if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
+            uct_rc_verbs_handle_failure(ep, iface, &wc[i]);
+            continue;
+        }
+        iface->super.tx.cq_available += num_wcs;
         uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         uct_rc_ep_process_tx_completion(&iface->super, &ep->super,
                                         ep->txcnt.ci);
@@ -90,6 +97,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
 
     uct_rc_iface_query(&iface->super, iface_attr);
     uct_rc_verbs_iface_common_query(&iface->verbs_common, &iface->super, iface_attr);
+
     return UCS_OK;
 }
 
@@ -120,7 +128,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->inl_rwrite_wr.opcode              = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.send_flags          = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 
-    status = uct_rc_verbs_iface_common_init(&self->verbs_common, 
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common,
                                             &self->super, config);
     if (status != UCS_OK) {
         return status;

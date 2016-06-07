@@ -47,15 +47,15 @@ typedef struct uct_rc_verbs_iface_common {
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
-static inline void 
-uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, 
+static inline void
+uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
                          uct_rc_iface_t *iface, int signaled)
 {
     txcnt->pi++;
     uct_rc_txqp_posted(txqp, iface, 1, signaled);
 }
 
-static inline void 
+static inline void
 uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, uint16_t count)
 {
     txcnt->ci += count;
@@ -95,16 +95,13 @@ static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_iface_t *iface
     return uct_rc_verbs_iface_post_recv_always(iface, count);
 }
 
-#define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(iface, i, wc, num_wcs) \
-      status = uct_ib_poll_cq((iface)->super.send_cq, &num_wcs, wc); \
+#define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
+      status = uct_ib_poll_cq((_iface)->super.send_cq, &_num_wcs, _wc); \
       if (status != UCS_OK) { \
           return; \
       } \
-      UCS_STATS_UPDATE_COUNTER((iface)->stats, UCT_RC_IFACE_STAT_TX_COMPLETION, num_wcs); \
-      /* it is possible to update available outside of the loop because */ \
-      /* completion with error is a FATAL error */ \
-      (iface)->tx.cq_available += num_wcs; \
-      UCT_IB_IFACE_VERBS_FOREACH_TXWQE(&(iface)->super.super, i, wc, num_wcs) 
+      UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_TX_COMPLETION, _num_wcs); \
+      for (_i = 0; _i < _num_wcs; ++_i)
 
 
 /* TODO: think of a better name */
@@ -113,7 +110,7 @@ static inline int uct_rc_verbs_txcq_get_comp_count(struct ibv_wc *wc)
     return wc->wr_id + 1;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t 
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 {
     uct_rc_hdr_t *hdr;
@@ -158,7 +155,7 @@ out:
     return status;
 }
 
-static inline void 
+static inline void
 uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                        uct_rc_am_short_hdr_t *am,
                                        uint8_t id, uint64_t hdr,
@@ -220,7 +217,7 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
     _wr.wr.atomic.rkey        = _rkey;  \
     _sge.length               = sizeof(uint64_t);
 
-static inline uct_rc_send_handler_t 
+static inline uct_rc_send_handler_t
 uct_rc_verbs_atomic_handler(uct_rc_verbs_iface_common_t *iface, uint32_t length)
 {
     ucs_assert((length == sizeof(uint32_t)) || (length == sizeof(uint64_t)));
@@ -234,7 +231,7 @@ uct_rc_verbs_atomic_handler(uct_rc_verbs_iface_common_t *iface, uint32_t length)
 }
 
 #if HAVE_IB_EXT_ATOMICS
-static inline void 
+static inline void
 uct_rc_verbs_fill_ext_atomic_wr(struct ibv_exp_send_wr *wr, struct ibv_sge *sge,
                                 int opcode, uint32_t length, uint32_t compare_mask,
                                 uint64_t compare_add, uint64_t swap, uint64_t remote_addr,

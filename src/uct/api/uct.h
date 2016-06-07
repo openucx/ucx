@@ -172,12 +172,13 @@ enum {
     UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23), /**< 64bit atomic compare-and-swap */
 
     /* Error handling capabilities */
-    UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF  = UCS_BIT(32), /**< Invalid buffer for short operation */
-    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF  = UCS_BIT(33), /**< Invalid buffer for buffered operation */
-    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF  = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
-    UCT_IFACE_FLAG_ERRHANDLE_AM_ID      = UCS_BIT(35), /**< Invalid AM id on remote */
-    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM = UCS_BIT(35), /**< Remote memory access */
-    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN  = UCS_BIT(36), /**< Invalid length for buffered operation */
+    UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF    = UCS_BIT(32), /**< Invalid buffer for short operation */
+    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF    = UCS_BIT(33), /**< Invalid buffer for buffered operation */
+    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
+    UCT_IFACE_FLAG_ERRHANDLE_AM_ID        = UCS_BIT(35), /**< Invalid AM id on remote */
+    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM   = UCS_BIT(36), /**< Remote memory access */
+    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN    = UCS_BIT(37), /**< Invalid length for buffered operation */
+    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE = UCS_BIT(38), /**< Remote peer failures/outage */
 
     /* Connection establishment */
     UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */

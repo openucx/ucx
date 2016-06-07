@@ -137,6 +137,6 @@ extern ucs_mpool_ops_t ucp_request_mpool_ops;
  */
 ucs_status_t ucp_request_start_send(ucp_request_t *req);
 
-ucs_status_t ucp_request_release_pending_send(uct_pending_req_t *self);
+void ucp_request_release_pending_send(uct_pending_req_t *self, void *arg);
 
 #endif
