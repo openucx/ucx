@@ -65,7 +65,8 @@ noinst_HEADERS += \
 	ib/rc/base/rc_def.h \
 	ib/rc/base/rc_ep.h \
 	ib/rc/base/rc_iface.h \
-	ib/rc/verbs/rc_verbs.h
+	ib/rc/verbs/rc_verbs.h \
+	ib/rc/verbs/rc_verbs_common.h 
 
 libuct_la_SOURCES += \
 	ib/rc/base/rc_ep.c \

@@ -23,9 +23,9 @@
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
 
-#define UCT_RC_CHECK_AM_SHORT(am_id, length, max_inline) \
-     UCT_CHECK_AM_ID(am_id); \
-     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + length, max_inline, "am_short");
+#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
+     UCT_CHECK_AM_ID(_am_id); \
+     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, _max_inline, "am_short");
 
 
 #define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \

@@ -195,7 +195,7 @@ static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint16_t sn)
+uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op)
 {
 
     /* NOTE: We insert the descriptor with the sequence number after the post,
@@ -203,9 +203,15 @@ uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint16_
      * than completion zero-based index).
      */
     ucs_assert(op != NULL);
-    op->sn = sn;
     ucs_queue_push(&txqp->outstanding, &op->queue);
     UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint16_t sn)
+{
+    op->sn = sn;
+    uct_rc_txqp_add_send_op(txqp, op);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -221,7 +227,7 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     op            = uct_rc_iface_get_send_op(iface);
     op->handler   = uct_rc_ep_send_completion_proxy_handler;
     op->user_comp = comp;
-    uct_rc_txqp_add_send_op(txqp, op, sn);
+    uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
 static inline void 

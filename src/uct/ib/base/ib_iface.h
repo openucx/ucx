@@ -256,23 +256,25 @@ ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);
 
-#define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(iface, i, hdr, wc, wc_count) \
-    for (i = 0; i < wc_count && ({ \
-        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) { \
-            ucs_fatal("Receive completion with error: %s", ibv_wc_status_str(wc[i].status)); \
+#define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
+    for (_i = 0; _i < _wc_count && ({ \
+        if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
+            ucs_fatal("Receive completion with error: %s", ibv_wc_status_str(_wc[i].status)); \
         } \
-        hdr = (typeof(hdr))uct_ib_iface_recv_desc_hdr(iface, \
-                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id); \
-        VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len); \
+        _hdr = (typeof(_hdr))uct_ib_iface_recv_desc_hdr(_iface, \
+                                                      (uct_ib_iface_recv_desc_t *)(uintptr_t)_wc[i].wr_id); \
+        VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[i].byte_len); \
         UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_RX, __FUNCTION__, \
-                              wc[i].wr_id, wc[i].status); \
-               1; }); ++i) 
+                              _wc[i].wr_id, _wc[i].status); \
+               1; }); ++_i) 
 
-#define UCT_IB_IFACE_VERBS_FOREACH_TXWQE(iface, i, wc, wc_count) \
-    for (i = 0; i < wc_count && ({ \
-        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) { \
-            ucs_fatal("iface=%p: send completion %d with error: %s wqe: %p wr_id: %llu", iface, i, ibv_wc_status_str(wc[i].status), &wc[i], (unsigned long long)wc[i].wr_id); \
+#define UCT_IB_IFACE_VERBS_FOREACH_TXWQE(_iface, _i, _wc, _wc_count) \
+    for (_i = 0; _i < _wc_count && ({ \
+        if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \
+            ucs_fatal("iface=%p: send completion %d with error: %s wqe: %p wr_id: %llu", \
+                      _iface, _i, ibv_wc_status_str(_wc[i].status), \
+                      &_wc[i], (unsigned long long)_wc[i].wr_id); \
         } \
-               1; }); ++i) 
+               1; }); ++_i) 
 
 #endif

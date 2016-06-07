@@ -79,7 +79,7 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
                                                  uct_rc_verbs_iface_t);
     UCT_RC_VERBS_FILL_DESC_WR(wr, desc);
     uct_rc_verbs_ep_post_send(iface, ep, wr, send_flags);
-    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super, ep->txcnt.pi);
+    uct_rc_txqp_add_send_op_sn(&ep->super.txqp, &desc->super, ep->txcnt.pi);
 }
 
 static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
@@ -165,7 +165,7 @@ uct_rc_verbs_ep_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t leng
     UCT_RC_VERBS_FILL_DESC_WR(&wr, desc);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_verbs_exp_post_send(ep, &wr, force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE);
-    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super, ep->txcnt.pi);
+    uct_rc_txqp_add_send_op_sn(&ep->super.txqp, &desc->super, ep->txcnt.pi);
 }
 
 static inline ucs_status_t

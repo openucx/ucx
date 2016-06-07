@@ -344,13 +344,11 @@ uct_rc_mlx5_ep_bcopy_post(uct_rc_mlx5_ep_t *ep, unsigned opcode, unsigned length
                           /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                           int force_sig, uct_rc_iface_send_desc_t *desc)
 {
-    uint16_t sn;
-
-    sn = ep->tx.wq.sw_pi;
+    desc->super.sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_ep_dptr_post(ep, opcode, desc + 1, length, &desc->lkey,
                              am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
                              0, 0, 0, force_sig);
-    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super, sn);
+    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super);
 }
 
 /*
@@ -387,13 +385,13 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
                            uint64_t compare_mask, uint64_t compare,
                            uint64_t swap_add, int signal)
 {
-    uint16_t sn = ep->tx.wq.sw_pi;
+    desc->super.sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_ep_dptr_post(ep, opcode, desc + 1, length, &desc->lkey,
                                       0, NULL, 0, remote_addr, rkey, compare_mask,
                                       compare, swap_add, signal);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
-    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super, sn);
+    uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
