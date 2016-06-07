@@ -77,7 +77,7 @@ ucx:
 	$(MAKE) -C $(top_builddir)
 
 test: ucx ucx_perftest
-	$(MPIRUN) $(MPI_ARGS) ucx_perftest$(EXEEXT) $(TEST_ARGS)
+	$(MPIRUN) $(MPI_ARGS) $(abs_builddir)/ucx_perftest$(EXEEXT) $(TEST_ARGS)
 
 help:
 	@echo
