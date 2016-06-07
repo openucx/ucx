@@ -40,7 +40,7 @@ static pthread_spinlock_t threads_lock = 0;
 static pthread_t threads[128]          = {0};
 
 
-int get_thread_num(void)
+static int ucs_log_get_thread_num(void)
 {
     pthread_t self = pthread_self();
     unsigned i;
@@ -118,8 +118,9 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     } else if (ucs_log_initialized) {
         fprintf(ucs_log_file,
                 "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
-                tv.tv_sec, tv.tv_usec, ucs_log_hostname, ucs_log_pid, get_thread_num(),
-                short_file, line, "UCX", ucs_log_level_names[level], buf);
+                tv.tv_sec, tv.tv_usec, ucs_log_hostname, ucs_log_pid,
+                ucs_log_get_thread_num(), short_file, line, "UCX",
+                ucs_log_level_names[level], buf);
     } else {
         fprintf(stdout,
                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
@@ -181,7 +182,7 @@ void ucs_log_fatal_error(const char *fmt, ...)
 
     /* Print hostname:pid */
     snprintf(p, buffer_size, "[%s:%-5d:%d] ", ucs_log_hostname, ucs_log_pid,
-             get_thread_num());
+             ucs_log_get_thread_num());
     buffer_size -= strlen(p);
     p           += strlen(p);
 
