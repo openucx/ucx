@@ -101,22 +101,36 @@ AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
 
 
 #
+#  Enable/disable turning on machine-specific optimizations
+#
+AC_ARG_ENABLE(optimizations,
+        AC_HELP_STRING([--enable-optimizations], [Enable machine-specific optimizations, default: YES]),
+        [],
+        [enable_optimizations=yes])
+
+
+#
 # SSE/AVX
 #
-COMPILER_OPTION([avx], [AVX], [-mavx], [no],
+COMPILER_OPTION([avx], [AVX], [-mavx], [$enable_optimizations],
                 [#include <immintrin.h>
                  int main() { return _mm256_testz_si256(_mm256_set1_epi32(1), _mm256_set1_epi32(3)); }])
 AS_IF([test "x$with_avx" != xyes],
-      [COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [no],
+      [COMPILER_OPTION([sse41], [SSE 4.1], [-msse4.1], [$enable_optimizations],
                        [#include <smmintrin.h>
                        int main() { return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3)); }])
-       COMPILER_OPTION([sse42], [SSE 4.2], [-msse4.2], [no],
+       COMPILER_OPTION([sse42], [SSE 4.2], [-msse4.2], [$enable_optimizations],
                        [#include <popcntintrin.h>
                         int main() { return _mm_popcnt_u32(0x101) - 2; }])
       ])
 
+
+#
+# Check for compiler attribute which disables optimizations per-function.
+#
 CHECK_SPECIFIC_ATTRIBUTE([optimize], [NOOPTIMIZE],
                          [int foo (int arg) __attribute__ ((optimize("O0")));])
+
 
 #
 # Set C++ optimization/debug flags to be the same as for C
