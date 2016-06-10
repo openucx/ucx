@@ -460,7 +460,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
  * @ingroup UCP_CONTEXT
  * @brief UCP context initialization.
  *
- * This routine creates and initializes a @ref ucp_context_t
+ * This routine creates and initializes a @ref ucp_context_h
  * "UCP application context".
  *
  * @warning This routine must be called before any other UCP function
@@ -567,12 +567,12 @@ void ucp_worker_destroy(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WORKER
- * @bried Print information about protocols that would be used by a worker.
+ * @brief Print information about protocols that would be used by a worker.
  *
  * This routine prints information about the protocols being used, thresholds,
  * UCT transport methods, and other useful information associated with the worker.
  *
- * @param [in] context      Handle to @ref ucp_context_h "UCP application context".
+ * @param [in] worker       Worker object whose address to return.
  * @param [in] stream       Output stream to print the information to.
  * @param [in] title        Configuration title to print.
  * @param [in] print_flags  Flags that control various printing options.
@@ -649,7 +649,7 @@ void ucp_worker_progress(ucp_worker_h worker);
  * The file descriptor will get signaled when an event occurs, as part of the
  * wake-up mechanism. Signaling means a call to poll() or select() with this
  * file descriptor will return at this point, with this descriptor marked as the
- * reason (or one of the resons) the function has returned. The user is
+ * reason (or one of the reasons) the function has returned. The user is
  * responsible to release the file descriptor by invoking close().
  *
  * The wake-up mechanism exists to allow for the user process to register for
@@ -663,12 +663,15 @@ void ucp_worker_progress(ucp_worker_h worker);
  * file descriptor obtained per worker (this function) and the second is the
  * @ref ucp_worker_wait function for waiting on the next event internally.
  *
+ * @note UCP @ref ucp_feature "features" have to be triggered
+ *   with @ref UCP_FEATURE_WAKEUP to select proper transport
+ *
  * @param [in]  worker    Worker of notified events.
  * @param [out] fd        File descriptor.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd_p);
+ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
 
 
 /**
@@ -686,12 +689,14 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd_p);
  * notification and may not progress some of the requests as it would when
  * calling @ref ucp_worker_progress (which is not invoked in that duration).
  *
+ * @note UCP @ref ucp_feature "features" have to be triggered
+ *   with @ref UCP_FEATURE_WAKEUP to select proper transport
+ *
  * @param [in]  worker    Worker to wait for events on.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_wait(ucp_worker_h worker);
-
 
 /**
  * @ingroup UCP_WAKEUP
@@ -704,21 +709,24 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  * The worker must be armed before waiting on an event (must be re-armed after
  * it has been signaled for re-use) with @ref ucp_worker_arm.
  * The events triggering a signal of the file descriptor from
- * @ref ucp_worker_get_efd , or the return of a call to @ref ucp_worker_wait -
- * depend on the interfaces used by the worker and are defined in the transport
- * layer, and typically represent a request completion or newly available
- * resources. It can also be triggered by calling @ref ucp_worker_signal .
+ * @ref ucp_worker_get_efd depend on the interfaces used by the worker and
+ * defined in the transport layer, and typically represent a request completion
+ * or newly available resources. It can also be triggered
+ * by calling @ref ucp_worker_signal .
  *
- * @code
- * status = @ref ucp_worker_get_efd (worker, &fd);
+ * @code {.c}
+ * status = ucp_worker_get_efd (worker, &fd);
  * while (1) {
- *     @ref ucp_worker_arm (worker);
- *     @ref ucp_worker_wait (worker);
+ *     ucp_worker_arm (worker);
+ *     poll (&fd, nfds, timeout);
  *     <handle event>
  * }
  *
- * - In this example, @ref ucp_worker_wait can be replaced with poll() on fd.
+ * - The code in this example, could be replaced by ucp_worker_wait.
  * @endcode
+ *
+ * @note UCP @ref ucp_feature "features" have to be triggered
+ *   with @ref UCP_FEATURE_WAKEUP to select proper transport
  *
  * @param [in]  worker    Worker of notified events.
  *
@@ -753,7 +761,7 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  * non-blocking, and communications may begin immediately after it returns. If
  * the connection process is not completed, communications may be delayed.
  * The created @ref ucp_ep_h "endpoint" is associated with one and only one
- * @ref ucp_worker_t "worker".
+ * @ref ucp_worker_h "worker".
  *
  * @param [in]  worker      Handle to the worker; the endpoint
  *                          is associated with the worker.
@@ -860,7 +868,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
  * This routine unmaps a user specified memory segment, that was previously
  * mapped using the @ref ucp_mem_map "ucp_mem_map()" routine.  The unmap
  * routine will also release the resources associated with the memory
- * @ucp_mem_h "handle".  When the function returns, the @ref ucp_mem_h
+ * @ref ucp_mem_h "handle".  When the function returns, the @ref ucp_mem_h
  * and associated @ref ucp_rkey_h "remote key" will be invalid and cannot be
  * used with any UCP routine.
  *
@@ -876,7 +884,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
  *
  * @param [in]  context     Application @ref ucp_context_h "context" which was
  *                          used to allocate/map the memory.
- * @paran [in]  memh        @ref ucp_mem_h "Handle" to memory region.
+ * @param [in]  memh        @ref ucp_mem_h "Handle" to memory region.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -891,7 +899,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  * a remote access key (RKEY) object. RKEY is an opaque object that provides
  * the information that is necessary for remote memory access.
  * This routine packs the RKEY object in a portable format such that the
- * object can be @ucp_rkey_unpack "unpacked" on any platform supported by the
+ * object can be @ref ucp_ep_rkey_unpack "unpacked" on any platform supported by the
  * UCP library. In order to release the memory buffer allocated by this routine
  * the application is responsible to call the @ref ucp_rkey_buffer_release
  * "ucp_rkey_buffer_release()" routine.
@@ -907,9 +915,9 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  * @param [in]  context       Application @ref ucp_context_h "context" which was
  *                            used to allocate/map the memory.
  * @param [in]  memh          @ref ucp_mem_h "Handle" to memory region.
- * @param [out] rkey_buffer   Memory buffer allocated by the library.
+ * @param [out] rkey_buffer_p Memory buffer allocated by the library.
  *                            The buffer contains packed RKEY.
- * @param [out] size          Size (in bytes) of the packed RKEY.
+ * @param [out] size_p        Size (in bytes) of the packed RKEY.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -948,7 +956,7 @@ void ucp_rkey_buffer_release(void *rkey_buffer);
  *
  * @param [in]  ep            Endpoint to access using the remote key.
  * @param [in]  rkey_buffer   Packed rkey.
- * @param [out] rkey          Remote key handle.
+ * @param [out] rkey_p        Remote key handle.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -968,7 +976,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
  * @li Once the RKEY object is released an access to the memory will cause an
  * undefined failure.
  * @li If the RKEY object was not created using
- * @ref ucp_rkey_unpack "ucp_rkey_unpack()" routine the behaviour of this
+ * @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()" routine the behaviour of this
  * routine is undefined.
  *
  * @param [in]  rkey         Romote key to destroy.
@@ -990,7 +998,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *                              creation and is used for the remote memory address.
  * @param [in]  remote_addr     Remote address to translate.
  * @param [out] rkey            Remote key handle for the remote address.
- * @param [out] local_addr      Local memory address that can by accessed
+ * @param [out] local_addr_p    Local memory address that can by accessed
  *                              directly using memory load and store operations.
  *
  * @return Error code as defined by @ref ucs_status_t
@@ -1083,7 +1091,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  * This routine receives a messages that is described by the local address @a
  * buffer, size @a count, and @a datatype object on the @a worker.  The tag
  * value of the receive message has to match the @a tag and @a tag_mask values,
- * where the @tag_mask indicates what bits of the tag have to be matched. The
+ * where the @a tag_mask indicates what bits of the tag have to be matched. The
  * routine is a non-blocking and therefore returns immediately. The receive
  * operation is considered completed when the message is delivered to the @a
  * buffer.  In order to notify the application about completion of the receive
@@ -1124,9 +1132,9 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * @brief Non-blocking probe and return a message.
  *
  * This routine probes (checks) if a messages described by the @a tag and
- * @tag_mask was received (fully or partially) on the @a worker. The tag
+ * @a tag_mask was received (fully or partially) on the @a worker. The tag
  * value of the received message has to match the @a tag and @a tag_mask
- * values, where the @tag_mask indicates what bits of the tag have to be
+ * values, where the @a tag_mask indicates what bits of the tag have to be
  * matched. The function returns immediately and if the message is matched it
  * returns a handle for the message.
  *
@@ -1163,7 +1171,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  *
  * This routine receives a messages that is described by the local address @a
  * buffer, size @a count, @a message handle, and @a datatype object on the @a
- * worker.  The @message handle can be obtain by calling the @ref
+ * worker.  The @a message handle can be obtain by calling the @ref
  * ucp_tag_probe_nb "ucp_tag_probe_nb()" routine.  @ref ucp_tag_msg_recv_nb
  * "ucp_tag_msg_recv_nb()" routine is a non-blocking and therefore returns
  * immediately. The receive operation is considered completed when the message
@@ -1657,8 +1665,8 @@ void ucp_dt_destroy(ucp_datatype_t datatype);
  * This routine ensures ordering of non-blocking communication operations on
  * the @ref ucp_worker_h "UCP worker".  Communication operations issued on the
  * @a worker prior to this call are guaranteed to be completed before any
- * subsequent communication operations to the same @ucp_worker_h "worker" which
- * follow the call to @ref ucp_worker_fence "fence".
+ * subsequent communication operations to the same @ref ucp_worker_h "worker"
+ * which follow the call to @ref ucp_worker_fence "fence".
  *
  * @note The primary diference between @ref ucp_worker_fence "ucp_worker_fence()"
  * and the @ref ucp_worker_flush "ucp_worker_flush()" is the fact the fence
@@ -1695,5 +1703,9 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
 
+/**
+ * @example ucp_hello_world.c
+ * UCP hello world client / server example utility.
+ */
 
 #endif
