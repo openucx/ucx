@@ -44,7 +44,7 @@ public:
     {
         /* all work should be complete */
         EXPECT_EQ(N, req_count);
-        uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+        uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
     }
 
     static const int N; 
@@ -63,6 +63,11 @@ public:
     {
         req_count++;
         return UCS_OK;
+    }
+
+    static void purge_cb(uct_pending_req_t *r, void *arg)
+    {
+        req_count++;
     }
 
     static ucs_status_t pending_cb_busy(uct_pending_req_t *r)
@@ -94,7 +99,7 @@ UCS_TEST_P(test_ud_pending, async_progress) {
     twait(300);
     /* requests must not be dispatched from async progress */
     EXPECT_EQ(0, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
     EXPECT_EQ(N, req_count);
 }
 
@@ -115,7 +120,7 @@ UCS_TEST_P(test_ud_pending, sync_progress) {
     short_progress_loop();
     /* requests must be dispatched from progress */
     EXPECT_EQ(N, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
     EXPECT_EQ(N, req_count);
 }
 
@@ -136,7 +141,7 @@ UCS_TEST_P(test_ud_pending, err_busy) {
     short_progress_loop();
     /* requests will not be dispatched from progress */
     EXPECT_EQ(0, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
     EXPECT_EQ(N, req_count);
 }
 
@@ -170,7 +175,7 @@ UCS_TEST_P(test_ud_pending, window)
     EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &r));
     short_progress_loop();
     EXPECT_EQ(1, req_count);
-    uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
 }
 
 UCS_TEST_P(test_ud_pending, tx_wqe)
@@ -196,7 +201,7 @@ UCS_TEST_P(test_ud_pending, tx_wqe)
     short_progress_loop();
     EXPECT_EQ(1, req_count);
     short_progress_loop();
-    uct_ep_pending_purge(m_e1->ep(0), pending_cb);
+    uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ud_pending, ud)

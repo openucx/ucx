@@ -75,11 +75,10 @@ ucs_mpool_ops_t ucp_request_mpool_ops = {
     .obj_cleanup   = ucp_worker_request_fini_proxy
 };
 
-ucs_status_t ucp_request_release_pending_send(uct_pending_req_t *self)
+void ucp_request_release_pending_send(uct_pending_req_t *self, void *arg)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_request_complete_send(req, UCS_ERR_CANCELED);
-    return UCS_OK;
 }
 
 /*

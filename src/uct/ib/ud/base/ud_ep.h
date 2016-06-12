@@ -258,9 +258,10 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
 
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n);
 
-void         uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
+void   uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
+                               void *arg);
 
-void         uct_ud_ep_disconnect(uct_ep_h ep);
+void   uct_ud_ep_disconnect(uct_ep_h ep);
 
 
 /* helper function to create/destroy new connected ep */

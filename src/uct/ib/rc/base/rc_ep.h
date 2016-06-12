@@ -154,7 +154,8 @@ void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
 
-void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_callback_t cb);
+void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
+                             void*arg);
 
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
@@ -164,6 +165,9 @@ void uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize);
 void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
+
+void uct_rc_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
+                              int is_log);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 1)(uct_rc_iface_send_op_t *op);

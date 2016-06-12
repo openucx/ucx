@@ -177,7 +177,7 @@ static void ucp_ep_destory_uct_eps(ucp_ep_h ep)
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = ep->uct_eps[lane];
-        uct_ep_pending_purge(uct_ep, ucp_request_release_pending_send);
+        uct_ep_pending_purge(uct_ep, ucp_request_release_pending_send, NULL);
         ucs_debug("destroy ep %p op %d uct_ep %p", ep, lane, uct_ep);
         uct_ep_destroy(uct_ep);
     }

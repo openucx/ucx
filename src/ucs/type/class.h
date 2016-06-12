@@ -56,6 +56,8 @@ struct ucs_class {
     extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
     UCS_CLASS_INIT_FUNC(_type, ## __VA_ARGS__);
 
+#define UCS_CLASS_NAME(_type) \
+    _UCS_CLASS_DECL_NAME(_type)
 
 /**
  * Define a class.

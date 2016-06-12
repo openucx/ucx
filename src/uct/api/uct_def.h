@@ -134,6 +134,15 @@ typedef void (*uct_completion_callback_t)(uct_completion_t *self,
  */
 typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
 
+/**
+ * Callback to purge pending requests.
+ *
+ * @param [in]  self     Pointer to relevant pending structure, which was
+ *                       initially passed to the operation.
+ * @param [in]  arg      User argument to be passed to the callback.
+ */
+typedef void (*uct_pending_purge_callback_t)(uct_pending_req_t *self,
+                                             void *arg);
 
 /**
  * Callback for producing data.

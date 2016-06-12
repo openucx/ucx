@@ -141,11 +141,12 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         }
 
         buf[0] = '\0';
-        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
-                                    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
-                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
-                                    UCT_IFACE_FLAG_ERRHANDLE_AM_ID     |
-                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM))
+        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF   |
+                                    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF   |
+                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF   |
+                                    UCT_IFACE_FLAG_ERRHANDLE_AM_ID       |
+                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM  |
+                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
         {
             if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
@@ -169,6 +170,9 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM) {
                 strncat(buf, " remote access,", sizeof(buf) - 1);
+            }
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) {
+                strncat(buf, " peer failure,", sizeof(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
         } else {

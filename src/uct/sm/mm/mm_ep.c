@@ -135,7 +135,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
         ucs_error("error detaching from remote FIFO");
     }
 
-    uct_mm_ep_pending_purge(&self->super.super, NULL);
+    uct_mm_ep_pending_purge(&self->super.super, NULL, NULL);
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)
@@ -407,24 +407,27 @@ static ucs_arbiter_cb_result_t uct_mm_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                           void *arg)
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_pending_callback_t cb = arg;
+    uct_purge_cb_args_t *cb_args    = arg;
+    uct_pending_purge_callback_t cb = cb_args->cb;
     uct_mm_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
                                        uct_mm_ep_t, arb_group);
     if (cb != NULL) {
-        cb(req);
+        cb(req, cb_args->arg);
     } else {
         ucs_warn("ep=%p cancelling user pending request %p", ep, req);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
-void uct_mm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_callback_t cb)
+void uct_mm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
+                             void *arg)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+    uct_purge_cb_args_t  args = {cb, arg};
 
     ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
-                            uct_mm_ep_abriter_purge_cb, cb);
+                            uct_mm_ep_abriter_purge_cb, &args);
 }
 
 ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
