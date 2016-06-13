@@ -145,7 +145,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
                   gni_err_str[ugni_rc], ugni_rc);
     }
     sglib_hashed_uct_ugni_ep_t_delete(iface->eps, self);
-    uct_ugni_ep_pending_purge(&self->super.super, NULL);
+    uct_ugni_ep_pending_purge(&self->super.super, NULL, NULL);
 }
 
 UCS_CLASS_DEFINE(uct_ugni_ep_t, uct_base_ep_t)
