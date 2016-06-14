@@ -97,6 +97,14 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     ucs_assert(tail != NULL);
     head = tail->next;
 
+    if (head == NULL) {
+        /* it means that 1 element group is 
+         * scheduled during dispatch.
+         * Restore next pointer.
+         */
+        head = tail->next = tail;
+    }
+
     if (head->list.next != NULL) {
         return; /* Already scheduled */
     }
@@ -114,6 +122,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg)
 {
     ucs_arbiter_elem_t *group_head, *last_elem, *elem, *next_elem;
+    ucs_list_link_t *elem_list_next;
     ucs_arbiter_elem_t *next_group, *prev_group;
     ucs_arbiter_group_t *group;
     ucs_arbiter_cb_result_t result;
@@ -136,9 +145,17 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
         next_elem     = group_head;
 
         do {
-            elem       = next_elem;
-            next_elem  = elem->next;
-            elem->next = NULL;
+            elem            = next_elem;
+            next_elem       = elem->next;
+            /* zero pointer to next elem here because:
+             * - user callback may free() the element
+             * - push_elem() will fail if next is not NULL
+             *   and elem is reused later. For example in
+             *   rc/ud transports control.
+             */
+            elem->next      = NULL;
+            elem_list_next  = elem->list.next;
+            elem->list.next = NULL;
 
             ucs_assert(elem->group == group);
             ucs_trace_data("dispatching arbiter element %p", elem);
@@ -175,11 +192,11 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             } else if (result == UCS_ARBITER_CB_RESULT_NEXT_GROUP) {
                 elem->next = next_elem;
                 /* avoid infinite loop */
+                elem->list.next = elem_list_next;
                 break;
             } else if ((result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) ||
                        (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP)) {
                 elem->next = next_elem;
-                elem->list.next = NULL;
                 if (group_head == prev_group) {
                     next_group = NULL; /* No more groups */
                 } else {
@@ -192,9 +209,11 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                 break;
             } else if (result == UCS_ARBITER_CB_RESULT_STOP) {
                 elem->next = next_elem;
+                elem->list.next = elem_list_next;
                 goto out;
             } else {
                 elem->next = next_elem;
+                elem->list.next = elem_list_next;
                 ucs_bug("unexpected return value from arbiter callback");
             }
         } while ((elem != last_elem) && (group_dispatch_count < per_group));
