@@ -576,3 +576,48 @@ ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
     *p_mtu = uct_ib_mtu_value(uct_ib_device_port_attr(dev, port_num)->active_mtu);
     return UCS_OK;
 }
+
+int uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size)
+{
+    const struct ibv_exp_device_attr *dev_attr = &dev->dev_attr;
+
+    if (!IBV_EXP_HAVE_ATOMIC_HCA(dev_attr) &&
+        !IBV_EXP_HAVE_ATOMIC_GLOB(dev_attr) &&
+        !IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(dev_attr))
+    {
+        return 0; /* No atomics support */
+    }
+
+    if (ext) {
+#ifdef HAVE_IB_EXT_ATOMICS
+        uint64_t log_atomic_arg_sizes = 0;
+
+        if (dev_attr->comp_mask & IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS) {
+            log_atomic_arg_sizes |= dev_attr->ext_atom.log_atomic_arg_sizes;
+        }
+#  if HAVE_MASKED_ATOMICS_ENDIANNESS
+        if (dev_attr->comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS) {
+            log_atomic_arg_sizes |=
+                            dev_attr->masked_atomic.masked_log_atomic_arg_sizes;
+        }
+#  endif
+        return (log_atomic_arg_sizes & size) &&
+               (dev_attr->ext_atom.log_max_atomic_inline >= ucs_ilog2(size));
+#else
+        return 0;
+#endif
+    } else {
+        return size == sizeof(uint64_t); /* IB spec atomics are 64 bit only */
+    }
+}
+
+int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size)
+{
+#if HAVE_MASKED_ATOMICS_ENDIANNESS
+    if (ext && (dev->dev_attr.comp_mask & IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS)) {
+        struct ibv_exp_masked_atomic_params masked_atom = dev->dev_attr.masked_atomic;
+        return size & masked_atom.masked_log_atomic_arg_sizes_network_endianness;
+    }
+#endif
+    return IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr);
+}

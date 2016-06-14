@@ -38,8 +38,6 @@ typedef struct uct_rc_verbs_iface_common {
     /* TODO: make a separate datatype */
     struct {
         size_t                 short_desc_size;
-        uct_rc_send_handler_t  atomic32_handler;
-        uct_rc_send_handler_t  atomic64_handler;
         size_t                 max_inline;
     } config;
 } uct_rc_verbs_iface_common_t;
@@ -217,18 +215,6 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
     _wr.wr.atomic.rkey        = _rkey;  \
     _sge.length               = sizeof(uint64_t);
 
-static inline uct_rc_send_handler_t
-uct_rc_verbs_atomic_handler(uct_rc_verbs_iface_common_t *iface, uint32_t length)
-{
-    ucs_assert((length == sizeof(uint32_t)) || (length == sizeof(uint64_t)));
-    switch (length) {
-        case sizeof(uint32_t):
-            return iface->config.atomic32_handler;
-        case sizeof(uint64_t):
-            return iface->config.atomic64_handler;
-    }
-    return NULL;
-}
 
 #if HAVE_IB_EXT_ATOMICS
 static inline void

@@ -279,19 +279,11 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                         - sizeof(struct mlx5_wqe_data_seg);
 
     /* Atomics */
-    iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                             UCT_IFACE_FLAG_ATOMIC_FADD32 |
-                             UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                             UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
-                             UCT_IFACE_FLAG_ATOMIC_ADD64 |
-                             UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                             UCT_IFACE_FLAG_ATOMIC_SWAP64 |
-                             UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
-                             UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
-                             UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
+    iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
+                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;
 
     /* Software overhead */
-    iface_attr->overhead = 40e-9;
+    iface_attr->overhead          = 40e-9;
 
     return UCS_OK;
 }

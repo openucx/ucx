@@ -86,6 +86,9 @@ enum {
 };
 
 
+typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op);
+
+
 struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
     uct_ib_mtu_t             path_mtu;
@@ -153,6 +156,11 @@ struct uct_rc_iface {
         uint8_t              retry_cnt;
         uint8_t              max_rd_atomic;
         enum ibv_mtu         path_mtu;
+
+        /* Atomic callbacks */
+        uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
+        uct_rc_send_handler_t  atomic32_ext_handler;  /* 32bit extended */
+        uct_rc_send_handler_t  atomic64_ext_handler;  /* 64bit extended */
     } config;
 
     UCS_STATS_NODE_DECLARE(stats);
@@ -162,9 +170,6 @@ struct uct_rc_iface {
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
                   const char*, unsigned, unsigned, uct_rc_iface_config_t*)
-
-
-typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op);
 
 
 struct uct_rc_iface_send_op {
@@ -293,6 +298,20 @@ static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {
     return uct_rc_iface_have_tx_cqe_avail(iface) &&
            !ucs_mpool_is_empty(&iface->tx.mp);
+}
+
+static UCS_F_ALWAYS_INLINE uct_rc_send_handler_t
+uct_rc_iface_atomic_handler(uct_rc_iface_t *iface, int ext, unsigned length)
+{
+    ucs_assert((length == sizeof(uint32_t)) || (length == sizeof(uint64_t)));
+    switch (length) {
+    case sizeof(uint32_t):
+        return iface->config.atomic32_ext_handler;
+    case sizeof(uint64_t):
+        return ext ? iface->config.atomic64_ext_handler :
+                     iface->config.atomic64_handler;
+    }
+    return NULL;
 }
 
 #endif

@@ -78,24 +78,43 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+
     uct_ib_iface_query(&iface->super,
                        ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN),
                        iface_attr);
 
-    iface_attr->iface_addr_len      = 0;
-    iface_attr->ep_addr_len         = sizeof(uct_rc_ep_address_t);
-    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT |
-                                      UCT_IFACE_FLAG_AM_BCOPY |
-                                      UCT_IFACE_FLAG_AM_ZCOPY |
-                                      UCT_IFACE_FLAG_PUT_SHORT |
-                                      UCT_IFACE_FLAG_PUT_BCOPY |
-                                      UCT_IFACE_FLAG_PUT_ZCOPY |
-                                      UCT_IFACE_FLAG_GET_BCOPY |
-                                      UCT_IFACE_FLAG_GET_ZCOPY |
-                                      UCT_IFACE_FLAG_PENDING   |
-                                      UCT_IFACE_FLAG_CONNECT_TO_EP |
-                                      UCT_IFACE_FLAG_AM_CB_SYNC |
-                                      UCT_IFACE_FLAG_WAKEUP;
+    iface_attr->iface_addr_len  = 0;
+    iface_attr->ep_addr_len     = sizeof(uct_rc_ep_address_t);
+    iface_attr->cap.flags       = UCT_IFACE_FLAG_AM_SHORT |
+                                  UCT_IFACE_FLAG_AM_BCOPY |
+                                  UCT_IFACE_FLAG_AM_ZCOPY |
+                                  UCT_IFACE_FLAG_PUT_SHORT |
+                                  UCT_IFACE_FLAG_PUT_BCOPY |
+                                  UCT_IFACE_FLAG_PUT_ZCOPY |
+                                  UCT_IFACE_FLAG_GET_BCOPY |
+                                  UCT_IFACE_FLAG_GET_ZCOPY |
+                                  UCT_IFACE_FLAG_PENDING   |
+                                  UCT_IFACE_FLAG_CONNECT_TO_EP |
+                                  UCT_IFACE_FLAG_AM_CB_SYNC |
+                                  UCT_IFACE_FLAG_WAKEUP;
+
+    if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
+        iface_attr->cap.flags  |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
+                                  UCT_IFACE_FLAG_ATOMIC_FADD64 |
+                                  UCT_IFACE_FLAG_ATOMIC_CSWAP64;
+    }
+
+    if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64;
+    }
+
+    if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint32_t))) {
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
+                                 UCT_IFACE_FLAG_ATOMIC_FADD32 |
+                                 UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+                                 UCT_IFACE_FLAG_ATOMIC_CSWAP32;
+    }
 }
 
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
@@ -244,6 +263,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     unsigned rx_priv_len, uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
+    uct_ib_device_t *dev;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, dev_name, rx_headroom,
@@ -341,6 +361,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                            config->fc.hard_thresh), 1);
     self->config.fc_soft_thresh  = ucs_max((int)(self->config.fc_wnd_size *
                                            config->fc.soft_thresh), 1);
+
+    /* Set atomic handlers according to atomic reply endianness */
+    dev = uct_ib_iface_device(&self->super);
+    self->config.atomic64_handler = uct_ib_atomic_is_be_reply(dev, 0, sizeof(uint64_t)) ?
+                                    uct_rc_ep_atomic_handler_64_be1 :
+                                    uct_rc_ep_atomic_handler_64_be0;
+    self->config.atomic32_ext_handler = uct_ib_atomic_is_be_reply(dev, 1, sizeof(uint32_t)) ?
+                                        uct_rc_ep_atomic_handler_32_be1 :
+                                        uct_rc_ep_atomic_handler_32_be0;
+    self->config.atomic64_ext_handler = uct_ib_atomic_is_be_reply(dev, 1, sizeof(uint64_t)) ?
+                                        uct_rc_ep_atomic_handler_64_be1 :
+                                        uct_rc_ep_atomic_handler_64_be0;
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);

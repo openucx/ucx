@@ -202,6 +202,10 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
  */
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu);
 
+int uct_ib_atomic_is_supported(uct_ib_device_t *dev, int ext, size_t size);
+
+int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size);
+
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
                                      uint8_t *p_port_num);
