@@ -3,6 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -176,6 +177,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.command         = test.command;
     params.test_type       = test.test_type;
     params.thread_mode     = UCS_THREAD_MODE_SINGLE;
+    params.async_mode      = UCS_ASYNC_MODE_THREAD;
     params.thread_count    = 1;
     params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params.flags           = flags;
