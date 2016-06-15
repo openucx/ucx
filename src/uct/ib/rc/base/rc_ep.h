@@ -323,7 +323,6 @@ static inline void uct_rc_ep_process_tx_completion(uct_rc_iface_t *iface,
 {
     uct_rc_txqp_completion(&ep->txqp, sn);
     ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
-    ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
 }
 
 

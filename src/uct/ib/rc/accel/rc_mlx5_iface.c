@@ -128,6 +128,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     ++iface->super.tx.cq_available;
 
     uct_rc_ep_process_tx_completion(&iface->super, &ep->super, hw_ci);
+    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
 }
 
 static inline void uct_rc_mlx5_iface_rx_inline(uct_rc_mlx5_iface_t *iface,

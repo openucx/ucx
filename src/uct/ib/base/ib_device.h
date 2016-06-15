@@ -222,13 +222,13 @@ static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, st
     int ret;
 
     ret = ibv_poll_cq(cq, *count, wcs);
-    if (ucs_unlikely(ret < 0)) {
+    if (ret <= 0) {
+        if (ucs_likely(ret == 0)) {
+            return UCS_ERR_NO_PROGRESS;
+        }
         ucs_fatal("Failed to poll receive CQ");
     }
 
-    if (ret == 0) {
-        return UCS_ERR_NO_PROGRESS;
-    }
     *count = ret;
     return UCS_OK;
 }
