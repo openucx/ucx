@@ -13,6 +13,10 @@ extern "C" {
 #include <common/test.h>
 #include "uct_test.h"
 
+#define UCT_RC_INSTANTIATE_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
+
 class test_rc_flow_control : public uct_test {
 public:
     virtual void init() {
@@ -50,7 +54,8 @@ public:
         return ucs_derived_of(e->ep(0), uct_rc_ep_t);
     }
 
-    void set_fc_attributes(entity *e, int wnd, int s_thresh, int h_thresh) {
+    void set_fc_attributes(entity *e, bool enabled, int wnd, int s_thresh, int h_thresh) {
+        rc_iface(e)->config.fc_enabled     = enabled;
         rc_iface(e)->config.fc_wnd_size    = rc_ep(e)->fc.fc_wnd = wnd;
         rc_iface(e)->config.fc_soft_thresh = s_thresh;
         rc_iface(e)->config.fc_hard_thresh = h_thresh;
@@ -102,12 +107,28 @@ UCS_TEST_P(test_rc_flow_control, general)
 {
     int test_wnd = 8;
 
-    set_fc_attributes(m_e1, test_wnd,
+    set_fc_attributes(m_e1, true, test_wnd,
                       ucs_max((int)(test_wnd*0.5), 1),
                       ucs_max((int)(test_wnd*0.25), 1));
 
     send_am_messages(m_e1, test_wnd, UCS_OK);
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
+
+    progress_loop();
+    send_am_messages(m_e1, 1, UCS_OK);
+}
+
+/* Check that FC does not stop us when disabled */
+UCS_TEST_P(test_rc_flow_control, disabled)
+{
+    int test_wnd = 8;
+
+    set_fc_attributes(m_e1, false, test_wnd,
+                      ucs_max((int)(test_wnd*0.5), 1),
+                      ucs_max((int)(test_wnd*0.25), 1));
+
+    send_am_messages(m_e1, test_wnd, UCS_OK);
+    send_am_messages(m_e1, 1, UCS_OK);
 
     progress_loop();
     send_am_messages(m_e1, 1, UCS_OK);
@@ -123,7 +144,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
      * to be added to the pending group */
     rc_ep(m_e2)->txqp.available = 0;
 
-    set_fc_attributes(m_e1, test_wnd, test_wnd, 1);
+    set_fc_attributes(m_e1, true, test_wnd, test_wnd, 1);
 
     send_am_messages(m_e1, test_wnd, UCS_OK);
     progress_loop();
@@ -144,7 +165,7 @@ UCS_TEST_P(test_rc_flow_control, pending_purge)
      * to be added to the pending group*/
     rc_ep(m_e2)->txqp.available = 0;
 
-    set_fc_attributes(m_e1, test_wnd, test_wnd, 1);
+    set_fc_attributes(m_e1, true, test_wnd, test_wnd, 1);
 
     req_count = 0;
 
@@ -178,7 +199,7 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     /* Disable send capabilities of m_e2 */
     rc_iface(m_e2)->tx.cq_available = 0;
 
-    set_fc_attributes(m_e1, test_wnd, test_wnd, h_thresh);
+    set_fc_attributes(m_e1, true, test_wnd, test_wnd, h_thresh);
 
     for (int i = 0; i < num_pend; i++) {
         req[i].uct.func = am_send;
@@ -208,5 +229,47 @@ UCS_TEST_P(test_rc_flow_control, pending_fc_req)
     EXPECT_EQ(rc_ep(m_e2)->txqp.available, available - (num_pend + 1));
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_rc_flow_control, rc)
-_UCT_INSTANTIATE_TEST_CASE(test_rc_flow_control, rc_mlx5)
+UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control)
+
+/* Check that FC window works as expected */
+#if ENABLE_STATS
+class test_rc_flow_control_stats : public test_rc_flow_control {
+public:
+    void init() {
+        stats_activate();
+        test_rc_flow_control::init();
+    }
+
+    void cleanup() {
+        test_rc_flow_control::cleanup();
+        stats_restore();
+    }
+};
+
+UCS_TEST_P(test_rc_flow_control_stats, general)
+{
+    int test_wnd = 8;
+    uint64_t v;
+
+    set_fc_attributes(m_e1, true, test_wnd,
+                      ucs_max((int)(test_wnd*0.5), 1),
+                      ucs_max((int)(test_wnd*0.25), 1));
+
+    send_am_messages(m_e1, test_wnd, UCS_OK);
+    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
+
+    v = UCS_STATS_GET_COUNTER(rc_ep(m_e1)->fc.stats, UCT_RC_FC_STAT_NO_CRED);
+    EXPECT_EQ(1ul, v);
+
+    progress_loop();
+    send_am_messages(m_e1, 1, UCS_OK);
+
+    v = UCS_STATS_GET_COUNTER(rc_ep(m_e1)->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ);
+    EXPECT_EQ(1ul, v);
+
+    v = UCS_STATS_GET_COUNTER(rc_ep(m_e1)->fc.stats, UCT_RC_FC_STAT_RX_GRANT);
+    EXPECT_EQ(1ul, v);
+}
+
+UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control_stats)
+#endif

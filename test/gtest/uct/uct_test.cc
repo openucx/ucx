@@ -6,6 +6,9 @@
 
 #include "uct_test.h"
 
+extern "C" {
+#include <ucs/stats/stats.h>
+}
 #include <common/test_helpers.h>
 #include <algorithm>
 #include <malloc.h>
@@ -127,6 +130,23 @@ void uct_test::modify_config(const std::string& name, const std::string& value) 
         UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
                        " to " << value.c_str() << ": " << ucs_status_string(status));
     }
+}
+
+void uct_test::stats_activate()
+{
+    ucs_stats_cleanup();
+    push_config();
+    modify_config("STATS_DEST",    "file:/dev/null");
+    modify_config("STATS_TRIGGER", "exit");
+    ucs_stats_init();
+    ASSERT_TRUE(ucs_stats_is_active());
+}
+
+void uct_test::stats_restore()
+{
+    ucs_stats_cleanup();
+    pop_config();
+    ucs_stats_init();
 }
 
 uct_test::entity* uct_test::create_entity(size_t rx_headroom) {

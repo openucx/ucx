@@ -24,14 +24,7 @@ public:
     }
 
     virtual void init() {
-
-        ucs_stats_cleanup();
-        push_config();
-        modify_config("STATS_DEST",    "file:/dev/null");
-        modify_config("STATS_TRIGGER", "exit");
-        ucs_stats_init();
-        ASSERT_TRUE(ucs_stats_is_active());
-
+        stats_activate();
         uct_p2p_test::init();
         lbuf = new mapped_buffer(64, 0, sender());
         rbuf = new mapped_buffer(64, 0, receiver());
@@ -42,9 +35,7 @@ public:
         delete lbuf;
         delete rbuf;
         uct_p2p_test::cleanup();
-        ucs_stats_cleanup();
-        pop_config();
-        ucs_stats_init();
+        stats_restore();
     }
 
     uct_base_ep_t *uct_ep(const entity &e)
@@ -385,7 +376,7 @@ UCS_TEST_P(test_uct_stats, tx_no_res)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
     count = fill_tx_q(1024);
-    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_TX_NO_RES);
+    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_NO_RES);
     EXPECT_EQ(count, v);
     v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_AM);
     EXPECT_EQ(1024-count, v);

@@ -22,6 +22,7 @@ static ucs_stats_class_t uct_ep_stats_class = {
         [UCT_EP_STAT_BYTES_SHORT] = "bytes_short",
         [UCT_EP_STAT_BYTES_BCOPY] = "bytes_bcopy",
         [UCT_EP_STAT_BYTES_ZCOPY] = "bytes_zcopy",
+        [UCT_EP_STAT_NO_RES]      = "no_res",
         [UCT_EP_STAT_FLUSH]       = "flush",
         [UCT_EP_STAT_FLUSH_WAIT]  = "flush_wait"
     }
@@ -33,7 +34,7 @@ static ucs_stats_class_t uct_iface_stats_class = {
     .counter_names = {
         [UCT_IFACE_STAT_RX_AM]       = "rx_am",
         [UCT_IFACE_STAT_RX_AM_BYTES] = "rx_am_bytes",
-        [UCT_IFACE_STAT_TX_NO_RES]   = "tx_no_res",
+        [UCT_IFACE_STAT_TX_NO_DESC]  = "tx_no_desc",
         [UCT_IFACE_STAT_FLUSH]       = "flush",
         [UCT_IFACE_STAT_FLUSH_WAIT]  = "flush_wait",
     }

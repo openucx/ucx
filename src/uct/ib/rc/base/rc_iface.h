@@ -100,6 +100,7 @@ struct uct_rc_iface_config {
     } tx;
 
     struct {
+        int                  enable;
         double               soft_thresh;
         double               hard_thresh;
         unsigned             wnd_size;
@@ -140,13 +141,15 @@ struct uct_rc_iface {
 
         /* Threshold to send "soft" FC credit request. The peer will try to
          * piggy-back credits grant to the counter AM, if any. */
-        uint16_t             fc_soft_thresh;
+        int16_t              fc_soft_thresh;
 
         /* Threshold to sent "hard" credits request. The peer will grant
          * credits in a separate AM as soon as it handles this request. */
-        uint16_t             fc_hard_thresh;
+        int16_t              fc_hard_thresh;
 
         uint16_t             fc_wnd_size;
+        uint8_t              fc_enabled;
+
         uint8_t              min_rnr_timer;
         uint8_t              timeout;
         uint8_t              rnr_retry;

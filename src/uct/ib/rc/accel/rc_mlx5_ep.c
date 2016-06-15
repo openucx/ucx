@@ -538,7 +538,7 @@ ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                         id, hdr, 0, 0);
     if (ucs_likely(status >= 0)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
-        UCT_RC_UPDATE_FC_WND(&ep->super);
+        UCT_RC_UPDATE_FC_WND(iface, &ep->super, id);
     }
     return status;
 }
@@ -566,7 +566,7 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_rc_mlx5_ep_bcopy_post(ep, MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
                               sizeof(*rch) + length, 0, NULL, 0, 0, 0, 0, desc);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
-    UCT_RC_UPDATE_FC_WND(&ep->super);
+    UCT_RC_UPDATE_FC_WND(&iface->super, &ep->super, id);
     return length;
 }
 
@@ -597,7 +597,7 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
                                        id, header, header_length, 0, 0, 0, comp);
     if (ucs_likely(status >= 0)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
-        UCT_RC_UPDATE_FC_WND(&ep->super);
+        UCT_RC_UPDATE_FC_WND(iface, &ep->super, id);
     }
     return status;
 }

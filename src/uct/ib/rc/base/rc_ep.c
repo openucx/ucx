@@ -17,6 +17,23 @@
 
 
 #if ENABLE_STATS
+static ucs_stats_class_t uct_rc_fc_stats_class = {
+    .name = "rc_fc",
+    .num_counters = UCT_RC_FC_STAT_LAST,
+    .counter_names = {
+        [UCT_RC_FC_STAT_NO_CRED]            = "no_cred",
+        [UCT_RC_FC_STAT_TX_GRANT]           = "tx_grant",
+        [UCT_RC_FC_STAT_TX_PURE_GRANT]      = "tx_pure_grant",
+        [UCT_RC_FC_STAT_TX_SOFT_REQ]        = "tx_soft_req",
+        [UCT_RC_FC_STAT_TX_HARD_REQ]        = "tx_hard_req",
+        [UCT_RC_FC_STAT_RX_GRANT]           = "rx_grant",
+        [UCT_RC_FC_STAT_RX_PURE_GRANT]      = "rx_pure_grant",
+        [UCT_RC_FC_STAT_RX_SOFT_REQ]        = "rx_soft_req",
+        [UCT_RC_FC_STAT_RX_HARD_REQ]        = "rx_hard_req",
+        [UCT_RC_FC_STAT_FC_WND]             = "fc_wnd",
+    }
+};
+
 static ucs_stats_class_t uct_rc_txqp_stats_class = {
     .name = "rc_txqp",
     .num_counters = UCT_RC_TXQP_STAT_LAST,
@@ -28,7 +45,8 @@ static ucs_stats_class_t uct_rc_txqp_stats_class = {
 #endif
 
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
-                              int qp_type, struct ibv_qp_cap *cap)
+                              int qp_type, struct ibv_qp_cap *cap
+                              UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
     ucs_status_t status; 
 
@@ -36,18 +54,19 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
     txqp->available  = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
-    status = UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
-                                  iface->stats);
-    if (status != UCS_OK) {
-       return status;
-    }
-
     status = uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap);
     if (status != UCS_OK) {
-        UCS_STATS_NODE_FREE(txqp->stats);
+        return status;
     }
 
-    return status;
+    status = UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
+                                  stats_parent, "-0x%x", txqp->qp->qp_num);
+    if (status != UCS_OK) {
+        ibv_destroy_qp(txqp->qp);
+        return status;
+    }
+
+    return UCS_OK;
 }
 
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
@@ -63,17 +82,30 @@ void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
     UCS_STATS_NODE_FREE(txqp->stats);
 }
 
-void uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize)
+ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
+                            UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
+    ucs_status_t status;
+
     fc->fc_wnd     = winsize;
     fc->flags      = 0;
 
+    status = UCS_STATS_NODE_ALLOC(&fc->stats, &uct_rc_fc_stats_class,
+                                  stats_parent);
+    if (status != UCS_OK) {
+       return status;
+    }
+
+    UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
+
     fc->fc_grant_req.func = uct_rc_ep_fc_grant;
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)fc->fc_grant_req.priv);
+    return UCS_OK;
 }
 
 void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
 {
+    UCS_STATS_NODE_FREE(fc->stats);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
@@ -83,9 +115,16 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap);
+    status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap
+                              UCS_STATS_ARG(iface->stats));
     if (status != UCS_OK) {
-        return status;
+        goto err;
+    }
+
+    status = uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size
+                            UCS_STATS_ARG(self->super.stats));
+    if (status != UCS_OK) {
+        goto err_txqp_cleanup;
     }
 
     self->sl                = iface->super.sl;           /* TODO multi-rail */
@@ -97,9 +136,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     ucs_arbiter_group_init(&self->arb_group);
 
-    uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size);
     uct_rc_iface_add_ep(iface, self);
     return UCS_OK;
+
+err_txqp_cleanup:
+    uct_rc_txqp_cleanup(&self->txqp);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
@@ -109,9 +152,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
     ucs_debug("destroy rc ep %p", self);
 
     uct_rc_iface_remove_ep(iface, self);
-
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
-
+    uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
 }
 
@@ -357,9 +399,15 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 {
     uct_rc_ep_t *ep = ucs_container_of(self, uct_rc_ep_t, fc.fc_grant_req);
-    uct_ib_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ib_iface_t);
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+    ucs_status_t status;
 
-    return (ucs_derived_of(iface->ops, uct_rc_iface_ops_t))->fc_ctrl(ep);
+    ucs_assert(iface->config.fc_enabled);
+    status = (ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t))->fc_ctrl(ep);
+    if (status == UCS_OK) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
+    }
+    return status;
 }
 
 void uct_rc_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,

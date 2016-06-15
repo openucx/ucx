@@ -14,6 +14,20 @@
 
 
 enum {
+    UCT_RC_FC_STAT_NO_CRED,
+    UCT_RC_FC_STAT_TX_GRANT,
+    UCT_RC_FC_STAT_TX_PURE_GRANT,
+    UCT_RC_FC_STAT_TX_SOFT_REQ,
+    UCT_RC_FC_STAT_TX_HARD_REQ,
+    UCT_RC_FC_STAT_RX_GRANT,
+    UCT_RC_FC_STAT_RX_PURE_GRANT,
+    UCT_RC_FC_STAT_RX_SOFT_REQ,
+    UCT_RC_FC_STAT_RX_HARD_REQ,
+    UCT_RC_FC_STAT_FC_WND,
+    UCT_RC_FC_STAT_LAST
+};
+
+enum {
     UCT_RC_TXQP_STAT_QP_FULL,
     UCT_RC_TXQP_STAT_SIGNAL,
     UCT_RC_TXQP_STAT_LAST
@@ -61,17 +75,17 @@ enum {
 /*
  * Check for send resources
  */
-#define UCT_RC_CHECK_CQE(_iface) \
+#define UCT_RC_CHECK_CQE(_iface, _ep) \
     if (!uct_rc_iface_have_tx_cqe_avail(_iface)) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
-        UCT_TL_IFACE_STAT_TX_NO_RES(&(_iface)->super.super); \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return UCS_ERR_NO_RESOURCE; \
     } 
 
-#define UCT_RC_CHECK_TXQP(_iface, _txqp) \
+#define UCT_RC_CHECK_TXQP(_iface, _ep, _txqp) \
     if (uct_rc_txqp_available(_txqp) <= 0) { \
         UCS_STATS_UPDATE_COUNTER((_txqp)->stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
-        UCT_TL_IFACE_STAT_TX_NO_RES(&(_iface)->super.super); \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }
 
@@ -81,23 +95,44 @@ enum {
 #define UCT_RC_CHECK_FC_WND(_iface, _ep, _am_id) \
     do { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= (_iface)->config.fc_soft_thresh)) { \
-            if ((_ep)->fc.fc_wnd <= 0) { \
-                return UCS_ERR_NO_RESOURCE; \
+            if ((_iface)->config.fc_enabled) { \
+                if ((_ep)->fc.fc_wnd <= 0) { \
+                    UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_NO_CRED, 1); \
+                    UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
+                    return UCS_ERR_NO_RESOURCE; \
+                } \
+                (_am_id) |= uct_rc_fc_req_moderation(&(_ep)->fc, _iface); \
+            } else { \
+                /* Set fc_wnd to max, to send as much as possible without checks */ \
+                (_ep)->fc.fc_wnd = INT16_MAX; \
             } \
-            (_am_id) |= uct_rc_fc_req_moderation(&(_ep)->fc, _iface); \
         } \
         (_am_id) |= uct_rc_fc_get_fc_hdr((_ep)->fc.flags); /* take grant bit */ \
     } while (0)
 
-#define UCT_RC_UPDATE_FC_WND(_ep) \
+#define UCT_RC_UPDATE_FC_WND(_iface, _ep, _fc_hdr) \
     do { \
+        if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_GRANT) { \
+            UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_GRANT, 1); \
+        } \
+        if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_SOFT_REQ) { \
+            UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_SOFT_REQ, 1); \
+        } else if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_HARD_REQ) { \
+            UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1); \
+        } \
+        \
         (_ep)->fc.fc_wnd--; \
         (_ep)->fc.flags = 0; \
+        \
+        if ((_iface)->config.fc_enabled) { \
+            UCS_STATS_SET_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_FC_WND, \
+                                  (_ep)->fc.fc_wnd); \
+        } \
     } while (0)
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
-    UCT_RC_CHECK_CQE(_iface) \
-    UCT_RC_CHECK_TXQP(_iface, &(_ep)->txqp);
+    UCT_RC_CHECK_CQE(_iface, (_ep)) \
+    UCT_RC_CHECK_TXQP(_iface, (_ep), &(_ep)->txqp);
 
 /* this is a common type for all rc and dc transports */
 typedef struct uct_rc_txqp {
@@ -114,6 +149,7 @@ typedef struct uct_rc_fc {
     /* used only for FC protocol at this point (3 higher bits) */
     uint8_t             flags;
     uct_pending_req_t   fc_grant_req;
+    UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_fc_t;
 
 struct uct_rc_ep {
@@ -124,7 +160,6 @@ struct uct_rc_ep {
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
-    UCS_STATS_NODE_DECLARE(stats);
 };
 
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
@@ -161,7 +196,8 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg);
 
-void uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize);
+ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
+                            UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
@@ -175,7 +211,8 @@ void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op);
 
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
-                              int qp_type, struct ibv_qp_cap *cap);
+                              int qp_type, struct ibv_qp_cap *cap
+                              UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
 
 static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp) 
