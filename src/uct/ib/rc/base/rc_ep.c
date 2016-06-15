@@ -116,7 +116,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     status = uct_rc_txqp_init(&self->txqp, iface, IBV_QPT_RC, &cap
-                              UCS_STATS_ARG(iface->stats));
+                              UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
         goto err;
     }
