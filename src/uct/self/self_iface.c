@@ -1,5 +1,4 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -21,11 +20,11 @@ static ucs_config_field_t uct_self_iface_config_table[] = {
 static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *attr)
 {
     ucs_trace_func("iface=%p", iface);
-    memset(attr, 0, sizeof(uct_iface_attr_t));
+    memset(attr, 0, sizeof(*attr));
 
     attr->iface_addr_len         = sizeof(uct_self_iface_addr_t);
-    attr->device_addr_len        = sizeof(uct_self_iface_addr_t);
-    attr->ep_addr_len            = 0; //No UCT_IFACE_FLAG_CONNECT_TO_EP supported
+    attr->device_addr_len        = 0;
+    attr->ep_addr_len            = 0; /* No UCT_IFACE_FLAG_CONNECT_TO_EP supported */
     attr->cap.flags              = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                    UCT_IFACE_FLAG_AM_SHORT         |
                                    UCT_IFACE_FLAG_AM_CB_SYNC;
@@ -42,9 +41,9 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->cap.am.max_zcopy       = SIZE_MAX;
     attr->cap.am.max_hdr         = 0;
 
-    attr->latency                = 10e-9; // 10 ns; TODO fix the score
+    attr->latency                = 0;
     attr->bandwidth              = 6911 * 1024.0 * 1024.0;
-    attr->overhead               = 3e-9; // 3 ns; TODO fix the score
+    attr->overhead               = 0;
 
     return UCS_OK;
 }
@@ -52,23 +51,20 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
 static ucs_status_t uct_self_iface_get_address(uct_iface_h iface,
                                                uct_iface_addr_t *addr)
 {
+    const uct_self_iface_t *local_iface = 0;
+
     ucs_trace_func("iface=%p", iface);
-    const uct_self_iface_t *local_iface = ucs_derived_of(iface, uct_self_iface_t);
+    local_iface = ucs_derived_of(iface, uct_self_iface_t);
     *(uct_self_iface_addr_t*)addr = local_iface->id;
     return UCS_OK;
-}
-
-static ucs_status_t uct_self_iface_get_device_address(uct_iface_h iface,
-                                                      uct_device_addr_t *addr)
-{
-    ucs_trace_func("iface=%p", iface);
-    return uct_self_iface_get_address(iface, (uct_iface_addr_t*) addr);
 }
 
 static int uct_self_iface_is_reachable(uct_iface_h iface,
                                        const uct_device_addr_t *addr)
 {
-    const uct_self_iface_t *local_iface = ucs_derived_of(iface, uct_self_iface_t);
+    const uct_self_iface_t *local_iface = 0;
+
+    local_iface = ucs_derived_of(iface, uct_self_iface_t);
     ucs_trace_func("iface=%p id=%lx addr=%lx",
                    iface, local_iface->id, *(uct_self_iface_addr_t*)addr);
     return  local_iface->id == *(const uct_self_iface_addr_t*)addr;
@@ -78,7 +74,7 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_iface_t, uct_iface_t);
 
 static uct_iface_ops_t uct_self_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_self_iface_t),
-    .iface_get_device_address = uct_self_iface_get_device_address,
+    .iface_get_device_address = ucs_empty_function_return_success,
     .iface_get_address        = uct_self_iface_get_address,
     .iface_query              = uct_self_iface_query,
     .iface_is_reachable       = uct_self_iface_is_reachable,
@@ -100,7 +96,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_DEVICE;
     }
 
-    self->id = getpid(); /* TODO need uniq id for node + process + thread */
+    self->id = ucs_generate_uuid((uintptr_t)self);
     return UCS_OK;
 }
 
@@ -118,13 +114,13 @@ static ucs_status_t uct_self_query_tl_resources(uct_md_h md,
                                                 uct_tl_resource_desc_t **resource_p,
                                                 unsigned *num_resources_p)
 {
-    uct_tl_resource_desc_t *resource;
-    ucs_trace_func("md=%p", md);
+    uct_tl_resource_desc_t *resource = 0;
 
-    resource = ucs_calloc(1, sizeof(uct_tl_resource_desc_t), "resource desc");
+    ucs_trace_func("md=%p", md);
+    resource = ucs_calloc(1, sizeof(*resource), "resource desc");
     if (NULL == resource) {
-      ucs_error("Failed to allocate memory");
-      return UCS_ERR_NO_MEMORY;
+        ucs_error("Failed to allocate memory");
+        return UCS_ERR_NO_MEMORY;
     }
 
     ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name), "%s",
