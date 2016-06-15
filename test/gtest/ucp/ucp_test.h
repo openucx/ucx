@@ -119,6 +119,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
  * @param _test_case  Test case class, derived from uct_test.
  */
 #define UCP_INSTANTIATE_TEST_CASE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc,    "\\dc"                        ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "\\ud"                        ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "\\ud_mlx5"                   ) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud", "\\rc"                ) \

@@ -46,7 +46,7 @@ static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_rc_verbs_ep_t *ep,
         ucs_error("Send completion with error: %s",
                   ibv_wc_status_str(wc->status));
 
-        uct_rc_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
+        uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t),
                           &ep->super.super.super,
