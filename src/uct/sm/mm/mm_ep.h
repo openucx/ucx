@@ -1,6 +1,7 @@
 /**
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -29,6 +30,12 @@ struct uct_mm_ep {
     uct_mm_remote_seg_t  *remote_segments_hash[UCT_MM_BASE_ADDRESS_HASH_SIZE];
 
     ucs_arbiter_group_t  arb_group;   /* the group that holds this ep's pending operations */
+
+    /* The cached addrlen and sockaddr is used for a safe
+     * disconnect when other peer unmaps the memory.
+     * while this is not necessary for mmap() call, it is critical for XPMEM */
+    socklen_t            cached_signal_addrlen;   /* cached address length of signaling socket */
+    struct sockaddr_un   cached_signal_sockaddr;  /* cached address of signaling socket */
 };
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
