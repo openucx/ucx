@@ -36,6 +36,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "\"all\" would use all available devices.",
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"SELF_DEVICES", "all",
+    "Specifies which loop-back device(s) to use. The order is not meaningful.\n"
+    "\"all\" would use all available devices.",
+    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {"TLS", "all",
    "Comma-separated list of transports to use. The order is not meaningful.\n"
    "In addition it's possible to use a combination of the following aliases:\n"
@@ -385,7 +390,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      * if the user's device list is empty, there is no match */
     if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
         (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
-        (0 == config->devices[UCT_DEVICE_TYPE_ACC].count)) {
+        (0 == config->devices[UCT_DEVICE_TYPE_ACC].count) &&
+        (0 == config->devices[UCT_DEVICE_TYPE_SELF].count)) {
         ucs_error("The device lists are empty. Please specify the devices you would like to use "
                   "or omit the UCX_*_DEVICES so that the default will be used.");
         status = UCS_ERR_NO_ELEM;

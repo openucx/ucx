@@ -111,6 +111,7 @@ typedef enum {
     UCT_DEVICE_TYPE_NET,     /**< Network devices */
     UCT_DEVICE_TYPE_SHM,     /**< Shared memory devices */
     UCT_DEVICE_TYPE_ACC,     /**< Acceleration devices */
+    UCT_DEVICE_TYPE_SELF,    /**< Loop-back device */
     UCT_DEVICE_TYPE_LAST
 } uct_device_type_t;
 
