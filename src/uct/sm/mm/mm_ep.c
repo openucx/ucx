@@ -28,8 +28,8 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
      */
     for (;;) {
         ret = sendto(iface->signal_fd, &sig, sizeof(sig), 0,
-                     (const struct sockaddr*)&ep->fifo_ctl->signal_sockaddr,
-                     ep->fifo_ctl->signal_addrlen);
+                     (const struct sockaddr*)&ep->cached_signal_sockaddr,
+                     ep->cached_signal_addrlen);
         if (ret >= 0) {
             ucs_assert(ret == sizeof(sig));
             return UCS_OK;
@@ -78,10 +78,12 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
         return status;
     }
 
-    self->mapped_desc.length = size_to_attach;
-    self->mapped_desc.mmid   = addr->id;
+    self->mapped_desc.length     = size_to_attach;
+    self->mapped_desc.mmid       = addr->id;
     uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl, &self->fifo);
-    self->cached_tail        = self->fifo_ctl->tail;
+    self->cached_tail            = self->fifo_ctl->tail;
+    self->cached_signal_addrlen  = self->fifo_ctl->signal_addrlen;
+    self->cached_signal_sockaddr = self->fifo_ctl->signal_sockaddr;
 
     /* Send connect message to remote side so it will start polling */
     status = uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_CONNECT);
