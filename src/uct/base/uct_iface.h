@@ -28,6 +28,7 @@ enum {
     UCT_EP_STAT_BYTES_SHORT,
     UCT_EP_STAT_BYTES_BCOPY,
     UCT_EP_STAT_BYTES_ZCOPY,
+    UCT_EP_STAT_NO_RES,
     UCT_EP_STAT_FLUSH,
     UCT_EP_STAT_FLUSH_WAIT,  /* number of times flush called while in progress */
     UCT_EP_STAT_LAST
@@ -36,7 +37,7 @@ enum {
 enum {
     UCT_IFACE_STAT_RX_AM,
     UCT_IFACE_STAT_RX_AM_BYTES,
-    UCT_IFACE_STAT_TX_NO_RES,
+    UCT_IFACE_STAT_TX_NO_DESC,
     UCT_IFACE_STAT_FLUSH,
     UCT_IFACE_STAT_FLUSH_WAIT,  /* number of times flush called while in progress */
     UCT_IFACE_STAT_LAST
@@ -64,8 +65,8 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH, 1);
 #define UCT_TL_IFACE_STAT_FLUSH_WAIT(_iface) \
     UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_FLUSH_WAIT, 1);
-#define UCT_TL_IFACE_STAT_TX_NO_RES(_iface) \
-    UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_RES, 1);
+#define UCT_TL_IFACE_STAT_TX_NO_DESC(_iface) \
+    UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_IFACE_STAT_TX_NO_DESC, 1);
 
 
 /**
@@ -270,7 +271,7 @@ typedef struct uct_iface_mpool_config {
     { \
         _desc = ucs_mpool_get(_mp); \
         if (ucs_unlikely((_desc) == NULL)) { \
-            UCT_TL_IFACE_STAT_TX_NO_RES(_iface); \
+            UCT_TL_IFACE_STAT_TX_NO_DESC(_iface); \
             _failure; \
         } \
         \

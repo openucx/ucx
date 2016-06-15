@@ -259,7 +259,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
         if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
             /* pending isn't empty. don't send now to prevent out-of-order sending */
-            UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super);
+            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
             return UCS_ERR_NO_RESOURCE;
         } else {
             /* pending is empty */
@@ -267,7 +267,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
             ucs_memory_cpu_load_fence();
             ep->cached_tail = ep->fifo_ctl->tail;
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
-                UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super);
+                UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
                 return UCS_ERR_NO_RESOURCE;
             }
         }
@@ -276,7 +276,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
     status = uct_mm_ep_get_remote_elem(ep, head, &elem);
     if (status != UCS_OK) {
         ucs_trace_poll("couldn't get an available FIFO element");
-        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super);
+        UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
         return status;
     }
 

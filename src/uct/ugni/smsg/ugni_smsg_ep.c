@@ -227,7 +227,7 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 
 exit_no_res:
     ucs_mpool_put(desc);
-    UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
+    UCS_STATS_UPDATE_COUNTER(ep->super.super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;
 }
 

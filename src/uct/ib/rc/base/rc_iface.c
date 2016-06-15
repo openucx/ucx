@@ -45,6 +45,11 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
    ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
 
+  {"FC_ENABLE", "y",
+   "Enable flow control protocol to prevent sender from overwhelming the receiver,\n"
+   "thus avoiding RC RnR backoff timer.",
+   ucs_offsetof(uct_rc_iface_config_t, fc.enable), UCS_CONFIG_TYPE_BOOL},
+
   {"FC_WND_SIZE", "512",
    "The size of flow control window per endpoint. limits the number of AM\n"
    "which can be sent w/o acknowledgment.",
@@ -195,12 +200,17 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
     uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, qp_num);
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(hdr->am_id);
 
+    ucs_assert(iface->config.fc_enabled);
+
     if (fc_hdr & UCT_RC_EP_FC_FLAG_GRANT) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_GRANT, 1);
+
         /* Got either grant flag or special FC grant message */
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
         ep->fc.fc_wnd = iface->config.fc_wnd_size;
+        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0
@@ -213,16 +223,21 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
         if  (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
             /* Special FC grant message can't be bundled with any other FC
              * request. Stop processing this AM and do not invoke AM handler */
+            UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
             return UCS_OK;
         }
     }
 
     if (fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_SOFT_REQ, 1);
+
         /* Got soft credit request. Mark ep that it needs to grant
          * credits to the peer in outgoing AM (if any). */
         ep->fc.flags |= UCT_RC_EP_FC_FLAG_GRANT;
 
     } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
+
         /* Got hard credit request. Send grant to the peer immediately */
         status = uct_rc_ep_fc_grant(&ep->fc.fc_grant_req);
 
@@ -330,17 +345,24 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     self->rx.available           = srq_init_attr.attr.max_wr;
+    self->config.fc_enabled      = config->fc.enable;
 
-    /* Assume that number of recv buffers is the same on all peers.
-     * Then FC window size is the same for all endpoints as well.
-     * TODO: Make wnd size to be a property of the particular interface.
-     * We could distribute it via rc address then.*/
-    self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
-                                           srq_init_attr.attr.max_wr);
-    self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
-                                           config->fc.hard_thresh), 1);
-    self->config.fc_soft_thresh  = ucs_max((int)(self->config.fc_wnd_size *
-                                           config->fc.soft_thresh), 1);
+    if (self->config.fc_enabled) {
+        /* Assume that number of recv buffers is the same on all peers.
+         * Then FC window size is the same for all endpoints as well.
+         * TODO: Make wnd size to be a property of the particular interface.
+         * We could distribute it via rc address then.*/
+        self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
+                                               srq_init_attr.attr.max_wr);
+        self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
+                                               config->fc.hard_thresh), 1);
+        self->config.fc_soft_thresh  = ucs_max((int)(self->config.fc_wnd_size *
+                                               config->fc.soft_thresh), 1);
+    } else {
+        self->config.fc_wnd_size     = INT16_MAX;
+        self->config.fc_hard_thresh  = 0;
+        self->config.fc_soft_thresh  = 0;
+    }
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
                                   self->super.super.stats);

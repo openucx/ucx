@@ -64,7 +64,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
 
     UCT_CHECK_AM_ID(am_id);
     if (ucs_unlikely(NULL != ep->posted_desc)) {
-        UCT_TL_IFACE_STAT_TX_NO_RES(&iface->super.super);
+        UCT_TL_IFACE_STAT_TX_NO_DESC(&iface->super.super);
         return UCS_ERR_NO_RESOURCE;
     }
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
