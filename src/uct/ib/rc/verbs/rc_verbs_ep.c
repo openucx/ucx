@@ -143,7 +143,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc,
-                                    iface->verbs_common.config.atomic64_handler,
+                                    iface->super.config.atomic64_handler,
                                     result, comp);
     uct_rc_verbs_ep_atomic_post(ep, opcode, compare_add, swap, remote_addr,
                                 rkey, desc, IBV_SEND_SIGNALED);
@@ -176,8 +176,9 @@ uct_rc_verbs_ep_ext_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
+    uct_rc_send_handler_t handler = uct_rc_iface_atomic_handler(&iface->super, 1,
+                                                                length);
     uct_rc_iface_send_desc_t *desc;
-    uct_rc_send_handler_t handler = uct_rc_verbs_atomic_handler(&iface->verbs_common, length);
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->verbs_common.short_desc_mp, desc,

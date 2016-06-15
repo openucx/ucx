@@ -148,9 +148,16 @@ AS_IF([test "x$with_ib" == xyes],
                       [],
                       [have_ext_atomics=no],
                       [[#include <infiniband/verbs_exp.h>]])
+
+       # Extended atomics
        AS_IF([test "x$have_ext_atomics" != xno],
              [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],
              [AC_MSG_WARN([Compiling without extended atomics support])])
+
+       # Check for driver which exposes masked atomics endianity per size
+       AC_CHECK_MEMBER(struct ibv_exp_masked_atomic_params.masked_log_atomic_arg_sizes_network_endianness,
+                       [AC_DEFINE([HAVE_MASKED_ATOMICS_ENDIANNESS], 1, [have masked atomic endianness])],
+                       [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
                          struct ibv_exp_qp_init_attr.max_inl_recv,
