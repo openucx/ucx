@@ -58,7 +58,7 @@ echo "Build without IB verbs"
 ../contrib/configure-release --without-verbs
 make $make_opt
 
-if [ -n "$JENKINS_RUN_TESTS" ]; then
+if [[ -n "$JENKINS_PPC_SERVER" || -n "$JENKINS_RUN_TESTS" ]] ; then
     # Set CPU affinity to 2 cores, for performance tests
     if [ -n "$EXECUTOR_NUMBER" ]; then
         AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
@@ -182,7 +182,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     echo "Running unit tests"
     $AFFINITY $TIMEOUT make -C test/gtest test UCS_HANDLE_ERRORS=bt
     (cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+fi
 
+if [ -n "$JENKINS_RUN_TESTS" ]; then
     echo "Running valgrind tests"
     module load tools/valgrind-latest
     $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
