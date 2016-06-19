@@ -41,6 +41,11 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "RNR retries",
    ucs_offsetof(uct_rc_iface_config_t, tx.rnr_retry_count), UCS_CONFIG_TYPE_UINT},
 
+  {"TX_MAX_WR", "-1",
+   "Limits the number of outstanding posted work requests. The actualt limit is\n"
+   "a minimum between this value and the TX queue length. -1 meanss no limit.",
+   ucs_offsetof(uct_rc_iface_config_t, tx.max_wr), UCS_CONFIG_TYPE_UINT},
+
   {"TX_CQ_LEN", "4096",
    "Length of send completion queue. This limits the total number of outstanding signaled sends.",
    ucs_offsetof(uct_rc_iface_config_t, tx.cq_len), UCS_CONFIG_TYPE_UINT},
@@ -294,6 +299,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_moderation      = ucs_min(ucs_roundup_pow2(config->super.tx.cq_moderation),
                                               ucs_roundup_pow2(config->super.tx.queue_len / 4));
     self->config.tx_ops_mask        = ucs_roundup_pow2(config->tx.cq_len) - 1;
+    self->config.tx_max_wr          = ucs_min(config->tx.max_wr,
+                                              config->super.tx.queue_len);
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);
