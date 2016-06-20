@@ -724,12 +724,15 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    status = uct_ib_mlx5_get_txwq(iface->super.super.super.worker, self->super.txqp.qp,
-                                  &self->tx.wq);
+    status = uct_ib_mlx5_get_txwq(iface->super.super.super.worker,
+                                  self->super.txqp.qp, &self->tx.wq);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");
         return status;
     }
+
+    self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max,
+                                 iface->super.config.tx_max_wr);
 
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     self->qp_num          = self->super.txqp.qp->qp_num;

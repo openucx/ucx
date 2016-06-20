@@ -498,7 +498,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (uct_rc_txqp_available(&ep->super.txqp) == iface->super.config.tx_qp_len) {
+    if (uct_rc_txqp_available(&ep->super.txqp) == iface->super.config.tx_max_wr) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);
         return UCS_OK;
     }
@@ -550,7 +550,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    uct_rc_txqp_available_set(&self->super.txqp, iface->super.config.tx_qp_len);
+    uct_rc_txqp_available_set(&self->super.txqp, iface->super.config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
 
     uct_worker_progress_register(iface->super.super.super.worker,
