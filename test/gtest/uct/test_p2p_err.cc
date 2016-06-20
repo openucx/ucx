@@ -89,8 +89,8 @@ public:
                 arg.buffer = buffer;
                 arg.length = length;
                 packed_len = uct_ep_put_bcopy(sender_ep(), pack_cb, &arg, remote_addr,
-                                          rkey);
-                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)status;
+                                              rkey);
+                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
                 break;
             case OP_PUT_ZCOPY:
                 status = uct_ep_put_zcopy(sender_ep(), buffer, length, memh,
@@ -103,7 +103,7 @@ public:
                 arg.buffer = buffer;
                 arg.length = length;
                 packed_len = uct_ep_am_bcopy(sender_ep(), am_id, pack_cb, &arg);
-                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)status;
+                status = (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
                 break;
             case OP_AM_ZCOPY:
                 status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,
