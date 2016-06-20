@@ -24,7 +24,8 @@ static ucs_stats_class_t uct_ep_stats_class = {
         [UCT_EP_STAT_BYTES_ZCOPY] = "bytes_zcopy",
         [UCT_EP_STAT_NO_RES]      = "no_res",
         [UCT_EP_STAT_FLUSH]       = "flush",
-        [UCT_EP_STAT_FLUSH_WAIT]  = "flush_wait"
+        [UCT_EP_STAT_FLUSH_WAIT]  = "flush_wait",
+        [UCT_EP_STAT_FENCE]       = "fence"
     }
 };
 
@@ -37,6 +38,7 @@ static ucs_stats_class_t uct_iface_stats_class = {
         [UCT_IFACE_STAT_TX_NO_DESC]  = "tx_no_desc",
         [UCT_IFACE_STAT_FLUSH]       = "flush",
         [UCT_IFACE_STAT_FLUSH_WAIT]  = "flush_wait",
+        [UCT_IFACE_STAT_FENCE]       = "fence"
     }
 };
 #endif
@@ -196,10 +198,22 @@ static ucs_status_t uct_base_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
+static ucs_status_t uct_base_iface_fence(uct_iface_h tl_iface, unsigned flags)
+{
+    UCT_TL_IFACE_STAT_FENCE(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_OK;
+}
+
 static ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       uct_completion_t *comp)
 {
     UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_OK;
+}
+
+static ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
+{
+    UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
 
@@ -289,9 +303,18 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
         self->ops.ep_flush = uct_base_ep_flush;
     }
 
+    if (ops->ep_fence == NULL) {
+        self->ops.ep_fence = uct_base_ep_fence;
+    }
+
     if (ops->iface_flush == NULL) {
         self->ops.iface_flush = uct_base_iface_flush;
     }
+
+    if (ops->iface_fence == NULL) {
+        self->ops.iface_fence = uct_base_iface_fence;
+    }
+
     return UCS_OK;
 }
 

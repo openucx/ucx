@@ -125,6 +125,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_is_reachable  = uct_sm_iface_is_reachable,
     .iface_release_am_desc = uct_mm_iface_release_am_desc,
     .iface_flush         = uct_mm_iface_flush,
+    .iface_fence         = uct_sm_iface_fence,
     .ep_put_short        = uct_mm_ep_put_short,
     .ep_put_bcopy        = uct_mm_ep_put_bcopy,
     .ep_get_bcopy        = uct_mm_ep_get_bcopy,
@@ -141,6 +142,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_pending_add      = uct_mm_ep_pending_add,
     .ep_pending_purge    = uct_mm_ep_pending_purge,
     .ep_flush            = uct_mm_ep_flush,
+    .ep_fence            = uct_sm_ep_fence,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
 };
