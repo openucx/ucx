@@ -184,7 +184,7 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
 #define UCT_RC_VERBS_FILL_AM_ZCOPY_WR(_wr, _sge, _wr_opcode) \
     _wr.sg_list = _sge; \
     _wr_opcode  = IBV_WR_SEND; \
-    _wr.num_sge = 2;
+    _wr.num_sge = _sge[1].length ? 2 : 1;
 
 #define UCT_RC_VERBS_FILL_RDMA_WR(_wr, _wr_opcode, _opcode, \
                                   _sge, _length, _raddr, _rkey) \
