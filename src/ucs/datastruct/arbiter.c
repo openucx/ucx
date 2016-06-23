@@ -210,6 +210,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             } else if (result == UCS_ARBITER_CB_RESULT_STOP) {
                 elem->next = next_elem;
                 elem->list.next = elem_list_next;
+                /* make sure that next dispatch() will continue
+                 * from the current group */
+                arbiter->current = group_head;
                 goto out;
             } else {
                 elem->next = next_elem;
@@ -218,9 +221,8 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             }
         } while ((elem != last_elem) && (group_dispatch_count < per_group));
     } while (next_group != NULL);
+    arbiter->current = NULL;
 out:
-    arbiter->current = next_group;
-
     ucs_list_for_each_safe(elem, next_elem, &resched_groups, list) {
         ucs_list_del(&elem->list);
         elem->list.next = NULL;

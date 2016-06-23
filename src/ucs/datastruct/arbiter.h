@@ -88,7 +88,8 @@ typedef enum {
                                            dispatch cycle. After dispatch()
                                            is finished group automatically
                                            scheduled */
-    UCS_ARBITER_CB_RESULT_STOP          /* Stop dispatching work altogether */
+    UCS_ARBITER_CB_RESULT_STOP          /* Stop dispatching work altogether. Next dispatch()
+                                           will start from the group that returned STOP */
 } ucs_arbiter_cb_result_t;
 
 
@@ -251,6 +252,17 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 }
 
 /**
+ * Return true if arbiter has no groups scheduled
+ *
+ * @param [in]  arbiter    Arbiter object to dispatch work on.
+ */
+static inline int
+ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
+{
+    return arbiter->current == NULL;
+}
+
+/**
  * Dispatch work elements in the arbiter. For every group, up to per_group work
  * elements are dispatched, as long as the callback returns REMOVE_ELEM or
  * NEXT_GROUP. Then, the same is done for the next group, until either the
@@ -267,7 +279,7 @@ static inline void
 ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
                      ucs_arbiter_callback_t cb, void *cb_arg)
 {
-    if (ucs_unlikely(arbiter->current != NULL)) {
+    if (ucs_unlikely(!ucs_arbiter_is_empty(arbiter))) {
         ucs_arbiter_dispatch_nonempty(arbiter, per_group, cb, cb_arg);
     }
 }
