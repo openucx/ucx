@@ -129,5 +129,4 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
     senders.clear();
 }
 
-UCT_INSTANTIATE_TEST_CASE(test_many2one_am)
-
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_many2one_am)

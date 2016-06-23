@@ -211,7 +211,7 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length,
 
         /* If MD does not support registration, allow only the MD method */
         if (!(md_attr.cap.flags & UCT_MD_FLAG_REG)) {
-            ucs_error("%s md does not supprt registration, so cannot use any allocation "
+            ucs_error("%s md does not support registration, so cannot use any allocation "
                       "method except 'md'", iface->md->component->name);
             status = UCS_ERR_NO_MEMORY;
             goto err_free;

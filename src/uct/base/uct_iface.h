@@ -47,7 +47,7 @@ enum {
 
 
 /*
- * Statistics macors
+ * Statistics macros
  */
 #define UCT_TL_EP_STAT_OP(_ep, _op, _method, _size) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_##_op, 1); \
@@ -120,7 +120,7 @@ enum {
 
 
 /**
- * Declare classes for structs defined in api/tl.h
+ * Declare classes for structures defined in api/tl.h
  */
 UCS_CLASS_DECLARE(uct_iface_h, uct_iface_ops_t, uct_md_h);
 UCS_CLASS_DECLARE(uct_ep_t, uct_iface_h);

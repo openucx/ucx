@@ -21,15 +21,16 @@ extern "C" {
 struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
-    std::string md_name;
-    cpu_set_t   local_cpus;
-    std::string tl_name;
-    std::string dev_name;
+    std::string       md_name;
+    cpu_set_t         local_cpus;
+    std::string       tl_name;
+    std::string       dev_name;
+    uct_device_type_t dev_type;
 };
 
 
 /**
- * UCT test, parameterized on a transport/device.
+ * UCT test, parametrized on a transport/device.
  */
 class uct_test : public testing::TestWithParam<const resource*>,
                  public ucs::test_base {
@@ -174,26 +175,30 @@ protected:
 std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 
-#define UCT_TEST_TLS \
-    UCT_TEST_IB_TLS, \
-    ugni_rdma, \
-    ugni_udt, \
-    ugni_smsg, \
-    mm, \
-    cma, \
-    knem, \
-    cuda
-
 #define UCT_TEST_IB_TLS \
-    rc_mlx5, \
-    rc, \
-    dc, \
-    ud, \
-    ud_mlx5, \
+    rc_mlx5,            \
+    rc,                 \
+    dc,                 \
+    ud,                 \
+    ud_mlx5,            \
     cm
 
+#define UCT_TEST_NO_SELF_TLS \
+    UCT_TEST_IB_TLS,         \
+    ugni_rdma,               \
+    ugni_udt,                \
+    ugni_smsg,               \
+    mm,                      \
+    cma,                     \
+    knem,                    \
+    cuda
+
+#define UCT_TEST_TLS      \
+    UCT_TEST_NO_SELF_TLS, \
+    self
+
 /**
- * Instantiate the parameterized test case for all transports.
+ * Instantiate the parametrized test case for all transports.
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
@@ -205,12 +210,20 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 
 /**
- * Instantiate the parameterized test case for the IB transports.
+ * Instantiate the parametrized test case for the IB transports.
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
 #define UCT_INSTANTIATE_IB_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_IB_TLS)
+
+/**
+ * Instantiate the parametrized test case for all transports excluding SELF.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_NO_SELF_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_SELF_TLS)
 
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 

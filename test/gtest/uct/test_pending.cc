@@ -247,7 +247,6 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     EXPECT_EQ(send_data, 0xdeadbeef + counter - 1);
 }
 
-
 UCS_TEST_P(test_uct_pending, pending_fairness)
 {
     int N=16;
@@ -338,4 +337,4 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     }
 }
 
-UCT_INSTANTIATE_TEST_CASE(test_uct_pending);
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_pending);
