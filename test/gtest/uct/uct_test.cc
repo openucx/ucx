@@ -458,13 +458,20 @@ uct_test::mapped_buffer::~mapped_buffer() {
 }
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
-    uint64_t *ptr = (uint64_t*)m_buf;
-    while ((char*)(ptr + 1) <= m_end) {
+    pattern_fill(m_buf, (char*)m_end - (char*)m_buf, seed);
+}
+
+void uct_test::mapped_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed)
+{
+    uint64_t *ptr = (uint64_t*)buffer;
+    char *end = (char *)buffer + length;
+
+    while ((char*)(ptr + 1) <= end) {
         *ptr = seed;
         seed = pat(seed);
         ++ptr;
     }
-    memcpy(ptr, &seed, (char*)m_end - (char*)ptr);
+    memcpy(ptr, &seed, end - (char*)ptr);
 }
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {

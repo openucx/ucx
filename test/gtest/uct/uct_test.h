@@ -119,6 +119,7 @@ protected:
         void pattern_check(uint64_t seed);
 
         static size_t pack(void *dest, void *arg);
+        static void pattern_fill(void *buffer, size_t length, uint64_t seed);
         static void pattern_check(const void *buffer, size_t length);
         static void pattern_check(const void *buffer, size_t length, uint64_t seed);
     private:

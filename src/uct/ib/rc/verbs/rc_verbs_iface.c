@@ -129,6 +129,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->inl_rwrite_wr.opcode              = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.send_flags          = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 
+    self->config.tx_max_wr                  = ucs_min(config->tx_max_wr,
+                                                      self->super.config.tx_qp_len);
+    self->super.config.tx_moderation        = ucs_min(self->super.config.tx_moderation,
+                                                      self->config.tx_max_wr / 4);
+
     status = uct_rc_verbs_iface_common_init(&self->verbs_common,
                                             &self->super, config);
     if (status != UCS_OK) {

@@ -99,7 +99,6 @@ struct uct_rc_iface_config {
         unsigned             retry_count;
         double               rnr_timeout;
         unsigned             rnr_retry_count;
-        unsigned             max_wr;
         unsigned             cq_len;
     } tx;
 
@@ -140,7 +139,6 @@ struct uct_rc_iface {
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
         unsigned             tx_ops_mask;
-        unsigned             tx_max_wr;
         unsigned             rx_inline;
         uint16_t             tx_moderation;
 

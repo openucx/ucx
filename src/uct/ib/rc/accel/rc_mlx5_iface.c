@@ -23,6 +23,12 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {"RC_", "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
+  {"TX_MAX_BB", "-1",
+   "Limits the number of outstanding WQE building blocks. The actual limit is\n"
+   "a minimum between this value and the number of building blocks in the TX QP.\n"
+   "-1 means no limit.",
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, tx_max_bb), UCS_CONFIG_TYPE_UINT},
+
   {NULL}
 };
 
@@ -391,6 +397,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         ucs_error("TX CQE size is not 64");
         goto err;
     }
+
+    self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
+    self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
+                                               self->tx.bb_max / 4);
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {

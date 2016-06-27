@@ -27,10 +27,13 @@ typedef struct uct_rc_verbs_ep {
  * RC verbs remote endpoint.
  */
 typedef struct uct_rc_verbs_iface {
-    uct_rc_iface_t     super;
+    uct_rc_iface_t              super;
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
     uct_rc_verbs_iface_common_t verbs_common;
+    struct {
+        unsigned                tx_max_wr;
+    } config;
 } uct_rc_verbs_iface_t;
 
 

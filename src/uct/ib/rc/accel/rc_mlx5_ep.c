@@ -731,11 +731,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
         return status;
     }
 
-    self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max,
-                                 iface->super.config.tx_max_wr);
-
+    self->qp_num       = self->super.txqp.qp->qp_num;
+    self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
-    self->qp_num          = self->super.txqp.qp->qp_num;
 
     uct_worker_progress_register(iface->super.super.super.worker,
                                  uct_rc_mlx5_iface_progress, iface);
