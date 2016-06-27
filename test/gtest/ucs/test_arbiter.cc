@@ -146,6 +146,13 @@ protected:
         return self->remove_elem(elem);
     }
 
+    static ucs_arbiter_cb_result_t stop_cb(ucs_arbiter_t *arbiter,
+                                           ucs_arbiter_elem_t *elem,
+                                           void *arg)
+    {
+        return UCS_ARBITER_CB_RESULT_STOP;
+    }
+
     static ucs_arbiter_cb_result_t purge_cb(ucs_arbiter_t *arbiter,
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
@@ -466,4 +473,36 @@ UCS_TEST_F(test_arbiter, desched_groups) {
     delete [] elems;
 
     ucs_arbiter_cleanup(&m_arb1);
+}
+
+/* make sure that next arbiter dispatch
+ * continues from the group that stopped
+ */
+UCS_TEST_F(test_arbiter, result_stop) {
+
+    const int N = 5;
+    const int nelems = 1;
+    ucs_arbiter_group_t *groups;
+    ucs_arbiter_elem_t  *elems;
+
+    groups = new ucs_arbiter_group_t [N];
+    elems  = new ucs_arbiter_elem_t [nelems*N];
+    ucs_arbiter_init(&m_arb1);
+
+    prepare_groups(groups, elems, N, nelems);
+
+    for (int i = 0; i < N + 3; i++) {
+       ucs_arbiter_dispatch(&m_arb1, 1, stop_cb, this);
+       /* arbiter current position must not change on STOP */
+       EXPECT_EQ(m_arb1.current, groups[0].tail->next);
+    }
+
+    m_count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 1, remove_cb, this);
+    EXPECT_EQ(N*nelems, m_count);
+
+    ucs_arbiter_cleanup(&m_arb1);
+
+    delete [] groups;
+    delete [] elems;
 }
