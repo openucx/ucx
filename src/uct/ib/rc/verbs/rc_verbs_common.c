@@ -21,6 +21,11 @@ ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "not support zero-copy active messages.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"TX_MAX_WR", "-1",
+   "Limits the number of outstanding posted work requests. The actual limit is\n"
+   "a minimum between this value and the TX queue length. -1 means no limit.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
+
   {NULL}
 };
 

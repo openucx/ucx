@@ -17,7 +17,8 @@ extern "C" {
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
 
-class test_rc_flow_control : public uct_test {
+
+class test_rc : public uct_test {
 public:
     virtual void init() {
         uct_test::init();
@@ -30,11 +31,6 @@ public:
 
         connect();
     }
-
-    typedef struct pending_send_request {
-        uct_ep_h          ep;
-        uct_pending_req_t uct;
-    } pending_send_request_t;
 
     void connect() {
         m_e1->connect(0, *m_e2, 0);
@@ -54,6 +50,61 @@ public:
         return ucs_derived_of(e->ep(0), uct_rc_ep_t);
     }
 
+    void send_am_messages(entity *e, int wnd, ucs_status_t expected) {
+        for (int i = 0; i < wnd; i++) {
+            EXPECT_EQ(expected, uct_ep_am_short(e->ep(0), 0, 0, NULL, 0));
+        }
+    }
+
+    void progress_loop(double delta_ms=10.0) {
+        uct_test::short_progress_loop(delta_ms);
+    }
+
+    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length, void *desc) {
+        return UCS_OK;
+    }
+
+protected:
+    entity *m_e1, *m_e2;
+};
+
+
+class test_rc_max_wr : public test_rc {
+protected:
+    virtual void init() {
+        ucs_status_t status1, status2;
+        status1 = uct_config_modify(m_iface_config, "TX_MAX_WR", "32");
+        status2 = uct_config_modify(m_iface_config, "TX_MAX_BB", "32");
+        if (status1 != UCS_OK && status2 != UCS_OK) {
+            UCS_TEST_ABORT("Error: cannot set rc max wr/bb");
+        }
+        test_rc::init();
+    }
+};
+
+/* Check that max_wr stops from sending */
+UCS_TEST_P(test_rc_max_wr, send_limit)
+{
+    /* first 32 messages should be OK */
+    send_am_messages(m_e1, 32, UCS_OK);
+
+    /* next message - should fail */
+    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
+
+    progress_loop();
+    send_am_messages(m_e1, 1, UCS_OK);
+}
+
+UCT_RC_INSTANTIATE_TEST_CASE(test_rc_max_wr)
+
+
+class test_rc_flow_control : public test_rc {
+public:
+    typedef struct pending_send_request {
+        uct_ep_h          ep;
+        uct_pending_req_t uct;
+    } pending_send_request_t;
+
     void set_fc_attributes(entity *e, bool enabled, int wnd, int s_thresh, int h_thresh) {
         rc_iface(e)->config.fc_enabled     = enabled;
         rc_iface(e)->config.fc_wnd_size    = rc_ep(e)->fc.fc_wnd = wnd;
@@ -62,12 +113,6 @@ public:
 
     }
 
-    void send_am_messages(entity *e, int wnd, ucs_status_t expected) {
-        for (int i = 0; i < wnd; i++) {
-            EXPECT_EQ(uct_ep_am_short(e->ep(0), 0, 0, NULL, 0), expected);
-        }
-    }
-    
     void progress_loop(double delta_ms=10.0) {
         uct_test::short_progress_loop(delta_ms);
     }
@@ -91,13 +136,8 @@ public:
         req_count++;
     }
 
-    virtual void cleanup() {
-        uct_test::cleanup();
-    }
-
 protected:
     static int req_count;
-    entity *m_e1, *m_e2;
 };
 
 int test_rc_flow_control::req_count = 0;

@@ -26,6 +26,7 @@ typedef struct uct_rc_verbs_txcnt {
 typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t  super;
     size_t                 max_am_hdr;
+    unsigned               tx_max_wr;
     /* TODO flags for exp APIs */
 } uct_rc_verbs_iface_config_t;
 

@@ -29,6 +29,7 @@ enum {
  */
 typedef struct uct_rc_mlx5_iface_config {
     uct_rc_iface_config_t  super;
+    unsigned               tx_max_bb;
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
 
@@ -79,6 +80,7 @@ typedef struct {
     struct {
         uct_ib_mlx5_cq_t   cq;
         ucs_mpool_t        atomic_desc_mp;
+        uint16_t           bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
 
     struct {

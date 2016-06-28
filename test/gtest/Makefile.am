@@ -126,7 +126,7 @@ gtest_SOURCES += \
 endif
 if HAVE_TL_RC
 gtest_SOURCES += \
-	uct/test_rc_flow_control.cc
+	uct/test_rc.cc
 endif	
 endif
 

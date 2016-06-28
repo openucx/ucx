@@ -407,6 +407,7 @@ UCS_TEST_P(uct_p2p_am_test, am_zcopy) {
                     DIRECTION_SEND_TO_RECV);
 }
 
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
 
 const unsigned uct_p2p_am_misc::RX_MAX_BUFS = 1024; /* due to hard coded 'grow'
                                                        parameter in uct_ib_iface_recv_mpool_init */
@@ -453,5 +454,39 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
     EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 6));
 }
 
-UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_test)
+UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
+    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+
+    ucs_status_t status;
+
+    m_am_count = 0;
+    set_keep_data(false);
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                      this, UCT_AM_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+
+    size_t size = ucs_min(sender().iface_attr().cap.am.max_short, 8192ul);
+    std::string sendbuf(size, 0);
+    mapped_buffer::pattern_fill(&sendbuf[0], sendbuf.size(), SEED1);
+    ucs_assert(SEED1 == *(uint64_t*)&sendbuf[0]);
+
+    /* exhaust all resources */
+    do {
+        status = uct_ep_am_short(sender_ep(), AM_ID, SEED1,
+                                 ((uint64_t*)&sendbuf[0]) + 1,
+                                 sendbuf.size() - sizeof(uint64_t));
+    } while (status == UCS_OK);
+    if (status != UCS_ERR_NO_RESOURCE) {
+        ASSERT_UCS_OK(status);
+    }
+
+    /* do some progress */
+    short_progress_loop();
+
+    /* should be able to send again */
+    status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
+    EXPECT_EQ(UCS_OK, status);
+}
+
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)
