@@ -31,6 +31,8 @@ typedef struct uct_iface_ops {
     ucs_status_t (*iface_flush)(uct_iface_h iface, unsigned flags,
                                 uct_completion_t *comp);
 
+    ucs_status_t (*iface_fence)(uct_iface_h iface, unsigned flags);
+
     void         (*iface_release_am_desc)(uct_iface_h iface, void *desc);
 
     ucs_status_t (*iface_wakeup_open)(uct_iface_h iface, unsigned events,
@@ -152,6 +154,8 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_flush)(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);
+
+    ucs_status_t (*ep_fence)(uct_ep_h ep, unsigned flags);
 
 } uct_iface_ops_t;
 

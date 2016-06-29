@@ -33,3 +33,17 @@ int uct_sm_iface_is_reachable(uct_iface_t *tl_iface, const uct_device_addr_t *ad
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     return uct_sm_iface_node_guid(iface) == *(const uint64_t*)addr;
 }
+
+ucs_status_t uct_sm_iface_fence(uct_iface_t *tl_iface, unsigned flags)
+{
+    ucs_memory_cpu_fence();
+    UCT_TL_IFACE_STAT_FENCE(ucs_derived_of(tl_iface, uct_base_iface_t));
+    return UCS_OK;
+}
+
+ucs_status_t uct_sm_ep_fence(uct_ep_t *tl_ep, unsigned flags)
+{
+    ucs_memory_cpu_fence();
+    UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_OK;
+}

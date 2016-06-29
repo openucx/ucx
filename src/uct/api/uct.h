@@ -1088,6 +1088,23 @@ UCT_INLINE_API ucs_status_t uct_iface_flush(uct_iface_h iface, unsigned flags,
     return iface->ops.iface_flush(iface, flags, comp);
 }
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Ensures ordering of outstanding communications on the interface.
+ * Operations issued on the interface prior to this call are guaranteed to
+ * be completed before any subsequent communication operations to the same
+ * interface which follow the call to fence.
+ *
+ * @param [in]    iface  Interface to issue communications from.
+ * @param [in]    flags  Flags that control ordering semantic (currently
+ *                        unsupported - set to 0).
+ * @return UCS_OK         - Ordering is inserted.
+ */
+
+UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
+{
+    return iface->ops.iface_fence(iface, flags);
+}
 
 /**
  * @ingroup UCT_AM
@@ -1370,6 +1387,23 @@ UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
                                          uct_completion_t *comp)
 {
     return ep->iface->ops.ep_flush(ep, flags, comp);
+}
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Ensures ordering of outstanding communications on the endpoint.
+ * Operations issued on the endpoint prior to this call are guaranteed to
+ * be completed before any subsequent communication operations to the same
+ * endpoint which follow the call to fence.
+ *
+ * @param [in]    ep     Endpoint to issue communications from.
+ * @param [in]    flags  Flags that control ordering semantic (currently
+ *                        unsupported - set to 0).
+ * @return UCS_OK         - Ordering is inserted.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
+{
+    return ep->iface->ops.ep_fence(ep, flags);
 }
 
 #endif

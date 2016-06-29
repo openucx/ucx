@@ -109,7 +109,7 @@ protected:
 
 
 /* test basic stat counters:
- * am, put, get, amo and flush
+ * am, put, get, amo, flush and fence
  */
 UCS_TEST_P(test_uct_stats, am_short)
 {
@@ -312,6 +312,24 @@ UCS_TEST_P(test_uct_stats, flush)
     EXPECT_EQ(0UL, v);
 }
 
+UCS_TEST_P(test_uct_stats, fence)
+{
+    ucs_status_t status;
+    uint64_t v;
+
+    if (sender_ep()) {
+        status = uct_ep_fence(sender_ep(), 0);
+        EXPECT_UCS_OK(status);
+        v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FENCE);
+        EXPECT_EQ(1UL, v);
+    }
+
+    status = uct_iface_fence(sender().iface(), 0);
+    EXPECT_UCS_OK(status);
+    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FENCE);
+    EXPECT_EQ(1UL, v);
+}
+
 /* flush test only check stats on tls with am_bcopy
  * TODO: full test matrix
  */
@@ -365,6 +383,49 @@ UCS_TEST_P(test_uct_stats, flush_wait_ep)
     EXPECT_EQ(1UL, v);
     v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FLUSH_WAIT);
     EXPECT_EQ(count_wait, v);
+}
+
+/* fence test only check stats on tls with am_bcopy
+ * TODO: full test matrix
+ */
+UCS_TEST_P(test_uct_stats, fence_iface)
+{
+    uint64_t v;
+    ucs_status_t status;
+
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
+    EXPECT_UCS_OK(status);
+
+    fill_tx_q(0);
+
+    status = uct_iface_fence(sender().iface(), 0);
+    EXPECT_UCS_OK(status);
+
+    fill_tx_q(0);
+
+    v = UCS_STATS_GET_COUNTER(uct_iface(sender())->stats, UCT_IFACE_STAT_FENCE);
+    EXPECT_EQ(1UL, v);
+}
+
+UCS_TEST_P(test_uct_stats, fence_ep)
+{
+    uint64_t v;
+    ucs_status_t status;
+
+    check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
+    EXPECT_UCS_OK(status);
+
+    fill_tx_q(0);
+
+    status = uct_ep_fence(sender_ep(), 0);
+    EXPECT_UCS_OK(status);
+
+    fill_tx_q(0);
+
+    v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_FENCE);
+    EXPECT_EQ(1UL, v);
 }
 
 UCS_TEST_P(test_uct_stats, tx_no_res)
