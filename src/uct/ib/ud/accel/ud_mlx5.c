@@ -37,7 +37,8 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     uct_ib_mlx5_set_dgram_seg((struct mlx5_wqe_datagram_seg *)(ctrl+1),
                               &ep->av, 0);
     uct_ib_mlx5_log_tx(&iface->super.super, IBV_QPT_UD, ctrl,
-                       iface->tx.wq.qstart, iface->tx.wq.qend, NULL);
+                       iface->tx.wq.qstart, iface->tx.wq.qend,
+                       uct_ud_dump_packet);
     iface->super.tx.available -= uct_ib_mlx5_post_send(&iface->tx.wq,
                                                        ctrl, wqe_size);
     ucs_assert((int16_t)iface->tx.wq.bb_max >= iface->super.tx.available);
@@ -373,7 +374,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
         status = UCS_ERR_NO_PROGRESS;
         goto out;
     }
-    uct_ib_mlx5_log_cqe(cqe);
+
     ucs_assert(0 == (cqe->op_own & 
                (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
     ucs_assert(ntohs(cqe->wqe_counter) == iface->rx.wq.cq_wqe_counter);
@@ -383,7 +384,8 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 
     len = ntohl(cqe->byte_cnt);
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
-
+    uct_ib_mlx5_log_rx(&iface->super.super, IBV_QPT_UD, cqe, packet,
+                       uct_ud_dump_packet);
     uct_ud_ep_process_rx(&iface->super,
                          (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                          len - UCT_IB_GRH_LEN,
@@ -493,7 +495,6 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
-    char buf[128];
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
@@ -521,8 +522,6 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     }
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qpn 0x%x %s)", uct_ib_unpack_uint24(if_addr->qp_num),
-                       uct_ib_address_str(ib_addr, buf, sizeof(buf)));
         uct_ud_mlx5_ep_tx_ctl_skb(&ep->super, skb, 1);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }

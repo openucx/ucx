@@ -134,6 +134,11 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface);
 
 void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface);
 
+void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
+                        void *data, size_t length, size_t valid_length,
+                        char *buffer, size_t max);
+
+
 static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
 {
     return iface->tx.available > 0;

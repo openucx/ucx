@@ -169,7 +169,7 @@ static uint64_t network_to_host(uint64_t value, int size)
 }
 static void uct_ib_mlx5_dump_dgram(char *buf, size_t max, struct mlx5_wqe_datagram_seg *seg)
 {
-    snprintf(buf, max-1, " [rlid: %d dqp: 0x%x]", 
+    snprintf(buf, max-1, " [dlid %d rqpn 0x%x]",
              ntohs(mlx5_av_base(&seg->av)->rlid), 
              ntohl(mlx5_av_base(&seg->av)->dqp_dct) & ~UCT_IB_MLX5_EXTENDED_UD_AV);
 }
@@ -349,12 +349,18 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
+    size_t length;
 
+    length = ntohl(cqe->byte_cnt);
+    if (qp_type == IBV_QPT_UD) {
+        length -= UCT_IB_GRH_LEN;
+        data   += UCT_IB_GRH_LEN;
+    }
     uct_ib_log_dump_recv_completion(iface, qp_type,
                                     ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER),
                                     ntohl(cqe->flags_rqpn) & UCS_MASK(UCT_IB_QPN_ORDER),
                                     ntohs(cqe->slid),
-                                    data, ntohl(cqe->byte_cnt),
+                                    data, length,
                                     packet_dump_cb, buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }

@@ -109,7 +109,6 @@ noinst_HEADERS += \
 	ib/ud/base/ud_ep.h \
 	ib/ud/base/ud_def.h \
 	ib/ud/base/ud_inl.h \
-	ib/ud/base/ud_log.h \
 	ib/ud/verbs/ud_verbs.h 
 
 if HAVE_MLX5_HW

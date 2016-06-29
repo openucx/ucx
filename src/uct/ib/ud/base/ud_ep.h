@@ -48,11 +48,7 @@ typedef ucs_status_t (*uct_ud_ep_hook_t)(uct_ud_ep_t *ep, uct_ud_neth_t *neth);
 
 #define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len) \
     if ((ep)->rx.rx_hook(ep, neth) != UCS_OK) { \
-        uct_ud_log_packet(__FILE__, __LINE__, __FUNCTION__, \
-                          ucs_derived_of(ep->super.super.iface, uct_ud_iface_t), \
-                          ep, \
-                          UCT_AM_TRACE_TYPE_RECV_DROP, \
-                          neth, len); \
+        ucs_trace_data("RX: dropping packet"); \
         return; \
     }
 

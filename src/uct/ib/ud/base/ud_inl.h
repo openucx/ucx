@@ -1,4 +1,3 @@
-#include "ud_log.h"
 
 /**
  * scedule control operation. 
@@ -92,9 +91,9 @@ uct_ud_am_set_zcopy_desc(uct_ud_send_skb_t *skb, const void *payload, size_t len
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                   uct_ud_send_skb_t *skb, void *data,
-                                   const void *buffer, unsigned length)
+uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                             uct_ud_send_skb_t *skb, void *data,
+                             const void *buffer, unsigned length)
 {
     iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
@@ -108,14 +107,9 @@ uct_ud_iface_complete_tx_inl_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
 
-#define uct_ud_iface_complete_tx_inl(iface, ep, skb, data, buffer, length) \
-    uct_ud_iface_complete_tx_inl_nolog(iface, ep, skb, data, buffer, length); \
-    uct_ud_ep_log_tx(iface, ep, skb);
-
-
 static UCS_F_ALWAYS_INLINE void 
-uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                   uct_ud_send_skb_t *skb)
+uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                             uct_ud_send_skb_t *skb)
 {
     iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
@@ -126,11 +120,6 @@ uct_ud_iface_complete_tx_skb_nolog(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                    uct_ud_slow_tick());
     ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
-
-#define uct_ud_iface_complete_tx_skb(iface, ep, skb) \
-    uct_ud_iface_complete_tx_skb_nolog(iface, ep, skb); \
-    uct_ud_ep_log_tx(iface, ep, skb);
-
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_am_set_neth(uct_ud_neth_t *neth, uct_ud_ep_t *ep, uint8_t id)

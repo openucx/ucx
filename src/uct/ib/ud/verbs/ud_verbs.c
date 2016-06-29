@@ -84,7 +84,8 @@ uct_ud_verbs_ep_tx_inlv(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_ud_verbs_ep_tx_inlv", &iface->tx.wr_inl);
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_inl, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
-    uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_inl, NULL);
+    uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_inl,
+                         uct_ud_dump_packet);
     --iface->super.tx.available;
 }
 
@@ -103,7 +104,8 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface,
     UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_ud_verbs_ep_tx_skb", &iface->tx.wr_skb);
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_skb, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
-    uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_skb, NULL);
+    uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_skb,
+                         uct_ud_dump_packet);
     --iface->super.tx.available;
 }
 
@@ -152,7 +154,6 @@ ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
 
     uct_ud_verbs_ep_tx_inlv(iface, ep, buffer, length);
-    ucs_trace_data("TX: AM [%d] buf=%p len=%u", id, buffer, length);
 
     skb->len = iface->tx.sge[0].length;
 
@@ -185,9 +186,6 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
-    ucs_trace_data("TX(iface=%p): AM_BCOPY [%d] skb=%p buf=%p len=%u", iface, id,
-                   skb, arg, skb->len);
-
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_ud_leave(&iface->super);
@@ -270,8 +268,6 @@ ucs_status_t uct_ud_verbs_ep_put_short(uct_ep_h tl_ep,
     iface->tx.sge[0].length = sizeof(*neth) + sizeof(*put_hdr);
 
     uct_ud_verbs_ep_tx_inlv(iface, ep, buffer, length);
-    ucs_trace_data("TX: PUT [%0llx] buf=%p len=%u", 
-                   (unsigned long long)remote_addr, buffer, length);
 
     skb->len = iface->tx.sge[0].length;
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
@@ -313,11 +309,11 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
 {
-    int i;
-    char *packet;
-    ucs_status_t status;
     unsigned num_wcs = iface->super.super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
+    ucs_status_t status;
+    void *packet;
+    int i;
 
     status = uct_ib_poll_cq(iface->super.super.recv_cq, &num_wcs, wc);
     if (status != UCS_OK) {
@@ -325,7 +321,8 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
-
+        uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_UD, &wc[i],
+                                   packet, uct_ud_dump_packet);
         uct_ud_ep_process_rx(&iface->super, 
                              (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                              wc[i].byte_len - UCT_IB_GRH_LEN,
@@ -391,7 +388,6 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t *)iface_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
-    char buf[128];
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
@@ -423,8 +419,6 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     ep->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
 
     if (status == UCS_OK) {
-        ucs_trace_data("TX: CREQ (qpn 0x%x %s)", uct_ib_unpack_uint24(if_addr->qp_num),
-                       uct_ib_address_str(ib_addr, buf, sizeof(buf)));
         uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE|IBV_SEND_SOLICITED);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     }

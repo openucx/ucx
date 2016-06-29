@@ -547,24 +547,21 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
 
     if (ucs_unlikely(dest_id == UCT_UD_EP_NULL_ID)) {
         /* must be connection request packet */
-        uct_ud_iface_log_rx(iface, NULL, neth, byte_len);
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
-    }
-    else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-                     ep->ep_id != dest_id)) {
-        uct_ud_iface_log_rxdrop(iface, ep, neth, byte_len);
+    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
+               ep->ep_id != dest_id))
+    {
         /* Drop the packet because it is
          * allowed to do disconnect without flush/barrier. So it
          * is possible to get packet for the ep that has been destroyed 
          */
-        ucs_debug("Failed to find ep(%d)", dest_id);
+        ucs_trace("RX: failed to find ep %d, dropping packet", dest_id);
         goto out;
     } 
 
     ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, byte_len);
-    uct_ud_iface_log_rx(iface, ep, neth, byte_len);
     
     uct_ud_ep_process_ack(iface, ep, neth->ack_psn, is_async);
 
@@ -814,7 +811,6 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
 
     VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->tx_skb(ep, skb, 0);
-    uct_ud_ep_log_tx(iface, ep, skb);
     uct_ud_iface_res_skb_put(iface, skb);
 }
 
