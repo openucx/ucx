@@ -128,6 +128,10 @@ if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/test_rc.cc
 endif	
+if HAVE_TL_DC
+gtest_SOURCES += \
+	uct/test_dc.cc
+endif
 endif
 
 noinst_HEADERS = \

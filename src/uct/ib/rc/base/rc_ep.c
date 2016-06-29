@@ -78,7 +78,7 @@ void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
         ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
     }
 
-    uct_rc_purge_outstanding(txqp, UCS_ERR_CANCELED, 1);
+    uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_CANCELED, 1);
     UCS_STATS_NODE_FREE(txqp->stats);
 }
 
@@ -410,8 +410,8 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
     return status;
 }
 
-void uct_rc_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
-                              int is_log)
+void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
+                                   int is_log)
 {
     uct_rc_iface_send_op_t *op;
     uct_rc_iface_send_desc_t *desc;

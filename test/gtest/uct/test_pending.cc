@@ -31,6 +31,8 @@ public:
         uint64_t          data;
         int               countdown;  /* Actually send after X calls */
         uct_pending_req_t uct;
+        int               active;
+        int               id;
     } pending_send_request_t;
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
@@ -46,6 +48,11 @@ public:
             UCS_TEST_ABORT("Error in comparison in pending_am_handler. Counter: " << counter);
         }
 
+        return UCS_OK;
+    }
+
+    static ucs_status_t am_handler_simple(void *arg, void *data, size_t length,
+                                          void *desc) {
         return UCS_OK;
     }
 
@@ -67,6 +74,22 @@ public:
         return status;
     }
 
+    static ucs_status_t pending_send_op_simple(uct_pending_req_t *self) {
+
+        pending_send_request_t *req = ucs_container_of(self, pending_send_request_t, uct);
+        ucs_status_t status;
+
+        status = uct_ep_am_short(req->ep, 0, test_pending_hdr, &req->data,
+                                 sizeof(req->data));
+        if (status == UCS_OK) {
+            req->countdown ++;
+            n_pending--;
+            req->active = 0;
+            //ucs_warn("dispatched %p idx %d total %d", req->ep, req->id, req->countdown);
+        }
+        return status;
+    }
+
     pending_send_request_t* pending_alloc(uint64_t send_data) {
         pending_send_request_t *req =  new pending_send_request_t();
         req->ep        = m_e1->ep(0);
@@ -76,10 +99,25 @@ public:
         return req;
     }
 
+    pending_send_request_t* pending_alloc_simple(uint64_t send_data, int idx) {
+        pending_send_request_t *req =  new pending_send_request_t();
+        req->ep        = m_e1->ep(idx);
+        req->data      = send_data;
+        req->countdown = 0;
+        req->uct.func  = pending_send_op_simple;
+        req->active    = 0;
+        req->id        = idx;
+        return req;
+    }
+
+
 protected:
     static const uint64_t test_pending_hdr = 0xabcd;
     entity *m_e1, *m_e2;
+    static int n_pending;
 };
+
+int test_uct_pending::n_pending = 0;
 
 void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callback_t cb, void *arg)
 {
@@ -139,7 +177,6 @@ UCS_TEST_P(test_uct_pending, pending_op)
             i++;
         }
     }
-
     /* coverity[loop_condition] */
     while (counter != iters) {
         progress();
@@ -208,6 +245,97 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     /* the receive side checks that the messages were received in order.
      * check the last message here. (counter was raised by one for next iteration) */
     EXPECT_EQ(send_data, 0xdeadbeef + counter - 1);
+}
+
+
+UCS_TEST_P(test_uct_pending, pending_fairness)
+{
+    int N=16;
+    int i, iters;
+    uint64_t send_data = 0xdeadbeef;
+    ucs_status_t status;
+    
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    initialize();
+    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_PENDING);
+    if (m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        N = 128;
+    }
+    pending_send_request_t *reqs[N];
+    install_handler_sync_or_async(m_e2->iface(), 0, am_handler_simple, 0);
+
+    /* idx 0 is setup in initialize(). only need to alloc request */
+    reqs[0] = pending_alloc_simple(send_data, 0);
+    for (i = 1; i < N; i++) {
+        m_e1->connect(i, *m_e2, i);
+        reqs[i] = pending_alloc_simple(send_data, i);
+    }
+
+    /* give a chance to finish connection for some transports (ud) */
+    short_progress_loop();
+
+    for (iters = 0; iters < 10000; iters++) { 
+        /* send until resources of all eps are exausted */
+        while (n_pending < N) {
+            for (i = 0; i < N; ++i) { /* TODO: change to list */
+                if (reqs[i]->active) {
+                    continue;
+                }
+                status = uct_ep_am_short(m_e1->ep(i), 0, test_pending_hdr,
+                        &send_data, sizeof(send_data));
+                if (status != UCS_OK) { 
+                    /* schedule pending */
+                    //ucs_warn("pending sceduled at %d", i);
+                    n_pending++;
+                    reqs[i]->active = 1;
+                    status = uct_ep_pending_add(m_e1->ep(i), &reqs[i]->uct);
+                    ASSERT_UCS_OK(status);
+                    //ucs_warn("pending add %p idx %d", m_e1->ep(i), i);
+                    continue;
+                }
+                reqs[i]->countdown++;
+            }
+        }
+        /* progress untill it is possible to send more */
+        while(n_pending == N) {
+            progress();
+        }
+        //ucs_warn("n_pending = %d", n_pending);
+        /* repeat the cycle. 
+         * it is expected that every ep will send about
+         * the same number of messages. 
+         */
+    }
+
+    /* check fairness:  */ 
+    int min_sends = INT_MAX;
+    int max_sends = 0;
+    for (i = 0; i < N; i++) {
+        min_sends = ucs_min(min_sends, reqs[i]->countdown);
+        max_sends = ucs_max(max_sends, reqs[i]->countdown);
+        //printf("%d: send %d\n", i, reqs[i]->countdown);
+    }
+    UCS_TEST_MESSAGE << " min_sends: " << min_sends 
+                     << " max_sends: " << max_sends 
+                     << " still pending: " << n_pending;
+
+    while(n_pending > 0) {
+       progress();
+    }
+
+    for (i = 0; i < N; i++) {
+        delete reqs[i];
+    }
+
+    /* there must be no starvation */
+    EXPECT_LT(0, min_sends);
+    /* TODO: add stricter fairness criteria */
+    if (min_sends < max_sends /2) {
+        UCS_TEST_MESSAGE << " CHECK: pending queue is not fair";
+    }
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_pending);
