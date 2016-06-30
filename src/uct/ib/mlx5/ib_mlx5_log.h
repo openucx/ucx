@@ -12,7 +12,7 @@
 #include <uct/base/uct_log.h>
 
 
-void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe);
+void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe, int is_fatal);
 
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,

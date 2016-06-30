@@ -134,7 +134,8 @@ unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
 
-struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
+struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
+                                                uct_ib_mlx5_cq_t *cq,
                                                 struct mlx5_cqe64 *cqe);
 
 
@@ -144,7 +145,7 @@ static inline unsigned uct_ib_mlx5_cqe_size(uct_ib_mlx5_cq_t *cq)
 }
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
-uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq, int cqe_size_log)
+uct_ib_mlx5_get_cqe(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int cqe_size_log)
 {
     struct mlx5_cqe64 *cqe;
     unsigned index;
@@ -160,7 +161,7 @@ uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq, int cqe_size_log)
         if (op_own >> 4 == MLX5_CQE_INVALID) {
             return NULL; /* No CQE */
         } else {
-            return uct_ib_mlx5_check_completion(cq, cqe);
+            return uct_ib_mlx5_check_completion(iface, cq, cqe);
         }
     }
 

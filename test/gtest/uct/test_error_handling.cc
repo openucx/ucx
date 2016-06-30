@@ -21,7 +21,7 @@ public:
 
         /* To reduce test execution time decrease retransmition timeouts
          * where it is relevant */
-        if (GetParam()->tl_name == "rc") {
+        if (GetParam()->tl_name == "rc" || GetParam()->tl_name == "rc_mlx5") {
             set_config("RC_TIMEOUT=0.0001"); /* 100 us should be enough */
             set_config("RC_RETRY_COUNT=2");
         }

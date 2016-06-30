@@ -369,7 +369,8 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     ucs_prefetch(packet + UCT_IB_GRH_LEN);
     desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->rx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
+    cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->rx.cq,
+                              UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
         status = UCS_ERR_NO_PROGRESS;
         goto out;
@@ -408,7 +409,8 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
 {
     struct mlx5_cqe64 *cqe;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->tx.cq, UCT_IB_MLX5_CQE64_SIZE_LOG);
+    cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->tx.cq,
+                              UCT_IB_MLX5_CQE64_SIZE_LOG);
     if (cqe == NULL) {
         return;
     }
@@ -603,6 +605,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     },
     .arm_tx_cq                = uct_ud_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ud_mlx5_iface_arm_rx_cq,
+    .handle_failure           = ucs_empty_function
     },
     .progress                 = uct_ud_mlx5_iface_progress,
     .async_progress           = uct_ud_mlx5_iface_async_progress,
