@@ -15,7 +15,10 @@
 
 #define UCP_REQUEST_PRIV_LEN             80
 
-/* Forward declarions */
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Forward declarations
+ */
 typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
 
 /**
@@ -125,7 +128,7 @@ typedef struct ucp_mem                   *ucp_mem_h;
  * multiple network interfaces or communication ports. It could also represent
  * virtual communication resources that are defined across multiple devices.
  * Although the worker can represent multiple network resources, it is
- * associated with a single @ref ucp_context "UCX application context".
+ * associated with a single @ref ucp_context_h "UCX application context".
  * All communication functions require a context to perform the operation on
  * the dedicated hardware resource(s) and an @ref ucp_ep_h "endpoint" to address the
  * destination.
@@ -211,8 +214,8 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  * @param [in]  status    Completion status. If the send operation was completed
  *                        successfully UCX_OK is returned. If send operation was
  *                        canceled UCS_ERR_CANCELED is returned. If the data can
- *                        not fit into the receive buffer the UCS_ERR_TRUNCATRED
- *                        error code is returned.
+ *                        not fit into the receive buffer the
+ *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
  *                        Otherwise, an @ref ucs_status_t "error status" is
  *                        returned.
  * @param [in]  info      @ref ucp_tag_recv_info_t "Completion information"

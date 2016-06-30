@@ -24,7 +24,8 @@
 #define UCT_INLINE_API           static UCS_F_ALWAYS_INLINE
 
 
-/* @ingroup UCT_RESOURCE
+/**
+ * @ingroup UCT_RESOURCE
  * @brief  List of event types for interrupt notification.
  */
 enum uct_event_types {
@@ -38,7 +39,7 @@ enum uct_event_types {
 
 
 /**
- * @ingroup AM
+ * @ingroup UCT_AM
  * @brief Trace types for active message tracer.
  */
 enum uct_am_trace_type {
@@ -49,6 +50,11 @@ enum uct_am_trace_type {
     UCT_AM_TRACE_TYPE_LAST
 };
 
+
+/**
+ * @addtogroup UCT_RESOURCE
+ * @{
+ */
 typedef struct uct_iface         *uct_iface_h;
 typedef struct uct_wakeup        *uct_wakeup_h;
 typedef struct uct_iface_config  uct_iface_config_t;
@@ -56,7 +62,7 @@ typedef struct uct_md_config     uct_md_config_t;
 typedef struct uct_ep            *uct_ep_h;
 typedef void *                   uct_mem_h;
 typedef uintptr_t                uct_rkey_t;
-typedef struct uct_md            *uct_md_h;
+typedef struct uct_md            *uct_md_h;          /**< @brief Memory domain handler */
 typedef struct uct_md_ops        uct_md_ops_t;
 typedef void                     *uct_rkey_ctx_h;
 typedef struct uct_iface_attr    uct_iface_attr_t;
@@ -69,15 +75,18 @@ typedef enum uct_am_trace_type   uct_am_trace_type_t;
 typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
-
+/**
+ * @}
+ */
 
 /**
- * Callback to process incoming active message
+ * @ingroup UCT_AM
+ * @brief Callback to process incoming active message
  *
- * When the callback is called, `desc' does not necessarily contain the payload.
- * In this case, `data' would not point inside `desc', and user may want copy the
- * payload from `data' to `desc' before returning UCT_INPROGRESS (it's guaranteed
- * `desc' has enough room to hold the payload).
+ * When the callback is called, @a desc does not necessarily contain the payload.
+ * In this case, @a data would not point inside @a desc, and user may want
+ * copy the payload from @a data to @a desc before returning @ref UCS_INPROGRESS
+ * (it's guaranteed @a desc has enough room to hold the payload).
  *
  * @param [in]  arg      User-defined argument.
  * @param [in]  data     Points to the received data.
@@ -85,16 +94,28 @@ typedef struct uct_ep_addr       uct_ep_addr_t;
  * @param [in]  desc     Points to the received descriptor, at the beginning of
  *                       the user-defined rx_headroom.
  *
- * @return UCS_OK - descriptor was consumed, and can be released by the caller.
- *         UCS_INPROGRESS - descriptor is owned by the callee, and would be released later.
+ * @note This callback could be set and released
+ *       by @ref uct_iface_set_am_handler function.
+
+ * @warning If the user became the owner of the @a desc (by returning
+ *          @ref UCS_INPROGRESS) the descriptor must be released later by
+ *          @ref uct_iface_release_am_desc by the user.
+ *
+ * @retval UCS_OK         - descriptor was consumed, and can be released
+ *                          by the caller.
+ * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
+ *                          released later.
+ *
  */
 typedef ucs_status_t (*uct_am_callback_t)(void *arg, void *data, size_t length,
                                           void *desc);
 
 
 /**
- * Callback to trace active messages. Writes a string which represents active
- * message contents into 'buffer'.
+ * @ingroup UCT_AM
+ * @brief Callback to trace active messages.
+ *
+ * Writes a string which represents active message contents into 'buffer'.
  *
  * @param [in]  arg      User-defined argument.
  * @param [in]  type     Message type.
@@ -110,7 +131,8 @@ typedef void (*uct_am_tracer_t)(void *arg, uct_am_trace_type_t type, uint8_t id,
 
 
 /**
- * Callback to process send completion.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process send completion.
  *
  * @param [in]  self     Pointer to relevant completion structure, which was
  *                       initially passed to the operation.
@@ -121,21 +143,24 @@ typedef void (*uct_completion_callback_t)(uct_completion_t *self,
 
 
 /**
- * Callback to process pending requests.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process pending requests.
  *
  * @param [in]  self     Pointer to relevant pending structure, which was
  *                       initially passed to the operation.
  *
- * @return UCS_OK         - This pending request has completed and should be removed.
- *         UCS_INPROGRESS - Some progress was made, but not completed. Keep this
- *                          request and keep processing the queue.
- *         Otherwise      - Could not make any progress. Keep this pending request
- *                          on the queue, and stop processing the queue.
+ * @return @ref UCS_OK         - This pending request has completed and
+ *                               should be removed.
+ *         @ref UCS_INPROGRESS - Some progress was made, but not completed.
+ *                               Keep this request and keep processing the queue.
+ *         Otherwise           - Could not make any progress. Keep this pending
+ *                               request on the queue, and stop processing the queue.
  */
 typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
 
 /**
- * Callback to purge pending requests.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to purge pending requests.
  *
  * @param [in]  self     Pointer to relevant pending structure, which was
  *                       initially passed to the operation.
@@ -145,18 +170,20 @@ typedef void (*uct_pending_purge_callback_t)(uct_pending_req_t *self,
                                              void *arg);
 
 /**
- * Callback for producing data.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback for producing data.
  *
  * @param [in]  dest     Memory buffer to pack the data to.
  * @param [in]  arg      Custom user-argument.
  *
- * @return  How much data was actually produced.
+ * @return  Size of the data was actually produced.
  */
 typedef size_t (*uct_pack_callback_t)(void *dest, void *arg);
 
 
 /**
- * Callback for consuming data.
+ * @ingroup UCT_RESOURCE
+ * @brief Callback for consuming data.
  *
  * @param [in]  arg      Custom user-argument.
  * @param [in]  data     Memory buffer to unpack the data from.
