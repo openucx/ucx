@@ -204,7 +204,6 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
                               IBV_SEND_INLINE | IBV_SEND_SIGNALED);
-
     return UCS_OK;
 }
 
@@ -466,7 +465,7 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 #endif
 }
 
-ucs_status_t uct_rc_verbs_ep_nop(uct_rc_verbs_ep_t *ep)
+static ucs_status_t uct_rc_verbs_ep_nop(uct_rc_verbs_ep_t *ep)
 {
 #if HAVE_DECL_IBV_EXP_WR_NOP
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
@@ -494,8 +493,8 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (uct_rc_txqp_available(&ep->super.txqp) == iface->config.tx_max_wr) {
@@ -512,7 +511,11 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         if (status != UCS_OK) {
             return status;
         }
+    } else if (!uct_rc_ep_has_tx_resources(&ep->super)) {
+        return UCS_ERR_NO_RESOURCE;
     }
+
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi);
     UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     return UCS_INPROGRESS;
 }

@@ -81,7 +81,7 @@ struct uct_ud_iface {
         ucs_arbiter_t          pending_q;
         int                    pending_q_len;
         int                    in_pending;
-        ucs_queue_head_t       zcopy_comp_q;
+        ucs_queue_head_t       async_comp_q;
     } tx;
     struct {
         unsigned             tx_qp_len;
@@ -338,15 +338,15 @@ uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
     return uct_ud_iface_dispatch_pending_rx_do(iface);
 }
 
-void uct_ud_iface_dispatch_zcopy_comps_do(uct_ud_iface_t *iface);
+void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
 {
-    if (ucs_likely(ucs_queue_is_empty(&iface->tx.zcopy_comp_q))) {
+    if (ucs_likely(ucs_queue_is_empty(&iface->tx.async_comp_q))) {
         return;
     }
-    uct_ud_iface_dispatch_zcopy_comps_do(iface);
+    uct_ud_iface_dispatch_async_comps_do(iface);
 }
 
 #if ENABLE_PARAMS_CHECK

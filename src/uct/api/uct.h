@@ -1364,7 +1364,7 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * this call. The operations are completed at the origin or at the target
  * as well. The exact completion semantic depends on @a flags parameter.
  *
- * @note Currently only one completion type is supported. It guaranties that
+ * @note Currently only one completion type is supported. It guarantees that
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    ep     Endpoint to flush communications from.
@@ -1373,15 +1373,19 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the endpoint and no completion will
- *                        be generated in case of outstanding communciations.
+ *                        be generated in case of outstanding communications.
  *                        If it is not NULL completion counter is decremented
  *                        by 1 when the call completes. Completion callback is
  *                        called when the counter reaches 0.
  *
- * @return UCS_OK         - No outstanding communications left.
- *         UCS_INPROGRESS - Some communication operations are still in progress.
- *                           If non-NULL 'comp' is provided, it will be updated
- *                           upon completion of these operations.
+ * @return UCS_OK              - No outstanding communications left.
+ *         UCS_ERR_NO_RESOURCE - Flush operation could not be initiated. A subsequent
+ *                               call to @ref uct_ep_pending_add would add a pending
+ *                               operation, which provides an opportunity to retry
+ *                               the flush.
+ *         UCS_INPROGRESS      - Some communication operations are still in progress.
+ *                               If non-NULL 'comp' is provided, it will be updated
+ *                               upon completion of these operations.
  */
 UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
                                          uct_completion_t *comp)

@@ -47,6 +47,9 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
                        (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
     posted = uct_ib_mlx5_post_send(&ep->tx.wq, ctrl, wqe_size);
+    if (sig_flag & MLX5_WQE_CTRL_CQ_UPDATE) {
+        ep->tx.wq.sig_pi = ep->tx.wq.sw_pi - posted;
+    }
     uct_rc_txqp_posted(&ep->super.txqp, 
                        ucs_derived_of(ep->super.super.super.iface, uct_rc_iface_t),
                        posted, sig_flag & MLX5_WQE_CTRL_CQ_UPDATE);
@@ -680,25 +683,33 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
+    uint16_t sn;
     ucs_status_t status;
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (uct_rc_txqp_available(&ep->super.txqp) == ep->tx.wq.bb_max) {
         UCT_TL_EP_STAT_FLUSH(&ep->super.super);
-        ucs_trace_data("ep %p is flushed", ep);
         return UCS_OK;
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        status = uct_rc_mlx5_ep_inline_post(ep, MLX5_OPCODE_NOP, NULL, 0, 0, 0, 0, 0);
+        sn = ep->tx.wq.sw_pi;
+        status = uct_rc_mlx5_ep_inline_post(ep, MLX5_OPCODE_NOP, NULL, 0, 0, 0,
+                                            0, 0);
         if (status != UCS_OK) {
             return status;
         }
+    } else if (!uct_rc_ep_has_tx_resources(&ep->super)) {
+        return UCS_ERR_NO_RESOURCE;
+    } else {
+        sn = ep->tx.wq.sig_pi;
     }
 
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, sn);
     UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     return UCS_INPROGRESS;
 }
