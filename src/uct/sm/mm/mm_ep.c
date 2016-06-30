@@ -237,6 +237,12 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
     return UCS_OK;
 }
 
+static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
+{
+    ucs_memory_cpu_load_fence();
+    ep->cached_tail = ep->fifo_ctl->tail;
+}
+
 /* A common mm active message sending function.
  * The first parameter indicates the origin of the call.
  * is_short = 1 - perform AM short sending
@@ -264,8 +270,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
         } else {
             /* pending is empty */
             /* update the local copy of the tail to its actual value on the remote peer */
-            ucs_memory_cpu_load_fence();
-            ep->cached_tail = ep->fifo_ctl->tail;
+            uct_mm_ep_update_cached_tail(ep);
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
                 UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
                 return UCS_ERR_NO_RESOURCE;
@@ -353,13 +358,20 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
                                     pack_cb, arg);
 }
 
+static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
+    return UCT_MM_EP_IS_ABLE_TO_SEND(ep->fifo_ctl->head, ep->cached_tail,
+                                     iface->config.fifo_size);
+}
+
 ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     /* check if resources became available */
-    if (UCT_MM_EP_IS_ABLE_TO_SEND(ep->fifo_ctl->head, ep->cached_tail, iface->config.fifo_size)) {
+    if (uct_mm_ep_has_tx_resources(ep)) {
         return UCS_ERR_BUSY;
     }
 
@@ -550,12 +562,15 @@ ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb
 ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
                              uct_completion_t *comp)
 {
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+
+    uct_mm_ep_update_cached_tail(ep);
+
+    if (!uct_mm_ep_has_tx_resources(ep)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     ucs_memory_cpu_store_fence();
-    UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    UCT_TL_EP_STAT_FLUSH(&ep->super);
     return UCS_OK;
 }
-

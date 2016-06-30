@@ -26,7 +26,7 @@ static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface);
 static void uct_ud_iface_timer(void *arg);
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
-static void uct_ud_iface_free_zcopy_comps(uct_ud_iface_t *iface);
+static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
 static void uct_ud_iface_cq_event(void *arg);
 
@@ -455,7 +455,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.skb = ucs_mpool_get(&self->tx.mp);
     self->tx.skb_inl.super.len = sizeof(uct_ud_neth_t);
     ucs_queue_head_init(&self->tx.res_skbs);
-    ucs_queue_head_init(&self->tx.zcopy_comp_q);
+    ucs_queue_head_init(&self->tx.async_comp_q);
 
     ucs_arbiter_init(&self->tx.pending_q);
     self->tx.pending_q_len = 0;
@@ -483,7 +483,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_cep_cleanup(self);
     uct_ud_iface_free_res_skbs(self);
-    uct_ud_iface_free_zcopy_comps(self);
+    uct_ud_iface_free_async_comps(self);
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
@@ -562,11 +562,13 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
     uct_ud_enter(iface);
 
+    uct_ud_iface_progress_pending_tx(iface);
+
     count = 0;
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
         /* ud ep flush returns either ok or in progress */
-        status = uct_ud_ep_flush_nolock(iface, ep);
-        if (status == UCS_INPROGRESS) {
+        status = uct_ud_ep_flush_nolock(iface, ep, NULL);
+        if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
             ++count;
         }
     }
@@ -642,34 +644,32 @@ static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface)
     }
 }
 
-void uct_ud_iface_dispatch_zcopy_comps_do(uct_ud_iface_t *iface)
+void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
+    uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
-    uct_ud_zcopy_desc_t *zdesc;
-    uct_ud_ep_t *ep;
 
     do {
-        skb = ucs_queue_pull_elem_non_empty(&iface->tx.zcopy_comp_q, uct_ud_send_skb_t, queue);
-        ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
-        zdesc = uct_ud_zcopy_desc(skb);
-        uct_invoke_completion(zdesc->comp, UCS_OK);
-        ep = (uct_ud_ep_t *)zdesc->payload;
-        ep->flags &= ~UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS;
+        skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
+                                            uct_ud_send_skb_t, queue);
+        cdesc = uct_ud_comp_desc(skb);
+        uct_invoke_completion(cdesc->comp, UCS_OK);
+        cdesc->ep->flags &= ~UCT_UD_EP_FLAG_ASYNC_COMPS;
         skb->flags = 0;
         ucs_mpool_put(skb);
-    } while (!ucs_queue_is_empty(&iface->tx.zcopy_comp_q));
+    } while (!ucs_queue_is_empty(&iface->tx.async_comp_q));
 }
 
-static void uct_ud_iface_free_zcopy_comps(uct_ud_iface_t *iface)
+static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
 
-    while (!ucs_queue_is_empty(&iface->tx.zcopy_comp_q)) {
-        skb = ucs_queue_pull_elem_non_empty(&iface->tx.zcopy_comp_q, uct_ud_send_skb_t, queue);
+    while (!ucs_queue_is_empty(&iface->tx.async_comp_q)) {
+        skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
+                                            uct_ud_send_skb_t, queue);
         ucs_mpool_put(skb);
     }
 }
-
 
 ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
 {

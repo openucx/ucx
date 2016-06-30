@@ -107,7 +107,7 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     uct_cm_ep_t *ep = ucs_derived_of(tl_ep, uct_cm_ep_t);
     struct ib_cm_sidr_req_param req;
     struct ibv_sa_path_rec path;
-    struct ib_cm_id *id;
+    uct_cm_iface_op_t *op;
     ucs_status_t status;
     uct_cm_hdr_t *hdr;
     size_t payload_len;
@@ -137,7 +137,7 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
 
     status = uct_cm_ep_fill_path_rec(ep, &path);
     if (status != UCS_OK) {
-        goto err_free;
+        goto err_free_hdr;
     }
 
     /* Fill SIDR request */
@@ -149,36 +149,49 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     req.private_data_len = total_len;
     req.max_cm_retries   = iface->config.retry_count;
 
+    op = ucs_malloc(sizeof *op, "cm_op");
+    if (op == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_hdr;
+    }
+
+    op->is_id = 1;
+
     /* Create temporary ID for this message. Will be released when getting REP. */
-    ret = ib_cm_create_id(iface->cmdev, &id, NULL);
+    ret = ib_cm_create_id(iface->cmdev, &op->id, NULL);
     if (ret) {
         ucs_error("ib_cm_create_id() failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto err_free;
+        goto err_free_op;
     }
 
     uct_cm_dump_path(&path);
 
-    ret = ib_cm_send_sidr_req(id, &req);
+    ret = ib_cm_send_sidr_req(op->id, &req);
     if (ret) {
         ucs_error("ib_cm_send_sidr_req() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_destroy_id;
     }
 
-    iface->outstanding[iface->num_outstanding++] = id;
+    ucs_queue_push(&iface->outstanding_q, &op->queue);
+    ++iface->num_outstanding;
+    ucs_trace("outs=%d", iface->num_outstanding);
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, payload_len);
     uct_cm_leave(iface);
 
     uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_SEND, hdr,
                             "TX: SIDR_REQ [id %p{%u} dlid %d svc 0x%"PRIx64"]",
-                            id, id->handle, ntohs(path.dlid), req.service_id);
+                            op->id, op->id->handle, ntohs(path.dlid),
+                            req.service_id);
     ucs_free(hdr);
     return payload_len;
 
 err_destroy_id:
-    ib_cm_destroy_id(id);
-err_free:
+    ib_cm_destroy_id(op->id);
+err_free_op:
+    ucs_free(op);
+err_free_hdr:
     ucs_free(hdr);
 err:
     uct_cm_leave(iface);
@@ -218,14 +231,10 @@ ucs_status_t uct_cm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     ucs_status_t status;
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = uct_cm_iface_flush_do(tl_ep->iface);
+    status = uct_cm_iface_flush_do(tl_ep->iface, comp);
     if (status == UCS_OK) {
         UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-    } else {
+    } else if (status == UCS_INPROGRESS) {
         UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
     }
     return status;

@@ -305,11 +305,6 @@ void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
-static inline int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
-{
-    return ((ep->txqp.available > 0) && (ep->fc.fc_wnd > 0));
-}
-
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
