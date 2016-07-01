@@ -135,7 +135,6 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
         req->recv.tag_mask = tag_mask;
         req->recv.cb       = cb;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
-        ucp_worker_progress(worker);
         ucs_trace_req("recv_nb returning expected request %p (%p)", req, req + 1);
     }
 
@@ -194,7 +193,6 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         req->recv.datatype = datatype;
         req->recv.cb       = cb;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
-        ucp_worker_progress(worker);
     }
     return req + 1;
 }
