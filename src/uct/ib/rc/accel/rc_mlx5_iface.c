@@ -315,7 +315,8 @@ static ucs_status_t uct_rc_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
 }
 
-static void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
+static UCS_F_NOINLINE void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+                                                            void *arg)
 {
     struct mlx5_cqe64 *cqe = arg;
     uct_rc_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
@@ -325,6 +326,7 @@ static void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
                                           uct_rc_mlx5_ep_t);
 
     if (ep != NULL) {
+        uct_ib_mlx5_completion_with_err((void*)cqe, 0);
         uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t),

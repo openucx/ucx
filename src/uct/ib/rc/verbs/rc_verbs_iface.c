@@ -37,11 +37,15 @@ static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
     return uct_rc_verbs_iface_post_recv_always(&iface->super, count);
 }
 
-static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_rc_verbs_ep_t *ep,
-                                                       uct_rc_verbs_iface_t *iface,
-                                                       struct ibv_wc *wc)
+static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface,
+                                                       void *arg)
 {
+    struct ibv_wc *wc = arg;
+    uct_rc_verbs_ep_t *ep;
     extern ucs_class_t UCS_CLASS_NAME(uct_rc_verbs_ep_t);
+    uct_rc_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
+                        uct_rc_verbs_ep_t);
     if (ep != NULL) {
         ucs_error("Send completion with error: %s",
                   ibv_wc_status_str(wc->status));
@@ -50,7 +54,7 @@ static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_rc_verbs_ep_t *ep,
 
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t),
                           &ep->super.super.super,
-                          &iface->super.super.super.super);
+                          &iface->super.super.super);
     }
 }
 
@@ -70,7 +74,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
                             uct_rc_verbs_ep_t);
 
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            uct_rc_verbs_handle_failure(ep, iface, &wc[i]);
+            iface->super.super.ops->handle_failure(&iface->super.super, &wc[i]);
             continue;
         }
         uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
@@ -213,6 +217,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .handle_failure           = uct_rc_verbs_handle_failure
     },
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl
 };

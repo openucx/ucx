@@ -180,7 +180,6 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
     case MLX5_CQE_INVALID:
         return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
-        uct_ib_mlx5_completion_with_err((void*)cqe, 0);
         iface->ops->handle_failure(iface, cqe);
         ++cq->cq_ci;
         return NULL;
