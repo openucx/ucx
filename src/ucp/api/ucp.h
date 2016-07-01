@@ -104,6 +104,21 @@
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief UCP context parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_params_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_params_field {
+    UCP_PARAM_FIELD_FEATURES        = UCS_BIT(0), /* features */
+    UCP_PARAM_FIELD_REQUEST_SIZE    = UCS_BIT(1), /* request_size */
+    UCP_PARAM_FIELD_REQUEST_INIT    = UCS_BIT(2), /* request_init */
+    UCP_PARAM_FIELD_REQUEST_CLEANUP = UCS_BIT(3)  /* request_cleanup */
+};
+
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP configuration features
  *
  * The enumeration list describes the features supported by UCP.  An
@@ -287,27 +302,37 @@ typedef struct ucp_params {
      * UCP @ref ucp_feature "features" that are used for library
      * initialization. It is recommend for applications only request
      * the features that are required for an optimal functionality
+     * This field must be specified.
      */
-    uint64_t                    features;
+    uint64_t                           features;
     /**
      * The size of a reserved space in a non-blocking requests. Typically
      * applications use this space for caching own structures in order to avoid
      * costly memory allocations, pointer dereferences, and cache misses.
      * For example, MPI implementation can use this memory for caching MPI
      * descriptors
+     * This field defaults to 0 if not specified.
      */
-    size_t                      request_size;
+    size_t                             request_size;
     /**
      * Pointer to a routine that is used for the request initialization.
      * @e NULL can be used if no such function required.
+     * This field defaults to @e NULL if not specified.
      */
-    ucp_request_init_callback_t request_init;
+    ucp_request_init_callback_t        request_init;
     /**
      * Pointer to a routine that is responsible for cleanup the memory
      * associated with the request.  @e NULL can be used if no such function
      * required.
+     * This field defaults to @e NULL if not specified.
      */
-    ucp_request_cleanup_callback_t request_cleanup;
+    ucp_request_cleanup_callback_t     request_cleanup;
+    /**
+     * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                           field_mask;
 } ucp_params_t;
 
 
