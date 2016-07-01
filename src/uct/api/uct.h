@@ -76,10 +76,10 @@
  */
 
 /**
- * @defgroup UCT_RMA  UCT Remote memeory access operations.
+ * @defgroup UCT_RMA  UCT Remote memory access operations.
  * @ingroup UCT_API
  * @{
- * Defines remote memory access operairons.
+ * Defines remote memory access operations.
  * @}
  */
 
@@ -212,7 +212,7 @@ enum {
  */
 typedef enum {
     UCT_ALLOC_METHOD_MD,   /**< Allocate using memory domain */
-    UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap usign libc allocator */
+    UCT_ALLOC_METHOD_HEAP, /**< Allocate from heap using libc allocator */
     UCT_ALLOC_METHOD_MMAP, /**< Allocate from OS using mmap() syscall */
     UCT_ALLOC_METHOD_HUGE, /**< Allocate huge pages */
     UCT_ALLOC_METHOD_LAST,
@@ -451,7 +451,7 @@ void uct_md_close(uct_md_h md);
  * @ingroup UCT_RESOURCE
  * @brief Query for transport resources.
  *
- * This routine queries the @ref uct_md_t "memory domain" for communication
+ * This routine queries the @ref uct_md_h "memory domain" for communication
  * resources that are available for it.
  *
  * @param [in]  md              Handle to memory domain.
@@ -471,7 +471,7 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
  * @brief Release the list of resources returned from @ref uct_md_query_tl_resources.
  *
  * This routine releases the memory associated with the list of resources
- * allocated by @ref uct_query_tl_resources.
+ * allocated by @ref uct_md_query_tl_resources.
  *
  * @param [in] resources  Array of resource descriptors to release.
  */
@@ -650,7 +650,8 @@ void uct_iface_close(uct_iface_h iface);
  * @ingroup UCT_RESOURCE
  * @brief Get interface attributes.
  *
- * @param [in]  iface   Interface to query.
+ * @param [in]  iface      Interface to query.
+ * @param [out] iface_attr Filled with interface attributes.
  */
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr);
 
@@ -728,7 +729,7 @@ void uct_wakeup_close(uct_wakeup_h wakeup);
  * @brief Obtain a notification file descriptor for polling.
  *
  * @param [in]  wakeup     Handle to the notification event.
- * @param [out] fd         Location to write the notification file descriptor.
+ * @param [out] fd_p       Location to write the notification file descriptor.
  *
  * @return Error code.
  */
@@ -776,22 +777,25 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length,
 
 void uct_iface_mem_free(const uct_allocated_memory_t *mem);
 
-/* @ingroup UCT_AM
- * @brief  List of capabilities of active message callback
+/**
+ * @ingroup UCT_AM
+ * @brief AM callback capabilities
+ *
+ * List of capabilities of active message callback
  *
  * A callback must have either SYNC or ASYNC flags.
  */
-enum {
-    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< callback is always invoked from the context (thread, process)
+enum uct_am_cb_cap {
+    UCT_AM_CB_FLAG_SYNC  = UCS_BIT(1), /**< Callback is always invoked from the context (thread, process)
                                             that called uct_iface_progress(). An interface must
-                                            have UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync 
+                                            have @ref UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync
                                             callback invocation */
 
-    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< callback may be invoked from any context. For example,
+    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< Callback may be invoked from any context. For example,
                                             it may be called from transport async progress thread. To guarantee
-                                            async invocation, interface must have UCT_IFACE_FLAG_AM_CB_ASYNC 
+                                            async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
                                             flag set. 
-                                             If async callback is set on interface with only 
+                                            If async callback is set on interface with only @ref
                                             UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
                                             sync callback  */ 
 };
@@ -808,9 +812,10 @@ enum {
  * @param [in]  id       Active message id. Must be 0..UCT_AM_ID_MAX-1.
  * @param [in]  cb       Active message callback. NULL to clear.
  * @param [in]  arg      Active message argument.
- * @param [in]  flags    Required active message callback capabilities 
+ * @param [in]  flags    Required @ref uct_am_cb_cap "active message callback capabilities"
  *
- * @return error code if the interface does not support active messages or requested callback flags
+ * @return error code if the interface does not support active messages or
+ *         requested callback flags
  */
 ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
                                       uct_am_callback_t cb, void *arg, uint32_t flags);
@@ -822,7 +827,7 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
  *
  * Sets a function which dumps active message debug information to a buffer,
  * which is printed every time the an active message is sent or received, when
- * data tracing is on. Without the trancer, only transport-level information is
+ * data tracing is on. Without the tracer, only transport-level information is
  * printed.
  *
  * @param [in]  iface    Interface to set the active message handler for.
@@ -874,7 +879,7 @@ void uct_ep_destroy(uct_ep_h ep);
  * @brief Get endpoint address.
  *
  * @param [in]  ep       Endpoint to query.
- * @param [out] ep_addr  Filled with endpoint address. The size of the buffer
+ * @param [out] addr     Filled with endpoint address. The size of the buffer
  *                        provided must be at least @ref uct_iface_attr_t::ep_addr_len.
  */
 ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
@@ -908,13 +913,14 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
  * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy sends and remote access.
  *
- *  Allocate memory on the memory domain. In order to use this function, MD
+ * Allocate memory on the memory domain. In order to use this function, MD
  * must support @ref UCT_MD_FLAG_ALLOC flag.
  *
  * @param [in]     md          Memory domain to allocate memory on.
  * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
  *                              return, filled with the actual size that was allocated,
  *                              which may be larger than the one requested. Must be >0.
+ * @param [in,out] address_p   The address
  * @param [in]     name        Name of the allocated region, used to track memory
  *                              usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
@@ -926,7 +932,7 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  * @ingroup UCT_MD
  * @brief Release memory allocated by @ref uct_md_mem_alloc.
  *
- * @param [in]     md          Memory domain memory was allocateed on.
+ * @param [in]     md          Memory domain memory was allocated on.
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
  */
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
@@ -953,7 +959,7 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
  * @brief Undo the operation of @ref uct_md_mem_reg().
  *
  * @param [in]  md          Memory domain which was used to register the memory.
- * @paran [in]  memh        Local access key to memory region.
+ * @param [in]  memh        Local access key to memory region.
  */
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
@@ -972,7 +978,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     min_length  Minimal size to allocate. The actual size may be
  *                             larger, for example because of alignment restrictions.
  * @param [in]     methods     Array of memory allocation methods to attempt.
- * @param [in]     num_method  Length of 'methods' array.
+ * @param [in]     num_methods Length of 'methods' array.
  * @param [in]     mds         Array of memory domains to attempt to allocate
  *                             the memory with, for MD allocation method.
  * @param [in]     num_mds     Length of 'mds' array. May be empty, in such case
@@ -1071,7 +1077,7 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
- *                        be generated in case of outstanding communciations.
+ *                        be generated in case of outstanding communications.
  *                        If it is not NULL completion counter is decremented
  *                        by 1 when the call completes. Completion callback is
  *                        called when the counter reaches 0.
@@ -1108,10 +1114,12 @@ UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
 
 /**
  * @ingroup UCT_AM
- * @brief Release active message descriptor, which was passed to the active
- * message callback, and owned by the callee.
+ * @brief Release AM descriptor
  *
- * @param [in]  desc         Descriptor to release.
+ * Release active message descriptor @a desc, which was passed to
+ * @ref uct_am_callback_t "the active message callback", and owned by the callee.
+ *
+ * @param [in]  desc  Descriptor to release.
  */
 UCT_INLINE_API void uct_iface_release_am_desc(void *desc)
 {
@@ -1373,7 +1381,7 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the endpoint and no completion will
- *                        be generated in case of outstanding communciations.
+ *                        be generated in case of outstanding communications.
  *                        If it is not NULL completion counter is decremented
  *                        by 1 when the call completes. Completion callback is
  *                        called when the counter reaches 0.

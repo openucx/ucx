@@ -1,22 +1,41 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * @file        uct.h
+ * @date        2014-2016
+ * @copyright   Mellanox Technologies Ltd. All rights reserved.
+ * @brief       Unified Communication Services
+ */
 
 #ifndef UCS_TYPES_STATUS_H_
 #define UCS_TYPES_STATUS_H_
 
 #include <ucs/sys/compiler.h>
 
+
 /**
- * Status codes
+ * @defgroup UCS_API Unified Communication Services (UCS) API
+ * @{
+ * This section describes UCS API.
+ * @}
+ */
+
+/**
+* @defgroup UCS_RESOURCE   UCS Communication Resource
+* @ingroup UCS_API
+* @{
+* This section describes a concept of the Communication Resource and routines
+* associated with the concept.
+* @}
+*/
+
+/**
+ * @ingroup UCS_RESOURCE
+ * @brief Status codes
  *
  * @note In order to evaluate the necessary steps to recover from a certain
  * error, all error codes which can be returned by the external API are grouped
  * by the largest entity permanently effected by the error. Each group ranges
  * between its UCS_ERR_FIRST_<name> and UCS_ERR_LAST_<name> enum values.
- * For example, if a link fails it may be suffecient to destroy (and possibly
+ * For example, if a link fails it may be sufficient to destroy (and possibly
  * replace) it, in contrast to an endpoint-level error.
  */
 typedef enum {
