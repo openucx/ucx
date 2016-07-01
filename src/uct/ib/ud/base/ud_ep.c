@@ -698,7 +698,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
             skb->neth->packet_type      = 0;
             skb->neth->psn              = psn;
             uct_ud_comp_desc(skb)->comp = comp;
-            ucs_assert(psn = (uct_ud_psn_t)(ep->tx.psn - 1));
+            ucs_assert(psn == (uct_ud_psn_t)(ep->tx.psn - 1));
 
             uct_ud_neth_set_dest_id(skb->neth, UCT_UD_EP_NULL_ID);
             ucs_queue_push(&ep->tx.window, &skb->queue);

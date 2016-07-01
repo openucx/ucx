@@ -23,9 +23,6 @@ public:
         uct_flush_test     *test;
     };
 
-    uct_flush_test() {
-    }
-
     void init() {
         m_sender = uct_test::create_entity(0);
         m_entities.push_back(m_sender);
@@ -225,6 +222,7 @@ public:
         if (status == UCS_OK) {
             return;
         }
+        /* coverity[loop_condition] */
         while (comp.count != 1) {
             progress();
         }
@@ -332,6 +330,7 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
          ASSERT_UCS_OK(status);
      }
 
+     /* coverity[loop_condition] */
      while (flush_req.comp.count != 1) {
          progress();
      }
