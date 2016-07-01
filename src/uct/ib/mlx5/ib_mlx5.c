@@ -172,21 +172,20 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));
 }
 
-struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_mlx5_cq_t *cq,
+struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
+                                                uct_ib_mlx5_cq_t *cq,
                                                 struct mlx5_cqe64 *cqe)
 {
     switch (cqe->op_own >> 4) {
     case MLX5_CQE_INVALID:
         return NULL; /* No CQE */
     case MLX5_CQE_REQ_ERR:
-        uct_ib_mlx5_completion_with_err((void*)cqe);
-        /* For send completion, we don't care about the data, only releasing
-         * the descriptor and updating QP pi.
-         * TODO need to be changed if we have scatter-to-CQE on send. */
+        iface->ops->handle_failure(iface, cqe);
         ++cq->cq_ci;
-        return cqe;
+        return NULL;
     case MLX5_CQE_RESP_ERR:
-        uct_ib_mlx5_completion_with_err((void*)cqe);
+        /* Local side failure - treat as fatal */
+        uct_ib_mlx5_completion_with_err((void*)cqe, 1);
         ++cq->cq_ci;
         return NULL;
     default:
