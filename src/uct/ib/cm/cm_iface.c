@@ -51,6 +51,7 @@ static void uct_cm_iface_progress(void *arg)
      */
     ucs_queue_for_each_extract(op, &iface->outstanding_q, queue, !op->is_id) {
         uct_invoke_completion(op->comp, UCS_OK);
+        ucs_free(op);
     }
 
     /* Dispatch pending operations */
