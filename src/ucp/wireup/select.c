@@ -588,8 +588,10 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
 
     status = ucp_wireup_select_transport(ep, address_list, address_count, &criteria,
                                          -1, 0, &rsc_index, &addr_index, &score);
-    if (status == UCS_OK) {
-        ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
+    if ((status == UCS_OK) &&
+        /* a temporary workaround to prevent the ugni uct from using rndv */
+        (strstr(ep->worker->context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni") == NULL)) {
+         ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  address_list[addr_index].md_index, score,
                                  UCP_WIREUP_LANE_USAGE_RNDV);
     }
