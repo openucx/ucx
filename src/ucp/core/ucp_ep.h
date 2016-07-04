@@ -12,7 +12,6 @@
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/log.h>
 #include <limits.h>
 
 
@@ -109,7 +108,6 @@ typedef struct ucp_ep {
     uint8_t                       flags;         /* Endpoint flags */
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
-    ucp_ep_h                      next;          /* Next in hash table linked list */
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_NAME_MAX];

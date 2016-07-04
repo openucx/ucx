@@ -21,13 +21,17 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
                         ucp_ep_h *ep_p)
 {
+    ucs_status_t status;
     ucp_ep_config_key_t key;
     ucp_ep_h ep;
+    khiter_t hash_it;
+    int hash_extra_status = 0;
 
     ep = ucs_calloc(1, sizeof(*ep), "ucp ep");
     if (ep == NULL) {
         ucs_error("Failed to allocate ep");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     /* EP configuration without any lanes */
@@ -48,17 +52,42 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
-    sglib_hashed_ucp_ep_t_add(worker->ep_hash, ep);
 
-    *ep_p                    = ep;
+    hash_it = kh_put(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid,
+                     &hash_extra_status);
+    if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
+        ucs_error("Hash failed with ep %p to %s 0x%"PRIx64"->0x%"PRIx64" %s "
+                  "with status %d", ep, peer_name, worker->uuid, ep->dest_uuid,
+                  message, hash_extra_status);
+        status = UCS_ERR_NO_RESOURCE;
+        goto err_free_ep;
+    }
+    kh_value(&worker->ep_hash, hash_it) = ep;
+
+    *ep_p = ep;
     ucs_debug("created ep %p to %s 0x%"PRIx64"->0x%"PRIx64" %s", ep, peer_name,
               worker->uuid, ep->dest_uuid, message);
     return UCS_OK;
+
+err_free_ep:
+    ucs_free(ep);
+err:
+    return status;
+}
+
+static void ucp_ep_delete_from_hash(ucp_ep_h ep)
+{
+    khiter_t hash_it;
+
+    hash_it = kh_get(ucp_worker_ep_hash, &ep->worker->ep_hash, ep->dest_uuid);
+    if (hash_it != kh_end(&ep->worker->ep_hash)) {
+        kh_del(ucp_worker_ep_hash, &ep->worker->ep_hash, hash_it);
+    }
 }
 
 static void ucp_ep_delete(ucp_ep_h ep)
 {
-    sglib_hashed_ucp_ep_t_delete(ep->worker->ep_hash, ep);
+    ucp_ep_delete_from_hash(ep);
     ucs_free(ep);
 }
 
@@ -190,7 +219,7 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_debug("destroy ep %p", ep);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    sglib_hashed_ucp_ep_t_delete(worker->ep_hash, ep);
+    ucp_ep_delete_from_hash(ep);
     ucp_ep_destory_uct_eps(ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
