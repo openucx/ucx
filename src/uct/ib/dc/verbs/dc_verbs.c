@@ -580,9 +580,7 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
         }
     }
 
-    if ((ep->super.state == UCT_DC_EP_TX_WAIT) ||
-        !uct_dc_iface_dci_has_tx_resources(&iface->super, ep->super.dci))
-    {
+    if (!uct_dc_iface_dci_ep_can_send(&ep->super)) {
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
