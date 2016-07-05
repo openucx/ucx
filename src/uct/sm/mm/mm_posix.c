@@ -17,12 +17,16 @@
 #define UCT_MM_POSIX_MMAP_PROT      (PROT_READ | PROT_WRITE)
 #define UCT_MM_POSIX_HUGETLB        UCS_BIT(0)
 #define UCT_MM_POSIX_SHM_OPEN       UCS_BIT(1)
-#define UCT_MM_POSIX_CTRL_BITS      2
+#define UCT_MM_POSIX_PROC_LINK      UCS_BIT(2)
+#define UCT_MM_POSIX_CTRL_BITS      3
+#define UCT_MM_POSIX_FD_BITS        29
+#define UCT_MM_POSIX_PID_BITS       32
 
 typedef struct uct_posix_md_config {
     uct_mm_md_config_t      super;
     char                    *path;
     ucs_ternary_value_t     use_shm_open;
+    int                     use_proc_link;
 } uct_posix_md_config_t;
 
 static ucs_config_field_t uct_posix_md_config_table[] = {
@@ -40,6 +44,11 @@ static ucs_config_field_t uct_posix_md_config_table[] = {
 
   {"DIR", "/tmp", "The path to the backing file in case open() is used.",
    ucs_offsetof(uct_posix_md_config_t, path), UCS_CONFIG_TYPE_STRING},
+
+  {"USE_PROC_LINK", "y", "Use /proc/<pid>/fd/<fd> to share posix file. "
+   " y   - Use /proc/<pid>/fd/<fd> to share posix file.\n"
+   " n   - Use original file path to share posix file.\n",
+   ucs_offsetof(uct_posix_md_config_t, use_proc_link), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -260,16 +269,32 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     /* Generate a 64 bit uuid.
-     * use 62 bits of it for creating the file_name of the backing file.
+     * use 61 bits of it for creating the file_name of the backing file.
      * other 2 bits:
      * 1 bit is for indicating whether or not hugepages were used.
-     * 1 bit is for indicating whether or not shm_open() was used. */
+     * 1 bit is for indicating whether or not shm_open() was used.
+     * 1 bit is for indicating whether or not /proc/<pid>/fd/<fd> was used. */
     uuid = ucs_generate_uuid(0);
 
     status = uct_posix_open_backing_file(file_name, &uuid, posix_config,
                                          *length_p, &shm_fd, path_p);
     if (status != UCS_OK) {
         goto err_free_file;
+    }
+
+    /* immediately unlink the file */
+    if (posix_config->use_proc_link) {
+        int ret = (uuid & UCT_MM_POSIX_SHM_OPEN) ? shm_unlink(file_name) : unlink(file_name);
+        if (ret != 0) {
+            ucs_warn("unable to unlink the shared memory segment. File name is: %s",
+                     file_name);
+            status = UCS_ERR_SHMEM_SEGMENT;
+            goto err_free_file;
+        }
+
+        uuid |= UCT_MM_POSIX_PROC_LINK;
+    } else {
+        uuid &= ~UCT_MM_POSIX_PROC_LINK;
     }
 
     /* check is the location of the backing file has enough memory for the needed size
@@ -280,6 +305,21 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     }
 
     status = UCS_ERR_NO_MEMORY;
+
+    if (posix_config->use_proc_link) {
+        /* encode fd and pid into uuid */
+        uuid &= UCS_MASK_SAFE(UCT_MM_POSIX_CTRL_BITS);
+        uuid |= (shm_fd << UCT_MM_POSIX_CTRL_BITS);
+        uuid |= ((uint64_t)getpid()) << (UCT_MM_POSIX_CTRL_BITS + UCT_MM_POSIX_FD_BITS);
+
+        /* Here we encoded fd into uuid using 29 bits, which
+         * is less than 32 bits (one integer), so there are
+         * 3 bits lost. We make sure here the encoded fd equals
+         * to the original fd. If they are not equal, which means
+         * 29 bits is not enough for fd, we need proper solutions
+         * to deal with it. */
+        ucs_assert(shm_fd == ((uuid >> UCT_MM_POSIX_CTRL_BITS) & UCS_MASK_SAFE(UCT_MM_POSIX_FD_BITS)));
+    }
 
     /* mmap the shared memory segment that was created by shm_open */
 #ifdef MAP_HUGETLB
@@ -318,8 +358,10 @@ uct_posix_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
 
 err_shm_unlink:
     close(shm_fd);
-    if (shm_unlink(file_name) != 0) {
-        ucs_warn("unable to unlink the shared memory segment");
+    if (!posix_config->use_proc_link) {
+        if (shm_unlink(file_name) != 0) {
+            ucs_warn("unable to unlink the shared memory segment");
+        }
     }
 err_free_file:
     ucs_free(file_name);
@@ -328,8 +370,10 @@ err:
 
 out_ok:
     ucs_free(file_name);
-    /* closing the shm_fd here won't unmap the mem region*/
-    close(shm_fd);
+    if (!posix_config->use_proc_link) {
+        /* closing the shm_fd here won't unmap the mem region*/
+        close(shm_fd);
+    }
     *mmid_p = uuid;
     return UCS_OK;
 }
@@ -351,17 +395,32 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
         goto err;
     }
 
-    status = uct_posix_set_path(file_name, mmid & UCT_MM_POSIX_SHM_OPEN, path,
-                                mmid >> UCT_MM_POSIX_CTRL_BITS);
-    if (status != UCS_OK) {
-        goto err_free_file;
-    }
+    if (mmid & UCT_MM_POSIX_PROC_LINK) {
+        int orig_fd, pid;
+        uct_mm_id_t temp_mmid;
 
-    /* use the mmid (62 bits) to recreate the file_name for opening */
-    if (mmid & UCT_MM_POSIX_SHM_OPEN) {
-        shm_fd = shm_open(file_name, O_RDWR | O_EXCL, UCT_MM_POSIX_SHM_OPEN_MODE);
+        temp_mmid = mmid >> UCT_MM_POSIX_CTRL_BITS;
+        orig_fd = temp_mmid & UCS_MASK_SAFE(UCT_MM_POSIX_FD_BITS);
+        temp_mmid >>= UCT_MM_POSIX_FD_BITS;
+        pid = temp_mmid & UCS_MASK_SAFE(UCT_MM_POSIX_PID_BITS);
+
+        /* get internal path /proc/pid/fd/<fd> */
+        snprintf(file_name, NAME_MAX, "/proc/%d/fd/%d", pid, orig_fd);
+
+        shm_fd = open(file_name, O_RDWR, UCT_MM_POSIX_SHM_OPEN_MODE);
     } else {
-        shm_fd = open(file_name, O_CREAT | O_RDWR, UCT_MM_POSIX_SHM_OPEN_MODE);
+        status = uct_posix_set_path(file_name, mmid & UCT_MM_POSIX_SHM_OPEN, path,
+                                    mmid >> UCT_MM_POSIX_CTRL_BITS);
+        if (status != UCS_OK) {
+            goto err_free_file;
+        }
+
+        /* use the mmid (62 bits) to recreate the file_name for opening */
+        if (mmid & UCT_MM_POSIX_SHM_OPEN) {
+            shm_fd = shm_open(file_name, O_RDWR | O_EXCL, UCT_MM_POSIX_SHM_OPEN_MODE);
+        } else {
+            shm_fd = open(file_name, O_CREAT | O_RDWR, UCT_MM_POSIX_SHM_OPEN_MODE);
+        }
     }
 
     if (shm_fd == -1) {
@@ -417,7 +476,6 @@ static ucs_status_t uct_posix_detach(uct_mm_remote_seg_t *mm_desc)
 static ucs_status_t uct_posix_free(void *address, uct_mm_id_t mm_id, size_t length,
                                    const char *path)
 {
-    char *file_name;
     int ret;
     ucs_status_t status = UCS_OK;
 
@@ -429,29 +487,36 @@ static ucs_status_t uct_posix_free(void *address, uct_mm_id_t mm_id, size_t leng
         goto err;
     }
 
-    file_name = ucs_calloc(1, NAME_MAX, "shared mr posix mmap");
-    if (file_name == NULL) {
-        ucs_error("Failed to allocate memory for the shm_unlink file name. %m");
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
+    if (mm_id & UCT_MM_POSIX_PROC_LINK) {
+        int orig_fd;
+        mm_id >>= UCT_MM_POSIX_CTRL_BITS;
+        orig_fd = (int)(mm_id & UCS_MASK_SAFE(UCT_MM_POSIX_FD_BITS));
+        close(orig_fd);
+    } else {
+        char *file_name = ucs_calloc(1, NAME_MAX, "shared mr posix mmap");
+        if (file_name == NULL) {
+            ucs_error("Failed to allocate memory for the shm_unlink file name. %m");
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
 
-    status = uct_posix_set_path(file_name, mm_id & UCT_MM_POSIX_SHM_OPEN, path,
-                                mm_id >> UCT_MM_POSIX_CTRL_BITS);
-    if (status != UCS_OK) {
-        goto out_free_file;
-    }
+        status = uct_posix_set_path(file_name, mm_id & UCT_MM_POSIX_SHM_OPEN, path,
+                                    mm_id >> UCT_MM_POSIX_CTRL_BITS);
+        if (status != UCS_OK) {
+            goto out_free_file;
+        }
 
-    /* use the mmid (62 bits uuid) to recreate the file_name for unlink */
-    ret = (mm_id & UCT_MM_POSIX_SHM_OPEN) ? shm_unlink(file_name) : unlink(file_name);
-    if (ret != 0) {
-        ucs_warn("unable to unlink the shared memory segment. File name is: %s",
-                 file_name);
-        status = UCS_ERR_SHMEM_SEGMENT;
-    }
+        /* use the mmid (62 bits uuid) to recreate the file_name for unlink */
+        ret = (mm_id & UCT_MM_POSIX_SHM_OPEN) ? shm_unlink(file_name) : unlink(file_name);
+        if (ret != 0) {
+            ucs_warn("unable to unlink the shared memory segment. File name is: %s",
+                     file_name);
+            status = UCS_ERR_SHMEM_SEGMENT;
+        }
 
 out_free_file:
-    ucs_free(file_name);
+        ucs_free(file_name);
+    }
 
 err:
     return status;
