@@ -277,6 +277,7 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     /* give a chance to finish connection for some transports (ud) */
     short_progress_loop();
 
+    n_pending = 0;
     for (iters = 0; iters < 10000; iters++) { 
         /* send until resources of all eps are exausted */
         while (n_pending < N) {
