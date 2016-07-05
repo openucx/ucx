@@ -98,7 +98,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
 
 /**
- * Instantiate the parameterized test case a combination of transports.
+ * Instantiate the parametrized test case a combination of transports.
  *
  * @param _test_case   Test case class, derived from uct_test.
  * @param _name        Instantiation name.
@@ -114,19 +114,20 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
 
 /**
- * Instantiate the parameterized test case for all transport combinations.
+ * Instantiate the parametrized test case for all transport combinations.
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
-#define UCP_INSTANTIATE_TEST_CASE(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc,    "\\dc"                        ) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "\\ud"                        ) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "\\ud_mlx5"                   ) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud", "\\rc"                ) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrcx, "\\cm", "\\rc_mlx5"           ) \
+#define UCP_INSTANTIATE_TEST_CASE(_test_case)                                                    \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc,    "\\dc")                                     \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "\\ud")                                     \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "\\ud_mlx5")                                \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud", "\\rc")                             \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrcx, "\\cm", "\\rc_mlx5")                        \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm,   "\\mm", "\\knem", "\\cma", "\\xpmem", "ib") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5", "\\rc_mlx5"      ) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg", "\\ugni_udt", "\\ugni_rdma")
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5", "\\rc_mlx5")                   \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg", "\\ugni_udt", "\\ugni_rdma") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self")
 
 
 #endif

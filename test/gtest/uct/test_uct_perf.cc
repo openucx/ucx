@@ -137,4 +137,4 @@ UCS_TEST_P(test_uct_perf, envelope) {
     }
 }
 
-UCT_INSTANTIATE_TEST_CASE(test_uct_perf);
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_perf);

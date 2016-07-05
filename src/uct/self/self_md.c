@@ -8,10 +8,11 @@
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
-    attr->cap.flags         = 0;
+    /* Dummy memory registration provided. No real memory handling exists */
+    attr->cap.flags         = UCT_MD_FLAG_REG;
     attr->cap.max_alloc     = 0;
-    attr->cap.max_reg       = 0;
-    attr->rkey_packed_size  = 0;
+    attr->cap.max_reg       = ULONG_MAX;
+    attr->rkey_packed_size  = 0; /* uct_md_query adds UCT_MD_COMPONENT_NAME_MAX to this */
     attr->reg_cost.overhead = 0;
     attr->reg_cost.growth   = 0;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
@@ -24,15 +25,23 @@ static ucs_status_t uct_self_query_md_resources(uct_md_resource_desc_t **resourc
     return uct_single_md_resource(&uct_self_md, resources_p, num_resources_p);
 }
 
+static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
+                                     uct_mem_h *memh_p)
+{
+    /* We have to emulate memory registration. Return dummy pointer */
+    *memh_p = (void *) 0xdeadbeef;
+    return UCS_OK;
+}
+
 static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t *md_config,
                                      uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
         .close        = (void*)ucs_empty_function,
         .query        = uct_self_md_query,
-        .mkey_pack    = ucs_empty_function_return_unsupported,
-        .mem_reg      = ucs_empty_function_return_unsupported,
-        .mem_dereg    = ucs_empty_function_return_unsupported
+        .mkey_pack    = ucs_empty_function_return_success,
+        .mem_reg      = uct_self_mem_reg,
+        .mem_dereg    = ucs_empty_function_return_success
     };
     static uct_md_t md = {
         .ops          = &md_ops,
@@ -45,7 +54,7 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
 
 UCT_MD_COMPONENT_DEFINE(uct_self_md, UCT_SELF_NAME,
                         uct_self_query_md_resources, uct_self_md_open, NULL,
-                        ucs_empty_function_return_unsupported,
-                        ucs_empty_function_return_unsupported, "SELF_",
+                        uct_md_stub_rkey_unpack,
+                        ucs_empty_function_return_success, "SELF_",
                         uct_md_config_table, uct_md_config_t);
 

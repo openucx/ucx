@@ -67,4 +67,4 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
     }
 }
 
-UCT_INSTANTIATE_TEST_CASE(test_uct_ep)
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_ep)

@@ -162,6 +162,15 @@ ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
                                     uct_md_resource_desc_t **resources_p,
                                     unsigned *num_resources_p);
 
+/**
+ * @brief Dummy function
+ * Dummy function to emulate unpacking a remote key buffer to handle.
+ *
+ */
+ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
+                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                     void **handle_p);
+
 
 #define uct_worker_tl_data_get(_worker, _key, _type, _cmp_fn, _init_fn, ...) \
     ({ \

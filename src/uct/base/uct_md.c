@@ -200,6 +200,15 @@ ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
     return UCS_OK;
 }
 
+ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
+                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                     void **handle_p)
+{
+    *rkey_p   = 0xdeadbeef;
+    *handle_p = NULL;
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
                            ucs_thread_mode_t thread_mode)
 {

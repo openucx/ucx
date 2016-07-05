@@ -36,9 +36,12 @@ std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_
             res.local_cpus = (*iter)->local_cpus;
             res.tl_name    = (*iter)->tl_name;
             res.dev_name   = (*iter)->dev_name;
+            res.dev_type   = (*iter)->dev_type;
 
-            res.loopback = false;
-            all_resources.push_back(res);
+            if (UCT_DEVICE_TYPE_SELF != res.dev_type) {
+                res.loopback = false;
+                all_resources.push_back(res);
+            }
 
             res.loopback = true;
             all_resources.push_back(res);
