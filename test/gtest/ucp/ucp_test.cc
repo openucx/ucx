@@ -242,6 +242,11 @@ void ucp_test::entity::flush_ep() const {
     ASSERT_UCS_OK(status);
 }
 
+void ucp_test::entity::fence() const {
+    ucs_status_t status = ucp_worker_fence(worker());
+    ASSERT_UCS_OK(status);
+}
+
 void ucp_test::entity::disconnect() {
     m_ep.reset();
 }
