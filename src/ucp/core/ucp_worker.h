@@ -11,9 +11,10 @@
 #include "ucp_ep.h"
 
 #include <ucs/datastruct/mpool.h>
-#include <ucs/datastruct/sglib_wrapper.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/async/async.h>
 
+KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
 
 /**
  * UCP worker wake-up context.
@@ -42,21 +43,13 @@ typedef struct ucp_worker {
     unsigned                      stub_pend_count;/* Number of pending requests on stub endpoints*/
     ucs_list_link_t               stub_ep_list;  /* List of stub endpoints to progress */
 
-    ucp_ep_t                      **ep_hash;     /* Hash table of all endpoints */
+    khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count; /* Current number of configurations */
     ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
 } ucp_worker_t;
-
-
-#define UCP_WORKER_EP_HASH_SIZE            32767
-#define ucp_worker_ep_compare(_ep1, _ep2)  ((int64_t)(_ep1)->dest_uuid - (int64_t)(_ep2)->dest_uuid)
-#define ucp_worker_ep_hash(_ep)            ((_ep)->dest_uuid)
-
-SGLIB_DEFINE_LIST_PROTOTYPES(ucp_ep_t, ucp_worker_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE, ucp_worker_ep_hash);
 
 
 ucp_ep_h ucp_worker_get_reply_ep(ucp_worker_h worker, uint64_t dest_uuid);
@@ -80,10 +73,14 @@ static inline const char* ucp_worker_get_name(ucp_worker_h worker)
 
 static inline ucp_ep_h ucp_worker_ep_find(ucp_worker_h worker, uint64_t dest_uuid)
 {
-    ucp_ep_t search;
+    khiter_t hash_it;
 
-    search.dest_uuid = dest_uuid;
-    return sglib_hashed_ucp_ep_t_find_member(worker->ep_hash, &search);
+    hash_it = kh_get(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid);
+    if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
+        return NULL;
+    }
+
+    return kh_value(&worker->ep_hash, hash_it);
 }
 
 #endif

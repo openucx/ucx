@@ -51,6 +51,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
+	datastruct/khash.h \
 	debug/check.h \
 	debug/debug.h \
 	debug/instrument.h \
