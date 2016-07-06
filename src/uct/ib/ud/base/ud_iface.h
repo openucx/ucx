@@ -27,6 +27,7 @@
 
 typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t    super;
+    double                   peer_timeout;
 } uct_ud_iface_config_t;
 
 struct uct_ud_iface_peer {
@@ -84,11 +85,12 @@ struct uct_ud_iface {
         ucs_queue_head_t       async_comp_q;
     } tx;
     struct {
+        ucs_time_t           peer_timeout;
         unsigned             tx_qp_len;
         unsigned             max_inline;
     } config;
     ucs_ptr_array_t       eps;
-    uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE]; 
+    uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
         int               timer_id;
         ucs_twheel_t      slow_timer;

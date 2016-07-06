@@ -170,11 +170,19 @@ UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
                   const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
 
 
+enum {
+    /* This flag indicates whether endpoint needs to call its cleanup chain
+     * when moved to the failed state. In some cases it might not be needed. */
+    UCT_FAILED_EP_FLAG_CLEANUP = UCS_BIT(0)
+};
+
+
 /**
  * Stub interface used for failed endpoints
  */
 typedef struct uct_failed_iface {
     uct_iface_t       super;
+    uct_iface_t      *orig_iface;
     ucs_queue_head_t  pend_q;
 } uct_failed_iface_t;
 
@@ -447,7 +455,7 @@ void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
                        char *buffer, size_t max);
 
 
-void uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h tl_iface);
+void uct_ep_set_failed(ucs_class_t* cls, uct_ep_h tl_ep, uint32_t flags);
 
 /**
  * Invoke active message handler.

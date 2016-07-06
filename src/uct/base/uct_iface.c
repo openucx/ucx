@@ -239,6 +239,12 @@ static void uct_ep_failed_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
     }
 }
 
+static void uct_ep_failed_destroy_no_free(uct_ep_h tl_ep)
+{
+    /* Warn user if some pending reqs left*/
+    uct_ep_failed_purge (tl_ep, NULL, NULL);
+}
+
 static void uct_ep_failed_destroy(uct_ep_h tl_ep)
 {
     /* Warn user if some pending reqs left*/
@@ -248,7 +254,7 @@ static void uct_ep_failed_destroy(uct_ep_h tl_ep)
     ucs_free(tl_ep);
 }
 
-void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
+void uct_ep_set_failed(ucs_class_t *cls, uct_ep_h tl_ep, uint32_t flags)
 {
     uct_failed_iface_t *f_iface;
     uct_iface_ops_t    *ops;
@@ -261,6 +267,7 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
         return;
     }
 
+    f_iface->orig_iface = tl_ep->iface;
     ucs_queue_head_init(&f_iface->pend_q);
     ops = &f_iface->super.ops;
 
@@ -271,7 +278,6 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_flush           = (void*)ucs_empty_function_return_ep_timeout;
-    ops->ep_destroy         = uct_ep_failed_destroy;
     ops->ep_pending_add     = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_pending_purge   = uct_ep_failed_purge;
     ops->ep_put_short       = (void*)ucs_empty_function_return_ep_timeout;
@@ -291,7 +297,12 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     ops->ep_atomic_swap32   = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_atomic_cswap32  = (void*)ucs_empty_function_return_ep_timeout;
 
-    ucs_class_call_cleanup_chain(cls, tl_ep, -1);
+    if (flags & UCT_FAILED_EP_FLAG_CLEANUP) {
+        ucs_class_call_cleanup_chain(cls, tl_ep, -1);
+        ops->ep_destroy         = uct_ep_failed_destroy;
+    } else {
+        ops->ep_destroy         = uct_ep_failed_destroy_no_free;
+    }
 
     tl_ep->iface = &f_iface->super;
 }

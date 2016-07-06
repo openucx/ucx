@@ -187,10 +187,13 @@ enum {
 enum {
     UCT_UD_EP_FLAG_ASYNC_COMPS       = UCS_BIT(0), /* set if there are completions that
                                                     * were picked by async thread and queued */
+    UCT_UD_EP_FLAG_FAILED            = UCS_BIT(1), /* set if peer is not responding */
+    UCT_UD_EP_FLAG_DESTROYED         = UCS_BIT(2), /* set when user destroys ep */
+
     /* debug flags */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1),
-    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(2),
-    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(3)
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(3),
+    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(4),
+    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(5)
 };
 
 typedef struct uct_ud_peer_name {
@@ -228,6 +231,9 @@ struct uct_ud_ep {
         UCS_STATS_NODE_DECLARE(stats);
         UCT_UD_EP_HOOK_DECLARE(rx_hook);
     } rx;
+    ucs_callbackq_slow_elem_t sp_elem;   /* Used for handling ep failures. When peer
+                                            becomes unreachable, this element is scheduled
+                                            for purging tx window. */
     ucs_list_link_t  cep_list;
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
     ucs_wtimer_t     slow_timer;

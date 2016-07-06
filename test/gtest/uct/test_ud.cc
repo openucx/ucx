@@ -605,9 +605,6 @@ UCS_TEST_P(test_ud, ep_destroy_flush) {
     EXPECT_UCS_OK(tx(m_e1));
     short_progress_loop();
     uct_ep_destroy(m_e1->ep(0));
-    /* ep destroy should try to flush outstanding packets */
-    short_progress_loop();
-    validate_flush();
 
     /* next created ep must not reuse old id */
     status = uct_ep_create(m_e1->iface(), &ep);
