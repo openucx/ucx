@@ -660,6 +660,9 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
  * ucp_worker_progress "this routine" to progress any outstanding operations.
  * @li Transport layers, implementing asynchronous progress using threads,
  * require callbacks and other user code to be thread safe.
+ * @li The state of communication can be advanced (progressed) by blocking
+ * routines. Nevertheless, the non-blocking routines can not be used for
+ * communication progress.
  *
  * @param [in]  worker    Worker to progress.
  */
@@ -1176,14 +1179,21 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  *                          "ucp_tag_msg_recv_nb()" in order to receive the data
  *                          and release the resources associated with the
  *                          message handle.
+ *                          If false (0), the return value is merely an indication
+ *                          to whether a matching message is present, and it cannot
+ *                          be used in any other way, and in particular it cannot
+ *                          be passed to @ref ucp_tag_msg_recv_nb().
  * @param [out] info        If the matching message is found the descriptor is
  *                          filled with the details about the message.
  *
  * @return NULL                      - No match found.
  * @return Message handle (not NULL) - If message is matched the message handle
- *                                   is returned.
+ *                                     is returned.
  *
- * @todo Clarify release logic for remote == 0.
+ * @note This function does not advance the communication state of the network.
+ *       If this routine is used in busy-poll mode, need to make sure
+ *       @ref ucp_worker_progress() is called periodically to extract messages
+ *       from the transport.
  */
 ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_t tag_mask, int remove,

@@ -487,7 +487,7 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
     }
 
     /* do some progress */
-    short_progress_loop();
+    short_progress_loop(50);
 
     /* should be able to send again */
     status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
