@@ -7,6 +7,7 @@
 #include "self_md.h"
 #include "self_ep.h"
 
+#include <uct/base/uct_ep.h>
 #include <ucs/type/class.h>
 
 static ucs_config_field_t uct_self_iface_config_table[] = {
@@ -27,17 +28,28 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->iface_addr_len         = sizeof(uct_self_iface_addr_t);
     attr->device_addr_len        = 0;
     attr->ep_addr_len            = 0; /* No UCT_IFACE_FLAG_CONNECT_TO_EP supported */
-    attr->cap.flags              = UCT_IFACE_FLAG_CONNECT_TO_IFACE    |
-                                   UCT_IFACE_FLAG_AM_SHORT            |
-                                   UCT_IFACE_FLAG_AM_BCOPY            |
+    attr->cap.flags              = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                   UCT_IFACE_FLAG_AM_SHORT         |
+                                   UCT_IFACE_FLAG_AM_BCOPY         |
+                                   UCT_IFACE_FLAG_PUT_SHORT        |
+                                   UCT_IFACE_FLAG_PUT_BCOPY        |
+                                   UCT_IFACE_FLAG_GET_BCOPY        |
+                                   UCT_IFACE_FLAG_ATOMIC_ADD32     |
+                                   UCT_IFACE_FLAG_ATOMIC_ADD64     |
+                                   UCT_IFACE_FLAG_ATOMIC_FADD64    |
+                                   UCT_IFACE_FLAG_ATOMIC_FADD32    |
+                                   UCT_IFACE_FLAG_ATOMIC_SWAP64    |
+                                   UCT_IFACE_FLAG_ATOMIC_SWAP32    |
+                                   UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
+                                   UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
                                    UCT_IFACE_FLAG_AM_CB_SYNC;
 
     attr->cap.put.max_short      = UINT_MAX;
     attr->cap.put.max_bcopy      = SIZE_MAX;
-    attr->cap.put.max_zcopy      = SIZE_MAX;
+    attr->cap.put.max_zcopy      = 0;
 
     attr->cap.get.max_bcopy      = SIZE_MAX;
-    attr->cap.get.max_zcopy      = SIZE_MAX;
+    attr->cap.get.max_zcopy      = 0;
 
     attr->cap.am.max_short       = self_iface->data_length;
     attr->cap.am.max_bcopy       = self_iface->data_length;
@@ -95,6 +107,17 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .ep_am_short              = uct_self_ep_am_short,
     .ep_am_bcopy              = uct_self_ep_am_bcopy,
+    .ep_put_short             = uct_base_ep_put_short,
+    .ep_put_bcopy             = uct_base_ep_put_bcopy,
+    .ep_get_bcopy             = uct_base_ep_get_bcopy,
+    .ep_atomic_add64          = uct_base_ep_atomic_add64,
+    .ep_atomic_fadd64         = uct_base_ep_atomic_fadd64,
+    .ep_atomic_cswap64        = uct_base_ep_atomic_cswap64,
+    .ep_atomic_swap64         = uct_base_ep_atomic_swap64,
+    .ep_atomic_add32          = uct_base_ep_atomic_add32,
+    .ep_atomic_fadd32         = uct_base_ep_atomic_fadd32,
+    .ep_atomic_cswap32        = uct_base_ep_atomic_cswap32,
+    .ep_atomic_swap32         = uct_base_ep_atomic_swap32,
 };
 
 static ucs_mpool_ops_t ops = {

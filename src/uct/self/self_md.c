@@ -51,10 +51,22 @@ static ucs_status_t uct_self_md_open(const char *md_name, const uct_md_config_t 
     *md_p = &md;
     return UCS_OK;
 }
+/**
+ * Pseudo stub function for the key unpacking
+ * Need rkey == 0 due to work with same process to reuse uct_base_[put|get|atomic]*
+ */
+static ucs_status_t uct_self_md_rkey_unpack(uct_md_component_t *mdc,
+                                            const void *rkey_buffer, uct_rkey_t *rkey_p,
+                                            void **handle_p)
+{
+    *rkey_p   = 0;
+    *handle_p = NULL;
+    return UCS_OK;
+}
 
 UCT_MD_COMPONENT_DEFINE(uct_self_md, UCT_SELF_NAME,
                         uct_self_query_md_resources, uct_self_md_open, NULL,
-                        uct_md_stub_rkey_unpack,
+                        uct_self_md_rkey_unpack,
                         ucs_empty_function_return_success, "SELF_",
                         uct_md_config_table, uct_md_config_t);
 
