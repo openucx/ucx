@@ -61,6 +61,7 @@ gtest_SOURCES = \
 	uct/test_amo_fadd.cc \
 	uct/test_amo_swap.cc \
 	uct/test_fence.cc \
+	uct/test_flush.cc \
 	uct/test_many2one_am.cc \
 	uct/test_mm.cc \
 	uct/test_mem.cc \

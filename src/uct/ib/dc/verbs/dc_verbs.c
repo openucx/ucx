@@ -129,6 +129,14 @@ uct_dc_verbs_iface_post_send_desc(uct_dc_verbs_iface_t *iface,
                                iface->dcis_txcnt[ep->super.dci].pi);
 }
 
+static inline void uct_dc_verbs_iface_add_send_comp(uct_dc_verbs_iface_t *iface,
+                                                    uct_dc_verbs_ep_t *ep,
+                                                    uct_completion_t *comp)
+{
+    uint8_t dci = ep->super.dci;
+    uct_rc_txqp_add_send_comp(&iface->super.super, &iface->super.tx.dcis[dci].txqp,
+                              comp, iface->dcis_txcnt[dci].pi);
+}
 
 static inline ucs_status_t
 uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const void *buffer, size_t length,
@@ -149,8 +157,7 @@ uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const void *buffer, size_t len
     uct_rc_verbs_rdma_zcopy_sge_fill(&sge, buffer, length, mr);
 
     uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
-    uct_rc_txqp_add_send_comp(&iface->super.super, &iface->super.tx.dcis[ep->super.dci].txqp, comp, 
-                              iface->dcis_txcnt[ep->super.dci].pi);
+    uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
     return UCS_INPROGRESS;
 }
 
@@ -513,6 +520,7 @@ static inline ucs_status_t uct_dc_verbs_flush_dci(uct_dc_iface_t *iface, int dci
     if (uct_rc_txqp_available(txqp) == iface->super.config.tx_qp_len) {
         return UCS_OK;
     }
+
     ucs_trace_data("dci %d is not flushed %d/%d", dci, 
                     txqp->available, iface->super.config.tx_qp_len);
     if (uct_rc_txqp_unsignaled(txqp) != 0) { 
@@ -543,11 +551,11 @@ ucs_status_t uct_dc_verbs_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
+
     status = uct_dc_verbs_flush_dcis(iface);
     if (status == UCS_OK) {
         UCT_TL_IFACE_STAT_FLUSH(&iface->super.super.super);
-    } 
-    else if (status == UCS_INPROGRESS) {
+    } else if (status == UCS_INPROGRESS) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super.super);
     }
     return status;
@@ -555,26 +563,39 @@ ucs_status_t uct_dc_verbs_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_
 
 ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
-    uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
+    uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     ucs_status_t status;
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
+        return UCS_ERR_NO_RESOURCE;
     }
-    if (ep->dci == UCT_DC_EP_NO_DCI) {
-        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-        return UCS_OK;
-    }
-    status = uct_dc_verbs_flush_dci(iface, ep->dci);
-    if (status == UCS_OK) {
-        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
-    } else if (status == UCS_INPROGRESS) {
-        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
-    }
-    return status;
-}
 
+    if (ep->super.dci == UCT_DC_EP_NO_DCI) {
+        if (!uct_dc_iface_dci_can_alloc(&iface->super)) {
+            return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+        } else {
+            UCT_TL_EP_STAT_FLUSH(&ep->super.super); /* no sends */
+            return UCS_OK;
+        }
+    }
+
+    if (!uct_dc_iface_dci_ep_can_send(&ep->super)) {
+        return UCS_ERR_NO_RESOURCE; /* cannot send */
+    }
+
+    status = uct_dc_verbs_flush_dci(&iface->super, ep->super.dci);
+    if (status == UCS_OK) {
+        UCT_TL_EP_STAT_FLUSH(&ep->super.super);
+        return UCS_OK; /* all sends completed */
+    }
+
+    ucs_assert(status == UCS_INPROGRESS);
+
+    uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
+    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
+    return UCS_INPROGRESS;
+}
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface) 

@@ -1,6 +1,6 @@
 
 /**
- * scedule control operation. 
+ * schedule control operation.
  */
 static UCS_F_ALWAYS_INLINE void
 uct_ud_ep_ctl_op_add(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
@@ -82,12 +82,15 @@ uct_ud_am_set_zcopy_desc(uct_ud_send_skb_t *skb, const void *payload, size_t len
 {
     uct_ud_zcopy_desc_t *zdesc;
 
-    skb->flags    |= UCT_UD_SEND_SKB_FLAG_ZCOPY;
-    zdesc          = uct_ud_zcopy_desc(skb);
-    zdesc->comp    = comp;
-    zdesc->lkey    = lkey;
-    zdesc->payload = payload;
-    zdesc->len     = length;
+    skb->flags        |= UCT_UD_SEND_SKB_FLAG_ZCOPY;
+    zdesc              = uct_ud_zcopy_desc(skb);
+    zdesc->lkey        = lkey;
+    zdesc->payload     = payload;
+    zdesc->len         = length;
+    if (comp != NULL) {
+        skb->flags        |= UCT_UD_SEND_SKB_FLAG_COMP;
+        zdesc->super.comp  = comp;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void

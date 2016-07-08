@@ -185,7 +185,7 @@ enum {
 
 /* TODO: optimize endpoint memory footprint */
 enum {
-    UCT_UD_EP_FLAG_ZCOPY_ASYNC_COMPS = UCS_BIT(0), /* set if there are zcopy completions that
+    UCT_UD_EP_FLAG_ASYNC_COMPS       = UCS_BIT(0), /* set if there are completions that
                                                     * were picked by async thread and queued */
     /* debug flags */
     UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1),
@@ -244,7 +244,8 @@ UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);
 /* internal flush */
-ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
+ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                                    uct_completion_t *comp);
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 

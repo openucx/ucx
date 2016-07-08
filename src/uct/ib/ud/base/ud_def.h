@@ -14,7 +14,7 @@
 #include <ucs/datastruct/frag_list.h>
 #include <uct/ib/base/ib_iface.h>
 
-#define UCT_UD_QP_HASH_SIZE     256    
+#define UCT_UD_QP_HASH_SIZE     256
 #define UCT_UD_MAX_SGE          2
 #define UCT_UD_TX_MODERATION    64
 #define UCT_UD_MIN_INLINE       48
@@ -124,11 +124,20 @@ typedef struct uct_ud_neth {
     uct_ud_psn_t        ack_psn;
 } UCS_S_PACKED uct_ud_neth_t;
 
+
 enum {
-    UCT_UD_SEND_SKB_FLAG_ACK_REQ = UCS_BIT(1),
-    UCT_UD_SEND_SKB_FLAG_ZCOPY   = UCS_BIT(2),
+    UCT_UD_SEND_SKB_FLAG_ACK_REQ = UCS_BIT(1), /* ACK was requested for this skb */
+    UCT_UD_SEND_SKB_FLAG_COMP    = UCS_BIT(2), /* This skb contains a completion */
+    UCT_UD_SEND_SKB_FLAG_ZCOPY   = UCS_BIT(3), /* This skb contains a zero-copy segment */
 };
 
+
+/*
+ * Send skb with completion layout:
+ * - if COMP skb flag is set, skb contains uct_ud_comp_desc_t after the payload
+ * - if ZCOPY skb flag is set, skb contains uct_ud_zcopy_desc_t after the payload.
+ * - otherwise, there is no additional data.
+ */
 typedef struct uct_ud_send_skb {
     ucs_queue_elem_t        queue;      /* in send window */
     uint32_t                lkey;
@@ -137,31 +146,26 @@ typedef struct uct_ud_send_skb {
     uct_ud_neth_t           neth[0];
 } UCS_S_PACKED uct_ud_send_skb_t;
 
+
+typedef struct uct_ud_comp_desc {
+    uct_completion_t        *comp;
+    uct_ud_ep_t             *ep;
+} uct_ud_comp_desc_t;
+
+
 typedef struct uct_ud_zcopy_desc {
-    uint32_t           lkey;
-    uint32_t           len;
-    const void        *payload;
-    uct_completion_t  *comp;
+    uct_ud_comp_desc_t      super;
+    const void              *payload;
+    uint32_t                lkey;
+    uint32_t                len;
 } uct_ud_zcopy_desc_t;
 
-/* Zcopy send skb layout:
- * - zcopy skb flag is set
- * - skb->len = sizeof(neth) + zcopy_header_len
- * - uct_ud_zcopy_desc_t has user provider data buffer, lkey, len
- *   and completion
- * - data layout: 
- *    uct_ud_send_skb_t | neth + zcopy_desc | uct_ud_zcopy_desc_t
- */
-
-static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
-{
-    return (uct_ud_zcopy_desc_t *)((char *)skb->neth + skb->len);
-}
 
 typedef struct uct_ud_send_skb_inl {
     uct_ud_send_skb_t  super;
     uct_ud_neth_t      neth;
 } UCS_S_PACKED uct_ud_send_skb_inl_t;
+
 
 typedef struct uct_ud_recv_skb {
     uct_ib_iface_recv_desc_t super;
@@ -176,9 +180,11 @@ typedef struct uct_ud_recv_skb {
     } u;
 } uct_ud_recv_skb_t;
 
+
 typedef struct uct_ud_am_short_hdr {
     uint64_t hdr;
 } UCS_S_PACKED uct_ud_am_short_hdr_t;
+
 
 typedef struct uct_ud_put_hdr {
     uint64_t rva;
@@ -200,6 +206,7 @@ static inline uint32_t uct_ud_neth_get_dest_id(uct_ud_neth_t *neth)
 {
     return neth->packet_type & UCT_UD_PACKET_DEST_ID_MASK;
 }
+
 static inline void uct_ud_neth_set_dest_id(uct_ud_neth_t *neth, uint32_t id)
 {
     neth->packet_type |= id;
@@ -209,10 +216,23 @@ static inline uint8_t uct_ud_neth_get_am_id(uct_ud_neth_t *neth)
 {
     return neth->packet_type >> UCT_UD_PACKET_AM_ID_SHIFT;
 }
+
 static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
 {
     neth->packet_type |= (id << UCT_UD_PACKET_AM_ID_SHIFT);
 }
 
-#endif
+static inline uct_ud_comp_desc_t *uct_ud_comp_desc(uct_ud_send_skb_t *skb)
+{
+    ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP);
+    return (uct_ud_comp_desc_t*)((char *)skb->neth + skb->len);
+}
 
+static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
+{
+    ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
+    return (uct_ud_zcopy_desc_t*)((char *)skb->neth + skb->len);
+}
+
+
+#endif

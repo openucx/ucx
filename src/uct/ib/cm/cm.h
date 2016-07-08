@@ -27,6 +27,19 @@ typedef struct uct_cm_iface_config {
 
 
 /**
+ * Outstanding operation - can be either a send or flush request.
+ */
+typedef struct uct_cm_iface_op {
+    ucs_queue_elem_t       queue;    /* queue element */
+    int                    is_id;    /* 1: id field is valid. 0: comp field is valid */
+    union {
+        struct ib_cm_id    *id;      /* send operation: cm id */
+        uct_completion_t   *comp;    /* flush request: user completion */
+    };
+} uct_cm_iface_op_t;
+
+
+/**
  * IB CM interface/
  */
 typedef struct uct_cm_iface {
@@ -35,8 +48,8 @@ typedef struct uct_cm_iface {
     struct ib_cm_device    *cmdev;      /* CM device */
     struct ib_cm_id        *listen_id;  /* Listening "socket" */
     ucs_queue_head_t       notify_q;    /* Notification queue */
-    uint32_t               num_outstanding; /* number of outstanding sends */
-    struct ib_cm_id        **outstanding;   /* outstanding sends */
+    uint32_t               num_outstanding; /* Number of outstanding sends */
+    ucs_queue_head_t       outstanding_q; /* Outstanding operations queue */
 
     struct {
         int                timeout_ms;
@@ -84,7 +97,7 @@ ucs_status_t uct_cm_ep_connect_to_iface(uct_ep_h ep, const uct_iface_addr_t *ifa
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp);
 
-ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_ep);
+ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_ep, uct_completion_t *comp);
 
 ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
                            void *arg);
