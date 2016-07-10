@@ -24,13 +24,20 @@ public:
     };
 
     void init() {
-        m_sender = uct_test::create_entity(0);
-        m_entities.push_back(m_sender);
+        if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
+            entity *e = uct_test::create_entity(0);
+            m_entities.push_back(e);
 
-        m_receiver = uct_test::create_entity(0);
-        m_entities.push_back(m_receiver);
+            e->connect(0, *e, 0);
+        } else {
+            entity *m_sender = uct_test::create_entity(0);
+            m_entities.push_back(m_sender);
 
-        m_sender->connect(0, *m_receiver, 0);
+            entity *m_receiver = uct_test::create_entity(0);
+            m_entities.push_back(m_receiver);
+
+            m_sender->connect(0, *m_receiver, 0);
+        }
     }
 
     static size_t pack_cb(void *dest, void *arg)
@@ -45,7 +52,7 @@ public:
     {
         ssize_t status;
          for (;;) {
-             status = uct_ep_put_bcopy(m_sender->ep(0), pack_cb, (void*)&sendbuf,
+             status = uct_ep_put_bcopy(sender().ep(0), pack_cb, (void*)&sendbuf,
                                        recvbuf.addr(), recvbuf.rkey());
              if (status >= 0) {
                  return;
@@ -62,7 +69,7 @@ public:
     {
          ssize_t status;
          for (;;) {
-             status = uct_ep_am_bcopy(m_sender->ep(0), AM_ID, pack_cb,
+             status = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
                                       (void*)&sendbuf);
              if (status >= 0) {
                  return;
@@ -87,7 +94,7 @@ public:
     {
         ssize_t status;
 
-        status = uct_ep_am_bcopy(m_sender->ep(0), AM_ID, pack_cb,
+        status = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
                                  (void*)am_req->sendbuf);
         if (status >= 0) {
             --am_req->comp.count;
@@ -108,7 +115,7 @@ public:
         test_req_t *flush_req = ucs_container_of(req, test_req_t, uct);
         ucs_status_t status;
 
-        status = uct_ep_flush(flush_req->test->m_sender->ep(0), 0,
+        status = uct_ep_flush(flush_req->test->sender().ep(0), 0,
                               &flush_req->comp);
         if (status == UCS_OK) {
             --flush_req->comp.count;
@@ -125,8 +132,8 @@ public:
     virtual void test_flush_put_bcopy(flush_func_t flush) {
         const size_t length = 8;
         check_caps(UCT_IFACE_FLAG_PUT_SHORT);
-        mapped_buffer sendbuf(length, SEED1, *m_sender);
-        mapped_buffer recvbuf(length, SEED2, *m_receiver);
+        mapped_buffer sendbuf(length, SEED1, sender());
+        mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
         blocking_put_bcopy(sendbuf, recvbuf);
         (this->*flush)();
@@ -136,11 +143,11 @@ public:
     virtual void test_flush_am_zcopy(flush_func_t flush) {
         const size_t length = 8;
         check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
-        mapped_buffer sendbuf(length, SEED1, *m_sender);
-        mapped_buffer recvbuf(length, SEED2, *m_receiver);
+        mapped_buffer sendbuf(length, SEED1, sender());
+        mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
 
-        uct_iface_set_am_handler(m_receiver->iface(), AM_ID, am_handler, &recvbuf,
+        uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
                                  UCT_AM_CB_FLAG_ASYNC);
 
         uct_completion_t zcomp;
@@ -149,7 +156,7 @@ public:
 
         ucs_status_t status;
         do {
-            status = uct_ep_am_zcopy(m_sender->ep(0), AM_ID, NULL, 0, sendbuf.ptr(),
+            status = uct_ep_am_zcopy(sender().ep(0), AM_ID, NULL, 0, sendbuf.ptr(),
                                      sendbuf.length(), sendbuf.memh(), &zcomp);
         } while (status == UCS_ERR_NO_RESOURCE);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -162,11 +169,11 @@ public:
         EXPECT_EQ(1, zcomp.count); /* Zero copy op should be already completed
                                       since flush returned */
 
-        m_sender->destroy_ep(0);
+        sender().destroy_ep(0);
 
         short_progress_loop();
 
-        uct_iface_set_am_handler(m_receiver->iface(), AM_ID, NULL, NULL, 0);
+        uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
         recvbuf.pattern_check(SEED3);
     }
@@ -174,19 +181,19 @@ public:
     virtual void test_flush_am_disconnect(flush_func_t flush) {
         const size_t length = 8;
         check_caps(UCT_IFACE_FLAG_AM_BCOPY);
-        mapped_buffer sendbuf(length, SEED1, *m_sender);
-        mapped_buffer recvbuf(length, SEED2, *m_receiver);
+        mapped_buffer sendbuf(length, SEED1, sender());
+        mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
 
-        uct_iface_set_am_handler(m_receiver->iface(), AM_ID, am_handler, &recvbuf,
+        uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
                                  UCT_AM_CB_FLAG_ASYNC);
         blocking_am_bcopy(sendbuf);
         (this->*flush)();
-        m_sender->destroy_ep(0);
+        sender().destroy_ep(0);
 
         short_progress_loop();
 
-        uct_iface_set_am_handler(m_receiver->iface(), AM_ID, NULL, NULL, 0);
+        uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
         recvbuf.pattern_check(SEED3);
     }
@@ -195,7 +202,7 @@ public:
         ucs_status_t status;
         do {
             progress();
-            status = uct_ep_flush(m_sender->ep(0), 0, NULL);
+            status = uct_ep_flush(sender().ep(0), 0, NULL);
         } while ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS));
         ASSERT_UCS_OK(status);
     }
@@ -204,7 +211,7 @@ public:
         ucs_status_t status;
         do {
             progress();
-            status = uct_ep_flush(m_sender->ep(0), 0, NULL);
+            status = uct_ep_flush(sender().ep(0), 0, NULL);
         } while ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS));
         ASSERT_UCS_OK(status);
     }
@@ -216,7 +223,7 @@ public:
         comp.func  = NULL;
         do {
             progress();
-            status = uct_ep_flush(m_sender->ep(0), 0, &comp);
+            status = uct_ep_flush(sender().ep(0), 0, &comp);
         } while (status == UCS_ERR_NO_RESOURCE);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
         if (status == UCS_OK) {
@@ -229,8 +236,14 @@ public:
     }
 
 protected:
-    entity *m_sender;
-    entity *m_receiver;
+    uct_test::entity& sender() {
+        return **m_entities.begin();
+    }
+
+    uct_test::entity& receiver() {
+        return **(m_entities.end() - 1);
+    }
+
 };
 
 UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_no_comp) {
@@ -271,21 +284,22 @@ UCS_TEST_P(uct_flush_test, am_flush_ep_nb) {
 
 UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      const size_t length = 8;
-     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
-     mapped_buffer sendbuf(length, SEED1, *m_sender);
-     mapped_buffer recvbuf(length, SEED2, *m_receiver);
+     check_caps(UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_PENDING);
+     mapped_buffer sendbuf(length, SEED1, sender());
+     mapped_buffer recvbuf(length, SEED2, receiver());
      sendbuf.pattern_fill(SEED3);
 
-     uct_iface_set_am_handler(m_receiver->iface(), AM_ID, am_handler, &recvbuf,
+     uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
                               UCT_AM_CB_FLAG_ASYNC);
 
-     /* Send until resources are exhausted */
+     /* Send until resources are exhausted or timeout in 1sec*/
      unsigned count = 0;
+     ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
      ssize_t packed_len;
      for (;;) {
-         packed_len = uct_ep_am_bcopy(m_sender->ep(0), AM_ID, pack_cb,
+         packed_len = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
                                       (void*)&sendbuf);
-         if (packed_len == UCS_ERR_NO_RESOURCE) {
+         if ((packed_len == UCS_ERR_NO_RESOURCE) || (ucs_get_time() > loop_end_limit)) {
              break;
          }
 
@@ -297,56 +311,71 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      }
 
      /* Queue some pending AMs */
+     ucs_status_t status;
      std::vector<test_req_t> reqs;
      reqs.resize(10);
-     for (size_t i = 0; i < reqs.size(); ++i) {
-         reqs[i].sendbuf    = &sendbuf;
-         reqs[i].test       = this;
-         reqs[i].uct.func   = am_progress;
-         reqs[i].comp.count = 2;
-         reqs[i].comp.func  = NULL;
-         ucs_status_t status =
-                         uct_ep_pending_add(m_sender->ep(0), &reqs[i].uct);
+     for (std::vector<test_req_t>::iterator it = reqs.begin(); it != reqs.end();) {
+         it->sendbuf    = &sendbuf;
+         it->test       = this;
+         it->uct.func   = am_progress;
+         it->comp.count = 2;
+         it->comp.func  = NULL;
+         status = uct_ep_pending_add(sender().ep(0), &it->uct);
+         if (UCS_ERR_BUSY == status) {
+             /* User advised to retry the send. It means no requests added
+              * to the queue
+              */
+             it = reqs.erase(it);
+             status = UCS_OK;
+         } else {
+             ++it;
+         }
          ASSERT_UCS_OK(status);
      }
 
      /* Try to start a flush */
      test_req_t flush_req;
-     ucs_status_t status;
      flush_req.comp.count = 2;
      flush_req.comp.func  = NULL;
 
-     status = uct_ep_flush(m_sender->ep(0), 0, &flush_req.comp);
+     status = uct_ep_flush(sender().ep(0), 0, &flush_req.comp);
      if (status == UCS_OK) {
          --flush_req.comp.count;
      } else if (status == UCS_ERR_NO_RESOURCE) {
          /* If flush returned NO_RESOURCE, add to pending must succeed */
          flush_req.test      = this;
          flush_req.uct.func  = flush_progress;
-         status = uct_ep_pending_add(m_sender->ep(0), &flush_req.uct);
+         status = uct_ep_pending_add(sender().ep(0), &flush_req.uct);
          EXPECT_EQ(UCS_OK, status);
      } else if (status == UCS_INPROGRESS) {
      } else {
          ASSERT_UCS_OK(status);
      }
 
+     /* timeout used to prevent test hung */
+     ucs_time_t loop_end_limit_comp = ucs_get_time() + ucs_time_from_sec(1.0);
      /* coverity[loop_condition] */
      while (flush_req.comp.count != 1) {
+         if (ucs_get_time() > loop_end_limit_comp) {
+             break;
+         }
          progress();
      }
+
+     EXPECT_TRUE(flush_req.comp.count == 1);
 
      while (!reqs.empty()) {
          EXPECT_EQ(1, reqs.back().comp.count);
          reqs.pop_back();
      }
 
-     m_sender->destroy_ep(0);
+     sender().destroy_ep(0);
 
      short_progress_loop();
 
-     uct_iface_set_am_handler(m_receiver->iface(), AM_ID, NULL, NULL, 0);
+     uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
      recvbuf.pattern_check(SEED3);
 }
 
-UCT_INSTANTIATE_NO_SELF_TEST_CASE(uct_flush_test)
+UCT_INSTANTIATE_TEST_CASE(uct_flush_test)
