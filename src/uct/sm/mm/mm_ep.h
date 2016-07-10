@@ -42,44 +42,10 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
                            const uct_device_addr_t *, const uct_iface_addr_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
-
-ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                 unsigned length, uint64_t remote_addr, 
-                                 uct_rkey_t rkey);
-ssize_t uct_mm_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb,
-                            void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
                            void *arg);
-ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                    uint64_t remote_addr, uct_rkey_t rkey);
-ucs_status_t uct_mm_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint64_t *result, uct_completion_t *comp);
-ucs_status_t uct_mm_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint64_t *result, uct_completion_t *comp);
-ucs_status_t uct_mm_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
-                                      uint64_t swap, uint64_t remote_addr, 
-                                      uct_rkey_t rkey, uint64_t *result,
-                                      uct_completion_t *comp);
-ucs_status_t uct_mm_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                    uint64_t remote_addr, uct_rkey_t rkey);
-ucs_status_t uct_mm_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint32_t *result, uct_completion_t *comp);
-ucs_status_t uct_mm_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint32_t *result, uct_completion_t *comp);
-ucs_status_t uct_mm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
-                                      uint32_t swap, uint64_t remote_addr, 
-                                      uct_rkey_t rkey, uint32_t *result,
-                                      uct_completion_t *comp);
-ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t unpack_cb,
-                                 void *arg, size_t length,
-                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                 uct_completion_t *comp);
 
 ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
                              uct_completion_t *comp);

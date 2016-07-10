@@ -25,12 +25,14 @@ noinst_HEADERS = \
 	base/addr.h \
 	base/uct_md.h \
 	base/uct_iface.h \
+	base/uct_ep.h \
 	base/uct_log.h
 
 libuct_la_SOURCES = \
 	base/uct_md.c \
 	base/uct_mem.c \
-	base/uct_iface.c
+	base/uct_iface.c \
+	base/uct_ep.c
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
