@@ -78,6 +78,7 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
                 rsc.local_cpus = md_attr.local_cpus,
                 rsc.tl_name    = tl_resources[j].tl_name,
                 rsc.dev_name   = tl_resources[j].dev_name;
+                rsc.dev_type   = tl_resources[j].dev_type;
                 all_resources.push_back(rsc);
             }
 

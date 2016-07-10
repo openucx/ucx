@@ -43,7 +43,7 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
         ctlh = (uct_ud_ctl_hdr_t *)(neth + 1);
         switch (ctlh->type) {
         case UCT_UD_PACKET_CREQ:
-            snprintf(p, endp - p, "CREQ from %s:%d qpn 0x%x %s epid %d cid %d",
+            snprintf(p, endp - p, " CREQ from %s:%d qpn 0x%x %s epid %d cid %d",
                      ctlh->peer.name, ctlh->peer.pid,
                      uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.iface_addr.qp_num),
                      uct_ib_address_str(uct_ud_creq_ib_addr(ctlh), buf, sizeof(buf)),
@@ -51,12 +51,12 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
                      ctlh->conn_req.conn_id);
             break;
         case UCT_UD_PACKET_CREP:
-            snprintf(p, endp - p, "CREP from %s:%d src_ep_id %d",
+            snprintf(p, endp - p, " CREP from %s:%d src_ep_id %d",
                      ctlh->peer.name, ctlh->peer.pid,
                      ctlh->conn_rep.src_ep_id);
             break;
         default:
-            snprintf(p, endp - p, "<unknown control packet %d> from %s:%d",
+            snprintf(p, endp - p, " <unknown control packet %d> from %s:%d",
                      ctlh->type, ctlh->peer.name, ctlh->peer.pid);
             break;
         }

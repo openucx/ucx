@@ -71,10 +71,10 @@ static ucs_status_t uct_cma_md_open(const char *md_name, const uct_md_config_t *
 }
 
 UCT_MD_COMPONENT_DEFINE(uct_cma_md_component, "cma",
-        uct_cma_query_md_resources, uct_cma_md_open, NULL,
-        ucs_empty_function_return_success,
-        ucs_empty_function_return_success, "CMA_", uct_md_config_table,
-        uct_md_config_t)
+                        uct_cma_query_md_resources, uct_cma_md_open, NULL,
+                        uct_md_stub_rkey_unpack,
+                        ucs_empty_function_return_success, "CMA_",
+                        uct_md_config_table, uct_md_config_t)
 
 ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {

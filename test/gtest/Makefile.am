@@ -61,6 +61,7 @@ gtest_SOURCES = \
 	uct/test_amo_fadd.cc \
 	uct/test_amo_swap.cc \
 	uct/test_fence.cc \
+	uct/test_flush.cc \
 	uct/test_many2one_am.cc \
 	uct/test_mm.cc \
 	uct/test_mem.cc \
@@ -112,7 +113,8 @@ gtest_SOURCES = \
 	ucs/test_sys.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
-	ucs/test_frag_list.cc
+	ucs/test_frag_list.cc \
+	ucs/test_hash_perf.cc
 
 if HAVE_IB
 gtest_SOURCES += \

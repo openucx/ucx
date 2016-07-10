@@ -231,6 +231,10 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
 
     ucs_status_t status;
 
+    if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
+        UCS_TEST_SKIP_R("SELF doesn't use progress");
+    }
+
     check_caps(UCT_IFACE_FLAG_AM_CB_SYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
@@ -438,7 +442,7 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
 
     /* send many messages and progress the receiver. the receiver will keep getting
      * UCS_INPROGRESS from the recv-handler and will keep consuming its rx memory pool.
-     * the goal is to make the reciever's rx memory pool run out.
+     * the goal is to make the receiver's rx memory pool run out.
      * once this happens, the sender shouldn't be able to send */
     set_keep_data(true);
     status = send_with_timeout(sender_ep(), sendbuf, recvbuf, 1);
@@ -471,18 +475,19 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
     mapped_buffer::pattern_fill(&sendbuf[0], sendbuf.size(), SEED1);
     ucs_assert(SEED1 == *(uint64_t*)&sendbuf[0]);
 
-    /* exhaust all resources */
+    /* exhaust all resources or time out 1sec */
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
     do {
         status = uct_ep_am_short(sender_ep(), AM_ID, SEED1,
                                  ((uint64_t*)&sendbuf[0]) + 1,
                                  sendbuf.size() - sizeof(uint64_t));
-    } while (status == UCS_OK);
+    } while ((ucs_get_time() < loop_end_limit) && (status == UCS_OK));
     if (status != UCS_ERR_NO_RESOURCE) {
         ASSERT_UCS_OK(status);
     }
 
     /* do some progress */
-    short_progress_loop();
+    short_progress_loop(50);
 
     /* should be able to send again */
     status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);

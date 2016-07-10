@@ -144,37 +144,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, uct_iface_t*,
                           const uct_device_addr_t *, const uct_iface_addr_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
-
-#define uct_mm_trace_data(_remote_addr, _rkey, _fmt, ...) \
-     ucs_trace_data(_fmt " to 0x%"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
-                    (_rkey))
-
-ucs_status_t uct_mm_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                 unsigned length, uint64_t remote_addr,
-                                 uct_rkey_t rkey)
-{
-    if (ucs_likely(length != 0)) {
-        memcpy((void *)(rkey + remote_addr), buffer, length);
-        uct_mm_trace_data(remote_addr, rkey, "PUT_SHORT [buffer %p size %u]",
-                          buffer, length);
-    } else {
-        ucs_trace_data("PUT_SHORT [zero-length]");
-    }
-    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
-    return UCS_OK;
-}
-
-ssize_t uct_mm_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
-                            void *arg, uint64_t remote_addr, uct_rkey_t rkey)
-{
-    size_t length;
-
-    length = pack_cb((void *)(rkey + remote_addr), arg);
-    uct_mm_trace_data(remote_addr, rkey, "PUT_BCOPY [arg %p size %zu]", arg, length);
-    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, BCOPY, length);
-    return length;
-}
-
 void *uct_mm_ep_attach_remote_seg(uct_mm_ep_t *ep, uct_mm_iface_t *iface, uct_mm_fifo_element_t *elem)
 {
     uct_mm_remote_seg_t *remote_seg, search;
@@ -236,6 +205,12 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
     return UCS_OK;
 }
 
+static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
+{
+    ucs_memory_cpu_load_fence();
+    ep->cached_tail = ep->fifo_ctl->tail;
+}
+
 /* A common mm active message sending function.
  * The first parameter indicates the origin of the call.
  * is_short = 1 - perform AM short sending
@@ -263,8 +238,7 @@ uct_mm_ep_am_common_send(const unsigned is_short, uct_mm_ep_t *ep, uct_mm_iface_
         } else {
             /* pending is empty */
             /* update the local copy of the tail to its actual value on the remote peer */
-            ucs_memory_cpu_load_fence();
-            ep->cached_tail = ep->fifo_ctl->tail;
+            uct_mm_ep_update_cached_tail(ep);
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
                 UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
                 return UCS_ERR_NO_RESOURCE;
@@ -352,13 +326,20 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
                                     pack_cb, arg);
 }
 
+static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
+    return UCT_MM_EP_IS_ABLE_TO_SEND(ep->fifo_ctl->head, ep->cached_tail,
+                                     iface->config.fifo_size);
+}
+
 ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     /* check if resources became available */
-    if (UCT_MM_EP_IS_ABLE_TO_SEND(ep->fifo_ctl->head, ep->cached_tail, iface->config.fifo_size)) {
+    if (uct_mm_ep_has_tx_resources(ep)) {
         return UCS_ERR_BUSY;
     }
 
@@ -431,130 +412,18 @@ void uct_mm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                             uct_mm_ep_abriter_purge_cb, &args);
 }
 
-ucs_status_t uct_mm_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
-                                    uint64_t remote_addr, uct_rkey_t rkey)
-{
-    uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
-    ucs_atomic_add64(ptr, add);
-    uct_mm_trace_data(remote_addr, rkey, "ATOMIC_ADD64 [add %"PRIu64"]", add);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint64_t *result, uct_completion_t *comp)
-{
-    uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
-    *result = ucs_atomic_fadd64(ptr, add);
-    uct_mm_trace_data(remote_addr, rkey,
-                      "ATOMIC_FADD64 [add %"PRIu64" result %"PRIu64"]",
-                      add, *result);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint64_t *result, uct_completion_t *comp)
-{
-    uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
-    *result = ucs_atomic_swap64(ptr, swap);
-    uct_mm_trace_data(remote_addr, rkey,
-                      "ATOMIC_SWAP64 [swap %"PRIu64" result %"PRIu64"]",
-                      swap, *result);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
-                                      uint64_t swap, uint64_t remote_addr, 
-                                      uct_rkey_t rkey, uint64_t *result,
-                                      uct_completion_t *comp)
-{
-    uint64_t *ptr = (uint64_t *)(rkey + remote_addr);
-    *result = ucs_atomic_cswap64(ptr, compare, swap);
-    uct_mm_trace_data(remote_addr, rkey,
-                      "ATOMIC_CSWAP64 [compare %"PRIu64" swap %"PRIu64" result %"PRIu64"]",
-                      compare, swap, *result);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_add32(uct_ep_h tl_ep, uint32_t add,
-                                    uint64_t remote_addr, uct_rkey_t rkey)
-{
-    uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
-    ucs_atomic_add32(ptr, add);
-    uct_mm_trace_data(remote_addr, rkey, "ATOMIC_ADD32 [add %"PRIu32"]", add);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_fadd32(uct_ep_h tl_ep, uint32_t add,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint32_t *result, uct_completion_t *comp)
-{
-    uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
-    *result = ucs_atomic_fadd32(ptr, add);
-    uct_mm_trace_data(remote_addr, rkey,
-                      "ATOMIC_FADD32 [add %"PRIu32" result %"PRIu32"]",
-                      add, *result);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_swap32(uct_ep_h tl_ep, uint32_t swap,
-                                     uint64_t remote_addr, uct_rkey_t rkey,
-                                     uint32_t *result, uct_completion_t *comp)
-{
-    uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
-    *result = ucs_atomic_swap32(ptr, swap);
-    uct_mm_trace_data(remote_addr, rkey,
-                      "ATOMIC_SWAP32 [swap %"PRIu32" result %"PRIu32"]",
-                      swap, *result);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
-                                      uint32_t swap, uint64_t remote_addr, 
-                                      uct_rkey_t rkey, uint32_t *result,
-                                      uct_completion_t *comp)
-{
-    uint32_t *ptr = (uint32_t *)(rkey + remote_addr);
-    *result = ucs_atomic_cswap32(ptr, compare, swap);
-    uct_mm_trace_data(remote_addr, rkey,
-                      "ATOMIC_CSWAP32 [compare %"PRIu32" swap %"PRIu32" result %"PRIu32"]",
-                      compare, swap, *result);
-    UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_OK;
-}
-
-ucs_status_t uct_mm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,
-                                 void *arg, size_t length,
-                                 uint64_t remote_addr, uct_rkey_t rkey,
-                                 uct_completion_t *comp)
-{
-    if (ucs_likely(0 != length)) {
-        unpack_cb(arg, (void *)(rkey + remote_addr), length);
-        uct_mm_trace_data(remote_addr, rkey, "GET_BCOPY [length %zu]", length);
-    } else {
-        ucs_trace_data("GET_BCOPY [zero-length]");
-    }
-    UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, BCOPY, length);
-    return UCS_OK;
-}
-
 ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
                              uct_completion_t *comp)
 {
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+
+    uct_mm_ep_update_cached_tail(ep);
+
+    if (!uct_mm_ep_has_tx_resources(ep)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     ucs_memory_cpu_store_fence();
-    UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+    UCT_TL_EP_STAT_FLUSH(&ep->super);
     return UCS_OK;
 }
-

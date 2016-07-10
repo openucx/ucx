@@ -42,22 +42,50 @@ static void uct_cm_iface_progress(void *arg)
 {
     uct_cm_pending_req_priv_t *priv;
     uct_cm_iface_t *iface = arg;
+    uct_cm_iface_op_t *op;
 
     uct_cm_enter(iface);
+
+    /* Invoke flush completions at the head of the queue - the sends which
+     * started before them were already completed.
+     */
+    ucs_queue_for_each_extract(op, &iface->outstanding_q, queue, !op->is_id) {
+        uct_invoke_completion(op->comp, UCS_OK);
+        ucs_free(op);
+    }
+
+    /* Dispatch pending operations */
     uct_pending_queue_dispatch(priv, &iface->notify_q,
                                iface->num_outstanding < iface->config.max_outstanding);
+
     uct_cm_leave(iface);
 
     ucs_callbackq_remove(&uct_cm_iface_worker(iface)->progress_q,
                          uct_cm_iface_progress, iface);
 }
 
-ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface)
+ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface, uct_completion_t *comp)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
+    uct_cm_iface_op_t *op;
 
     if (iface->num_outstanding == 0) {
         return UCS_OK;
+    }
+
+    /* If user request a completion callback, allocate a new operation and put
+     * it in the tail of the queue. It will be called when all operations which
+     * were sent before are completed.
+     */
+    if (comp != NULL) {
+        op = ucs_malloc(sizeof *op, "cm_op");
+        if (op == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        op->is_id = 0;
+        op->comp  = comp;
+        ucs_queue_push(&iface->outstanding_q, &op->queue);
     }
 
     sched_yield();
@@ -69,15 +97,10 @@ ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
 {
     ucs_status_t status;
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = uct_cm_iface_flush_do(tl_iface);
+    status = uct_cm_iface_flush_do(tl_iface, comp);
     if (status == UCS_OK) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
-    }
-    else {
+    } else if (status == UCS_INPROGRESS){
         UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
     }
     return status;
@@ -125,24 +148,37 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
     }
 }
 
-struct ib_cm_id *uct_cm_iface_outstanding_pop(uct_cm_iface_t *iface)
-{
-    return iface->outstanding[--iface->num_outstanding];
-}
-
 static void uct_cm_iface_outstanding_remove(uct_cm_iface_t* iface,
                                             struct ib_cm_id* id)
 {
-    unsigned index;
+    uct_cm_iface_op_t *op;
+    ucs_queue_iter_t iter;
 
-    for (index = 0; index < iface->num_outstanding; ++index) {
-        if (iface->outstanding[index] == id) {
-            iface->outstanding[index] = uct_cm_iface_outstanding_pop(iface);
+    ucs_queue_for_each_safe(op, iter, &iface->outstanding_q, queue) {
+        if (op->is_id && (op->id == id)) {
+            ucs_queue_del_iter(&iface->outstanding_q, iter);
+            --iface->num_outstanding;
+            ucs_free(op);
             return;
         }
     }
 
     ucs_fatal("outstanding cm id %p not found", id);
+}
+
+static void uct_cm_iface_outstanding_purge(uct_cm_iface_t *iface)
+{
+    uct_cm_iface_op_t *op;
+
+    ucs_queue_for_each_extract(op, &iface->outstanding_q, queue, 1) {
+        if (op->is_id) {
+            ib_cm_destroy_id(op->id);
+        } else {
+            uct_invoke_completion(op->comp, UCS_ERR_CANCELED);
+        }
+        ucs_free(op);
+    }
+    iface->num_outstanding = 0;
 }
 
 static void uct_cm_iface_event_handler(void *arg)
@@ -210,7 +246,7 @@ static void uct_cm_iface_event_handler(void *arg)
     }
 }
 
-static void uct_cm_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_cm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
     ucs_free(desc - iface->super.config.rx_headroom_offset);
@@ -246,20 +282,13 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
     self->notify_q.head       = NULL;
     ucs_queue_head_init(&self->notify_q);
-
-    self->outstanding = ucs_calloc(self->config.max_outstanding,
-                                   sizeof(*self->outstanding),
-                                   "cm_outstanding");
-    if (self->outstanding == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
+    ucs_queue_head_init(&self->outstanding_q);
 
     self->cmdev = ib_cm_open_device(uct_ib_iface_device(&self->super)->ibv_context);
     if (self->cmdev == NULL) {
         ucs_error("ib_cm_open_device() failed: %m. Check if ib_ucm.ko module is loaded.");
         status = UCS_ERR_NO_DEVICE;
-        goto err_free_outstanding;
+        goto err;
     }
 
     status = ucs_sys_fcntl_modfl(self->cmdev->fd, O_NONBLOCK, 0);
@@ -301,8 +330,6 @@ err_destroy_id:
     ib_cm_destroy_id(self->listen_id);
 err_close_device:
     ib_cm_close_device(self->cmdev);
-err_free_outstanding:
-    ucs_free(self->outstanding);
 err:
     return status;
 }
@@ -315,9 +342,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
     ucs_async_unset_event_handler(self->cmdev->fd);
 
     uct_cm_enter(self);
-    while (self->num_outstanding > 0) {
-        ib_cm_destroy_id(uct_cm_iface_outstanding_pop(self));
-    }
+    uct_cm_iface_outstanding_purge(self);
     ib_cm_destroy_id(self->listen_id);
     ib_cm_close_device(self->cmdev);
     uct_cm_leave(self);
@@ -327,8 +352,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
      */
     ucs_callbackq_remove_all(&uct_cm_iface_worker(self)->progress_q,
                              uct_cm_iface_progress, self);
-
-    ucs_free(self->outstanding);
 }
 
 UCS_CLASS_DEFINE(uct_cm_iface_t, uct_ib_iface_t);
@@ -378,7 +401,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
-    .iface_release_am_desc    = uct_cm_iface_release_desc,
+    .iface_release_am_desc    = uct_cm_iface_release_am_desc,
     .ep_am_bcopy              = uct_cm_ep_am_bcopy,
     .ep_pending_add           = uct_cm_ep_pending_add,
     .ep_pending_purge         = uct_cm_ep_pending_purge,

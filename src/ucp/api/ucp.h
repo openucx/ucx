@@ -104,6 +104,21 @@
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief UCP context parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_params_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_params_field {
+    UCP_PARAM_FIELD_FEATURES        = UCS_BIT(0), /* features */
+    UCP_PARAM_FIELD_REQUEST_SIZE    = UCS_BIT(1), /* request_size */
+    UCP_PARAM_FIELD_REQUEST_INIT    = UCS_BIT(2), /* request_init */
+    UCP_PARAM_FIELD_REQUEST_CLEANUP = UCS_BIT(3)  /* request_cleanup */
+};
+
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP configuration features
  *
  * The enumeration list describes the features supported by UCP.  An
@@ -287,27 +302,37 @@ typedef struct ucp_params {
      * UCP @ref ucp_feature "features" that are used for library
      * initialization. It is recommended for applications only to request
      * the features that are required for an optimal functionality
+     * This field must be specified.
      */
-    uint64_t                    features;
+    uint64_t                           features;
     /**
      * The size of a reserved space in a non-blocking requests. Typically
      * applications use this space for caching own structures in order to avoid
      * costly memory allocations, pointer dereferences, and cache misses.
      * For example, MPI implementation can use this memory for caching MPI
      * descriptors
+     * This field defaults to 0 if not specified.
      */
-    size_t                      request_size;
+    size_t                             request_size;
     /**
      * Pointer to a routine that is used for the request initialization.
      * @e NULL can be used if no such function required.
+     * This field defaults to @e NULL if not specified.
      */
-    ucp_request_init_callback_t request_init;
+    ucp_request_init_callback_t        request_init;
     /**
      * Pointer to a routine that is responsible for cleanup the memory
      * associated with the request.  @e NULL can be used if no such function
      * required.
+     * This field defaults to @e NULL if not specified.
      */
-    ucp_request_cleanup_callback_t request_cleanup;
+    ucp_request_cleanup_callback_t     request_cleanup;
+    /**
+     * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                           field_mask;
 } ucp_params_t;
 
 
@@ -635,6 +660,9 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
  * ucp_worker_progress "this routine" to progress any outstanding operations.
  * @li Transport layers, implementing asynchronous progress using threads,
  * require callbacks and other user code to be thread safe.
+ * @li The state of communication can be advanced (progressed) by blocking
+ * routines. Nevertheless, the non-blocking routines can not be used for
+ * communication progress.
  *
  * @param [in]  worker    Worker to progress.
  */
@@ -1151,14 +1179,21 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  *                          "ucp_tag_msg_recv_nb()" in order to receive the data
  *                          and release the resources associated with the
  *                          message handle.
- *                          If false (0), ucp_tag_msg_recv_nb() cannot be called
- *                          after this function call.
+ *                          If false (0), the return value is merely an indication
+ *                          to whether a matching message is present, and it cannot
+ *                          be used in any other way, and in particular it cannot
+ *                          be passed to @ref ucp_tag_msg_recv_nb().
  * @param [out] info        If the matching message is found the descriptor is
  *                          filled with the details about the message.
  *
  * @return NULL                      - No match found.
  * @return Message handle (not NULL) - If message is matched the message handle
  *                                     is returned.
+ *
+ * @note This function does not advance the communication state of the network.
+ *       If this routine is used in busy-poll mode, need to make sure
+ *       @ref ucp_worker_progress() is called periodically to extract messages
+ *       from the transport.
  */
 ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_t tag_mask, int remove,

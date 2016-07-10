@@ -92,6 +92,13 @@ static inline int uct_dc_iface_dci_can_alloc_dcs(uct_dc_iface_t *iface)
     return iface->tx.stack_top < iface->tx.ndci;
 }
 
+static inline int uct_dc_iface_dci_ep_can_send(uct_dc_ep_t *ep)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
+    return (ep->state != UCT_DC_EP_TX_WAIT) &&
+           uct_dc_iface_dci_has_tx_resources(iface, ep->dci);
+}
+
 static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
 {
     uct_dc_ep_t *ep = iface->tx.dcis[dci].ep;

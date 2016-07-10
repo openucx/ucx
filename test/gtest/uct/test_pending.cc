@@ -247,7 +247,6 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
     EXPECT_EQ(send_data, 0xdeadbeef + counter - 1);
 }
 
-
 UCS_TEST_P(test_uct_pending, pending_fairness)
 {
     int N=16;
@@ -277,6 +276,7 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     /* give a chance to finish connection for some transports (ud) */
     short_progress_loop();
 
+    n_pending = 0;
     for (iters = 0; iters < 10000; iters++) { 
         /* send until resources of all eps are exausted */
         while (n_pending < N) {
@@ -338,4 +338,4 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     }
 }
 
-UCT_INSTANTIATE_TEST_CASE(test_uct_pending);
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_pending);

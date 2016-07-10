@@ -59,6 +59,5 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
     ucp_context_h context = worker->context;
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64, tag, tag_mask);
-    ucp_worker_progress(worker);
     return ucp_tag_probe_search(context, tag, tag_mask, info, remove);
 }

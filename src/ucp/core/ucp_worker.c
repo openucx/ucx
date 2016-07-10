@@ -328,20 +328,13 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
                       getpid());
 
-    worker->ep_hash = ucs_malloc(sizeof(*worker->ep_hash) * UCP_WORKER_EP_HASH_SIZE,
-                                 "ucp_ep_hash");
-    if (worker->ep_hash == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free;
-    }
-
-    sglib_hashed_ucp_ep_t_init(worker->ep_hash);
+    kh_init_inplace(ucp_worker_ep_hash, &worker->ep_hash);
 
     worker->ifaces = ucs_calloc(context->num_tls, sizeof(*worker->ifaces),
                                 "ucp iface");
     if (worker->ifaces == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_ep_hash;
+        goto err_free;
     }
 
     worker->iface_attrs = ucs_calloc(context->num_tls,
@@ -401,8 +394,6 @@ err_free_attrs:
     ucs_free(worker->iface_attrs);
 err_free_ifaces:
     ucs_free(worker->ifaces);
-err_free_ep_hash:
-    ucs_free(worker->ep_hash);
 err_free:
     ucs_free(worker);
 err:
@@ -411,15 +402,10 @@ err:
 
 static void ucp_worker_destroy_eps(ucp_worker_h worker)
 {
-    struct sglib_hashed_ucp_ep_t_iterator iter;
     ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    for (ep = sglib_hashed_ucp_ep_t_it_init(&iter, worker->ep_hash); ep != NULL;
-         ep = sglib_hashed_ucp_ep_t_it_next(&iter))
-    {
-        ucp_ep_destroy(ep);
-    }
+    kh_foreach_value(&worker->ep_hash, ep, ucp_ep_destroy(ep));
 }
 
 void ucp_worker_destroy(ucp_worker_h worker)
@@ -434,7 +420,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_wakeup_context_cleanup(&worker->wakeup);
     ucs_free(worker->iface_attrs);
     ucs_free(worker->ifaces);
-    ucs_free(worker->ep_hash);
+    kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
     ucs_free(worker);
 }
 
@@ -632,10 +618,6 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
     req->send.ep = ucp_worker_get_reply_ep(worker, dest_uuid);
     return req;
 }
-
-SGLIB_DEFINE_LIST_FUNCTIONS(ucp_ep_t, ucp_worker_ep_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucp_ep_t, UCP_WORKER_EP_HASH_SIZE,
-                                        ucp_worker_ep_hash);
 
 void ucp_worker_progress_stub_eps(void *arg)
 {

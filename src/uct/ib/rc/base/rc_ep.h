@@ -235,6 +235,11 @@ static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp)
     return txqp->unsignaled;
 }
 
+static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
+{
+    return ((ep->txqp.available > 0) && (ep->fc.fc_wnd > 0));
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op)
 {

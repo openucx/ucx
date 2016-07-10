@@ -7,6 +7,7 @@
 #include "mm_iface.h"
 #include "mm_ep.h"
 
+#include <uct/base/uct_ep.h>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
@@ -126,19 +127,19 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_release_am_desc = uct_mm_iface_release_am_desc,
     .iface_flush         = uct_mm_iface_flush,
     .iface_fence         = uct_sm_iface_fence,
-    .ep_put_short        = uct_mm_ep_put_short,
-    .ep_put_bcopy        = uct_mm_ep_put_bcopy,
-    .ep_get_bcopy        = uct_mm_ep_get_bcopy,
+    .ep_put_short        = uct_base_ep_put_short,
+    .ep_put_bcopy        = uct_base_ep_put_bcopy,
+    .ep_get_bcopy        = uct_base_ep_get_bcopy,
     .ep_am_short         = uct_mm_ep_am_short,
     .ep_am_bcopy         = uct_mm_ep_am_bcopy,
-    .ep_atomic_add64     = uct_mm_ep_atomic_add64,
-    .ep_atomic_fadd64    = uct_mm_ep_atomic_fadd64,
-    .ep_atomic_cswap64   = uct_mm_ep_atomic_cswap64,
-    .ep_atomic_swap64    = uct_mm_ep_atomic_swap64,
-    .ep_atomic_add32     = uct_mm_ep_atomic_add32,
-    .ep_atomic_fadd32    = uct_mm_ep_atomic_fadd32,
-    .ep_atomic_cswap32   = uct_mm_ep_atomic_cswap32,
-    .ep_atomic_swap32    = uct_mm_ep_atomic_swap32,
+    .ep_atomic_add64     = uct_base_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_base_ep_atomic_fadd64,
+    .ep_atomic_cswap64   = uct_base_ep_atomic_cswap64,
+    .ep_atomic_swap64    = uct_base_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_base_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_base_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_base_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_base_ep_atomic_swap32,
     .ep_pending_add      = uct_mm_ep_pending_add,
     .ep_pending_purge    = uct_mm_ep_pending_purge,
     .ep_flush            = uct_mm_ep_flush,

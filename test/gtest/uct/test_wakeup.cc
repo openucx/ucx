@@ -73,7 +73,7 @@ UCS_TEST_P(test_uct_wakeup, am)
     uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler, recv_buffer,
                              UCT_AM_CB_FLAG_SYNC);
 
-    /* create reciever makeup */
+    /* create receiver makeup */
     ASSERT_EQ(uct_wakeup_open(m_e2->iface(), UCT_WAKEUP_RX_SIGNALED_AM,
             &wakeup_handle), UCS_OK);
     ASSERT_EQ(uct_wakeup_efd_get(wakeup_handle, &wakeup_fd.fd), UCS_OK);
@@ -100,4 +100,4 @@ UCS_TEST_P(test_uct_wakeup, am)
     free(recv_buffer);
 }
 
-UCT_INSTANTIATE_TEST_CASE(test_uct_wakeup);
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_wakeup);

@@ -190,6 +190,7 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qstart;
     void                        *qend;
     uint16_t                    bb_max;
+    uint16_t                    sig_pi;     /* PI for last signaled WQE */
 #if ENABLE_ASSERT
     uint16_t                    hw_ci;
 #endif

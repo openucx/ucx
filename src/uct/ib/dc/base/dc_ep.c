@@ -50,8 +50,9 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
      * - dci has resources
      */
     if (uct_rc_iface_has_tx_resources(&iface->super) &&
-        (ep->dci != UCT_DC_EP_NO_DCI || uct_dc_iface_dci_can_alloc(iface)) &&
-        uct_dc_iface_dci_has_tx_resources(iface, ep->dci)) {
+        ((ep->dci != UCT_DC_EP_NO_DCI) || uct_dc_iface_dci_can_alloc(iface)) &&
+        uct_dc_iface_dci_ep_can_send(ep))
+    {
         return UCS_ERR_BUSY;
     }
 
