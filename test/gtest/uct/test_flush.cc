@@ -349,4 +349,4 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      recvbuf.pattern_check(SEED3);
 }
 
-UCT_INSTANTIATE_TEST_CASE(uct_flush_test)
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(uct_flush_test)
