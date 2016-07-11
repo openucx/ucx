@@ -677,7 +677,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
              * Also, prevent from sending more control messages like this after
              * first time by turning on the flag on the last skb.
              */
-            uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+            uct_ud_ep_ctl_op_add_safe(iface, ep, UCT_UD_SEND_SKB_FLAG_ACK_REQ);
             skb->flags |= UCT_UD_SEND_SKB_FLAG_ACK_REQ;
         }
 
@@ -1002,6 +1002,7 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req)
     ucs_arbiter_group_push_elem(&ep->tx.pending.group, 
                                 (ucs_arbiter_elem_t *)req->priv);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
+
     iface->tx.pending_q_len++;
     uct_ud_leave(iface);
     return UCS_OK;
