@@ -500,11 +500,11 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             last_tl     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
             ++ptr;
 
-            address->dev_addr     = dev_addr;
+            address->dev_addr     = (dev_addr_len > 0) ? dev_addr : NULL;
             address->dev_addr_len = dev_addr_len;
             address->md_index     = md_index;
             address->md_flags     = md_flags;
-            address->tl_addr      = ptr;
+            address->tl_addr      = (tl_addr_len > 0) ? ptr : NULL;
             address->tl_addr_len  = tl_addr_len;
 
             ucs_trace("unpack addr[%d] : md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e ovh %e ",

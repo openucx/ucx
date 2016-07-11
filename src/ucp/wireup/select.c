@@ -116,7 +116,7 @@ static int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_inde
 {
     ucp_context_h context = worker->context;
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(worker->ifaces[rsc_index], ae->dev_addr);
+           uct_iface_is_reachable(worker->ifaces[rsc_index], ae->dev_addr, ae->iface_addr);
 }
 
 /**

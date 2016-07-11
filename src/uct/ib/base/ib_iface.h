@@ -50,7 +50,7 @@ struct uct_ib_iface_config {
 
     struct {
         unsigned            queue_len;       /* Queue length */
-        unsigned            max_batch;       /* How many buffers can be batched to one post receuive */
+        unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         size_t              inl;             /* Inline space to reserve in CQ/QP */
         uct_iface_mpool_config_t mp;
@@ -189,7 +189,8 @@ uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr);
 
-int uct_ib_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *addr);
+int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
+                              const uct_iface_addr_t *iface_addr);
 
 /*
  * @param xport_hdr_len       How many bytes this transport adds on top of IB header (LRH+BTH+iCRC+vCRC)
