@@ -168,23 +168,6 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem);
 
 /**
- * Add a new work element to a group if it is not already there
- *
- * @param [in]  group    Group to add the element to.
- * @param [in]  elem     Work element to add.
- */
-static inline void 
-ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
-                            ucs_arbiter_elem_t *elem)
-{
-    if (elem->next != NULL) {
-        return;
-    }
-    ucs_arbiter_group_push_elem_always(group, elem);
-}
-
-
-/**
  * Remove all elements from a group, and call the callback for each of them.
  * Callback return value is ignored.
  *
@@ -195,11 +178,6 @@ ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
  */
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg);
-
-static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
-{
-    return group->tail == NULL;
-}
 
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
 
@@ -215,6 +193,27 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 /* Internal function */
 void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
                                     ucs_arbiter_elem_t *head);
+
+
+/**
+ * Return true if arbiter has no groups scheduled
+ *
+ * @param [in]  arbiter    Arbiter object to dispatch work on.
+ */
+static inline int ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
+{
+    return arbiter->current == NULL;
+}
+
+
+/**
+ * @return whether if the group does not have any queued elements.
+ */
+static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
+{
+    return group->tail == NULL;
+}
+
 
 /**
  * Schedule a group for arbitration. If the group is already there, the operation
@@ -252,15 +251,31 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 }
 
 /**
- * Return true if arbiter has no groups scheduled
- *
- * @param [in]  arbiter    Arbiter object to dispatch work on.
+ * @return whether the group does not have any queued elements.
  */
-static inline int
-ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
+static inline int ucs_arbiter_elem_is_scheduled(ucs_arbiter_elem_t *elem)
 {
-    return arbiter->current == NULL;
+    return elem->next != NULL;
 }
+
+
+/**
+ * Add a new work element to a group if it is not already there
+ *
+ * @param [in]  group    Group to add the element to.
+ * @param [in]  elem     Work element to add.
+ */
+static inline void
+ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
+                            ucs_arbiter_elem_t *elem)
+{
+    if (ucs_arbiter_elem_is_scheduled(elem)) {
+        return;
+    }
+
+    ucs_arbiter_group_push_elem_always(group, elem);
+}
+
 
 /**
  * Dispatch work elements in the arbiter. For every group, up to per_group work

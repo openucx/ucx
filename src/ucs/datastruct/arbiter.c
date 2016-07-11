@@ -98,7 +98,7 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     head = tail->next;
 
     if (head == NULL) {
-        /* it means that 1 element group is 
+        /* it means that 1 element group is
          * scheduled during dispatch.
          * Restore next pointer.
          */
@@ -164,7 +164,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             ++group_dispatch_count;
 
             if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
-               if (elem == last_elem) {
+                 if (elem == last_elem) {
                     /* Only element */
                     group->tail = NULL; /* Group is empty now */
                     if (group_head == prev_group) {
