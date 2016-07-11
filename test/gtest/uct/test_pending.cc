@@ -284,26 +284,33 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
                 if (reqs[i]->active) {
                     continue;
                 }
-                status = uct_ep_am_short(m_e1->ep(i), 0, test_pending_hdr,
-                        &send_data, sizeof(send_data));
-                if (status != UCS_OK) { 
-                    /* schedule pending */
-                    //ucs_warn("pending sceduled at %d", i);
-                    n_pending++;
-                    reqs[i]->active = 1;
-                    status = uct_ep_pending_add(m_e1->ep(i), &reqs[i]->uct);
-                    ASSERT_UCS_OK(status);
-                    //ucs_warn("pending add %p idx %d", m_e1->ep(i), i);
-                    continue;
+                for (;;) {
+                    status = uct_ep_am_short(m_e1->ep(i), 0, test_pending_hdr,
+                                             &send_data, sizeof(send_data));
+                    if (status == UCS_ERR_NO_RESOURCE) {
+                        /* schedule pending */
+                        status = uct_ep_pending_add(m_e1->ep(i), &reqs[i]->uct);
+                        if (status == UCS_ERR_BUSY) {
+                            continue; /* retry */
+                        }
+                        ASSERT_UCS_OK(status);
+
+                        n_pending++;
+                        reqs[i]->active = 1;
+                        break;
+                    } else {
+                        ASSERT_UCS_OK(status);
+                        /* sent */
+                        reqs[i]->countdown++;
+                        break;
+                    }
                 }
-                reqs[i]->countdown++;
             }
         }
-        /* progress untill it is possible to send more */
+        /* progress until it is possible to send more */
         while(n_pending == N) {
             progress();
         }
-        //ucs_warn("n_pending = %d", n_pending);
         /* repeat the cycle. 
          * it is expected that every ep will send about
          * the same number of messages. 
