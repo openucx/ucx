@@ -11,8 +11,10 @@ make docs
 mkdir -p ucx.wiki
 cd ucx.wiki
 git init .
-[ -d .git/refs/remotes/origin ] || git remote add origin https://github.com/openucx/ucx.wiki.git
+git remote show origin &>/dev/null || git remote add origin https://github.com/openucx/ucx.wiki.git
+git fetch --all
+git checkout -t origin/master -f
 git pull
 cp -f ../doc/doxygen-doc/ucx.pdf ./
-git ci ucx.pdf -m "update ucx.pdf for $rev"
+git commit ucx.pdf -m "update ucx.pdf for $rev"
 git push
