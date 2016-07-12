@@ -300,7 +300,7 @@ typedef struct ucp_generic_dt_ops {
 typedef struct ucp_params {
     /**
      * UCP @ref ucp_feature "features" that are used for library
-     * initialization. It is recommend for applications only request
+     * initialization. It is recommended for applications only to request
      * the features that are required for an optimal functionality
      * This field must be specified.
      */
@@ -1103,7 +1103,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *                          completed in any point in time. The request handle
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
- *                          responsible to released the handle using
+ *                          responsible to release the handle using
  *                          @ref ucp_request_release "ucp_request_release()"
  *                          routine.
  */

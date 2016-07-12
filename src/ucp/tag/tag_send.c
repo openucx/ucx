@@ -16,7 +16,6 @@
 #include <ucs/datastruct/mpool.inl>
 #include <string.h>
 
-
 static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
                                              ssize_t max_short, size_t zcopy_thresh,
                                              size_t rndv_thresh,
@@ -36,7 +35,10 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
         req->send.uct.func = proto->contig_short;
     } else if (length >= rndv_thresh) {
         /* rendezvous */
-        ucp_tag_send_start_rndv(req);
+        status = ucp_tag_send_start_rndv(req);
+        if (status != UCS_OK) {
+            return status;
+        }
     } else if (length < zcopy_thresh) {
         /* bcopy */
         if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
@@ -83,9 +85,7 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     req->send.state.dt.generic.state = state;
     req->send.length = length = dt_gen->ops.packed_size(state);
 
-    if (length >= rndv_thresh) {
-        ucp_tag_send_start_rndv(req);
-    } else if (length <= config->max_am_bcopy - progress->only_hdr_size) {
+    if (length <= config->max_am_bcopy - progress->only_hdr_size) {
         req->send.uct.func = progress->generic_single;
     } else {
         req->send.uct.func = progress->generic_multi;

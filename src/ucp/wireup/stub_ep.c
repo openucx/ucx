@@ -75,6 +75,7 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (ep->uct_eps[lane] == &stub_ep->super) {
             ep->uct_eps[lane] = uct_ep;
+            break;
         }
     }
 

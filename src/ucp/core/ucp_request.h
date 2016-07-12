@@ -90,6 +90,14 @@ struct ucp_request {
                     uct_pending_req_t *req;
                     ucp_stub_ep_t*    stub_ep;
                 } proxy;
+
+                struct {
+                    uint64_t      remote_address;
+                    uintptr_t     remote_request;
+                    uct_rkey_bundle_t rkey_bundle;
+                    ucp_request_t *rreq; /* receive request on the recv side */
+                } rndv_get;
+
             };
 
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */

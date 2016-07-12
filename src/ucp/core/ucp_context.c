@@ -67,7 +67,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"RNDV_THRESH", "1gb",
+  {"RNDV_THRESH", "1mb",
    "Threshold for switching from eager to rendezvous protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -138,7 +138,7 @@ void ucp_config_release(ucp_config_t *config)
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
                                const char *value)
 {
-    return ucs_config_parser_set_value(config,ucp_config_table, name, value);
+    return ucs_config_parser_set_value(config, ucp_config_table, name, value);
 }
 
 void ucp_config_print(const ucp_config_t *config, FILE *stream,

@@ -79,6 +79,8 @@ ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
     case UCP_DATATYPE_CONTIG:
         buffer_size = ucp_contig_dt_length(datatype, count);
         if (ucs_unlikely(recv_length + offset > buffer_size)) {
+            ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
+                      recv_length, offset, buffer_size);
             return UCS_ERR_MESSAGE_TRUNCATED;
         }
         memcpy(buffer + offset, recv_data, recv_length);

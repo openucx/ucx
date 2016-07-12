@@ -127,6 +127,60 @@ UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated) {
     test_send_probe (50000, 0, true,  1);
 }
 
+UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
+    static const size_t size = 1148576;
+    ucp_tag_recv_info info;
+    ucp_tag_message_h message;
+    request *my_send_req, *my_recv_req;
+
+    std::vector<char> sendbuf(size, 0);
+    std::vector<char> recvbuf(size, 0);
+
+    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+
+    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    EXPECT_TRUE(message == NULL);
+
+    /* sender - send the RTS */
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
+    EXPECT_FALSE(my_send_req->completed);
+
+    /* receiver - get the RTS and put it into unexpected */
+    short_progress_loop();
+
+    /* receiver - match the rts, remove it from unexpected and return it */
+    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    /* make sure that there was a match (RTS) */
+    ASSERT_TRUE(message != NULL);
+    EXPECT_EQ(sendbuf.size(),      info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+
+    /* receiver - process the rts and schedule a get operation */
+    my_recv_req = (request*)ucp_tag_msg_recv_nb(receiver->worker(), &recvbuf[0],
+                                                recvbuf.size(), DATATYPE, message,
+                                                recv_callback);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+
+    /* receiver - perform rndv get and send the ATS */
+    wait(my_recv_req);
+    EXPECT_TRUE(my_recv_req->completed);
+
+    /* sender - get the ATS and set send request to completed */
+    short_progress_loop();
+
+    EXPECT_EQ(UCS_OK,              my_recv_req->status);
+    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf, recvbuf);
+
+    EXPECT_TRUE(my_send_req->completed);
+    EXPECT_EQ(UCS_OK, my_send_req->status);
+
+    request_release(my_send_req);
+    request_release(my_recv_req);
+}
+
 UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
     static const int COUNT = 1000;
     std::string sendbuf, recvbuf;
