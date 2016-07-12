@@ -197,7 +197,7 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
  * @param max           Maximal buffer size.
  * @param filename_fmt  File name printf-like format string.
  *
- * @return Number of ytes read, or -1 in case of error.
+ * @return Number of bytes read, or -1 in case of error.
  */
 ssize_t ucs_read_file(char *buffer, size_t max, int silent,
                       const char *filename_fmt, ...)
@@ -239,7 +239,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shim
 /**
  * Release memory allocated via hugetlb.
  *
- * @param address   Memory to release (retuned from ucs_hugetlb_alloc).
+ * @param address   Memory to release (returned from @ref ucs_sysv_alloc).
  */
 ucs_status_t ucs_sysv_free(void *address);
 
@@ -298,5 +298,6 @@ ucs_status_t ucs_empty_function_return_unsupported();
 ucs_status_t ucs_empty_function_return_inprogress();
 ucs_status_t ucs_empty_function_return_ep_timeout();
 ssize_t ucs_empty_function_return_bc_ep_timeout();
+ucs_status_t ucs_empty_function_return_busy();
 
 #endif

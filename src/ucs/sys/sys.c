@@ -738,4 +738,8 @@ ssize_t ucs_empty_function_return_bc_ep_timeout()
     return UCS_ERR_ENDPOINT_TIMEOUT;
 }
 
+ucs_status_t ucs_empty_function_return_busy()
+{
+    return UCS_ERR_BUSY;
+}
 
