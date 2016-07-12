@@ -41,6 +41,8 @@ public:
 
         void flush_worker() const;
 
+        void fence() const;
+
         void disconnect();
 
         void destroy_worker();

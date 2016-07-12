@@ -306,7 +306,21 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
 
 ucs_status_t ucp_worker_fence(ucp_worker_h worker)
 {
-    return UCS_ERR_UNSUPPORTED;
+    unsigned rsc_index;
+    ucs_status_t status;
+
+    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+        if (worker->ifaces[rsc_index] == NULL) {
+            continue;
+        }
+
+        status = uct_iface_fence(worker->ifaces[rsc_index], 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_flush(ucp_worker_h worker)

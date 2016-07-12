@@ -91,6 +91,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_context.cc \
 	ucp/test_ucp_wireup.cc \
 	ucp/test_ucp_wakeup.cc \
+	ucp/test_ucp_fence.cc \
 	ucp/ucp_test.cc \
 	\
 	ucs/test_algorithm.cc \
