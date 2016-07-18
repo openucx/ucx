@@ -58,6 +58,7 @@ struct ucp_wireup_tl_info {
     uint64_t                   cap_flags;  /* Interface capability flags */
     float                      overhead;   /* Interface performance - overhead */
     float                      bandwidth;  /* Interface performance - bandwidth */
+    uint8_t                    priority;   /* Priority of device */
 };
 
 

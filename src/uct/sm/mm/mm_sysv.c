@@ -107,9 +107,15 @@ static size_t uct_sysv_get_path_size(uct_md_h md)
     return 0;
 }
 
+static uint8_t uct_sysv_get_priority()
+{
+    return 0;
+}
+
 static uct_mm_mapper_ops_t uct_sysv_mapper_ops = {
    .query   = ucs_empty_function_return_success,
    .get_path_size = uct_sysv_get_path_size,
+   .get_priority = uct_sysv_get_priority,
    .reg     = NULL,
    .dereg   = NULL,
    .alloc   = uct_sysv_alloc,

@@ -30,6 +30,11 @@ static size_t uct_xpmem_get_path_size(uct_md_h md)
     return 0;
 }
 
+static uint8_t uct_xpmem_get_priority()
+{
+    return 0;
+}
+
 static ucs_status_t uct_xmpem_reg(void *address, size_t size, uct_mm_id_t *mmid_p)
 {
     xpmem_segid_t segid;
@@ -199,6 +204,7 @@ static ucs_status_t uct_xpmem_free(void *address, uct_mm_id_t mmid, size_t lengt
 static uct_mm_mapper_ops_t uct_xpmem_mapper_ops = {
     .query   = uct_xpmem_query,
     .get_path_size = uct_xpmem_get_path_size,
+    .get_priority = uct_xpmem_get_priority,
     .reg     = uct_xmpem_reg,
     .dereg   = uct_xpmem_dereg,
     .alloc   = uct_xpmem_alloc,

@@ -114,6 +114,11 @@ static size_t uct_posix_get_path_size(uct_md_h md)
     }
 }
 
+static uint8_t uct_posix_get_priority()
+{
+    return 0;
+}
+
 static ucs_status_t uct_posix_set_path(char *file_name, int use_shm_open,
                                        const char *path, uint64_t uuid)
 {
@@ -460,6 +465,7 @@ err:
 static uct_mm_mapper_ops_t uct_posix_mapper_ops = {
    .query   = ucs_empty_function_return_success,
    .get_path_size = uct_posix_get_path_size,
+   .get_priority = uct_posix_get_priority,
    .reg     = NULL,
    .dereg   = NULL,
    .alloc   = uct_posix_alloc,

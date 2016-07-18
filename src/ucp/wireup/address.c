@@ -218,6 +218,7 @@ static void ucp_address_pack_tl_info(ucp_wireup_iface_attr_t *tl_info,
     tl_info->cap_flags = iface_attr->cap.flags;
     tl_info->overhead  = iface_attr->overhead;
     tl_info->bandwidth = iface_attr->bandwidth;
+    tl_info->priority  = iface_attr->priority;
 }
 
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
@@ -369,6 +370,8 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
         status = UCS_ERR_NO_MEMORY;
         goto out_free_devices;
     }
+
+    memset(buffer, 0, size);
 
     /* Pack the address */
     status = ucp_address_do_pack(worker, ep, buffer, size, tl_bitmap, order,

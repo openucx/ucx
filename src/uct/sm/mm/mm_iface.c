@@ -113,6 +113,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->latency                = 80e-9; /* 80 ns */
     iface_attr->bandwidth              = 6911 * 1024.0 * 1024.0;
     iface_attr->overhead               = 10e-9; /* 10 ns */
+    iface_attr->priority               = uct_mm_md_mapper_ops(iface->super.md)->get_priority();
     return UCS_OK;
 }
 

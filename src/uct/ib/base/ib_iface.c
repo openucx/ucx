@@ -109,6 +109,15 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {NULL}
 };
 
+uct_ib_device_info_t uct_ib_device_info_table[] = {
+  {4099, "ConnectX-3", 0, 10},
+  {4103, "ConnectX-3 Pro", 0, 11},
+  {4113, "Connect-IB", UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
+  {4115, "ConnectX-4", UCT_IB_DEVICE_FLAG_MLX5_PRM, 30},
+  {4117, "ConnectX-4 LX", UCT_IB_DEVICE_FLAG_MLX5_PRM, 28},
+  {0, "", 0, 0}
+};
+
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
@@ -526,6 +535,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     uint8_t active_width, active_speed, active_mtu;
     double encoding, signal_rate, wire_speed;
     size_t mtu, width, extra_pkt_len;
+    int i = 0;
 
     if (!uct_ib_device_is_port_ib(dev, iface->port_num)) {
         return UCS_ERR_UNSUPPORTED;
@@ -595,6 +605,17 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     extra_pkt_len         = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + xport_hdr_len +
                             UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
     iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);
+
+    /* Set priority of current device */
+    iface_attr->priority = 0;
+    while (uct_ib_device_info_table[i].vendor_part_id != 0) {
+        if (uct_ib_device_info_table[i].vendor_part_id == dev->dev_attr.vendor_part_id) {
+            iface_attr->priority = uct_ib_device_info_table[i].priority;
+            break;
+        }
+        i++;
+    }
+
     return UCS_OK;
 }
 

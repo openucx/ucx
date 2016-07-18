@@ -41,6 +41,8 @@ typedef struct uct_mm_mapper_ops {
 
     size_t       (*get_path_size)(uct_md_h md);
 
+    uint8_t      (*get_priority)();
+
     ucs_status_t (*reg)(void *address, size_t size, 
                         uct_mm_id_t *mmid_p);
 
