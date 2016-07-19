@@ -511,4 +511,41 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     EXPECT_EQ(UCS_OK, my_send_req->status);
     request_release(my_send_req);
 }
+
+UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
+    static const size_t size = 1148576;
+    request *my_send_req, *my_recv_req;
+
+    std::vector<char> sendbuf(size, 0);
+    std::vector<char> recvbuf(size, 0);
+
+    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+
+    /* receiver - put the receive request into expected */
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+    EXPECT_FALSE(my_recv_req->completed);
+
+    /* sender - send the RTS */
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
+    EXPECT_FALSE(my_send_req->completed);
+
+    /* receiver - match the rts, perform rndv get and send an ack upon finishing */
+    short_progress_loop();
+    /* for UCTs that cannot perform real rndv and may do eager send-recv bcopy instead */
+    wait(my_recv_req);
+
+    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_TRUE(my_recv_req->completed);
+    EXPECT_EQ(sendbuf, recvbuf);
+
+    EXPECT_TRUE(my_send_req->completed);
+    EXPECT_EQ(UCS_OK, my_send_req->status);
+
+    request_release(my_send_req);
+    request_release(my_recv_req);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)

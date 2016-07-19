@@ -264,7 +264,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_rsc_index_t rsc_index;
     uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
-    double zcopy_thresh;
+    double zcopy_thresh, rndv_thresh;
 
     /* Default thresholds */
     config->zcopy_thresh      = SIZE_MAX;
@@ -351,11 +351,37 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane];
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->iface_attrs[rsc_index];
+            md_attr    = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
-                config->rndv_thresh        = context->config.ext.rndv_thresh;
-                config->sync_rndv_thresh   = context->config.ext.rndv_thresh;
-                config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
+
+                if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                    /* auto */
+                    /* Make UCX calculate the rndv threshold on its own.
+                     * We do it by finding the message size at which rndv and eager_zcopy get
+                     * the same latency. Starting this message size (rndv_thresh), rndv's latency
+                     * would be lower and the reached bandwidth would be higher.
+                     * The used latency functions for eager_zcopy and rndv are specified in the UCX wiki */
+                    rndv_thresh = ((2 * iface_attr->overhead) + (4 * iface_attr->latency)
+                                   + md_attr->reg_cost.overhead) /
+                                  (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
+                                   md_attr->reg_cost.growth - (1.0 / iface_attr->bandwidth));
+
+                    if (rndv_thresh < 0) {
+                        config->rndv_thresh        = SIZE_MAX;
+                        config->sync_rndv_thresh   = SIZE_MAX;
+                        config->max_rndv_get_zcopy = SIZE_MAX;
+                    } else {
+                        config->rndv_thresh        = rndv_thresh;
+                        config->sync_rndv_thresh   = rndv_thresh;
+                        config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
+                    }
+                } else {
+                    config->rndv_thresh        = context->config.ext.rndv_thresh;
+                    config->sync_rndv_thresh   = context->config.ext.rndv_thresh;
+                    config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
+                }
+                ucs_debug("the rendezvous threshold is: %zu", config->rndv_thresh);
             }
         } else {
             ucs_debug("There was no transport selected for rndv");

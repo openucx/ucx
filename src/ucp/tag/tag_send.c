@@ -48,7 +48,7 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
             req->send.uct.func = proto->contig_bcopy_multi;
         }
     } else {
-        /* zcopy */
+        /* eager zcopy */
         status = ucp_request_send_buffer_reg(req, ucp_ep_get_am_lane(req->send.ep));
         if (status != UCS_OK) {
             return status;

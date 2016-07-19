@@ -67,7 +67,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"RNDV_THRESH", "1mb",
+  {"RNDV_THRESH", "auto",
    "Threshold for switching from eager to rendezvous protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
