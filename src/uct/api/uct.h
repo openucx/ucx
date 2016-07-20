@@ -693,11 +693,16 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
  * it does not detect issues such as network mis-configuration or lack of connectivity.
  *
  * @param [in]  iface      Interface to check reachability from.
- * @param [in]  addr       Address to check reachability to.
+ * @param [in]  dev_addr   Device address to check reachability to. It is NULL
+ *                         if iface_attr.dev_addr_len == 0, and must be non-NULL otherwise.
+ * @param [in]  iface_addr Interface address to check reachability to. It is
+ *                         NULL if iface_attr.iface_addr_len == 0, and must
+ *                         be non-NULL otherwise.
  *
  * @return Nonzero if reachable, 0 if not.
  */
-int uct_iface_is_reachable(uct_iface_h iface, const uct_device_addr_t *addr);
+int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
+                           const uct_iface_addr_t *iface_addr);
 
 
 /**

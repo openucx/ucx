@@ -207,7 +207,7 @@ int main(int argc, char **argv)
                  peer_dev, if_info.attr.device_addr_len, MPI_BYTE, partner,0,
                  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    status = uct_iface_is_reachable(if_info.iface, peer_dev);
+    status = uct_iface_is_reachable(if_info.iface, peer_dev, NULL);
     CHKERR_JUMP(0 == status, "reach the peer", out_free_if_addrs);
 
     /* Get interface address */

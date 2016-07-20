@@ -75,15 +75,19 @@ static ucs_status_t uct_self_iface_get_address(uct_iface_h iface,
     return UCS_OK;
 }
 
-static int uct_self_iface_is_reachable(uct_iface_h iface,
-                                       const uct_device_addr_t *addr)
+static int uct_self_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
+                                       const uct_iface_addr_t *iface_addr)
 {
-    const uct_self_iface_t *self_iface = 0;
+    const uct_self_iface_t *self_iface = NULL;
+    const uct_self_iface_addr_t *self_addr = NULL;
 
+    if (NULL == iface_addr) {
+        return 0;
+    }
     self_iface = ucs_derived_of(iface, uct_self_iface_t);
-    ucs_trace_func("iface=%p id=%lx addr=%lx",
-                   iface, self_iface->id, *(uct_self_iface_addr_t*)addr);
-    return  self_iface->id == *(const uct_self_iface_addr_t*)addr;
+    self_addr = (const uct_self_iface_addr_t *) iface_addr;
+    ucs_trace_func("iface=%p id=%lx addr=%lx", iface, self_iface->id, *self_addr);
+    return  self_iface->id == *self_addr;
 }
 
 static void uct_self_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)

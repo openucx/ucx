@@ -33,8 +33,8 @@ static ucs_status_t uct_cuda_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-static int uct_cuda_iface_is_reachable(uct_iface_h iface,
-                                       const uct_device_addr_t *addr)
+static int uct_cuda_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
+                                       const uct_iface_addr_t *iface_addr)
 {
     return 0;
 }
