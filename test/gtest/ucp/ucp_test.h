@@ -15,6 +15,7 @@ extern "C" {
 struct ucp_test_param {
     ucp_params_t              ctx_params;
     std::vector<std::string>  transports;
+    bool                      variant;  
 };
 
 class ucp_test_base : public ucs::test_base {
@@ -70,7 +71,7 @@ public:
     enum_test_params(const ucp_params_t& ctx_params,
                      const std::string& name,
                      const std::string& test_case_name,
-                     ...);
+                     const std::string& tls);
 
     virtual void modify_config(const std::string& name, const std::string& value);
 
@@ -109,13 +110,12 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
  * @param _name        Instantiation name.
  * @param ...          Transport names.
  */
-#define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, ...) \
+#define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
     INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
-                            testing::ValuesIn(ucp_test::enum_test_params(_test_case::get_ctx_params(), \
-                                                                         #_name, \
-                                                                         #_test_case, \
-                                                                         __VA_ARGS__, \
-                                                                         NULL)));
+                            testing::ValuesIn(_test_case::enum_test_params(_test_case::get_ctx_params(), \
+                                                                           #_name, \
+                                                                           #_test_case, \
+                                                                           _tls)));
 
 
 /**
@@ -128,11 +128,11 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,   "\\dc_mlx5")                                \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "\\ud")                                     \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "\\ud_mlx5")                                \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud", "\\rc")                             \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrcx, "\\cm", "\\rc_mlx5")                        \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm,   "\\mm", "\\knem", "\\cma", "\\xpmem", "ib") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5", "\\rc_mlx5")                   \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg", "\\ugni_udt", "\\ugni_rdma") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrc,  "\\ud,\\rc")                             \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, cmrcx, "\\cm,\\rc_mlx5")                        \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm,   "\\mm,\\knem,\\cma,\\xpmem,ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5,\\rc_mlx5")                   \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg,\\ugni_udt,\\ugni_rdma") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self")
 
 

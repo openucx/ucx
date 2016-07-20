@@ -119,7 +119,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
         req->send.length -= packed_len;
         if (req->send.length == 0) {
-            ucp_request_put(req);
+            ucp_request_put(req, UCS_OK);
             return UCS_OK;
         }
 
@@ -264,7 +264,7 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
         req->send.rma.remote_addr += frag_length;
         if (req->send.length == 0) {
             /* Get was posted */
-            ucp_request_put(req);
+            ucp_request_put(req, UCS_OK);
             return UCS_OK;
         } else {
             return UCS_INPROGRESS;

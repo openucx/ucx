@@ -28,6 +28,8 @@ enum {
     UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
     UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
     UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
+    UCP_REQUEST_FLAG_EXTERNAL             = UCS_BIT(6),
+    UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7)
 };
 
 
@@ -60,6 +62,7 @@ typedef struct ucp_send_state {
  * Request in progress.
  */
 struct ucp_request {
+    ucs_status_t                  status;  /* Operation status */
     uint16_t                      flags;   /* Request flags */
 
     union {

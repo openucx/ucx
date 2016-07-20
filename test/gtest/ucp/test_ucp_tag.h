@@ -18,6 +18,8 @@ public:
 protected:
     struct request {
         bool                completed;
+        bool                external;
+        void                *req_mem;
         ucs_status_t        status;
         ucp_tag_recv_info_t info;
     };
@@ -33,6 +35,8 @@ protected:
     virtual void cleanup();
 
     static void request_init(void *request);
+
+    static request* request_alloc();
 
     static void request_release(struct request *req);
 
@@ -53,8 +57,20 @@ protected:
     request* recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
                      ucp_tag_t tag, ucp_tag_t tag_mask);
 
+    request* recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
+                         ucp_tag_t tag, ucp_tag_t tag_mask);
+
+    request* recv_cb_nb(void *buffer, size_t count, ucp_datatype_t dt,
+                        ucp_tag_t tag, ucp_tag_t tag_mask);
+
     ucs_status_t recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
                         ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
+
+    ucs_status_t recv_req_b(void *buffer, size_t count, ucp_datatype_t datatype,
+                            ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
+
+    ucs_status_t recv_cb_b(void *buffer, size_t count, ucp_datatype_t datatype,
+                           ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
 
     void wait(request *req);
 
@@ -78,7 +94,8 @@ protected:
     static ucp_generic_dt_ops test_dt_ops;
     static int dt_gen_start_count;
     static int dt_gen_finish_count;
-
+    bool   is_req_based_api;
+    static ucp_context_attr_t ctx_attr;
 public:
     int    count;
 };

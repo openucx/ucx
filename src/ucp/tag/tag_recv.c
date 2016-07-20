@@ -71,20 +71,16 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
     return UCS_INPROGRESS;
 }
 
-static inline ucp_request_t*
-ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
-                         ucp_datatype_t datatype)
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
+                          size_t count, ucp_datatype_t datatype,
+                          uint16_t req_flags)
 {
     ucp_dt_generic_t *dt_gen;
-    ucp_request_t *req;
-
-    req = ucp_request_get(worker);
-    if (req == NULL) {
-        return NULL;
-    }
-
-    req->flags             = UCP_REQUEST_FLAG_EXPECTED;
+    req->flags = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV | req_flags;
     req->recv.state.offset = 0;
+
     if ((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC) {
         dt_gen = ucp_dt_generic(datatype);
         req->recv.state.dt.generic.state = dt_gen->ops.start_unpack(dt_gen->context,
@@ -95,53 +91,55 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.info.sender_tag = 0;
     }
+}
 
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
+                         ucp_datatype_t datatype)
+{
+    ucp_request_t *req;
+
+    req = ucp_request_get(worker);
+    if (ucs_unlikely(req == NULL)) {
+        return NULL;
+    }
+
+    ucp_tag_recv_request_init(req, worker, buffer, count, datatype, 0);
     return req;
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_recv_request_completed(ucp_request_t *req, ucp_tag_recv_callback_t cb,
-                               ucs_status_t status, ucp_tag_recv_info_t *info,
-                               const char *function)
+ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
+                               ucp_tag_recv_info_t *info, const char *function)
 {
     ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                   function, req, req + 1, info->sender_tag, info->length,
                   ucs_status_string(status));
-    cb(req + 1, status, &req->recv.info);
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
                           "ucp_tag_recv_request_completed",
                           req, info->length);
-    ucp_request_put(req);
+
+    ucp_request_put(req, status);
 }
 
-ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
-                                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                                 ucp_tag_recv_callback_t cb)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
+                    uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                    ucp_request_t *req)
 {
     ucs_status_t status;
-    ucp_request_t *req;
     unsigned save_rreq = 1;
 
-    ucs_trace_req("recv_nb buffer %p count %zu tag %"PRIx64"/%"PRIx64, buffer,
-                  count, tag, tag_mask);
-
-    req = ucp_tag_recv_request_get(worker, buffer, count, datatype);
-    if (req == NULL) {
-        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-    }
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb",
-                          req, ucp_contig_dt_length(datatype, count));
-
-    req->recv.cb = cb;
+    ucs_trace_req("recv_nb%c buffer %p count %zu tag %"PRIx64"/%"PRIx64,
+                  (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
+                  buffer, count, tag, tag_mask);
 
     /* First, search in unexpected list */
     status = ucp_tag_search_unexp(worker, buffer, count, datatype, tag,
                                   tag_mask, req, &req->recv.info, &save_rreq);
     if (status != UCS_INPROGRESS) {
-        ucp_tag_recv_request_completed(req, cb, status, &req->recv.info,
-                                       "recv_nb");
+        return status;
     } else if (save_rreq) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
@@ -151,9 +149,63 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
         req->recv.tag      = tag;
         req->recv.tag_mask = tag_mask;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
-        ucs_trace_req("recv_nb returning expected request %p (%p)", req, req + 1);
+        ucs_trace_req("recv_nb%c returning expected request %p (%p)",
+                      (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
+                      req, req + 1);
     }
 
+    return status;
+}
+
+ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
+                              uintptr_t datatype, ucp_tag_t tag,
+                              ucp_tag_t tag_mask, void *request)
+{
+    ucp_request_t  *req = (ucp_request_t *)request - 1;
+    ucs_status_t status;
+
+    ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
+                              UCP_REQUEST_FLAG_EXTERNAL);
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr",
+                          req, ucp_contig_dt_length(datatype, count));
+
+    req->recv.cb  = NULL;
+    status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
+                                 tag_mask, req);
+
+    if (status != UCS_INPROGRESS) {
+        ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nbr");
+    }
+
+    return status;
+}
+
+ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
+                                 size_t count, uintptr_t datatype,
+                                 ucp_tag_t tag, ucp_tag_t tag_mask,
+                                 ucp_tag_recv_callback_t cb)
+{
+    ucp_request_t *req;
+    ucs_status_t status;
+
+    req = ucp_tag_recv_request_get(worker, buffer, count, datatype);
+    if (ucs_unlikely(req == NULL)) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb",
+                          req, ucp_contig_dt_length(datatype, count));
+
+    req->recv.cb = cb;
+
+    status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
+                                 tag_mask, req);
+
+    if (status != UCS_INPROGRESS) {
+        cb(req + 1, status, &req->recv.info);
+        ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nb");
+    }
     return req + 1;
 }
 
@@ -211,7 +263,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     }
 
     if (status != UCS_INPROGRESS) {
-        ucp_tag_recv_request_completed(req, cb, status, &req->recv.info,
+        cb(req + 1, status, &req->recv.info);
+        ucp_tag_recv_request_completed(req, status, &req->recv.info,
                                        "msg_recv_nb");
     } else if (save_rreq) {
         ucs_trace_req("msg_recv_nb returning inprogress request %p (%p)", req, req + 1);
