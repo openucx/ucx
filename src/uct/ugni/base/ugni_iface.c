@@ -148,7 +148,7 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
-int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *addr)
+int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, const uct_iface_addr_t *iface_addr)
 {
     return 1;
 }
