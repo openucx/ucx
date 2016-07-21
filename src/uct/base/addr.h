@@ -25,12 +25,4 @@ enum {
     UCT_AF_MAX
 };
 
-
-typedef struct uct_sockaddr_ugni {
-    UCT_SOCKADDR_COMMON (sgni_);
-    uint32_t   nic_addr;
-    uint32_t   domain_id;
-} UCS_S_PACKED uct_sockaddr_ugni_t;
-
-
 #endif

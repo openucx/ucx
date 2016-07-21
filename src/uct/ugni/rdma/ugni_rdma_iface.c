@@ -46,6 +46,7 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
     iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
     iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
+    iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = 0;
     iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT |
@@ -98,7 +99,7 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .iface_flush         = uct_ugni_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
     .iface_get_address   = uct_ugni_iface_get_address,
-    .iface_get_device_address = (void*)ucs_empty_function_return_success,
+    .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_is_reachable  = uct_ugni_iface_is_reachable,
     .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
     .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),

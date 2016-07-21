@@ -266,7 +266,7 @@ static void uct_ugni_md_close(uct_md_h md)
 static ucs_status_t uct_ugni_md_open(const char *md_name, const uct_md_config_t *md_config,
                                      uct_md_h *md_p)
 {
-    int domain_id;
+    uint16_t domain_id;
     ucs_status_t status = UCS_OK;
 
     pthread_mutex_lock(&uct_ugni_global_lock);

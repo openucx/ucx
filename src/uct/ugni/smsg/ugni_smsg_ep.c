@@ -154,6 +154,7 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     const uct_sockaddr_smsg_ugni_t *iface_addr = (const uct_sockaddr_smsg_ugni_t*)ep_addr;
+    const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)dev_addr;
     gni_smsg_attr_t *local_attr = (gni_smsg_attr_t*)&ep->smsg_attr->mbox_attr;
     uct_ugni_compact_smsg_attr_t *compact_remote_attr = (uct_ugni_compact_smsg_attr_t *)&iface_addr->smsg_compact_attr;
     gni_smsg_attr_t remote_attr;
@@ -164,7 +165,7 @@ ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
     uncompact_smsg_attr(ucs_derived_of(iface, uct_ugni_smsg_iface_t), compact_remote_attr, &remote_attr);
 
     pthread_mutex_lock(&uct_ugni_global_lock);
-    rc = ugni_connect_ep(iface, &iface_addr->super, &ep->super);
+    rc = ugni_connect_ep(iface, ugni_dev_addr, &iface_addr->super, &ep->super);
 
     if(UCS_OK != rc){
         ucs_error("Could not connect ep in smsg");

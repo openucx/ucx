@@ -16,14 +16,8 @@ typedef struct uct_ugni_iface {
     uct_ugni_device_t       *dev;
     gni_cdm_handle_t        cdm_handle;                  /**< Ugni communication domain */
     gni_nic_handle_t        nic_handle;                  /**< Ugni NIC handle */
-    uint32_t                pe_address;                  /**< PE address for the NIC that this
-                                                              function has attached to the
-                                                              communication domain. */
-    uint32_t                nic_addr;                    /**< PE address that is returned for the
-                                                              communication domain that this NIC
-                                                              is attached to. */
     gni_cq_handle_t         local_cq;                    /**< Completion queue */
-    int                     domain_id;                   /**< Id for UGNI domain creation */
+    uint16_t                domain_id;                   /**< Id for UGNI domain creation */
     uct_ugni_ep_t           *eps[UCT_UGNI_HASH_SIZE];    /**< Array of QPs */
     unsigned                outstanding;                 /**< Counter for outstanding packets
                                                               on the interface */
@@ -49,17 +43,11 @@ typedef struct uct_ugni_base_desc {
     int not_ready_to_free;
 } uct_ugni_base_desc_t;
 
-ucs_status_t uct_ugni_init_nic(int device_index,
-                               int *domain_id,
-                               gni_cdm_handle_t *cdm_handle,
-                               gni_nic_handle_t *nic_handle,
-                               uint32_t *address);
-
 ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface);
 ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface);
 
 ucs_status_t uct_ugni_init_nic(int device_index,
-                               int *domain_id,
+                               uint16_t *domain_id,
                                gni_cdm_handle_t *cdm_handle,
                                gni_nic_handle_t *nic_handle,
                                uint32_t *address);

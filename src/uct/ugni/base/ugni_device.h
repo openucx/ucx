@@ -33,8 +33,13 @@ typedef struct uct_ugni_device {
 
 ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *dev_p);
 
+typedef struct uct_devaddr_ugni_t {
+    uint32_t nic_addr;
+} UCS_S_PACKED uct_devaddr_ugni_t;
+
 void uct_ugni_device_destroy(uct_ugni_device_t *dev);
 
 void uct_ugni_device_get_resource(const char *tl_name, uct_ugni_device_t *dev,
                                   uct_tl_resource_desc_t *resource);
+ucs_status_t uct_ugni_iface_get_dev_address(uct_iface_t *tl_iface, uct_device_addr_t *addr);
 #endif

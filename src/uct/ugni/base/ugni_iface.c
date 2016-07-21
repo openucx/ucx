@@ -1,7 +1,7 @@
 #include "ugni_iface.h"
 #include <pmi.h>
 
-static unsigned ugni_domain_global_counter = 0;
+static uint16_t ugni_domain_global_counter = 0;
 
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
@@ -142,8 +142,6 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     uct_sockaddr_ugni_t *iface_addr = (uct_sockaddr_ugni_t*)addr;
 
-    iface_addr->sgni_family = UCT_AF_UGNI;
-    iface_addr->nic_addr    = iface->nic_addr;
     iface_addr->domain_id   = iface->domain_id;
     return UCS_OK;
 }
@@ -247,7 +245,7 @@ static ucs_status_t uct_ugni_fetch_pmi()
 }
 
 ucs_status_t uct_ugni_init_nic(int device_index,
-                               int *domain_id,
+                               uint16_t *domain_id,
                                gni_cdm_handle_t *cdm_handle,
                                gni_nic_handle_t *nic_handle,
                                uint32_t *address)
@@ -295,6 +293,7 @@ ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface)
 {
     ucs_status_t status;
     gni_return_t ugni_rc;
+    uint32_t pe_address;
 
     if(iface->activated) {
         return UCS_OK;
@@ -302,11 +301,13 @@ ucs_status_t ugni_activate_iface(uct_ugni_iface_t *iface)
 
     status = uct_ugni_init_nic(0, &iface->domain_id,
                                &iface->cdm_handle, &iface->nic_handle,
-                               &iface->pe_address);
+                               &pe_address);
     if (UCS_OK != status) {
         ucs_error("Failed to UGNI NIC, Error status: %d", status);
         return status;
     }
+
+    ucs_debug("Made ugni interface. iface->dev->nic_addr = %i iface->domain_id = %i", iface->dev->address, iface->domain_id);
 
     ugni_rc = GNI_CqCreate(iface->nic_handle, UCT_UGNI_LOCAL_CQ, 0,
                            GNI_CQ_NOBLOCK,
@@ -364,7 +365,6 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
                              tl_config UCS_STATS_ARG(NULL));
 
   self->dev      = dev;
-  self->nic_addr = dev->address;
 
   self->activated = false;
   self->outstanding = 0;
@@ -382,6 +382,7 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t){
 
     ugni_deactivate_iface(self);
+    ucs_arbiter_cleanup(&self->arbiter);
 }
 
 UCS_CLASS_DEFINE(uct_ugni_iface_t, uct_base_iface_t);
