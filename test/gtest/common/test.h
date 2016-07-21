@@ -96,6 +96,27 @@ public:
     UCS_TEST_BASE_IMPL;
 };
 
+/**
+ * UCT/UCP tests common storage for tests entities
+ */
+template <typename T>
+class entities_storage {
+public:
+    const ucs::ptr_vector<T>& entities() const {
+        return m_entities;
+    }
+
+    T& sender() {
+        return *m_entities.front();
+    }
+
+    T& receiver() {
+        return *m_entities.back();
+    }
+
+    ucs::ptr_vector<T> m_entities;
+};
+
 }
 
 #define UCS_TEST_SET_CONFIG(_dummy, _config) \

@@ -92,8 +92,7 @@ UCS_TEST_P(test_ucp_wireup_tag, address) {
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
 
-    entity *ent1 = create_entity();
-    status = ucp_address_pack(ent1->worker(), NULL, -1, order, &size, &buffer);
+    status = ucp_address_pack(sender().worker(), NULL, -1, order, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -106,9 +105,9 @@ UCS_TEST_P(test_ucp_wireup_tag, address) {
 
     ucp_address_unpack(buffer, &uuid, name, sizeof(name), &address_count,
                        &address_list);
-    EXPECT_EQ(ent1->worker()->uuid, uuid);
-    EXPECT_EQ(std::string(ucp_worker_get_name(ent1->worker())), std::string(name));
-    EXPECT_LE(address_count, static_cast<unsigned>(ent1->ucph()->num_tls));
+    EXPECT_EQ(sender().worker()->uuid, uuid);
+    EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
+    EXPECT_LE(address_count, static_cast<unsigned>(sender().ucph()->num_tls));
 
     /* TODO test addresses */
 
@@ -122,8 +121,7 @@ UCS_TEST_P(test_ucp_wireup_tag, empty_address) {
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
 
-    entity *ent1 = create_entity();
-    status = ucp_address_pack(ent1->worker(), NULL, 0, order, &size, &buffer);
+    status = ucp_address_pack(sender().worker(), NULL, 0, order, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
@@ -135,9 +133,9 @@ UCS_TEST_P(test_ucp_wireup_tag, empty_address) {
 
     ucp_address_unpack(buffer, &uuid, name, sizeof(name), &address_count,
                        &address_list);
-    EXPECT_EQ(ent1->worker()->uuid, uuid);
-    EXPECT_EQ(std::string(ucp_worker_get_name(ent1->worker())), std::string(name));
-    EXPECT_LE(address_count, ent1->ucph()->num_tls);
+    EXPECT_EQ(sender().worker()->uuid, uuid);
+    EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
+    EXPECT_LE(address_count, sender().ucph()->num_tls);
     EXPECT_EQ(0u, address_count);
 
     ucs_free(address_list);
@@ -146,106 +144,101 @@ UCS_TEST_P(test_ucp_wireup_tag, empty_address) {
 
 
 UCS_TEST_P(test_ucp_wireup_tag, one_sided_wireup) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
-    ent1->connect(ent2);
-    tag_send(ent1->ep(), ent2->worker());
-    ent1->flush_worker();
+    sender().connect(&receiver());
+    tag_send(sender().ep(), receiver().worker());
+    sender().flush_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, two_sided_wireup) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
 
-    ent1->connect(ent2);
-    ent2->connect(ent1);
+    sender().connect(&receiver());
+    receiver().connect(&sender());
 
-    tag_send(ent1->ep(), ent2->worker());
-    ent1->flush_worker();
-    tag_send(ent2->ep(), ent1->worker());
-    ent2->flush_worker();
+    tag_send(sender().ep(), receiver().worker());
+    sender().flush_worker();
+    tag_send(receiver().ep(), sender().worker());
+    receiver().flush_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_before) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
 
-    ent1->connect(ent2);
+    sender().connect(&receiver());
 
-    ucp_ep_connect_remote(ent1->ep());
+    ucp_ep_connect_remote(sender().ep());
 
     /* Send a reply */
-    ucp_ep_h ep = ucp_worker_get_reply_ep(ent2->worker(), ent1->worker()->uuid);
-    tag_send(ep, ent1->worker());
-    ent1->flush_worker();
+    ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(), sender().worker()->uuid);
+    tag_send(ep, sender().worker());
+    sender().flush_worker();
 
     ucp_ep_destroy(ep);
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_after) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
 
-    ent1->connect(ent2);
+    sender().connect(&receiver());
 
-    ucp_ep_connect_remote(ent1->ep());
+    ucp_ep_connect_remote(sender().ep());
 
     /* Make sure the wireup message arrives before sending a reply */
-    tag_send(ent1->ep(), ent2->worker());
-    ent1->flush_worker();
+    tag_send(sender().ep(), receiver().worker());
+    sender().flush_worker();
 
     /* Send a reply */
-    ucp_ep_h ep = ucp_worker_get_reply_ep(ent2->worker(), ent1->worker()->uuid);
-    tag_send(ep, ent1->worker());
-    ent1->flush_worker();
+    ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(), sender().worker()->uuid);
+    tag_send(ep, sender().worker());
+    sender().flush_worker();
 
     ucp_ep_destroy(ep);
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, stress_connect) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     for (int i = 0; i < 30; ++i) {
-        ent1->connect(ent2);
-        tag_send(ent1->ep(), ent2->worker(), 10000 / ucs::test_time_multiplier());
-        ent2->connect(ent1);
-        ent1->disconnect();
-        ent2->disconnect();
+        sender().connect(&receiver());
+        tag_send(sender().ep(), receiver().worker(), 10000 / ucs::test_time_multiplier());
+        receiver().connect(&sender());
+        sender().disconnect();
+        receiver().disconnect();
     }
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, stress_connect2) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        ent1->connect(ent2);
-        tag_send(ent1->ep(), ent2->worker(), 1);
-        ent2->connect(ent1);
-        ent1->disconnect();
-        ent2->disconnect();
+        sender().connect(&receiver());
+        tag_send(sender().ep(), receiver().worker(), 1);
+        if (&sender() != &receiver()) {
+            receiver().connect(&sender());
+        }
+        sender().disconnect();
+        receiver().disconnect();
     }
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, connect_disconnect) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
-    ent1->connect(ent2);
-    ent2->connect(ent1);
-    ent1->disconnect();
-    ent2->disconnect();
+    sender().connect(&receiver());
+    if (&sender() != &receiver()) {
+        receiver().connect(&sender());
+    }
+    sender().disconnect();
+    receiver().disconnect();
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, disconnect_nonexistent) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
-    ent1->connect(ent2);
-    ent2->destroy_worker();
-    ent1->disconnect();
+    sender().connect(&receiver());
+    receiver().destroy_worker();
+    sender().disconnect();
 }
 
 class test_ucp_wireup_rma : public ucp_test {
@@ -297,44 +290,36 @@ void test_ucp_wireup_rma::rma_send(ucp_ep_h from, ucp_worker_h to)
 }
 
 UCS_TEST_P(test_ucp_wireup_rma, one_sided_wireup) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
-    ent1->connect(ent2);
-    rma_send(ent1->ep(), ent2->worker());
-    ent1->flush_worker();
+    sender().connect(&receiver());
+    rma_send(sender().ep(), receiver().worker());
+    sender().flush_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup_rma, two_sided_wireup) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
+    sender().connect(&receiver());
+    if (&sender() != &receiver()) {
+        receiver().connect(&sender());
+    }
 
-    ent1->connect(ent2);
-    ent2->connect(ent1);
-
-    rma_send(ent1->ep(), ent2->worker());
-    ent1->flush_worker();
-    rma_send(ent2->ep(), ent1->worker());
-    ent2->flush_worker();
+    rma_send(sender().ep(), receiver().worker());
+    sender().flush_worker();
+    rma_send(receiver().ep(), sender().worker());
+    receiver().flush_worker();
 }
 
 UCS_TEST_P(test_ucp_wireup_rma, connect_disconnect) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
-    ent1->connect(ent2);
-    ent2->connect(ent1);
-    ent1->disconnect();
-    ent2->disconnect();
+    sender().connect(&receiver());
+    if (&sender() != &receiver()) {
+        receiver().connect(&sender());
+    }
+    sender().disconnect();
+    receiver().disconnect();
 }
 
 UCS_TEST_P(test_ucp_wireup_rma, disconnect_nonexistent) {
-    entity *ent1 = create_entity();
-    entity *ent2 = create_entity();
-
-    ent1->connect(ent2);
-    ent2->destroy_worker();
-    ent1->disconnect();
+    sender().connect(&receiver());
+    receiver().destroy_worker();
+    sender().disconnect();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_tag)

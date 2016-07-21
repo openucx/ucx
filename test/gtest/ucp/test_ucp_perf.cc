@@ -16,6 +16,9 @@ class test_ucp_perf : public ucp_test, public test_perf {
 public:
     using ucp_test::get_ctx_params;
 protected:
+    virtual void init() {
+        test_base::init(); /* Skip entities creation in ucp_test */
+    }
     static test_spec tests[];
 };
 

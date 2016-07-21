@@ -34,7 +34,7 @@ public:
 
         ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-        message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff,
+        message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff,
                                    is_recv_msg, &info);
         EXPECT_TRUE(message == NULL);
 
@@ -48,7 +48,7 @@ public:
 
         do {
             progress();
-            message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff,
+            message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff,
                                        is_recv_msg, &info);
         } while (message == NULL);
 
@@ -59,7 +59,7 @@ public:
             recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE,
                                0x1337, 0xffff);
         } else {
-            recv_req = (request*)ucp_tag_msg_recv_nb(receiver->worker(),
+            recv_req = (request*)ucp_tag_msg_recv_nb(receiver().worker(),
                                                      &recvbuf[0],recvbuf.size(),
                                                      DATATYPE, message, recv_callback);
             ASSERT_TRUE(!UCS_PTR_IS_ERR(recv_req));
@@ -95,12 +95,12 @@ public:
 
         int count = 0;
         for (;;) {
-             message = ucp_tag_probe_nb(receiver->worker(), 0, 0, 1, &info);
+             message = ucp_tag_probe_nb(receiver().worker(), 0, 0, 1, &info);
              if (message == NULL) {
                  return count;
              }
 
-             req = (request*)ucp_tag_msg_recv_nb(receiver->worker(),
+             req = (request*)ucp_tag_msg_recv_nb(receiver().worker(),
                                                  &recvbuf[0], recvbuf.size(),
                                                  DATATYPE, message, recv_callback);
              wait(req);
@@ -123,6 +123,9 @@ UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe) {
 }
 
 UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_send_probe (50000, 0, false, 1);
     test_send_probe (50000, 0, true,  1);
 }
@@ -133,12 +136,16 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     ucp_tag_message_h message;
     request *my_send_req, *my_recv_req;
 
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
+
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff, 1, &info);
     EXPECT_TRUE(message == NULL);
 
     /* sender - send the RTS */
@@ -150,14 +157,14 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     short_progress_loop();
 
     /* receiver - match the rts, remove it from unexpected and return it */
-    message = ucp_tag_probe_nb(receiver->worker(), 0x1337, 0xffff, 1, &info);
+    message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff, 1, &info);
     /* make sure that there was a match (RTS) */
     ASSERT_TRUE(message != NULL);
     EXPECT_EQ(sendbuf.size(),      info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
 
     /* receiver - process the rts and schedule a get operation */
-    my_recv_req = (request*)ucp_tag_msg_recv_nb(receiver->worker(), &recvbuf[0],
+    my_recv_req = (request*)ucp_tag_msg_recv_nb(receiver().worker(), &recvbuf[0],
                                                 recvbuf.size(), DATATYPE, message,
                                                 recv_callback);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
@@ -189,6 +196,10 @@ UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
     request *req;
     int recvd;
 
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
+
     sendbuf.resize(100, '1');
     recvbuf.resize(100, '0');
 
@@ -202,16 +213,16 @@ UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
             reqs.push_back(req);
         }
 
-        sender->progress(); /* progress only the sender */
+        sender().progress(); /* progress only the sender */
     }
 
     for (int i = 0; i < 1000; ++i) {
         ucs::safe_usleep(1000);
-        sender->progress();
+        sender().progress();
     }
 
     /* progress once */
-    ucp_worker_progress(receiver->worker());
+    ucp_worker_progress(receiver().worker());
 
     /* probe should not have too many messages here because we poll once */
     recvd = probe_all(recvbuf);

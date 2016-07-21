@@ -126,10 +126,8 @@ public:
     }
 
 protected:
-    void test_fence(send_func_t send1, send_func_t send2, size_t alignment){
+    void test_fence(send_func_t send1, send_func_t send2, size_t alignment) {
         static const size_t memheap_size = sizeof(uint64_t);
-        entity *pe0 = create_entity();
-        entity *pe1 = create_entity();
         ucs_status_t status;
 
         ucp_mem_h memh;
@@ -141,34 +139,36 @@ protected:
 
         uint32_t error = 0;
 
-        pe0->connect(pe1);
-        pe1->connect(pe0);
+        sender().connect(&receiver());
+        if (&sender() != &receiver()) {
+            receiver().connect(&sender());
+        }
 
         memheap = malloc(memheap_size);
 
-        status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
+        status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size, 0, &memh);
         ASSERT_UCS_OK(status);
 
         memset(memheap, 0, memheap_size);
 
-        status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
+        status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
         ASSERT_UCS_OK(status);
 
-        status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
+        status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
         ASSERT_UCS_OK(status);
 
         ucp_rkey_buffer_release(rkey_buffer);
 
-        run_workers(send1, send2, pe0, rkey, memheap, 1, &error);
+        run_workers(send1, send2, &sender(), rkey, memheap, 1, &error);
 
         EXPECT_EQ(error, (uint32_t)0);
 
         ucp_rkey_destroy(rkey);
 
-        pe0->disconnect();
-        pe1->disconnect();
+        sender().disconnect();
+        receiver().disconnect();
 
-        status = ucp_mem_unmap(pe1->ucph(), memh);
+        status = ucp_mem_unmap(receiver().ucph(), memh);
         ASSERT_UCS_OK(status);
 
         free(memheap);

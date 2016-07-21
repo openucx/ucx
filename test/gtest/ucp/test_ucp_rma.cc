@@ -23,7 +23,7 @@ public:
         ASSERT_UCS_OK_OR_INPROGRESS(status);
     }
 
-    void blocking_put(entity *e, size_t max_size, 
+    void blocking_put(entity *e, size_t max_size,
                       void *memheap_addr,
                       ucp_rkey_h rkey,
                       std::string& expected_data)
@@ -34,7 +34,7 @@ public:
         ASSERT_UCS_OK(status);
     }
 
-    void nonblocking_get_nbi(entity *e, size_t max_size, 
+    void nonblocking_get_nbi(entity *e, size_t max_size,
                              void *memheap_addr,
                              ucp_rkey_h rkey,
                              std::string& expected_data)
@@ -47,7 +47,7 @@ public:
         ASSERT_UCS_OK_OR_INPROGRESS(status);
     }
 
-    void blocking_get(entity *e, size_t max_size, 
+    void blocking_get(entity *e, size_t max_size,
                       void *memheap_addr,
                       ucp_rkey_h rkey,
                       std::string& expected_data)

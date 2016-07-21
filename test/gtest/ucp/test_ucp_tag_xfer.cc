@@ -140,6 +140,9 @@ UCS_TEST_P(test_ucp_tag_xfer, contig_exp) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_unexp) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, false, false);
 }
 
@@ -148,22 +151,37 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_exp) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_unexp) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_unexp_sync) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, false, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_exp_sync) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_sync) {
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, true);
 }
 
