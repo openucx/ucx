@@ -223,6 +223,28 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg);
 
 
 /**
+ * @brief Add memory events to the external events list.
+ *
+ * @param [in]  events    Bit-mask of events which are supposed to be handled
+ *                        externally.
+ *
+ * @note Setting a handler for external event will not trigger installing of
+ *       memory hooks (if they were not installed before). In this case, the
+ *       event handlers will only be called when the corresponding UCM function
+ *       is invoked (for instance ucp_vm_munmap).
+ */
+void ucm_set_external_event(int events);
+
+
+/**
+ * @brief Remove memory events from the external events list.
+ *
+ * @param [in]  events     Which events to remove from the external events list.
+ */
+void ucm_unset_external_event(int events);
+
+
+/**
  * @brief Call the original implementation of @ref mmap without triggering events.
  */
 void *ucm_orig_mmap(void *addr, size_t length, int prot, int flags, int fd,
@@ -258,6 +280,61 @@ int ucm_orig_shmdt(const void *shmaddr);
  * @brief Call the original implementation of @ref sbrk without triggering events.
  */
 void *ucm_orig_sbrk(intptr_t increment);
+
+
+/**
+ * @brief Call the original implementation of @ref mmap and all handlers
+ * associated with it.
+ */
+void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd,
+               off_t offset);
+
+
+/**
+ * @brief Call the original implementation of @ref munmap and all handlers
+ * associated with it.
+ */
+int ucm_munmap(void *addr, size_t length);
+
+
+/**
+ * @brief Call the handlers registered for aggregated VM_MMAP event.
+ */
+void ucm_vm_mmap(void *addr, size_t length);
+
+
+/**
+ * @brief Call the handlers registered for aggregated VM_MUNMAP event.
+ */
+void ucm_vm_munmap(void *addr, size_t length);
+
+
+/**
+ * @brief Call the original implementation of @ref mremap and all handlers
+ * associated with it.
+ */
+void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags);
+
+
+/**
+ * @brief Call the original implementation of @ref shmat and all handlers
+ * associated with it.
+ */
+void *ucm_shmat(int shmid, const void *shmaddr, int shmflg);
+
+
+/**
+ * @brief Call the original implementation of @ref shmdt and all handlers
+ * associated with it.
+ */
+int ucm_shmdt(const void *shmaddr);
+
+
+/**
+ * @brief Call the original implementation of @ref sbrk and all handlers
+ * associated with it.
+ */
+void *ucm_sbrk(intptr_t increment);
 
 
 END_C_DECLS

@@ -28,11 +28,4 @@ void ucm_event_handler_add(ucm_event_handler_t *handler);
 
 void ucm_event_handler_remove(ucm_event_handler_t *handler);
 
-void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-int ucm_munmap(void *addr, size_t length);
-void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags);
-void *ucm_shmat(int shmid, const void *shmaddr, int shmflg);
-int ucm_shmdt(const void *shmaddr);
-void *ucm_sbrk(intptr_t increment);
-
 #endif

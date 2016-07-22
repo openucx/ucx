@@ -68,7 +68,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         TIMEOUT=""
     fi
 
-    # Load newer doxygen 
+    # Load newer doxygen
     module load tools/doxygen-1.8.11
 
     echo "Build gtest"
@@ -95,7 +95,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     opt_perftest_common="-b $ucx_inst_ptest/test_types_short -b $ucx_inst_ptest/msg_pow2_short -w 1"
 
-    # show UCX libraries being used 
+    # show UCX libraries being used
     ldd $ucx_inst/bin/ucx_perftest
     echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 
@@ -149,13 +149,16 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     rm -f ./active_message
 
-    echo "Running memory hook on MPI"
-    mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks
+    for tname in malloc_hooks external_events flag_no_install; do
+        echo "Running memory hook (${tname}) on MPI"
+        mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks -t $tname
+    done
 
-    echo "Running memory hook on MPI with LD_PRELOAD"
+    echo "Running memory hook (malloc_hooks) on MPI with LD_PRELOAD"
     ucm_lib=$PWD/src/ucm/.libs/libucm.so
     ls -l $ucm_lib
-    mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks
+    mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
+
 
     module unload hpcx-gcc
 
