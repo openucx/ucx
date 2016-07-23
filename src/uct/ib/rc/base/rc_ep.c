@@ -48,7 +48,7 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               int qp_type, struct ibv_qp_cap *cap
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
-    ucs_status_t status; 
+    ucs_status_t status;
 
     txqp->unsignaled = 0;
     txqp->available  = 0;
@@ -426,8 +426,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
                 uct_invoke_completion(op->user_comp, status);
             }
         }
-        desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-        ucs_mpool_put(desc);
+        if (op->handler != uct_rc_ep_send_completion_proxy_handler) {
+            desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+            ucs_mpool_put(desc);
+        }
     }
 }
 
