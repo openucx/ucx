@@ -17,20 +17,8 @@ struct ucp_test_param {
     std::vector<std::string>  transports;
 };
 
-
-/**
- * UCP test
- */
-class ucp_test : public ucs::test_base, public ::testing::TestWithParam<ucp_test_param> {
-
+class ucp_test_base : public ucs::test_base {
 public:
-    UCS_TEST_BASE_IMPL;
-
-    ucp_test();
-    virtual ~ucp_test();
-
-    ucp_config_t* m_ucp_config;
-
     class entity {
     public:
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config);
@@ -60,8 +48,23 @@ public:
         ucs::handle<ucp_worker_h>  m_worker;
         ucs::handle<ucp_ep_h>      m_ep;
     };
+};
 
-    const ucs::ptr_vector<entity>& entities() const;
+/**
+ * UCP test
+ */
+class ucp_test : public ucp_test_base,
+                 public ::testing::TestWithParam<ucp_test_param>,
+                 public ucs::entities_storage<ucp_test_base::entity> {
+
+    friend class ucp_test_base::entity;
+
+public:
+    UCS_TEST_BASE_IMPL;
+    ucp_test();
+    virtual ~ucp_test();
+
+    ucp_config_t* m_ucp_config;
 
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
@@ -72,8 +75,9 @@ public:
     virtual void modify_config(const std::string& name, const std::string& value);
 
 protected:
+    virtual void init();
     virtual void cleanup();
-    entity* create_entity();
+    ucp_test_base::entity* create_entity(bool add_in_front = false);
     static ucp_params_t get_ctx_params();
     void progress() const;
     void short_progress_loop() const;
@@ -92,7 +96,6 @@ private:
                                                va_list ap);
 
     static std::string m_last_err_msg;
-    ucs::ptr_vector<entity> m_entities;
 };
 
 
@@ -100,7 +103,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
 
 /**
- * Instantiate the parametrized test case a combination of transports.
+ * Instantiate the parameterized test case a combination of transports.
  *
  * @param _test_case   Test case class, derived from uct_test.
  * @param _name        Instantiation name.
@@ -116,7 +119,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
 
 /**
- * Instantiate the parametrized test case for all transport combinations.
+ * Instantiate the parameterized test case for all transport combinations.
  *
  * @param _test_case  Test case class, derived from uct_test.
  */

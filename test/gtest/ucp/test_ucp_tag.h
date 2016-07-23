@@ -81,7 +81,6 @@ protected:
 
 public:
     int    count;
-    entity *sender, *receiver;
 };
 
 #endif

@@ -16,12 +16,12 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     static const int max_iter = 300 / ucs::test_time_multiplier();
     static const size_t size = ucs_max((size_t)rand() % (12*1024), alignment);
     static const size_t memheap_size = max_iter * size + alignment;
-    entity *pe0 = create_entity();
-    entity *pe1 = create_entity();
     ucs_status_t status;
 
-    pe0->connect(pe1);
-    pe1->connect(pe0);
+    sender().connect(&receiver());
+    if (&sender() != &receiver()) {
+        receiver().connect(&sender());
+    }
 
     ucp_mem_h memh;
     void *memheap;
@@ -32,18 +32,18 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
         memheap = NULL;
     }
 
-    status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
+    status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size, 0, &memh);
     ASSERT_UCS_OK(status);
 
     memset(memheap, 0, memheap_size);
 
     void *rkey_buffer;
     size_t rkey_buffer_size;
-    status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
+    status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
 
     ucp_rkey_h rkey;
-    status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
+    status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
 
     std::string expected_data[300];
@@ -56,7 +56,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
 
         ucs_assert(size * i + alignment <= memheap_size);
 
-        (this->*send)(pe0, size, (void*)((uintptr_t)memheap + alignment + i * size),
+        (this->*send)(&sender(), size, (void*)((uintptr_t)memheap + alignment + i * size),
                       rkey, expected_data[i]);
 
         ASSERT_UCS_OK(status);
@@ -64,9 +64,9 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     if (is_ep_flush) {
-        pe0->flush_ep();
+        sender().flush_ep();
     } else {
-        pe0->flush_worker();
+        sender().flush_worker();
     }
 
     for (int i = 0; i < max_iter; ++i) {
@@ -75,13 +75,13 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 
     ucp_rkey_destroy(rkey);
-    pe1->flush_worker();
+    receiver().flush_worker();
 
-    pe0->disconnect();
-    pe1->disconnect();
+    sender().disconnect();
+    receiver().disconnect();
 
     ucp_rkey_buffer_release(rkey_buffer);
-    status = ucp_mem_unmap(pe1->ucph(), memh);
+    status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);
 
     if (malloc_allocate) {
@@ -93,13 +93,13 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
                                           bool malloc_allocate, bool is_ep_flush)
 {
     static const size_t memheap_size = 3 * 1024;
-    entity *pe0 = create_entity();
-    entity *pe1 = create_entity();
     ucs_status_t status;
     size_t size;
 
-    pe0->connect(pe1);
-    pe1->connect(pe0);
+    sender().connect(&receiver());
+    if (&sender() != &receiver()) {
+        receiver().connect(&sender());
+    }
 
     ucp_mem_h memh;
     void *memheap;
@@ -110,18 +110,18 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
         memheap = NULL;
     }
 
-    status = ucp_mem_map(pe1->ucph(), &memheap, memheap_size, 0, &memh);
+    status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size, 0, &memh);
     ASSERT_UCS_OK(status);
 
     memset(memheap, 0, memheap_size);
 
     void *rkey_buffer;
     size_t rkey_buffer_size;
-    status = ucp_rkey_pack(pe1->ucph(), memh, &rkey_buffer, &rkey_buffer_size);
+    status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
     ASSERT_UCS_OK(status);
 
     ucp_rkey_h rkey;
-    status = ucp_ep_rkey_unpack(pe0->ep(), rkey_buffer, &rkey);
+    status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
     ASSERT_UCS_OK(status);
 
     ucp_rkey_buffer_release(rkey_buffer);
@@ -141,13 +141,13 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
         ucs::fill_random(expected_data.begin(), expected_data.end());
 
-        (this->*send)(pe0, size, (void*)((uintptr_t)memheap + offset),
+        (this->*send)(&sender(), size, (void*)((uintptr_t)memheap + offset),
                       rkey, expected_data);
 
         if (is_ep_flush) {
-            pe0->flush_ep();
+            sender().flush_ep();
         } else {
-            pe0->flush_worker();
+            sender().flush_worker();
         }
 
         EXPECT_EQ(expected_data,
@@ -157,12 +157,12 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     }
 
     ucp_rkey_destroy(rkey);
-    pe1->flush_worker();
+    receiver().flush_worker();
 
-    pe0->disconnect();
-    pe1->disconnect();
+    sender().disconnect();
+    receiver().disconnect();
 
-    status = ucp_mem_unmap(pe1->ucph(), memh);
+    status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);
 
     if (malloc_allocate) {

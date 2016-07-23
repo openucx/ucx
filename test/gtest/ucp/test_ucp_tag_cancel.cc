@@ -26,7 +26,7 @@ UCS_TEST_P(test_ucp_tag_cancel, cancel_exp) {
         UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
     }
 
-    ucp_request_cancel(receiver->worker(), req);
+    ucp_request_cancel(receiver().worker(), req);
     wait(req);
 
     EXPECT_EQ(UCS_ERR_CANCELED, req->status);

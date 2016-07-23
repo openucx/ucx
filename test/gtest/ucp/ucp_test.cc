@@ -26,10 +26,6 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
     return os;
 }
 
-const ucs::ptr_vector<ucp_test::entity>& ucp_test::entities() const {
-    return m_entities;
-}
-
 ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
@@ -50,9 +46,24 @@ void ucp_test::cleanup() {
     m_entities.clear();
 }
 
-ucp_test::entity* ucp_test::create_entity() {
+void ucp_test::init() {
+    test_base::init();
+
+    const ucp_test_param &test_param = GetParam();
+
+    create_entity();
+    if ("\\self" != test_param.transports.front()) {
+        create_entity();
+    }
+}
+
+ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
     entity *e = new entity(GetParam(), m_ucp_config);
-    m_entities.push_back(e);
+    if (add_in_front) {
+        m_entities.push_front(e);
+    } else {
+        m_entities.push_back(e);
+    }
     return e;
 }
 
@@ -198,9 +209,9 @@ void ucp_test::restore_errors()
     ucs_log_pop_handler();
 }
 
-ucp_test::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_config) {
+ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_config) {
 
-    set_ucp_config(ucp_config, test_param);
+    ucp_test::set_ucp_config(ucp_config, test_param);
 
     UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
                            &test_param.ctx_params, ucp_config);
@@ -209,7 +220,7 @@ ucp_test::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_con
                            ucp_worker_create, m_ucph, UCS_THREAD_MODE_MULTI);
 }
 
-void ucp_test::entity::connect(const ucp_test::entity* other) {
+void ucp_test_base::entity::connect(const entity* other) {
     ucs_status_t status;
     ucp_address_t *address;
     size_t address_length;
@@ -218,12 +229,12 @@ void ucp_test::entity::connect(const ucp_test::entity* other) {
     ASSERT_UCS_OK(status);
 
     ucp_ep_h ep;
-    disable_errors();
+    ucp_test::disable_errors();
     status = ucp_ep_create(m_worker, address, &ep);
-    restore_errors();
+    ucp_test::restore_errors();
     if (status == UCS_ERR_UNREACHABLE) {
         ucp_worker_release_address(other->worker(), address);
-        UCS_TEST_SKIP_R(m_last_err_msg);
+        UCS_TEST_SKIP_R(ucp_test::m_last_err_msg);
     }
 
     ASSERT_UCS_OK(status);
@@ -232,43 +243,43 @@ void ucp_test::entity::connect(const ucp_test::entity* other) {
     ucp_worker_release_address(other->worker(), address);
 }
 
-void ucp_test::entity::flush_worker() const {
+void ucp_test_base::entity::flush_worker() const {
     ucs_status_t status = ucp_worker_flush(worker());
     ASSERT_UCS_OK(status);
 }
 
-void ucp_test::entity::flush_ep() const {
+void ucp_test_base::entity::flush_ep() const {
     ucs_status_t status = ucp_ep_flush(ep());
     ASSERT_UCS_OK(status);
 }
 
-void ucp_test::entity::fence() const {
+void ucp_test_base::entity::fence() const {
     ucs_status_t status = ucp_worker_fence(worker());
     ASSERT_UCS_OK(status);
 }
 
-void ucp_test::entity::disconnect() {
+void ucp_test_base::entity::disconnect() {
     m_ep.reset();
 }
 
-void ucp_test::entity::destroy_worker() {
+void ucp_test_base::entity::destroy_worker() {
     disconnect();
     m_worker.reset();
 }
 
-ucp_ep_h ucp_test::entity::ep() const {
+ucp_ep_h ucp_test_base::entity::ep() const {
     return m_ep;
 }
 
-ucp_worker_h ucp_test::entity::worker() const {
+ucp_worker_h ucp_test_base::entity::worker() const {
     return m_worker;
 }
 
-ucp_context_h ucp_test::entity::ucph() const {
+ucp_context_h ucp_test_base::entity::ucph() const {
     return m_ucph;
 }
 
-void ucp_test::entity::progress()
+void ucp_test_base::entity::progress()
 {
     ucp_worker_progress(m_worker);
 }

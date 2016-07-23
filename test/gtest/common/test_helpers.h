@@ -160,6 +160,10 @@ public:
         m_vec.push_back(ptr);
     }
 
+    void push_front(T* ptr) {
+        m_vec.insert(m_vec.begin(), ptr);
+    }
+
     virtual void clear() {
         while (!m_vec.empty()) {
             T* ptr = m_vec.back();
@@ -174,6 +178,18 @@ public:
 
     const_iterator end() const {
         return m_vec.end();
+    }
+
+    T* front() {
+        return m_vec.front();
+    }
+
+    T* back() {
+        return m_vec.back();
+    }
+
+    size_t size() const {
+        return m_vec.size();
     }
 
 protected:

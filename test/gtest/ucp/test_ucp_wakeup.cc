@@ -39,21 +39,19 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const uint64_t TAG = 0xdeadbeef;
     uint64_t send_data = 0x12121212;
-    entity *sender   = create_entity();
-    entity *receiver = create_entity();
     void *req;
 
     polled.events = POLLIN;
-    sender->connect(receiver);
+    sender().connect(&receiver());
 
-    recv_worker = receiver->worker();
+    recv_worker = receiver().worker();
     ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
 
     polled.fd = recv_efd;
     EXPECT_EQ(poll(&polled, 1, 0), 0);
     ASSERT_UCS_OK(ucp_worker_arm(recv_worker));
 
-    req = ucp_tag_send_nb(sender->ep(), &send_data, sizeof(send_data), DATATYPE,
+    req = ucp_tag_send_nb(sender().ep(), &send_data, sizeof(send_data), DATATYPE,
                           TAG, send_completion);
     if (UCS_PTR_IS_PTR(req)) {
         wait(req);
@@ -65,12 +63,12 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     ASSERT_UCS_OK(ucp_worker_arm(recv_worker));
 
     uint64_t recv_data = 0;
-    req = ucp_tag_recv_nb(receiver->worker(), &recv_data, sizeof(recv_data),
+    req = ucp_tag_recv_nb(receiver().worker(), &recv_data, sizeof(recv_data),
                           DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
     wait(req);
 
     close(recv_efd);
-    ucp_worker_flush(sender->worker());
+    ucp_worker_flush(sender().worker());
     EXPECT_EQ(send_data, recv_data);
 }
 
@@ -79,11 +77,10 @@ UCS_TEST_P(test_ucp_wakeup, signal)
     int efd;
     ucp_worker_h worker;
     struct pollfd polled;
-    entity *entity   = create_entity();
 
     polled.events = POLLIN;
 
-    worker = entity->worker();
+    worker = sender().worker();
     ASSERT_UCS_OK(ucp_worker_get_efd(worker, &efd));
 
     polled.fd = efd;
