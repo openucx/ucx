@@ -253,3 +253,35 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                             resources_p, num_resources_p);
 }
 
+
+static inline ucs_status_t uct_dc_iface_flush_dcis(uct_dc_iface_t *iface) 
+{
+    int i;
+    int is_flush_done = 1;
+
+    for (i = 0; i < iface->tx.ndci; i++) {
+        if (uct_dc_iface_flush_dci(iface, i) != UCS_OK) {
+            is_flush_done = 0;
+        }
+    }
+    return is_flush_done ? UCS_OK : UCS_INPROGRESS;
+}
+
+ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
+    ucs_status_t status;
+    
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+    status = uct_dc_iface_flush_dcis(iface);
+    if (status == UCS_OK) {
+        UCT_TL_IFACE_STAT_FLUSH(&iface->super.super.super);
+    } 
+    else if (status == UCS_INPROGRESS) {
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super.super);
+    }
+    return status;
+}
+

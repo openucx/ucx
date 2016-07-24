@@ -13,16 +13,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 
-
-#define UCT_RC_MLX5_MAX_BB   4 /* Max number of BB per WQE */
-
-
-enum {
-    UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
-    UCT_RC_MLX5_IFACE_STAT_RX_INL_64,
-    UCT_RC_MLX5_IFACE_STAT_LAST
-};
-
+#include "rc_mlx5_common.h"
 
 /**
  * RC mlx5 interface configuration
@@ -33,29 +24,6 @@ typedef struct uct_rc_mlx5_iface_config {
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
 
-
-/**
- * SRQ segment
- *
- * We add some SW book-keeping information in the unused HW fields:
- *  - next_hole - points to the next out-of-order completed segment
- *  - desc      - the receive descriptor.
- *
- */
-typedef struct uct_rc_mlx5_srq_seg {
-    union {
-        struct mlx5_wqe_srq_next_seg   mlx5_srq;
-        struct {
-            uint8_t                    rsvd0[2];
-            uint16_t                   next_wqe_index; /* Network byte order */
-            uint8_t                    signature;
-            uint8_t                    rsvd1[2];
-            uint8_t                    ooo;
-            uct_ib_iface_recv_desc_t   *desc;          /* Host byte order */
-        } srq;
-    };
-    struct mlx5_wqe_data_seg           dptr;
-} uct_rc_mlx5_srq_seg_t;
 
 
 /**
@@ -75,27 +43,11 @@ typedef struct uct_rc_mlx5_ep {
  * RC communication interface
  */
 typedef struct {
-    uct_rc_iface_t         super;
-
+    uct_rc_iface_t              super;
+    uct_rc_mlx5_iface_common_t  mlx5_common;
     struct {
-        uct_ib_mlx5_cq_t   cq;
-        ucs_mpool_t        atomic_desc_mp;
         uint16_t           bb_max;     /* limit number of outstanding WQE BBs */
     } tx;
-
-    struct {
-        uct_ib_mlx5_cq_t   cq;
-        void               *buf;
-        volatile uint32_t  *db;
-        uint16_t           free_idx;   /* what is completed contiguously */
-        uint16_t           ready_idx;  /* what is ready to be posted to hw */
-        uint16_t           sw_pi;      /* what is posted to hw */
-        uint16_t           mask;
-        uint16_t           tail;       /* tail in the driver */
-    } rx;
-
-    UCS_STATS_NODE_DECLARE(stats);
-
 } uct_rc_mlx5_iface_t;
 
 
@@ -168,7 +120,5 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_rc_ep_t *rc_ep);
 
 void uct_rc_mlx5_iface_progress(void *arg);
-
-void uct_rc_mlx5_iface_clean_rx(uct_rc_mlx5_iface_t *iface);
 
 #endif

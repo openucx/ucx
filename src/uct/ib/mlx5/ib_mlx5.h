@@ -45,6 +45,9 @@
 #endif
 
 
+#define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
+                                  sizeof(struct mlx5_wqe_data_seg))
+
 typedef struct uct_ib_mlx5_qp_info {
     uint32_t           qpn;           /* QP number */
     volatile uint32_t  *dbrec;        /* QP doorbell record in RAM */
@@ -70,6 +73,15 @@ typedef struct uct_ib_mlx5_srq_info {
     unsigned           tail;
 } uct_ib_mlx5_srq_info_t;
 
+typedef struct uct_ib_mlx5_srq {
+    void               *buf;
+    volatile uint32_t  *db;
+    uint16_t           free_idx;   /* what is completed contiguously */
+    uint16_t           ready_idx;  /* what is ready to be posted to hw */
+    uint16_t           sw_pi;      /* what is posted to hw */
+    uint16_t           mask;
+    uint16_t           tail;       /* tail in the driver */
+} uct_ib_mlx5_srq_t;
 
 typedef struct uct_ib_mlx5_cq {
     void               *cq_buf;
@@ -78,6 +90,29 @@ typedef struct uct_ib_mlx5_cq {
     unsigned           cqe_size_log;
 } uct_ib_mlx5_cq_t;
 
+
+/**
+ * SRQ segment
+ *
+ * We add some SW book-keeping information in the unused HW fields:
+ *  - next_hole - points to the next out-of-order completed segment
+ *  - desc      - the receive descriptor.
+ *
+ */
+typedef struct uct_rc_mlx5_srq_seg {
+    union {
+        struct mlx5_wqe_srq_next_seg   mlx5_srq;
+        struct {
+            uint8_t                    rsvd0[2];
+            uint16_t                   next_wqe_index; /* Network byte order */
+            uint8_t                    signature;
+            uint8_t                    rsvd1[2];
+            uint8_t                    ooo;
+            uct_ib_iface_recv_desc_t   *desc;          /* Host byte order */
+        } srq;
+    };
+    struct mlx5_wqe_data_seg           dptr;
+} uct_ib_mlx5_srq_seg_t;
 
 struct uct_ib_mlx5_atomic_masked_cswap32_seg {
     uint32_t           swap;
@@ -312,6 +347,37 @@ uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, void *seg_base, size_t seg_len)
     return rseg;
 }
 
+static unsigned UCS_F_ALWAYS_INLINE uct_ib_mlx5_ctrl_seg_size(int qp_type)
+{
+    switch (qp_type) {
+        case IBV_QPT_RC:
+            return sizeof(struct mlx5_wqe_ctrl_seg);
+        case IBV_EXP_QPT_DC_INI:
+            return sizeof(struct mlx5_wqe_ctrl_seg) + 
+                   sizeof(struct mlx5_wqe_datagram_seg);
+        default:
+            ucs_fatal("unknown qp type %d", qp_type);
+    }
+    return 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_raddr,
+                            uct_rkey_t rdma_rkey)
+{
+#ifdef __SSE4_2__
+    *(__m128i*)raddr = _mm_shuffle_epi8(
+                _mm_set_epi64x(rdma_rkey, rdma_raddr),
+                _mm_set_epi8(0, 0, 0, 0,            /* reserved */
+                             8, 9, 10, 11,          /* rkey */
+                             0, 1, 2, 3, 4, 5, 6, 7 /* rdma_raddr */
+                             ));
+#else
+    raddr->raddr = htonll(rdma_raddr);
+    raddr->rkey  = htonl(rdma_rkey);
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
                           struct mlx5_wqe_av *av,
@@ -433,6 +499,14 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     /* Flip BF register */
     wq->bf->reg.addr ^= UCT_IB_MLX5_BF_REG_SIZE;
     return num_bb;
+}
+
+
+static inline uct_ib_mlx5_srq_seg_t *
+uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
+{
+    ucs_assert(index <= srq->mask);
+    return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
 }
 
 #endif
