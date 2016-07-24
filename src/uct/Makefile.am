@@ -25,14 +25,12 @@ noinst_HEADERS = \
 	base/addr.h \
 	base/uct_md.h \
 	base/uct_iface.h \
-	base/uct_ep.h \
 	base/uct_log.h
 
 libuct_la_SOURCES = \
 	base/uct_md.c \
 	base/uct_mem.c \
-	base/uct_iface.c \
-	base/uct_ep.c
+	base/uct_iface.c
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
@@ -179,6 +177,7 @@ endif
 # FIXME these should be done conditionally
 noinst_HEADERS += \
     sm/base/sm_iface.h \
+    sm/base/sm_ep.h \
     sm/mm/mm_iface.h \
     sm/mm/mm_ep.h \
     sm/mm/mm_def.h \
@@ -186,6 +185,7 @@ noinst_HEADERS += \
 
 libuct_la_SOURCES += \
     sm/base/sm_iface.c \
+    sm/base/sm_ep.c \
     sm/mm/mm_iface.c \
     sm/mm/mm_ep.c \
     sm/mm/mm_md.c \
@@ -228,13 +228,13 @@ libuct_la_SOURCES += \
 
 #Loopback interface (self)
 noinst_HEADERS += \
-	self/self_md.h \
-	self/self_iface.h \
-	self/self_ep.h
+	sm/self/self_md.h \
+	sm/self/self_iface.h \
+	sm/self/self_ep.h
 
 libuct_la_SOURCES += \
-	self/self_md.c \
-	self/self_iface.c \
-	self/self_ep.c
+	sm/self/self_md.c \
+	sm/self/self_iface.c \
+	sm/self/self_ep.c
 
 endif

@@ -7,7 +7,7 @@
 #include "self_md.h"
 #include "self_ep.h"
 
-#include <uct/base/uct_ep.h>
+#include <uct/sm/base/sm_ep.h>
 #include <ucs/type/class.h>
 
 static ucs_config_field_t uct_self_iface_config_table[] = {
@@ -112,17 +112,17 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .ep_am_short              = uct_self_ep_am_short,
     .ep_am_bcopy              = uct_self_ep_am_bcopy,
-    .ep_put_short             = uct_base_ep_put_short,
-    .ep_put_bcopy             = uct_base_ep_put_bcopy,
-    .ep_get_bcopy             = uct_base_ep_get_bcopy,
-    .ep_atomic_add64          = uct_base_ep_atomic_add64,
-    .ep_atomic_fadd64         = uct_base_ep_atomic_fadd64,
-    .ep_atomic_cswap64        = uct_base_ep_atomic_cswap64,
-    .ep_atomic_swap64         = uct_base_ep_atomic_swap64,
-    .ep_atomic_add32          = uct_base_ep_atomic_add32,
-    .ep_atomic_fadd32         = uct_base_ep_atomic_fadd32,
-    .ep_atomic_cswap32        = uct_base_ep_atomic_cswap32,
-    .ep_atomic_swap32         = uct_base_ep_atomic_swap32,
+    .ep_put_short             = uct_sm_ep_put_short,
+    .ep_put_bcopy             = uct_sm_ep_put_bcopy,
+    .ep_get_bcopy             = uct_sm_ep_get_bcopy,
+    .ep_atomic_add64          = uct_sm_ep_atomic_add64,
+    .ep_atomic_fadd64         = uct_sm_ep_atomic_fadd64,
+    .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
+    .ep_atomic_swap64         = uct_sm_ep_atomic_swap64,
+    .ep_atomic_add32          = uct_sm_ep_atomic_add32,
+    .ep_atomic_fadd32         = uct_sm_ep_atomic_fadd32,
+    .ep_atomic_cswap32        = uct_sm_ep_atomic_cswap32,
+    .ep_atomic_swap32         = uct_sm_ep_atomic_swap32,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
 };
