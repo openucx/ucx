@@ -361,7 +361,16 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                      * We do it by finding the message size at which rndv and eager_zcopy get
                      * the same latency. Starting this message size (rndv_thresh), rndv's latency
                      * would be lower and the reached bandwidth would be higher.
-                     * The used latency functions for eager_zcopy and rndv are specified in the UCX wiki */
+                     * The latency function for eager_zcopy is:
+                     * [ reg_cost.overhead + size * md_attr->reg_cost.growth +
+                     * max(size/bw , size/bcopy_bw) + overhead ]
+                     * The latency function for Rendezvous is:
+                     * [ reg_cost.overhead + size * md_attr->reg_cost.growth + latency + overhead +
+                     *   reg_cost.overhead + size * md_attr->reg_cost.growth + overhead + latency +
+                     *   size/bw + latency + overhead + latency ]
+                     * Isolating the 'size' yields the rndv_thresh.
+                     * The used latency functions for eager_zcopy and rndv are also specified in
+                     * the UCX wiki */
                     rndv_thresh = ((2 * iface_attr->overhead) + (4 * iface_attr->latency)
                                    + md_attr->reg_cost.overhead) /
                                   (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -

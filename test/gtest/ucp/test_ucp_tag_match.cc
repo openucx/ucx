@@ -519,6 +519,10 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
+    if (&sender() == &receiver()) {
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
+
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
     /* receiver - put the receive request into expected */
