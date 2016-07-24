@@ -350,13 +350,13 @@ uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, void *seg_base, size_t seg_len)
 static unsigned UCS_F_ALWAYS_INLINE uct_ib_mlx5_ctrl_seg_size(int qp_type)
 {
     switch (qp_type) {
-        case IBV_QPT_RC:
-            return sizeof(struct mlx5_wqe_ctrl_seg);
-        case IBV_EXP_QPT_DC_INI:
-            return sizeof(struct mlx5_wqe_ctrl_seg) + 
-                   sizeof(struct mlx5_wqe_datagram_seg);
-        default:
-            ucs_fatal("unknown qp type %d", qp_type);
+    case IBV_QPT_RC:
+        return sizeof(struct mlx5_wqe_ctrl_seg);
+    case IBV_EXP_QPT_DC_INI:
+        return sizeof(struct mlx5_wqe_ctrl_seg) + 
+               sizeof(struct mlx5_wqe_datagram_seg);
+    default:
+        ucs_fatal("unknown qp type %d", qp_type);
     }
     return 0;
 }

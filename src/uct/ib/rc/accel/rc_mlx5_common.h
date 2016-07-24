@@ -192,7 +192,7 @@ done:
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txqp_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
+uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                            uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size, 
                            struct mlx5_wqe_av *av, int qp_type)
 {
@@ -314,7 +314,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
         ucs_fatal("invalid send opcode");
     }
 
-    uct_rc_mlx5_txqp_post_send(iface, txqp, txwq, opcode, 0, sig_flag, wqe_size, av, qp_type);
+    uct_rc_mlx5_common_post_send(iface, txqp, txwq, opcode, 0, sig_flag, wqe_size, av, qp_type);
 }
 
 
@@ -510,7 +510,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_ml
         ucs_fatal("invalid send opcode");
     }
 
-    uct_rc_mlx5_txqp_post_send(iface, txqp, txwq, (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
+    uct_rc_mlx5_common_post_send(iface, txqp, txwq, (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
                                opmod, signal, wqe_size, av, qp_type);
 }
 

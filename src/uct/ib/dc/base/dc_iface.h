@@ -102,7 +102,6 @@ static inline ucs_arbiter_t *uct_dc_iface_dci_waitq(uct_dc_iface_t *iface)
     return &iface->super.tx.arbiter;
 }
 
-
 static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci) 
 {
     uct_rc_txqp_t *txqp;
@@ -114,13 +113,10 @@ static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci
     }
     ucs_trace_data("dci %d is not flushed %d/%d", dci, 
                     txqp->available, iface->super.config.tx_qp_len);
-    if (uct_rc_txqp_unsignaled(txqp) != 0) { 
-        /* TODO */
-        ucs_fatal("unsignalled send is not supported!!!");
-    }
+    ucs_assertv(uct_rc_txqp_unsignaled(txqp) == 0, 
+                "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
 }
-
 
 ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 

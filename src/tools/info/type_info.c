@@ -40,6 +40,15 @@
 #  endif
 #endif
 
+#if HAVE_TL_DC
+#  include <uct/ib/dc/base/dc_iface.h>
+#  include <uct/ib/dc/base/dc_ep.h>
+#  include <uct/ib/dc/verbs/dc_verbs.h>
+#  if HAVE_MLX5_HW
+#    include <uct/ib/dc/accel/dc_mlx5.h>
+#  endif
+#endif
+
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_def.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
@@ -154,7 +163,7 @@ void print_type_info(const char * tl_name)
     }
 
 #if HAVE_TL_RC
-    if (tl_name == NULL || !strcasecmp(tl_name, "rc_verbs") ||
+    if (tl_name == NULL || !strcasecmp(tl_name, "rc") ||
         !strcasecmp(tl_name, "rc_mlx5"))
     {
         printf("RC:\n");
@@ -177,6 +186,31 @@ void print_type_info(const char * tl_name)
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_ep_t);
             PRINT_SIZE(uct_rc_mlx5_iface_config_t);
+            PRINT_SIZE(uct_rc_mlx5_iface_t);
+        }
+#endif
+        printf("\n");
+    }
+#endif
+
+#if HAVE_TL_DC
+    if (tl_name == NULL || !strcasecmp(tl_name, "dc") ||
+        !strcasecmp(tl_name, "dc_mlx5"))
+    {
+        printf("DC:\n");
+        PRINT_SIZE(uct_dc_ep_t);
+        PRINT_SIZE(uct_dc_iface_t);
+        PRINT_SIZE(uct_dc_iface_config_t);
+
+        if (tl_name == NULL || !strcasecmp(tl_name, "dc")) {
+            PRINT_SIZE(uct_dc_verbs_ep_t);
+            PRINT_SIZE(uct_dc_verbs_iface_t);
+        }
+
+#if HAVE_MLX5_HW
+        if (tl_name == NULL || !strcasecmp(tl_name, "dc_mlx5")) {
+            PRINT_SIZE(uct_dc_mlx5_ep_t);
+            PRINT_SIZE(uct_dc_mlx5_iface_t);
         }
 #endif
         printf("\n");

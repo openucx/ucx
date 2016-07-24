@@ -76,7 +76,7 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                       UCT_IFACE_FLAG_ATOMIC_FADD32|
                                       UCT_IFACE_FLAG_ATOMIC_SWAP32|
                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32|
-                                      UCT_IFACE_FLAG_PENDING |
+                                      UCT_IFACE_FLAG_PENDING|
                                       UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     return UCS_OK;

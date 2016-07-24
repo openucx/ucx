@@ -78,7 +78,6 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     return count;
 }
 
-
 ucs_status_t uct_rc_mlx5_iface_srq_init(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
     uct_ib_mlx5_srq_info_t srq_info;
@@ -126,7 +125,6 @@ ucs_status_t uct_rc_mlx5_iface_srq_init(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t
     return UCS_OK;
 }
 
-
 void uct_rc_mlx5_iface_srq_cleanup(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
 {
     uct_ib_mlx5_srq_info_t srq_info;
@@ -152,7 +150,6 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, uc
                                            uct_rc_iface_config_t *config)
 {
     ucs_status_t status;
-
 
     status = uct_ib_mlx5_get_cq(rc_iface->super.send_cq, &iface->tx.cq);
     if (status != UCS_OK) {
