@@ -125,6 +125,7 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq, size_t size,
     cbq->end           = cbq->start;
     ucs_callbackq_priv(cbq)->async = async;
     ucs_spinlock_init(&ucs_callbackq_priv(cbq)->lock);
+    ucs_list_head_init(&cbq->slow_path);
     return UCS_OK;
 }
 
@@ -247,3 +248,73 @@ ucs_status_t ucs_callbackq_remove_safe(ucs_callbackq_t *cbq, ucs_callback_t cb,
     ucs_callbackq_leave(cbq);
     return UCS_OK;
 }
+
+void ucs_callbackq_slow_elem_init(ucs_callbackq_slow_elem_t *elem)
+{
+#if ENABLE_ASSERT
+    elem->is_added = 0;
+#endif
+}
+
+static void ucs_callbackq_slow_path_cb(void *arg)
+{
+    ucs_callbackq_t *cbq = arg;
+    ucs_callbackq_slow_elem_t *elem, *tmp_elem;
+
+    ucs_callbackq_enter(cbq);
+
+    /* TODO avoid locks on every iteration. For instance implement
+     * lazy remove with additional list of elements to be removed. */
+    ucs_list_for_each_safe(elem, tmp_elem, &cbq->slow_path, list) {
+        ucs_callbackq_leave(cbq);
+        elem->cb(elem);
+        ucs_callbackq_enter(cbq);
+    }
+
+    ucs_callbackq_leave(cbq);
+}
+
+/* Note: multiple calls with the same element are not allowed */
+void ucs_callbackq_add_slow_path(ucs_callbackq_t *cbq,
+                                 ucs_callbackq_slow_elem_t* elem)
+{
+    ucs_status_t status;
+
+    ucs_callbackq_enter(cbq);
+
+    /* Coverity complains on  ucs_assert(++elem_is_added !=1),
+     * so use clear macro */
+#if ENABLE_ASSERT
+    if (++elem->is_added != 1) {
+        ucs_fatal("Slow path element can be added to callbackq just once");
+    }
+#endif
+    ucs_list_add_tail(&cbq->slow_path, &elem->list);
+    status = ucs_callbackq_add_safe(cbq, ucs_callbackq_slow_path_cb, cbq);
+    ucs_assert_always(status == UCS_OK);
+
+    ucs_callbackq_leave(cbq);
+}
+
+/* Note: The element should have been added previously */
+void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
+                                    ucs_callbackq_slow_elem_t* elem)
+{
+    ucs_status_t status;
+
+    ucs_callbackq_enter(cbq);
+
+    /* Coverity complains on  ucs_assert(--elem->is_added != 0),
+     * so use clear macro */
+#if ENABLE_ASSERT
+    if (--elem->is_added != 0) {
+        ucs_fatal("Slow path element should have been added prior to remove");
+    }
+#endif
+    ucs_list_del(&elem->list);
+    status = ucs_callbackq_remove(cbq, ucs_callbackq_slow_path_cb, cbq);
+    ucs_assert_always(status == UCS_OK);
+
+    ucs_callbackq_leave(cbq);
+}
+
