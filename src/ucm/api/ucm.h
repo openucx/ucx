@@ -225,19 +225,34 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg);
 /**
  * @brief Add memory events to the external events list.
  *
+ * When the event is set to be external, it means that user is responsible for
+ * handling it. So, setting a handler for external event will not trigger
+ * installing of UCM memory hooks (if they were not installed before). In this
+ * case the corresponding UCM function needs to be invoked to trigger event
+ * handlers.
+ * Usage example is when the user disables UCM memory hooks (he may have its
+ * own hooks, like Open MPI), but it wants to use some UCM based functionality,
+ * e.g. IB registration cache. IB registration cache needs to be notified about
+ * UCM_EVENT_VM_UNMAPPED events, therefore it adds specific handler for it.
+ * In this case user needs to declare UCM_EVENT_VM_UNMAPPED event as external
+ * and explicitly call ucm_vm_munmap() when some memory release operation
+ * occurs.
+ *
  * @param [in]  events    Bit-mask of events which are supposed to be handled
  *                        externally.
  *
- * @note Setting a handler for external event will not trigger installing of
- *       memory hooks (if they were not installed before). In this case, the
- *       event handlers will only be called when the corresponding UCM function
- *       is invoked (for instance ucp_vm_munmap).
+ * @note To take an effect, the event should be set external prior to adding
+ *       event handlers for it.
  */
 void ucm_set_external_event(int events);
 
 
 /**
  * @brief Remove memory events from the external events list.
+ *
+ * When the event is removed from the external events list, any subsequent call
+ * to ucm_set_event_handler() for that event will trigger installing of UCM
+ * memory hooks (if they are enabled and were not installed before).
  *
  * @param [in]  events     Which events to remove from the external events list.
  */
