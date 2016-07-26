@@ -89,6 +89,7 @@ typedef enum {
 #define UCS_CONFIG_ARRAY_FIELD(_type, _array_name) \
     struct { \
         _type    *_array_name; \
+        uint32_t pad; \
         unsigned count; \
     }
 
