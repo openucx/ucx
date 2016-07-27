@@ -30,28 +30,13 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 
 /**
  * Reserve the buffer and set the descriptor empty for later initialization
- * in case if UCS_ERR_NO_RESOURCE obtained from memory pool
+ * in case if UCS_ERR_NO_RESOURCE obtained from active message handler
  */
 static void UCS_F_ALWAYS_INLINE uct_self_ep_am_reserve_buffer(uct_self_iface_t *self_iface,
                                                               void *desc)
 {
     uct_recv_desc_iface(desc) = &self_iface->super.super;
     self_iface->msg_cur_desc = NULL;
-}
-
-/**
- * Get new buffer from the memory pool
- * No need to copy data from payload to desc->am_recv_data
- */
-static ucs_status_t UCS_F_ALWAYS_INLINE uct_self_ep_am_get_new_buffer(uct_self_iface_t *self_iface)
-{
-    ucs_assert_always(NULL == self_iface->msg_cur_desc);
-    self_iface->msg_cur_desc = ucs_mpool_get(&self_iface->msg_desc_mp);
-    if (ucs_unlikely(NULL == self_iface->msg_cur_desc)) {
-        ucs_error("Failed to get next descriptor in SELF MP storage");
-        return UCS_ERR_NO_RESOURCE;
-    }
-    return UCS_OK;
 }
 
 ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
@@ -71,11 +56,8 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     UCT_CHECK_AM_ID(id);
     UCT_CHECK_LENGTH(total_length, self_iface->data_length, "am_short");
     if (ucs_unlikely(NULL == self_iface->msg_cur_desc)) {
-        status = uct_self_ep_am_get_new_buffer(self_iface);
-        if (UCS_OK != status) {
-            UCS_STATS_UPDATE_COUNTER(self_ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return status;
-        }
+        UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
+                                 self_iface->msg_cur_desc, return UCS_ERR_NO_MEMORY);
     }
 
     desc = self_iface->msg_cur_desc + 1;
@@ -97,7 +79,8 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
          * Try to get new buffer from memory pool and
          * ignore UCS_ERR_NO_RESOURCE to resolve it later
          */
-        uct_self_ep_am_get_new_buffer(self_iface);
+        UCT_TL_IFACE_GET_RX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
+                                 self_iface->msg_cur_desc, );
         status = UCS_OK;
     }
 
@@ -111,7 +94,7 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_self_iface_t *self_iface = 0;
     uct_self_ep_t *self_ep = 0;
     void *desc = 0, *payload = 0;
-    size_t length = 0;
+    ssize_t length = 0;
 
     self_ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     self_iface = ucs_derived_of(self_ep->super.super.iface, uct_self_iface_t);
@@ -119,11 +102,8 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     /* Send part */
     UCT_CHECK_AM_ID(id);
     if (ucs_unlikely(NULL == self_iface->msg_cur_desc)) {
-        status = uct_self_ep_am_get_new_buffer(self_iface);
-        if (UCS_OK != status) {
-            UCS_STATS_UPDATE_COUNTER(self_ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return status;
-        }
+        UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
+                                 self_iface->msg_cur_desc, return UCS_ERR_NO_MEMORY);
     }
 
     desc = self_iface->msg_cur_desc + 1;
@@ -143,9 +123,10 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
         uct_self_ep_am_reserve_buffer(self_iface, desc);
         /**
          * Try to get new buffer from memory pool and
-         * ignore UCS_ERR_NO_RESOURCE to resolve it later
+         * ignore UCS_ERR_NO_MEMORY to resolve it later
          */
-        uct_self_ep_am_get_new_buffer(self_iface);
+        UCT_TL_IFACE_GET_RX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
+                                 self_iface->msg_cur_desc, );
         status = UCS_OK;
     }
 

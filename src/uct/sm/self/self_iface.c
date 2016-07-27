@@ -15,6 +15,9 @@ static ucs_config_field_t uct_self_iface_config_table[] = {
      ucs_offsetof(uct_self_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+     UCT_IFACE_MPOOL_CONFIG_FIELDS("", 16384, 16, "",
+                                   ucs_offsetof(uct_self_iface_config_t, mp), ""),
+
     {NULL}
 };
 
@@ -127,13 +130,6 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
 };
 
-static ucs_mpool_ops_t ops = {
-   ucs_mpool_chunk_malloc,
-   ucs_mpool_chunk_free,
-   NULL,
-   NULL
-};
-
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
@@ -159,10 +155,15 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     self->data_length = self_config->super.max_bcopy;
 
     /* create a memory pool for data transferred */
-    status = ucs_mpool_init(&self->msg_desc_mp, 0,
-                            sizeof(uct_am_recv_desc_t) + rx_headroom + self->data_length,
-                            sizeof(uct_am_recv_desc_t) + rx_headroom,
-                            UCS_SYS_CACHE_LINE_SIZE, 16, 256, &ops, "self_msg_desc");
+    status = uct_iface_mpool_init(&self->super,
+                                  &self->msg_desc_mp,
+                                  sizeof(uct_am_recv_desc_t) + rx_headroom + self->data_length,
+                                  sizeof(uct_am_recv_desc_t) + rx_headroom,
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &self_config->mp,
+                                  256,
+                                  ucs_empty_function,
+                                  "self_msg_desc");
     if (UCS_OK != status) {
         ucs_error("Failed to create a memory pool for the loop-back transport");
         goto err;

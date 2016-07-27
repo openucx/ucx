@@ -16,12 +16,12 @@ public:
 
     /* The parameters mean the following:
      *  - s_size and r_size: send and recv buffer sizes.
-     *    Can be different for checking message trancation error
+     *    Can be different for checking message transaction error
      *  - is_sync: specifies the type of send function to be used
      *    (sync or not)
      *  - is_recv_msg: specifies whether probe function needs to remove
      *    matched message. If yes, then ucp_tag_msg_recv_nb is used for
-     *    recieve
+     *    receive
      * */
     void test_send_probe (size_t s_size, size_t r_size, bool is_sync,
                           int is_recv_msg) {
@@ -68,7 +68,7 @@ public:
         wait(recv_req);
         EXPECT_TRUE(recv_req->completed);
         if (s_size != r_size) {
-            /* Test for correct msg trancation handling */
+            /* Test for correct msg transaction handling */
             EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, recv_req->status);
         } else {
             /* Everything should be received correctly */
@@ -123,9 +123,6 @@ UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe) {
 }
 
 UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated) {
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
     test_send_probe (50000, 0, false, 1);
     test_send_probe (50000, 0, true,  1);
 }
