@@ -150,12 +150,10 @@ UCS_TEST_P(test_ucp_wireup_tag, one_sided_wireup) {
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, two_sided_wireup) {
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
-
     sender().connect(&receiver());
-    receiver().connect(&sender());
+    if (&sender() != &receiver()) {
+        receiver().connect(&sender());
+    }
 
     tag_send(sender().ep(), receiver().worker());
     sender().flush_worker();
@@ -202,13 +200,12 @@ UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_after) {
 }
 
 UCS_TEST_P(test_ucp_wireup_tag, stress_connect) {
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
     for (int i = 0; i < 30; ++i) {
         sender().connect(&receiver());
         tag_send(sender().ep(), receiver().worker(), 10000 / ucs::test_time_multiplier());
-        receiver().connect(&sender());
+        if (&sender() != &receiver()) {
+            receiver().connect(&sender());
+        }
         sender().disconnect();
         receiver().disconnect();
     }

@@ -21,6 +21,7 @@ typedef struct uct_self_iface {
 
 typedef struct uct_self_iface_config {
     uct_iface_config_t       super;
+    uct_iface_mpool_config_t mp;
 } uct_self_iface_config_t;
 
 
