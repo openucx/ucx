@@ -28,7 +28,7 @@
 static pthread_mutex_t ucm_event_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile pthread_t ucm_event_lock_owner = (pthread_t)-1;
 static ucs_list_link_t ucm_event_handlers;
-
+static int ucm_external_events = 0;
 
 static size_t ucm_shm_size(int shmid)
 {
@@ -142,6 +142,26 @@ static void ucm_event_leave()
     pthread_mutex_unlock(&ucm_event_lock);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_vm_mmap(void *addr, size_t length)
+{
+    ucm_event_t event;
+
+    event.vm_mapped.address = addr;
+    event.vm_mapped.size    = length;
+    ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_vm_munmap(void *addr, size_t length)
+{
+    ucm_event_t event;
+
+    event.vm_unmapped.address = addr;
+    event.vm_unmapped.size    = length;
+    ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
+}
+
 void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
     ucm_event_t event;
@@ -161,9 +181,8 @@ void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     ucm_event_dispatch(UCM_EVENT_MMAP, &event);
 
     if (event.mmap.result != MAP_FAILED) {
-        event.vm_mapped.address = event.mmap.result;
-        event.vm_mapped.size    = length; /* Use original length */
-        ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
+        /* Use original length */
+        ucm_dispatch_vm_mmap(event.mmap.result, length);
     }
 
     ucm_event_leave();
@@ -179,9 +198,7 @@ int ucm_munmap(void *addr, size_t length)
 
     ucm_trace("ucm_munmap(addr=%p length=%lu)", addr, length);
 
-    event.vm_unmapped.address = addr;
-    event.vm_unmapped.size    = length;
-    ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
+    ucm_dispatch_vm_munmap(addr, length);
 
     event.munmap.result  = -1;
     event.munmap.address = addr;
@@ -193,6 +210,26 @@ int ucm_munmap(void *addr, size_t length)
     return event.munmap.result;
 }
 
+void ucm_vm_mmap(void *addr, size_t length)
+{
+    ucm_event_enter();
+
+    ucm_trace("ucm_vm_mmap(addr=%p length=%lu)", addr, length);
+    ucm_dispatch_vm_mmap(addr, length);
+
+    ucm_event_leave();
+}
+
+void ucm_vm_munmap(void *addr, size_t length)
+{
+    ucm_event_enter();
+
+    ucm_trace("ucm_vm_munmap(addr=%p length=%lu)", addr, length);
+    ucm_dispatch_vm_munmap(addr, length);
+
+    ucm_event_leave();
+}
+
 void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
 {
     ucm_event_t event;
@@ -202,9 +239,7 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
     ucm_trace("ucm_mremap(old_address=%p old_size=%lu new_size=%ld flags=0x%x)",
               old_address, old_size, new_size, flags);
 
-    event.vm_unmapped.address = old_address;
-    event.vm_unmapped.size    = old_size;
-    ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
+    ucm_dispatch_vm_munmap(old_address, old_size);
 
     event.mremap.result   = MAP_FAILED;
     event.mremap.address  = old_address;
@@ -214,9 +249,8 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
     ucm_event_dispatch(UCM_EVENT_MREMAP, &event);
 
     if (event.mremap.result != MAP_FAILED) {
-        event.vm_mapped.address = event.mremap.result;
-        event.vm_mapped.size    = new_size; /* Use original new_size */
-        ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
+        /* Use original new_size */
+        ucm_dispatch_vm_mmap(event.mremap.result, new_size);
     }
 
     ucm_event_leave();
@@ -242,10 +276,8 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
     ucm_event_dispatch(UCM_EVENT_SHMAT, &event);
 
     if (event.shmat.result != MAP_FAILED) {
-         event.vm_mapped.address = event.shmat.result;
-         event.vm_mapped.size    = size;
-         ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
-     }
+        ucm_dispatch_vm_mmap(event.shmat.result, size);
+    }
 
     ucm_event_leave();
 
@@ -260,9 +292,7 @@ int ucm_shmdt(const void *shmaddr)
 
     ucm_debug("ucm_shmdt(shmaddr=%p)", shmaddr);
 
-    event.vm_unmapped.address = (void*)shmaddr;
-    event.vm_unmapped.size    = ucm_get_shm_seg_size(shmaddr);
-    ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
+    ucm_dispatch_vm_munmap((void*)shmaddr, ucm_get_shm_seg_size(shmaddr));
 
     event.shmdt.result  = -1;
     event.shmdt.shmaddr = shmaddr;
@@ -282,9 +312,7 @@ void *ucm_sbrk(intptr_t increment)
     ucm_trace("ucm_sbrk(increment=%+ld)", increment);
 
     if (increment < 0) {
-        event.vm_unmapped.address = ucm_orig_sbrk(0) + increment;
-        event.vm_unmapped.size    = -increment;
-        ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
+        ucm_dispatch_vm_munmap(ucm_orig_sbrk(0) + increment, -increment);
     }
 
     event.sbrk.result    = MAP_FAILED;
@@ -292,9 +320,7 @@ void *ucm_sbrk(intptr_t increment)
     ucm_event_dispatch(UCM_EVENT_SBRK, &event);
 
     if ((increment > 0) && (event.sbrk.result != MAP_FAILED)) {
-        event.vm_mapped.address = ucm_orig_sbrk(0) - increment;
-        event.vm_mapped.size    = increment;
-        ucm_event_dispatch(UCM_EVENT_VM_MAPPED, &event);
+        ucm_dispatch_vm_mmap(ucm_orig_sbrk(0) - increment, increment);
     }
 
     ucm_event_leave();
@@ -375,7 +401,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (!(events & UCM_EVENT_FLAG_NO_INSTALL)) {
+    if (!(events & (UCM_EVENT_FLAG_NO_INSTALL | ucm_external_events))) {
         status = ucm_event_install(events);
         if (status != UCS_OK) {
             return status;
@@ -397,6 +423,20 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
     ucm_debug("added user handler (func=%p arg=%p) for events=0x%x prio=%d", cb,
               arg, events, priority);
     return UCS_OK;
+}
+
+void ucm_set_external_event(int events)
+{
+    pthread_mutex_lock(&ucm_event_lock);
+    ucm_external_events |= events;
+    pthread_mutex_unlock(&ucm_event_lock);
+}
+
+void ucm_unset_external_event(int events)
+{
+    pthread_mutex_lock(&ucm_event_lock);
+    ucm_external_events &= ~events;
+    pthread_mutex_unlock(&ucm_event_lock);
 }
 
 void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
