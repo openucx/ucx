@@ -18,8 +18,17 @@
 typedef struct ucs_config_array_field {
     void      *data;
     unsigned  count;
+    unsigned  pad;
 } ucs_config_array_field_t;
 
+UCS_STATIC_ASSERT(!(offsetof(ucs_config_array_field_t, data) -
+                    offsetof(str_names_array_t, names) ||
+                    offsetof(ucs_config_array_field_t, count) -
+                    offsetof(str_names_array_t, count) ||
+                    offsetof(ucs_config_array_field_t, pad) -
+                    offsetof(str_names_array_t, pad)),
+                  "offset of fields in ucs_config_array_field_t and "
+                  "UCS_CONFIG_ARRAY_FIELD don't match\n");
 
 /* Process environment variables */
 extern char **environ;
