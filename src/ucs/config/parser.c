@@ -15,10 +15,7 @@
 #include <ucs/time/time.h>
 
 
-typedef struct ucs_config_array_field {
-    void      *data;
-    unsigned  count;
-} ucs_config_array_field_t;
+typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
 
 /* Process environment variables */

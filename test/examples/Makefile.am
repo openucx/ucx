@@ -14,7 +14,7 @@ dist_examples_DATA = \
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
 	$(CC) -o uct_hello_world $(examplesdir)/uct_hello_world.c -luct -I$(includedir) -L$(libdir) -Wl,-rpath,$(libdir)
-	$(CC) -o ucp_hello_world $(examplesdir)/ucp_hello_world.c -lucp -lucs -I$(includedir) -L$(libdir) -Wl,-rpath,$(libdir)
+	$(CC) -o ucp_hello_world $(examplesdir)/ucp_hello_world.c -lucp -lucs -I$(includedir) -L$(libdir) -Wpadded -Wl,-rpath,$(libdir)
 if HAVE_MPI
 	$(MPICC) -o active_message $(examplesdir)/active_message.c -luct -lucs -I$(includedir) -L$(libdir) -Wl,-rpath,$(libdir)
 endif
