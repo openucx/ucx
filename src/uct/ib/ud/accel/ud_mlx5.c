@@ -578,7 +578,7 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
     /* Send completion with error is a local failure (thus fatal) in UD case.
      * arg is struct mlx5_cqe64*. Pass it as it is, because struct mlx5_err_cqe*
      * is expected in uct_ib_mlx5_completion_with_err */
-    uct_ib_mlx5_completion_with_err(arg, 1);
+    uct_ib_mlx5_completion_with_err(arg, UCS_LOG_LEVEL_FATAL);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);

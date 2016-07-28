@@ -362,6 +362,8 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
         alloc_methods_bitmap |= UCS_BIT(method);
     }
 
+    self->config.failure_level = config->failure;
+
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
                                   stats_parent);
     if (status != UCS_OK) {
@@ -459,6 +461,10 @@ ucs_config_field_t uct_iface_config_table[] = {
   {"ALLOC", "huge,md,mmap,heap",
    "Priority of methods to allocate intermediate buffers for communication",
    ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
+
+  {"FAILURE", "error",
+   "Level of network failure reporting",
+   ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
   {NULL}
 };

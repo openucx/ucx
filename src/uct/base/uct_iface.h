@@ -162,6 +162,7 @@ typedef struct uct_base_iface {
     struct {
         unsigned            num_alloc_methods;
         uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
+        ucs_log_level_t     failure_level;
     } config;
 
 } uct_base_iface_t;
@@ -236,6 +237,8 @@ struct uct_iface_config {
         uct_alloc_method_t  *methods;
         unsigned            count;
     } alloc_methods;
+
+    int               failure;   /* Level of failure reports */
 };
 
 
