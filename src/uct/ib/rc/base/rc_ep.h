@@ -235,6 +235,12 @@ static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp)
     return txqp->unsignaled;
 }
 
+static UCS_F_ALWAYS_INLINE void uct_rc_txqp_check(uct_rc_txqp_t *txqp)
+{
+    ucs_assertv(txqp->qp->state == IBV_QPS_RTS, "QP 0x%x state is %d",
+                txqp->qp->qp_num, txqp->qp->state);
+}
+
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     return ((ep->txqp.available > 0) && (ep->fc.fc_wnd > 0));
