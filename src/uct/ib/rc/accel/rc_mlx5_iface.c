@@ -326,7 +326,8 @@ static UCS_F_NOINLINE void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_i
                                           uct_rc_mlx5_ep_t);
 
     if (ep != NULL) {
-        uct_ib_mlx5_completion_with_err((void*)cqe, 0);
+        uct_ib_mlx5_completion_with_err((void*)cqe,
+                                        iface->super.super.config.failure_level);
         uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 
         uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t),

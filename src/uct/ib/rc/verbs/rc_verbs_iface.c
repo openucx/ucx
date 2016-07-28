@@ -47,8 +47,9 @@ static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface,
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
     if (ep != NULL) {
-        ucs_error("Send completion with error: %s",
-                  ibv_wc_status_str(wc->status));
+        ucs_log(iface->super.super.config.failure_level,
+                "Send completion with error: %s",
+                ibv_wc_status_str(wc->status));
 
         uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 

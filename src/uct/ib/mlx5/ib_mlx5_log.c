@@ -46,7 +46,8 @@ static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
     }
 }
 
-void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe, int is_fatal)
+void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe,
+                                     ucs_log_level_t log_level)
 {
     uint16_t wqe_counter;
     uint32_t qp_num;
@@ -105,15 +106,9 @@ void uct_ib_mlx5_completion_with_err(struct mlx5_err_cqe *ecqe, int is_fatal)
         break;
     }
 
-    if (is_fatal) {
-        ucs_fatal("Error on QP 0x%x wqe[%d]: %s (synd 0x%x vend 0x%x) opcode %s",
-                  qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
-                  uct_ib_mlx5_cqe_err_opcode(ecqe));
-    } else {
-        ucs_error("Error on QP 0x%x wqe[%d]: %s (synd 0x%x vend 0x%x) opcode %s",
-                  qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
-                  uct_ib_mlx5_cqe_err_opcode(ecqe));
-    }
+    ucs_log(log_level, "Error on QP 0x%x wqe[%d]: %s (synd 0x%x vend 0x%x) opcode %s",
+              qp_num, wqe_counter, info, ecqe->syndrome, ecqe->vendor_err_synd,
+              uct_ib_mlx5_cqe_err_opcode(ecqe));
 }
 
 static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
