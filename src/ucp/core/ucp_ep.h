@@ -22,6 +22,7 @@ enum {
     UCP_EP_FLAG_LOCAL_CONNECTED  = UCS_BIT(0), /* All local endpoints are connected */
     UCP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_SENT = UCS_BIT(2), /* Connection request was sent */
+    UCP_EP_FLAG_CONNECT_REP_SENT = UCS_BIT(3), /* Debug: Connection reply was sent */
 };
 
 

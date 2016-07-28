@@ -37,6 +37,7 @@ static ucs_status_t ucp_stub_ep_connect_to_ep(uct_ep_h uct_ep,
                                               const uct_ep_addr_t *ep_addr)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    stub_ep->flags |= UCP_STUB_EP_FLAG_LOCAL_CONNECTED;
     return uct_ep_connect_to_ep(stub_ep->next_ep, dev_addr, ep_addr);
 }
 
@@ -49,7 +50,7 @@ void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep)
     ucp_request_t *req;
     uct_ep_h uct_ep;
 
-    ucs_assert(stub_ep->connected);
+    ucs_assert(stub_ep->flags & UCP_STUB_EP_FLAG_READY);
     ucs_assert(stub_ep->next_ep != NULL);
 
     /* If we still have pending wireup messages, send them out first */
@@ -106,14 +107,17 @@ static uct_ep_h ucp_stub_ep_get_wireup_msg_ep(ucp_stub_ep_t *stub_ep)
 {
     uct_ep_h wireup_msg_ep;
 
-    if (stub_ep->connected) {
+    if (stub_ep->flags & UCP_STUB_EP_FLAG_READY) {
         wireup_msg_ep = stub_ep->next_ep;
     } else {
         wireup_msg_ep = stub_ep->aux_ep;
     }
     ucs_assertv(wireup_msg_ep != NULL,
-                "ep=%p stub_ep=%p connected=%d next_ep=%p aux_ep=%p", stub_ep->ep,
-                stub_ep, stub_ep->connected, stub_ep->next_ep, stub_ep->aux_ep);
+                "ep=%p stub_ep=%p flags=%c%c next_ep=%p aux_ep=%p", stub_ep->ep,
+                stub_ep,
+                (stub_ep->flags & UCP_STUB_EP_FLAG_LOCAL_CONNECTED) ? 'c' : '-',
+                (stub_ep->flags & UCP_STUB_EP_FLAG_READY)           ? 'r' : '-',
+                stub_ep->next_ep, stub_ep->aux_ep);
     return wireup_msg_ep;
 }
 
@@ -283,7 +287,7 @@ UCS_CLASS_INIT_FUNC(ucp_stub_ep_t, ucp_ep_h ep)
     self->next_ep       = NULL;
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
-    self->connected     = 0;
+    self->flags         = 0;
     ucs_queue_head_init(&self->pending_q);
     ucs_trace("ep %p: created stub ep %p to %s ", ep, self, ucp_ep_peer_name(ep));
     return UCS_OK;
@@ -296,7 +300,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_stub_ep_t)
 
     ucs_debug("ep %p: destroy stub ep %p", self->ep, self);
 
-    if (self->connected) {
+    if (self->flags & UCP_STUB_EP_FLAG_READY) {
         ucp_worker_stub_ep_remove(self->ep->worker, self);
     }
     if (self->aux_ep != NULL) {
@@ -372,8 +376,10 @@ void ucp_stub_ep_remote_connected(uct_ep_h uct_ep)
 
     ucs_assert(ucp_stub_ep_test(uct_ep));
     ucs_assert(stub_ep->next_ep != NULL);
+    ucs_assert(stub_ep->flags & UCP_STUB_EP_FLAG_LOCAL_CONNECTED);
+
     ucs_trace("ep %p: stub ep %p is remote-connected", stub_ep->ep, stub_ep);
-    stub_ep->connected = 1;
+    stub_ep->flags |= UCP_STUB_EP_FLAG_READY;
     ucp_worker_stub_ep_add(stub_ep->ep->worker, stub_ep);
 }
 

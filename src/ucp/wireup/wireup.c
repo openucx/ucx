@@ -269,6 +269,8 @@ static void ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg
         if (status != UCS_OK) {
             return;
         }
+
+        ep->flags |= UCP_EP_FLAG_CONNECT_REP_SENT;
     }
 }
 
@@ -326,6 +328,9 @@ static void ucp_wireup_process_ack(ucp_worker_h worker, uint64_t uuid)
     }
 
     ucs_trace("ep %p: got wireup ack", ep);
+
+    ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT);
+    ucs_assert(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
     ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
     ucp_wireup_ep_remote_connected(ep);
