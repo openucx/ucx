@@ -531,10 +531,52 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 #endif /* HAVE_DETAILED_BACKTRACE */
 
+static const char * ucs_debug_getlogin()
+{
+    static char login_str[64] = {0};
+
+    if (login_str[0] == '\0') {
+        getlogin_r(login_str, sizeof(login_str));
+    }
+    return login_str;
+}
+
+static void *ucs_debug_alloc_mem(size_t length)
+{
+    void *ptr;
+
+    ptr = mmap(NULL, ucs_align_up_pow2(length, ucs_get_page_size()),
+               PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) {
+        ucs_log_fatal_error("failed to allocate %zu bytes with mmap: %m", length);
+        return NULL;
+    }
+
+    return ptr;
+}
+
+static char *ucs_debug_strdup(const char *str)
+{
+    size_t length;
+    char *newstr;
+
+    length = strlen(str) + 1;
+    newstr = ucs_debug_alloc_mem(length);
+    if (newstr != NULL) {
+        strncpy(newstr, str, length);
+    }
+    return newstr;
+}
+
 static ucs_status_t ucs_debugger_attach()
 {
-    static const char *gdb_commands = "bt\n";
+    static const char *gdb_commands    = "bt\n";
+    static const char *gdb_vg_commands = "file %s\n"
+                                         "target remote | vgdb\n"
+                                         "bt\n";
+    static char pid_str[16];
     const char *cmds;
+    char *vg_cmds;
     char *gdb_cmdline;
     char gdb_commands_file[256];
     char* argv[6 + UCS_GDB_MAX_ARGS];
@@ -543,20 +585,25 @@ static ucs_status_t ucs_debugger_attach()
     int valgrind;
     char *self_exe;
 
+    /* Fork a process which will execute gdb and attach to the current process.
+     * We must avoid trigerring calls to malloc/free, since the heap may be corrupted.
+     * Therefore all allocations are done with mmap() or use static arrays.
+     */
+
     debug_pid = getpid();
 
-    /* Fork a process which will execute gdb */
     pid = fork();
     if (pid < 0) {
         ucs_log_fatal_error("fork returned %d: %m", pid);
         return UCS_ERR_IO_ERROR;
     }
 
+    /* retrieve values from original process, before forking */
     valgrind = RUNNING_ON_VALGRIND;
-    self_exe = strdup(ucs_get_exe());
+    self_exe = ucs_debug_strdup(ucs_get_exe());
 
     if (pid == 0) {
-        gdb_cmdline = strdup(ucs_global_opts.gdb_command);
+        gdb_cmdline = ucs_debug_strdup(ucs_global_opts.gdb_command);
         narg = 0;
         argv[narg] = strtok(gdb_cmdline, " \t");
         while (argv[narg] != NULL) {
@@ -565,29 +612,24 @@ static ucs_status_t ucs_debugger_attach()
         }
 
         if (!valgrind) {
+            snprintf(pid_str, sizeof(pid_str), "%d", debug_pid);
             argv[narg++] = "-p";
-            if (asprintf(&argv[narg++], "%d", debug_pid)<0) {
-                ucs_log_fatal_error("Failed to extract pid : %m");
-                exit(-1);
-            }
+            argv[narg++] = pid_str;
         }
 
         /* Generate a file name for gdb commands */
         memset(gdb_commands_file, 0, sizeof(gdb_commands_file));
         snprintf(gdb_commands_file, sizeof(gdb_commands_file) - 1,
-                 "/tmp/.gdbcommands.%s", getlogin());
+                 "/tmp/.gdbcommands.%s", ucs_debug_getlogin());
 
         /* Write gdb commands and add the file to argv is successful */
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);
         if (fd >= 0) {
             if (valgrind) {
-                if (asprintf((char**)&cmds, "file %s\n"
-                                            "target remote | vgdb\n"
-                                            "%s",
-                                            self_exe, gdb_commands) < 0) {
-                    cmds = "";
-                }
-            } else {
+                vg_cmds = ucs_debug_alloc_mem(strlen(gdb_vg_commands) + strlen(self_exe));
+                sprintf(vg_cmds, gdb_vg_commands, self_exe);
+                cmds = vg_cmds;
+           } else {
                 cmds = gdb_commands;
             }
 
@@ -613,7 +655,6 @@ static ucs_status_t ucs_debugger_attach()
         }
     }
 
-    free(self_exe);
     waitpid(pid, &ret, 0);
     return UCS_OK;
 }
@@ -942,6 +983,7 @@ void ucs_debug_init()
         signal(ucs_global_opts.debug_signo, ucs_debug_signal_handler);
     }
 
+    (void)ucs_debug_getlogin();
 #ifdef HAVE_DETAILED_BACKTRACE
     bfd_init();
 #endif
