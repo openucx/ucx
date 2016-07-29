@@ -284,6 +284,7 @@ struct uct_iface_attr {
     double                   overhead;     /**< Message overhead, seconds */
     double                   latency;      /**< Latency, seconds */
     double                   bandwidth;    /**< Maximal bandwidth, bytes/second */
+    uint8_t                  priority;     /**< Priority of device */
 };
 
 

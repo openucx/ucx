@@ -143,9 +143,11 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     unsigned addr_index;
     int reachable;
     int found;
+    uint8_t priority, best_score_priority;
 
     found       = 0;
     best_score  = 0.0;
+    best_score_priority = 0;
     p           = tls_info;
     endp        = tls_info + sizeof(tls_info) - 1;
     tls_info[0] = '\0';
@@ -215,14 +217,21 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             score = criteria->calc_score(md_attr, iface_attr, &ae->iface_attr);
             ucs_assert(score >= 0.0);
 
+            priority = iface_attr->priority + ae->iface_attr.priority;
+
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%zd] : %s score %.2f",
                       UCT_TL_RESOURCE_DESC_ARG(resource), ae - address_list,
                       criteria->title, score);
-            if (!found || (score > best_score)) {
+
+            /* First comparing score, if score equals to current best score,
+             * comparing priority with the priority of best score */
+            if (!found || (score > best_score) ||
+                ((score == best_score) && (priority > best_score_priority))) {
                 *rsc_index_p      = rsc_index;
                 *dst_addr_index_p = ae - address_list;
                 *score_p          = score;
                 best_score        = score;
+                best_score_priority = priority;
                 found             = 1;
             }
         }
