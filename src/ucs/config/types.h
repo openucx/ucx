@@ -90,6 +90,7 @@ typedef enum {
     struct { \
         _type    *_array_name; \
         unsigned count; \
+        unsigned pad; \
     }
 
 /* Specific structure for an array of strings */
