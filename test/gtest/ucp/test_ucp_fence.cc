@@ -168,6 +168,8 @@ protected:
         sender().disconnect();
         receiver().disconnect();
 
+        short_progress_loop();
+
         status = ucp_mem_unmap(receiver().ucph(), memh);
         ASSERT_UCS_OK(status);
 

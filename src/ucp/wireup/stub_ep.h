@@ -17,6 +17,15 @@
 
 
 /**
+ * Stub endpoint flags
+ */
+enum {
+    UCP_STUB_EP_FLAG_READY           = UCS_BIT(0), /**< next_ep is fully connected */
+    UCP_STUB_EP_FLAG_LOCAL_CONNECTED = UCS_BIT(1), /**< Debug: next_ep connected to remote */
+};
+
+
+/**
  * Stub endpoint, to hold off send requests until wireup process completes.
  * It is placed instead UCT endpoint before it's fully connected, and for AM
  * endpoint it also contains an auxiliary endpoint which can send wireup messages.
@@ -29,7 +38,7 @@ struct ucp_stub_ep {
     uct_ep_h            next_ep;       /**< Next transport being wired up */
     ucp_rsc_index_t     aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t   pending_count; /**< Number of pending wireup operations */
-    volatile int        connected;     /**< next_ep is fully connected */
+    volatile uint32_t   flags;         /**< Connection state flags */
     ucs_list_link_t     list;
 };
 
