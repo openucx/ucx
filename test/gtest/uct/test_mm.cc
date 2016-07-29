@@ -64,24 +64,37 @@ UCS_TEST_P(test_uct_mm, open_for_posix) {
     uint64_t test_mm_hdr = 0xbeef;
     recv_desc_t *recv_buffer;
 
-    initialize();
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    for (int i = 0; i < 2; i++) {
 
-    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
-    recv_buffer->length = 0; /* Initialize length to 0 */
+        if (i == 1) {
+            /* first loop tests USE_PROC_LINK==yes (default),
+             * second loop tests USE_PROC_LINK==no */
+            if (GetParam()->dev_name == "posix") {
+                set_config("USE_PROC_LINK=no");
+            } else {
+                break;
+            }
+        }
 
-    /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
+        initialize();
+        check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
-    /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));
+        recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
+        recv_buffer->length = 0; /* Initialize length to 0 */
 
-    short_progress_loop();
+        /* set a callback for the uct to invoke for receiving the data */
+        uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
 
-    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
-    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
+        /* send the data */
+        uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));
 
-    free(recv_buffer);
+        short_progress_loop();
+
+        ASSERT_EQ(sizeof(send_data), recv_buffer->length);
+        EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
+
+        free(recv_buffer);
+    }
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_mm, mm)
