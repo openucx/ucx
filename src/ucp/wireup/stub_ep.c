@@ -367,6 +367,7 @@ void ucp_stub_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 
     ucs_assert(ucp_stub_ep_test(uct_ep));
     ucs_assert(stub_ep->next_ep == NULL);
+    stub_ep->flags |= UCP_STUB_EP_FLAG_LOCAL_CONNECTED;
     stub_ep->next_ep = next_ep;
 }
 
