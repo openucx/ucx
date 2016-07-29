@@ -39,6 +39,8 @@ uct_rc_mlx5_post_send(uct_rc_mlx5_ep_t *ep, struct mlx5_wqe_ctrl_seg *ctrl,
 {
     uint16_t posted;
 
+    uct_rc_txqp_check(&ep->super.txqp);
+
     uct_ib_mlx5_set_ctrl_seg(ctrl, ep->tx.wq.sw_pi,
                              opcode, opmod, ep->qp_num, sig_flag, wqe_size);
 

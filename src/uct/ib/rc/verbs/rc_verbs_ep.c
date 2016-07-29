@@ -17,6 +17,8 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     struct ibv_send_wr *bad_wr;
     int ret;
 
+    uct_rc_txqp_check(&ep->super.txqp);
+
     if (!(send_flags & IBV_SEND_SIGNALED)) {
         send_flags |= uct_rc_iface_tx_moderation(&iface->super, &ep->super.txqp,
                                                  IBV_SEND_SIGNALED);
@@ -44,6 +46,8 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
+    uct_rc_txqp_check(&ep->super.txqp);
+
     struct ibv_exp_send_wr *bad_wr;
     int ret;
 

@@ -110,8 +110,10 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 {
+    struct ibv_qp_attr qp_attr;
     struct ibv_qp_cap cap;
     ucs_status_t status;
+    int ret;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
@@ -119,6 +121,25 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
                               UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
         goto err;
+    }
+
+    memset(&qp_attr, 0, sizeof(qp_attr));
+
+    qp_attr.qp_state              = IBV_QPS_INIT;
+    qp_attr.pkey_index            = iface->super.pkey_index;
+    qp_attr.port_num              = iface->super.port_num;
+    qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE|
+                                    IBV_ACCESS_REMOTE_WRITE|
+                                    IBV_ACCESS_REMOTE_READ|
+                                    IBV_ACCESS_REMOTE_ATOMIC;
+    ret = ibv_modify_qp(self->txqp.qp, &qp_attr,
+                        IBV_QP_STATE      |
+                        IBV_QP_PKEY_INDEX |
+                        IBV_QP_PORT       |
+                        IBV_QP_ACCESS_FLAGS);
+    if (ret) {
+         ucs_error("error modifying QP to INIT: %m");
+         goto err_txqp_cleanup;
     }
 
     status = uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size
@@ -179,23 +200,6 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     int ret;
 
     memset(&qp_attr, 0, sizeof(qp_attr));
-
-    qp_attr.qp_state              = IBV_QPS_INIT;
-    qp_attr.pkey_index            = iface->super.pkey_index;
-    qp_attr.port_num              = iface->super.port_num;
-    qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE|
-                                    IBV_ACCESS_REMOTE_WRITE|
-                                    IBV_ACCESS_REMOTE_READ|
-                                    IBV_ACCESS_REMOTE_ATOMIC;
-    ret = ibv_modify_qp(ep->txqp.qp, &qp_attr,
-                        IBV_QP_STATE      |
-                        IBV_QP_PKEY_INDEX |
-                        IBV_QP_PORT       |
-                        IBV_QP_ACCESS_FLAGS);
-    if (ret) {
-         ucs_error("error modifying QP to INIT: %m");
-         return UCS_ERR_IO_ERROR;
-    }
 
     qp_attr.qp_state              = IBV_QPS_RTR;
     qp_attr.dest_qp_num           = uct_ib_unpack_uint24(rc_addr->qp_num);
