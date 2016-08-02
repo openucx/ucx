@@ -540,7 +540,7 @@ static ucs_status_t uct_rc_mlx5_query_resources(uct_md_h md,
 {
     return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
                                             "rc_mlx5",
-                                            UCT_IB_DEVICE_FLAG_MLX5_PRM,
+                                            UCT_IB_DEVICE_FLAG_MLX5_PRM | UCT_IB_DEVICE_FLAG_ONLY_IB,
                                             resources_p, num_resources_p);
 }
 

@@ -84,6 +84,14 @@ public:
         if (ibv_query_port(ibctx, port_num, &port_attr) != 0) {
             UCS_TEST_ABORT("Failed to query port " << port_num << " on device: " << dev_name);
         }
+
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+        if (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) {
+            found = 0;
+            goto out;
+        }
+#endif
+
         for (table_idx = 0; table_idx < port_attr.pkey_tbl_len; table_idx++) {
             if(ibv_query_pkey(ibctx, port_num, table_idx, &pkey)) {
                 UCS_TEST_ABORT("Failed to query pkey on port " << port_num << " on device: " << dev_name);
@@ -94,6 +102,8 @@ public:
                 break;
             }
         }
+
+out:
         ibv_close_device(ibctx);
         ibv_free_device_list(device_list);
 
@@ -126,7 +136,7 @@ public:
         return ret;
     }
 
-    void test_address_pack(uct_ib_address_scope_t scope, uint64_t subnet_prefix) {
+    void test_address_pack(uct_ib_address_type_t scope, uint64_t subnet_prefix) {
         static const uint16_t lid_in = 0x1ee7;
         union ibv_gid gid_in, gid_out;
         uct_ib_address_t *ib_addr;
@@ -141,7 +151,7 @@ public:
 
         uct_ib_address_unpack(ib_addr, &lid_out, &is_global, &gid_out);
 
-        EXPECT_EQ((scope != UCT_IB_ADDRESS_SCOPE_LINK_LOCAL), is_global);
+        EXPECT_EQ((scope != UCT_IB_ADDRESS_TYPE_LINK_LOCAL), is_global);
         EXPECT_EQ(lid_in, lid_out);
 
         if (is_global) {
@@ -175,7 +185,7 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
     if (ret == UCS_OK) {
         initialize();
     } else {
-        UCS_TEST_SKIP_R("pkey not found");
+        UCS_TEST_SKIP_R("pkey not found or not an IB port");
     }
 
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
@@ -199,9 +209,9 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
 
 UCS_TEST_P(test_uct_ib, address_pack) {
     initialize();
-    test_address_pack(UCT_IB_ADDRESS_SCOPE_LINK_LOCAL, UCT_IB_LINK_LOCAL_PREFIX);
-    test_address_pack(UCT_IB_ADDRESS_SCOPE_SITE_LOCAL, UCT_IB_SITE_LOCAL_PREFIX | htonll(0x7200));
-    test_address_pack(UCT_IB_ADDRESS_SCOPE_GLOBAL,     0xdeadfeedbeefa880ul);
+    test_address_pack(UCT_IB_ADDRESS_TYPE_LINK_LOCAL, UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_ADDRESS_TYPE_SITE_LOCAL, UCT_IB_SITE_LOCAL_PREFIX | htonll(0x7200));
+    test_address_pack(UCT_IB_ADDRESS_TYPE_GLOBAL,     0xdeadfeedbeefa880ul);
 }
 
 

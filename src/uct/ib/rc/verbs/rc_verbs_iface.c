@@ -228,7 +228,7 @@ static ucs_status_t uct_rc_verbs_query_resources(uct_md_h md,
                                                  unsigned *num_resources_p)
 {
     return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                            "rc", 0,
+                                            "rc", UCT_IB_DEVICE_FLAG_ONLY_IB,
                                             resources_p, num_resources_p);
 }
 

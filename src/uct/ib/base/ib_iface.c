@@ -89,7 +89,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
 
   {"GID_INDEX", "0",
-   "Port GID index to use for RoCE.",
+   "Port GID index to use.",
    ucs_offsetof(uct_ib_iface_config_t, gid_index), UCS_CONFIG_TYPE_UINT},
 
   {"SL", "0",
@@ -161,7 +161,7 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    uct_ib_address_pack(uct_ib_iface_device(iface), iface->addr_scope,
+    uct_ib_address_pack(uct_ib_iface_device(iface), iface->addr_type,
                         &iface->gid, uct_ib_iface_port_attr(iface)->lid,
                         (void*)dev_addr);
     return UCS_OK;
@@ -177,7 +177,22 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
     uint16_t lid;
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
-    return (gid.global.subnet_prefix == iface->gid.global.subnet_prefix);
+
+    if ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_RAW) == 0) {
+        /* IB */
+        return (gid.global.subnet_prefix == iface->gid.global.subnet_prefix);
+    } else {
+        /* RoCE */
+        /* check that there is no lid and that the raw_gid is on */
+        if ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_RAW) &&
+            ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) == 0)) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+
 }
 
 void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
@@ -284,6 +299,18 @@ static ucs_status_t uct_ib_iface_init_gid(uct_ib_iface_t *iface,
         ucs_error("ibv_query_gid(index=%d) failed: %m", config->gid_index);
         return UCS_ERR_INVALID_PARAM;
     }
+
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+    if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
+        if (iface->gid.raw == 0) {
+            ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
+                      uct_ib_device_name(dev), iface->port_num);
+            return UCS_ERR_INVALID_ADDR;
+        } else {
+            return UCS_OK;
+        }
+    }
+#endif
 
     if ((iface->gid.global.interface_id == 0) && (iface->gid.global.subnet_prefix == 0)) {
         ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
@@ -444,15 +471,15 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_send_cq;
     }
 
-    if (!uct_ib_device_is_port_ib(dev, self->port_num)) {
-        ucs_error("Unsupported link layer");
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_destroy_recv_cq;
-    }
-
     /* Address scope and size */
-    self->addr_scope = uct_ib_address_scope(self->gid.global.subnet_prefix);
-    self->addr_size  = uct_ib_address_size(self->addr_scope);
+    self->addr_type = uct_ib_address_scope(self->gid.global.subnet_prefix);
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+    if (uct_ib_iface_port_attr(self)->link_layer == IBV_LINK_LAYER_ETHERNET) {
+        self->addr_type = UCT_IB_ADDRESS_TYPE_ETH_LOCAL;
+    }
+#endif
+
+    self->addr_size  = uct_ib_address_size(self->addr_type);
 
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
@@ -460,8 +487,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     return UCS_OK;
 
-err_destroy_recv_cq:
-    ibv_destroy_cq(self->recv_cq);
 err_destroy_send_cq:
     ibv_destroy_cq(self->send_cq);
 err_destroy_comp_channel:
@@ -537,10 +562,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, width, extra_pkt_len;
     int i = 0;
 
-    if (!uct_ib_device_is_port_ib(dev, iface->port_num)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
@@ -602,8 +623,21 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     /* Calculate packet overhead  */
     mtu                   = ucs_min(uct_ib_mtu_value(active_mtu),
                                     iface->config.seg_size);
-    extra_pkt_len         = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + xport_hdr_len +
-                            UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+
+#if HAVE_DECL_IBV_LINK_LAYER_INFINIBAND
+    if (uct_ib_iface_port_attr(iface)->link_layer != IBV_LINK_LAYER_ETHERNET) {
+        extra_pkt_len = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + xport_hdr_len +
+                        UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+    } else {
+        extra_pkt_len = UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN + UCT_IB_BTH_LEN + xport_hdr_len +
+                        UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+        /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
+    }
+#else
+    extra_pkt_len = UCT_IB_LRH_LEN + UCT_IB_BTH_LEN + xport_hdr_len +
+                    UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
+#endif
+
     iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);
 
     /* Set priority of current device */
