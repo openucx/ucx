@@ -73,9 +73,6 @@ struct ucs_callbackq {
 struct ucs_callbackq_slow_elem {
     ucs_callback_slow_t    cb;
     ucs_list_link_t        list;
-#ifdef ENABLE_ASSERT
-    int                    is_added;
-#endif
 };
 
 
@@ -248,14 +245,6 @@ void ucs_callbackq_add_slow_path(ucs_callbackq_t *cbq,
  */
 void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
                                     ucs_callbackq_slow_elem_t* elem);
-
-
-/**
- * Initialize a slow path element object.
- *
- * @param [in]  elem    Element to initialize.
- */
-void ucs_callbackq_slow_elem_init(ucs_callbackq_slow_elem_t *elem);
 
 
 /**

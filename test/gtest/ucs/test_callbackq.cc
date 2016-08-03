@@ -77,7 +77,6 @@ protected:
         ctx->test    = this;
         ctx->count   = 0;
         ctx->command = COMMAND_NONE;
-        ucs_callbackq_slow_elem_init(&ctx->slow_elem);
     }
 
     void add(callback_ctx *ctx)
