@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/debug/instrument.h>
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -107,6 +108,10 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucp_tag_recv_callback_t cb,
                   function, req, req + 1, info->sender_tag, info->length,
                   ucs_status_string(status));
     cb(req + 1, status, &req->recv.info);
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
+                          "ucp_tag_recv_request_completed",
+                          req, info->length);
     ucp_request_put(req);
 }
 
@@ -125,6 +130,9 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb",
+                          req, ucp_contig_dt_length(datatype, count));
 
     req->recv.cb = cb;
 
@@ -167,6 +175,9 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb",
+                          req, ucp_contig_dt_length(datatype, count));
 
     req->recv.cb       = cb;
 
@@ -223,6 +234,9 @@ void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req)
     ucs_queue_for_each_safe(qreq, iter, &context->tag.expected, recv.queue) {
         if (qreq == req) {
             ucs_queue_del_iter(&context->tag.expected, iter);
+            UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
+                                  "ucp_tag_cancel_expected",
+                                  req, 0);
             return;
         }
     }

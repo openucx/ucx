@@ -44,6 +44,8 @@ static const char *handle_error_modes[] = {
 };
 
 const char *ucs_instrumentation_type_names[] = {
+    [UCS_INSTRUMENT_TYPE_UCP_TX] = "ucp-tx",
+    [UCS_INSTRUMENT_TYPE_UCP_RX] = "ucp-rx",
     [UCS_INSTRUMENT_TYPE_IB_TX] = "ib-tx",
     [UCS_INSTRUMENT_TYPE_IB_RX] = "ib-rx",
     [UCS_INSTRUMENT_TYPE_LAST]  = NULL

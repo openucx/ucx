@@ -118,7 +118,7 @@ def timestamp_analysis(file_path):
             if "min" not in stats:
                 locations[interval]["min"] = duration
             else:
-                stats["min"] = min(stats["max"], duration)
+                stats["min"] = min(stats["min"], duration)
             stats["max"] = max(stats["max"], duration)
         
         # set this 
