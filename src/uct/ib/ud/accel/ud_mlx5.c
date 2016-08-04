@@ -715,7 +715,7 @@ uct_ud_mlx5_query_resources(uct_md_h md,
     ucs_trace_func("");
     /* TODO take transport overhead into account */
     return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                            "ud_mlx5", UCT_IB_DEVICE_FLAG_MLX5_PRM | UCT_IB_DEVICE_FLAG_ONLY_IB,
+                                            "ud_mlx5", UCT_IB_DEVICE_FLAG_MLX5_PRM | UCT_IB_DEVICE_FLAG_LINK_IB,
                                             resources_p, num_resources_p);
 }
 

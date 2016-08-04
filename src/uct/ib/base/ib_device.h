@@ -50,7 +50,7 @@ enum {
     UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
     UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
     UCT_IB_DEVICE_FLAG_DC       = UCS_BIT(3),   /* Device supports DC */
-    UCT_IB_DEVICE_FLAG_ONLY_IB  = UCS_BIT(4)    /* Require only IB */
+    UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(4)    /* Require only IB */
 };
 
 
@@ -58,8 +58,7 @@ typedef enum {
     UCT_IB_ADDRESS_TYPE_LINK_LOCAL,   /* Subnet-local address */
     UCT_IB_ADDRESS_TYPE_SITE_LOCAL,   /* Site local, 16-bit subnet prefix */
     UCT_IB_ADDRESS_TYPE_GLOBAL,       /* Global, 64-bit subnet prefix */
-    UCT_IB_ADDRESS_TYPE_ETH_LOCAL,    /* RoCE - Subnet-local address */
-    UCT_IB_ADDRESS_TYPE_ETH_GLOBAL    /* RoCE - Subnet-global address */
+    UCT_IB_ADDRESS_TYPE_ETH           /* RoCE  address */
 } uct_ib_address_type_t;
 
 
@@ -71,7 +70,9 @@ enum {
     UCT_IB_ADDRESS_FLAG_IF_ID    = UCS_BIT(1),
     UCT_IB_ADDRESS_FLAG_SUBNET16 = UCS_BIT(2),
     UCT_IB_ADDRESS_FLAG_SUBNET64 = UCS_BIT(3),
-    UCT_IB_ADDRESS_FLAG_GID_RAW  = UCS_BIT(4)
+    UCT_IB_ADDRESS_FLAG_GID  = UCS_BIT(4),
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB = UCS_BIT(5),
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(6)
 };
 
 
@@ -80,13 +81,13 @@ enum {
  */
 typedef struct uct_ib_address {
     uint8_t            flags;
-    /* Following fields appear in this order (if specified by flags) unless RoCE is used:
+    /* Following fields appear in this order (if specified by flags) . The full gid always appears last:
      * - uint16_t lid
      * - uint64_t if_id
      * - uint16_t subnet16
      * - uint64_t subnet64
      * For RoCE:
-     * - uint8_t raw
+     * - uint8_t gid[16]
      */
 } UCS_S_PACKED uct_ib_address_t;
 

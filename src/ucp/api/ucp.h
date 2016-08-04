@@ -1705,7 +1705,7 @@ void ucp_dt_destroy(ucp_datatype_t datatype);
  *
  * @note The primary difference between @ref ucp_worker_fence "ucp_worker_fence()"
  * and the @ref ucp_worker_flush "ucp_worker_flush()" is the fact the fence
- * routine does not guarantee completion of the operations on the call return but
+ * routine does not guarante completion of the operations on the call return but
  * only ensures the order between communication operations. The
  * @ref ucp_worker_flush "flush" operation on return guarantees that all
  * operations are completed and corresponding memory regions were updated.
