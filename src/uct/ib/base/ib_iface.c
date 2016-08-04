@@ -292,6 +292,20 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
     return UCS_ERR_INVALID_PARAM;
 }
 
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+static int uct_ib_iface_is_gid_raw_empty(uint8_t *gid_raw)
+{
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        if (gid_raw[0] != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+#endif
+
 static ucs_status_t uct_ib_iface_init_gid(uct_ib_iface_t *iface,
                                            uct_ib_iface_config_t *config)
 {
@@ -307,7 +321,7 @@ static ucs_status_t uct_ib_iface_init_gid(uct_ib_iface_t *iface,
 
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
     if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
-        if ((*((uint64_t*) &iface->gid.raw) == 0) && ((*((uint64_t*) &iface->gid.raw + 1)) == 0)) {
+        if (uct_ib_iface_is_gid_raw_empty(iface->gid.raw)) {
             ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
                       uct_ib_device_name(dev), iface->port_num);
             return UCS_ERR_INVALID_ADDR;
