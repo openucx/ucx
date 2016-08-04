@@ -10,6 +10,7 @@
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt_generic.h>
+#include <ucs/debug/instrument.h>
 #include <ucs/datastruct/mpool.inl>
 #include <inttypes.h>
 
@@ -39,6 +40,10 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
     ucs_trace_data("completing send request %p (%p), %s", req, req + 1,
                    ucs_status_string(status));
     req->send.cb(req + 1, status);
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
+                          "ucp_request_complete_send",
+                          req, 0);
     ucp_request_put(req);
 }
 
@@ -50,6 +55,10 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status,
                    req, req + 1, info->sender_tag, info->length,
                    ucs_status_string(status));
     req->recv.cb(req + 1, status, info);
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
+                          "ucp_request_complete_recv",
+                          req, info->length);
     ucp_request_put(req);
 }
 

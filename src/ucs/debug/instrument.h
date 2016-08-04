@@ -18,6 +18,9 @@
 
 
 typedef enum ucs_instrumentation_types {
+    UCS_INSTRUMENT_TYPE_UCP_TX,
+    UCS_INSTRUMENT_TYPE_UCP_RX,
+
     UCS_INSTRUMENT_TYPE_IB_TX,
     UCS_INSTRUMENT_TYPE_IB_RX,
 

@@ -14,6 +14,7 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/dt_generic.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/debug/instrument.h>
 #include <string.h>
 
 static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
@@ -170,9 +171,15 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 
     if (ucs_likely((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)) {
         length = ucp_contig_dt_length(datatype, count);
+        UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
+                              "ucp_tag_send_nb (eager - start)",
+                              buffer, length);
         if (ucs_likely(length <= ucp_ep_config(ep)->max_eager_short)) {
             status = ucp_tag_send_eager_short(ep, tag, buffer, length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+                UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
+                                      "ucp_tag_send_nb (eager - finish)",
+                                      buffer, length);
                 return UCS_STATUS_PTR(status); /* UCS_OK also goes here */
             }
         }
@@ -182,6 +189,9 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb",
+                          req, ucp_contig_dt_length(datatype, count));
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
 
@@ -205,6 +215,9 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
+
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_sync_nb",
+                          req, ucp_contig_dt_length(datatype, count));
 
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);
