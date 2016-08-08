@@ -3,7 +3,7 @@
  *
  * See file LICENSE for terms.
  */
-
+#define _GNU_SOURCE /* For basename */
 #include <mpi.h>
 
 #include <ucs/sys/preprocessor.h>
@@ -17,7 +17,7 @@
 #define CHKERR_JUMP(cond, msg, label) \
     do { \
         if (cond) { \
-            fprintf(stderr, "%s\n", msg); \
+            printf("%s:%d: %s\n", basename(__FILE__), __LINE__, msg); \
             goto label; \
         } \
     } while (0)
@@ -54,8 +54,8 @@ memtest_type_t tests[] = {
     {NULL}
 };
 
-static size_t total_mapped = 0;
-static size_t total_unmapped = 0;
+static volatile size_t total_mapped = 0;
+static volatile size_t total_unmapped = 0;
 
 static void usage() {
     printf("Usage: test_memhooks [options]\n");
@@ -63,7 +63,7 @@ static void usage() {
     printf("  -h         Print this info.\n");
     printf("  -t <name>  Test name to execute (malloc_hooks)\n");
     printf("                 malloc_hooks     : General UCM test.\n");
-    printf("                 extternal_events : Test of ucm_set_external_event() API.\n");
+    printf("                 external_events  : Test of ucm_set_external_event() API.\n");
     printf("                 flag_no_install  : Test of UCM_EVENT_FLAG_NO_INSTALL flag.\n");
     printf("\n");
 }
