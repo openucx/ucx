@@ -187,7 +187,10 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     (cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
     echo "Running valgrind tests"
-    module load tools/valgrind-latest
+    if [ $(valgrind --version) != "valgrind-3.10.0" ]
+    then
+        module load tools/valgrind-latest
+    fi
     $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
     (cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
     module unload tools/valgrind-latest
