@@ -19,7 +19,9 @@
 #define UCT_IB_LRH_LEN              8   /* IB Local routing header */
 #define UCT_IB_GRH_LEN              40  /* IB GLobal routing header */
 #define UCT_IB_BTH_LEN              12  /* IB base transport header */
-#define UCT_IB_ROCE_LEN             14  /* Ethernet header - 6B for Destination MAC + 6B for Source MAC + 2B Type (RoCE) */
+#define UCT_IB_ROCE_LEN             14  /* Ethernet header -
+                                           6B for Destination MAC +
+                                           6B for Source MAC + 2B Type (RoCE) */
 #define UCT_IB_DETH_LEN             8   /* IB datagram header */
 #define UCT_IB_RETH_LEN             16  /* IB RDMA header */
 #define UCT_IB_ATOMIC_ETH_LEN       28  /* IB atomic header */
@@ -81,7 +83,8 @@ enum {
  */
 typedef struct uct_ib_address {
     uint8_t            flags;
-    /* Following fields appear in this order (if specified by flags) . The full gid always appears last:
+    /* Following fields appear in this order (if specified by flags).
+     * The full gid always appears last:
      * - uint16_t lid
      * - uint64_t if_id
      * - uint16_t subnet16

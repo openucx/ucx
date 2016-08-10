@@ -369,7 +369,7 @@ size_t uct_ib_address_size(uct_ib_address_type_t type)
                sizeof(uint64_t);  /* subnet64 */
     case UCT_IB_ADDRESS_TYPE_ETH:
         return sizeof(uct_ib_address_t) +
-               sizeof(union ibv_gid) * sizeof(uint8_t);  /* raw gid */
+               sizeof(union ibv_gid);  /* raw gid */
     default:
         ucs_fatal("Invalid IB address type: %d", type);
     }
@@ -381,9 +381,9 @@ void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_type_t type,
 {
     void *ptr = ib_addr + 1;
 
-    ib_addr->flags  = 0;
+    ib_addr->flags = 0;
 
-    if (type  !=  UCT_IB_ADDRESS_TYPE_ETH) {
+    if (type != UCT_IB_ADDRESS_TYPE_ETH) {
         /* IB */
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB;
 
@@ -410,10 +410,10 @@ void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_type_t type,
     } else {
         /* RoCE */
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
-        /* in this case we don't use the lid */
-        ib_addr->flags &= ~UCT_IB_ADDRESS_FLAG_LID;
+        /* in this case we don't use the lid and set the GID flag */
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_GID;
-        memcpy(ptr, gid->raw, sizeof(gid->raw) * sizeof(uint8_t));    /* uint8_t raw[16]; */
+        /* uint8_t raw[16]; */
+        memcpy(ptr, gid->raw, sizeof(gid->raw) * sizeof(uint8_t));
     }
 
 }
@@ -430,7 +430,7 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
     *is_global                = 0;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) {
-        memcpy(gid->raw, ptr, sizeof(gid->raw) * sizeof(uint8_t));    /* uint8_t raw[16]; */
+        memcpy(gid->raw, ptr, sizeof(gid->raw) * sizeof(uint8_t)); /* uint8_t raw[16]; */
         *is_global = 1;
     }
 

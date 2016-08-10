@@ -178,26 +178,20 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
 
-#if HAVE_DECL_IBV_LINK_LAYER_INFINIBAND
-    if (!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) ) {
-        /* IB */
-        return ((uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_INFINIBAND) &&
-                (ib_addr->flags &UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
-                (gid.global.subnet_prefix == iface->gid.global.subnet_prefix));
-    } else {
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+    if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
         /* RoCE */
         /* there shouldn't be a lid and the gid flag should be on */
-        return ((uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) &&
-                (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) &&
-                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID));
-    }
-#else
-    if (!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) ) {
-           /* IB */
-           return ((ib_addr->flags &UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
-                   (gid.global.subnet_prefix == iface->gid.global.subnet_prefix));
-       }
+        return ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) &&
+                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) &&
+                (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID));
+    } else
 #endif
+    {
+        /* IB */
+        return ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
+                (gid.global.subnet_prefix == iface->gid.global.subnet_prefix));
+    }
 }
 
 void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
@@ -295,14 +289,7 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
 static int uct_ib_iface_is_gid_raw_empty(uint8_t *gid_raw)
 {
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        if (gid_raw[0] != 0) {
-            return 0;
-        }
-    }
-    return 1;
+    return ((uint64_t)gid_raw == 0) && ((uint64_t)(gid_raw + 8) == 0);
 }
 #endif
 
@@ -493,13 +480,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     /* Address scope and size */
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
     if (uct_ib_iface_port_attr(self)->link_layer == IBV_LINK_LAYER_ETHERNET) {
-           self->addr_type = UCT_IB_ADDRESS_TYPE_ETH;
-       } else {
-           self->addr_type = uct_ib_address_scope(self->gid.global.subnet_prefix);
-       }
-#else
-    self->addr_type = uct_ib_address_scope(self->gid.global.subnet_prefix);
+        self->addr_type = UCT_IB_ADDRESS_TYPE_ETH;
+       } else
 #endif
+       {
+        self->addr_type = uct_ib_address_scope(self->gid.global.subnet_prefix);
+       }
 
     self->addr_size  = uct_ib_address_size(self->addr_type);
 
@@ -652,12 +638,12 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
         extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
             /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
-    } else {
-                extra_pkt_len += UCT_IB_LRH_LEN;
-    }
-#else
-    extra_pkt_len += UCT_IB_LRH_LEN;
+    } else
 #endif
+    {
+      extra_pkt_len += UCT_IB_LRH_LEN;
+    }
+
     iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);
 
     /* Set priority of current device */
