@@ -178,7 +178,7 @@ enum ucp_dt_type {
  * This structure provides a generic datatype descriptor that
  * is used for definition of application defined datatypes.
 
- * Typically, the descriptor is used for an integratoion with datatype
+ * Typically, the descriptor is used for an integration with datatype
  * engines implemented within MPI and SHMEM implementations.
  *
  */
@@ -1703,9 +1703,9 @@ void ucp_dt_destroy(ucp_datatype_t datatype);
  * subsequent communication operations to the same @ref ucp_worker_h "worker"
  * which follow the call to @ref ucp_worker_fence "fence".
  *
- * @note The primary diference between @ref ucp_worker_fence "ucp_worker_fence()"
+ * @note The primary difference between @ref ucp_worker_fence "ucp_worker_fence()"
  * and the @ref ucp_worker_flush "ucp_worker_flush()" is the fact the fence
- * routine does not gurantee completion of the operations on the call return but
+ * routine does not guarante completion of the operations on the call return but
  * only ensures the order between communication operations. The
  * @ref ucp_worker_flush "flush" operation on return guarantees that all
  * operations are completed and corresponding memory regions were updated.

@@ -97,7 +97,7 @@ struct uct_ib_iface {
     uint16_t                pkey_value;
     uint8_t                 port_num;
     uint8_t                 sl;
-    uct_ib_address_scope_t  addr_scope;
+    uct_ib_address_type_t   addr_type;
     uint8_t                 addr_size;
 
     struct ibv_cq           *send_cq;

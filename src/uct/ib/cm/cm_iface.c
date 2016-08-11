@@ -416,7 +416,7 @@ static ucs_status_t uct_cm_query_resources(uct_md_h md,
                                            unsigned *num_resources_p)
 {
     return uct_ib_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                            "cm", 0, /* TODO require IB link layer? */
+                                            "cm", UCT_IB_DEVICE_FLAG_LINK_IB,
                                             resources_p, num_resources_p);
 }
 

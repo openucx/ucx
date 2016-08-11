@@ -17,7 +17,7 @@
  *
  * Client side:
  *
- *    ./ucp_hello_world    <server host name>
+ *    ./ucp_hello_world -n <server host name>
  *
  * Notes:
  *

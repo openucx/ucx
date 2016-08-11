@@ -19,6 +19,9 @@
 #define UCT_IB_LRH_LEN              8   /* IB Local routing header */
 #define UCT_IB_GRH_LEN              40  /* IB GLobal routing header */
 #define UCT_IB_BTH_LEN              12  /* IB base transport header */
+#define UCT_IB_ROCE_LEN             14  /* Ethernet header -
+                                           6B for Destination MAC +
+                                           6B for Source MAC + 2B Type (RoCE) */
 #define UCT_IB_DETH_LEN             8   /* IB datagram header */
 #define UCT_IB_RETH_LEN             16  /* IB RDMA header */
 #define UCT_IB_ATOMIC_ETH_LEN       28  /* IB atomic header */
@@ -48,15 +51,17 @@ enum {
 enum {
     UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
     UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
-    UCT_IB_DEVICE_FLAG_DC       = UCS_BIT(3)    /* Device supports DC */
+    UCT_IB_DEVICE_FLAG_DC       = UCS_BIT(3),   /* Device supports DC */
+    UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(4)    /* Require only IB */
 };
 
 
 typedef enum {
-    UCT_IB_ADDRESS_SCOPE_LINK_LOCAL,   /* Subnet-local address */
-    UCT_IB_ADDRESS_SCOPE_SITE_LOCAL,   /* Site local, 16-bit subnet prefix */
-    UCT_IB_ADDRESS_SCOPE_GLOBAL        /* Global, 64-bit subnet prefix */
-} uct_ib_address_scope_t;
+    UCT_IB_ADDRESS_TYPE_LINK_LOCAL,   /* Subnet-local address */
+    UCT_IB_ADDRESS_TYPE_SITE_LOCAL,   /* Site local, 16-bit subnet prefix */
+    UCT_IB_ADDRESS_TYPE_GLOBAL,       /* Global, 64-bit subnet prefix */
+    UCT_IB_ADDRESS_TYPE_ETH           /* RoCE  address */
+} uct_ib_address_type_t;
 
 
 /**
@@ -66,7 +71,10 @@ enum {
     UCT_IB_ADDRESS_FLAG_LID      = UCS_BIT(0),
     UCT_IB_ADDRESS_FLAG_IF_ID    = UCS_BIT(1),
     UCT_IB_ADDRESS_FLAG_SUBNET16 = UCS_BIT(2),
-    UCT_IB_ADDRESS_FLAG_SUBNET64 = UCS_BIT(3)
+    UCT_IB_ADDRESS_FLAG_SUBNET64 = UCS_BIT(3),
+    UCT_IB_ADDRESS_FLAG_GID  = UCS_BIT(4),
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB = UCS_BIT(5),
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(6)
 };
 
 
@@ -75,11 +83,14 @@ enum {
  */
 typedef struct uct_ib_address {
     uint8_t            flags;
-    /* Following fields appear in this order (if specified by flags) :
+    /* Following fields appear in this order (if specified by flags).
+     * The full gid always appears last:
      * - uint16_t lid
      * - uint64_t if_id
      * - uint16_t subnet16
      * - uint64_t subnet64
+     * For RoCE:
+     * - uint8_t gid[16]
      */
 } UCS_S_PACKED uct_ib_address_t;
 
@@ -153,13 +164,13 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu);
 /**
  * @return IB address scope of a given subnet prefix (according to IBTA 4.1.1 12).
  */
-uct_ib_address_scope_t uct_ib_address_scope(uint64_t subnet_prefix);
+uct_ib_address_type_t uct_ib_address_scope(uint64_t subnet_prefix);
 
 
 /**
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(uct_ib_address_scope_t scope);
+size_t uct_ib_address_size(uct_ib_address_type_t type);
 
 
 /**
@@ -173,7 +184,7 @@ size_t uct_ib_address_size(uct_ib_address_scope_t scope);
  *                         must be at least what @ref uct_ib_address_size() returns
  *                         for the given scope.
  */
-void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_scope_t scope,
+void uct_ib_address_pack(uct_ib_device_t *dev, uct_ib_address_type_t scope,
                          const union ibv_gid *gid, uint16_t lid,
                          uct_ib_address_t *ib_addr);
 

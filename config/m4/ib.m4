@@ -125,6 +125,7 @@ AS_IF([test "x$with_ib" == xyes],
              [])
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
+                       IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
                        IBV_DEVICE_MR_ALLOCATE,
                        IBV_ACCESS_ALLOCATE_MR],
