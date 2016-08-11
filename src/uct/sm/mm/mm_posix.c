@@ -45,7 +45,7 @@ static ucs_config_field_t uct_posix_md_config_table[] = {
   {"DIR", "/tmp", "The path to the backing file in case open() is used.",
    ucs_offsetof(uct_posix_md_config_t, path), UCS_CONFIG_TYPE_STRING},
 
-  {"USE_PROC_LINK", "y", "Use /proc/<pid>/fd/<fd> to share posix file. "
+  {"USE_PROC_LINK", "y", "Use /proc/<pid>/fd/<fd> to share posix file.\n"
    " y   - Use /proc/<pid>/fd/<fd> to share posix file.\n"
    " n   - Use original file path to share posix file.\n",
    ucs_offsetof(uct_posix_md_config_t, use_proc_link), UCS_CONFIG_TYPE_BOOL},
@@ -429,8 +429,11 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
     }
 
     if (shm_fd == -1) {
-        ucs_error("Error returned from shm_open/open in attach. %m. File name is: %s",
-                  file_name);
+        ucs_error("Error returned from open in attach. %m. File name is: %s%s",
+                 (mmid & UCT_MM_POSIX_PROC_LINK) ? "" :
+                 (mmid & UCT_MM_POSIX_SHM_OPEN) ? "/dev/shm" : "",
+                 file_name);
+
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free_file;
     }
