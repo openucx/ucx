@@ -71,8 +71,8 @@
 #define ucs_trace_req(_message, ...)    ucs_log(UCS_LOG_LEVEL_TRACE_REQ, _message, ## __VA_ARGS__)
 #define ucs_trace_data(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_DATA, _message, ## __VA_ARGS__)
 #define ucs_trace_async(_message, ...)  ucs_log(UCS_LOG_LEVEL_TRACE_ASYNC, _message, ## __VA_ARGS__)
-#define ucs_trace_func(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s("_message")", __FUNCTION__, ## __VA_ARGS__)
-#define ucs_trace_poll(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, "%s("_message")", __FUNCTION__, ## __VA_ARGS__)
+#define ucs_trace_func(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_FUNC, "%s(" _message ")", __FUNCTION__, ## __VA_ARGS__)
+#define ucs_trace_poll(_message, ...)   ucs_log(UCS_LOG_LEVEL_TRACE_POLL, "%s(" _message ")", __FUNCTION__, ## __VA_ARGS__)
 
 
 typedef enum {
