@@ -38,6 +38,7 @@ noinst_HEADERS = \
 
 libucp_la_SOURCES = \
 	amo/basic_amo.c \
+	am/basic_am.c \
 	core/ucp_context.c \
 	core/ucp_ep.c \
 	core/ucp_mm.c \
