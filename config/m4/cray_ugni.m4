@@ -15,7 +15,7 @@ AS_IF([test "x$with_ugni" != "xno"],
         [PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni cray-pmi], 
                            [transports="${transports},cray-ugni"
                            cray_ugni_supported=yes
-			   AC_DEFINE([HAVE_TL_UGNI], [1],
+                           AC_DEFINE([HAVE_TL_UGNI], [1],
                                  [Define if UGNI transport exists.])],
                            [AS_IF([test "x$with_ugni" == "xforced"],
                                   [AC_MSG_WARN([UGNI support was requested but cray-ugni and cray-pmi packages can't be found])
