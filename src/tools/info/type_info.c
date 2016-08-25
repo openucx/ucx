@@ -50,8 +50,10 @@
 
 
 #if HAVE_TL_UGNI
-#  include <uct/ugni/ugni_ep.h>
-#  include <uct/ugni/ugni_iface.h>
+#  include <uct/ugni/base/ugni_ep.h>
+#  include <uct/ugni/base/ugni_iface.h>
+#  include <uct/ugni/base/ugni_device.h>
+#  include <uct/ugni/smsg/ugni_smsg_ep.h>
 #endif
 
 
@@ -130,7 +132,12 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_md_ops_t);
         PRINT_SIZE(uct_tl_resource_desc_t);
         PRINT_SIZE(uct_rkey_bundle_t);
+
+#if HAVE_TL_UGNI
         PRINT_SIZE(uct_sockaddr_ugni_t);
+        PRINT_SIZE(uct_sockaddr_smsg_ugni_t);
+        PRINT_SIZE(uct_devaddr_ugni_t);
+#endif
 
 #if HAVE_IB
         printf("\nIB:\n");
@@ -210,15 +217,12 @@ void print_type_info(const char * tl_name)
 #if HAVE_TL_UGNI
     if (tl_name == NULL || !strcasecmp(tl_name, "ugni")) {
         printf("UGNI:\n");
-        PRINT_SIZE(uct_ugni_context_t);
         PRINT_SIZE(uct_ugni_device_t);
         PRINT_SIZE(uct_ugni_ep_t);
-        PRINT_SIZE(uct_ugni_ep_addr_t);
-        PRINT_SIZE(uct_ugni_fma_desc_t);
         PRINT_SIZE(uct_ugni_iface_t);
-        PRINT_SIZE(uct_ugni_iface_addr_t);
-        PRINT_SIZE(uct_ugni_iface_config_t);
         PRINT_SIZE(uct_ugni_md_t);
+        PRINT_SIZE(uct_ugni_compact_smsg_attr_t);
+
         printf("\n");
     }
 #endif

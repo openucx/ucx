@@ -47,6 +47,7 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
 
     message_data.msg_id = GNI_CQ_GET_MSG_ID(event_data);
     message_pointer = sglib_hashed_uct_ugni_smsg_desc_t_find_member(iface->smsg_list,&message_data);
+    ucs_assert(NULL != message_pointer);
     message_pointer->ep->outstanding--;
     iface->super.outstanding--;
     sglib_hashed_uct_ugni_smsg_desc_t_delete(iface->smsg_list,message_pointer);
@@ -208,6 +209,7 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
     iface_attr->cap.am.max_short       = iface->config.smsg_seg_size-sizeof(uint64_t);
     iface_attr->cap.am.max_bcopy       = iface->config.smsg_seg_size;
+    iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = sizeof(uct_sockaddr_smsg_ugni_t);
     iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT |
@@ -283,7 +285,7 @@ uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .iface_flush           = uct_ugni_smsg_iface_flush,
     .iface_close           = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_smsg_iface_t),
     .iface_get_address     = uct_ugni_iface_get_address,
-    .iface_get_device_address = (void*)ucs_empty_function_return_success,
+    .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_is_reachable    = uct_ugni_iface_is_reachable,
     .iface_release_am_desc = uct_ugni_smsg_iface_release_am_desc,
     .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_smsg_ep_t),
@@ -301,6 +303,7 @@ static ucs_status_t ugni_smsg_activate_iface(uct_ugni_smsg_iface_t *iface)
 {
     ucs_status_t status;
     gni_return_t ugni_rc;
+    uint32_t pe_address;
 
     if(iface->super.activated) {
         return UCS_OK;
@@ -308,7 +311,7 @@ static ucs_status_t ugni_smsg_activate_iface(uct_ugni_smsg_iface_t *iface)
     /*pull out these chunks into common routines */
     status = uct_ugni_init_nic(0, &iface->super.domain_id,
                                &iface->super.cdm_handle, &iface->super.nic_handle,
-                               &iface->super.pe_address);
+                               &pe_address);
     if (UCS_OK != status) {
         ucs_error("Failed to UGNI NIC, Error status: %d", status);
         return status;

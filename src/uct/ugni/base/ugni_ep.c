@@ -69,7 +69,8 @@ static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbit
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
-void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
+void uct_ugni_ep_pending_purge(uct_ep_h tl_ep,
+                               uct_pending_purge_callback_t cb,
                                void *arg){
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
     uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
@@ -79,10 +80,13 @@ void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                             uct_ugni_ep_abriter_purge_cb, &args);
 }
 
-ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface, const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep){
+ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface,
+                             const uct_devaddr_ugni_t *dev_addr,
+                             const uct_sockaddr_ugni_t *iface_addr,
+                             uct_ugni_ep_t *ep){
     gni_return_t ugni_rc;
 
-    ugni_rc = GNI_EpBind(ep->ep, iface_addr->nic_addr, iface_addr->domain_id);
+    ugni_rc = GNI_EpBind(ep->ep, dev_addr->nic_addr, iface_addr->domain_id);
     if (GNI_RC_SUCCESS != ugni_rc) {
         (void)GNI_EpDestroy(ep->ep);
         ucs_error("GNI_EpBind failed, Error status: %s %d",
@@ -90,7 +94,7 @@ ucs_status_t ugni_connect_ep(uct_ugni_iface_t *iface, const uct_sockaddr_ugni_t 
         return UCS_ERR_UNREACHABLE;
     }
 
-    ucs_debug("Binding ep %p to address (%d %d)", ep, iface_addr->nic_addr,
+    ucs_debug("Binding ep %p to address (%d %d)", ep, dev_addr->nic_addr,
               iface_addr->domain_id);
 
     ep->outstanding = 0;
@@ -104,6 +108,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
 {
     uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
     const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)addr;
+    const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)dev_addr;
     ucs_status_t rc = UCS_OK;
     gni_return_t ugni_rc;
     self->arb_size = 0;
@@ -119,7 +124,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     }
 
     if(NULL != addr){
-        rc = ugni_connect_ep(iface, iface_addr, self);
+        rc = ugni_connect_ep(iface, ugni_dev_addr, iface_addr, self);
     }
 
     ucs_arbiter_group_init(&self->arb_group);

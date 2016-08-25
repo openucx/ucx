@@ -97,7 +97,7 @@ uct_ugni_udt_ep_am_common_send(const unsigned is_short, uct_ugni_udt_ep_t *ep, u
     sheader->am_id = am_id;
     sheader->type = UCT_UGNI_UDT_PAYLOAD;
 
-    ucs_assert_always(sheader->length <= GNI_DATAGRAM_MAXSIZE);
+    ucs_assertv_always(msg_length <= GNI_DATAGRAM_MAXSIZE, "msg_length=%u", msg_length);
 
     pthread_mutex_lock(&uct_ugni_global_lock);
     ugni_rc = GNI_EpPostDataWId(ep->super.ep,

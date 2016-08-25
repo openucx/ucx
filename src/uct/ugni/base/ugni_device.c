@@ -9,6 +9,7 @@
 #endif
 
 #include "ugni_device.h"
+#include "ugni_iface.h"
 
 #include <uct/base/uct_md.h>
 #include <ucs/debug/memtrack.h>
@@ -116,4 +117,14 @@ ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *de
 void uct_ugni_device_destroy(uct_ugni_device_t *dev)
 {
     /* Nop */
+}
+
+ucs_status_t uct_ugni_iface_get_dev_address(uct_iface_t *tl_iface, uct_device_addr_t *addr)
+{
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_iface_t);
+    uct_devaddr_ugni_t *ugni_dev_addr = (uct_devaddr_ugni_t *)addr;
+
+    ugni_dev_addr->nic_addr = iface->dev->address;
+
+    return UCS_OK;
 }

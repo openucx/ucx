@@ -24,7 +24,7 @@ typedef struct uct_ugni_compact_smsg_attr {
 typedef struct uct_sockaddr_smsg_ugni {
     uct_sockaddr_ugni_t super;
     uct_ugni_compact_smsg_attr_t smsg_compact_attr;
-    uint64_t ep_hash;
+    uint32_t ep_hash;
 } UCS_S_PACKED uct_sockaddr_smsg_ugni_t;
 
 typedef struct uct_ugni_mbox_handle {

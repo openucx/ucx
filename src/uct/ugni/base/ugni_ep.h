@@ -8,6 +8,8 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/datastruct/arbiter.h>
 
+#include "ugni_device.h"
+
 #define UCT_UGNI_HASH_SIZE   (256)
 
 #define UCT_UGNI_ZERO_LENGTH_POST(len)              \
@@ -15,6 +17,10 @@ if (0 == len) {                                     \
     ucs_trace_data("Zero length request: skip it"); \
     return UCS_OK;                                  \
 }
+
+typedef struct uct_sockaddr_ugni {
+   uint16_t   domain_id;
+} UCS_S_PACKED uct_sockaddr_ugni_t;
 
 typedef struct uct_ugni_ep {
   uct_base_ep_t     super;
@@ -48,7 +54,8 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_ep_t, uct_ep_t);
 
 struct uct_ugni_iface;
 uct_ugni_ep_t *uct_ugni_iface_lookup_ep(struct uct_ugni_iface *iface, uintptr_t hash_key);
-ucs_status_t ugni_connect_ep(struct uct_ugni_iface *iface, const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep);
+ucs_status_t ugni_connect_ep(struct uct_ugni_iface *iface, const uct_devaddr_ugni_t *dev_addr,
+                             const uct_sockaddr_ugni_t *iface_addr, uct_ugni_ep_t *ep);
 ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
 void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                                void *arg);
