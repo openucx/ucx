@@ -270,30 +270,31 @@ static void *ucm_realloc(void *oldptr, size_t size, const void *caller)
     int foreign;
 
     ucm_malloc_hook_state.hook_called = 1;
+    if (oldptr != NULL) {
+        foreign = !ucm_malloc_address_remove_if_managed(oldptr, "realloc");
+        if (RUNNING_ON_VALGRIND || foreign) {
+            /*  If pointer was created by original malloc(), allocate the new pointer
+             * with the new heap, and copy out the data. Then, release the old pointer.
+             *  We do the same if we are running with valgrind, so we could use client
+             * requests properly.
+             */
+            newptr = ucm_dlmalloc(size);
+            ucm_malloc_allocated(newptr, size, "realloc");
 
-    foreign = (oldptr != NULL) &&
-              !ucm_malloc_address_remove_if_managed(oldptr, "realloc");
-    if ((oldptr != NULL) && (RUNNING_ON_VALGRIND || foreign)) {
-        /*  If pointer was created by original malloc(), allocate the new pointer
-         * with the new heap, and copy out the data. Then, release the old pointer.
-         *  We do the same if we are running with valgrind, so we could use client
-         * requests properly.
-         */
-        newptr = ucm_dlmalloc(size);
-        ucm_malloc_allocated(newptr, size, "realloc");
+            oldsz = ucm_malloc_hook_state.usable_size(oldptr);
+            memcpy(newptr, oldptr, ucs_min(size, oldsz));
 
-        oldsz = ucm_malloc_hook_state.usable_size(oldptr);
-        memcpy(newptr, oldptr, ucs_min(size, oldsz));
-
-        if (foreign) {
-            ucm_release_foreign_block(oldptr, ucm_malloc_hook_state.free, "realloc");
-        } else{
-            ucm_mem_free(oldptr, oldsz);
+            if (foreign) {
+                ucm_release_foreign_block(oldptr, ucm_malloc_hook_state.free, "realloc");
+            } else{
+                ucm_mem_free(oldptr, oldsz);
+            }
+            return newptr;
         }
-    } else {
-        newptr = ucm_dlrealloc(oldptr, size);
-        ucm_malloc_allocated(newptr, size, "realloc");
     }
+
+    newptr = ucm_dlrealloc(oldptr, size);
+    ucm_malloc_allocated(newptr, size, "realloc");
     return newptr;
 }
 

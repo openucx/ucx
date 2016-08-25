@@ -582,7 +582,6 @@ static ucs_status_t ucs_debugger_attach()
     char* argv[6 + UCS_GDB_MAX_ARGS];
     pid_t pid, debug_pid;
     int fd, ret, narg;
-    int valgrind;
     char *self_exe;
 
     /* Fork a process which will execute gdb and attach to the current process.
@@ -599,7 +598,6 @@ static ucs_status_t ucs_debugger_attach()
     }
 
     /* retrieve values from original process, before forking */
-    valgrind = RUNNING_ON_VALGRIND;
     self_exe = ucs_debug_strdup(ucs_get_exe());
 
     if (pid == 0) {
@@ -611,7 +609,7 @@ static ucs_status_t ucs_debugger_attach()
             argv[narg] = strtok(NULL, " \t");
         }
 
-        if (!valgrind) {
+        if (!RUNNING_ON_VALGRIND) {
             snprintf(pid_str, sizeof(pid_str), "%d", debug_pid);
             argv[narg++] = "-p";
             argv[narg++] = pid_str;
@@ -625,7 +623,7 @@ static ucs_status_t ucs_debugger_attach()
         /* Write gdb commands and add the file to argv is successful */
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);
         if (fd >= 0) {
-            if (valgrind) {
+            if (RUNNING_ON_VALGRIND) {
                 vg_cmds = ucs_debug_alloc_mem(strlen(gdb_vg_commands) + strlen(self_exe));
                 sprintf(vg_cmds, gdb_vg_commands, self_exe);
                 cmds = vg_cmds;
@@ -893,6 +891,7 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
 {
     struct sigaction sigact, old_action;
     int i;
+    int ret;
 
     if (handler == NULL) {
         sigact.sa_handler   = SIG_DFL;
@@ -904,7 +903,11 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
     sigemptyset(&sigact.sa_mask);
 
     for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
-        sigaction(ucs_global_opts.error_signals.signals[i], &sigact, &old_action);
+        ret = sigaction(ucs_global_opts.error_signals.signals[i], &sigact, &old_action);
+        if (ret < 0) {
+            ucs_warn("failed to set signal handler for sig %d : %m",
+                     ucs_global_opts.error_signals.signals[i]);
+        }
         ucs_debug_signal_restorer = old_action.sa_restorer;
     }
 }
