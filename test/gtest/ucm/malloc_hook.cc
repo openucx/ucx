@@ -49,8 +49,8 @@ protected:
     }
 
 public:
-    static int          small_alloc_count;
-    static const size_t small_alloc_size  = 10000;
+    static int            small_alloc_count;
+    static const size_t   small_alloc_size  = 10000;
     ucs::ptr_vector<void> m_pts;
 };
 
@@ -144,15 +144,16 @@ void test_thread::test() {
     ucs::ptr_vector<void> new_ptrs;
     void *ptr_r;
     size_t small_map_size;
+    const size_t small_alloc_size = malloc_hook::small_alloc_size;
     int num_ptrs_in_range;
     static volatile uint32_t total_ptrs_in_range = 0;
 
     /* Allocate some pointers with old heap manager */
     for (unsigned i = 0; i < 10; ++i) {
-        old_ptrs.push_back(malloc(m_test->small_alloc_size));
+        old_ptrs.push_back(malloc(small_alloc_size));
     }
 
-    ptr_r = malloc(m_test->small_alloc_size);
+    ptr_r = malloc(small_alloc_size);
 
     m_map_ranges.reserve  ((m_test->small_alloc_count * 8 + 10) * m_num_threads);
     m_unmap_ranges.reserve((m_test->small_alloc_count * 8 + 10) * m_num_threads);
@@ -169,7 +170,7 @@ void test_thread::test() {
 
     /* Allocate small pointers with new heap manager */
     for (int i = 0; i < m_test->small_alloc_count; ++i) {
-        new_ptrs.push_back(malloc(m_test->small_alloc_size));
+        new_ptrs.push_back(malloc(small_alloc_size));
     }
     small_map_size = m_map_size;
 
@@ -182,7 +183,7 @@ void test_thread::test() {
     for (ucs::ptr_vector<void>::const_iterator iter = new_ptrs.begin();
                     iter != new_ptrs.end(); ++iter)
     {
-        if (is_ptr_in_range(*iter, m_test->small_alloc_size, m_map_ranges)) {
+        if (is_ptr_in_range(*iter, small_alloc_size, m_map_ranges)) {
             ++num_ptrs_in_range;
         }
     }
@@ -217,7 +218,7 @@ void test_thread::test() {
     ucs_get_user_name();
 
     /* Test realloc */
-    ptr_r = realloc(ptr_r, m_test->small_alloc_size / 2);
+    ptr_r = realloc(ptr_r, small_alloc_size / 2);
     free(ptr_r);
 
     /* Test C++ allocations */

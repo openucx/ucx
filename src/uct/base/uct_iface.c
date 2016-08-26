@@ -332,7 +332,6 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
 {
     uint64_t alloc_methods_bitmap;
     uct_alloc_method_t method;
-    ucs_status_t status;
     unsigned i;
     uint8_t id;
 
@@ -364,13 +363,8 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
 
     self->config.failure_level = config->failure;
 
-    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
-                                  stats_parent);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCS_OK;
+    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
+                                stats_parent);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
@@ -424,16 +418,9 @@ UCS_CLASS_DEFINE(uct_ep_t, void);
 
 UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
-    ucs_status_t status;
-
     UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
 
-    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCS_OK;
+    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
