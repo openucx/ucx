@@ -103,7 +103,9 @@ public:
             }
         }
 
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
 out:
+#endif
         ibv_close_device(ibctx);
         ibv_free_device_list(device_list);
 
