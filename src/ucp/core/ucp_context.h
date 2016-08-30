@@ -71,6 +71,9 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_thresh;
     /** Threshold for switching UCP to rendezvous protocol */
     size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to rendezvous protocol in case the calculated
+     *  threshold is zero or negative */
+    size_t                                 rndv_thresh_fallback;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Estimation of bcopy bandwidth */

@@ -264,7 +264,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_rsc_index_t rsc_index;
     uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
-    double zcopy_thresh, rndv_thresh;
+    double zcopy_thresh, rndv_thresh, numerator, denumerator;
 
     /* Default thresholds */
     config->zcopy_thresh      = SIZE_MAX;
@@ -371,20 +371,27 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                      * Isolating the 'size' yields the rndv_thresh.
                      * The used latency functions for eager_zcopy and rndv are also specified in
                      * the UCX wiki */
-                    rndv_thresh = ((2 * iface_attr->overhead) + (4 * iface_attr->latency)
-                                   + md_attr->reg_cost.overhead) /
-                                  (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
+                    numerator = ((2 * iface_attr->overhead) + (4 * iface_attr->latency) +
+                                 md_attr->reg_cost.overhead);
+                    denumerator = (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
                                    md_attr->reg_cost.growth - (1.0 / iface_attr->bandwidth));
 
-                    if (rndv_thresh < 0) {
-                        config->rndv_thresh        = SIZE_MAX;
-                        config->sync_rndv_thresh   = SIZE_MAX;
-                        config->max_rndv_get_zcopy = SIZE_MAX;
+                    if (denumerator > 0) {
+                        rndv_thresh = numerator / denumerator;
                     } else {
-                        config->rndv_thresh        = rndv_thresh;
-                        config->sync_rndv_thresh   = rndv_thresh;
-                        config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
+                        rndv_thresh = context->config.ext.rndv_thresh_fallback;
+                        ucs_debug("The denumerator is %f. Setting the rndv threshold to %f",
+                                  denumerator, rndv_thresh);
                     }
+
+                    /* for the 'auto' mode in the rndv_threshold, we enforce the usage of rndv
+                     * to a value that can be set by the user.
+                     * to disable rndv, need to set a high value for the rndv_threshold
+                     * (without the 'auto' mode)*/
+                    config->rndv_thresh        = rndv_thresh;
+                    config->sync_rndv_thresh   = rndv_thresh;
+                    config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
+
                 } else {
                     config->rndv_thresh        = context->config.ext.rndv_thresh;
                     config->sync_rndv_thresh   = context->config.ext.rndv_thresh;
