@@ -13,6 +13,41 @@
 #include <ucp/core/ucp_context.h>
 
 
+/* Which iface flags would be packed in the address */
+enum {
+    UCP_ADDRESS_IFACE_FLAGS =
+         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+         UCT_IFACE_FLAG_AM_CB_SYNC |
+         UCT_IFACE_FLAG_AM_CB_ASYNC |
+         UCT_IFACE_FLAG_AM_BCOPY |
+         UCT_IFACE_FLAG_PUT_SHORT |
+         UCT_IFACE_FLAG_PUT_BCOPY |
+         UCT_IFACE_FLAG_GET_BCOPY |
+         UCT_IFACE_FLAG_GET_ZCOPY |
+         UCT_IFACE_FLAG_ATOMIC_ADD32 |
+         UCT_IFACE_FLAG_ATOMIC_FADD32 |
+         UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+         UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
+         UCT_IFACE_FLAG_ATOMIC_ADD64 |
+         UCT_IFACE_FLAG_ATOMIC_FADD64 |
+         UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+         UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
+         UCT_IFACE_FLAG_WAKEUP |
+         UCT_IFACE_FLAG_PENDING
+};
+
+
+/**
+ * Remote interface attributes.
+ */
+struct ucp_address_iface_attr {
+    uint64_t                   cap_flags;     /* Interface capability flags */
+    double                     overhead;      /* Interface performance - overhead */
+    double                     bandwidth;     /* Interface performance - bandwidth */
+    int                        priority;      /* Priority of device */
+};
+
+
 /**
  * Address entry.
  */
@@ -22,7 +57,7 @@ struct ucp_address_entry {
     uint16_t                   tl_name_csum;   /* Checksum of transport name */
     ucp_rsc_index_t            md_index;       /* Memory domain index */
     uint64_t                   md_flags;       /* MD reg/alloc flags */
-    ucp_wireup_iface_attr_t    iface_attr;     /* Interface attributes information */
+    ucp_address_iface_attr_t   iface_attr;     /* Interface attributes information */
     size_t                     tl_addr_len;    /* Transport address length */
     union {
         const uct_iface_addr_t *iface_addr;    /* Interface address */

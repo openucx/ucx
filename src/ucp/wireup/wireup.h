@@ -46,20 +46,9 @@ typedef struct {
      */
     double      (*calc_score)(const uct_md_attr_t *md_attr,
                               const uct_iface_attr_t *iface_attr,
-                              const ucp_wireup_iface_attr_t *remote_iface_attr);
+                              const ucp_address_iface_attr_t *remote_iface_attr);
 
 } ucp_wireup_criteria_t;
-
-
-/**
- * Transport capabilities and performance.
- */
-struct ucp_wireup_tl_info {
-    uint64_t                   cap_flags;  /* Interface capability flags */
-    float                      overhead;   /* Interface performance - overhead */
-    float                      bandwidth;  /* Interface performance - bandwidth */
-    uint8_t                    priority;   /* Priority of device */
-};
 
 
 /**
