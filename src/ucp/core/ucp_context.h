@@ -38,10 +38,10 @@ typedef uint8_t                      ucp_lane_index_t;
 UCP_UINT_TYPE(UCP_MD_LANE_MAP_BITS)  ucp_md_lane_map_t;
 
 /* Forward declarations */
-typedef struct ucp_request           ucp_request_t;
-typedef struct ucp_wireup_tl_info    ucp_wireup_iface_attr_t;
-typedef struct ucp_address_entry     ucp_address_entry_t;
-typedef struct ucp_stub_ep           ucp_stub_ep_t;
+typedef struct ucp_request              ucp_request_t;
+typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
+typedef struct ucp_address_entry        ucp_address_entry_t;
+typedef struct ucp_stub_ep              ucp_stub_ep_t;
 
 
 /**

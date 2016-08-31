@@ -44,6 +44,13 @@ typedef struct {
 } ucp_address_packed_device_t;
 
 
+typedef struct {
+    float            overhead;
+    float            bandwidth;
+    uint32_t         prio_cap_flags; /* 8 lsb: prio, 24 msb - cap flags */
+} ucp_address_packed_iface_attr_t;
+
+
 #define UCP_ADDRESS_FLAG_LAST         0x80   /* Last address in the list */
 #define UCP_ADDRESS_FLAG_EMPTY        0x80   /* Device without TL addresses */
 #define UCP_ADDRESS_FLAG_MD_ALLOC     0x40   /* MD can register  */
@@ -51,7 +58,6 @@ typedef struct {
 #define UCP_ADDRESS_FLAG_MD_MASK      ~(UCP_ADDRESS_FLAG_EMPTY | \
                                         UCP_ADDRESS_FLAG_MD_ALLOC | \
                                         UCP_ADDRESS_FLAG_MD_REG)
-
 
 static size_t ucp_address_string_packed_size(const char *s)
 {
@@ -143,7 +149,7 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
         }
 
         dev->tl_addrs_size += sizeof(uint16_t); /* tl name checksum */
-        dev->tl_addrs_size += sizeof(ucp_wireup_iface_attr_t); /* transport info */
+        dev->tl_addrs_size += sizeof(ucp_address_packed_iface_attr_t); /* iface attr */
         dev->tl_addrs_size += 1;                /* address length */
         dev->rsc_index      = i;
         dev->dev_addr_len   = iface_attr->device_addr_len;
@@ -212,13 +218,53 @@ ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
     return UCS_ERR_INVALID_ADDR;
 }
 
-static void ucp_address_pack_tl_info(ucp_wireup_iface_attr_t *tl_info,
-                                     const uct_iface_attr_t *iface_attr)
+static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
+                                        const uct_iface_attr_t *iface_attr)
 {
-    tl_info->cap_flags = iface_attr->cap.flags;
-    tl_info->overhead  = iface_attr->overhead;
-    tl_info->bandwidth = iface_attr->bandwidth;
-    tl_info->priority  = iface_attr->priority;
+    uint32_t packed_flag;
+    uint64_t bit;
+
+    packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
+    packed->overhead       = iface_attr->overhead;
+    packed->bandwidth      = iface_attr->bandwidth;
+
+    /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
+    packed_flag = 8;
+    bit         = 1;
+    while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
+        if (UCP_ADDRESS_IFACE_FLAGS & bit) {
+            if (iface_attr->cap.flags & bit) {
+                packed->prio_cap_flags |= packed_flag;
+            }
+            packed_flag <<= 1;
+        }
+        bit <<= 1;
+    }
+}
+
+static void
+ucp_address_unpack_iface_attr(ucp_address_iface_attr_t *iface_attr,
+                              const ucp_address_packed_iface_attr_t *packed)
+{
+    uint32_t packed_flag;
+    uint64_t bit;
+
+    iface_attr->cap_flags = 0;
+    iface_attr->priority  = packed->prio_cap_flags & UCS_MASK(8);
+    iface_attr->overhead  = packed->overhead;
+    iface_attr->bandwidth = packed->bandwidth;
+
+    packed_flag = 8;
+    bit         = 1;
+    while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
+        if (UCP_ADDRESS_IFACE_FLAGS & bit) {
+            if (packed->prio_cap_flags & packed_flag) {
+                iface_attr->cap_flags |= bit;
+            }
+            packed_flag <<= 1;
+        }
+        bit <<= 1;
+    }
 }
 
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
@@ -290,8 +336,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             ptr += sizeof(uint16_t);
 
             /* Transport information */
-            ucp_address_pack_tl_info(ptr, &worker->iface_attrs[i]);
-            ptr += sizeof(ucp_wireup_iface_attr_t);
+            ucp_address_pack_iface_attr(ptr, &worker->iface_attrs[i]);
+            ptr += sizeof(ucp_address_packed_iface_attr_t);
 
             /* Transport address length */
             iface_attr = &worker->iface_attrs[i];
@@ -439,8 +485,8 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
 
         last_tl = empty_dev;
         while (!last_tl) {
-            ptr += sizeof(uint16_t);             /* tl_name_csum */
-            ptr += sizeof(ucp_wireup_iface_attr_t); /* tl_info */
+            ptr += sizeof(uint16_t);                        /* tl_name_csum */
+            ptr += sizeof(ucp_address_packed_iface_attr_t); /* iface attr */
 
             /* tl address length */
             tl_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;
@@ -495,8 +541,8 @@ ucs_status_t ucp_address_unpack(const void *buffer, uint64_t *remote_uuid_p,
             ptr += sizeof(uint16_t);
 
             /* tl_name_csum */
-            address->iface_attr   = *(const ucp_wireup_iface_attr_t*)ptr;
-            ptr += sizeof(ucp_wireup_iface_attr_t);
+            ucp_address_unpack_iface_attr(&address->iface_attr, ptr);
+            ptr += sizeof(ucp_address_packed_iface_attr_t);
 
             /* tl address length */
             tl_addr_len = (*(uint8_t*)ptr) & ~UCP_ADDRESS_FLAG_LAST;

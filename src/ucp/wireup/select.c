@@ -65,7 +65,7 @@ static const char *ucp_wireup_iface_flags[] = {
 
 static double ucp_wireup_aux_score_func(const uct_md_attr_t *md_attr,
                                         const uct_iface_attr_t *iface_attr,
-                                        const ucp_wireup_iface_attr_t *remote_iface_attr);
+                                        const ucp_address_iface_attr_t *remote_iface_attr);
 
 static ucp_wireup_criteria_t ucp_wireup_aux_criteria = {
     .title              = "auxiliary",
@@ -168,6 +168,11 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
                                                        ucp_wireup_md_flags));
             continue;
         }
+
+        /* Make sure we are indeed passing all flags required by the criteria in
+         * ucp packed address */
+        ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS, criteria->remote_iface_flags));
+
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
             ucs_trace("addr[%d]: no %s", addr_index,
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
@@ -422,7 +427,7 @@ static uint64_t ucp_ep_get_context_features(ucp_ep_h ep)
 
 static double ucp_wireup_rma_score_func(const uct_md_attr_t *md_attr,
                                         const uct_iface_attr_t *iface_attr,
-                                        const ucp_wireup_iface_attr_t *remote_iface_attr)
+                                        const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best for 4k messages */
     return 1e-3 / (iface_attr->latency + iface_attr->overhead +
@@ -457,7 +462,7 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, unsigned address_count
 
 static double ucp_wireup_amo_score_func(const uct_md_attr_t *md_attr,
                                         const uct_iface_attr_t *iface_attr,
-                                        const ucp_wireup_iface_attr_t *remote_iface_attr)
+                                        const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best one-sided latency */
     return 1e-3 / (iface_attr->latency + iface_attr->overhead);
@@ -502,7 +507,7 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, unsigned address_count
 
 static double ucp_wireup_am_score_func(const uct_md_attr_t *md_attr,
                                        const uct_iface_attr_t *iface_attr,
-                                       const ucp_wireup_iface_attr_t *remote_iface_attr)
+                                       const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best end-to-end latency */
     return 1e-3 / (iface_attr->latency + iface_attr->overhead + remote_iface_attr->overhead);
@@ -510,7 +515,7 @@ static double ucp_wireup_am_score_func(const uct_md_attr_t *md_attr,
 
 static double ucp_wireup_rndv_score_func(const uct_md_attr_t *md_attr,
                                          const uct_iface_attr_t *iface_attr,
-                                         const ucp_wireup_iface_attr_t *remote_iface_attr)
+                                         const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* highest bandwidth */
     return iface_attr->bandwidth;
@@ -770,7 +775,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
 
 static double ucp_wireup_aux_score_func(const uct_md_attr_t *md_attr,
                                         const uct_iface_attr_t *iface_attr,
-                                        const ucp_wireup_iface_attr_t *remote_iface_attr)
+                                        const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best end-to-end latency and larger bcopy size */
     return (1e-3 / (iface_attr->latency + iface_attr->overhead + remote_iface_attr->overhead)) +
