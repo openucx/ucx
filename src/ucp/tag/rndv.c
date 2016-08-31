@@ -111,7 +111,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
             size_t max_get_zcopy = ucp_ep_config(get_req->send.ep)->max_rndv_get_zcopy;
             size_t remainder = (uintptr_t) get_req->send.buffer % UCP_ALIGN; /* TODO make UCP_ALIGN come from the transport */
 
-            if (remainder) {
+            if (remainder && (get_req->send.length > UCP_MTU_SIZE )) {
                 get_req->send.uct_comp.count = 1 +
                                                (get_req->send.length - (UCP_MTU_SIZE - remainder) +
                                                max_get_zcopy - 1) / max_get_zcopy;
@@ -124,7 +124,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
     offset = get_req->send.state.offset;
 
     if ((offset == 0) && ((uintptr_t)get_req->send.buffer % UCP_ALIGN) &&
-        (get_req->send.length > (UCP_MTU_SIZE - ((uintptr_t)get_req->send.buffer % UCP_ALIGN)))) {
+        (get_req->send.length > UCP_MTU_SIZE )) {
         length = UCP_MTU_SIZE - ((uintptr_t)get_req->send.buffer % UCP_ALIGN);
     } else {
         length = ucs_min(get_req->send.length - offset,
