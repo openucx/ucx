@@ -149,3 +149,17 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
                 [AC_MSG_ERROR([Cannot continue. Please use compiler that
                              supports __attribute__((constructor))])]
                 )
+
+#
+# Architecture specific checks
+#
+case ${host} in
+    aarch64*)
+    AC_MSG_CHECKING([support for CNTVCT_EL0 on aarch64])
+    AC_RUN_IFELSE([AC_LANG_PROGRAM(
+                  [[#include <stdint.h>]],
+                  [[uint64_t tmp; asm volatile("mrs %0, cntvct_el0" : "=r" (tmp));]])],
+                  [AC_MSG_RESULT([yes])],
+                  [AC_MSG_ERROR([cannot access cntvct_el0 register, please update your kernel])]
+                 );;
+esac
