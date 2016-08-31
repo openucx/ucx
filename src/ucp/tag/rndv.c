@@ -123,11 +123,9 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
 
     offset = get_req->send.state.offset;
 
-    if ((offset == 0) && ((uintptr_t)get_req->send.buffer % UCP_ALIGN)) {
+    if ((offset == 0) && ((uintptr_t)get_req->send.buffer % UCP_ALIGN) &&
+        (get_req->send.length > (UCP_MTU_SIZE - ((uintptr_t)get_req->send.buffer % UCP_ALIGN)))) {
         length = UCP_MTU_SIZE - ((uintptr_t)get_req->send.buffer % UCP_ALIGN);
-        if (length > get_req->send.length) {
-            length = get_req->send.length;
-        }
     } else {
         length = ucs_min(get_req->send.length - offset,
                          ucp_ep_config(get_req->send.ep)->max_rndv_get_zcopy);
