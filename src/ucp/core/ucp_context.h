@@ -147,6 +147,7 @@ typedef struct ucp_context {
 
         /* Bitmap of features supported by the context */
         uint64_t                  features;
+        uint64_t                  tag_sender_mask;
 
         struct {
             size_t                         size;    /* Request size for user */

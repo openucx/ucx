@@ -556,6 +556,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
 
     context->config.features        = params->features;
+    context->config.tag_sender_mask = params->tag_sender_mask;
     context->config.request.size    = params->request_size;
     context->config.request.init    = params->request_init;
     context->config.request.cleanup = params->request_cleanup;
