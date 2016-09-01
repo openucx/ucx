@@ -37,7 +37,7 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                           unsigned opcode, const void *buffer,
-                          unsigned length, struct ibv_mr *mr,
+                          unsigned length, uct_ib_memh_t *memh,
                           /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                           /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                           int force_sig, uct_completion_t *comp)
@@ -50,7 +50,7 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
 
     sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, &ep->super.txqp, &ep->tx.wq, 
-                               opcode, buffer, length, &mr->lkey,
+                               opcode, buffer, length, &memh->lkey,
                                am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
                                0, 0, 0, 0,
                                (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
@@ -72,7 +72,9 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
     desc->super.sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, &ep->super.txqp, &ep->tx.wq,
                                opcode, desc + 1, length, &desc->lkey,
-                               0, NULL, 0, remote_addr, rkey, compare_mask,
+                               0, NULL, 0, 
+                               remote_addr + ep->super.umr_offset, 
+                               uct_ib_md_umr_rkey(rkey), compare_mask,
                                compare, swap_add, 0, signal, IBV_QPT_RC);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);

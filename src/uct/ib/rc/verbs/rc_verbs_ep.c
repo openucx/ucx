@@ -100,7 +100,7 @@ static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
 
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const void *buffer, size_t length,
-                           struct ibv_mr *mr, uint64_t remote_addr,
+                           uct_ib_memh_t *memh, uint64_t remote_addr,
                            uct_rkey_t rkey, uct_completion_t *comp,
                            int opcode)
 {
@@ -115,7 +115,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const void *buffer, size_t len
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, opcode, sge, length, remote_addr, rkey);
 
     wr.next                = NULL;
-    uct_rc_verbs_rdma_zcopy_sge_fill(&sge, buffer, length, mr);
+    uct_rc_verbs_rdma_zcopy_sge_fill(&sge, buffer, length, memh);
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi);
@@ -131,7 +131,7 @@ uct_rc_verbs_ep_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint64_t compare_
     struct ibv_sge sge;
 
     UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.opcode, sge, opcode,
-                                compare_add, swap, remote_addr, rkey);
+                                compare_add, swap, remote_addr, rkey, ep->super.umr_offset);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, force_sig);
 }
@@ -165,7 +165,7 @@ uct_rc_verbs_ep_ext_atomic_post(uct_rc_verbs_ep_t *ep, int opcode, uint32_t leng
     struct ibv_sge sge;
 
     uct_rc_verbs_fill_ext_atomic_wr(&wr, &sge, opcode, length, compare_mask,
-                                    compare_add, swap, remote_addr, rkey);
+                                    compare_add, swap, remote_addr, rkey, ep->super.umr_offset);
     UCT_RC_VERBS_FILL_DESC_WR(&wr, desc);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_verbs_exp_post_send(ep, &wr, force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE);

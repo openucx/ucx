@@ -11,7 +11,11 @@
 
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
 
-typedef uct_ib_qpnum_t uct_dc_iface_addr_t;
+typedef struct uct_dc_iface_addr {
+    uct_ib_uint24_t   qp_num;
+    uint8_t           umr_id;
+} uct_dc_iface_addr_t;
+
 typedef struct uct_dc_ep uct_dc_ep_t;
 
 typedef enum {

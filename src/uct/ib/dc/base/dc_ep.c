@@ -8,12 +8,13 @@
 #include "dc_iface.h"
 
 
-UCS_CLASS_INIT_FUNC(uct_dc_ep_t, uct_dc_iface_t *iface)
+UCS_CLASS_INIT_FUNC(uct_dc_ep_t, uct_dc_iface_t *iface, const uct_dc_iface_addr_t *if_addr)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super);
     ucs_arbiter_group_init(&self->arb_group);
-    self->dci   = UCT_DC_EP_NO_DCI;
-    self->state = UCT_DC_EP_TX_OK;
+    self->dci        = UCT_DC_EP_NO_DCI;
+    self->state      = UCT_DC_EP_TX_OK;
+    self->umr_offset = uct_ib_md_umr_offset(if_addr->umr_id);
     return UCS_OK;
 }
 

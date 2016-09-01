@@ -28,7 +28,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_ep_t,
     ucs_status_t status;
 
     ucs_trace_func("");
-    UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
     status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr, 0, &self->ah);
     if (status != UCS_OK) {
@@ -140,7 +140,7 @@ static inline void uct_dc_verbs_iface_add_send_comp(uct_dc_verbs_iface_t *iface,
 
 static inline ucs_status_t
 uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const void *buffer, size_t length,
-                           struct ibv_mr *mr, uint64_t remote_addr,
+                           uct_ib_memh_t *memh, uint64_t remote_addr,
                            uct_rkey_t rkey, uct_completion_t *comp,
                            int opcode)
 {
@@ -154,7 +154,7 @@ uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const void *buffer, size_t len
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.exp_opcode, opcode, sge, length, remote_addr, rkey);
     wr.next = NULL;
-    uct_rc_verbs_rdma_zcopy_sge_fill(&sge, buffer, length, mr);
+    uct_rc_verbs_rdma_zcopy_sge_fill(&sge, buffer, length, memh);
 
     uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
     uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
@@ -333,7 +333,7 @@ uct_dc_verbs_iface_atomic_post(uct_dc_verbs_iface_t *iface, uct_dc_verbs_ep_t *e
     struct ibv_exp_send_wr wr;
 
     UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.exp_opcode, sge, opcode,
-                                compare_add, swap, remote_addr, rkey);
+                                compare_add, swap, remote_addr, rkey, ep->super.umr_offset);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig);
 }
@@ -367,7 +367,7 @@ uct_dc_verbs_iface_ext_atomic_post(uct_dc_verbs_iface_t *iface, uct_dc_verbs_ep_
     struct ibv_exp_send_wr wr;
 
     uct_rc_verbs_fill_ext_atomic_wr(&wr, &sge, opcode, length, compare_mask,
-                                    compare_add, swap, remote_addr, rkey);
+                                    compare_add, swap, remote_addr, rkey, ep->super.umr_offset);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE);
 }
