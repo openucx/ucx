@@ -1,6 +1,8 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+# Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+#
 # See file LICENSE for terms.
 #
 
@@ -61,6 +63,8 @@ AS_IF([test "x$with_ib" == xyes],
         save_LDFLAGS="$LDFLAGS"
         save_CFLAGS="$CFLAGS"
         save_CPPFLAGS="$CPPFLAGS"
+        CPPFLAGS="-I$with_verbs/include $CPPFLAGS"
+        LDFLAGS="-L$with_verbs/lib64 -L$with_verbs/lib $LDFLAGS"
         AC_CHECK_HEADER([infiniband/verbs.h], [],
                         [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
         AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
@@ -93,6 +97,11 @@ AS_IF([test "x$with_ib" == xyes],
 
 AS_IF([test "x$with_ib" == xyes],
       [
+       save_LDFLAGS="$LDFLAGS"
+       save_CFLAGS="$CFLAGS"
+       save_CPPFLAGS="$CPPFLAGS"
+       CPPFLAGS="-I$with_verbs/include $CPPFLAGS"
+       LDFLAGS="-L$with_verbs/lib64 $LDFLAGS"
        AC_CHECK_HEADER([infiniband/verbs_exp.h],
            [AC_DEFINE([HAVE_VERBS_EXP_H], 1, [IB experimental verbs])
            verbs_exp=yes],
@@ -226,6 +235,9 @@ AS_IF([test "x$with_ib" == xyes],
        AS_IF([test -d "$mlnx_valg_libdir"],
                [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
                valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
+       LDFLAGS="$save_LDFLAGS"
+       CFLAGS="$save_CFLAGS"
+       CPPFLAGS="$save_CPPFLAGS"
     ],
     [
         with_dc=no
