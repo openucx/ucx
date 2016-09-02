@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -15,7 +16,7 @@
 #include <stdint.h>
 
 
-#define UCS_SYS_CACHE_LINE_SIZE    128
+#define UCS_ARCH_CACHE_LINE_SIZE 128
 
 /* Assume the worst - weak memory ordering */
 #define ucs_memory_bus_fence()        asm volatile ("sync"::: "memory")

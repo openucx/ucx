@@ -53,4 +53,10 @@ typedef enum ucs_cpu_flag {
 #  error "Unsupported architecture"
 #endif
 
+#if defined(HAVE_CACHE_LINE_SIZE)
+#define UCS_SYS_CACHE_LINE_SIZE    HAVE_CACHE_LINE_SIZE
+#else
+#define UCS_SYS_CACHE_LINE_SIZE    UCS_ARCH_CACHE_LINE_SIZE
+#endif
+
 #endif

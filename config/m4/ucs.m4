@@ -150,6 +150,40 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
                              supports __attribute__((constructor))])]
                 )
 
+
+#
+# Manual configuration of cacheline size
+#
+
+AC_ARG_WITH([cache-line-size],
+        [AC_HELP_STRING([--with-cache-line-size=SIZE],
+            [Build UCX with cache line size defined by user. This parameter
+             overwrites defaulf cache line sizes defines in
+             UCX (x86-64: 64, Power: 128, ARMv8: 64/128). The supported values are: 64, 128])],
+        [],
+        [with_cache_line_size=no])
+
+AS_IF([test "x$with_cache_line_size" != xno],[
+	     case ${with_cache_line_size} in
+                 64)
+		     AC_MSG_RESULT(The cache line size is set to 64B)
+		     AC_DEFINE([HAVE_CACHE_LINE_SIZE], 64, [user defined cache line size])
+		     ;;
+		 128)
+		     AC_MSG_RESULT(The cache line size is set to 128B)
+		     AC_DEFINE([HAVE_CACHE_LINE_SIZE], 128, [user defined cache line size])
+		     ;;
+		 @<:@0-9@:>@*)
+		     AC_MSG_WARN(Unusual cache cache line size was specified: [$with_cache_line_size])
+		     AC_DEFINE_UNQUOTED([HAVE_CACHE_LINE_SIZE], [$with_cache_line_size], [user defined cache line size])
+		     ;;
+		 *)
+		     AC_MSG_ERROR(Cannot continue. Unsupported cache line size [$with_cache_line_size].)
+		     ;;
+             esac],
+	     [])
+
+
 #
 # Architecture specific checks
 #

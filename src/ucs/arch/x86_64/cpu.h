@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -18,7 +19,7 @@
 #endif
 
 
-#define UCS_SYS_CACHE_LINE_SIZE    64
+#define UCS_ARCH_CACHE_LINE_SIZE 64
 
 /**
  * In x86_64, there is strong ordering of each processor with respect to another
