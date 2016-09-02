@@ -113,7 +113,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_FEATURES        = UCS_BIT(0), /* features */
     UCP_PARAM_FIELD_REQUEST_SIZE    = UCS_BIT(1), /* request_size */
     UCP_PARAM_FIELD_REQUEST_INIT    = UCS_BIT(2), /* request_init */
-    UCP_PARAM_FIELD_REQUEST_CLEANUP = UCS_BIT(3)  /* request_cleanup */
+    UCP_PARAM_FIELD_REQUEST_CLEANUP = UCS_BIT(3), /* request_cleanup */
+    UCP_PARAM_FIELD_TAG_SENDER_MASK = UCS_BIT(4)  /* tag_sender_mask */
 };
 
 
@@ -327,6 +328,12 @@ typedef struct ucp_params {
      * This field defaults to @e NULL if not specified.
      */
     ucp_request_cleanup_callback_t     request_cleanup;
+    /**
+     * Mask which specifies particular bits of the tag which can uniquely
+     * identify the sender (UCP endpoint) in tagged operations.
+     * This field defaults to 0 if not specified.
+     */
+    uint64_t                           tag_sender_mask;
     /**
      * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
      * Fields not specified in this mask would be ignored.
