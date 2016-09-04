@@ -13,7 +13,7 @@
 #include <sys/times.h>
 
 
-#define UCS_SYS_CACHE_LINE_SIZE    64
+#define UCS_ARCH_CACHE_LINE_SIZE 64
 
 /**
  * Assume the worst - weak memory ordering.
