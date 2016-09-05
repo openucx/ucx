@@ -110,9 +110,9 @@ static UCS_F_NOINLINE void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_i
                                         iface->super.super.config.failure_level);
         uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
 
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t),
+        uct_ep_set_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t),
                           &ep->super.super.super,
-                          &iface->super.super.super);
+                          UCT_FAILED_EP_FLAG_CLEANUP);
     }
 }
 

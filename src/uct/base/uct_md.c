@@ -242,6 +242,19 @@ void uct_worker_progress_unregister(uct_worker_h worker,
     ucs_callbackq_remove(&worker->progress_q, func, arg);
 }
 
+void uct_worker_slow_progress_register(uct_worker_h worker,
+                                       ucs_callbackq_slow_elem_t *elem)
+{
+    ucs_callbackq_add_slow_path(&worker->progress_q, elem);
+}
+
+void uct_worker_slow_progress_unregister(uct_worker_h worker,
+                                         ucs_callbackq_slow_elem_t *elem)
+{
+    ucs_callbackq_remove_slow_path(&worker->progress_q, elem);
+}
+
+
 UCS_CLASS_DEFINE(uct_worker_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
                                 ucs_async_context_t*, ucs_thread_mode_t)

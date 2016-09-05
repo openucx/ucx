@@ -104,12 +104,80 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
                        UCS_STATS_ARG(ep->rx.stats));
 }
 
+static void uct_ud_ep_purge_tx_window(uct_ud_ep_t *ep, ucs_status_t status)
+{
+    uct_ud_send_skb_t *skb;
+    uct_ud_comp_desc_t *cdesc;
+
+    /* Release all tx skb's */
+    ucs_queue_for_each_extract(skb, &ep->tx.window, queue, 1) {
+        if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
+            cdesc = uct_ud_comp_desc(skb);
+            uct_invoke_completion(cdesc->comp, status);
+        }
+        skb->flags = 0;
+        ucs_mpool_put(skb);
+    }
+}
+
+/* Release some resources. This functions is used when either ep is
+ * destroyed or ep goes to failed state due to peer outage */
+static void uct_ud_ep_common_cleanup(uct_ud_ep_t *ep)
+{
+    ucs_wtimer_remove(&ep->slow_timer);
+    uct_ud_iface_cep_remove(ep);
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
+}
+
+/* This function is scheduled for execution on the main thread
+ * when ep goes to failed state */
+static void uct_ud_ep_complete_fail(ucs_callbackq_slow_elem_t *elem)
+{
+    uct_ud_ep_t *ep = ucs_container_of(elem, uct_ud_ep_t, sp_elem);
+    uct_iface_t *tl_iface = (ucs_derived_of(ep->super.super.iface,
+                                            uct_failed_iface_t))->orig_iface;
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_callback_t func = (ucs_derived_of(iface->super.ops,
+                                          uct_ud_iface_ops_t))->progress;
+
+
+    uct_ud_ep_purge_tx_window(ep, UCS_ERR_ENDPOINT_TIMEOUT);
+    uct_ud_ep_reset(ep);
+
+    uct_worker_progress_unregister(iface->super.super.worker, func, iface);
+
+    /* Now all resources of the failed ep are released, so unregister
+     * auxiliary slow progress function. */
+    uct_worker_slow_progress_unregister(iface->super.super.worker,
+                                        &ep->sp_elem);
+}
+
+static void uct_ud_ep_timed_out(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+{
+
+    ucs_log(iface->super.super.config.failure_level,
+            "Resend error on ep=%p: peer is not responding for %f sec",
+            ep, ucs_time_to_sec(iface->config.peer_timeout));
+
+    uct_ud_ep_common_cleanup(ep);
+
+    /* Schedule cleanup of tx.window. Since it may contain zcopy/flush
+     * completions, it should be done by the main thread. */
+    uct_worker_slow_progress_register(iface->super.super.worker, &ep->sp_elem);
+
+    /* Set this flag for incoming packets to be dropped */
+    ep->flags |= UCT_UD_EP_FLAG_FAILED;
+
+    /* Move ep to failed state */
+    uct_ep_set_failed(NULL, &ep->super.super, 0);
+}
+
 static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
 {
     uct_ud_ep_t *ep = ucs_container_of(self, uct_ud_ep_t, slow_timer);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
-    ucs_time_t now;
+    ucs_time_t now, since_last_send;
 
     UCT_UD_EP_HOOK_CALL_TIMER(ep);
     now = ucs_twheel_get_time(&iface->async.slow_timer);
@@ -118,25 +186,32 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         return;
     }
 
-    /* It is possible that the sender is slow.
-     * Try to flush the window twice before going into
-     * full resend mode.    
-     */
-    if (now - ep->tx.send_time > uct_ud_slow_tick() &&
-        uct_ud_ep_is_connected(ep)) {
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+    since_last_send = now - ep->tx.send_time;
+
+
+    if (ucs_unlikely(since_last_send > iface->config.peer_timeout)) {
+        /* Peer is not responding. Move ep to failed state */
+        uct_ud_ep_timed_out(iface, ep);
+        return;
     }
 
-    if (now - ep->tx.send_time > 3*uct_ud_slow_tick()) {
-        ucs_trace("sceduling resend now: %llu send_time: %llu diff: %llu tick: %llu",
-                   now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick()); 
+    if (since_last_send > 3*uct_ud_slow_tick()) {
+        ucs_trace("scheduling resend now: %llu send_time: %llu diff: %llu tick: %llu",
+                now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick());
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
+    } else if (since_last_send > uct_ud_slow_tick() &&
+               uct_ud_ep_is_connected(ep)) {
+        /* It is possible that the sender is slow.
+         * Try to flush the window twice before going into
+         * full resend mode.
+         */
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     }
 
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, 
+    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
                    uct_ud_slow_tick());
 }
 
@@ -155,6 +230,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
+     /* This func is used by error handling flow. When ep goes to failed
+      * state it schedules resources cleanup on the main thread. */
+    self->sp_elem.cb = uct_ud_ep_complete_fail;
+
     uct_worker_progress_register(iface->super.super.worker,
                                  ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
                                  iface);
@@ -166,15 +245,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
 
 static ucs_arbiter_cb_result_t
 uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                        void *arg)
+                            void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), 
+    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
                                        uct_ud_ep_t, tx.pending.group);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_pending_req_t *req;
 
     /* we may have pending op on ep */
-    if (&ep->tx.pending.elem == elem) { 
+    if (&ep->tx.pending.elem == elem) {
         /* return ignored by arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
@@ -183,35 +262,40 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_warn("ep=%p removing user pending req=%p", ep, req);
     iface->tx.pending_q_len--;
-    
+
     /* return ignored by arbiter */
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
+/* The destructor may be called only during iface destruction.
+ * Currently uct_ud_ep_disconnect() is used for ep destruction. */
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface;
+    uct_iface_t    *tl_iface;
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
 
-    uct_worker_progress_unregister(iface->super.super.worker,
-                                   ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
-                                   iface);
+    if (ucs_unlikely(self->flags & UCT_UD_EP_FLAG_FAILED)) {
+        /* Interface is just a stub. Fetch real iface */
+        tl_iface = (ucs_derived_of(self->super.super.iface,
+                                   uct_failed_iface_t))->orig_iface;
+        iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
 
-    ucs_wtimer_remove(&self->slow_timer);
-    uct_ud_iface_remove_ep(iface, self);
-    uct_ud_iface_cep_remove(self);
-    ucs_frag_list_cleanup(&self->rx.ooo_pkts); 
+        /* Clean up pendings on failed ep if user has not purged them. */
+        uct_ep_pending_purge(&self->super.super, NULL, NULL);
+    } else {
+        iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
-    ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
-                            uct_ud_ep_pending_cancel_cb, 0);
-
-    if (!ucs_queue_is_empty(&self->tx.window)) {
-        ucs_debug("ep=%p id=%d conn_id=%d has %d unacked packets", 
-                   self, self->ep_id, self->conn_id, 
-                   (int)ucs_queue_length(&self->tx.window));
+        if (!(self->flags & UCT_UD_EP_FLAG_DESTROYED)) {
+            uct_ud_ep_disconnect(&self->super.super);
+        }
+        uct_worker_progress_unregister(iface->super.super.worker,
+                ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                iface);
     }
-    ucs_arbiter_group_cleanup(&self->tx.pending.group);
+
+    uct_ud_iface_remove_ep(iface, self);
 }
 
 UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
@@ -222,7 +306,7 @@ void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
     uct_iface_t *iface_h = ep_h->iface;
 
     uct_ud_iface_replace_ep(ucs_derived_of(iface_h, uct_ud_iface_t), old_ep, new_ep);
-    memcpy(new_ep, old_ep, sizeof(uct_ud_ep_t)); 
+    memcpy(new_ep, old_ep, sizeof(uct_ud_ep_t));
 }
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
@@ -239,12 +323,12 @@ ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
                                                const uct_ib_address_t *ib_addr,
                                                const uct_ud_iface_addr_t *if_addr)
-{   
+{
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     char buf[128];
 
-    ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d lid %d qpn 0x%x epid %u ep %p connected to IFACE %s qpn 0x%x",
@@ -252,7 +336,7 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
-              ep->ep_id, ep, 
+              ep->ep_id, ep,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(if_addr->qp_num));
 
@@ -339,7 +423,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
 
     ep->dest_ep_id = uct_ib_unpack_uint24(ep_addr->ep_id);
 
-    ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
 
     ucs_debug("%s:%d slid %d qpn 0x%x epid %u connected to %s qpn 0x%x epid %u",
@@ -347,14 +431,14 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
               iface->super.port_num,
               dev->port_attr[iface->super.port_num-dev->first_port].lid,
               iface->qp->qp_num,
-              ep->ep_id, 
+              ep->ep_id,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num), ep->dest_ep_id);
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void 
-uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep, 
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                       uct_ud_psn_t ack_psn, int is_async)
 {
     uct_ud_comp_desc_t *cdesc;
@@ -365,7 +449,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     }
 
     ep->tx.acked_psn = ack_psn;
-    
+
     /* Release acknowledged skb's */
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                UCT_UD_PSN_COMPARE(skb->neth->psn, <=, ack_psn)) {
@@ -552,7 +636,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-               ep->ep_id != dest_id))
+               (ep->ep_id != dest_id) || (ep->flags & UCT_UD_EP_FLAG_FAILED)))
     {
         /* Drop the packet because it is
          * allowed to do disconnect without flush/barrier. So it
@@ -1055,12 +1139,15 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
     uct_ud_leave(iface);
 }
 
-void  uct_ud_ep_disconnect(uct_ep_h ep)
+void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
 {
+    uct_ud_ep_t *ud_ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
+
     /*
-     * At the moment scedule flush and keep ep
+     * At the moment schedule flush and keep ep in ptr_array
      * until interface is destroyed. User should not send any
-     * new data
+     * new data.
      * In the future consider doin full fledged disconnect
      * protocol. Kind of TCP (FIN/ACK). Doing this will save memory
      * on the other hand active ep will need more memory to keep its state
@@ -1068,11 +1155,28 @@ void  uct_ud_ep_disconnect(uct_ep_h ep)
      */
 
     ucs_trace_func("");
-    /* cancel user pending */
-    uct_ud_ep_pending_purge(ep, NULL, NULL);
 
-    /* scedule flush */
-    uct_ud_ep_flush(ep, 0, NULL);
+    /* Schedule flush */
+    uct_ud_ep_flush(tl_ep, 0, NULL);
+
+    uct_ud_ep_common_cleanup(ud_ep);
+
+    if (!ucs_queue_is_empty(&ud_ep->tx.window)) {
+        ucs_debug("ep=%p id=%d conn_id=%d has %d unacked packets",
+                  ud_ep, ud_ep->ep_id, ud_ep->conn_id,
+                  (int)ucs_queue_length(&ud_ep->tx.window));
+        uct_ud_ep_purge_tx_window(ud_ep, UCS_ERR_CANCELED);
+    }
+
+    /* Cancel user pending */
+    ucs_arbiter_group_purge(&iface->tx.pending_q, &ud_ep->tx.pending.group,
+                            uct_ud_ep_pending_cancel_cb, 0);
+    ucs_arbiter_group_cleanup(&ud_ep->tx.pending.group);
+
+    /* Mark that resources are freed. Then in real destructor (which may be
+     * called during interface destruction), we check whether resources need
+     * to be freed. */
+    ud_ep->flags |= UCT_UD_EP_FLAG_DESTROYED;
 
     /* TODO: at leat in debug mode keep and check ep state  */
 }

@@ -561,6 +561,46 @@ void uct_worker_progress_unregister(uct_worker_h worker,
 
 
 /**
+ * @ingroup UCT_CONTEXT
+ * @brief Add a callback function to a worker progress.
+ *
+ * Add an element to the slow path callbackq list. The "cb" field of "elem"
+ * element should be initialized by the user. The function pointed by "cb"
+ * field will be called every time a progress is made on the worker.
+ * The difference with uct_worker_progress_register() is that the callback
+ * is added to the slow execution path, which is not limited in length.
+ * Using of slow path callbacks may be prefferable for short, non-performance
+ * critical tasks, like error handling or connection management.
+ *
+ * @param [in]  worker        Handle to worker.
+ * @param [in]  elem          Slow path element. Note that "cb" field should be
+ *                            initialized.
+ *
+ * @note It is not allowed to add the same element more than once.
+ * @note This operation could potentially be slow.
+ */
+void uct_worker_slow_progress_register(uct_worker_h worker,
+                                       ucs_callbackq_slow_elem_t *elem);
+
+
+/**
+ * @ingroup UCT_CONTEXT
+ * @brief Remove a callback function from worker's progress.
+ *
+ * Remove a previously added slow path element from worker's progress.
+ *
+ * @param [in]  worker        Handle to worker.
+ * @param [in]  elem          Slow path element, which was previously registered
+ *                            by calling uct_worker_slow_progress_register().
+ *
+ * @note It is not allowed to remove the element which was not added previously.
+ * @note This operation could potentially be slow.
+ */
+void uct_worker_slow_progress_unregister(uct_worker_h worker,
+                                         ucs_callbackq_slow_elem_t *elem);
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Read transport-specific interface configuration.
  *

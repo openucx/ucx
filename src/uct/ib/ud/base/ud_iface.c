@@ -404,7 +404,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         ucs_error("%s ud iface tx queue is too short (%d <= %d)",
                   dev_name,
                   config->super.tx.queue_len, UCT_UD_TX_MODERATION);
-        return UCS_ERR_INVALID_PARAM; 
+        return UCS_ERR_INVALID_PARAM;
     }
 
     status = uct_ib_device_mtu(dev_name, md, &mtu);
@@ -419,22 +419,23 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, dev_name,
                               rx_headroom, rx_priv_len, rx_hdr_len,
                               config->super.tx.queue_len, mtu, &config->super);
- 
+
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
 
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
+    self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
 
     if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     ucs_ptr_array_init(&self->eps, 0, "ud_eps");
-    uct_ud_iface_cep_init(self);    
+    uct_ud_iface_cep_init(self);
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
-                                          "ud_recv_skb", &self->rx.mp); 
+                                          "ud_recv_skb", &self->rx.mp);
     if (status != UCS_OK) {
         goto err_qp;
     }
@@ -463,7 +464,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     ucs_queue_head_init(&self->rx.pending_q);
 
-                        
+
     return UCS_OK;
 
 err_mpool:
@@ -501,6 +502,11 @@ UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 ucs_config_field_t uct_ud_iface_config_table[] = {
     {"IB_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+
+    {"TIMEOUT", "1.0s",
+     "Transport timeout",
+     ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
+
     {NULL}
 };
 
@@ -511,13 +517,14 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                        iface_attr);
 
     iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
-                                        UCT_IFACE_FLAG_AM_BCOPY | 
-                                        UCT_IFACE_FLAG_AM_ZCOPY | 
+                                        UCT_IFACE_FLAG_AM_BCOPY |
+                                        UCT_IFACE_FLAG_AM_ZCOPY |
                                         UCT_IFACE_FLAG_CONNECT_TO_EP |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                         UCT_IFACE_FLAG_PENDING |
                                         UCT_IFACE_FLAG_AM_CB_SYNC |
-                                        UCT_IFACE_FLAG_AM_CB_ASYNC;
+                                        UCT_IFACE_FLAG_AM_CB_ASYNC |
+                                        UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
