@@ -29,13 +29,18 @@ static UCS_F_ALWAYS_INLINE void
 uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                       uint8_t se, struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
 {
+    struct mlx5_wqe_datagram_seg *seg;
+
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi,
                              MLX5_OPCODE_SEND, 0,
                              iface->super.qp->qp_num,
                              uct_ud_mlx5_tx_moderation(iface) | se,
                              wqe_size);
-    uct_ib_mlx5_set_dgram_seg((struct mlx5_wqe_datagram_seg *)(ctrl+1),
-                              &ep->av, 0);
+
+    seg = (struct mlx5_wqe_datagram_seg *)(ctrl+1);
+    uct_ib_mlx5_set_dgram_seg(seg, &ep->av, 0);
+    mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_QKEY);
+
     uct_ib_mlx5_log_tx(&iface->super.super, IBV_QPT_UD, ctrl,
                        iface->tx.wq.qstart, iface->tx.wq.qend,
                        uct_ud_dump_packet);

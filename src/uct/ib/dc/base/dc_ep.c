@@ -169,4 +169,38 @@ void uct_dc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, vo
     }
 }
 
+ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_dc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_iface_t);
+    uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
+    ucs_status_t status;
+
+    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (ep->dci == UCT_DC_EP_NO_DCI) {
+        if (!uct_dc_iface_dci_can_alloc(iface)) {
+            return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+        } else {
+            UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
+            return UCS_OK;
+        }
+    }
+
+    if (!uct_dc_iface_dci_ep_can_send(ep)) {
+        return UCS_ERR_NO_RESOURCE; /* cannot send */
+    }
+
+    status = uct_dc_iface_flush_dci(iface, ep->dci);
+    if (status == UCS_OK) {
+        UCT_TL_EP_STAT_FLUSH(&ep->super);
+        return UCS_OK; /* all sends completed */
+    }
+
+    ucs_assert(status == UCS_INPROGRESS);
+    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
+    return UCS_INPROGRESS;
+}
+
 UCS_CLASS_DEFINE(uct_dc_ep_t, uct_base_ep_t);

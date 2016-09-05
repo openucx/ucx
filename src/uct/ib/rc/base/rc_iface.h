@@ -31,7 +31,8 @@
 #define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \
     UCT_CHECK_AM_ID(_id); \
     UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, _desc_size, "am_zcopy header"); \
-    UCT_CHECK_LENGTH(_header_length + _length, _seg_size, "am_zcopy payload");
+    UCT_CHECK_LENGTH(_header_length + _length, _seg_size, "am_zcopy payload"); \
+    UCT_CHECK_LENGTH(_header_length + _length, UCT_IB_MAX_MESSAGE_SIZE, "am_zcopy ib max message");
 
 
 #define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \

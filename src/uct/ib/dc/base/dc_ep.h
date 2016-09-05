@@ -82,6 +82,8 @@ enum uct_dc_ep_state {
 
 #define UCT_DC_EP_NO_DCI ((uint8_t)-1)
 
+ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
 #define uct_dc_iface_dci_put       uct_dc_iface_dci_put_dcs
 #define uct_dc_iface_dci_get       uct_dc_iface_dci_get_dcs
 #define uct_dc_iface_dci_can_alloc uct_dc_iface_dci_can_alloc_dcs

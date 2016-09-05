@@ -76,7 +76,7 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                       UCT_IFACE_FLAG_ATOMIC_FADD32|
                                       UCT_IFACE_FLAG_ATOMIC_SWAP32|
                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32|
-                                      UCT_IFACE_FLAG_PENDING |
+                                      UCT_IFACE_FLAG_PENDING|
                                       UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     return UCS_OK;
@@ -193,6 +193,7 @@ ucs_status_t uct_dc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t leng
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     ucs_status_t status;
 
+    UCT_CHECK_LENGTH(length, UCT_IB_MAX_MESSAGE_SIZE, "get_zcopy");
     status = uct_dc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_READ);
     if (status == UCS_INPROGRESS) {
@@ -240,7 +241,6 @@ ssize_t uct_dc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return length;
 }
 
-
 ucs_status_t uct_dc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
                                        uct_mem_h memh, uint64_t remote_addr,
                                        uct_rkey_t rkey, uct_completion_t *comp)
@@ -248,6 +248,7 @@ ucs_status_t uct_dc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     ucs_status_t status;
 
+    UCT_CHECK_LENGTH(length, UCT_IB_MAX_MESSAGE_SIZE, "put_zcopy");
     status = uct_dc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_WRITE);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY, length);
@@ -511,90 +512,21 @@ ucs_status_t uct_dc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 }
 
 
-static inline ucs_status_t uct_dc_verbs_flush_dci(uct_dc_iface_t *iface, int dci) 
-{
-    uct_rc_txqp_t *txqp;
-
-    txqp = &iface->tx.dcis[dci].txqp;
-
-    if (uct_rc_txqp_available(txqp) == iface->super.config.tx_qp_len) {
-        return UCS_OK;
-    }
-
-    ucs_trace_data("dci %d is not flushed %d/%d", dci, 
-                    txqp->available, iface->super.config.tx_qp_len);
-    if (uct_rc_txqp_unsignaled(txqp) != 0) { 
-        /* TODO */
-        ucs_fatal("unsignalled send is not supported!!!");
-    }
-    return UCS_INPROGRESS;
-}
-
-static inline ucs_status_t uct_dc_verbs_flush_dcis(uct_dc_iface_t *iface) 
-{
-    int i;
-    int is_flush_done = 1;
-
-    for (i = 0; i < iface->tx.ndci; i++) {
-        if (uct_dc_verbs_flush_dci(iface, i) != UCS_OK) {
-            is_flush_done = 0;
-        }
-    }
-    return is_flush_done ? UCS_OK : UCS_INPROGRESS;
-}
-
-ucs_status_t uct_dc_verbs_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp)
-{
-    uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
-    ucs_status_t status;
-    
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = uct_dc_verbs_flush_dcis(iface);
-    if (status == UCS_OK) {
-        UCT_TL_IFACE_STAT_FLUSH(&iface->super.super.super);
-    } else if (status == UCS_INPROGRESS) {
-        UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super.super);
-    }
-    return status;
-}
-
 ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
     ucs_status_t status;
 
-    if (!uct_rc_iface_has_tx_resources(&iface->super.super)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    if (ep->super.dci == UCT_DC_EP_NO_DCI) {
-        if (!uct_dc_iface_dci_can_alloc(&iface->super)) {
-            return UCS_ERR_NO_RESOURCE; /* waiting for dci */
-        } else {
-            UCT_TL_EP_STAT_FLUSH(&ep->super.super); /* no sends */
-            return UCS_OK;
-        }
-    }
-
-    if (!uct_dc_iface_dci_ep_can_send(&ep->super)) {
-        return UCS_ERR_NO_RESOURCE; /* cannot send */
-    }
-
-    status = uct_dc_verbs_flush_dci(&iface->super, ep->super.dci);
+    status = uct_dc_ep_flush(tl_ep, flags, comp);
     if (status == UCS_OK) {
-        UCT_TL_EP_STAT_FLUSH(&ep->super.super);
         return UCS_OK; /* all sends completed */
     }
 
-    ucs_assert(status == UCS_INPROGRESS);
-
-    uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
-    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
-    return UCS_INPROGRESS;
+    if (status == UCS_INPROGRESS) {
+        uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
+    }
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -653,7 +585,7 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
             .iface_release_am_desc    = uct_ib_iface_release_am_desc, 
             .iface_get_address        = uct_dc_iface_get_address,
 
-            .iface_flush              = uct_dc_verbs_iface_flush,
+            .iface_flush              = uct_dc_iface_flush,
 
             .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_verbs_ep_t),
             .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_ep_t),
