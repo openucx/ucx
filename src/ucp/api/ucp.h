@@ -345,18 +345,6 @@ typedef struct ucp_params {
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Completion status of a tag-matched receive.
- *
- * @todo This declaration should be removed from public API
- */
-typedef struct ucp_tag_recv_completion {
-    ucp_tag_t             sender_tag;  /**< Full sender tag */
-    size_t                rcvd_len;    /**< How much data was received */
-} ucp_tag_recv_completion_t;
-
-
-/**
- * @ingroup UCP_CONTEXT
  * @brief UCP receive information descriptor
  *
  * The UCP receive information descriptor is allocated by application and filled
@@ -732,6 +720,7 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_wait(ucp_worker_h worker);
+
 
 /**
  * @ingroup UCP_WAKEUP
@@ -1269,6 +1258,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
 ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
                      uint64_t remote_addr, ucp_rkey_h rkey);
 
+
 /**
  * @ingroup UCP_COMM
  * @brief Non-blocking implicit remote memory put operation.
@@ -1298,6 +1288,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey);
 
+
 /**
  * @ingroup UCP_COMM
  * @brief Blocking remote memory get operation.
@@ -1322,6 +1313,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
  */
 ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
                      uint64_t remote_addr, ucp_rkey_h rkey);
+
 
 /**
  * @ingroup UCP_COMM
@@ -1350,6 +1342,7 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
  */
 ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey);
+
 
 /**
  * @ingroup UCP_COMM
@@ -1469,6 +1462,7 @@ ucs_status_t ucp_atomic_fadd32(ucp_ep_h ep, uint32_t add, uint64_t remote_addr,
  */
 ucs_status_t ucp_atomic_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
                                ucp_rkey_h rkey, uint64_t *result);
+
 
 /**
  * @ingroup UCP_COMM
@@ -1744,6 +1738,7 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
+
 
 /**
  * @example ucp_hello_world.c
