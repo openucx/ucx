@@ -136,6 +136,7 @@ enum ucp_feature {
                                            operations support */
     UCP_FEATURE_WAKEUP = UCS_BIT(4)   /**< Request interrupt notification
                                            support */
+    UCP_FEATURE_GENERIC_PTR = UCS_BIT(5), /**< Generic non-dereferensable pointer */
 };
 
 
@@ -340,6 +341,11 @@ typedef struct ucp_params {
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                           field_mask;
+
+    uint64_t tag_sender_mask;
+
+    ucs_thread_mode_t thread_mode;
+
 } ucp_params_t;
 
 
@@ -531,6 +537,10 @@ static inline ucs_status_t ucp_init(const ucp_params_t *params,
                             context_p);
 }
 
+ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr);
+/* thread mode - actualt thread mode
+ * receive request size
+ */
 
 /**
  * @ingroup UCP_CONTEXT
@@ -575,8 +585,14 @@ void ucp_cleanup(ucp_context_h context_p);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
+ucs_status_t ucp_worker_create(ucp_context_h context, const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p);
+/* ucs_thread_mode_t thread_mode */
+
+ucs_status_t ucp_worker_query(ucp_worker_h worker, ucp_worker_attr_t *attr);
+/* thread_mode - actual
+ * notification object: fd (linux), handle (windows)
+ */
 
 
 /**
@@ -728,10 +744,11 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  *   with @ref UCP_FEATURE_WAKEUP to select proper transport
  *
  * @param [in]  worker    Worker to wait for events on.
+ * @param [in]  adderess  If non-null - will also wait for modifications to the address.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_wait(ucp_worker_h worker);
+ucs_status_t ucp_worker_wait(ucp_worker_h worker, void *address);
 
 /**
  * @ingroup UCP_WAKEUP
@@ -1744,6 +1761,81 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
+
+typedef enum {
+    UCP_ATOMIC_POST_OP_ADD,
+    UCP_ATOMIC_POST_OP_XOR,
+    UCP_ATOMIC_POST_OP_AND,
+    UCP_ATOMIC_POST_OP_OR,
+} ucp_atomic_post_op_t;
+
+typedef enum {
+    UCP_ATOMIC_FETCH_OP_FADD,
+    UCP_ATOMIC_FETCH_OP_SWAP, /* swap with *result */
+    UCP_ATOMIC_FETCH_OP_CSWAP,
+} ucp_atomic_fetch_op_t;
+
+ucs_status_t ucp_atomic_post32(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint32_t value,
+                               uint64_t remote_addr, ucp_rkey_h rkey);
+
+ucs_status_ptr_t ucp_atomic_fetch32_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
+                                       uint32_t value, uint32_t *result,
+                                       uint64_t remote_addr, ucp_rkey_h rkey,
+                                       ucp_send_callback_t cb);
+/*
+ * shmem_iput
+ * MPI_Put
+ * multiple remote keys - need global key support in the mem map
+ *   global remote key -> pass in endpoint address
+ *   no need for remote key -> don't pass at all
+ *  if ucp_rkey_pack returns 0 -> no need to exchange the rkey
+ *  UCP_NULL_RKEY could be passed to RMA/atomics
+ */
+ucs_status_ptr_t ucp_put_nbe(ucp_ep_h ep, const void *buffer, size_t count,
+                             ucp_datatype_t datatype,
+                             uint64_t remote_addr, ucp_datatype_t remote_datatype,
+                             ucp_rkey_t rkey,
+                             ucp_send_callback_t cb);
+
+
+ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags, ucp_send_callback_t cb);
+
+/* O(num_outstanding_sends) */
+ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
+                                   ucp_send_callback_t cb);
+
+ucs_status_t ucp_ep_fence(ucp_ep_h ep, unsigned flags);
+ucs_status_t ucp_worker_fence(ucp_worker_h worker, unsigned flags);
+
+
+/*
+ * header is unlimited
+ */
+ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, unsigned id, const void *header, header_len,
+                                const void *payload, size_t count, ucp_datatype_t datatype,
+                                ucp_send_callback_t cb);
+
+ucs_status_t
+ucp_am_register(ucp_worker_h worker, unsigned id, ucp_am_callback_t cb, void *arg);
+
+/*
+ * OK - drop the data
+ * INPROGRESS - keep the descriptor, header remains valid after function returns
+ * if header is very big, ucp will malloc() an contig buffer - but this is not the optimized case
+ */
+typedef ucs_status_t
+(*ucp_am_callback_t)(void *arg, const void *header, size_t header_length,
+                     ucp_am_recv_handle_t desc);
+
+/*
+ * if count==0, desc is just released
+ * after this call, desc becomes invalid
+ * generalize the send callback to be also recv callback
+ */
+ucs_status_ptr_t ucp_am_recv_nb(ucp_worker_h worker, ucp_am_recv_handle_t desc,
+                                void *buffer, size_t count, ucp_datatype_t type,
+                                ucp_callback_t cb);
+
 
 /**
  * @example ucp_hello_world.c
