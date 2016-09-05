@@ -13,13 +13,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define UCP_REQUEST_PRIV_LEN             80
 
 /**
  * @ingroup UCP_CONTEXT
  * @brief Forward declarations
  */
 typedef struct ucp_tag_recv_info         ucp_tag_recv_info_t;
+
 
 /**
  * @ingroup UCP_CONTEXT
@@ -149,6 +149,15 @@ typedef struct ucp_mem                   *ucp_mem_h;
  */
 typedef uint64_t                         ucp_tag_t;
 
+
+/**
+ * @ingroup UCP_COMM
+ * @brief UCP Message descriptor.
+ *
+ * UCP Message descriptor is an opaque handle for a message returned by
+ * @ref ucp_tag_probe_nb. This handle can be passed to @ref ucp_tag_msg_recv_nb
+ * in order to receive the message data to a specific buffer.
+ */
 typedef struct ucp_recv_desc             *ucp_tag_message_h;
 
 
