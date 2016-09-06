@@ -42,6 +42,14 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Initialize a fork-safe IB library with ibv_fork_init().",
    ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
+  {"PFC_ENABLED", "n",
+   "Whether or not PFC (Pause Frame Control) is enabled on the switch. \n"
+   "A mechanism for temporarily stopping the transmission of data to \n"
+   "ensure zero loss under congestion on Ethernet family computer networks. \n"
+   "This parameter, if set to 'no', will disqualify IB transports that may not perform \n"
+   "well on lossy fabric when working with RoCE. ",
+   ucs_offsetof(uct_ib_md_config_t, pfc_enabled), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -461,6 +469,8 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         status = UCS_ERR_NO_MEMORY;
         goto err_cleanup_device;
     }
+
+    md->pfc_enabled = md_config->pfc_enabled;
 
     md->rcache   = NULL;
     md->reg_cost = md_config->uc_reg_cost;

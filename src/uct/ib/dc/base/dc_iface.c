@@ -249,7 +249,7 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                               unsigned *num_resources_p)
 {
     return uct_ib_device_query_tl_resources(dev, tl_name,
-                                            flags | UCT_IB_DEVICE_FLAG_DC | UCT_IB_DEVICE_FLAG_LINK_IB,
+                                            flags | UCT_IB_DEVICE_FLAG_DC,
                                             resources_p, num_resources_p);
 }
 
