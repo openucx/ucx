@@ -68,7 +68,8 @@ ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
 }
 
 ucp_params_t ucp_test::get_ctx_params() {
-    ucp_params_t params = { 0, 0, NULL, NULL };
+    ucp_params_t params;
+    memset(&params, 0, sizeof(params));
     return params;
 }
 

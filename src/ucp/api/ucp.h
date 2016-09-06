@@ -300,12 +300,20 @@ typedef struct ucp_generic_dt_ops {
  */
 typedef struct ucp_params {
     /**
+     * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                           field_mask;
+
+    /**
      * UCP @ref ucp_feature "features" that are used for library
      * initialization. It is recommended for applications only to request
      * the features that are required for an optimal functionality
      * This field must be specified.
      */
     uint64_t                           features;
+
     /**
      * The size of a reserved space in a non-blocking requests. Typically
      * applications use this space for caching own structures in order to avoid
@@ -315,12 +323,14 @@ typedef struct ucp_params {
      * This field defaults to 0 if not specified.
      */
     size_t                             request_size;
+
     /**
      * Pointer to a routine that is used for the request initialization.
      * @e NULL can be used if no such function required.
      * This field defaults to @e NULL if not specified.
      */
     ucp_request_init_callback_t        request_init;
+
     /**
      * Pointer to a routine that is responsible for cleanup the memory
      * associated with the request.  @e NULL can be used if no such function
@@ -328,18 +338,13 @@ typedef struct ucp_params {
      * This field defaults to @e NULL if not specified.
      */
     ucp_request_cleanup_callback_t     request_cleanup;
+
     /**
      * Mask which specifies particular bits of the tag which can uniquely
      * identify the sender (UCP endpoint) in tagged operations.
      * This field defaults to 0 if not specified.
      */
     uint64_t                           tag_sender_mask;
-    /**
-     * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
-     * Fields not specified in this mask would be ignored.
-     * Provides ABI compatibility with respect to adding new fields.
-     */
-    uint64_t                           field_mask;
 } ucp_params_t;
 
 
