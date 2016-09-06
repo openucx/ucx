@@ -813,19 +813,30 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief Destroy and release the endpoint.
  *
- * This routine releases an @ref ucp_ep_h "endpoint". The release process
- * flushes, locally, all outstanding communication operations and releases all
- * memory context associated with the endpoints.  Once the endpoint is
- * destroyed, application cannot access it anymore.  Nevertheless, if the
- * application is interested, to re-initiate communication with a particular
- * endpoint it can use @ref ucp_ep_create "endpoints create routine" to
- * re-open the endpoint.
+ * @brief Initiate non-blocking disconnect.
  *
- * @param [in]  ep   Handle to the remote endpoint.
+ *   This routine starts a disconnect process which would eventually release the
+ * @ref ucp_ep_h "endpoint". The disconnect process flushes, locally, all
+ * outstanding communications, and releases all memory contexts associated with
+ * the endpoint. After calling this function, the endpoint cannot be used anymore.
+ *   Nevertheless, if the application is interested to re-initiate communication
+ * with a particular remote worker, it can use @ref ucp_ep_create "endpoints
+ * create routine" to re-open a new endpoint.
+ *
+ * @param [in]  ep   Handle to the endpoint to disconnect.
+ *
+ * @return UCS_OK           - The endpoint is flushed and destroyed.
+ * @return UCS_PTR_IS_ERR(_ptr) - The disconnect operation failed.
+ * @return otherwise        - The disconnect process started, and can be
+ *                          completed in any point in time. The request handle
+ *                          is returned to the application in order to track
+ *                          progress of the disconnect. The application is
+ *                          responsible to release the handle using
+ *                          @ref ucp_request_release "ucp_request_release()"
+ *                          routine.
  */
-void ucp_ep_destroy(ucp_ep_h ep);
+ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
 
 
 /**
@@ -1749,5 +1760,13 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.
  */
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @deprecated Replaced by @ref ucp_disconnect_nb.
+ */
+void ucp_ep_destroy(ucp_ep_h ep);
+
 
 #endif
