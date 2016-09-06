@@ -57,6 +57,11 @@ static inline ucp_rsc_index_t ucp_ep_num_lanes(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.num_lanes;
 }
 
+static inline int ucp_ep_is_lane_p2p(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    return ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane);
+}
+
 static inline ucp_rsc_index_t ucp_ep_md_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_context_h context = ep->worker->context;
