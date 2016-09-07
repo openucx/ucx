@@ -117,12 +117,12 @@ UCS_TEST_P(test_ucp_tag_probe, send_probe) {
     test_send_probe (8, 8, true,  0);
 }
 
-UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe) {
+UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe, "RNDV_THRESH=1048576") {
     test_send_probe (50000, 50000, false, 1);
     test_send_probe (50000, 50000, true,  1);
 }
 
-UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated) {
+UCS_TEST_P(test_ucp_tag_probe, send_medium_msg_probe_truncated, "RNDV_THRESH=1048576") {
     test_send_probe (50000, 0, false, 1);
     test_send_probe (50000, 0, true,  1);
 }
