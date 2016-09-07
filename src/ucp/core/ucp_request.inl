@@ -27,9 +27,12 @@ ucp_request_get(ucp_worker_h worker)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_put(ucp_request_t *req)
+ucp_request_put(ucp_request_t *req, ucs_status_t status)
 {
+    req->status = status;
     if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
+        /* Release should not be called for external requests */
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_EXTERNAL));
         ucs_mpool_put(req);
     }
 }
@@ -44,7 +47,7 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                           "ucp_request_complete_send",
                           req, 0);
-    ucp_request_put(req);
+    ucp_request_put(req, status);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -54,12 +57,16 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status,
     ucs_trace_data("completing recv request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                    req, req + 1, info->sender_tag, info->length,
                    ucs_status_string(status));
-    req->recv.cb(req + 1, status, info);
+
+    if (!(req->flags & UCP_REQUEST_FLAG_EXTERNAL)) {
+        /* In the current API callbacks are defined for internal reqs only. */
+        req->recv.cb(req + 1, status, info);
+    }
+    ucp_request_put(req, status);
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
                           "ucp_request_complete_recv",
                           req, info->length);
-    ucp_request_put(req);
 }
 
 static UCS_F_ALWAYS_INLINE size_t

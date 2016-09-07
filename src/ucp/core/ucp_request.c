@@ -20,11 +20,28 @@ int ucp_request_is_completed(void *request)
     return !!(req->flags & UCP_REQUEST_FLAG_COMPLETED);
 }
 
+ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+
+    if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        if (req->flags & UCP_REQUEST_FLAG_RECV) {
+            *info = req->recv.info;
+        }
+        ucs_assert(req->status != UCS_INPROGRESS);
+        return req->status;
+    }
+    return UCS_INPROGRESS;
+}
+
 void ucp_request_release(void *request)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
     ucs_trace_data("release request %p (%p) flags: 0x%x", req, req + 1, req->flags);
+
+    /* Release should not be called for external requests */
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_EXTERNAL));
 
     if ((req->flags |= UCP_REQUEST_FLAG_RELEASED) & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_data("put %p to mpool", req);

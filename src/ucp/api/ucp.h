@@ -140,6 +140,18 @@ enum ucp_feature {
 
 
 /**
+ * @ingroup UCP_CONTEXT
+ * @brief UCP context attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_context_attr_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_context_attr_field {
+    UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0) /* UCP request size */
+};
+
+
+/**
  * @ingroup UCP_DATATYPE
  * @brief UCP data type classification
  *
@@ -350,6 +362,31 @@ typedef struct ucp_params {
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief Context attributes.
+ *
+ * The structure defines the attributes which characterize
+ * the particular context.
+ */
+typedef struct ucp_context_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_context_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t              field_mask;
+
+    /**
+     * Size of UCP non-blocking request. When pre-allocated request is used
+     * (e.g. in @ref ucp_tag_recv_nbr) it should have enough space to fit
+     * UCP request data, which is defined by this value.
+     */
+    size_t                request_size;
+} ucp_context_attr_t;
+
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP receive information descriptor
  *
  * The UCP receive information descriptor is allocated by application and filled
@@ -544,6 +581,22 @@ static inline ucs_status_t ucp_init(const ucp_params_t *params,
  */
 void ucp_cleanup(ucp_context_h context_p);
 
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Get attributes specific to a particular context.
+ *
+ * This routine fetches an information about the context.
+ *
+ * @param [in]  context_p  Handle to @ref ucp_context_h
+ *                         "UCP application context".
+ *
+ * @param [out] attr       Filled with attributes of @p context_p context.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_context_query(ucp_context_h context_p,
+                               ucp_context_attr_t *attr);
 
 /**
  * @ingroup UCP_WORKER
@@ -1158,6 +1211,39 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking tagged-receive operation.
+ *
+ * This routine receives a message that is described by the local address @a
+ * buffer, size @a count, and @a datatype object on the @a worker.  The tag
+ * value of the receive message has to match the @a tag and @a tag_mask values,
+ * where the @a tag_mask indicates what bits of the tag have to be matched. The
+ * routine is a non-blocking and therefore returns immediately. The receive
+ * operation is considered completed when the message is delivered to the @a
+ * buffer. In order to monitor completion of the operation @ref ucp_request_test
+ * should be used.
+ *
+ * @param [in]  worker      UCP worker that is used for the receive operation.
+ * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  count       Number of elements to receive
+ * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
+ * @param [in]  tag         Message tag to expect.
+ * @param [in]  tag_mask    Bit mask that indicates the bits that are used for
+ *                          the matching of the incoming tag
+ *                          against the expected tag.
+ * @param [in]  req         Request handle allocated by the user. There should
+ *                          be at least UCP request size bytes of available
+ *                          space before the @a req. The size of UCP request
+ *                          can be obtained by @ref ucp_context_query function.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
+                              ucp_datatype_t datatype, ucp_tag_t tag,
+                              ucp_tag_t tag_mask, void *req);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking probe and return a message.
  *
  * This routine probes (checks) if a messages described by the @a tag and
@@ -1609,6 +1695,27 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
  * @return @a true if the request was completed and @a false otherwise.
  */
 int ucp_request_is_completed(void *request);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Check the status of non-blocking request.
+ *
+ * This routine checks the state of the request and returns its current status.
+ * Any value different from UCS_INPROGRESS means that request is in a completed
+ * state.
+ *
+ * @param [in]  request     Non-blocking request to check.
+ *
+ * @param [out] info        If request is in completed state, it is
+ *                          filled with the details about the message.
+ *
+ * @note The @p info parameter is relevant for receive operations only. It is
+ * left uninitialized in case of send operation.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
 
 
 /**

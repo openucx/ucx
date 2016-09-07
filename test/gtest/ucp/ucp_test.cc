@@ -92,21 +92,19 @@ std::vector<ucp_test_param>
 ucp_test::enum_test_params(const ucp_params_t& ctx_params,
                            const std::string& name,
                            const std::string& test_case_name,
-                           ...)
+                           const std::string& tls)
 {
     ucp_test_param test_param;
-    const char *tl_name;
-    va_list ap;
+    std::stringstream ss(tls);
 
     test_param.ctx_params = ctx_params;
-
-    va_start(ap, test_case_name);
-    tl_name = va_arg(ap, const char *);
-    while (tl_name != NULL) {
+    test_param.variant    = false;   
+    
+    while (ss.good()) {
+        std::string tl_name;
+        std::getline(ss, tl_name, ',');
         test_param.transports.push_back(tl_name);
-        tl_name = va_arg(ap, const char *);
     }
-    va_end(ap);
 
     if (check_test_param(name, test_case_name, test_param)) {
         return std::vector<ucp_test_param>(1, test_param);

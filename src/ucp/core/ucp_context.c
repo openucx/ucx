@@ -5,7 +5,7 @@
  */
 
 #include "ucp_context.h"
-
+#include "ucp_request.h"
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
@@ -710,3 +710,10 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
         ++offset;
     }
 }
+
+ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
+{
+    attr->request_size = sizeof(ucp_request_t);
+    return UCS_OK;
+}
+
