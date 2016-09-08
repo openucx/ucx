@@ -478,14 +478,19 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_RCVD);
 }
 
-static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_ctl_hdr_t *ctl)
+static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
+    uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t*)(neth + 1);
     ucs_trace_func("");
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREP);
     /* note that duplicate creps are discared earlier */
-    ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID || 
+    ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID ||
                       ep->dest_ep_id == ctl->conn_rep.src_ep_id);
     ep->dest_ep_id = ctl->conn_rep.src_ep_id;
+
+    /* No need to track duplications, CREP always goes
+     * with ACK_REQ flag */
+    ep->rx.ooo_pkts.head_sn = neth->psn;
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     uct_ud_peer_copy(&ep->peer, &ctl->peer);
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_RCVD);
@@ -579,10 +584,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
             goto out;
         }
         if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
-            /* No need to track duplications, CREP always goes
-             * with ACK_REQ flag */
-            ep->rx.ooo_pkts.head_sn = neth->psn;
-            uct_ud_ep_rx_ctl(iface, ep, (uct_ud_ctl_hdr_t *)(neth + 1));
+            uct_ud_ep_rx_ctl(iface, ep, neth);
             goto out;
         }
     }
