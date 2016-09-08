@@ -24,7 +24,7 @@ enum {
     UCT_EP_STAT_AM,
     UCT_EP_STAT_PUT,
     UCT_EP_STAT_GET,
-    UCT_EP_STAT_ATOMIC,    
+    UCT_EP_STAT_ATOMIC,
     UCT_EP_STAT_BYTES_SHORT,
     UCT_EP_STAT_BYTES_BCOPY,
     UCT_EP_STAT_BYTES_ZCOPY,
@@ -59,9 +59,9 @@ enum {
 #define UCT_TL_EP_STAT_ATOMIC(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_ATOMIC, 1);
 #define UCT_TL_EP_STAT_FLUSH(_ep) \
-    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1); 
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH, 1);
 #define UCT_TL_EP_STAT_FLUSH_WAIT(_ep) \
-    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH_WAIT, 1); 
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FLUSH_WAIT, 1);
 #define UCT_TL_EP_STAT_FENCE(_ep) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCT_EP_STAT_FENCE, 1);
 
@@ -87,6 +87,16 @@ enum {
         ucs_error(_err_message, ## __VA_ARGS__); \
         return UCS_ERR_INVALID_PARAM; \
     }
+
+
+/**
+ * This macro should be deleted after UCT gather/scatter IOV interface changed
+ */
+#define UCT_CHECK_PARAM_IOV(_iov, _iovlen, _buffer, _length, _memh) \
+    UCT_CHECK_PARAM(1 == _iovlen, "iov[iovlen] has to be 1 at this time"); \
+    void     *_buffer = _iov[0].buffer; \
+    size_t    _length = _iov[0].length; \
+    uct_mem_h _memh   = _iov[0].memh;
 
 
 /**

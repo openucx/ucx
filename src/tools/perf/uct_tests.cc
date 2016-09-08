@@ -78,6 +78,7 @@ public:
         uint64_t am_short_hdr;
         size_t header_size;
         ssize_t packed_len;
+        uct_iov_t iov[1];
 
         switch (CMD) {
         case UCX_PERF_CMD_AM:
@@ -94,10 +95,13 @@ public:
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 *(psn_t*)buffer = sn;
                 header_size = m_perf.params.am_hdr_size;
+                iov[0].buffer = (char*)buffer + header_size;
+                iov[0].length = length - header_size;
+                iov[0].memh   = m_perf.uct.send_mem.memh;
+                iov[0].count  = 1;
+                iov[0].stride = 0;
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID,
-                                       buffer, header_size,
-                                       (char*)buffer + header_size, length - header_size,
-                                       m_perf.uct.send_mem.memh, comp);
+                                       buffer, header_size, iov, 1,comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -112,8 +116,12 @@ public:
                 packed_len = uct_ep_put_bcopy(ep, pack_cb, (void*)this, remote_addr, rkey);
                 return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return uct_ep_put_zcopy(ep, buffer, length, m_perf.uct.send_mem.memh,
-                                        remote_addr, rkey, comp);
+                iov[0].buffer = buffer;
+                iov[0].length = length;
+                iov[0].memh   = m_perf.uct.send_mem.memh;
+                iov[0].count  = 1;
+                iov[0].stride = 0;
+                return uct_ep_put_zcopy(ep, iov, 1, remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -123,8 +131,12 @@ public:
                 return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy,
                                         buffer, length, remote_addr, rkey, comp);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                return uct_ep_get_zcopy(ep, buffer, length, m_perf.uct.send_mem.memh,
-                                        remote_addr, rkey, comp);
+                iov[0].buffer = buffer;
+                iov[0].length = length;
+                iov[0].memh   = m_perf.uct.send_mem.memh;
+                iov[0].count  = 1;
+                iov[0].stride = 0;
+                return uct_ep_get_zcopy(ep, iov, 1, remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }

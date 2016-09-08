@@ -90,6 +90,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                          sizeof(uct_mm_fifo_element_t);
     iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
     iface_attr->cap.am.max_zcopy       = 0;
+    iface_attr->cap.max_iov            = 1;
     iface_attr->iface_addr_len         = sizeof(uct_mm_iface_addr_t);
     iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len            = 0;

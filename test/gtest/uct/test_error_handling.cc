@@ -76,22 +76,24 @@ UCS_TEST_P(test_error_handling, peer_failure)
 
     m_e1->flush();
 
+    UCS_TEST_GET_BUFFER_IOV(iov, iovlen, NULL, 0, NULL, 1);
+
     /* Check that all ep operations return pre-defined error code */
     EXPECT_EQ(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_am_bcopy(m_e1->ep(0), 0, NULL, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_am_zcopy(m_e1->ep(0), 0, NULL, 0, NULL, 0, NULL, NULL),
+    EXPECT_EQ(uct_ep_am_zcopy(m_e1->ep(0), 0, NULL, 0, iov, iovlen, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_put_short(m_e1->ep(0), NULL, 0, 0, 0),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_put_bcopy(m_e1->ep(0), NULL, NULL, 0, 0),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_zcopy(m_e1->ep(0), NULL, 0, NULL, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_put_zcopy(m_e1->ep(0), iov, iovlen, 0, 0, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_get_bcopy(m_e1->ep(0), NULL, NULL, 0, 0, 0, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_zcopy(m_e1->ep(0), NULL, 0, NULL, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_get_zcopy(m_e1->ep(0), iov, iovlen, 0, 0, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_atomic_add64(m_e1->ep(0), 0, 0, 0),
               UCS_ERR_ENDPOINT_TIMEOUT);

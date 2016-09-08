@@ -44,7 +44,7 @@
  * @{
  *
  * UCT context abstracts all the resources required for network communication.
- * It is designed to enable either share or isolate resources for multiple 
+ * It is designed to enable either share or isolate resources for multiple
  * programming models used by an application.
  *
  * This section provides a detailed description of this concept and
@@ -58,10 +58,10 @@
  * @ingroup UCT_API
  * @{
  * The Memory Domain abstracts resources required for network communication,
- * which typically includes memory, transport mechanisms, compute and 
- * network resources. It is an isolation  mechanism that can be employed 
- * by the applications for isolating resources between multiple programming models. 
- * The attributes of the Memory Domain are defined by the structure @ref uct_md_attr(). 
+ * which typically includes memory, transport mechanisms, compute and
+ * network resources. It is an isolation  mechanism that can be employed
+ * by the applications for isolating resources between multiple programming models.
+ * The attributes of the Memory Domain are defined by the structure @ref uct_md_attr().
  * The communication and memory operations are defined in the context of Memory Domain.
  *
  * @}
@@ -202,10 +202,10 @@ enum {
                                                         which is invoked only from the calling context of
                                                         uct_worker_progress() */
     UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(45), /**< Interface supports setting active message callback
-                                                        which will be invoked within a reasonable amount of 
+                                                        which will be invoked within a reasonable amount of
                                                         time if uct_worker_progress() is not being called.
                                                         The callback can be invoked from any progress context
-                                                        and it may also be invoked when uct_worker_progress() 
+                                                        and it may also be invoked when uct_worker_progress()
                                                         is called. */
 
     /* Event notification */
@@ -261,23 +261,33 @@ struct uct_iface_attr {
         struct {
             size_t           max_short;  /**< Maximal size for put_short */
             size_t           max_bcopy;  /**< Maximal size for put_bcopy */
-            size_t           max_zcopy;  /**< Maximal size for put_zcopy */
-        } put;
+            size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
+        } put;                           /**< Attributes for PUT operations */
 
         struct {
             size_t           max_bcopy;  /**< Maximal size for get_bcopy */
-            size_t           max_zcopy;  /**< Maximal size for get_zcopy */
-        } get;
+            size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
+        } get;                           /**< Attributes for GET operations */
 
         struct {
             size_t           max_short;  /**< Total max. size (incl. the header) */
             size_t           max_bcopy;  /**< Total max. size (incl. the header) */
-            size_t           max_zcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_zcopy;  /**< Total max. size (incl. the header
+                                              and total of @ref uct_iov_t::length
+                                              of the @a iov parameter) */
             size_t           max_hdr;    /**< Max. header size for bcopy/zcopy */
-        } am;
+        } am;                            /**< Attributes for AM operations */
 
+        size_t               max_iov;    /**< Maximal @a size of @ref ::uct_iov_t
+                                              @a iov parameter in
+                                              @ref ::UCT_RMA "RMA operations"
+                                              @anchor uct_iface_attr_cap_max_iov */
         uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
-    } cap;
+    } cap;                               /**< Interface capabilities */
 
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
@@ -310,8 +320,8 @@ enum {
  * @brief  Memory domain attributes.
  *
  * This structure defines the attributes of a Memory Domain which includes
- * maximum memory that can be allocated, credentials required for accessing the memory, 
- * and CPU mask indicating the proximity of CPUs. 
+ * maximum memory that can be allocated, credentials required for accessing the memory,
+ * and CPU mask indicating the proximity of CPUs.
  */
 struct uct_md_attr {
     struct {
@@ -332,10 +342,10 @@ struct uct_md_attr {
 
 /**
  * @ingroup UCT_MD
- * @brief Describes a memory allocated by UCT. 
- * 
+ * @brief Describes a memory allocated by UCT.
+ *
  * This structure describes the memory block which includes the address, size, and
- * Memory Domain used for allocation. This structure is passed to interface 
+ * Memory Domain used for allocation. This structure is passed to interface
  * and the memory is allocated by memory allocation functions @ref uct_mem_alloc.
  */
 typedef struct uct_allocated_memory {
@@ -351,8 +361,8 @@ typedef struct uct_allocated_memory {
  * @ingroup UCT_MD
  * @brief Remote key with its type
  *
- * This structure describes the credentials (typically key) and information 
- * required to access the remote memory by the communication interfaces. 
+ * This structure describes the credentials (typically key) and information
+ * required to access the remote memory by the communication interfaces.
  */
 typedef struct uct_rkey_bundle {
     uct_rkey_t               rkey;    /**< Remote key descriptor, passed to RMA functions */
@@ -841,10 +851,10 @@ enum uct_am_cb_cap {
     UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< Callback may be invoked from any context. For example,
                                             it may be called from transport async progress thread. To guarantee
                                             async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
-                                            flag set. 
+                                            flag set.
                                             If async callback is set on interface with only @ref
                                             UCT_IFACE_FLAG_AM_CB_SYNC flags, it will behave exactly like a
-                                            sync callback  */ 
+                                            sync callback  */
 };
 
 /**
@@ -1200,14 +1210,39 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
 
 /**
  * @ingroup UCT_RMA
- * @brief
+ * @brief Write data to remote memory while avoiding local memory copy
+ *
+ * The input data in @a iov array of @ref ::uct_iov_t structures sent to remote
+ * address ("gather output"). Buffers in @a iov are processed in array order.
+ * This means that the function complete iov[0] before proceeding to
+ * iov[1], and so on.
+ *
+ *
+ * @param [in] ep          Destination endpoint handle.
+ * @param [in] iov         Points to an array of @ref ::uct_iov_t structures.
+ *                         The @a iov pointer must be valid address of an array
+ *                         of @ref ::uct_iov_t structures. A particular structure
+ *                         pointer must be valid address. NULL terminated pointer
+ *                         is not required.
+ * @param [in] iovlen      Size of the @a iov data @ref ::uct_iov_t structures
+ *                         array. If @a iovlen is zero, the data is considered empty.
+ *                         @a iovlen is limited by @ref uct_iface_attr_cap_max_iov
+ *                         "uct_iface_attr::cap::max_iov"
+ * @param [in] remote_addr Remote address to place the @a iov data.
+ * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
+ * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS  Some communication operations are still in progress.
+ *                         If non-NULL @a comp is provided, it will be updated
+ *                         upon completion of these operations.
+ *
  */
-UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep, const void *buffer, size_t length,
-                                             uct_mem_h memh, uint64_t remote_addr,
-                                             uct_rkey_t rkey, uct_completion_t *comp)
+UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep,
+                                             const uct_iov_t *iov, size_t iovlen,
+                                             uint64_t remote_addr, uct_rkey_t rkey,
+                                             uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_put_zcopy(ep, buffer, length, memh, remote_addr,
-                                       rkey, comp);
+    return ep->iface->ops.ep_put_zcopy(ep, iov, iovlen, remote_addr, rkey, comp);
 }
 
 
@@ -1227,14 +1262,39 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t 
 
 /**
  * @ingroup UCT_RMA
- * @brief
+ * @brief Read data from remote memory while avoiding local memory copy
+ *
+ * The output data in @a iov array of @ref ::uct_iov_t structures received from
+ * remote address ("scatter input"). Buffers in @a iov are processed in array order.
+ * This means that the function complete iov[0] before proceeding to
+ * iov[1], and so on.
+ *
+ *
+ * @param [in] ep          Destination endpoint handle.
+ * @param [in] iov         Points to an array of @ref ::uct_iov_t structures.
+ *                         The @a iov pointer must be valid address of an array
+ *                         of @ref ::uct_iov_t structures. A particular structure
+ *                         pointer must be valid address. NULL terminated pointer
+ *                         is not required.
+ * @param [in] iovlen      Size of the @a iov data @ref ::uct_iov_t structures
+ *                         array. If @a iovlen is zero, the data is considered empty.
+ *                         @a iovlen is limited by @ref uct_iface_attr_cap_max_iov
+ *                         "uct_iface_attr::cap::max_iov"
+ * @param [in] remote_addr Remote address of the data placed to the @a iov.
+ * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
+ * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS  Some communication operations are still in progress.
+ *                         If non-NULL @a comp is provided, it will be updated
+ *                         upon completion of these operations.
+ *
  */
-UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep, void *buffer, size_t length,
-                                             uct_mem_h memh, uint64_t remote_addr,
-                                             uct_rkey_t rkey, uct_completion_t *comp)
+UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep,
+                                             const uct_iov_t *iov, size_t iovlen,
+                                             uint64_t remote_addr, uct_rkey_t rkey,
+                                             uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_get_zcopy(ep, buffer, length, memh, remote_addr,
-                                       rkey, comp);
+    return ep->iface->ops.ep_get_zcopy(ep, iov, iovlen, remote_addr, rkey, comp);
 }
 
 
@@ -1261,16 +1321,41 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
 
 
 /**
- * @ingroup UCT_AM
- * @brief
+ * @ingroup UCT_RMA
+ * @brief Send active message while avoiding local memory copy
+ *
+ * The output data placed into @a iov array of @ref ::uct_iov_t structures
+ * from remote side ("gather output"). Buffers in @a iov are processed in array order.
+ * This means that the function complete iov[0] before proceeding to
+ * iov[1], and so on.
+ *
+ *
+ * @param [in] ep            Destination endpoint handle.
+ * @param [in] id            Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
+ * @param [in] header        Active message header.
+ * @param [in] header_length Active message header length in bytes.
+ * @param [in] iov           Points to an array of @ref ::uct_iov_t structures.
+ *                           The @a iov pointer must be valid address of an array
+ *                           of @ref ::uct_iov_t structures. A particular structure
+ *                           pointer must be valid address. NULL terminated pointer
+ *                           is not required.
+ * @param [in] iovlen        Size of the @a iov data @ref ::uct_iov_t structures
+ *                           array. If @a iovlen is zero, the data is considered empty.
+ *                           @a iovlen is limited by @ref uct_iface_attr_cap_max_iov
+ *                           "uct_iface_attr::cap::max_iov"
+ * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS    Some communication operations are still in progress.
+ *                           If non-NULL @a comp is provided, it will be updated
+ *                           upon completion of these operations.
+ *
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
-                                            unsigned header_length, const void *payload,
-                                            size_t length, uct_mem_h memh,
+                                            unsigned header_length,
+                                            const uct_iov_t *iov, size_t iovlen,
                                             uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, payload,
-                                      length, memh, comp);
+    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovlen, comp);
 }
 
 /**

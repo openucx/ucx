@@ -92,6 +92,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
     ucp_request_t *get_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
     size_t offset, length;
+    uct_iov_t iov[1];
 
     if (ucp_ep_is_stub(get_req->send.ep)) {
         return UCS_ERR_NO_RESOURCE;
@@ -136,10 +137,13 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
                    offset, (uintptr_t)get_req->send.buffer % UCP_ALIGN,
                    (void*)get_req->send.buffer + offset, length);
 
+    iov[0].buffer = (void*)get_req->send.buffer + offset;
+    iov[0].length = length;
+    iov[0].memh   = get_req->send.state.dt.contig.memh;
+    iov[0].count  = 1;
+    iov[0].stride = 0;
     status = uct_ep_get_zcopy(ucp_ep_get_rndv_data_uct_ep(get_req->send.ep),
-                              (void*)get_req->send.buffer + offset,
-                              length,
-                              get_req->send.state.dt.contig.memh,
+                              iov, 1,
                               get_req->send.rndv_get.remote_address + offset,
                               get_req->send.rndv_get.rkey_bundle.rkey,
                               &get_req->send.uct_comp);

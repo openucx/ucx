@@ -197,7 +197,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
 
     skb->len = sizeof(*neth) + sizeof(*am);
-    memcpy(skb->neth, neth, skb->len); 
+    memcpy(skb->neth, neth, skb->len);
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
                                  (char *)skb->neth + skb->len, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
@@ -235,15 +235,14 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
 static ucs_status_t
 uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
-                        unsigned header_length, const void *payload,
-                        size_t length, uct_mem_h memh,
-                        uct_completion_t *comp)
+                        unsigned header_length, const uct_iov_t *iov,
+                        size_t iovlen, uct_completion_t *comp)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ud_mlx5_iface_t);
     uct_ud_send_skb_t *skb;
-    uct_ib_mem_t *ib_memh = memh;
+    uct_ib_mem_t *ib_memh = NULL;
     uint32_t lkey;
     struct mlx5_wqe_ctrl_seg *ctrl;
     struct mlx5_wqe_inl_data_seg *inl;
@@ -251,6 +250,8 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     unsigned wqe_size;
     uct_ud_neth_t *neth;
 
+    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    ib_memh = memh;
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
                      iface->super.config.max_inline, "am_zcopy header");
@@ -287,7 +288,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
             dptr = (void *)dptr - (iface->tx.wq.qend - iface->tx.wq.qstart);
         }
         wqe_size += sizeof(*dptr);
-        uct_ib_mlx5_set_data_seg(dptr, payload, length, lkey);
+        uct_ib_mlx5_set_data_seg(dptr, buffer, length, lkey);
     }
 
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
@@ -296,7 +297,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     skb->len = sizeof(*neth) + header_length;
     memcpy(skb->neth, neth, sizeof(*neth));
     memcpy(skb->neth + 1, header, header_length);
-    uct_ud_am_set_zcopy_desc(skb, payload, length, lkey, comp);
+    uct_ud_am_set_zcopy_desc(skb, buffer, length, lkey, comp);
 
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
@@ -304,7 +305,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     return UCS_INPROGRESS;
 }
 
-static ucs_status_t 
+static ucs_status_t
 uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                          uint64_t remote_addr, uct_rkey_t rkey)
 {
@@ -351,7 +352,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
 
     skb->len = sizeof(*neth) + sizeof(*put_hdr);
-    memcpy(skb->neth, neth, skb->len); 
+    memcpy(skb->neth, neth, skb->len);
     uct_ud_iface_complete_tx_inl(&iface->super, &ep->super, skb,
                                  (char *)skb->neth + skb->len, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
@@ -359,7 +360,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE 
+static UCS_F_ALWAYS_INLINE
 ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
 {
     struct mlx5_cqe64 *cqe;
@@ -381,7 +382,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
         goto out;
     }
 
-    ucs_assert(0 == (cqe->op_own & 
+    ucs_assert(0 == (cqe->op_own &
                (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)));
     ucs_assert(ntohs(cqe->wqe_counter) == iface->rx.wq.cq_wqe_counter);
 
@@ -409,7 +410,7 @@ out:
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE void
 uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
 {
     struct mlx5_cqe64 *cqe;
@@ -456,7 +457,7 @@ static void uct_ud_mlx5_iface_async_progress(uct_ud_iface_t *ud_iface)
     uct_ud_iface_progress_pending(&iface->super, 1);
 }
 
-static ucs_status_t 
+static ucs_status_t
 uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
@@ -484,7 +485,7 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     mlx5_av_base(&ep->av)->key.qkey.qkey      = htonl(UCT_IB_QKEY);
     mlx5_av_base(&ep->av)->key.qkey.reserved  = iface->super.qp->qp_num;
     mlx5_av_base(&ep->av)->dqp_dct            = htonl(uct_ib_unpack_uint24(if_addr->qp_num) |
-                                                      UCT_IB_MLX5_EXTENDED_UD_AV); 
+                                                      UCT_IB_MLX5_EXTENDED_UD_AV);
     ibv_destroy_ah(ah);
     return UCS_OK;
 }
@@ -646,7 +647,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
     if (uct_ib_mlx5_cqe_size(&self->tx.cq) != sizeof(struct mlx5_cqe64)) {
-        ucs_error("TX CQE size (%d) is not %d", 
+        ucs_error("TX CQE size (%d) is not %d",
                   uct_ib_mlx5_cqe_size(&self->tx.cq),
                   (int)sizeof(struct mlx5_cqe64));
         return UCS_ERR_IO_ERROR;
@@ -658,7 +659,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     }
 
     if (uct_ib_mlx5_cqe_size(&self->rx.cq) != sizeof(struct mlx5_cqe64)) {
-        ucs_error("RX CQE size (%d) is not %d", 
+        ucs_error("RX CQE size (%d) is not %d",
                   uct_ib_mlx5_cqe_size(&self->rx.cq),
                   (int)sizeof(struct mlx5_cqe64));
         return UCS_ERR_IO_ERROR;
@@ -670,15 +671,15 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
     self->super.tx.available = self->tx.wq.bb_max;
-   
-    status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq); 
+
+    status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);
     if (status != UCS_OK) {
         return status;
     }
 
     /* write buffer sizes */
     for (i = 0; i <= self->rx.wq.mask; i++) {
-        self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset + 
+        self->rx.wq.wqes[i].byte_count = htonl(self->super.super.config.rx_payload_offset +
                                                self->super.super.config.seg_size);
     }
     while (self->super.rx.available >= self->super.super.config.rx_max_batch) {

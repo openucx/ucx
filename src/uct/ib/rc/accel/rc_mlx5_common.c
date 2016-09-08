@@ -220,6 +220,8 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface, uct_iface_attr_t *ifa
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_hdr    = UCT_RC_MLX5_AM_MAX_HDR(qp_type) - sizeof(uct_rc_hdr_t);
 
+    iface_attr->cap.max_iov       = 1;
+
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |
                                     UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM;

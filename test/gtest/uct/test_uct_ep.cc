@@ -44,14 +44,16 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
 
     mapped_buffer buffer(256, 0, *m_sender);
-    size_t length = ucs_min(buffer.length(), m_sender->iface_attr().cap.am.max_zcopy);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovlen, buffer.ptr(),
+                            (ucs_min(buffer.length(), m_sender->iface_attr().cap.am.max_zcopy)),
+                            buffer.memh(),
+                            ucs_max(1UL, m_sender->iface_attr().cap.max_iov - 1));
 
     for (int i = 0; i < 100 / ucs::test_time_multiplier(); ++i) {
         connect();
         count = 0;
         for (;;) {
-            status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0, buffer.ptr(),
-                                     length, buffer.memh(), NULL);
+            status = uct_ep_am_zcopy(m_sender->ep(0), 1, NULL, 0, iov, iovlen, NULL);
             if (status == UCS_ERR_NO_RESOURCE) {
                 if (count > 0) {
                     break;

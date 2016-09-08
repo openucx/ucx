@@ -86,12 +86,18 @@ ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id, const void *hdr,
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
     ucs_status_t status;
+    uct_iov_t iov[1];
 
     /* TODO fix UCT api to have header ptr as const */
     req->send.lane = ucp_ep_get_am_lane(ep);
+
+    iov[0].buffer = (void*)req->send.buffer;
+    iov[0].length = req->send.length;
+    iov[0].memh   = req->send.state.dt.contig.memh;
+    iov[0].count  = 1;
+    iov[0].stride = 0;
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
-                             hdr_size, req->send.buffer, req->send.length,
-                             req->send.state.dt.contig.memh, &req->send.uct_comp);
+                             hdr_size, iov, 1, &req->send.uct_comp);
     if (status == UCS_OK) {
         complete(req);
     } else if (status < 0) {
@@ -114,45 +120,45 @@ ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ucp_ep_t *ep = req->send.ep;
     size_t max_middle = ucp_ep_config(ep)->max_am_zcopy - hdr_size_middle;
     ucs_status_t status;
-    size_t offset, length;
+    size_t offset;
     uct_ep_h uct_ep;
+    uct_iov_t iov[1];
 
     offset         = req->send.state.offset;
     req->send.lane = ucp_ep_get_am_lane(ep);
     uct_ep         = ep->uct_eps[req->send.lane];
+    iov[0].buffer  = (void *)(req->send.buffer + offset);
+    iov[0].memh    = req->send.state.dt.contig.memh;
+    iov[0].count   = 1;
+    iov[0].stride  = 0;
 
     if (offset == 0) {
         /* First */
-        length = max_middle - hdr_size_first + hdr_size_middle;
+        iov[0].length = max_middle - hdr_size_first + hdr_size_middle;
         status = uct_ep_am_zcopy(uct_ep, am_id_first, (void*)hdr_first,
-                                 hdr_size_first, req->send.buffer, length,
-                                 req->send.state.dt.contig.memh,
-                                 &req->send.uct_comp);
+                                 hdr_size_first, iov, 1, &req->send.uct_comp);
         if (status < 0) {
             return status; /* Failed */
         }
 
-        req->send.state.offset += length;
+        req->send.state.offset += iov[0].length;
         return UCS_INPROGRESS;
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
+        iov[0].length = max_middle;
         status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
-                                 hdr_size_middle, req->send.buffer + offset,
-                                 max_middle, req->send.state.dt.contig.memh,
-                                 &req->send.uct_comp);
+                                 hdr_size_middle, iov, 1, &req->send.uct_comp);
         if (status < 0) {
             return status; /* Failed */
         }
 
-        req->send.state.offset += max_middle;
+        req->send.state.offset += iov[0].length;
         return UCS_INPROGRESS;
     } else {
         /* Last */
-        length = req->send.length - offset;
+        iov[0].length = req->send.length - offset;
         status = uct_ep_am_zcopy(uct_ep, am_id_last, (void*)hdr_middle,
-                                 hdr_size_middle, req->send.buffer + offset,
-                                 length, req->send.state.dt.contig.memh,
-                                 &req->send.uct_comp);
+                                 hdr_size_middle, iov, 1, &req->send.uct_comp);
         if (status < 0) {
             return status; /* Failed */
         }
