@@ -202,7 +202,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_ud_verbs_iface_t);
     uct_ud_send_skb_t *skb;
-    uct_ib_memh_t *ib_memh = memh;
+    uct_ib_mem_t *ib_memh = memh;
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,

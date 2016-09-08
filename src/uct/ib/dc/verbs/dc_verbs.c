@@ -140,7 +140,7 @@ static inline void uct_dc_verbs_iface_add_send_comp(uct_dc_verbs_iface_t *iface,
 
 static inline ucs_status_t
 uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const void *buffer, size_t length,
-                           uct_ib_memh_t *memh, uint64_t remote_addr,
+                           uct_ib_mem_t *memh, uint64_t remote_addr,
                            uct_rkey_t rkey, uct_completion_t *comp,
                            int opcode)
 {

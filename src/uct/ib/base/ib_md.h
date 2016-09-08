@@ -25,11 +25,11 @@ enum {
     UCT_IB_MD_STAT_LAST
 };
 
-typedef struct uct_ib_memh {
+typedef struct uct_ib_mem {
     uint32_t                lkey;
     struct ibv_mr           *mr;
     struct ibv_mr           *umr;
-} uct_ib_memh_t;
+} uct_ib_mem_t;
 
 /**
  * IB memory domain.
@@ -77,27 +77,33 @@ typedef struct uct_ib_md_config {
  */
 typedef struct uct_ib_rcache_region {
     ucs_rcache_region_t  super;
-    uct_ib_memh_t        memh;      /**<  mr exposed to the user as the memh */
+    uct_ib_mem_t         memh;      /**<  mr exposed to the user as the memh */
 } uct_ib_rcache_region_t;
 
 
 extern uct_md_component_t uct_ib_mdc;
 
 /**
- * rkey is packed/unpacked is such a way that
+ * rkey is packed/unpacked is such a way that:
+ * low  32 bits contain a direct key
  * high 32 bits always contain a valid key. Either a umr key
- * or a regualar one. 
+ * or a direct one. 
  */
 static inline uint32_t uct_ib_md_umr_rkey(uct_rkey_t rkey)
 {
     return (uint32_t)(rkey >> 32);
 }
 
+static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t rkey)
+{
+    return (uint32_t)rkey;
+}
+
 uint8_t  uct_ib_md_umr_id(uct_ib_md_t *md);
 
 static inline uint16_t uct_ib_md_umr_offset(uint8_t umr_id)
 {
-    return umr_id<<3;
+    return 8 * umr_id;
 }
 
 #endif

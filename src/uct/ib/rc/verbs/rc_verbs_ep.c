@@ -86,21 +86,9 @@ uct_rc_verbs_ep_post_send_desc(uct_rc_verbs_ep_t* ep, struct ibv_send_wr *wr,
     uct_rc_txqp_add_send_op_sn(&ep->super.txqp, &desc->super, ep->txcnt.pi);
 }
 
-static inline void uct_rc_verbs_fill_rdma_wr(struct ibv_send_wr *wr, int opcode,
-                                             struct ibv_sge *sge, size_t length,
-                                             uint64_t remote_addr, uct_rkey_t rkey)
-{
-    wr->wr.rdma.remote_addr = remote_addr;
-    wr->wr.rdma.rkey        = rkey;
-    wr->sg_list             = sge;
-    wr->num_sge             = 1;
-    wr->opcode              = opcode;
-    sge->length             = length;
-}
-
 static inline ucs_status_t
 uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const void *buffer, size_t length,
-                           uct_ib_memh_t *memh, uint64_t remote_addr,
+                           uct_ib_mem_t *memh, uint64_t remote_addr,
                            uct_rkey_t rkey, uct_completion_t *comp,
                            int opcode)
 {

@@ -121,7 +121,7 @@ uct_ib_device_info_t uct_ib_device_info_table[] = {
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
-    uct_ib_memh_t *ib_memh = memh;
+    uct_ib_mem_t *ib_memh = memh;
 
     desc->lkey = ib_memh->lkey;
 }

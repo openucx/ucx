@@ -25,7 +25,8 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
 {
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, txqp, txwq, opcode, desc + 1, length, &desc->lkey,
-                               am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
+                               am_id, am_hdr, am_hdr_len,
+                               rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0, 0, force_sig, IBV_QPT_RC);
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
@@ -37,7 +38,7 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_m
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                           unsigned opcode, const void *buffer,
-                          unsigned length, uct_ib_memh_t *memh,
+                          unsigned length, uct_ib_mem_t *memh,
                           /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                           /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                           int force_sig, uct_completion_t *comp)
@@ -51,7 +52,8 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
     sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, &ep->super.txqp, &ep->tx.wq, 
                                opcode, buffer, length, &memh->lkey,
-                               am_id, am_hdr, am_hdr_len, rdma_raddr, rdma_rkey,
+                               am_id, am_hdr, am_hdr_len,
+                               rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
                                0, 0, 0, 0,
                                (comp == NULL) ? force_sig : MLX5_WQE_CTRL_CQ_UPDATE,
                                IBV_QPT_RC);
@@ -129,7 +131,7 @@ ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsign
     uct_rc_mlx5_txqp_inline_post(iface, &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 
-                                 remote_addr, rkey, 0, IBV_QPT_RC);
+                                 remote_addr, uct_ib_md_direct_rkey(rkey), 0, IBV_QPT_RC);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     return UCS_OK;
 }
