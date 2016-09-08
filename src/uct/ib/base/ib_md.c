@@ -46,9 +46,9 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Whether or not 'Pause Frame' is enabled on an Ethernet network.\n"
    "Pause frame is a mechanism for temporarily stopping the transmission of data to\n"
    "ensure zero loss under congestion on Ethernet family computer networks.\n"
-   "This parameter, if set to 'no', will disqualify IB transports that may not perform \n"
+   "This parameter, if set to 'no', will disqualify IB transports that may not perform\n"
    "well on a lossy fabric when working with RoCE.",
-   ucs_offsetof(uct_ib_md_config_t, pfc_enabled), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_md_config_t, eth_pause), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -470,7 +470,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         goto err_cleanup_device;
     }
 
-    md->pfc_enabled = md_config->pfc_enabled;
+    md->eth_pause = md_config->eth_pause;
 
     md->rcache   = NULL;
     md->reg_cost = md_config->uc_reg_cost;
