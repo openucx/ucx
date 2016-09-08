@@ -215,11 +215,11 @@ static void ucp_ep_destory_uct_eps(ucp_ep_h ep)
     }
 }
 
-void ucp_ep_destroy(ucp_ep_h ep)
+ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
 
-    ucs_debug("destroy ep %p", ep);
+    ucs_debug("disconnect ep %p", ep);
 
     UCS_ASYNC_BLOCK(&worker->async);
     ucp_ep_delete_from_hash(ep);
@@ -227,6 +227,28 @@ void ucp_ep_destroy(ucp_ep_h ep)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_free(ep);
+
+    return NULL; /* TODO implement non-blocking flow */
+}
+
+void ucp_ep_destroy(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+    ucs_status_ptr_t *ureq;
+    ucp_request_t *req;
+
+    ureq = ucp_disconnect_nb(ep);
+    if (ureq == NULL) {
+        return;
+    } else if (UCS_PTR_IS_ERR(ureq)) {
+        ucs_warn("disconnect failed: %s", ucs_status_string(UCS_PTR_STATUS(ureq)));
+        return;
+    } else {
+        req = (ucp_request_t*)ureq - 1;
+        while (!(req->flags & UCP_REQUEST_FLAG_COMPLETED)) {
+            ucp_worker_progress(worker);
+        }
+    }
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
