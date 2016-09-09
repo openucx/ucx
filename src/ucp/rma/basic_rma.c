@@ -40,14 +40,12 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
 
 #if _USE_ZCOPY
     ucp_ep_config_t *config;
-    ucp_lane_index_t lane;
 
     UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, lane, uct_rkey);
-    uct_ep = ep->uct_eps[lane];
     rma_config = &config->rma[lane];
 
     if (length <= rma_config->max_put_short) {
-        status = uct_ep_put_short(uct_ep, buffer,
+        status = uct_ep_put_short(ep->uct_eps[lane], buffer,
                                   length, remote_addr,
                                   uct_rkey);
         ucp_worker_progress(ep->worker);
@@ -55,7 +53,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
         ucp_memcpy_pack_context_t pack_ctx;
         pack_ctx.src    = buffer;
         pack_ctx.length = length;
-        packed_len = uct_ep_put_bcopy(uct_ep,
+        packed_len = uct_ep_put_bcopy(ep->uct_eps[lane],
                                       ucp_memcpy_pack, &pack_ctx,
                                       remote_addr, uct_rkey);
 
@@ -74,7 +72,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
                       ucs_status_string(status));
         }
         for(;;) {
-            status = uct_ep_put_zcopy(uct_ep,
+            status = uct_ep_put_zcopy(ep->uct_eps[lane],
                                       buffer, length,
                                       mem, remote_addr,
                                       uct_rkey, &uct_comp);
@@ -155,6 +153,7 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     ucs_status_t status;
     uct_rkey_t uct_rkey;
     ssize_t packed_len;
+    ucp_ep_rma_config_t *rma_config;
 
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req->send.lane, uct_rkey, rma_config);
 
@@ -421,7 +420,6 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
     uct_completion_t comp;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    size_t frag_length;
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
@@ -430,7 +428,6 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
     comp.count = 1;
 #if _USE_ZCOPY
     ucp_ep_config_t *config;
-    ucp_lane_index_t lane;
     uct_md_h uct_md = NULL;
     uct_mem_h mem;
 retry:
@@ -455,7 +452,7 @@ retry:
     } else {
         uct_md = ucp_ep_md(ep, lane);
 
-        status = uct_pd_mem_reg(uct_pd, (void*)buffer, length, &mem);
+        status = uct_md_mem_reg(uct_md, (void*)buffer, length, &mem);
         if (status != UCS_OK) {
             ucs_error("failed to register user buffer: %s",
                       ucs_status_string(status));
@@ -527,6 +524,7 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
     ucs_status_t status;
     uct_rkey_t uct_rkey;
     size_t frag_length;
+    ucp_ep_rma_config_t *rma_config;
 
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req->send.lane, uct_rkey, rma_config);
 
