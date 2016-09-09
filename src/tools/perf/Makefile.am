@@ -1,7 +1,9 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+# Copyright (C) The University of Tennessee and The University
+#               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+#
 # See file LICENSE for terms.
 #
 
@@ -59,7 +61,7 @@ ucx_perftest_SOURCE_FILES = \
 perftest.lo: $(ucx_perftest_SOURCE_FILES)
 	$(AM_V_CC)
 	@$(LIBTOOL) $(AM_V_lt) --mode=compile --tag=CC $(ucx_perftest_CC) \
-		$(DEFS) -I$(top_builddir) $(CFLAGS) $(AM_CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
+		$(DEFS) -I$(top_builddir) $(CFLAGS) $(CPPFLAGS) $(AM_CPPFLAGS) $(ucx_perftest_CPPFLAGS) \
 		$(ucx_perftest_CFLAGS) $(ucx_perftest_SOURCE_FILES) -c -o $@
 
 ucx_perftest$(EXEEXT): perftest.lo $(ucx_perftest_LDADD)
