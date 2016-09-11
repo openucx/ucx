@@ -45,6 +45,10 @@ enum {
 };
 
 
+/* Callback for UCP requests */
+typedef void (*ucp_request_callback_t)(ucp_request_t *req);
+
+
 typedef struct ucp_send_state {
     size_t                        offset;
     union {
@@ -100,6 +104,12 @@ struct ucp_request {
                     uct_rkey_bundle_t rkey_bundle;
                     ucp_request_t *rreq; /* receive request on the recv side */
                 } rndv_get;
+
+                struct {
+                    ucp_request_callback_t    flushed_cb;/* Called when flushed */
+                    ucs_callbackq_slow_elem_t cbq_elem;  /* Slow-path callback */
+                    ucp_lane_map_t            lanes;     /* Which lanes need to be flushed */
+                } flush;
 
             };
 

@@ -303,6 +303,7 @@ static void ucp_wireup_process_reply(ucp_worker_h worker, ucp_wireup_msg_t *msg,
 
     if (ack) {
         /* Send ACK without any address, we've already sent it as part of the request */
+        ucs_trace("ep %p: sending wireup ack", ep);
         memset(rsc_tli, -1, sizeof(rsc_tli));
         status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
         if (status != UCS_OK) {
