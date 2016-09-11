@@ -91,8 +91,6 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     uct_ib_device_t *ibdev;
     struct ibv_exp_port_attr *port_attr;
 
-    md->umr_qp = NULL;
-    md->umr_cq = NULL;
     ibdev = &md->dev;
 
     if (!(ibdev->dev_attr.exp_device_cap_flags & IBV_EXP_DEVICE_UMR)) {
@@ -162,15 +160,6 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_attr.ah_attr.port_num         = port_num;
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 0;
-#if 0
-    if (port_addr.is_global) {
-        qp_attr.ah_attr.is_global    = 1;
-        memcpy(&qp_attr.ah_attr.grh.dgid, port_addr.gid, sizeof(port_addr.gid));
-    } else {
-        qp_attr.ah_attr.is_global    = 0;
-    }
-#endif
-
     qp_attr.rq_psn                   = 0;
     qp_attr.path_mtu                 = IBV_MTU_512;
     qp_attr.min_rnr_timer            = 7;
@@ -205,6 +194,8 @@ err_destroy_qp:
 err_destroy_cq:
     ibv_destroy_cq(md->umr_cq);
 err:
+    md->umr_qp = NULL;
+    md->umr_cq = NULL;
     return UCS_ERR_IO_ERROR;
 #else
     return UCS_ERR_UNSUPPORTED;
