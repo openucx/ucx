@@ -98,7 +98,7 @@ ucp_test::enum_test_params(const ucp_params_t& ctx_params,
     std::stringstream ss(tls);
 
     test_param.ctx_params = ctx_params;
-    test_param.variant    = false;   
+    test_param.variant    = DEFAULT_PARAM_VARIANT;
     
     while (ss.good()) {
         std::string tl_name;
@@ -110,6 +110,25 @@ ucp_test::enum_test_params(const ucp_params_t& ctx_params,
         return std::vector<ucp_test_param>(1, test_param);
     } else {
         return std::vector<ucp_test_param>();
+    }
+}
+
+void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
+                                            const std::string& name,
+                                            const std::string& test_case_name,
+                                            const std::string& tls,
+                                            int variant,
+                                            std::vector<ucp_test_param>& test_params)
+{
+    std::vector<ucp_test_param> tmp_test_params, result;
+
+    tmp_test_params = ucp_test::enum_test_params(ctx_params, name,
+                                                 test_case_name, tls);
+    for (std::vector<ucp_test_param>::iterator iter = tmp_test_params.begin();
+         iter != tmp_test_params.end(); ++iter)
+    {
+        iter->variant = variant;
+        test_params.push_back(*iter);
     }
 }
 
@@ -262,12 +281,18 @@ void ucp_test_base::entity::disconnect() {
 }
 
 void ucp_test_base::entity::destroy_worker() {
-    disconnect();
+    m_ep.revoke();
     m_worker.reset();
 }
 
 ucp_ep_h ucp_test_base::entity::ep() const {
     return m_ep;
+}
+
+ucp_ep_h ucp_test_base::entity::revoke_ep() const {
+    ucp_ep_h ep = m_ep;
+    m_ep.revoke();
+    return ep;
 }
 
 ucp_worker_h ucp_test_base::entity::worker() const {

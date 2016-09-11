@@ -15,7 +15,7 @@ extern "C" {
 struct ucp_test_param {
     ucp_params_t              ctx_params;
     std::vector<std::string>  transports;
-    bool                      variant;  
+    int                       variant;
 };
 
 class ucp_test_base : public ucs::test_base {
@@ -37,6 +37,8 @@ public:
         void destroy_worker();
 
         ucp_ep_h ep() const;
+
+        ucp_ep_h revoke_ep() const;
 
         ucp_worker_h worker() const;
 
@@ -61,7 +63,12 @@ class ucp_test : public ucp_test_base,
     friend class ucp_test_base::entity;
 
 public:
+    enum {
+        DEFAULT_PARAM_VARIANT = 0
+    };
+
     UCS_TEST_BASE_IMPL;
+
     ucp_test();
     virtual ~ucp_test();
 
@@ -73,13 +80,22 @@ public:
                      const std::string& test_case_name,
                      const std::string& tls);
 
+    static ucp_params_t get_ctx_params();
+
+    static void
+    generate_test_params_variant(const ucp_params_t& ctx_params,
+                                 const std::string& name,
+                                 const std::string& test_case_name,
+                                 const std::string& tls,
+                                 int variant,
+                                 std::vector<ucp_test_param>& test_params);
+
     virtual void modify_config(const std::string& name, const std::string& value);
 
 protected:
     virtual void init();
     virtual void cleanup();
     ucp_test_base::entity* create_entity(bool add_in_front = false);
-    static ucp_params_t get_ctx_params();
     void progress() const;
     void short_progress_loop() const;
     static void disable_errors();

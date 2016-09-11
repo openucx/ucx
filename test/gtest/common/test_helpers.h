@@ -250,6 +250,10 @@ public:
         }
     }
 
+    void revoke() const {
+        m_initialized = false;
+    }
+
     void reset(const T& value, dtor_t dtor) {
         reset();
         if (value == NULL) {
@@ -282,10 +286,6 @@ public:
     }
 
 private:
-
-    void revoke() const {
-        m_initialized = false;
-    }
 
     void release() {
         m_dtor(m_value);
