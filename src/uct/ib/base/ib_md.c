@@ -194,8 +194,6 @@ err_destroy_qp:
 err_destroy_cq:
     ibv_destroy_cq(md->umr_cq);
 err:
-    md->umr_qp = NULL;
-    md->umr_cq = NULL;
     return UCS_ERR_IO_ERROR;
 #else
     return UCS_ERR_UNSUPPORTED;
@@ -851,7 +849,12 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         }
     }
 
-    uct_ib_md_umr_qp_create(md);
+    if (uct_ib_md_umr_qp_create(md) != UCS_OK) {
+#if HAVE_EXP_UMR
+        md->umr_qp = NULL;
+        md->umr_cq = NULL;
+#endif
+    }
 
     *md_p = &md->super;
     status = UCS_OK;
