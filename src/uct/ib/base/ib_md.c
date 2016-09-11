@@ -100,7 +100,7 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     }
 
     /* TODO: fix port selection. It looks like active port should be used */
-    port_num = 1;
+    port_num = ibdev->first_port;
     port_attr = uct_ib_device_port_attr(ibdev, port_num);
 
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
@@ -118,8 +118,8 @@ static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_send_sge    = 1;
     qp_init_attr.srq                 = NULL;
-    qp_init_attr.cap.max_recv_wr     = 100;
-    qp_init_attr.cap.max_send_wr     = 100;
+    qp_init_attr.cap.max_recv_wr     = 16;
+    qp_init_attr.cap.max_send_wr     = 16;
     qp_init_attr.pd                  = md->pd;
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD|IBV_EXP_QP_INIT_ATTR_MAX_INL_KLMS;
     qp_init_attr.max_inl_recv        = 0;
@@ -207,8 +207,6 @@ err_destroy_cq:
 err:
     return UCS_ERR_IO_ERROR;
 #else
-    md->umr_qp = NULL;
-    md->umr_cq = NULL;
     return UCS_ERR_UNSUPPORTED;
 #endif
 }
@@ -216,10 +214,10 @@ err:
 static void uct_ib_md_umr_qp_destroy(uct_ib_md_t *md) 
 {
 #if HAVE_EXP_UMR
-    if (md->umr_qp == NULL) {
+    if (md->umr_qp != NULL) {
         ibv_destroy_qp(md->umr_qp);
     }
-    if (md->umr_cq == NULL) {
+    if (md->umr_cq != NULL) {
         ibv_destroy_cq(md->umr_cq);
     }
 #endif
