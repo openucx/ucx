@@ -51,7 +51,6 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_verbs_ep_t, uct_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_verbs_ep_t, uct_ep_t, uct_iface_h, const uct_device_addr_t *,
                           const uct_iface_addr_t *);
 
-
 static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_verbs_iface_t);
@@ -59,29 +58,8 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     uct_dc_iface_query(&iface->super, iface_attr);
     uct_rc_verbs_iface_common_query(&iface->verbs_common, 
                                     &iface->super.super, iface_attr);
-    /*TODO: remove flags once we have a full functionality */
-    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_ZCOPY|
-                                      UCT_IFACE_FLAG_AM_BCOPY|
-                                      UCT_IFACE_FLAG_AM_SHORT|
-                                      UCT_IFACE_FLAG_PUT_SHORT|
-                                      UCT_IFACE_FLAG_PUT_BCOPY|
-                                      UCT_IFACE_FLAG_PUT_ZCOPY|
-                                      UCT_IFACE_FLAG_GET_BCOPY|
-                                      UCT_IFACE_FLAG_GET_ZCOPY|
-                                      UCT_IFACE_FLAG_ATOMIC_ADD64|
-                                      UCT_IFACE_FLAG_ATOMIC_FADD64|
-                                      UCT_IFACE_FLAG_ATOMIC_SWAP64|
-                                      UCT_IFACE_FLAG_ATOMIC_CSWAP64|
-                                      UCT_IFACE_FLAG_ATOMIC_ADD32|
-                                      UCT_IFACE_FLAG_ATOMIC_FADD32|
-                                      UCT_IFACE_FLAG_ATOMIC_SWAP32|
-                                      UCT_IFACE_FLAG_ATOMIC_CSWAP32|
-                                      UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-
     return UCS_OK;
 }
-
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,

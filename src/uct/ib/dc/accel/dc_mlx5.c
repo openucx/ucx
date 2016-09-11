@@ -62,27 +62,6 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_dc_iface_query(&iface->super, iface_attr);
     uct_rc_mlx5_iface_common_query(&iface->super.super, iface_attr, IBV_EXP_QPT_DC_INI);
-
-    /*TODO: remove flags once we have a full functionality */
-    iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT|
-                                      UCT_IFACE_FLAG_AM_BCOPY|
-                                      UCT_IFACE_FLAG_AM_ZCOPY|
-                                      UCT_IFACE_FLAG_PUT_SHORT|
-                                      UCT_IFACE_FLAG_PUT_BCOPY|
-                                      UCT_IFACE_FLAG_PUT_ZCOPY|
-                                      UCT_IFACE_FLAG_GET_BCOPY|
-                                      UCT_IFACE_FLAG_GET_ZCOPY|
-                                      UCT_IFACE_FLAG_ATOMIC_ADD64|
-                                      UCT_IFACE_FLAG_ATOMIC_FADD64|
-                                      UCT_IFACE_FLAG_ATOMIC_SWAP64|
-                                      UCT_IFACE_FLAG_ATOMIC_CSWAP64| 
-                                      UCT_IFACE_FLAG_ATOMIC_ADD32|
-                                      UCT_IFACE_FLAG_ATOMIC_FADD32|
-                                      UCT_IFACE_FLAG_ATOMIC_SWAP32|
-                                      UCT_IFACE_FLAG_ATOMIC_CSWAP32| 
-                                      UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-
     return UCS_OK;
 }
 
