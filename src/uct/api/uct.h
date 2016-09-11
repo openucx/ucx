@@ -561,6 +561,40 @@ void uct_worker_progress_unregister(uct_worker_h worker,
 
 
 /**
+ * @ingroup UCT_CONTEXT
+ * @brief Add a slow path callback function to a worker progress.
+ *
+ * Add a function which will be called every time a progress is made on the worker.
+ * The number of functions which can be added this way is unlimited since the
+ * element is allocated by the caller, but the overhead of calling this function
+ * is slightly higher than @ref uct_worker_progress_register.
+ *
+ * @param [in]  worker        Handle to worker.
+ * @param [in]  elem          Callback function to add, with it's associated context.
+ *
+ * @note This operation could potentially be slow.
+ */
+void uct_worker_slowpath_progress_register(uct_worker_h worker,
+                                           ucs_callbackq_slow_elem_t *elem);
+
+
+/**
+ * @ingroup UCT_CONTEXT
+ * @brief Remove a slow path callback function from worker's progress.
+ *
+ * Remove a function previously added by @ref uct_worker_slowpath_progress_register.
+ *
+ * @param [in]  worker        Handle to worker.
+ * @param [in]  elem          Callback element to remove. Must be the same pointer
+ *                            added earlier.
+ *
+ * @note This operation could potentially be slow.
+ */
+void uct_worker_slowpath_progress_unregister(uct_worker_h worker,
+                                             ucs_callbackq_slow_elem_t *elem);
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Read transport-specific interface configuration.
  *
