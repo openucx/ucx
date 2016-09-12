@@ -172,6 +172,13 @@ enum {
     UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22), /**< 32bit atomic compare-and-swap */
     UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23), /**< 64bit atomic compare-and-swap */
 
+    /* Atomic operations domain */
+    UCT_IFACE_FLAG_ATOMIC_HOST    = UCS_BIT(30), /**< Atomic communications are atomic
+                                                      with respect to host operations. */
+    UCT_IFACE_FLAG_ATOMIC_DEVICE  = UCS_BIT(31), /**< Atomic communications are atomic
+                                                      only with respect to other atomics
+                                                      on the same device. */
+
     /* Error handling capabilities */
     UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF    = UCS_BIT(32), /**< Invalid buffer for short operation */
     UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF    = UCS_BIT(33), /**< Invalid buffer for buffered operation */

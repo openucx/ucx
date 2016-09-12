@@ -21,13 +21,19 @@
 #define PRINT_ATOMIC_CAP(_name, _cap_flags) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) { \
         char *s = strduplower(#_name); \
+        char *domain = ""; \
+        if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_HOST) { \
+            domain = ", host"; \
+        } else if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_DEVICE) { \
+            domain = ", device"; \
+        } \
         if (ucs_test_all_flags(_cap_flags, \
                                UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) \
         { \
-            printf("#         %12s: 32, 64 bit\n", s); \
+            printf("#         %12s: 32, 64 bit%s\n", s, domain); \
         } else { \
-            printf("#         %12s: %d bit\n", s, \
-                   ((_cap_flags) & UCT_IFACE_FLAG_##_name##32) ? 32 : 64); \
+            printf("#         %12s: %d bit%s\n", s, \
+                   ((_cap_flags) & UCT_IFACE_FLAG_##_name##32) ? 32 : 64, domain); \
         } \
         free(s); \
     }

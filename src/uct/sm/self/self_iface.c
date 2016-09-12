@@ -45,6 +45,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
                                    UCT_IFACE_FLAG_ATOMIC_SWAP32    |
                                    UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
                                    UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
+                                   UCT_IFACE_FLAG_ATOMIC_HOST       |
                                    UCT_IFACE_FLAG_PENDING          |
                                    UCT_IFACE_FLAG_AM_CB_SYNC;
 
