@@ -618,9 +618,9 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
  */
 UCS_TEST_P(test_ud, connect_iface_2k) {
 
-    int i;
+    unsigned i;
     unsigned cids[2000];
-    int count = 2000 / ucs::test_time_multiplier();
+    unsigned count = 2000 / ucs::test_time_multiplier();
 
     /* create 2k connections */
     for (i = 0; i < count; i++) {
