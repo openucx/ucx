@@ -567,18 +567,19 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
  */
 UCS_TEST_P(test_ud, connect_iface_2k) {
 
-    unsigned i;
+    int i;
     unsigned cids[2000];
+    int count = 2000 / ucs::test_time_multiplier();
 
     /* create 2k connections */
-    for (i = 0; i < 2000; i++) {
+    for (i = 0; i < count; i++) {
         m_e1->connect_to_iface(i, *m_e2);
         cids[i] = UCT_UD_EP_NULL_ID;
     }
 
     flush();
 
-    for (i = 0; i < 2000; i++) {
+    for (i = 0; i < count; i++) {
         ASSERT_EQ(cids[i], (unsigned)UCT_UD_EP_NULL_ID);
         cids[i] = ep(m_e1,i)->dest_ep_id;
         ASSERT_NE((unsigned)UCT_UD_EP_NULL_ID, ep(m_e1,i)->dest_ep_id);

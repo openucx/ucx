@@ -154,6 +154,9 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
     /* For large size, slow down if needed */
     if (max_length > 1 * 1024 * 1024) {
         max_length = max_length / ucs::test_time_multiplier();
+        if (RUNNING_ON_VALGRIND) {
+            max_length = ucs_min(max_length, 20u * 1024 * 1024);
+        }
     }
 
     if (max_length <= min_length) {
@@ -176,7 +179,7 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
 
     /* How many times to repeat */
     int repeat_count;
-    repeat_count = (1 * 1024 * 1024) / ((max_length + min_length) / 2);
+    repeat_count = (256 * 1024) / ((max_length + min_length) / 2);
     if (repeat_count > 3000) {
         repeat_count = 3000;
     }
