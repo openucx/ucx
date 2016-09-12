@@ -150,6 +150,27 @@ AS_IF([test "x$with_ib" == xyes],
                       [have_ext_atomics=no],
                       [[#include <infiniband/verbs_exp.h>]])
 
+       # UMR support
+       AC_CHECK_DECLS(IBV_EXP_WR_UMR_FILL,
+                     [AC_DEFINE([HAVE_EXP_UMR], 1, [IB UMR support])],
+                     [],
+                     [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_DECLS(IBV_EXP_QP_CREATE_UMR,
+                     [AC_DEFINE([HAVE_IBV_EXP_QP_CREATE_UMR], 1, [IB QP Create UMR support])],
+                     [],
+                     [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_MEMBERS([struct ibv_exp_qp_init_attr.umr_caps],
+                        [AC_DEFINE([HAVE_IBV_EXP_QP_CREATE_UMR_CAPS], 1, [Support UMR max caps v2])],
+                        [],
+                        [[#include <infiniband/verbs.h>]])
+
+       AC_CHECK_DECLS(IBV_EXP_MR_INDIRECT_KLMS,
+                     [AC_DEFINE([HAVE_EXP_UMR_NEW_API], 1, [IB UMR new API])],
+                     [],
+                     [[#include <infiniband/verbs.h>]])
+
        # Extended atomics
        AS_IF([test "x$have_ext_atomics" != xno],
              [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],

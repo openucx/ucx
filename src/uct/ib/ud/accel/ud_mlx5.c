@@ -243,7 +243,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ud_mlx5_iface_t);
     uct_ud_send_skb_t *skb;
-    struct ibv_mr *mr = memh;
+    uct_ib_mem_t *ib_memh = memh;
     uint32_t lkey;
     struct mlx5_wqe_ctrl_seg *ctrl;
     struct mlx5_wqe_inl_data_seg *inl;
@@ -278,7 +278,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ib_mlx5_inline_copy(neth + 1, header, header_length, &iface->tx.wq);
 
     wqe_size += UCT_UD_MLX5_WQE_SIZE + sizeof(*inl);
-    lkey = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
+    lkey = (ib_memh == UCT_INVALID_MEM_HANDLE) ? 0 : ib_memh->lkey;
 
     if (ucs_likely(length > 0)) {
         wqe_size = ucs_align_up_pow2(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);

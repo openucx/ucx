@@ -44,7 +44,7 @@ public:
         for (size_t i = 0; i < num_elem; ++i) {
             add_elem(keys[i]);
         }
-        return END_TIME;
+        return (ucs_time_t)END_TIME;
     }
 
     ucs_time_t lookup(const size_t num_elem) const {
@@ -53,13 +53,13 @@ public:
             hash_type *ep = find_elem(keys[i]);
             EXPECT_TRUE(ep->dest_uuid == keys[i]);
         }
-        return END_TIME;
+        return (ucs_time_t)END_TIME;
     }
 
     ucs_time_t cleanup(const size_t num_elem) {
         START_TIME
         del_elems();
-        return END_TIME;
+        return (ucs_time_t)END_TIME;
     }
 
     virtual void        init_storage()                      = 0;

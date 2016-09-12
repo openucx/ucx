@@ -136,13 +136,13 @@ public:
     ucs_status_t fadd32(uct_ep_h ep, worker& worker,
                         const mapped_buffer& recvbuf, uct_completion_t *comp) {
         return uct_ep_atomic_fadd32(ep, 0, recvbuf.addr(), recvbuf.rkey(),
-                                    (uint32_t*)&(worker.result), comp);
+                                    (uint32_t *)(void *)&worker.result, comp);
     }
 
     ucs_status_t fadd64(uct_ep_h ep, worker& worker,
                         const mapped_buffer& recvbuf, uct_completion_t *comp) {
         return uct_ep_atomic_fadd64(ep, 0, recvbuf.addr(), recvbuf.rkey(),
-                                    &(worker.result), comp);
+                                    &worker.result, comp);
     }
 
     template <typename T>

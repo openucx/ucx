@@ -267,6 +267,14 @@ ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);
 
+static inline uint8_t uct_ib_iface_umr_id(uct_ib_iface_t *iface)
+{
+    uct_ib_md_t *md;
+
+    md = ucs_derived_of(iface->super.md, uct_ib_md_t);
+    return uct_ib_md_umr_id(md);
+}
+
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
         if (ucs_unlikely(_wc[i].status != IBV_WC_SUCCESS)) { \

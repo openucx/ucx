@@ -232,8 +232,9 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
                                        uct_mem_h memh)
 {
     uct_ud_send_skb_t *skb = obj;
-    struct ibv_mr *mr = memh;
-    skb->lkey  = mr->lkey;
+    uct_ib_mem_t *ib_memh = memh;
+
+    skb->lkey  = ib_memh->lkey;
     skb->flags = 0;
 }
 

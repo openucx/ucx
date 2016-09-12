@@ -17,9 +17,10 @@ struct uct_dc_ep {
     ucs_arbiter_group_t   arb_group;
     uint8_t               dci;
     uint8_t               state;
+    uint16_t              umr_offset;
 };
 
-UCS_CLASS_DECLARE(uct_dc_ep_t, uct_dc_iface_t *);
+UCS_CLASS_DECLARE(uct_dc_ep_t, uct_dc_iface_t *, const uct_dc_iface_addr_t *);
 
 ucs_arbiter_cb_result_t
 uct_dc_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,

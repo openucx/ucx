@@ -25,6 +25,11 @@ enum {
     UCT_IB_MD_STAT_LAST
 };
 
+typedef struct uct_ib_mem {
+    uint32_t                lkey;
+    struct ibv_mr           *mr;
+    struct ibv_mr           *umr;
+} uct_ib_mem_t;
 
 /**
  * IB memory domain.
@@ -36,6 +41,11 @@ typedef struct uct_ib_md {
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     int                      eth_pause; /**< Pause Frame on an Ethernet network */
+#if HAVE_EXP_UMR
+    /* keep it in md because pd is needed to create umr_qp/cq */
+    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
+    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+#endif
     UCS_STATS_NODE_DECLARE(stats);
 } uct_ib_md_t;
 
@@ -66,19 +76,34 @@ typedef struct uct_ib_md_config {
  * IB memory region in the registration cache.
  */
 typedef struct uct_ib_rcache_region {
-    union {
-        ucs_rcache_region_t  super;
-        struct {
-            /* Overlap the unused fields of stub_mr with the superclass */
-            char             pad[sizeof(ucs_rcache_region_t) -
-                                 __builtin_offsetof(struct ibv_mr, lkey)];
-            struct ibv_mr    stub_mr;    /**< stub mr exposed to the user as the memh */
-        };
-    };
-    struct ibv_mr            *mr __attribute__((may_alias));        /**< IB region handle */
+    ucs_rcache_region_t  super;
+    uct_ib_mem_t         memh;      /**<  mr exposed to the user as the memh */
 } uct_ib_rcache_region_t;
 
 
 extern uct_md_component_t uct_ib_mdc;
+
+/**
+ * rkey is packed/unpacked is such a way that:
+ * low  32 bits contain a direct key
+ * high 32 bits always contain a valid key. Either a umr key
+ * or a direct one. 
+ */
+static inline uint32_t uct_ib_md_umr_rkey(uct_rkey_t rkey)
+{
+    return (uint32_t)(rkey >> 32);
+}
+
+static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t rkey)
+{
+    return (uint32_t)rkey;
+}
+
+uint8_t  uct_ib_md_umr_id(uct_ib_md_t *md);
+
+static inline uint16_t uct_ib_md_umr_offset(uint8_t umr_id)
+{
+    return 8 * umr_id;
+}
 
 #endif

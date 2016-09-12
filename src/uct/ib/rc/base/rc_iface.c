@@ -185,8 +185,9 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_rc_iface_send_desc_t *desc = obj;
-    struct ibv_mr *mr = memh;
-    desc->lkey = mr->lkey;
+    uct_ib_mem_t *ib_memh = memh;
+
+    desc->lkey = ib_memh->lkey;
 }
 
 static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,

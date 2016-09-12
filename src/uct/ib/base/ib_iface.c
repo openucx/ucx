@@ -121,8 +121,9 @@ uct_ib_device_info_t uct_ib_device_info_table[] = {
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
-    struct ibv_mr *mr = memh;
-    desc->lkey = mr->lkey;
+    uct_ib_mem_t *ib_memh = memh;
+
+    desc->lkey = ib_memh->lkey;
 }
 
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
@@ -286,45 +287,13 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
     return UCS_ERR_INVALID_PARAM;
 }
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-static int uct_ib_iface_is_gid_raw_empty(uint8_t *gid_raw)
-{
-    return ((uint64_t)gid_raw == 0) && ((uint64_t)(gid_raw + 8) == 0);
-}
-#endif
 
 static ucs_status_t uct_ib_iface_init_gid(uct_ib_iface_t *iface,
                                            uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    int ret;
 
-    ret = ibv_query_gid(dev->ibv_context, iface->port_num, config->gid_index,
-                        &iface->gid);
-    if (ret != 0) {
-        ucs_error("ibv_query_gid(index=%d) failed: %m", config->gid_index);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-    if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
-        if (uct_ib_iface_is_gid_raw_empty(iface->gid.raw)) {
-            ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
-                      uct_ib_device_name(dev), iface->port_num);
-            return UCS_ERR_INVALID_ADDR;
-        } else {
-            return UCS_OK;
-        }
-    }
-#endif
-
-    if ((iface->gid.global.interface_id == 0) && (iface->gid.global.subnet_prefix == 0)) {
-        ucs_error("Invalid gid[%d] on %s:%d", config->gid_index,
-                  uct_ib_device_name(dev), iface->port_num);
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    return UCS_OK;
+    return uct_ib_device_query_gid(dev, iface->port_num, config->gid_index, &iface->gid);
 }
 
 static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,

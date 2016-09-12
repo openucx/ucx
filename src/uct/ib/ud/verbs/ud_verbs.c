@@ -202,7 +202,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_ud_verbs_iface_t);
     uct_ud_send_skb_t *skb;
-    struct ibv_mr *mr = memh;
+    uct_ib_mem_t *ib_memh = memh;
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
@@ -221,7 +221,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     memcpy(skb->neth + 1, header, header_length);
     skb->len = sizeof(uct_ud_neth_t) + header_length;
            
-    iface->tx.sge[1].lkey   = (mr == UCT_INVALID_MEM_HANDLE) ? 0 : mr->lkey;
+    iface->tx.sge[1].lkey   = (ib_memh == UCT_INVALID_MEM_HANDLE) ? 0 : ib_memh->lkey;
     iface->tx.sge[1].length = length;
     iface->tx.sge[1].addr   = (uintptr_t)payload;
     iface->tx.wr_skb.num_sge = 2;

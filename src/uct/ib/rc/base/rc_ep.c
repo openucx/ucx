@@ -184,8 +184,10 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
     uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
+    uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
+    rc_addr->umr_id = uct_ib_iface_umr_id(iface);
     return UCS_OK;
 }
 
@@ -240,14 +242,16 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
         return UCS_ERR_IO_ERROR;
     }
 
+    ep->umr_offset = uct_ib_md_umr_offset(rc_addr->umr_id);
+
     ucs_debug("connected rc qp 0x%x on %s:%d to lid %d(+%d) sl %d remote_qp 0x%x"
-              " mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
+              " mtu %zu timer %dx%d rnr %dx%d rd_atom %d umr_offset 0x%0x",
               ep->txqp.qp->qp_num, uct_ib_device_name(uct_ib_iface_device(&iface->super)),
               iface->super.port_num, qp_attr.ah_attr.dlid, ep->path_bits,
               qp_attr.ah_attr.sl, qp_attr.dest_qp_num,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
-              qp_attr.max_rd_atomic);
+              qp_attr.max_rd_atomic, ep->umr_offset);
 
     return UCS_OK;
 }
