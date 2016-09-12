@@ -71,6 +71,10 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              ucp_rsc_index_t *rsc_index_p,
                                              unsigned *addr_index_p);
 
+double ucp_wireup_amo_score_func(const uct_md_attr_t *md_attr,
+                                 const uct_iface_attr_t *iface_attr,
+                                 const ucp_address_iface_attr_t *remote_iface_attr);
+
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,

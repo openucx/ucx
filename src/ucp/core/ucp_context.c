@@ -19,6 +19,11 @@
 
 ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
+static const char *ucp_atomic_modes[] = {
+    [UCP_ATOMIC_MODE_HOST]   = "host",
+    [UCP_ATOMIC_MODE_DEVICE] = "device",
+    [UCP_ATOMIC_MODE_LAST]   = NULL,
+};
 
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", "all",
@@ -84,12 +89,19 @@ static ucs_config_field_t ucp_config_table[] = {
    "Estimation of buffer copy bandwidth",
    ucs_offsetof(ucp_config_t, ctx.bcopy_bw), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"ATOMIC_MODE", "device",
+   "Atomic operations synchronization mode.\n"
+   " host   - operations are atomic with respect to the host processor.\n"
+   " device - atomic operations are performed on one of the transport devices,\n"
+   "          and there is no atomicity guarantee with respect to the host processor.",
+   ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
+
   {"LOG_DATA", "0",
    "Size of packet data that is dumped to the log system in debug mode (0 - nothing).",
    ucs_offsetof(ucp_config_t, ctx.log_data_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
-   "Maximal length of worker name. Affects the size of worker address.",
+   "Maximal length of worker name. Affects the size of worker address in debug builds.",
    ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
@@ -709,6 +721,14 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
         p += strlen(p);
         ++offset;
     }
+}
+
+uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context)
+{
+    return ((context->config.features & UCP_FEATURE_AMO32) ?
+            UCP_UCT_IFACE_ATOMIC32_FLAGS : 0) |
+           ((context->config.features & UCP_FEATURE_AMO64) ?
+            UCP_UCT_IFACE_ATOMIC64_FLAGS : 0);
 }
 
 ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)

@@ -184,11 +184,16 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         addr_index_map |= UCS_BIT(addr_index);
     }
 
+    if (!addr_index_map) {
+         snprintf(p, endp - p, "not supported by peer  ");
+         p += strlen(p);
+    }
+
     /* For each local resource try to find the best remote address to connect to.
      * Pick the best local resource to satisfy the criteria.
      * best one has the highest score (from the dedicated score_func) and
      * has a reachable tl on the remote peer */
-    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+    for (rsc_index = 0; addr_index_map && (rsc_index < context->num_tls); ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
         iface_attr   = &worker->iface_attrs[rsc_index];
         md_attr      = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
@@ -245,7 +250,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
          * debug message.
          */
         if (!reachable) {
-            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - cannot reach remote worker, ",
+            snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - cannot reach peer, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource));
             p += strlen(p);
         }
@@ -460,9 +465,9 @@ static ucs_status_t ucp_wireup_add_rma_lanes(ucp_ep_h ep, unsigned address_count
                                           UCP_WIREUP_LANE_USAGE_RMA);
 }
 
-static double ucp_wireup_amo_score_func(const uct_md_attr_t *md_attr,
-                                        const uct_iface_attr_t *iface_attr,
-                                        const ucp_address_iface_attr_t *remote_iface_attr)
+double ucp_wireup_amo_score_func(const uct_md_attr_t *md_attr,
+                                 const uct_iface_attr_t *iface_attr,
+                                 const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best one-sided latency */
     return 1e-3 / (iface_attr->latency + iface_attr->overhead);
@@ -475,20 +480,8 @@ static ucs_status_t ucp_wireup_add_amo_lanes(ucp_ep_h ep, unsigned address_count
 {
     ucp_wireup_criteria_t criteria;
 
-    criteria.remote_iface_flags = 0;
-
-    if (ucp_ep_get_context_features(ep) & UCP_FEATURE_AMO32) {
-        criteria.remote_iface_flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                                       UCT_IFACE_FLAG_ATOMIC_FADD32 |
-                                       UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32;
-    }
-    if (ucp_ep_get_context_features(ep) & UCP_FEATURE_AMO64) {
-        criteria.remote_iface_flags |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
-                                       UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                                       UCT_IFACE_FLAG_ATOMIC_SWAP64 |
-                                       UCT_IFACE_FLAG_ATOMIC_CSWAP64;
-    }
+    criteria.remote_iface_flags =
+                    ucp_context_uct_atomic_iface_flags(ep->worker->context);
     if (criteria.remote_iface_flags == 0) {
         return UCS_OK;
     }

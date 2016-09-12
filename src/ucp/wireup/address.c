@@ -137,7 +137,7 @@ ucp_address_gather_devices(ucp_worker_h worker, uint64_t tl_bitmap, int has_ep,
 
         iface_attr = &worker->iface_attrs[i];
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-                    dev->tl_addrs_size += iface_attr->iface_addr_len;
+            dev->tl_addrs_size += iface_attr->iface_addr_len;
         } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
             if (has_ep) {
                 dev->tl_addrs_size += iface_attr->ep_addr_len;
@@ -219,10 +219,17 @@ ucp_address_pack_ep_address(ucp_ep_h ep, ucp_rsc_index_t tl_index,
 }
 
 static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
-                                        const uct_iface_attr_t *iface_attr)
+                                        const uct_iface_attr_t *iface_attr,
+                                        int enable_atomics)
 {
     uint32_t packed_flag;
+    uint64_t cap_flags;
     uint64_t bit;
+
+    cap_flags = iface_attr->cap.flags;
+    if (!enable_atomics) {
+        cap_flags &= ~(UCP_UCT_IFACE_ATOMIC32_FLAGS | UCP_UCT_IFACE_ATOMIC64_FLAGS);
+    }
 
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
@@ -233,7 +240,7 @@ static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
     bit         = 1;
     while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
         if (UCP_ADDRESS_IFACE_FLAGS & bit) {
-            if (iface_attr->cap.flags & bit) {
+            if (cap_flags & bit) {
                 packed->prio_cap_flags |= packed_flag;
             }
             packed_flag <<= 1;
@@ -336,7 +343,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             ptr += sizeof(uint16_t);
 
             /* Transport information */
-            ucp_address_pack_iface_attr(ptr, &worker->iface_attrs[i]);
+            ucp_address_pack_iface_attr(ptr, &worker->iface_attrs[i],
+                                        worker->atomic_tls & UCS_BIT(i));
             ptr += sizeof(ucp_address_packed_iface_attr_t);
 
             /* Transport address length */

@@ -16,6 +16,21 @@
 
 KHASH_MAP_INIT_INT64(ucp_worker_ep_hash, ucp_ep_t *);
 
+
+enum {
+    UCP_UCT_IFACE_ATOMIC32_FLAGS =
+        UCT_IFACE_FLAG_ATOMIC_ADD32  |
+        UCT_IFACE_FLAG_ATOMIC_FADD32 |
+        UCT_IFACE_FLAG_ATOMIC_SWAP32 |
+        UCT_IFACE_FLAG_ATOMIC_CSWAP32,
+    UCP_UCT_IFACE_ATOMIC64_FLAGS =
+        UCT_IFACE_FLAG_ATOMIC_ADD64  |
+        UCT_IFACE_FLAG_ATOMIC_FADD64 |
+        UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+        UCT_IFACE_FLAG_ATOMIC_CSWAP64
+};
+
+
 /**
  * UCP worker wake-up context.
  */
@@ -36,6 +51,7 @@ typedef struct ucp_worker {
     uct_worker_h                  uct;           /* UCT worker handle */
     ucs_mpool_t                   req_mp;        /* Memory pool for requests */
     ucp_worker_wakeup_t           wakeup;        /* Wakeup-related context */
+    uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
 
     int                           inprogress;
     char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
