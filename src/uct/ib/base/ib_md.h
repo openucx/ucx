@@ -35,6 +35,7 @@ typedef struct uct_ib_md {
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
+    int                      eth_pause; /**< Pause Frame on an Ethernet network */
     UCS_STATS_NODE_DECLARE(stats);
 } uct_ib_md_t;
 
@@ -55,6 +56,8 @@ typedef struct uct_ib_md_config {
                                                 without using the cache */
 
     unsigned                fork_init;     /**< Use ibv_fork_init() */
+    int                     eth_pause;     /**< Whether or not Pause Frame is
+                                                enabled on the Ethernet network */
 
 } uct_ib_md_config_t;
 

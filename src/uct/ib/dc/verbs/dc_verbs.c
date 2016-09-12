@@ -711,8 +711,10 @@ ucs_status_t uct_dc_verbs_query_resources(uct_md_h md,
                                           uct_tl_resource_desc_t **resources_p,
                                           unsigned *num_resources_p)
 {
-    return uct_dc_device_query_tl_resources(&ucs_derived_of(md, uct_ib_md_t)->dev,
-                                            "dc", 0,
+    uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+
+    return uct_dc_device_query_tl_resources(&ib_md->dev, "dc",
+                                            (ib_md->eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB),
                                             resources_p, num_resources_p);
 }
 
