@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2012.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -57,8 +58,7 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max)
     } else if (getcwd(cwd, sizeof(cwd) - 1) != NULL) {
         snprintf(fullpath, max, "%s/%s", cwd, path);
     } else {
-        ucs_warn("failed to expand path '%s' (%s), using original path", path,
-                 strerror(errno));
+        ucs_warn("failed to expand path '%s' (%m), using original path", path);
         strncpy(fullpath, path, max);
     }
 }
@@ -440,6 +440,28 @@ size_t ucs_get_phys_mem_size()
         phys_pages = sysconf(_SC_PHYS_PAGES);
     }
     return phys_pages * ucs_get_page_size();
+}
+
+#define UCS_PROC_SYS_SHMMAX_FILE "/proc/sys/kernel/shmmax"
+size_t ucs_get_shmmax()
+{
+    char buf[256];
+    size_t size = 0;
+    int rc;
+
+    rc = ucs_read_file(buf, sizeof(buf), 0, UCS_PROC_SYS_SHMMAX_FILE);
+    if (rc < 0) {
+        ucs_warn("failed to read %s:%m", UCS_PROC_SYS_SHMMAX_FILE);
+        return 0;
+    }
+
+    rc = sscanf(buf, "%zu", &size);
+    if (rc != 1) {
+        ucs_warn("failed to parse: %m");
+        return 0;
+    }
+
+    return size;
 }
 
 ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmid

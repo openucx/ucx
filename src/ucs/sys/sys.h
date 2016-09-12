@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -288,6 +289,13 @@ pid_t ucs_get_tid(void);
  */
 double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
 
+
+/**
+ * Get shmmax size from /proc/sys/kernel/shmmax.
+ *
+ * @return shmmax size
+ */
+size_t ucs_get_shmmax();
 
 /**
  * Empty function which can be casted to a no-operation callback in various situations.

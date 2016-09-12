@@ -193,7 +193,12 @@ case ${host} in
     AC_RUN_IFELSE([AC_LANG_PROGRAM(
                   [[#include <stdint.h>]],
                   [[uint64_t tmp; asm volatile("mrs %0, cntvct_el0" : "=r" (tmp));]])],
-                  [AC_MSG_RESULT([yes])],
-                  [AC_MSG_ERROR([cannot access cntvct_el0 register, please update your kernel])]
+                  [AC_MSG_RESULT([yes])]
+		  [AC_DEFINE([HAVE_HW_TIMER], [1], [high-resolution hardware timer enabled])],
+		  [AC_MSG_RESULT([no])]
+		  [AC_DEFINE([HAVE_HW_TIMER], [0], [high-resolution hardware timer disabled])]
                  );;
+    *)
+    # HW timer is supported for all other architectures
+    AC_DEFINE([HAVE_HW_TIMER], [1], [high-resolution hardware timer disabled])
 esac

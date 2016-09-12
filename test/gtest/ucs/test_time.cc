@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -22,6 +23,8 @@ UCS_TEST_F(test_time, time_calc) {
     EXPECT_NEAR(value * 1000, ucs_time_to_nsec(ucs_time_from_usec(value)), 1.0);
 }
 
+/* This test is only useful when used with high-precision timers */
+#if HAVE_HW_TIMER
 UCS_TEST_F(test_time, get_time) {
     if (ucs::test_time_multiplier() > 1) {
         UCS_TEST_SKIP;
@@ -49,6 +52,7 @@ UCS_TEST_F(test_time, get_time) {
     double nsec = (ucs_time_to_nsec(current_time - start_time)) / count;
     EXPECT_LT(nsec, 40.0) << "ucs_get_time() performance is too bad";
 }
+#endif
 
 UCS_TEST_F(test_time, timerq) {
     static const int TIMER_ID_1  = 100;
