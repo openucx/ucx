@@ -478,19 +478,25 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_RCVD);
 }
 
-static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                             uct_ud_neth_t *neth, uct_ud_recv_skb_t *skb)
 {
     uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t*)(neth + 1);
+    ucs_frag_list_ooo_type_t ooo_type;
+
     ucs_trace_func("");
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREP);
-    /* note that duplicate creps are discared earlier */
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID ||
                       ep->dest_ep_id == ctl->conn_rep.src_ep_id);
-    ep->dest_ep_id = ctl->conn_rep.src_ep_id;
 
-    /* No need to track duplications, CREP always goes
-     * with ACK_REQ flag */
-    ep->rx.ooo_pkts.head_sn = neth->psn;
+    /* Discard duplicate CREP */
+    ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->u.ooo.elem, neth->psn);
+    if (ooo_type != UCS_FRAG_LIST_INSERT_FAST) {
+        ucs_assertv(ooo_type == UCS_FRAG_LIST_INSERT_DUP, "OOO unsupported");
+        return;
+    }
+
+    ep->dest_ep_id = ctl->conn_rep.src_ep_id;
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     uct_ud_peer_copy(&ep->peer, &ctl->peer);
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_RCVD);
@@ -584,7 +590,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
             goto out;
         }
         if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
-            uct_ud_ep_rx_ctl(iface, ep, neth);
+            uct_ud_ep_rx_ctl(iface, ep, neth, skb);
             goto out;
         }
     }
@@ -600,7 +606,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
         goto out;
     }
-    
 
     if (ucs_unlikely(!is_am && (neth->packet_type & UCT_UD_PACKET_FLAG_PUT))) {
         /* TODO: remove once ucp implements put */

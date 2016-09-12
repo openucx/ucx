@@ -81,6 +81,14 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t drop_ack(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (!(neth->packet_type & (UCT_UD_PACKET_FLAG_CTL|UCT_UD_PACKET_FLAG_AM))) {
+            return UCS_ERR_BUSY;
+        }
+        return UCS_OK;
+    }
+
     void validate_flush() {
         /* 1 packets transmitted, 1 packets received */
         EXPECT_EQ(2, ep(m_e1)->tx.psn);
@@ -314,6 +322,49 @@ UCS_TEST_P(test_ud, crep_drop2) {
     EXPECT_EQ(3, ep(m_e1, 0)->tx.psn);
     EXPECT_EQ(1, ep(m_e2, 0)->tx.acked_psn);
     EXPECT_EQ(3, ep(m_e2, 0)->tx.psn);
+}
+
+UCS_TEST_P(test_ud, crep_ack_drop) {
+    ucs_status_t status;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    m_e2->connect_to_iface(0, *m_e1);
+
+    /* drop ACK from CERQ/CREP */
+    ep(m_e1, 0)->rx.rx_hook = drop_ack;
+    ep(m_e2, 0)->rx.rx_hook = drop_ack;
+
+    short_progress_loop();
+
+    status = uct_iface_set_am_handler(m_e2->iface(), 0,
+                                      (uct_am_callback_t)ucs_empty_function_return_success,
+                                      NULL, UCT_AM_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    ASSERT_UCS_OK(status);
+
+    short_progress_loop();
+    twait(500);
+    short_progress_loop();
+
+    ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
+    ep(m_e2, 0)->rx.rx_hook = uct_ud_ep_null_hook;
+
+    /* Should receive both CREP and the active message */
+    EXPECT_EQ(3u, ep(m_e2, 0)->rx.ooo_pkts.head_sn);
+
+    short_progress_loop();
+    twait(500);
+    short_progress_loop();
+
+    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
+    ASSERT_UCS_OK(status);
+
+    short_progress_loop();
+
+    m_e1->flush();
+    m_e2->flush();
 }
 
 UCS_TEST_P(test_ud, creq_flush) {

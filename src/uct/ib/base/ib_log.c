@@ -126,7 +126,8 @@ static void uct_ib_dump_wr(struct ibv_qp *qp, uct_ib_opcode_t *op,
     char *ends = buf + max;
 
     if (qp->qp_type == IBV_QPT_UD) {
-        snprintf(s, ends - s, " [rqpn 0x%x]", wr->wr.ud.remote_qpn);
+        snprintf(s, ends - s, " [rqpn 0x%x ah %p]", wr->wr.ud.remote_qpn,
+                 wr->wr.ud.ah);
         s += strlen(s);
     }
 
