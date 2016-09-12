@@ -643,3 +643,45 @@ int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size)
 #endif
     return IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(&dev->dev_attr);
 }
+
+
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+static int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
+{
+    return ((uint64_t)gid_raw == 0) && ((uint64_t)(gid_raw + 8) == 0);
+}
+#endif
+
+ucs_status_t 
+uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_index,
+                        union ibv_gid *gid)
+{
+    int ret;
+
+    ret = ibv_query_gid(dev->ibv_context, port_num, gid_index, gid);
+    if (ret != 0) {
+        ucs_error("ibv_query_gid(index=%d) failed: %m", gid_index);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+    if (uct_ib_device_port_attr(dev, port_num)->link_layer == IBV_LINK_LAYER_ETHERNET) {
+        if (uct_ib_device_is_gid_raw_empty(gid->raw)) {
+            ucs_error("Invalid gid[%d] on %s:%d", gid_index,
+                      uct_ib_device_name(dev), port_num);
+            return UCS_ERR_INVALID_ADDR;
+        } else {
+            return UCS_OK;
+        }
+    }
+#endif
+
+    if ((gid->global.interface_id == 0) && (gid->global.subnet_prefix == 0)) {
+        ucs_error("Invalid gid[%d] on %s:%d", gid_index,
+                  uct_ib_device_name(dev), port_num);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    return UCS_OK;
+}
+
