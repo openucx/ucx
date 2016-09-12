@@ -150,9 +150,7 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
                                              unsigned address_count,
                                              const ucp_address_entry_t *address_list)
 {
-    ucp_worker_h worker = ep->worker;
     const ucp_address_entry_t *address;
-    ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, amo_index;
     ucs_status_t status;
     ucp_md_map_t UCS_V_UNUSED md_map;
@@ -160,8 +158,7 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
     ucs_trace("ep %p: connect local transports", ep);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        rsc_index = ucp_ep_get_rsc_index(ep, lane);
-        if (!ucp_worker_is_tl_p2p(worker, rsc_index)) {
+        if (!ucp_ep_is_lane_p2p(ep, lane)) {
             continue;
         }
 
@@ -195,15 +192,11 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
 
 static void ucp_wireup_ep_remote_connected(ucp_ep_h ep)
 {
-    ucp_worker_h worker = ep->worker;
-    ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
 
     ucs_trace("ep %p: remote connected", ep);
-
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        rsc_index = ucp_ep_get_rsc_index(ep, lane);
-        if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
+        if (ucp_ep_is_lane_p2p(ep, lane)) {
             ucp_stub_ep_remote_connected(ep->uct_eps[lane]);
         }
     }
@@ -517,7 +510,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
     uint16_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
-    uint8_t conn_flag;
     char str[32];
 
     ucs_trace("ep %p: initialize lanes", ep);
@@ -563,20 +555,19 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned address_count,
     ucs_trace("ep %p: connect lanes", ep);
 
     /* establish connections on all underlying endpoints */
-    conn_flag = UCP_EP_FLAG_LOCAL_CONNECTED;
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         status = ucp_wireup_connect_lane(ep, lane, address_count, address_list,
                                          addr_indices[lane]);
         if (status != UCS_OK) {
             goto err;
         }
-
-        if (ucp_worker_is_tl_p2p(worker, ucp_ep_get_rsc_index(ep, lane))) {
-            conn_flag = 0; /* If we have a p2p transport, we're not connected */
-        }
     }
 
-    ep->flags |= conn_flag;
+    /* If we don't have a p2p transport, we're connected */
+    if (!ucp_ep_config(ep)->p2p_lanes) {
+        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+    }
+
     return UCS_OK;
 
 err:

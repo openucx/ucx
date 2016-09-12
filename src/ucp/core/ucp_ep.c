@@ -288,13 +288,24 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_lane_index_t lane;
     double zcopy_thresh, rndv_thresh, numerator, denumerator;
 
-    /* Default thresholds */
-    config->zcopy_thresh      = SIZE_MAX;
-    config->sync_zcopy_thresh = -1;
-    config->bcopy_thresh      = context->config.ext.bcopy_thresh;
-    config->rndv_thresh       = SIZE_MAX;
-    config->sync_rndv_thresh  = SIZE_MAX;
-    config->max_rndv_get_zcopy = SIZE_MAX;
+    /* Default settings */
+    config->zcopy_thresh          = SIZE_MAX;
+    config->sync_zcopy_thresh     = -1;
+    config->bcopy_thresh          = context->config.ext.bcopy_thresh;
+    config->rndv_thresh           = SIZE_MAX;
+    config->sync_rndv_thresh      = SIZE_MAX;
+    config->max_rndv_get_zcopy    = SIZE_MAX;
+    config->p2p_lanes             = 0;
+
+    /* Collect p2p lanes */
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        rsc_index   = config->key.lanes[lane];
+        if ((rsc_index != UCP_NULL_RESOURCE) &&
+            ucp_worker_is_tl_p2p(worker, rsc_index))
+        {
+            config->p2p_lanes |= UCS_BIT(lane);
+        }
+    }
 
     /* Configuration for active messages */
     if (config->key.am_lane != UCP_NULL_LANE) {
