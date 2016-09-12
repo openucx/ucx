@@ -174,8 +174,3 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     }
 }
 
-ucp_params_t test_ucp_memheap::get_ctx_params() {
-    ucp_params_t params = ucp_test::get_ctx_params();
-    params.features |= UCP_FEATURE_RMA;
-    return params;
-}

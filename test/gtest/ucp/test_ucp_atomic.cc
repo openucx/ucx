@@ -147,7 +147,7 @@ public:
 class test_ucp_atomic32 : public test_ucp_atomic {
 public:
     static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_memheap::get_ctx_params();
+        ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_AMO32;
         return params;
     }
@@ -178,7 +178,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
 class test_ucp_atomic64 : public test_ucp_atomic {
 public:
     static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_memheap::get_ctx_params();
+        ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_AMO64;
         return params;
     }
