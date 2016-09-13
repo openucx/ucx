@@ -307,4 +307,15 @@ ucs_status_t ucs_config_parser_get_value(void *opts, ucs_config_field_t *fields,
 ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
+/**
+ * Translate configuration value of "MEMUNITS" type to actual value.
+ *
+ * @param config_size  Size specified by configuration.
+ * @param auto_size    Default size when configured to 'auto'.
+ * @param max_size     Maximal size to trim "inf".
+ */
+size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
+                               size_t max_size);
+
+
 #endif

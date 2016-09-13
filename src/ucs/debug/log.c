@@ -9,6 +9,7 @@
 
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <ucs/config/parser.h>
 
 #define UCS_MAX_LOG_HANDLERS    32
 
@@ -86,7 +87,8 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
                         ucs_log_level_t level, const char *prefix,
                         const char *message, va_list ap)
 {
-    size_t buffer_size = ucs_global_opts.log_buffer_size;
+    size_t buffer_size = ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
+                                                 256, 2048);
     const char *short_file;
     struct timeval tv;
     size_t length;

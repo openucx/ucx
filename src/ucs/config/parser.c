@@ -1114,3 +1114,13 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
         fprintf(stream, "\n");
     }
 }
+
+size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
+                               size_t max_size)
+{
+    if (config_size == UCS_CONFIG_MEMUNITS_AUTO) {
+        return auto_size;
+    } else {
+        return ucs_min(config_size, max_size);
+    }
+}
