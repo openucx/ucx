@@ -54,6 +54,38 @@ SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
                                          uct_ud_iface_peer_hash)
 
 
+
+#ifdef UCT_UD_EP_DEBUG_HOOKS
+
+typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t *neth);
+
+#define UCT_UD_IFACE_HOOK_DECLARE(_name) \
+    uct_ud_iface_hook_t _name
+
+#define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _len) \
+    if ((_iface)->rx.hook(_iface, _neth) != UCS_OK) { \
+        ucs_trace_data("RX: dropping packet"); \
+        return; \
+    }
+
+#define UCT_UD_IFACE_HOOK_INIT(_iface) { \
+        (_iface)->rx.hook = uct_ud_iface_null_hook; \
+    }
+
+static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
+                                                  uct_ud_neth_t *neth)
+{
+    return UCS_OK;
+}
+
+#else
+
+#define UCT_UD_IFACE_HOOK_DECLARE(_name)
+#define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _len)
+#define UCT_UD_IFACE_HOOK_INIT(_iface)
+
+#endif
+
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
     ucs_callback_t            progress;
@@ -69,6 +101,7 @@ struct uct_ud_iface {
         ucs_mpool_t          mp;
         unsigned             available;
         ucs_queue_head_t     pending_q;
+        UCT_UD_IFACE_HOOK_DECLARE(hook);
     } rx;
     struct {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
