@@ -668,6 +668,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     ucs_queue_head_init(&context->tag.expected);
     ucs_queue_head_init(&context->tag.unexpected);
 
+    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
+              context->num_mds, context->num_tls, context->config.features);
+
     *context_p = context;
     return UCS_OK;
 
