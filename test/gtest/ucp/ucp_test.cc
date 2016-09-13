@@ -113,6 +113,25 @@ ucp_test::enum_test_params(const ucp_params_t& ctx_params,
     }
 }
 
+void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
+                                            const std::string& name,
+                                            const std::string& test_case_name,
+                                            const std::string& tls,
+                                            int variant,
+                                            std::vector<ucp_test_param>& test_params)
+{
+    std::vector<ucp_test_param> tmp_test_params, result;
+
+    tmp_test_params = ucp_test::enum_test_params(ctx_params, name,
+                                                 test_case_name, tls);
+    for (std::vector<ucp_test_param>::iterator iter = tmp_test_params.begin();
+         iter != tmp_test_params.end(); ++iter)
+    {
+        iter->variant = variant;
+        test_params.push_back(*iter);
+    }
+}
+
 void ucp_test::set_ucp_config(ucp_config_t *config,
                               const ucp_test_param& test_param)
 {
