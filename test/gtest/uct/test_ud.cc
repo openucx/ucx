@@ -315,7 +315,7 @@ UCS_TEST_P(test_ud, crep_drop2) {
 
     ep(m_e1, 0)->rx.rx_hook = drop_ctl;
     ep(m_e2, 0)->rx.rx_hook = drop_ctl;
-    short_progress_loop();
+    short_progress_loop(100);
 
     /* Expect that creq and crep are sent and window is empty */
     EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
@@ -426,26 +426,23 @@ UCS_TEST_P(test_ud, ca_md) {
     ucs_status_t status;
     int new_cwnd;
     int i;
-    int max_window;
-    int iters;
-
-    connect();
-
-    /* assume we are at the max window
-     * on receive drop all packets. After several retransmission
-     * attempts the window will be reduced to the minumum
-     */
-    max_window = RUNNING_ON_VALGRIND ? 64 : UCT_UD_CA_MAX_WINDOW;
-    iters      = RUNNING_ON_VALGRIND ? 0 : 1;
 
     if (RUNNING_ON_VALGRIND) {
         /* skip valgrind for now */
         UCS_TEST_SKIP_R("skipping on valgrind");
     }
 
-    set_tx_win(m_e1, max_window);
+    connect();
+
+    short_progress_loop();
+
+    /* assume we are at the max window
+     * on receive drop all packets. After several retransmission
+     * attempts the window will be reduced to the minumum
+     */
+    set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
-    for (i = 1; i < max_window; i++) {
+    for (i = 1; i < UCT_UD_CA_MAX_WINDOW; i++) {
         status = tx(m_e1);
         EXPECT_UCS_OK(status);
         progress();
@@ -466,7 +463,7 @@ UCS_TEST_P(test_ud, ca_md) {
         EXPECT_GE(new_cwnd-1+2, tx_count);
         EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
 
-    } while (iters && ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
+    } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
 }
 
 UCS_TEST_P(test_ud, ca_resend) {

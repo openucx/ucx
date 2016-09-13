@@ -358,7 +358,7 @@ UCS_TEST_P(test_async, global_event) {
 UCS_TEST_P(test_async, global_timer) {
     global_timer gt(GetParam());
     suspend_and_poll(&gt, COUNT * 4);
-    EXPECT_GE(gt.count(), COUNT / 2);
+    EXPECT_GE(gt.count(), COUNT / 4);
 }
 
 UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {

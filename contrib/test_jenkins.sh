@@ -108,7 +108,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         ./ucp_hello_world ${test_mode} -p ${UCP_TEST_HELLO_WORLD_PORT} &
         hw_server_pid=$!
 
-        sleep 1
+        sleep 3
 
         #need to be ran in background to reflect application PID in $!
         echo Running UCP hello world client with mode ${test_mode}
