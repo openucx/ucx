@@ -202,9 +202,12 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
 
     uct_ib_address_unpack(ib_addr, &ah_attr->dlid, &ah_attr->is_global,
                           &ah_attr->grh.dgid);
-    ah_attr->sl            = iface->sl;
+    ah_attr->sl            = iface->config.sl;
     ah_attr->src_path_bits = src_path_bits;
-    ah_attr->port_num      = iface->port_num;
+    ah_attr->port_num      = iface->config.port_num;
+    if (ah_attr->is_global) {
+        ah_attr->grh.sgid_index = iface->config.gid_index;
+    }
 }
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
@@ -228,15 +231,15 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
         p += strlen(p);
 
         if (ah_attr.is_global) {
-            snprintf(p, endp - p, "dgid=");
+            snprintf(p, endp - p, " dgid=");
             p += strlen(p);
             inet_ntop(AF_INET6, &ah_attr.grh.dgid, p, endp - p);
             p += strlen(p);
             snprintf(p, endp - p, " sgid_index=%d", ah_attr.grh.sgid_index);
         }
 
-        ucs_error("ibv_create_ah(%s) on %s:%d failed: %m", buf,
-                  uct_ib_device_name(uct_ib_iface_device(iface)), iface->port_num);
+        ucs_error("ibv_create_ah(%s) on "UCT_IB_IFACE_FMT" failed: %m", buf,
+                  UCT_IB_IFACE_ARG(iface));
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -260,9 +263,11 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
     /* get the user's pkey value and find its index in the port's pkey table */
     for (pkey_index = 0; pkey_index < pkey_tbl_len; ++pkey_index) {
         /* get the pkey values from the port's pkeys table */
-        if (ibv_query_pkey(dev->ibv_context, iface->port_num, pkey_index, &port_pkey)) {
-            ucs_error("ibv_query_pkey(%s:%d, index=%d) failed: %m",
-                      uct_ib_device_name(dev), iface->port_num, pkey_index);
+        if (ibv_query_pkey(dev->ibv_context, iface->config.port_num, pkey_index,
+                           &port_pkey))
+        {
+            ucs_error("ibv_query_pkey("UCT_IB_IFACE_FMT", index=%d) failed: %m",
+                      UCT_IB_IFACE_ARG(iface), pkey_index);
         }
 
         pkey = ntohs(port_pkey);
@@ -275,8 +280,8 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
         if ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey_value) {
             iface->pkey_index = pkey_index;
             iface->pkey_value = pkey;
-            ucs_debug("using pkey[%d] 0x%x on %s:%d", iface->pkey_index,
-                      iface->pkey_value, uct_ib_device_name(dev), iface->port_num);
+            ucs_debug("using pkey[%d] 0x%x on "UCT_IB_IFACE_FMT, iface->pkey_index,
+                      iface->pkey_value, UCT_IB_IFACE_ARG(iface));
             return UCS_OK;
         }
     }
@@ -285,15 +290,6 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
               "It wasn't found or the configured pkey doesn't have full membership.",
               config->pkey_value);
     return UCS_ERR_INVALID_PARAM;
-}
-
-
-static ucs_status_t uct_ib_iface_init_gid(uct_ib_iface_t *iface,
-                                           uct_ib_iface_config_t *config)
-{
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-
-    return uct_ib_device_query_gid(dev, iface->port_num, config->gid_index, &iface->gid);
 }
 
 static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
@@ -382,8 +378,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    self->port_num                 = port_num;
-    self->sl                       = config->sl;
+    self->ops                      = ops;
+
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
                                      ucs_max(sizeof(uct_am_recv_desc_t) + rx_headroom,
                                              rx_priv_len + rx_hdr_len);
@@ -394,14 +390,17 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_max_poll       = config->rx.max_poll;
     self->config.rx_max_batch      = ucs_min(config->rx.max_batch,
                                              config->rx.queue_len / 4);
-    self->ops                      = ops;
+    self->config.port_num          = port_num;
+    self->config.sl                = config->sl;
+    self->config.gid_index         = config->gid_index;
 
     status = uct_ib_iface_init_pkey(self, config);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = uct_ib_iface_init_gid(self, config);
+    status = uct_ib_device_query_gid(dev, self->config.port_num,
+                                     self->config.gid_index, &self->gid);
     if (status != UCS_OK) {
         goto err;
     }
@@ -548,7 +547,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         (active_width < 1) || (ucs_ilog2(active_width) > 3))
     {
         ucs_error("Invalid active_width on %s:%d: %d",
-                  uct_ib_device_name(dev), iface->port_num, active_width);
+                  UCT_IB_IFACE_ARG(iface), active_width);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -589,7 +588,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         break;
     default:
         ucs_error("Invalid active_speed on %s:%d: %d",
-                  uct_ib_device_name(dev), iface->port_num, active_speed);
+                  UCT_IB_IFACE_ARG(iface), active_speed);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -712,9 +711,8 @@ static ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface, struct ibv_cq *cq
 
     ret = ibv_req_notify_cq(cq, solicited);
     if (ret != 0) {
-        uct_ib_device_t *dev = uct_ib_iface_device(iface);
-        ucs_error("ibv_req_notify_cq(%s:%d, cq) failed: %m",
-                  uct_ib_device_name(dev), iface->port_num);
+        ucs_error("ibv_req_notify_cq("UCT_IB_IFACE_FMT", cq) failed: %m",
+                  UCT_IB_IFACE_ARG(iface));
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;
