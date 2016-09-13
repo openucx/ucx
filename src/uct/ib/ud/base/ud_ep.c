@@ -482,7 +482,6 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                              uct_ud_neth_t *neth, uct_ud_recv_skb_t *skb)
 {
     uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t*)(neth + 1);
-    ucs_frag_list_ooo_type_t ooo_type;
 
     ucs_trace_func("");
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREP);
@@ -490,12 +489,11 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                       ep->dest_ep_id == ctl->conn_rep.src_ep_id);
 
     /* Discard duplicate CREP */
-    ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->u.ooo.elem, neth->psn);
-    if (ooo_type != UCS_FRAG_LIST_INSERT_FAST) {
-        ucs_assertv(ooo_type == UCS_FRAG_LIST_INSERT_DUP, "OOO unsupported");
+    if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
         return;
     }
 
+    ep->rx.ooo_pkts.head_sn = neth->psn;
     ep->dest_ep_id = ctl->conn_rep.src_ep_id;
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     uct_ud_peer_copy(&ep->peer, &ctl->peer);
@@ -554,6 +552,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     uint32_t is_am, am_id;
     uct_ud_ep_t *ep = 0; /* todo: check why gcc complaints about uninitialized var */
     ucs_frag_list_ooo_type_t ooo_type;
+
+    UCT_UD_IFACE_HOOK_CALL_RX(iface, neth, byte_len);
 
     dest_id = uct_ud_neth_get_dest_id(neth);
     am_id   = uct_ud_neth_get_am_id(neth);

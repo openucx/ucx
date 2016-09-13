@@ -89,6 +89,17 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t drop_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
+    {
+        if ((neth->packet_type & UCT_UD_PACKET_FLAG_CTL) &&
+            ((uct_ud_ctl_hdr_t *)(neth + 1))->type == UCT_UD_PACKET_CREQ)
+        {
+            return UCS_ERR_BUSY;
+        }
+
+        return UCS_OK;
+    }
+
     void validate_flush() {
         /* 1 packets transmitted, 1 packets received */
         EXPECT_EQ(2, ep(m_e1)->tx.psn);
@@ -520,6 +531,21 @@ UCS_TEST_P(test_ud, connect_iface_single) {
 
     check_connection();
 }
+
+UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
+    /* single connect */
+    iface(m_e2)->rx.hook = drop_creq;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    m_e2->connect_to_iface(0, *m_e1);
+
+    short_progress_loop(50);
+
+    iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
+
+    short_progress_loop(100);
+}
+
 
 UCS_TEST_P(test_ud, connect_iface_2to1) {
     /* 2 to 1 connect */
