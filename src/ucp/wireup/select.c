@@ -714,7 +714,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
 
     /* User should not create endpoints unless requested communication features */
     if (key->num_lanes == 0) {
-        ucs_error("No transports selected to %s", ucp_ep_peer_name(ep));
+        ucs_error("No transports selected to %s (features: 0x%lx)",
+                  ucp_ep_peer_name(ep), ucp_ep_get_context_features(ep));
         return UCS_ERR_UNREACHABLE;
     }
 

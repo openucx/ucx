@@ -448,23 +448,27 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
-#if HAVE_DECL_IBV_EXP_QPT_DC_INI 
-#define IB_RC_QP_TYPE_CHECK(type) \
-    ucs_assert_always((type) == IBV_QPT_RC || (type) == IBV_EXP_QPT_DC_INI)
-#else
-#define IB_RC_QP_TYPE_CHECK(type) \
-    ucs_assert_always((type) == IBV_QPT_RC)
-#endif
 
-ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct ibv_qp **qp_p,
-                                    struct ibv_qp_cap *cap)
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
+                                    struct ibv_qp **qp_p, struct ibv_qp_cap *cap)
 {
     uct_ib_device_t *dev UCS_V_UNUSED = uct_ib_iface_device(&iface->super);
     struct ibv_exp_qp_init_attr qp_init_attr;
+    const char *qp_type_str;
     struct ibv_qp *qp;
     int inline_recv = 0;
 
-    IB_RC_QP_TYPE_CHECK(qp_type);
+    /* Check QP type */
+    if (qp_type == IBV_QPT_RC) {
+        qp_type_str = "rc";
+#if HAVE_DECL_IBV_EXP_QPT_DC_INI
+    } else if (qp_type == IBV_EXP_QPT_DC_INI) {
+        qp_type_str = "dci";
+#endif
+    } else {
+        ucs_bug("invalid qp type: %d", qp_type);
+    }
+
     memset(&qp_init_attr, 0, sizeof(qp_init_attr));
     qp_init_attr.qp_context          = NULL;
     qp_init_attr.send_cq             = iface->super.send_cq;
@@ -514,9 +518,10 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct i
     inline_recv = qp_init_attr.max_inl_recv;
 #endif
 
-    ucs_debug("created rc qp 0x%x tx %d rx %d tx_inline %d rx_inline %d", qp->qp_num,
-              qp_init_attr.cap.max_send_wr, qp_init_attr.cap.max_recv_wr,
-              qp_init_attr.cap.max_inline_data, inline_recv);
+    ucs_debug("created %s qp 0x%x tx %d rx %d tx_inline %d rx_inline %d",
+              qp_type_str, qp->qp_num, qp_init_attr.cap.max_send_wr,
+              qp_init_attr.cap.max_recv_wr, qp_init_attr.cap.max_inline_data,
+              inline_recv);
 
     *qp_p = qp;
     *cap  = qp_init_attr.cap;

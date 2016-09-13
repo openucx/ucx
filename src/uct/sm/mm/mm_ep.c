@@ -367,6 +367,10 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
     ucs_memory_cpu_load_fence();
     ep->cached_tail = ep->fifo_ctl->tail;
 
+    if (!uct_mm_ep_has_tx_resources(ep)) {
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+
     status = req->func(req);
     ucs_trace_data("progress pending request %p returned %s", req,
                    ucs_status_string(status));
@@ -396,7 +400,7 @@ static ucs_arbiter_cb_result_t uct_mm_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     if (cb != NULL) {
         cb(req, cb_args->arg);
     } else {
-        ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+        ucs_warn("ep=%p canceling user pending request %p", ep, req);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }

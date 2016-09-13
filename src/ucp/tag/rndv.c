@@ -81,7 +81,8 @@ static void ucp_rndv_complete_rndv_get(ucp_request_t *get_req)
 
     ucp_request_complete_recv(req, UCS_OK, &req->recv.info);
     uct_rkey_release(&get_req->send.rndv_get.rkey_bundle);
-    ucp_request_send_buffer_dereg(get_req, ucp_ep_get_rndv_data_lane(get_req->send.ep));
+    ucp_request_send_buffer_dereg(get_req,
+                                  ucp_ep_get_rndv_data_lane(get_req->send.ep));
 
     ucp_rndv_send_ats(get_req);
 }
