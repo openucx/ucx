@@ -294,6 +294,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_rsc_index_t md_index;
     uct_md_attr_t *md_attr;
     uint64_t supp_tls;
+    uint8_t priority, best_priority;
 
     iface_cap_flags = ucp_context_uct_atomic_iface_flags(context) |
                       UCT_IFACE_FLAG_ATOMIC_DEVICE;
@@ -306,6 +307,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     supp_tls                    = 0;
     best_score                  = -1;
     best_rsc                    = NULL;
+    best_priority               = 0;
 
     /* Select best interface for atomics device */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
@@ -321,11 +323,15 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         }
 
         supp_tls |= UCS_BIT(rsc_index);
+        priority  = iface_attr->priority;
 
         score = ucp_wireup_amo_score_func(md_attr, iface_attr, &dummy_iface_attr);
-        if (score > best_score) {
-            best_rsc   = rsc;
-            best_score = score;
+        if ((score > best_score) ||
+            ((score == best_score) && (priority > best_priority)))
+        {
+            best_rsc      = rsc;
+            best_score    = score;
+            best_priority = priority;
         }
     }
 
