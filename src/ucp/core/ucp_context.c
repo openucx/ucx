@@ -444,12 +444,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_release_md_resources;
     }
 
-    if (num_md_resources >= UCP_MAX_MDS) {
-        ucs_error("Only up to %ld memory domains are supported", UCP_MAX_MDS);
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        goto err_release_md_resources;
-    }
-
     context->num_mds  = 0;
     context->md_rscs  = NULL;
     context->mds      = NULL;
@@ -528,6 +522,13 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         ucs_error("There are no available resources matching the configured criteria");
         status = UCS_ERR_NO_DEVICE;
         goto err_free_context_resources;
+    }
+
+    if (context->num_mds > UCP_MD_INDEX_BITS) {
+        ucs_error("Only up to %d memory domains are supported (have: %d)",
+                  UCP_MD_INDEX_BITS, context->num_mds);
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err_release_md_resources;
     }
 
     /* Notify the user if there are devices from the command line that are not available */

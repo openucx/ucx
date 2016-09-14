@@ -25,7 +25,7 @@ typedef uint8_t                      ucp_rsc_index_t;
 /* MDs */
 #define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE(UCS_PP_TOKENPASTE(uint, _bits), _t)
 #define UCP_MD_INDEX_BITS            8  /* How many bits are in MD index */
-#define UCP_MAX_MDS                  (1ul << UCP_MD_INDEX_BITS)
+#define UCP_MAX_MDS                  UCP_MAX_RESOURCES
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 /* Lanes */
