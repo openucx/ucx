@@ -90,19 +90,18 @@ struct uct_ib_device_info {
 
 struct uct_ib_iface {
     uct_base_iface_t        super;
-    uint8_t                 *path_bits;
-    unsigned                path_bits_count;
-    union ibv_gid           gid;
-    uint16_t                pkey_index;
-    uint16_t                pkey_value;
-    uint8_t                 port_num;
-    uint8_t                 sl;
-    uct_ib_address_type_t   addr_type;
-    uint8_t                 addr_size;
 
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
     struct ibv_comp_channel *comp_channel;
+
+    uint8_t                 *path_bits;
+    unsigned                path_bits_count;
+    uint16_t                pkey_index;
+    uint16_t                pkey_value;
+    uct_ib_address_type_t   addr_type;
+    uint8_t                 addr_size;
+    union ibv_gid           gid;
 
     struct {
         unsigned            rx_payload_offset;   /* offset from desc to payload */
@@ -112,6 +111,9 @@ struct uct_ib_iface {
         unsigned            rx_max_poll;
         unsigned            tx_max_poll;
         unsigned            seg_size;
+        uint8_t             port_num;
+        uint8_t             sl;
+        uint8_t             gid_index;
     } config;
 
     uct_ib_iface_ops_t      *ops;
@@ -219,7 +221,7 @@ static inline uct_ib_device_t* uct_ib_iface_device(uct_ib_iface_t *iface)
 
 static inline struct ibv_exp_port_attr* uct_ib_iface_port_attr(uct_ib_iface_t *iface)
 {
-    return uct_ib_device_port_attr(uct_ib_iface_device(iface), iface->port_num);
+    return uct_ib_device_port_attr(uct_ib_iface_device(iface), iface->config.port_num);
 }
 
 static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
@@ -274,6 +276,13 @@ static inline uint8_t uct_ib_iface_umr_id(uct_ib_iface_t *iface)
     md = ucs_derived_of(iface->super.md, uct_ib_md_t);
     return uct_ib_md_umr_id(md);
 }
+
+
+#define UCT_IB_IFACE_FMT \
+    "%s:%d"
+#define UCT_IB_IFACE_ARG(_iface) \
+    uct_ib_device_name(uct_ib_iface_device(_iface)), (_iface)->config.port_num
+
 
 #define UCT_IB_IFACE_VERBS_FOREACH_RXWQE(_iface, _i, _hdr, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \

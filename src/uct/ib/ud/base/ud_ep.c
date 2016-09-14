@@ -248,12 +248,10 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
-    ucs_debug("%s:%d lid %d qpn 0x%x epid %u ep %p connected to IFACE %s qpn 0x%x",
-              ibv_get_device_name(dev->ibv_context->device),
-              iface->super.port_num,
-              dev->port_attr[iface->super.port_num-dev->first_port].lid,
-              iface->qp->qp_num,
-              ep->ep_id, ep, 
+    ucs_debug(UCT_IB_IFACE_FMT" lid %d qpn 0x%x epid %u ep %p connected to "
+              "IFACE %s qpn 0x%x", UCT_IB_IFACE_ARG(&iface->super),
+              dev->port_attr[iface->super.config.port_num - dev->first_port].lid,
+              iface->qp->qp_num, ep->ep_id, ep,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(if_addr->qp_num));
 
@@ -343,12 +341,10 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts); 
     uct_ud_ep_reset(ep);
 
-    ucs_debug("%s:%d slid %d qpn 0x%x epid %u connected to %s qpn 0x%x epid %u",
-              ibv_get_device_name(dev->ibv_context->device),
-              iface->super.port_num,
-              dev->port_attr[iface->super.port_num-dev->first_port].lid,
-              iface->qp->qp_num,
-              ep->ep_id, 
+    ucs_debug(UCT_IB_IFACE_FMT" slid %d qpn 0x%x epid %u connected to %s qpn 0x%x "
+              "epid %u", UCT_IB_IFACE_ARG(&iface->super),
+              dev->port_attr[iface->super.config.port_num - dev->first_port].lid,
+              iface->qp->qp_num, ep->ep_id,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num), ep->dest_ep_id);
     return UCS_OK;

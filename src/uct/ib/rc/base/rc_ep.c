@@ -127,7 +127,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     qp_attr.qp_state              = IBV_QPS_INIT;
     qp_attr.pkey_index            = iface->super.pkey_index;
-    qp_attr.port_num              = iface->super.port_num;
+    qp_attr.port_num              = iface->super.config.port_num;
     qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE|
                                     IBV_ACCESS_REMOTE_WRITE|
                                     IBV_ACCESS_REMOTE_READ|
@@ -148,7 +148,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
         goto err_txqp_cleanup;
     }
 
-    self->sl                = iface->super.sl;           /* TODO multi-rail */
+    self->sl                = iface->super.config.sl;    /* TODO multi-rail */
     self->path_bits         = iface->super.path_bits[0]; /* TODO multi-rail */
 
     /* Check that FC protocol fits AM id
@@ -244,11 +244,11 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
 
     ep->umr_offset = uct_ib_md_umr_offset(rc_addr->umr_id);
 
-    ucs_debug("connected rc qp 0x%x on %s:%d to lid %d(+%d) sl %d remote_qp 0x%x"
-              " mtu %zu timer %dx%d rnr %dx%d rd_atom %d umr_offset 0x%0x",
-              ep->txqp.qp->qp_num, uct_ib_device_name(uct_ib_iface_device(&iface->super)),
-              iface->super.port_num, qp_attr.ah_attr.dlid, ep->path_bits,
-              qp_attr.ah_attr.sl, qp_attr.dest_qp_num,
+    ucs_debug("connected rc qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
+              "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d "
+              "umr_offset 0x%0x", ep->txqp.qp->qp_num,
+              UCT_IB_IFACE_ARG(&iface->super), qp_attr.ah_attr.dlid,
+              ep->path_bits, qp_attr.ah_attr.sl, qp_attr.dest_qp_num,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
               qp_attr.max_rd_atomic, ep->umr_offset);

@@ -22,7 +22,7 @@ static ucs_status_t uct_dc_iface_tgt_create(uct_dc_iface_t *iface)
     init_attr.cq               = iface->super.super.recv_cq;
     init_attr.srq              = iface->super.rx.srq;
     init_attr.dc_key           = UCT_IB_DC_KEY;
-    init_attr.port             = iface->super.super.port_num;
+    init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
     init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
                                  IBV_EXP_ACCESS_REMOTE_READ | 
@@ -50,7 +50,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
     attr.qp_state        = IBV_QPS_INIT;
     attr.pkey_index      = 0;
     attr.qp_access_flags = 0;
-    attr.port_num        = iface->super.super.port_num;
+    attr.port_num        = iface->super.super.config.port_num;
     attr.dct_key         = UCT_IB_DC_KEY;
 
     if (ibv_exp_modify_qp(dci->qp, &attr,
@@ -69,7 +69,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
     attr.path_mtu                   = iface->super.config.path_mtu;
     attr.min_rnr_timer              = 0;
     attr.max_dest_rd_atomic         = 1;
-    attr.ah_attr.sl                 = iface->super.super.sl;
+    attr.ah_attr.sl                 = iface->super.super.config.sl;
 
     if (ibv_exp_modify_qp(dci->qp, &attr,
                          IBV_EXP_QP_STATE     |

@@ -68,7 +68,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     path->reversible                = htonl(1); /* IBCM currently only supports reversible paths */
     path->numb_path                 = 0;
     path->pkey                      = ntohs(iface->super.pkey_value);
-    path->sl                        = iface->super.sl;
+    path->sl                        = iface->super.config.sl;
     path->mtu_selector              = 2; /* EQ */
     path->mtu                       = uct_ib_iface_port_attr(&iface->super)->active_mtu;
     path->rate_selector             = 2; /* EQ */
