@@ -22,8 +22,8 @@
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) { \
         char *s = strduplower(#_name); \
         char *domain = ""; \
-        if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_HOST) { \
-            domain = ", host"; \
+        if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_CPU) { \
+            domain = ", cpu"; \
         } else if ((_cap_flags) & UCT_IFACE_FLAG_ATOMIC_DEVICE) { \
             domain = ", device"; \
         } \

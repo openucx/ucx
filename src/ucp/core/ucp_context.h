@@ -71,7 +71,7 @@ enum {
  * Atomic operations mode.
  */
 typedef enum {
-    UCP_ATOMIC_MODE_HOST,    /* Use host-based atomics */
+    UCP_ATOMIC_MODE_CPU,     /* Use CPU-based atomics */
     UCP_ATOMIC_MODE_DEVICE,  /* Use device-based atomics */
     UCP_ATOMIC_MODE_LAST
 } ucp_atomic_mode_t;

@@ -173,9 +173,9 @@ enum {
     UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23), /**< 64bit atomic compare-and-swap */
 
     /* Atomic operations domain */
-    UCT_IFACE_FLAG_ATOMIC_HOST    = UCS_BIT(30), /**< Atomic communications are atomic
-                                                      with respect to host operations. */
-    UCT_IFACE_FLAG_ATOMIC_DEVICE  = UCS_BIT(31), /**< Atomic communications are atomic
+    UCT_IFACE_FLAG_ATOMIC_CPU     = UCS_BIT(30), /**< Atomic communications are consistent
+                                                      with respect to CPU operations. */
+    UCT_IFACE_FLAG_ATOMIC_DEVICE  = UCS_BIT(31), /**< Atomic communications are consistent
                                                       only with respect to other atomics
                                                       on the same device. */
 

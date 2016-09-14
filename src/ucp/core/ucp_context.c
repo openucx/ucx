@@ -20,7 +20,7 @@
 ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
 static const char *ucp_atomic_modes[] = {
-    [UCP_ATOMIC_MODE_HOST]   = "host",
+    [UCP_ATOMIC_MODE_CPU]    = "cpu",
     [UCP_ATOMIC_MODE_DEVICE] = "device",
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
@@ -91,9 +91,9 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"ATOMIC_MODE", "device",
    "Atomic operations synchronization mode.\n"
-   " host   - operations are atomic with respect to the host processor.\n"
+   " cpu    - atomic operations are consistent with respect to the CPU.\n"
    " device - atomic operations are performed on one of the transport devices,\n"
-   "          and there is no atomicity guarantee with respect to the host processor.",
+   "          and there is guarantee of consistency with respect to the CPU.",
    ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
 
   {"LOG_DATA", "0",

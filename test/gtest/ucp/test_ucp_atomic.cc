@@ -17,7 +17,7 @@ test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
 {
     std::vector<ucp_test_param> result;
     generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                 UCP_ATOMIC_MODE_HOST, result);
+                                 UCP_ATOMIC_MODE_CPU, result);
     generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                  UCP_ATOMIC_MODE_DEVICE, result);
     return result;
@@ -25,7 +25,7 @@ test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
 
 void test_ucp_atomic::init() {
     const char *atomic_mode =
-                    (GetParam().variant == UCP_ATOMIC_MODE_HOST) ? "host" :
+                    (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
                     (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
                     "";
     modify_config("ATOMIC_MODE", atomic_mode);

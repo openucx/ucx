@@ -269,15 +269,15 @@ static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
     worker->atomic_tls |= UCS_BIT(rsc_index);
 }
 
-static void ucp_worker_init_host_atomics(ucp_worker_h worker)
+static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_rsc_index_t rsc_index;
 
     /* Enable all interfaces which have host-based atomics */
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        if (worker->iface_attrs[rsc_index].cap.flags & UCT_IFACE_FLAG_ATOMIC_HOST) {
-            ucp_worker_enable_atomic_tl(worker, "host", rsc_index);
+        if (worker->iface_attrs[rsc_index].cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+            ucp_worker_enable_atomic_tl(worker, "cpu", rsc_index);
         }
     }
 }
@@ -360,8 +360,8 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
     worker->atomic_tls = 0;
 
     if (context->config.features & (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
-        if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_HOST) {
-            ucp_worker_init_host_atomics(worker);
+        if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_CPU) {
+            ucp_worker_init_cpu_atomics(worker);
         } else if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_DEVICE) {
             ucp_worker_init_device_atomics(worker);
         }
