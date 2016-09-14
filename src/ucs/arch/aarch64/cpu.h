@@ -11,6 +11,7 @@
 #include <ucs/debug/log.h>
 #include <time.h>
 #include <sys/times.h>
+#include <ucs/arch/generic/cpu.h>
 
 
 #define UCS_ARCH_CACHE_LINE_SIZE 64
@@ -27,6 +28,7 @@
 #define ucs_memory_cpu_load_fence()   asm volatile ("dmb ld" ::: "memory");
 
 
+#if HAVE_HW_TIMER
 static inline uint64_t ucs_arch_read_hres_clock(void)
 {
     uint64_t ticks;
@@ -41,6 +43,13 @@ static inline double ucs_arch_get_clocks_per_sec()
     asm volatile("mrs %0, cntfrq_el0" : "=r" (freq));
     return (double) freq;
 }
+
+#else
+
+#define ucs_arch_read_hres_clock ucs_arch_generic_read_hres_clock
+#define ucs_arch_get_clocks_per_sec ucs_arch_generic_get_clocks_per_sec
+
+#endif
 
 static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
 {
