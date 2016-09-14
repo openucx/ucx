@@ -293,8 +293,12 @@ struct uct_iface_attr {
  * @brief  Memory domain capability flags.
  */
 enum {
-    UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD support memory allocation */
-    UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD support memory registration */
+    UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD supports memory allocation */
+    UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD supports memory registration */
+    UCT_MD_FLAG_RKEY      = UCS_BIT(2)   /**< Remote key is required for remote
+                                              access operations. If not set, the
+                                              remote key argument for communications
+                                              to this MD may be undefined. */
 };
 
 
