@@ -19,7 +19,14 @@ static void usage() {
     printf("  -s         System\n");
     printf("  -d         Devices\n");
     printf("  -c         Configuration\n");
-    printf("  -p         Protocols\n");
+    printf("  -p         UCP context\n");
+    printf("  -w         UCP worker\n");
+    printf("  -e         UCP endpoint\n");
+    printf("  -u         UCP features to use. String of one or more of:\n");
+    printf("                'a' : atomic operations\n");
+    printf("                'r' : remote memory access\n");
+    printf("                't' : tag matching \n");
+    printf("                'w' : wakeup\n");
     printf("  -a         Show also hidden configuration\n");
     printf("  -b         Build configuration\n");
     printf("  -y         Type information\n");
@@ -31,14 +38,17 @@ static void usage() {
 int main(int argc, char **argv)
 {
     ucs_config_print_flags_t print_flags;
+    uint64_t ucp_features;
     unsigned print_opts;
     char *tl_name;
+    const char *f;
     int c;
 
-    print_opts  = 0;
-    print_flags = 0;
-    tl_name     = NULL;
-    while ((c = getopt(argc, argv, "fahvcydbspt:")) != -1) {
+    print_opts   = 0;
+    print_flags  = 0;
+    tl_name      = NULL;
+    ucp_features = 0;
+    while ((c = getopt(argc, argv, "fahvcydbswpet:u:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -65,10 +75,37 @@ int main(int argc, char **argv)
             print_opts |= PRINT_SYS_INFO;
             break;
         case 'p':
-            print_opts |= PRINT_PROTOCOLS;
+            print_opts |= PRINT_UCP_CONTEXT;
+            break;
+        case 'w':
+            print_opts |= PRINT_UCP_WORKER;
+            break;
+        case 'e':
+            print_opts |= PRINT_UCP_EP;
             break;
         case 't':
             tl_name = optarg;
+            break;
+        case 'u':
+            for (f = optarg; *f; ++f) {
+                switch (*f) {
+                case 'a':
+                    ucp_features |= UCP_FEATURE_AMO32|UCP_FEATURE_AMO64;
+                    break;
+                case 'r':
+                    ucp_features |= UCP_FEATURE_RMA;
+                    break;
+                case 't':
+                    ucp_features |= UCP_FEATURE_TAG;
+                    break;
+                case 'w':
+                    ucp_features |= UCP_FEATURE_WAKEUP;
+                    break;
+                default:
+                    usage();
+                    return -1;
+                }
+            }
             break;
         case 'h':
         default:
@@ -105,12 +142,17 @@ int main(int argc, char **argv)
         ucm_config_print(stdout, print_flags);
     }
 
-    if (print_opts & PRINT_PROTOCOLS) {
-        print_proto_info(print_flags);
-    }
-
     if (print_opts & PRINT_DEVICES) {
         print_uct_info(print_opts, print_flags, tl_name);
     }
+
+    if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP)) {
+        if (ucp_features == 0) {
+            printf("Please select UCP features using -u switch\n");
+            return -1;
+        }
+        print_ucp_info(print_opts, print_flags, ucp_features);
+    }
+
     return 0;
 }

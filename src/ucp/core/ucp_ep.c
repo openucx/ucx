@@ -437,3 +437,178 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         }
     }
 }
+
+static ucp_lane_index_t ucp_ep_get_amo_lane_index(const ucp_ep_config_key_t *key,
+                                                  ucp_lane_index_t lane)
+{
+    ucp_lane_index_t i;
+
+    for (i = 0; i < UCP_MAX_LANES; ++i) {
+        if (key->amo_lanes[i] == lane) {
+            return i;
+        } else if (key->amo_lanes[i] == UCP_NULL_LANE) {
+            break;
+        }
+    }
+    return UCP_NULL_LANE;
+}
+
+ucp_md_map_t ucp_ep_config_get_rma_md_map(const ucp_ep_config_key_t *key,
+                                          ucp_lane_index_t lane)
+{
+    return ucp_lane_map_get_lane(key->rma_lane_map, lane);
+}
+
+ucp_md_map_t ucp_ep_config_get_amo_md_map(const ucp_ep_config_key_t *key,
+                                          ucp_lane_index_t lane)
+{
+    ucp_lane_index_t amo_lane= ucp_ep_get_amo_lane_index(key, lane);
+    if (amo_lane != UCP_NULL_LANE) {
+        return ucp_lane_map_get_lane(key->amo_lane_map, amo_lane);
+    } else {
+        return 0;
+    }
+}
+
+static void ucp_ep_config_print_md_map(FILE *stream, const char *name,
+                                       ucp_md_map_t md_map)
+{
+    ucp_rsc_index_t md_index;
+    int first;
+
+    first = 1;
+    fprintf(stream, "%s", name);
+    for (md_index = 0; md_index < UCP_MD_INDEX_BITS; ++md_index) {
+        if (md_map & UCS_BIT(md_index)) {
+            fprintf(stream, "%c%d", first ? '{' : ',', md_index);
+            first = 0;
+        }
+    }
+    fprintf(stream, "}");
+}
+
+static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
+                                          size_t max_eager_short,
+                                          size_t zcopy_thresh, size_t rndv_thresh)
+{
+    size_t max_bcopy;
+
+    fprintf(stream, "# %18s: 0", name);
+    if (max_eager_short > 0) {
+        fprintf(stream, "..<egr/short>..%zu" , max_eager_short + 1);
+    }
+    max_bcopy = ucs_min(zcopy_thresh, rndv_thresh);
+    if (max_eager_short < max_bcopy) {
+        fprintf(stream, "..<egr/bcopy>..%zu", max_bcopy);
+    }
+    if (zcopy_thresh < rndv_thresh) {
+        fprintf(stream, "..<egr/zcopy>..");
+        if (rndv_thresh < SIZE_MAX) {
+            fprintf(stream, "%zu", rndv_thresh);
+        }
+    }
+    if (rndv_thresh < SIZE_MAX) {
+        fprintf(stream, "..<rndv>..");
+    }
+    fprintf(stream, "(inf)\n");
+}
+
+static void ucp_ep_config_print_rma_proto(FILE *stream,
+                                          const ucp_ep_rma_config_t* rma_config,
+                                          size_t bcopy_thresh)
+{
+    size_t max_short;
+
+    max_short = ucs_max(rma_config->max_put_short + 1, bcopy_thresh);
+
+    fprintf(stream, "#                put: 0");
+    if (max_short > 0) {
+        fprintf(stream, "..<short>..%zu" , max_short);
+    }
+    fprintf(stream, "..<bcopy>..(inf)\n");
+    fprintf(stream, "#                get: 0..<bcopy>..(inf)\n");
+}
+
+static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
+                                const ucp_ep_config_t *config,
+                                const uint8_t *addr_indices)
+{
+    ucp_context_h context   = worker->context;
+    ucp_tl_resource_desc_t *rsc;
+    ucp_rsc_index_t rsc_index;
+    ucp_lane_index_t lane;
+    ucp_md_map_t md_map;
+
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        rsc_index   = config->key.lanes[lane];
+        rsc         = &context->tl_rscs[rsc_index];
+        fprintf(stream, "#            lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT,
+                lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
+
+        if (addr_indices != NULL) {
+            fprintf(stream, "->addr[%d] ", addr_indices[lane]);
+        }
+        fprintf(stream, " -");
+        if (lane == config->key.am_lane) {
+            fprintf(stream, " am");
+        }
+        md_map = ucp_ep_config_get_rma_md_map(&config->key, lane);
+        if (md_map) {
+            ucp_ep_config_print_md_map(stream, " rma", md_map);
+        }
+        md_map = ucp_ep_config_get_amo_md_map(&config->key, lane);
+        if (md_map) {
+            ucp_ep_config_print_md_map(stream, " amo", md_map);
+        }
+        if (lane == config->key.rndv_lane) {
+            fprintf(stream, " rndv");
+        }
+        if (lane == config->key.wireup_msg_lane) {
+            fprintf(stream, " wireup");
+        }
+        fprintf(stream, "\n");
+    }
+
+    fprintf(stream, "#\n");
+
+    if (context->config.features & UCP_FEATURE_TAG) {
+         ucp_ep_config_print_tag_proto(stream, "tag_send",
+                                       config->max_eager_short,
+                                       config->zcopy_thresh,
+                                       config->rndv_thresh);
+         ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
+                                       config->max_eager_short,
+                                       config->sync_zcopy_thresh,
+                                       config->sync_rndv_thresh);
+     }
+
+     if (context->config.features & UCP_FEATURE_RMA) {
+         for (lane = 0; lane < config->key.num_lanes; ++lane) {
+             if (!ucp_ep_config_get_rma_md_map(&config->key, lane)) {
+                 continue;
+             }
+             ucp_ep_config_print_rma_proto(stream, &config->rma[lane],
+                                           config->bcopy_thresh);
+         }
+     }
+
+}
+
+void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
+{
+    fprintf(stream, "#\n");
+    fprintf(stream, "# UCP endpoint\n");
+    fprintf(stream, "#\n");
+
+    fprintf(stream, "#               peer: %s%suuid 0x%"PRIx64"\n",
+#if ENABLE_DEBUG_DATA
+            ucp_ep_peer_name(ep), ", ",
+#else
+            "", "",
+#endif
+            ep->dest_uuid);
+
+    ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL);
+
+    fprintf(stream, "#\n");
+}
