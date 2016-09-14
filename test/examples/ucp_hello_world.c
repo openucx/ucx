@@ -188,6 +188,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     } else if (UCS_PTR_STATUS(request) != UCS_OK) {
         printf("UCX address message was scheduled for send\n");
         wait(ucp_worker, request);
+        request->completed = 0; /* Reset request state before recycling it */
         ucp_request_release(request);
     }
 
@@ -235,6 +236,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         goto err_ep;
     } else {
         wait(ucp_worker, request);
+        request->completed = 0;
         ucp_request_release(request);
         printf("UCX data message was received\n");
     }
@@ -304,6 +306,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         goto err;
     } else {
         wait(ucp_worker, request);
+        request->completed = 0;
         ucp_request_release(request);
         printf("UCX address message was received\n");
     }
@@ -346,6 +349,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     } else if (UCS_PTR_STATUS(request) != UCS_OK) {
         printf("UCX data message was scheduled for send\n");
         wait(ucp_worker, request);
+        request->completed = 0;
         ucp_request_release(request);
     }
 
@@ -366,6 +370,13 @@ static int run_test(const char *server, ucp_worker_h ucp_worker)
     } else {
         return run_ucx_server(ucp_worker);
     }
+}
+
+static void barrier(int oob_sock)
+{
+    int dummy = 0;
+    send(oob_sock, &dummy, sizeof(dummy), 0);
+    recv(oob_sock, &dummy, sizeof(dummy), 0);
 }
 
 int main(int argc, char **argv)
@@ -471,9 +482,12 @@ int main(int argc, char **argv)
             goto err_peer_addr;
         }
     }
-    close(oob_sock);
 
     ret = run_test(server, ucp_worker);
+
+    /* Make sure remote is disconnected before destroying local worker */
+    barrier(oob_sock);
+    close(oob_sock);
 
 err_peer_addr:
     free(peer_addr);
