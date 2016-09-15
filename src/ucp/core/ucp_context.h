@@ -67,6 +67,16 @@ enum {
 };
 
 
+/**
+ * Atomic operations mode.
+ */
+typedef enum {
+    UCP_ATOMIC_MODE_CPU,     /* Use CPU-based atomics */
+    UCP_ATOMIC_MODE_DEVICE,  /* Use device-based atomics */
+    UCP_ATOMIC_MODE_LAST
+} ucp_atomic_mode_t;
+
+
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
     size_t                                 bcopy_thresh;
@@ -83,6 +93,8 @@ typedef struct ucp_context_config {
     size_t                                 log_data_size;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
+    /** Atomic mode */
+    ucp_atomic_mode_t                      atomic_mode;
 } ucp_context_config_t;
 
 
@@ -199,5 +211,7 @@ extern ucp_am_handler_t ucp_am_handlers[];
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
+
+uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
 #endif

@@ -107,18 +107,21 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
     if (uct_ib_atomic_is_supported(dev, 0, sizeof(uint64_t))) {
         iface_attr->cap.flags  |= UCT_IFACE_FLAG_ATOMIC_ADD64 |
                                   UCT_IFACE_FLAG_ATOMIC_FADD64 |
-                                  UCT_IFACE_FLAG_ATOMIC_CSWAP64;
+                                  UCT_IFACE_FLAG_ATOMIC_CSWAP64 |
+                                  UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
 
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint64_t))) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64;
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_SWAP64 |
+                                 UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
 
     if (uct_ib_atomic_is_supported(dev, 1, sizeof(uint32_t))) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_ATOMIC_ADD32 |
                                  UCT_IFACE_FLAG_ATOMIC_FADD32 |
                                  UCT_IFACE_FLAG_ATOMIC_SWAP32 |
-                                 UCT_IFACE_FLAG_ATOMIC_CSWAP32;
+                                 UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
+                                 UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
 }
 

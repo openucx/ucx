@@ -4,150 +4,172 @@
 * See file LICENSE for terms.
 */
 
-#include "test_ucp_memheap.h"
+#include "test_ucp_atomic.h"
+extern "C" {
+#include <ucp/core/ucp_context.h>
+}
 
-class test_ucp_atomic : public test_ucp_memheap {
-public:
-    template <typename T>
-    void blocking_add(entity *e,  size_t max_size, void *memheap_addr,
-                      ucp_rkey_h rkey, std::string& expected_data)
-    {
-        ucs_status_t status;
-        T add, prev;
+std::vector<ucp_test_param>
+test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
+                                  const std::string& name,
+                                  const std::string& test_case_name,
+                                  const std::string& tls)
+{
+    std::vector<ucp_test_param> result;
+    generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                 UCP_ATOMIC_MODE_CPU, result);
+    generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                 UCP_ATOMIC_MODE_DEVICE, result);
+    return result;
+}
 
-        prev = *(T*)memheap_addr;
-        add  = (T)rand() * (T)rand();
+void test_ucp_atomic::init() {
+    const char *atomic_mode =
+                    (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
+                    (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
+                    "";
+    modify_config("ATOMIC_MODE", atomic_mode);
+    test_ucp_memheap::init();
+}
 
-        if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_atomic_add32(e->ep(), add, (uintptr_t)memheap_addr, rkey);
-        } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_atomic_add64(e->ep(), add, (uintptr_t)memheap_addr, rkey);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
-        ASSERT_UCS_OK(status);
+template <typename T>
+void test_ucp_atomic::blocking_add(entity *e,  size_t max_size, void *memheap_addr,
+                  ucp_rkey_h rkey, std::string& expected_data)
+{
+    ucs_status_t status;
+    T add, prev;
 
-        expected_data.resize(sizeof(T));
-        *(T*)&expected_data[0] = add + prev;
+    prev = *(T*)memheap_addr;
+    add  = (T)rand() * (T)rand();
+
+    if (sizeof(T) == sizeof(uint32_t)) {
+        status = ucp_atomic_add32(e->ep(), add, (uintptr_t)memheap_addr, rkey);
+    } else if (sizeof(T) == sizeof(uint64_t)) {
+        status = ucp_atomic_add64(e->ep(), add, (uintptr_t)memheap_addr, rkey);
+    } else {
+        status = UCS_ERR_UNSUPPORTED;
     }
+    ASSERT_UCS_OK(status);
 
-    template<uint32_t> void blocking_add(entity *e,  size_t max_size, void *memheap_addr,
-                                         ucp_rkey_h rkey, std::string& expected_data);
+    expected_data.resize(sizeof(T));
+    *(T*)&expected_data[0] = add + prev;
+}
 
-    void unaligned_blocking_add64(entity *e,  size_t max_size, void *memheap_addr,
-                             ucp_rkey_h rkey, std::string& expected_data)
-    {
-        /* Test that unaligned addresses generate error */
-        ucs_status_t status;
-        status = ucp_atomic_add64(e->ep(), 0, (uintptr_t)memheap_addr + 1, rkey);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-        expected_data.clear();
+void test_ucp_atomic::unaligned_blocking_add64(entity *e,  size_t max_size,
+                                               void *memheap_addr, ucp_rkey_h rkey,
+                                               std::string& expected_data)
+{
+    /* Test that unaligned addresses generate error */
+    ucs_status_t status;
+    status = ucp_atomic_add64(e->ep(), 0, (uintptr_t)memheap_addr + 1, rkey);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    expected_data.clear();
+}
+
+template <typename T>
+void test_ucp_atomic::blocking_fadd(entity *e,  size_t max_size,
+                                    void *memheap_addr, ucp_rkey_h rkey,
+                                    std::string& expected_data)
+{
+    ucs_status_t status;
+    T add, prev, result;
+
+    prev = *(T*)memheap_addr;
+    add  = (T)rand() * (T)rand();
+
+    if (sizeof(T) == sizeof(uint32_t)) {
+        status = ucp_atomic_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
+                                   (uint32_t*)(void*)&result);
+    } else if (sizeof(T) == sizeof(uint64_t)) {
+        status = ucp_atomic_fadd64(e->ep(), add, (uintptr_t)memheap_addr, rkey,
+                                   (uint64_t*)(void*)&result);
+    } else {
+        status = UCS_ERR_UNSUPPORTED;
     }
+    ASSERT_UCS_OK(status);
 
-    template <typename T>
-    void blocking_fadd(entity *e,  size_t max_size, void *memheap_addr,
-                      ucp_rkey_h rkey, std::string& expected_data)
-    {
-        ucs_status_t status;
-        T add, prev, result;
+    EXPECT_EQ(prev, result);
 
-        prev = *(T*)memheap_addr;
-        add  = (T)rand() * (T)rand();
+    expected_data.resize(sizeof(T));
+    *(T*)&expected_data[0] = add + prev;
+}
 
-        if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_atomic_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                       (uint32_t*)(void*)&result);
-        } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_atomic_fadd64(e->ep(), add, (uintptr_t)memheap_addr, rkey,
-                                       (uint64_t*)(void*)&result);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
-        ASSERT_UCS_OK(status);
+template <typename T>
+void test_ucp_atomic::blocking_swap(entity *e,  size_t max_size, void *memheap_addr,
+                                    ucp_rkey_h rkey, std::string& expected_data)
+{
+    ucs_status_t status;
+    T swap, prev, result;
 
-        EXPECT_EQ(prev, result);
+    prev = *(T*)memheap_addr;
+    swap = (T)rand() * (T)rand();
 
-        expected_data.resize(sizeof(T));
-        *(T*)&expected_data[0] = add + prev;
+    if (sizeof(T) == sizeof(uint32_t)) {
+        status = ucp_atomic_swap32(e->ep(), swap, (uintptr_t)memheap_addr,
+                                   rkey, (uint32_t*)(void*)&result);
+    } else if (sizeof(T) == sizeof(uint64_t)) {
+        status = ucp_atomic_swap64(e->ep(), swap, (uintptr_t)memheap_addr,
+                                   rkey, (uint64_t*)(void*)&result);
+    } else {
+        status = UCS_ERR_UNSUPPORTED;
     }
+    ASSERT_UCS_OK(status);
 
-    template <typename T>
-    void blocking_swap(entity *e,  size_t max_size, void *memheap_addr,
-                       ucp_rkey_h rkey, std::string& expected_data)
-    {
-        ucs_status_t status;
-        T swap, prev, result;
+    EXPECT_EQ(prev, result);
 
-        prev = *(T*)memheap_addr;
-        swap = (T)rand() * (T)rand();
+    expected_data.resize(sizeof(T));
+    *(T*)&expected_data[0] = swap;
+}
 
-        if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_atomic_swap32(e->ep(), swap, (uintptr_t)memheap_addr,
-                                       rkey, (uint32_t*)(void*)&result);
-        } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_atomic_swap64(e->ep(), swap, (uintptr_t)memheap_addr,
-                                       rkey, (uint64_t*)(void*)&result);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
-        ASSERT_UCS_OK(status);
+template <typename T>
+void test_ucp_atomic::blocking_cswap(entity *e,  size_t max_size, void *memheap_addr,
+                    ucp_rkey_h rkey, std::string& expected_data)
+{
+    ucs_status_t status;
+    T compare, swap, prev, result;
 
-        EXPECT_EQ(prev, result);
+    prev = *(T*)memheap_addr;
+    if ((rand() % 2) == 0) {
+        compare = prev; /* success mode */
+    } else {
+        compare = ~prev; /* fail mode */
+    }
+    swap = (T)rand() * (T)rand();
 
-        expected_data.resize(sizeof(T));
+    if (sizeof(T) == sizeof(uint32_t)) {
+        status = ucp_atomic_cswap32(e->ep(), compare, swap,
+                                    (uintptr_t)memheap_addr, rkey,
+                                    (uint32_t*)(void*)&result);
+    } else if (sizeof(T) == sizeof(uint64_t)) {
+        status = ucp_atomic_cswap64(e->ep(), compare, swap,
+                                    (uintptr_t)memheap_addr, rkey,
+                                    (uint64_t*)(void*)&result);
+    } else {
+        status = UCS_ERR_UNSUPPORTED;
+    }
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(prev, result);
+
+    expected_data.resize(sizeof(T));
+    if (compare == prev) {
         *(T*)&expected_data[0] = swap;
+    } else {
+        *(T*)&expected_data[0] = prev;
     }
+}
 
-    template <typename T>
-    void blocking_cswap(entity *e,  size_t max_size, void *memheap_addr,
-                        ucp_rkey_h rkey, std::string& expected_data)
-    {
-        ucs_status_t status;
-        T compare, swap, prev, result;
+template <typename T, typename F>
+void test_ucp_atomic::test(F f, bool malloc_allocate) {
+    test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T),
+                       malloc_allocate, false);
+}
 
-        prev = *(T*)memheap_addr;
-        if ((rand() % 2) == 0) {
-            compare = prev; /* success mode */
-        } else {
-            compare = ~prev; /* fail mode */
-        }
-        swap = (T)rand() * (T)rand();
-
-        if (sizeof(T) == sizeof(uint32_t)) {
-            status = ucp_atomic_cswap32(e->ep(), compare, swap,
-                                        (uintptr_t)memheap_addr, rkey,
-                                        (uint32_t*)(void*)&result);
-        } else if (sizeof(T) == sizeof(uint64_t)) {
-            status = ucp_atomic_cswap64(e->ep(), compare, swap,
-                                        (uintptr_t)memheap_addr, rkey,
-                                        (uint64_t*)(void*)&result);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
-        }
-        ASSERT_UCS_OK(status);
-
-        EXPECT_EQ(prev, result);
-
-        expected_data.resize(sizeof(T));
-        if (compare == prev) {
-            *(T*)&expected_data[0] = swap;
-        } else {
-            *(T*)&expected_data[0] = prev;
-        }
-    }
-
-    template <typename T, typename F>
-    void test(F f, bool malloc_allocate) {
-        test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T),
-                           malloc_allocate, false);
-    }
-
-};
 
 class test_ucp_atomic32 : public test_ucp_atomic {
 public:
     static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_memheap::get_ctx_params();
+        ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_AMO32;
         return params;
     }
@@ -178,7 +200,7 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
 class test_ucp_atomic64 : public test_ucp_atomic {
 public:
     static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_memheap::get_ctx_params();
+        ucp_params_t params = ucp_test::get_ctx_params();
         params.features |= UCP_FEATURE_AMO64;
         return params;
     }

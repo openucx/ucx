@@ -259,6 +259,115 @@ out:
     return status;
 }
 
+static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
+                                        ucp_rsc_index_t rsc_index)
+{
+    ucs_assert(rsc_index != UCP_NULL_RESOURCE);
+    ucs_trace("worker %p: using %s atomics on iface[%d]=" UCT_TL_RESOURCE_DESC_FMT,
+              worker, mode, rsc_index,
+              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
+    worker->atomic_tls |= UCS_BIT(rsc_index);
+}
+
+static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    ucp_rsc_index_t rsc_index;
+
+    /* Enable all interfaces which have host-based atomics */
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        if (worker->iface_attrs[rsc_index].cap.flags & UCT_IFACE_FLAG_ATOMIC_CPU) {
+            ucp_worker_enable_atomic_tl(worker, "cpu", rsc_index);
+        }
+    }
+}
+
+static void ucp_worker_init_device_atomics(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    ucp_address_iface_attr_t dummy_iface_attr;
+    ucp_tl_resource_desc_t *rsc, *best_rsc;
+    uct_iface_attr_t *iface_attr;
+    ucp_rsc_index_t rsc_index;
+    uint64_t iface_cap_flags;
+    double score, best_score;
+    ucp_rsc_index_t md_index;
+    uct_md_attr_t *md_attr;
+    uint64_t supp_tls;
+    uint8_t priority, best_priority;
+
+    iface_cap_flags = ucp_context_uct_atomic_iface_flags(context) |
+                      UCT_IFACE_FLAG_ATOMIC_DEVICE;
+
+    dummy_iface_attr.bandwidth  = 1e12;
+    dummy_iface_attr.cap_flags  = -1;
+    dummy_iface_attr.overhead   = 0;
+    dummy_iface_attr.priority   = 0;
+
+    supp_tls                    = 0;
+    best_score                  = -1;
+    best_rsc                    = NULL;
+    best_priority               = 0;
+
+    /* Select best interface for atomics device */
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        rsc        = &context->tl_rscs[rsc_index];
+        md_index   = rsc->md_index;
+        md_attr    = &context->md_attrs[md_index];
+        iface_attr = &worker->iface_attrs[rsc_index];
+
+        if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
+            !ucs_test_all_flags(iface_attr->cap.flags, iface_cap_flags))
+        {
+            continue;
+        }
+
+        supp_tls |= UCS_BIT(rsc_index);
+        priority  = iface_attr->priority;
+
+        score = ucp_wireup_amo_score_func(md_attr, iface_attr, &dummy_iface_attr);
+        if ((score > best_score) ||
+            ((score == best_score) && (priority > best_priority)))
+        {
+            best_rsc      = rsc;
+            best_score    = score;
+            best_priority = priority;
+        }
+    }
+
+    if (best_rsc == NULL) {
+        ucs_debug("worker %p: no support for atomics", worker);
+        return;
+    }
+
+    /* Enable atomics on all resources using same device as the "best" resource */
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        rsc = &context->tl_rscs[rsc_index];
+        if ((supp_tls & UCS_BIT(rsc_index)) &&
+            (rsc->md_index == best_rsc->md_index) &&
+            !strncmp(rsc->tl_rsc.dev_name, best_rsc->tl_rsc.dev_name,
+                     UCT_DEVICE_NAME_MAX))
+        {
+            ucp_worker_enable_atomic_tl(worker, "device", rsc_index);
+        }
+    }
+}
+
+static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+
+    worker->atomic_tls = 0;
+
+    if (context->config.features & (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+        if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_CPU) {
+            ucp_worker_init_cpu_atomics(worker);
+        } else if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_DEVICE) {
+            ucp_worker_init_device_atomics(worker);
+        }
+    }
+}
+
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have it's own configuration (to save memory footprint). Same config can be used
  * by different eps.
@@ -377,6 +486,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
             goto err_close_ifaces;
         }
     }
+
+    /* Select atomic resources */
+    ucp_worker_init_atomic_tls(worker);
 
     *worker_p = worker;
     return UCS_OK;

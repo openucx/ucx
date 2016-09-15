@@ -9,7 +9,12 @@
 
 class test_ucp_mmap : public test_ucp_memheap {
 public:
-    using test_ucp_memheap::get_ctx_params;
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.features |= UCP_FEATURE_RMA;
+        return params;
+    }
+
 protected:
     void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy);
 };

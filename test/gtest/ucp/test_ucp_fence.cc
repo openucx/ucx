@@ -4,9 +4,9 @@
 * See file LICENSE for terms.
 */
 
-#include "ucp_test.h"
+#include "test_ucp_atomic.h"
 
-class test_ucp_fence : public ucp_test {
+class test_ucp_fence : public test_ucp_atomic {
 public:
     typedef void (test_ucp_fence::* send_func_t)(entity *e, uint64_t *initial_buf,
                                                  uint64_t *result_buf, void *memheap_addr,

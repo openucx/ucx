@@ -10,7 +10,11 @@
 
 class test_ucp_rma : public test_ucp_memheap {
 public:
-    using test_ucp_memheap::get_ctx_params;
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.features |= UCP_FEATURE_RMA;
+        return params;
+    }
 
     void nonblocking_put_nbi(entity *e, size_t max_size,
                              void *memheap_addr,

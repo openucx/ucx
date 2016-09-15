@@ -150,6 +150,7 @@ noinst_HEADERS = \
 	uct/uct_test.h \
 	uct/ud_base.h \
 	\
+	ucp/test_ucp_atomic.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h
