@@ -108,6 +108,7 @@ struct ucp_request {
                 struct {
                     ucp_request_callback_t    flushed_cb;/* Called when flushed */
                     ucs_callbackq_slow_elem_t cbq_elem;  /* Slow-path callback */
+                    uint8_t                   cbq_elem_on;
                     ucp_lane_map_t            lanes;     /* Which lanes need to be flushed */
                 } flush;
 

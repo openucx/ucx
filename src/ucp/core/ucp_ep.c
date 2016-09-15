@@ -213,6 +213,9 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_status_t status;
     uct_ep_h uct_ep;
 
+    ucs_trace("ep %p: progress flush req %p, lanes 0x%x count %d", ep, req,
+              req->send.flush.lanes, req->send.uct_comp.count);
+
     while (req->send.flush.lanes) {
 
         /* Search for next lane to start flush */
@@ -235,6 +238,9 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             req->send.flush.lanes &= ~UCS_BIT(lane);
         } else if (status == UCS_ERR_NO_RESOURCE) {
             if (req->send.lane != UCP_NULL_LANE) {
+                ucs_trace("ep %p: not adding pending flush %p on lane %d, "
+                          "because it's already pending on lane %d",
+                          ep, req, lane, req->send.lane);
                 break;
             }
 
@@ -253,6 +259,16 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 }
 
+static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+    if (req->send.flush.cbq_elem_on) {
+        uct_worker_slowpath_progress_unregister(ep->worker->uct,
+                                                &req->send.flush.cbq_elem);
+        req->send.flush.cbq_elem_on = 0;
+    }
+}
+
 static void ucp_ep_flushed_slow_path_callback(ucs_callbackq_slow_elem_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.flush.cbq_elem);
@@ -262,7 +278,7 @@ static void ucp_ep_flushed_slow_path_callback(ucs_callbackq_slow_elem_t *self)
 
     ucs_trace("flush req %p ep %p remove from uct_worker %p", req, ep,
               ep->worker->uct);
-    uct_worker_slowpath_progress_unregister(ep->worker->uct, self);
+    ucp_ep_flush_slow_path_remove(req);
     req->send.flush.flushed_cb(req);
 
     /* Complete send request from here, to avoid releasing the request while
@@ -272,18 +288,31 @@ static void ucp_ep_flushed_slow_path_callback(ucs_callbackq_slow_elem_t *self)
     ucp_request_put(req, req->status);
 }
 
-static void ucp_flush_check_completion(ucp_request_t *req)
+static int ucp_flush_check_completion(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
 
     /* Check if flushed all lanes */
     if (req->send.uct_comp.count != 0) {
-        return;
+        return 0;
     }
 
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
+    ucp_ep_flush_slow_path_remove(req);
+    req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
+    req->send.flush.cbq_elem_on = 1;
     uct_worker_slowpath_progress_register(ep->worker->uct,
                                           &req->send.flush.cbq_elem);
+    return 1;
+}
+
+static void ucp_ep_flush_resume_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.flush.cbq_elem);
+
+    ucp_ep_flush_slow_path_remove(req);
+    ucp_ep_flush_progress(req);
+    ucp_flush_check_completion(req);
 }
 
 static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
@@ -292,6 +321,7 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucp_lane_index_t lane = req->send.lane;
     ucp_ep_h ep = req->send.ep;
     ucs_status_t status;
+    int completed;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
@@ -306,7 +336,16 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
      * put anything on pending.
      */
     ucp_ep_flush_progress(req);
-    ucp_flush_check_completion(req);
+    completed = ucp_flush_check_completion(req);
+
+    /* If the operation has not completed, add slow-path progress to resume */
+    if (!completed && req->send.flush.lanes && !req->send.flush.cbq_elem_on) {
+        ucs_trace("ep %p: adding slow-path callback to resume flush", ep);
+        req->send.flush.cbq_elem.cb = ucp_ep_flush_resume_slow_path_callback;
+        req->send.flush.cbq_elem_on = 1;
+        uct_worker_slowpath_progress_register(ep->worker->uct,
+                                              &req->send.flush.cbq_elem);
+    }
 
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
         req->send.lane = UCP_NULL_LANE;
@@ -405,6 +444,7 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     req->send.flush.flushed_cb  = ucp_ep_disconnected;
     req->send.flush.lanes       = UCS_MASK(ucp_ep_num_lanes(ep));
     req->send.flush.cbq_elem.cb = ucp_ep_flushed_slow_path_callback;
+    req->send.flush.cbq_elem_on = 0;
     req->send.lane              = UCP_NULL_LANE;
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.uct_comp.func     = ucp_ep_flush_completion;
@@ -415,12 +455,14 @@ static ucs_status_ptr_t ucp_disconnect_nb_internal(ucp_ep_h ep)
     if (req->send.uct_comp.count == 0) {
         status = req->status;
         ucp_ep_disconnected(req);
-        ucs_trace_req("releasing flush request %p, returning status %s", req,
-                      ucs_status_string(status));
+        ucs_trace_req("ep %p: releasing flush request %p, returning status %s",
+                      ep, req, ucs_status_string(status));
         ucs_mpool_put(req);
         return UCS_STATUS_PTR(status);
     }
 
+    ucs_trace_req("ep %p: return inprogress flush request %p (%p)", ep, req,
+                  req + 1);
     return req + 1;
 }
 
