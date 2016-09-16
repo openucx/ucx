@@ -15,6 +15,7 @@ AC_ARG_WITH([verbs],
 
 AS_IF([test "x$with_verbs" == "xyes"], [with_verbs=/usr])
 AS_IF([test -d "$with_verbs"], [with_ib=yes; str="with verbs support from $with_verbs"], [with_ib=no; str="without verbs support"])
+AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
 
 AC_MSG_NOTICE([Compiling $str])
 
@@ -63,15 +64,20 @@ AS_IF([test "x$with_ib" == xyes],
         save_LDFLAGS="$LDFLAGS"
         save_CFLAGS="$CFLAGS"
         save_CPPFLAGS="$CPPFLAGS"
-        CPPFLAGS="-I$with_verbs/include $CPPFLAGS"
-        LDFLAGS="-L$with_verbs/lib64 -L$with_verbs/lib $LDFLAGS"
+        AS_IF([test x/usr == "x$with_verbs"],
+          [],
+          [verbs_incl="-I$with_verbs/include"
+           verbs_libs="-L$with_verbs/lib$libsuff"])
+        LDFLAGS="$verbs_libs $LDFLAGS"
+        CFLAGS="$verbs_incl $CFLAGS"
+        CPPFLAGS="$verbs_incl $CPPFLAGS"
         AC_CHECK_HEADER([infiniband/verbs.h], [],
                         [AC_MSG_WARN([ibverbs header files not found]); with_ib=no])
         AC_CHECK_LIB([ibverbs], [ibv_get_device_list],
             [
-            AC_SUBST(IBVERBS_LDFLAGS,  ["-L$with_verbs/lib64 -L$with_verbs/lib -libverbs"])
-            AC_SUBST(IBVERBS_CPPFLAGS, [-I$with_verbs/include])
-            AC_SUBST(IBVERBS_CFLAGS,   [-I$with_verbs/include])
+            AC_SUBST(IBVERBS_LDFLAGS,  ["$verbs_libs -libverbs"])
+            AC_SUBST(IBVERBS_CPPFLAGS, ["$verbs_incl"])
+            AC_SUBST(IBVERBS_CFLAGS,   ["$verbs_incl"])
             ],
             [AC_MSG_WARN([libibverbs not found]); with_ib=no])
 
@@ -100,8 +106,9 @@ AS_IF([test "x$with_ib" == xyes],
        save_LDFLAGS="$LDFLAGS"
        save_CFLAGS="$CFLAGS"
        save_CPPFLAGS="$CPPFLAGS"
-       CPPFLAGS="-I$with_verbs/include $CPPFLAGS"
-       LDFLAGS="-L$with_verbs/lib64 $LDFLAGS"
+       LDFLAGS="$IBVERBS_LDFAGS $LDFLAGS"
+       CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
+       CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
        AC_CHECK_HEADER([infiniband/verbs_exp.h],
            [AC_DEFINE([HAVE_VERBS_EXP_H], 1, [IB experimental verbs])
            verbs_exp=yes],
@@ -209,7 +216,7 @@ AS_IF([test "x$with_ib" == xyes],
            [AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
            transports="${transports},dc"])
 
-       AS_IF([test "x$with_rc" != xno], 
+       AS_IF([test "x$with_rc" != xno],
            [AC_DEFINE([HAVE_TL_RC], 1, [RC transport support])
            transports="${transports},rc"])
 
@@ -228,7 +235,6 @@ AS_IF([test "x$with_ib" == xyes],
            [AC_DEFINE([HAVE_TL_CM], 1, [Connection manager support])
            transports="${transports},cm"])
 
-       AS_IF([test -d "$with_verbs/lib64"],[libsuff="64"],[libsuff=""])
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])
 

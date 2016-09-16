@@ -9,6 +9,10 @@ bin_PROGRAMS          = ucx_info
 AM_CPPFLAGS           = \
     -I$(abs_top_srcdir)/src \
     -I$(abs_top_builddir)/src
+if HAVE_IB
+AM_CPPFLAGS += $(IBVERBS_CPPFLAGS)
+AM_LDFLAGS   = $(IBVERBS_LDFLAGS) -lpthread
+endif
 
 BUILT_SOURCES = build_config.h
 DISTCLEANFILES = build_config.h
@@ -18,11 +22,6 @@ DISTCLEANFILES = build_config.h
 #
 build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
-
-if HAVE_IB
-ucx_info_CPPFLAGS = $(IBVERBS_CPPFLAGS) $(AM_CPPFLAGS)
-ucx_info_LDFLAGS =  $(IBVERBS_LDFLAGS) -lpthread $(AM_LDFLAGS)
-endif
 
 ucx_info_SOURCES  = \
 	build_info.c \
