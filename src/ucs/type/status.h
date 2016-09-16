@@ -2,6 +2,7 @@
  * @file        uct.h
  * @date        2014-2016
  * @copyright   Mellanox Technologies Ltd. All rights reserved.
+ * @copyright   The University of Tennessee and the University of Tennessee research foundation. All rights reserved.
  * @brief       Unified Communication Services
  */
 
@@ -78,11 +79,11 @@ typedef enum {
     UCS_ERR_LAST                   = -100
 } UCS_S_PACKED ucs_status_t ;
 
-#define USC_IS_LINK_ERROR(_code) \
+#define UCS_IS_LINK_ERROR(_code) \
     (((_code) <= UCS_ERR_FIRST_LINK_FAILURE) && \
      ((_code) >= UCS_ERR_LAST_LINK_FAILURE)
 
-#define USC_IS_ENDPOINT_ERROR(_code) \
+#define UCS_IS_ENDPOINT_ERROR(_code) \
     (((_code) <= UCS_ERR_FIRST_ENDPOINT_FAILURE) && \
      ((_code) >= UCS_ERR_LAST_ENDPOINT_FAILURE)
 
