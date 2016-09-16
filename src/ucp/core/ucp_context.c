@@ -57,6 +57,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - rc     : rc and ud.\n"
    " - rc_x   : rc with accelerated verbs and ud.\n"
    " - ud_x   : ud with accelerated verbs.\n"
+   " - dc_x   : dc with accelerated verbs.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -114,6 +115,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "rc",    { "rc", "ud", NULL } },
   { "rc_x",  { "rc_mlx5", "ud_mlx5", NULL } },
   { "ud_x",  { "ud_mlx5", NULL } },
+  { "dc_x",  { "dc_mlx5", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt", "ugni_rdma", NULL } },
   { NULL }
 };
