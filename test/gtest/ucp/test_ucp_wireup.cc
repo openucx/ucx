@@ -331,13 +331,13 @@ UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
 UCS_TEST_P(test_ucp_wireup, multi_wireup) {
     skip_loopback();
 
-    const int count = 10;
+    const size_t count = 10;
     while (entities().size() < count) {
         create_entity();
     }
 
     /* connect from sender() to all the rest */
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         sender().connect(&entities().at(i));
     }
 }
