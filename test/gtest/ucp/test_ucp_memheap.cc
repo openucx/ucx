@@ -80,8 +80,6 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     sender().disconnect();
     receiver().disconnect();
 
-    short_progress_loop();
-
     ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -163,8 +161,6 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
     sender().disconnect();
     receiver().disconnect();
-
-    short_progress_loop();
 
     status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);

@@ -30,7 +30,6 @@ void test_ucp_tag::init()
 
     dt_gen_start_count  = 0;
     dt_gen_finish_count = 0;
-    is_req_based_api = false;
 }
 
 void test_ucp_tag::cleanup()
@@ -38,7 +37,6 @@ void test_ucp_tag::cleanup()
     sender().flush_worker();
     receiver().flush_worker();
     sender().disconnect();
-    short_progress_loop();
     ucp_test::cleanup();
 }
 
@@ -94,7 +92,7 @@ void test_ucp_tag::recv_callback(void *request, ucs_status_t status,
 
 void test_ucp_tag::wait(request *req)
 {
-    if (is_req_based_api) {
+    if (GetParam().variant == RECV_REQ_EXTERNAL) {
         ucp_tag_recv_info_t recv_info;
         ucs_status_t status = ucp_request_test(req, &recv_info);
 
@@ -105,7 +103,7 @@ void test_ucp_tag::wait(request *req)
         if (req->external) {
             recv_callback(req, status, &recv_info);
         }
-    } else{
+    } else {
         while (!req->completed) {
             progress();
         }
@@ -154,9 +152,9 @@ test_ucp_tag::request*
 test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
                       ucp_tag_t tag, ucp_tag_t tag_mask)
 {
-
-    return (is_req_based_api) ? recv_req_nb(buffer, count, dt, tag, tag_mask) :
-                                recv_cb_nb(buffer, count, dt, tag, tag_mask);
+    return (GetParam().variant == RECV_REQ_EXTERNAL) ?
+                    recv_req_nb(buffer, count, dt, tag, tag_mask) :
+                    recv_cb_nb(buffer, count, dt, tag, tag_mask);
 }
 
 test_ucp_tag::request*
@@ -193,9 +191,9 @@ ucs_status_t
 test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t dt, ucp_tag_t tag,
                      ucp_tag_t tag_mask, ucp_tag_recv_info_t *info)
 {
-
-    return (is_req_based_api) ? recv_req_b(buffer, count, dt, tag, tag_mask, info) :
-                                recv_cb_b(buffer, count, dt, tag, tag_mask, info);
+    return (GetParam().variant == RECV_REQ_EXTERNAL) ?
+                    recv_req_b(buffer, count, dt, tag, tag_mask, info) :
+                    recv_cb_b(buffer, count, dt, tag, tag_mask, info);
 }
 
 ucs_status_t test_ucp_tag::recv_cb_b(void *buffer, size_t count, ucp_datatype_t datatype,

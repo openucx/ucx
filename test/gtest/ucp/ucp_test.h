@@ -38,6 +38,8 @@ public:
 
         ucp_ep_h ep() const;
 
+        ucp_ep_h revoke_ep() const;
+
         ucp_worker_h worker() const;
 
         ucp_context_h ucph() const;
@@ -61,7 +63,12 @@ class ucp_test : public ucp_test_base,
     friend class ucp_test_base::entity;
 
 public:
+    enum {
+        DEFAULT_PARAM_VARIANT = 0
+    };
+
     UCS_TEST_BASE_IMPL;
+
     ucp_test();
     virtual ~ucp_test();
 

@@ -517,7 +517,8 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
     ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    kh_foreach_value(&worker->ep_hash, ep, ucp_ep_destroy(ep));
+    kh_foreach_value(&worker->ep_hash, ep,
+                     ucp_ep_destroy_internal(ep, " from worker destroy"));
 }
 
 void ucp_worker_destroy(ucp_worker_h worker)

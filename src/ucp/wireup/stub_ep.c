@@ -15,6 +15,12 @@
 #include <ucp/core/ucp_ep.inl>
 
 
+typedef struct {
+    uct_pending_purge_callback_t cb;
+    void                         *arg;
+} ucp_stub_ep_pending_release_proxy_arg_t;
+
+
 UCS_CLASS_DECLARE(ucp_stub_ep_t, ucp_ep_h);
 
 
@@ -141,8 +147,9 @@ static void ucp_stub_ep_pending_req_release(uct_pending_req_t *self,
 {
     ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_stub_ep_t *stub_ep = proxy_req->send.proxy.stub_ep;
+    ucp_stub_ep_pending_release_proxy_arg_t *parg = arg;
 
-    ucp_request_release_pending_send(proxy_req->send.proxy.req, arg);
+    parg->cb(proxy_req->send.proxy.req, parg->arg);
     ucs_atomic_add32(&stub_ep->pending_count, -1);
     ucs_mpool_put(proxy_req);
 }
@@ -190,12 +197,15 @@ static void ucp_stub_pending_purge(uct_ep_h uct_ep,
                                    void *arg)
 {
     ucp_stub_ep_t *stub_ep = ucs_derived_of(uct_ep, ucp_stub_ep_t);
+    ucp_stub_ep_pending_release_proxy_arg_t parg;
+
     ucs_assert_always(ucs_queue_is_empty(&stub_ep->pending_q));
 
     if (stub_ep->aux_ep != NULL) {
-        ucs_assert_always(cb == ucp_request_release_pending_send);
+        parg.cb  = cb;
+        parg.arg = arg;
         uct_ep_pending_purge(stub_ep->aux_ep, ucp_stub_ep_pending_req_release,
-                             arg);
+                             &parg);
     }
 }
 
@@ -216,7 +226,7 @@ static uct_iface_t ucp_stub_iface = {
     .ops = {
         .ep_get_address       = ucp_stub_ep_get_address,
         .ep_connect_to_ep     = ucp_stub_ep_connect_to_ep,
-        .ep_flush             = (void*)ucs_empty_function_return_inprogress,
+        .ep_flush             = (void*)ucs_empty_function_return_no_resource,
         .ep_destroy           = UCS_CLASS_DELETE_FUNC_NAME(ucp_stub_ep_t),
         .ep_pending_add       = ucp_stub_pending_add,
         .ep_pending_purge     = ucp_stub_pending_purge,

@@ -11,82 +11,250 @@
 #include <algorithm>
 
 extern "C" {
-#include <ucp/core/ucp_worker.h>
 #include <ucp/wireup/address.h>
 #include <ucp/proto/proto.h>
 }
 
-
-class test_ucp_wireup_tag : public ucp_test {
+class test_ucp_wireup : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_TAG;
-        return params;
-    }
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params,
+                     const std::string& name,
+                     const std::string& test_case_name,
+                     const std::string& tls);
 
 protected:
-    void tag_send(ucp_ep_h from, ucp_worker_h to, int count = 1);
+    enum {
+        TEST_RMA,
+        TEST_TAG
+    };
+
+    typedef uint64_t               elem_type;
+    typedef std::vector<elem_type> vec_type;
+
+    static const size_t BUFFER_LENGTH    = 16384;
+    static const ucp_datatype_t DT_U64 = ucp_dt_make_contig(sizeof(elem_type));
+    static const uint64_t TAG          = 0xdeadbeef;
+    static const elem_type SEND_DATA   = 0xdeadbeef12121212ull;
+
+    virtual void init();
+    virtual void cleanup();
+
+    void send_nb(ucp_ep_h ep, size_t length, int repeat, std::vector<void*>& reqs);
+
+    void send_b(ucp_ep_h ep,         size_t length, int repeat);
+
+    void recv_b(ucp_worker_h worker, size_t length, int repeat);
+
+    void send_recv(ucp_ep_h ep, ucp_worker_h worker, size_t vecsize, int repeat);
+
+    void disconnect(ucp_ep_h ep);
+
+    void wait(void *req);
+
+    void waitall(std::vector<void*> reqs);
+
+private:
+    vec_type   m_send_data;
+    vec_type   m_recv_data;
+    size_t     m_max_send;
+    ucp_mem_h  m_memh1, m_memh2;
+    ucp_rkey_h m_rkey1, m_rkey2;
+
+    void clear_recv_data();
+
+    ucp_rkey_h get_rkey(ucp_mem_h memh);
 
     static void send_completion(void *request, ucs_status_t status);
 
     static void recv_completion(void *request, ucs_status_t status,
                                 ucp_tag_recv_info_t *info);
-    void wait(void *req);
 };
 
-void test_ucp_wireup_tag::tag_send(ucp_ep_h from, ucp_worker_h to, int count)
+std::vector<ucp_test_param>
+test_ucp_wireup::enum_test_params(const ucp_params_t& ctx_params,
+                                  const std::string& name,
+                                  const std::string& test_case_name,
+                                  const std::string& tls)
 {
-    const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
-    const uint64_t TAG = 0xdeadbeef;
-    uint64_t send_data = 0x12121212;
-    std::vector<void*> reqs;
-    void *req;
+    std::vector<ucp_test_param> result;
+    ucp_params_t tmp_ctx_params = ctx_params;
 
-    for (int i = 0; i < count; ++i) {
-        req = ucp_tag_send_nb(from, &send_data, sizeof(send_data), DATATYPE,
-                              TAG, send_completion);
-        if (UCS_PTR_IS_PTR(req)) {
-            reqs.push_back(req);
-        } else {
-            ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    tmp_ctx_params.features = UCP_FEATURE_RMA;
+    generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/rma",
+                                 tls, TEST_RMA, result);
+
+    tmp_ctx_params.features = UCP_FEATURE_TAG;
+    generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
+                                 tls, TEST_TAG, result);
+
+    return result;
+}
+
+void test_ucp_wireup::init() {
+    ucp_test::init();
+
+    m_send_data.resize(BUFFER_LENGTH, SEND_DATA);
+    m_recv_data.resize(BUFFER_LENGTH, 0);
+
+    if (GetParam().variant == UCP_FEATURE_RMA) {
+        ucs_status_t status;
+
+        void *ptr   = &m_recv_data[0];
+        size_t size = m_recv_data.size() * sizeof(m_recv_data[0]);
+
+        status = ucp_mem_map(receiver().ucph(), &ptr, size, 0, &m_memh1);
+        ASSERT_UCS_OK(status);
+
+        status = ucp_mem_map(sender().ucph(), &ptr, size, 0, &m_memh2);
+        ASSERT_UCS_OK(status);
+
+        m_rkey1 = get_rkey(m_memh1);
+        m_rkey2 = get_rkey(m_memh2);
+    }
+}
+
+ucp_rkey_h test_ucp_wireup::get_rkey(ucp_mem_h memh)
+{
+    void *rkey_buffer;
+    size_t rkey_size;
+    ucs_status_t status;
+    ucp_rkey_h rkey;
+
+    status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_size);
+    ASSERT_UCS_OK(status);
+
+    status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
+    ASSERT_UCS_OK(status);
+
+    ucp_rkey_buffer_release(rkey_buffer);
+
+    return rkey;
+}
+
+void test_ucp_wireup::cleanup() {
+    if (GetParam().variant == UCP_FEATURE_RMA) {
+        ucp_rkey_destroy(m_rkey1);
+        ucp_mem_unmap(receiver().ucph(), m_memh1);
+        ucp_rkey_destroy(m_rkey2);
+        ucp_mem_unmap(sender().ucph(), m_memh2);
+    }
+    ucp_test::cleanup();
+}
+
+void test_ucp_wireup::clear_recv_data() {
+    std::fill(m_recv_data.begin(), m_recv_data.end(), 0);
+}
+
+void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
+                              std::vector<void*>& reqs)
+{
+    if (GetParam().variant == UCP_FEATURE_TAG) {
+        for (int i = 0; i < repeat; ++i) {
+            void *req = ucp_tag_send_nb(ep, &m_send_data[0], length,
+                                        DT_U64, TAG, send_completion);
+            if (UCS_PTR_IS_PTR(req)) {
+                reqs.push_back(req);
+            } else {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+            }
+        }
+    } else if (GetParam().variant == UCP_FEATURE_RMA) {
+        clear_recv_data();
+        for (int i = 0; i < repeat; ++i) {
+            std::fill(m_send_data.begin(), m_send_data.end(), SEND_DATA + i);
+            ucs_status_t status;
+            status = ucp_put(ep, &m_send_data[0],
+                             m_send_data.size() * sizeof(m_send_data[0]),
+                             (uintptr_t)&m_recv_data[0],
+                             (sender().ep() == ep) ? m_rkey1 : m_rkey2);
+            ASSERT_UCS_OK(status);
         }
     }
+}
 
-    for (int i = 0; i < count; ++i) {
-        uint64_t recv_data = 0;
-        req = ucp_tag_recv_nb(to, &recv_data, sizeof(recv_data),
-                              DATATYPE, TAG, (ucp_tag_t)-1, recv_completion);
-        wait(req);
+void test_ucp_wireup::send_b(ucp_ep_h ep, size_t length, int repeat)
+{
+    std::vector<void*> reqs;
+    send_nb(ep, length, repeat, reqs);
+    waitall(reqs);
+}
 
-        EXPECT_EQ(send_data, recv_data);
-    }
-
-    while (!reqs.empty()) {
-        req = reqs.back();
-        wait(req);
-        reqs.pop_back();
+void test_ucp_wireup::recv_b(ucp_worker_h worker, size_t length, int repeat)
+{
+    if (GetParam().variant == UCP_FEATURE_TAG) {
+        for (int i = 0; i < repeat; ++i) {
+            clear_recv_data();
+            void *req = ucp_tag_recv_nb(worker, &m_recv_data[0], length,
+                                        DT_U64, TAG, (ucp_tag_t)-1,
+                                        recv_completion);
+            if (UCS_PTR_IS_PTR(req)) {
+                wait(req);
+            } else {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+            }
+            EXPECT_EQ(length,
+                      (size_t)std::count(m_recv_data.begin(), m_recv_data.begin() + length,
+                                         elem_type(SEND_DATA)));
+        }
+    } else if (GetParam().variant == UCP_FEATURE_RMA) {
+        for (size_t i = 0; i < length; ++i) {
+            while (m_recv_data[i] != SEND_DATA + repeat);
+        }
     }
 }
 
-void test_ucp_wireup_tag::send_completion(void *request, ucs_status_t status)
+void test_ucp_wireup::send_completion(void *request, ucs_status_t status)
 {
 }
 
-void test_ucp_wireup_tag::recv_completion(void *request, ucs_status_t status,
+void test_ucp_wireup::recv_completion(void *request, ucs_status_t status,
                                       ucp_tag_recv_info_t *info)
 {
 }
 
-void test_ucp_wireup_tag::wait(void *req)
+void test_ucp_wireup::send_recv(ucp_ep_h ep, ucp_worker_h worker,
+                                size_t length, int repeat)
 {
+    std::vector<void*> send_reqs;
+    send_nb(ep,     length, repeat, send_reqs);
+    recv_b (worker, length, repeat);
+    waitall(send_reqs);
+}
+
+void test_ucp_wireup::disconnect(ucp_ep_h ep) {
+    void *req = ucp_disconnect_nb(ep);
+    if (!UCS_PTR_IS_PTR(req)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    }
+    wait(req);
+}
+
+void test_ucp_wireup::wait(void *req)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    ucs_status_t status;
     do {
         progress();
-    } while (!ucp_request_is_completed(req));
+        ucp_tag_recv_info info;
+        status = ucp_request_test(req, &info);
+    } while (status == UCS_INPROGRESS);
+    ASSERT_UCS_OK(status);
     ucp_request_release(req);
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, address) {
+void test_ucp_wireup::waitall(std::vector<void*> reqs)
+{
+    while (!reqs.empty()) {
+        wait(reqs.back());
+        reqs.pop_back();
+    }
+}
+
+UCS_TEST_P(test_ucp_wireup, address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
@@ -115,7 +283,7 @@ UCS_TEST_P(test_ucp_wireup_tag, address) {
     ucs_free(buffer);
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, empty_address) {
+UCS_TEST_P(test_ucp_wireup, empty_address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
@@ -142,182 +310,211 @@ UCS_TEST_P(test_ucp_wireup_tag, empty_address) {
     ucs_free(buffer);
 }
 
-
-UCS_TEST_P(test_ucp_wireup_tag, one_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup, one_sided_wireup) {
     sender().connect(&receiver());
-    tag_send(sender().ep(), receiver().worker());
+    send_recv(sender().ep(), receiver().worker(), 1, 1);
     sender().flush_worker();
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, two_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup, two_sided_wireup) {
     sender().connect(&receiver());
     if (&sender() != &receiver()) {
         receiver().connect(&sender());
     }
 
-    tag_send(sender().ep(), receiver().worker());
+    send_recv(sender().ep(), receiver().worker(), 1, 1);
     sender().flush_worker();
-    tag_send(receiver().ep(), sender().worker());
+    send_recv(receiver().ep(), sender().worker(), 1, 1);
     receiver().flush_worker();
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_before) {
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
+UCS_TEST_P(test_ucp_wireup, multi_wireup) {
+    skip_loopback();
+
+    const size_t count = 10;
+    while (entities().size() < count) {
+        create_entity();
     }
+
+    /* connect from sender() to all the rest */
+    for (size_t i = 0; i < count; ++i) {
+        sender().connect(&entities().at(i));
+    }
+}
+
+UCS_TEST_P(test_ucp_wireup, reply_ep_send_before) {
+    skip_loopback();
 
     sender().connect(&receiver());
 
-    ucp_ep_connect_remote(sender().ep());
+    if (GetParam().variant == TEST_TAG) {
+        /* Send a reply */
+        ucp_ep_connect_remote(sender().ep());
+        ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(),
+                                              sender().worker()->uuid);
+        send_recv(ep, sender().worker(), 1, 1);
+        sender().flush_worker();
 
-    /* Send a reply */
-    ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(), sender().worker()->uuid);
-    tag_send(ep, sender().worker());
-    sender().flush_worker();
-
-    ucp_ep_destroy(ep);
+        ucp_ep_destroy(ep);
+    }
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, reply_ep_send_after) {
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+UCS_TEST_P(test_ucp_wireup, reply_ep_send_after) {
+    skip_loopback();
 
     sender().connect(&receiver());
 
-    ucp_ep_connect_remote(sender().ep());
+    if (GetParam().variant == TEST_TAG) {
+        ucp_ep_connect_remote(sender().ep());
 
-    /* Make sure the wireup message arrives before sending a reply */
-    tag_send(sender().ep(), receiver().worker());
-    sender().flush_worker();
+        /* Make sure the wireup message arrives before sending a reply */
+        send_recv(sender().ep(), receiver().worker(), 1, 1);
+        sender().flush_worker();
 
-    /* Send a reply */
-    ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(), sender().worker()->uuid);
-    tag_send(ep, sender().worker());
-    sender().flush_worker();
+        /* Send a reply */
+        ucp_ep_h ep = ucp_worker_get_reply_ep(receiver().worker(), sender().worker()->uuid);
+        send_recv(ep, sender().worker(), 1, 1);
 
-    ucp_ep_destroy(ep);
+        sender().flush_worker();
+
+        ucp_ep_destroy(ep);
+    }
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, stress_connect) {
+UCS_TEST_P(test_ucp_wireup, stress_connect) {
     for (int i = 0; i < 30; ++i) {
         sender().connect(&receiver());
-        tag_send(sender().ep(), receiver().worker(), 10000 / ucs::test_time_multiplier());
-        if (&sender() != &receiver()) {
+        send_recv(sender().ep(), receiver().worker(), 1,
+                  10000 / ucs::test_time_multiplier());
+        if (!is_loopback()) {
             receiver().connect(&sender());
         }
-        sender().disconnect();
-        receiver().disconnect();
+
+        disconnect(sender().revoke_ep());
+        if (!is_loopback()) {
+            disconnect(receiver().revoke_ep());
+        }
     }
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, stress_connect2) {
+UCS_TEST_P(test_ucp_wireup, stress_connect2) {
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
         sender().connect(&receiver());
-        tag_send(sender().ep(), receiver().worker(), 1);
+        send_recv(sender().ep(), receiver().worker(), 1, 1);
         if (&sender() != &receiver()) {
             receiver().connect(&sender());
         }
-        sender().disconnect();
+
+        disconnect(sender().revoke_ep());
+        if (!is_loopback()) {
+            disconnect(receiver().revoke_ep());
+        }
+    }
+}
+
+UCS_TEST_P(test_ucp_wireup, connect_disconnect) {
+    sender().connect(&receiver());
+    if (!is_loopback()) {
+        receiver().connect(&sender());
+    }
+    sender().disconnect();
+    if (!is_loopback()) {
         receiver().disconnect();
     }
 }
 
-UCS_TEST_P(test_ucp_wireup_tag, connect_disconnect) {
+UCS_TEST_P(test_ucp_wireup, disconnect_nonexistent) {
     sender().connect(&receiver());
-    if (&sender() != &receiver()) {
-        receiver().connect(&sender());
-    }
     sender().disconnect();
-    receiver().disconnect();
-}
-
-UCS_TEST_P(test_ucp_wireup_tag, disconnect_nonexistent) {
-    sender().connect(&receiver());
     receiver().destroy_worker();
+    sender().destroy_worker();
+}
+
+UCS_TEST_P(test_ucp_wireup, disconnect_reconnect) {
+    sender().connect(&receiver());
+    send_b(sender().ep(), 1000, 1);
     sender().disconnect();
-}
+    recv_b(receiver().worker(), 1000, 1);
 
-class test_ucp_wireup_rma : public ucp_test {
-public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_RMA;
-        return params;
-    }
-
-protected:
-    void rma_send(ucp_ep_h from, ucp_worker_h to);
-};
-
-void test_ucp_wireup_rma::rma_send(ucp_ep_h from, ucp_worker_h to)
-{
-    uint64_t send_data = 0x12121212;
-    uint64_t recv_data = 0;
-    ucs_status_t status;
-    void *rkey_buffer;
-    size_t rkey_size;
-    ucp_rkey_h rkey;
-    ucp_mem_h memh;
-    void *ptr;
-
-    ptr = &recv_data;
-    status = ucp_mem_map(to->context, &ptr, sizeof(recv_data), 0, &memh);
-    ASSERT_UCS_OK(status);
-
-    status = ucp_rkey_pack(to->context, memh, &rkey_buffer, &rkey_size);
-    ASSERT_UCS_OK(status);
-
-    status = ucp_ep_rkey_unpack(from, rkey_buffer, &rkey);
-    ASSERT_UCS_OK(status);
-
-    ucp_rkey_buffer_release(rkey_buffer);
-
-    status = ucp_put(from, &send_data, sizeof(send_data), (uintptr_t)&recv_data, rkey);
-    ASSERT_UCS_OK(status);
-
-    status = ucp_ep_flush(from);
-    ASSERT_UCS_OK(status);
-
-    while (recv_data != send_data);
-
-    ucp_rkey_destroy(rkey);
-
-    ucp_mem_unmap(to->context, memh);
-}
-
-UCS_TEST_P(test_ucp_wireup_rma, one_sided_wireup) {
     sender().connect(&receiver());
-    rma_send(sender().ep(), receiver().worker());
-    sender().flush_worker();
+    send_b(sender().ep(), 1000, 1);
+    sender().disconnect();
+    recv_b(receiver().worker(), 1000, 1);
 }
 
-UCS_TEST_P(test_ucp_wireup_rma, two_sided_wireup) {
+UCS_TEST_P(test_ucp_wireup, send_disconnect_onesided) {
     sender().connect(&receiver());
-    if (&sender() != &receiver()) {
+    send_b(sender().ep(), 1000, 100);
+    sender().disconnect();
+    recv_b(receiver().worker(), 1000, 100);
+}
+
+UCS_TEST_P(test_ucp_wireup, send_disconnect_onesided_nozcopy, "ZCOPY_THRESH=-1") {
+    sender().connect(&receiver());
+    send_b(sender().ep(), 1000, 100);
+    sender().disconnect();
+    recv_b(receiver().worker(), 1000, 100);
+}
+
+UCS_TEST_P(test_ucp_wireup, send_disconnect_reply1) {
+    sender().connect(&receiver());
+    if (!is_loopback()) {
         receiver().connect(&sender());
     }
 
-    rma_send(sender().ep(), receiver().worker());
-    sender().flush_worker();
-    rma_send(receiver().ep(), sender().worker());
-    receiver().flush_worker();
-}
-
-UCS_TEST_P(test_ucp_wireup_rma, connect_disconnect) {
-    sender().connect(&receiver());
-    if (&sender() != &receiver()) {
-        receiver().connect(&sender());
+    send_b(sender().ep(), 8, 1);
+    if (!is_loopback()) {
+        sender().disconnect();
     }
-    sender().disconnect();
+
+    recv_b(receiver().worker(), 8, 1);
+    send_b(receiver().ep(), 8, 1);
     receiver().disconnect();
+    recv_b(sender().worker(), 8, 1);
 }
 
-UCS_TEST_P(test_ucp_wireup_rma, disconnect_nonexistent) {
+UCS_TEST_P(test_ucp_wireup, send_disconnect_reply2) {
     sender().connect(&receiver());
-    receiver().destroy_worker();
-    sender().disconnect();
+
+    send_b(sender().ep(), 8, 1);
+    if (!is_loopback()) {
+        sender().disconnect();
+    }
+    recv_b(receiver().worker(), 8, 1);
+
+    if (!is_loopback()) {
+        receiver().connect(&sender());
+    }
+
+    send_b(receiver().ep(), 8, 1);
+    receiver().disconnect();
+    recv_b(sender().worker(), 8, 1);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_tag)
-UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_rma)
+UCS_TEST_P(test_ucp_wireup, send_disconnect_onesided_wait) {
+    sender().connect(&receiver());
+    send_recv(sender().ep(), receiver().worker(), 8, 1);
+    send_b(sender().ep(), 1000, 200);
+    sender().disconnect();
+    recv_b(receiver().worker(), 1000, 200);
+}
+
+UCS_TEST_P(test_ucp_wireup, disconnect_nb_onesided) {
+    sender().connect(&receiver());
+
+    std::vector<void*> sreqs;
+    send_nb(sender().ep(), 1000, 1000, sreqs);
+
+    void *dreq = ucp_disconnect_nb(sender().revoke_ep());
+    if (!UCS_PTR_IS_PTR(dreq)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+    }
+
+    wait(dreq);
+    recv_b(receiver().worker(), 1000, 1000);
+
+    waitall(sreqs);
+
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup)

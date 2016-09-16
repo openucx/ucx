@@ -114,6 +114,16 @@ public:
         return *m_entities.back();
     }
 
+    bool is_loopback() {
+        return &sender() == &receiver();
+    }
+
+    void skip_loopback() {
+        if (is_loopback()) {
+            UCS_TEST_SKIP_R("loopback");
+        }
+    }
+
     ucs::ptr_vector<T> m_entities;
 };
 

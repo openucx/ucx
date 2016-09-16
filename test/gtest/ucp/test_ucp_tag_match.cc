@@ -20,7 +20,6 @@ public:
     {
         test_ucp_tag::init();
         ucp_test_param param = GetParam();
-        is_req_based_api = param.variant;
     }
 
     static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
@@ -28,18 +27,12 @@ public:
                                                         const std::string& test_case_name,
                                                         const std::string& tls)
     {
-        std::vector<ucp_test_param> tmp, tmp_ret;
-        ucp_test_param test_param;
-
-        tmp = ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
-        for (std::vector<ucp_test_param>::iterator it = tmp.begin(); it != tmp.end(); it++)
-        {
-            it->variant = false;
-            tmp_ret.push_back(*it);
-            it->variant = true;
-            tmp_ret.push_back(*it);
-        }
-        return tmp_ret;
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     RECV_REQ_INTERNAL, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     RECV_REQ_EXTERNAL, result);
+        return result;
     }
 };
 

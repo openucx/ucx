@@ -16,6 +16,11 @@ public:
     static ucp_params_t get_ctx_params();
 
 protected:
+    enum {
+        RECV_REQ_INTERNAL = DEFAULT_PARAM_VARIANT,
+        RECV_REQ_EXTERNAL
+    };
+
     struct request {
         bool                completed;
         bool                external;
@@ -94,7 +99,6 @@ protected:
     static ucp_generic_dt_ops test_dt_ops;
     static int dt_gen_start_count;
     static int dt_gen_finish_count;
-    bool   is_req_based_api;
     static ucp_context_attr_t ctx_attr;
 public:
     int    count;
