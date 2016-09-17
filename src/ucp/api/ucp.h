@@ -665,7 +665,7 @@ void ucp_worker_destroy(ucp_worker_h worker);
  * This routine prints information about the protocols being used, thresholds,
  * UCT transport methods, and other useful information associated with the worker.
  *
- * @param [in] worker       Worker object ro print information for.
+ * @param [in] worker       Worker object to print information for.
  * @param [in] stream       Output stream to print the information to.
  */
 void ucp_worker_print_info(ucp_worker_h worker, FILE *stream);
@@ -902,7 +902,7 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
  * @ingroup UCP_ENDPOINT
  * @brief Print endpoint information.
  *
- * This routine prints information about the endpoint transport methods, limits,
+ * This routine prints information about the endpoint transport methods, thier
  * thresholds, and other useful information associated with the endpoint.
  *
  * @param [in] ep           Endpoint object whose configuration to print.
