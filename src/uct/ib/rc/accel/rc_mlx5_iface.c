@@ -47,6 +47,9 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
 
     ucs_memory_cpu_load_fence();
 
+    ucs_assertv(!(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)),
+                "tx inline scatter not supported");
+
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num), uct_rc_mlx5_ep_t);
     ucs_assert(ep != NULL);
