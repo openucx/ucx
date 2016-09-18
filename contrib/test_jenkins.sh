@@ -136,7 +136,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         mpirun -np 2 -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
 
         echo Running active_message example on $hca with rc
-        mpirun -np 2 -mca pml ob1 -mca btl sm,self ./active_message $hca "rc"
+        UCX_IB_ETH_PAUSE_ON=y mpirun -np 2 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll ./active_message $hca "rc"
 
         # todo: add csv generation
 
