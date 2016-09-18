@@ -31,7 +31,6 @@ typedef struct uct_dc_iface_config {
     uct_rc_verbs_iface_config_t   super;
     int                           ndci;
     int                           tx_policy;
-    int                           max_inline;
 } uct_dc_iface_config_t;
 
 typedef struct uct_dc_dci {
@@ -49,10 +48,10 @@ typedef struct uct_dc_iface {
         uint8_t       stack_top;    /* dci stack top */
         uint8_t       ndci;         /* Number of DCIs */
         uint8_t       policy;       /* dci selection algorithm */
-        ucs_arbiter_t dci_arbiter;   
+        ucs_arbiter_t dci_arbiter;
     } tx;
     struct { 
-        struct ibv_exp_dct *dct;    
+        struct ibv_exp_dct *dct;
     } rx;
 } uct_dc_iface_t;
 

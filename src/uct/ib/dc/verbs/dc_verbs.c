@@ -646,47 +646,62 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    int i;
-    ucs_status_t status;
     uct_dc_iface_config_t *config = ucs_derived_of(tl_config,
                                                    uct_dc_iface_config_t);
+    struct ibv_qp_init_attr dci_init_attr;
+    struct ibv_qp_attr dci_attr;
+    ucs_status_t status;
+    int i, ret;
+
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, md,
                               worker, dev_name, rx_headroom, 0, config);
 
-    self->verbs_common.config.max_inline = config->max_inline;
-
-    status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super, &config->super);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     uct_dc_verbs_iface_init_wrs(self);
 
-    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super);
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super,
+                                            &config->super);
     if (status != UCS_OK) {
-        goto out;
+        goto err;
     }
 
-    self->dcis_txcnt = ucs_malloc(self->super.tx.ndci * sizeof(uct_rc_verbs_txcnt_t), "dc");
+    ret = ibv_query_qp(self->super.tx.dcis[0].txqp.qp, &dci_attr, 0,
+                       &dci_init_attr);
+    if (ret) {
+        ucs_error("ibv_query_qp() failed: %m");
+        goto err_common_cleanup;
+    }
+
+    self->verbs_common.config.max_inline = dci_init_attr.cap.max_inline_data;
+
+    self->dcis_txcnt = ucs_malloc(self->super.tx.ndci * sizeof(uct_rc_verbs_txcnt_t),
+                                  "dc_txcnt");
     if (self->dcis_txcnt == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        goto err_common_cleanup;
     }
 
     for (i = 0; i < self->super.tx.ndci; i++) {
         uct_rc_verbs_txcnt_init(&self->dcis_txcnt[i]);
-        uct_rc_txqp_available_set(&self->super.tx.dcis[i].txqp, self->super.super.config.tx_qp_len);
+        uct_rc_txqp_available_set(&self->super.tx.dcis[i].txqp,
+                                  self->super.super.config.tx_qp_len);
     }
-    
-    /**
-     * TODO: only register progress when we have a connection
-     */
+
+    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super);
+    if (status != UCS_OK) {
+        goto err_free_txcnt;
+    }
+
+    /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self);
-    ucs_debug("created iface %p", self);
+    ucs_debug("created dc iface %p", self);
     return UCS_OK;
-out:
+
+err_free_txcnt:
+    ucs_free(self->dcis_txcnt);
+err_common_cleanup:
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
+err:
     return status;
 }
 

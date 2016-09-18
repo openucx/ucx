@@ -56,17 +56,21 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
 
     status = uct_rc_iface_qp_create(iface, qp_type, &txqp->qp, cap);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
                                   stats_parent, "-0x%x", txqp->qp->qp_num);
     if (status != UCS_OK) {
-        ibv_destroy_qp(txqp->qp);
-        return status;
+        goto err_destroy_qp;
     }
 
     return UCS_OK;
+
+err_destroy_qp:
+    ibv_destroy_qp(txqp->qp);
+err:
+    return status;
 }
 
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
