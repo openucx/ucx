@@ -50,11 +50,16 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
      * - dci is either assigned or can be assigned
      * - dci has resources
      */
-    if (uct_rc_iface_has_tx_resources(&iface->super) &&
-        ((ep->dci != UCT_DC_EP_NO_DCI) || uct_dc_iface_dci_can_alloc(iface)) &&
-        uct_dc_iface_dci_ep_can_send(ep))
-    {
-        return UCS_ERR_BUSY;
+    if (uct_rc_iface_has_tx_resources(&iface->super)) {
+        if (ep->dci == UCT_DC_EP_NO_DCI) {
+            if (uct_dc_iface_dci_can_alloc(iface)) {
+                return UCS_ERR_BUSY;
+            }
+        } else {
+            if (uct_dc_iface_dci_ep_can_send(ep)) {
+                return UCS_ERR_BUSY;
+            }
+        }
     }
 
     UCS_STATIC_ASSERT(sizeof(ucs_arbiter_elem_t) <= UCT_PENDING_REQ_PRIV_LEN);
