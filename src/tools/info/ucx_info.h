@@ -17,7 +17,10 @@ enum {
     PRINT_BUILD_CONFIG   = UCS_BIT(2),
     PRINT_TYPES          = UCS_BIT(3),
     PRINT_DEVICES        = UCS_BIT(4),
-    PRINT_PROTOCOLS      = UCS_BIT(5)
+    PRINT_UCP_CONTEXT    = UCS_BIT(5),
+    PRINT_UCP_WORKER     = UCS_BIT(6),
+    PRINT_UCP_EP         = UCS_BIT(7)
+
 };
 
 
@@ -36,7 +39,8 @@ void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
 
 void print_type_info(const char * tl_name);
 
-void print_proto_info(ucs_config_print_flags_t print_flags);
+void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
+                    uint64_t features);
 
 /**
  * @ingroup RESOURCE

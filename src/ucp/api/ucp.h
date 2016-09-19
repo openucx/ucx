@@ -598,6 +598,21 @@ void ucp_cleanup(ucp_context_h context_p);
 ucs_status_t ucp_context_query(ucp_context_h context_p,
                                ucp_context_attr_t *attr);
 
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Print context information.
+ *
+ * This routine prints information about the context configuration, including
+ * memory domains, transport resources, and other useful information associated
+ * with the context.
+ *
+ * @param [in] context      Context object whose configuration to print.
+ * @param [in] stream       Output stream to print the information to.
+ */
+void ucp_context_print_info(ucp_context_h context, FILE *stream);
+
+
 /**
  * @ingroup UCP_WORKER
  * @brief Create a worker object.
@@ -645,18 +660,15 @@ void ucp_worker_destroy(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WORKER
- * @brief Print information about protocols that would be used by a worker.
+ * @brief Print information about the worker.
  *
  * This routine prints information about the protocols being used, thresholds,
  * UCT transport methods, and other useful information associated with the worker.
  *
- * @param [in] worker       Worker object whose address to return.
+ * @param [in] worker       Worker object to print information for.
  * @param [in] stream       Output stream to print the information to.
- * @param [in] title        Configuration title to print.
- * @param [in] print_flags  Flags that control various printing options.
  */
-void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title,
-                            ucs_config_print_flags_t print_flags);
+void ucp_worker_print_info(ucp_worker_h worker, FILE *stream);
 
 
 /**
@@ -884,6 +896,19 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
  *                          routine.
  */
 ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Print endpoint information.
+ *
+ * This routine prints information about the endpoint transport methods, thier
+ * thresholds, and other useful information associated with the endpoint.
+ *
+ * @param [in] ep           Endpoint object whose configuration to print.
+ * @param [in] stream       Output stream to print the information to.
+ */
+void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
 
 
 /**

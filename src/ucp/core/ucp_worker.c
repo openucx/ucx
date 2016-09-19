@@ -771,84 +771,40 @@ void ucp_worker_stub_ep_remove(ucp_worker_h worker, ucp_stub_ep_t *stub_ep)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-static void ucp_worker_print_config(FILE *stream, const char * const *names,
-                                    const size_t *values, unsigned count,
-                                    const char *rel)
-{
-    char buf[256];
-    unsigned i;
-
-    fprintf(stream, "#   ");
-    for (i = 0; i < count; ++i) {
-        if (values[i] == SIZE_MAX) {
-            strcpy(buf, "(inf)");
-        } else {
-            snprintf(buf, sizeof(buf), "%zu", values[i]);
-        }
-        fprintf(stream, " %10s %s %-10s", names[i], rel, buf);
-    }
-    fprintf(stream, "\n");
-}
-
-void ucp_worker_proto_print(ucp_worker_h worker, FILE *stream, const char *title,
-                            ucs_config_print_flags_t print_flags)
+void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 {
     ucp_context_h context = worker->context;
-    ucp_ep_config_t *config;
-    ucp_rsc_index_t tl_id;
-    char rsc_name[UCT_TL_NAME_MAX + UCT_DEVICE_NAME_MAX + 2];
     ucp_address_t *address;
     size_t address_length;
     ucs_status_t status;
+    ucp_rsc_index_t rsc_index;
+    int first;
 
-    if (print_flags & UCS_CONFIG_PRINT_HEADER) {
-        fprintf(stream, "#\n");
-        fprintf(stream, "# %s\n", title);
-        fprintf(stream, "#\n");
-    }
-
-    fprintf(stream, "# Name:           `%s'\n", ucp_worker_get_name(worker));
+    fprintf(stream, "#\n");
+    fprintf(stream, "# UCP worker '%s'\n", ucp_worker_get_name(worker));
+    fprintf(stream, "#\n");
 
     status = ucp_worker_get_address(worker, &address, &address_length);
     if (status == UCS_OK) {
         ucp_worker_release_address(worker, address);
-        fprintf(stream, "# Address length: %zu bytes\n", address_length);
+        fprintf(stream, "#              address: %zu bytes\n", address_length);
     } else {
         fprintf(stream, "# <failed to get address>\n");
     }
 
-    fprintf(stream, "#\n");
-
-    fprintf(stream, "# Transports: \n");
-    fprintf(stream, "#\n");
-
-    for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
-
-        snprintf(rsc_name, sizeof(rsc_name), UCT_TL_RESOURCE_DESC_FMT,
-                 UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[tl_id].tl_rsc));
-
-        fprintf(stream, "# %3d %-18s\n", tl_id, rsc_name);
-        fprintf(stream, "#\n");
-
-        config = &worker->ep_config[tl_id];
-        {
-            const char *names[] = {"egr_short", "am_bcopy", "am_zcopy", "rndv_get_zcopy"};
-            size_t     values[] = {config->max_eager_short,
-                                   config->max_am_bcopy,
-                                   config->max_am_zcopy,
-                                   config->max_rndv_get_zcopy};
-
-            ucp_worker_print_config(stream, names, values, 3, "<=");
+    fprintf(stream, "#              atomics: ");
+    first = 1;
+    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+        if (worker->atomic_tls & UCS_BIT(rsc_index)) {
+            if (!first) {
+                fprintf(stream, ", ");
+            }
+            fprintf(stream, "%d:"UCT_TL_RESOURCE_DESC_FMT, rsc_index,
+                    UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
+            first = 0;
         }
-
-        {
-            const char *names[] = {"bcopy", "rndv", "zcopy"};
-            size_t     values[] = {config->bcopy_thresh, config->rndv_thresh,
-                                   config->zcopy_thresh};
-            ucp_worker_print_config(stream, names, values, 3, ">=");
-        }
-
-        fprintf(stream, "#\n");
-        fprintf(stream, "#\n");
     }
+    fprintf(stream, "\n");
+
+    fprintf(stream, "#\n");
 }
