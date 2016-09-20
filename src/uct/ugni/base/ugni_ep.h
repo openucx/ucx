@@ -19,18 +19,20 @@ if (0 == len) {                                     \
 }
 
 typedef struct uct_sockaddr_ugni {
-   uint16_t   domain_id;
+     uint16_t   domain_id;
 } UCS_S_PACKED uct_sockaddr_ugni_t;
 
 typedef struct uct_ugni_ep {
-  uct_base_ep_t     super;
-  gni_ep_handle_t   ep;
-  unsigned          outstanding;
-  uint32_t          hash_key;
-  ucs_arbiter_group_t arb_group;
-  uint32_t arb_size;
-  uint32_t arb_sched;
-  struct uct_ugni_ep *next;
+    uct_base_ep_t     super;
+    gni_ep_handle_t   ep;
+    unsigned          outstanding;
+    uint32_t          hash_key;
+    ucs_arbiter_group_t arb_group;
+    uint32_t arb_size;
+    uint32_t arb_flush;
+    uint32_t arb_sched;
+    uint32_t flush_flag;
+    struct uct_ugni_ep *next;
 } uct_ugni_ep_t;
 
 static inline int32_t uct_ugni_ep_compare(uct_ugni_ep_t *ep1, uct_ugni_ep_t *ep2)
@@ -62,4 +64,22 @@ void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
                                                     ucs_arbiter_elem_t *elem,
                                                     void *arg);
+
+static inline void uct_ugni_ep_check_flush(uct_ugni_ep_t *ep){
+    if(!ep->outstanding && ep->flush_flag && !ep->arb_flush){
+        ep->flush_flag = 0;
+    }
+}
+
+static inline int uct_ugni_can_send(uct_ugni_ep_t *ep)
+{
+
+    return (((ep->arb_size > 0) || ep->flush_flag) && !ep->arb_sched) ? 0 : 1;
+}
+
+static inline int uct_ugni_can_flush(uct_ugni_ep_t *ep)
+{
+    return ((ep->arb_flush <= 0) || ep->arb_sched) && !ep->outstanding ? 1 : 0;
+}
+
 #endif

@@ -30,15 +30,22 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_status_t rc;
 
+    /* If a flush is in progress, and we are done with the pending queue, skip us. */
+    if(ep->flush_flag && !ep->arb_flush){
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+
     ep->arb_sched = 1;
     rc = req->func(req);
     ep->arb_sched = 0;
     ucs_trace_data("progress pending request %p returned %s", req,
                    ucs_status_string(rc));
 
-
     if (UCS_OK == rc) {
         ep->arb_size--;
+        if(ep->flush_flag) {
+            ep->arb_flush--;
+        }
         /* sent successfully. remove from the arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (UCS_INPROGRESS == rc) {
@@ -113,6 +120,8 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
     gni_return_t ugni_rc;
     self->arb_size = 0;
     self->arb_sched = 0;
+    self->flush_flag = 0;
+    self->arb_flush = 0;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 

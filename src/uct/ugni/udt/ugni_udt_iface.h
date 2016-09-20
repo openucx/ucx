@@ -30,11 +30,6 @@ typedef struct uct_ugni_udt_iface {
     } config;
 } uct_ugni_udt_iface_t;
 
-typedef struct uct_ugni_iface_config {
-    uct_iface_config_t       super;
-    uct_iface_mpool_config_t mpool;
-} uct_ugni_iface_config_t;
-
 enum {
     UCT_UGNI_UDT_EMPTY    = 0,
     UCT_UGNI_UDT_PAYLOAD  = 1

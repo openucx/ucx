@@ -62,4 +62,9 @@ void uct_ugni_base_desc_key_init(uct_iface_h iface, void *obj, uct_mem_h memh);
 ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
                                          uct_tl_resource_desc_t **resource_p,
                                          unsigned *num_resources_p);
+
+typedef struct uct_ugni_iface_config {
+    uct_iface_config_t       super;
+    uct_iface_mpool_config_t mpool;
+} uct_ugni_iface_config_t;
 #endif

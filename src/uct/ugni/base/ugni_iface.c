@@ -29,7 +29,7 @@ void uct_ugni_progress(void *arg)
 
     ugni_rc = GNI_CqGetEvent(iface->local_cq, &event_data);
     if (GNI_RC_NOT_DONE == ugni_rc) {
-        return;
+        goto out;
     }
 
     if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
@@ -58,6 +58,9 @@ void uct_ugni_progress(void *arg)
         ucs_mpool_put(desc);
     }
 
+    uct_ugni_ep_check_flush(desc->ep);
+
+out:
     /* have a go a processing the pending queue */
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
     return;
@@ -88,18 +91,16 @@ ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                            uct_ugni_iface_t);
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (0 == ep->outstanding) {
+    if (uct_ugni_can_flush(ep)) {
         UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
         return UCS_OK;
     }
 
+    ep->flush_flag = 1;
+    ep->arb_flush = ep->arb_size;
     uct_ugni_progress(iface);
     UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
-    return UCS_INPROGRESS;
+    return UCS_ERR_NO_RESOURCE;
 }
 
 ucs_status_t uct_ugni_query_tl_resources(uct_md_h md, const char *tl_name,
@@ -370,6 +371,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
   self->outstanding = 0;
 
   sglib_hashed_uct_ugni_ep_t_init(self->eps);
+
   ucs_arbiter_init(&self->arbiter);
 
   return UCS_OK;
