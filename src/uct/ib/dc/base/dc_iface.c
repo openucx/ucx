@@ -153,8 +153,15 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, dev_name, rx_headroom,
                               rx_priv_len, &config->super.super);
 
-    if (config->ndci <= 1) {
-        ucs_error("dc interface must have at least 1 dci");
+    if (config->ndci < 1) {
+        ucs_error("dc interface must have at least 1 dci (requested: %d)",
+                  config->ndci);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (config->ndci > UCT_DC_IFACE_MAX_DCIS) {
+        ucs_error("dc interface can have at most %d dcis (requested: %d)",
+                  UCT_DC_IFACE_MAX_DCIS, config->ndci);
         return UCS_ERR_INVALID_PARAM;
     }
 
