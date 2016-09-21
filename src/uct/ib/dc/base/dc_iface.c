@@ -12,7 +12,7 @@ const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_LAST]          = NULL
 };
 
-static ucs_status_t uct_dc_iface_tgt_create(uct_dc_iface_t *iface)
+static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 {
     struct ibv_exp_dct_init_attr init_attr;
 
@@ -100,53 +100,46 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
     return UCS_OK;
 }
 
-static ucs_status_t uct_dc_iface_dcis_create(uct_dc_iface_t *iface, uct_dc_iface_config_t *config)
+static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)
 {
+    int i;
+    for (i = 0; i < max; i++) {
+        uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
+    }
+}
+
+static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
+                                             uct_dc_iface_config_t *config)
+{
+    struct ibv_qp_cap cap;
     ucs_status_t status;
     int i;
-    struct ibv_qp_cap cap;
 
     ucs_debug("creating %d dci(s)", iface->tx.ndci);
-    iface->tx.dcis = ucs_malloc(iface->tx.ndci * sizeof(uct_dc_dci_t), "dc");
-    if (iface->tx.dcis == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    iface->tx.dcis_stack = ucs_malloc(iface->tx.ndci * sizeof(uint8_t), "dc");
-    if (iface->tx.dcis_stack == NULL) {
-        free(iface->tx.dcis);
-        return UCS_ERR_NO_MEMORY;
-    }
 
     iface->tx.stack_top = 0;
-
     for (i = 0; i < iface->tx.ndci; i++) {
         status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super, 
                                   IBV_EXP_QPT_DC_INI, &cap 
                                   UCS_STATS_ARG(iface->super.stats));
         if (status != UCS_OK) {
-            goto create_err;
+            goto err;
         }
 
         status = uct_dc_iface_dci_connect(iface, &iface->tx.dcis[i].txqp);
         if (status != UCS_OK) {
-            goto create_err;
+            uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
+            goto err;
         }
 
         iface->tx.dcis_stack[i] = i;
         iface->tx.dcis[i].ep    = NULL;
     }
-    config->max_inline = cap.max_inline_data;
+
     return UCS_OK;
 
-create_err:
-    for (;i >= 0; i--) {
-        if (iface->tx.dcis[i].txqp.qp) { 
-            ibv_destroy_qp(iface->tx.dcis[i].txqp.qp);
-        }
-    }
-    ucs_free(iface->tx.dcis);
-    ucs_free(iface->tx.dcis_stack);
+err:
+    uct_dc_iface_dcis_destroy(iface, i);
     return status;
 }
 
@@ -160,38 +153,51 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, dev_name, rx_headroom,
                               rx_priv_len, &config->super.super);
 
-    self->tx.ndci   = config->ndci;
-    self->tx.policy = config->tx_policy;
-    ucs_debug("using %s dci selection algorithm",
-              uct_dc_tx_policy_names[self->tx.policy]);
+    if (config->ndci < 1) {
+        ucs_error("dc interface must have at least 1 dci (requested: %d)",
+                  config->ndci);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (config->ndci > UCT_DC_IFACE_MAX_DCIS) {
+        ucs_error("dc interface can have at most %d dcis (requested: %d)",
+                  UCT_DC_IFACE_MAX_DCIS, config->ndci);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    self->tx.ndci                    = config->ndci;
+    self->tx.policy                  = config->tx_policy;
+    self->super.config.tx_moderation = 0; /* disable tx moderation for dcs */
+
+    ucs_debug("dc iface %p: using '%s' policy with %d dcis", self,
+              uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci);
+
     /* create DC target */
-    status = uct_dc_iface_tgt_create(self);
+    status = uct_dc_iface_create_dct(self);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     /* create DC initiators */
-    status = uct_dc_iface_dcis_create(self, config);
+    status = uct_dc_iface_create_dcis(self, config);
     if (status != UCS_OK) {
-        ibv_exp_destroy_dct(self->rx.dct);
-        return status;
+        goto err_destroy_dct;
     }
+
     ucs_arbiter_init(&self->tx.dci_arbiter);
     return UCS_OK;
+
+err_destroy_dct:
+    ibv_exp_destroy_dct(self->rx.dct);
+err:
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 {
-   int i;
-
     ucs_trace_func("");
     ibv_exp_destroy_dct(self->rx.dct);
-
-    for (i = 0; i < self->tx.ndci; i++) {
-        uct_rc_txqp_cleanup(&self->tx.dcis[i].txqp);
-    }
-    ucs_free(self->tx.dcis);
-    ucs_free(self->tx.dcis_stack);
+    uct_dc_iface_dcis_destroy(self, self->tx.ndci);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
 }
 
@@ -201,15 +207,16 @@ UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
 ucs_config_field_t uct_dc_iface_config_table[] = {
     {"DC_", "", NULL,
         ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_config_table)},
+
     {"NUM_DCI", "8", 
-     "number of QPs (dynamic connection initiators) allocated by the interface",
+     "Number of DC initiator QPs used by the interface (up to " UCS_PP_QUOTE(UCT_DC_IFACE_MAX_DCIS) ")",
      ucs_offsetof(uct_dc_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
     {"TX_POLICY", "dcs_quota", 
-     "Specifies how dci is selected by the endpoint. The policies are:\n"
+     "Specifies how DC initiator (dci) is selected by the endpoint. The policies are:\n"
      "\n"
      "dcs        the endpoint either uses already assigned dci or a dci is allocated in the LIFO order.\n"
-     "           The dci is released once it has no outstanding operations.\n"      
+     "           The dci is released once it has no outstanding operations.\n"
      "\n"
      "dcs_quota  same as dcs. In addition the dci is scheduled for release\n"
      "           if it can not transmit and there are endpoints waiting for the dci allocation.\n"

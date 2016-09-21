@@ -484,6 +484,9 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 
     ucs_memory_cpu_load_fence();
 
+    ucs_assertv(!(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)),
+                "tx inline scatter not supported");
+
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     dci = uct_dc_iface_dci_find(&iface->super, qp_num);
     txqp = &iface->super.tx.dcis[dci].txqp;
@@ -571,54 +574,61 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
 };
 
 
+static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface)
+{
+    ucs_status_t status;
+    uint16_t bb_max;
+    int i;
+
+    bb_max = 0;
+    for (i = 0; i < iface->super.tx.ndci; i++) {
+        status = uct_ib_mlx5_get_txwq(iface->super.super.super.super.worker,
+                                      iface->super.tx.dcis[i].txqp.qp,
+                                      &iface->dci_wqs[i]);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+
+        bb_max = iface->dci_wqs[i].bb_max;
+        uct_rc_txqp_available_set(&iface->super.tx.dcis[i].txqp, bb_max);
+    }
+
+    iface->super.super.config.tx_qp_len = bb_max;
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
                            const char *dev_name, size_t rx_headroom,
                            const uct_iface_config_t *tl_config)
 {
-    ucs_status_t status;
     uct_dc_iface_config_t *config = ucs_derived_of(tl_config,
                                                    uct_dc_iface_config_t);
-    int i;
+    ucs_status_t status;
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
                               worker, dev_name, rx_headroom, 0, config);
 
-
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
                                            &config->super.super);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
-    self->dci_wqs = ucs_malloc(self->super.tx.ndci * sizeof(uct_ib_mlx5_txwq_t), "dc");
-    if (self->dci_wqs == NULL) {
-        uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
-        return UCS_ERR_NO_MEMORY;
+    status = uct_dc_mlx5_iface_init_dcis(self);
+    if (status != UCS_OK) {
+        goto err_common_cleanup;
     }
 
-    for (i = 0; i < self->super.tx.ndci; i++) {
-         status = uct_ib_mlx5_get_txwq(self->super.super.super.super.worker, 
-                                       self->super.tx.dcis[i].txqp.qp,
-                                       &self->dci_wqs[i]);
-         if (status != UCS_OK) {
-             uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
-             ucs_free(self->dci_wqs);
-             return status;
-         }
-         uct_rc_txqp_available_set(&self->super.tx.dcis[i].txqp, 
-                                   self->dci_wqs[i].bb_max);
-    }
-    /* convert  tx_qp_len to wq bulding blocks */
-    self->super.super.config.tx_qp_len = self->dci_wqs[0].bb_max;
-    /* disable tx moderation for now */
-    self->super.super.config.tx_moderation = 0;
-
-    /**
-     * TODO: only register progress when we have a connection
-     */
+    /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_mlx5_iface_progress, self);
-    ucs_debug("created iface %p", self);
+    ucs_debug("created dc iface %p", self);
+    return UCS_OK;
+
+err_common_cleanup:
+    uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
+err:
     return status;
 }
 
@@ -628,7 +638,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_worker_progress_unregister(self->super.super.super.super.worker,
                                    uct_dc_mlx5_iface_progress, self);
     uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
-    ucs_free(self->dci_wqs);
 }
 
 UCS_CLASS_DEFINE(uct_dc_mlx5_iface_t, uct_dc_iface_t);

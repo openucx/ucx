@@ -6,23 +6,28 @@
 
 #ifndef UCT_DC_IFACE_H
 #define UCT_DC_IFACE_H
+
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
-
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
+
+#define UCT_DC_IFACE_MAX_DCIS   16
+
+typedef struct uct_dc_ep     uct_dc_ep_t;
+
 
 typedef struct uct_dc_iface_addr {
     uct_ib_uint24_t   qp_num;
     uint8_t           umr_id;
 } uct_dc_iface_addr_t;
 
-typedef struct uct_dc_ep uct_dc_ep_t;
 
 typedef enum {
     UCT_DC_TX_POLICY_DCS,
     UCT_DC_TX_POLICY_DCS_QUOTA,
     UCT_DC_TX_POLICY_LAST
 } uct_dc_tx_policty_t;
+
 
 typedef struct uct_dc_iface_config {
     /* work around to do multiple inheritance:
@@ -31,28 +36,32 @@ typedef struct uct_dc_iface_config {
     uct_rc_verbs_iface_config_t   super;
     int                           ndci;
     int                           tx_policy;
-    int                           max_inline;
 } uct_dc_iface_config_t;
 
+
 typedef struct uct_dc_dci {
-    uct_rc_txqp_t   txqp;       /* DCI qp */
-    uct_dc_ep_t     *ep;        /* points to an endpoint that currently own
-                                   the dci. Relevant only for dcs and dcs quota policies */
+    uct_rc_txqp_t                 txqp; /* DCI qp */
+    uct_dc_ep_t                   *ep;  /* points to an endpoint that currently
+                                           owns the dci. Relevant only for dcs
+                                           and dcs quota policies. */
 } uct_dc_dci_t;
 
+
 typedef struct uct_dc_iface { 
-    uct_rc_iface_t super;
+    uct_rc_iface_t                super;
     struct {
-        uct_dc_dci_t  *dcis;        /* array of dcis. dcis[ndci] */
-        /* LIFO is only relevant for dcs allocation policy  */
-        uint8_t       *dcis_stack;  /* LIFO of indexes of available dcis */
-        uint8_t       stack_top;    /* dci stack top */
-        uint8_t       ndci;         /* Number of DCIs */
-        uint8_t       policy;       /* dci selection algorithm */
-        ucs_arbiter_t dci_arbiter;   
+        uct_dc_dci_t              dcis[UCT_DC_IFACE_MAX_DCIS]; /* Array of dcis */
+        uint8_t                   ndci;                        /* Number of DCIs */
+        uct_dc_tx_policty_t       policy;                      /* dci selection algorithm */
+
+        /* LIFO is only relevant for dcs allocation policy */
+        uint8_t                   stack_top;                   /* dci stack top */
+        uint8_t                   dcis_stack[UCT_DC_IFACE_MAX_DCIS];  /* LIFO of indexes of available dcis */
+
+        ucs_arbiter_t             dci_arbiter;
     } tx;
     struct { 
-        struct ibv_exp_dct *dct;    
+        struct ibv_exp_dct        *dct;
     } rx;
 } uct_dc_iface_t;
 
@@ -70,6 +79,9 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                               const char *tl_name, unsigned flags,
                                               uct_tl_resource_desc_t **resources_p,
                                               unsigned *num_resources_p);
+
+ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
+
 
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
@@ -121,7 +133,5 @@ static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
 }
-
-ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 
 #endif
