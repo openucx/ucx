@@ -379,9 +379,8 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
-                          struct mlx5_wqe_av *av,
-                          uint8_t path_bits)
+uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg, int is_global,
+                          struct mlx5_wqe_av *av, uint8_t path_bits)
 {
 
     mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_QKEY);
@@ -389,12 +388,20 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
     mlx5_av_base(&seg->av)->fl_mlid        = mlx5_av_base(av)->fl_mlid | path_bits;
     mlx5_av_base(&seg->av)->rlid           = mlx5_av_base(av)->rlid | (path_bits << 8);
     mlx5_av_base(&seg->av)->dqp_dct        = mlx5_av_base(av)->dqp_dct;
-/*  No need to fill grh
-    seg->av.grh_sec.tclass      = av->grh_sec.tclass;
-    seg->av.grh_sec.hop_limit   = av->grh_sec.hop_limit;
-    seg->av.grh_sec.grh_gid_fl  = av->grh_sec.grh_gid_fl;
-*/
-    mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
+
+    if (is_global) {
+#if HAVE_STRUCT_MLX5_GRH_AV_RMAC
+        memcpy(mlx5_av_grh(&seg->av)->rmac, mlx5_av_grh(av)->rmac,
+               sizeof(mlx5_av_grh(&seg->av)->rmac));
+#endif
+        mlx5_av_grh(&seg->av)->tclass      = mlx5_av_grh(av)->tclass;
+        mlx5_av_grh(&seg->av)->hop_limit   = mlx5_av_grh(av)->hop_limit;
+        mlx5_av_grh(&seg->av)->grh_gid_fl  = mlx5_av_grh(av)->grh_gid_fl;
+        memcpy(mlx5_av_grh(&seg->av)->rgid, mlx5_av_grh(av)->rgid,
+               sizeof(mlx5_av_grh(&seg->av)->rgid));
+    } else {
+        mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void 

@@ -250,7 +250,8 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     const uct_ib_address_t *ib_addr,
                                     uint8_t src_path_bits,
-                                    struct ibv_ah **ah_p);
+                                    struct ibv_ah **ah_p,
+                                    int *is_global_p);
 
 ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
                                       uct_wakeup_h wakeup);

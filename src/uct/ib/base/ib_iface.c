@@ -213,7 +213,8 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     const uct_ib_address_t *ib_addr,
                                     uint8_t src_path_bits,
-                                    struct ibv_ah **ah_p)
+                                    struct ibv_ah **ah_p,
+                                    int *is_global_p)
 {
     struct ibv_ah_attr ah_attr;
     struct ibv_ah *ah;
@@ -243,7 +244,8 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    *ah_p = ah;
+    *ah_p        = ah;
+    *is_global_p = ah_attr.is_global;
     return UCS_OK;
 }
 

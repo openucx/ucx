@@ -14,13 +14,16 @@
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_def.h>
 
-typedef struct {
-    uct_ud_ep_t          super;
-    struct mlx5_wqe_av   av;
-} uct_ud_mlx5_ep_t;
 
 typedef struct {
-    uct_ud_iface_t        super;
+    uct_ud_ep_t             super;
+    struct mlx5_wqe_av      av;
+    uint8_t                 is_global;
+} uct_ud_mlx5_ep_t;
+
+
+typedef struct {
+    uct_ud_iface_t          super;
     struct {
         uct_ib_mlx5_txwq_t  wq; 
         uct_ib_mlx5_cq_t    cq;
