@@ -46,6 +46,7 @@
 #include <ctype.h>   //isprint
 #include <pthread.h> //pthread_self
 #include <errno.h>   //errno
+#include <time.h>
 
 struct msg {
     uint64_t        data_len;
@@ -63,6 +64,7 @@ enum ucp_test_mode_t {
 } ucp_test_mode = TEST_MODE_PROBE;
 
 static uint16_t server_port = 13337;
+static long test_string_length = 16;
 static const ucp_tag_t tag  = 0x1337a880u;
 static const ucp_tag_t tag_mask = -1;
 static ucp_address_t *local_addr;
@@ -71,11 +73,12 @@ static ucp_address_t *peer_addr;
 static size_t local_addr_len;
 static size_t peer_addr_len;
 
-static char *test_str = "Hello UCP World!!!!";
+static char *test_str;
 
 static int parse_cmd(int argc, char * const argv[], char **server_name);
 static int run_server();
 static int run_client(const char *server);
+static void generate_random_string(char *str, int size);
 
 static void request_init(void *request)
 {
@@ -186,7 +189,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         free(msg);
         goto err_ep;
     } else if (UCS_PTR_STATUS(request) != UCS_OK) {
-        printf("UCX address message was scheduled for send\n");
+        fprintf(stderr, "UCX address message was scheduled for send\n");
         wait(ucp_worker, request);
         request->completed = 0; /* Reset request state before recycling it */
         ucp_request_release(request);
@@ -329,6 +332,14 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         goto err;
     }
 
+    test_str = (char*) calloc(test_string_length + 1, sizeof(char));
+    if (!test_str) {
+        fprintf(stderr, "unable to allocate memory\n");
+        goto err_ep;
+    }
+
+    generate_random_string(test_str, test_string_length + 1);
+
     msg_len = sizeof(*msg) + strlen(test_str) + 1;
     msg = calloc(1, msg_len);
     if (!msg) {
@@ -354,6 +365,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     }
 
     ret = 0;
+    free(test_str);
     free(msg);
 
 err_ep:
@@ -377,6 +389,16 @@ static void barrier(int oob_sock)
     int dummy = 0;
     send(oob_sock, &dummy, sizeof(dummy), 0);
     recv(oob_sock, &dummy, sizeof(dummy), 0);
+}
+
+static void generate_random_string(char *str, int size)
+{
+    int i;
+    srand(time(NULL)); // randomize seed
+    for (i = 0; i < size; ++i) {
+        str[i] =  'A' + (rand() % 26);
+    }
+    str[i] = 0;
 }
 
 int main(int argc, char **argv)
@@ -509,7 +531,7 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
 {
     int c = 0, index = 0;
     opterr = 0;
-    while ((c = getopt (argc, argv, "wfbn:p:h")) != -1) {
+    while ((c = getopt (argc, argv, "wfbn:p:s:h")) != -1) {
         switch (c) {
         case 'w':
             ucp_test_mode = TEST_MODE_WAIT;
@@ -530,6 +552,13 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
                 return UCS_ERR_UNSUPPORTED;
             }
             break;
+        case 's':
+            test_string_length = atol(optarg);
+            if (test_string_length <= 0) {
+                fprintf(stderr, "Wrong string size %ld\n", test_string_length);
+                return UCS_ERR_UNSUPPORTED;
+            }	
+	    break;
         case '?':
             if (optopt == 's') {
                 fprintf(stderr, "Option -%c requires an argument.\n", optopt);
@@ -553,6 +582,7 @@ int parse_cmd(int argc, char * const argv[], char **server_name)
                     "of the server (required for client and should be ignored "
                     "for server)\n");
             fprintf(stderr, "  -p port Set alternative server port (default:13337)\n");
+            fprintf(stderr, "  -s size Set test string length (default:16)\n");
             fprintf(stderr, "\n");
             return UCS_ERR_UNSUPPORTED;
         }
