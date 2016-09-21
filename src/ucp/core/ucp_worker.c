@@ -178,6 +178,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     ucs_status_t status;
     uct_iface_h iface;
     uct_iface_attr_t *attr;
+    uct_iface_params_t iface_params;
     uct_wakeup_h wakeup = NULL;
 
     /* Read configuration
@@ -188,10 +189,13 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
         goto out;
     }
 
+    iface_params.tl_name     = resource->tl_rsc.tl_name;
+    iface_params.dev_name    = resource->tl_rsc.dev_name;
+    iface_params.rx_headroom = sizeof(ucp_recv_desc_t);
+
     /* Open UCT interface */
     status = uct_iface_open(context->mds[resource->md_index], worker->uct,
-                            resource->tl_rsc.tl_name, resource->tl_rsc.dev_name,
-                            sizeof(ucp_recv_desc_t), iface_config, &iface);
+                            &iface_params, iface_config, &iface);
     uct_config_release(iface_config);
 
     if (status != UCS_OK) {

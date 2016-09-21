@@ -208,7 +208,7 @@ typedef struct uct_tl_component {
                                               unsigned *num_resources_p);
 
     ucs_status_t           (*iface_open)(uct_md_h md, uct_worker_h worker,
-                                         const char *dev_name, size_t rx_headroom,
+                                         const uct_iface_params_t *params,
                                          const uct_iface_config_t *config,
                                          uct_iface_h *iface_p);
 
@@ -444,7 +444,7 @@ extern ucs_config_field_t uct_iface_config_table[];
  */
 ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   size_t elem_size, size_t align_offset, size_t alignment,
-                                  uct_iface_mpool_config_t *config, unsigned grow,
+                                  const uct_iface_mpool_config_t *config, unsigned grow,
                                   uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name);
 

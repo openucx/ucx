@@ -139,7 +139,7 @@ static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_ugni_rdma_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_rdma_iface_config_t);
@@ -147,7 +147,8 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, dev_name, &uct_ugni_rdma_iface_ops,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params->dev_name,
+                              &uct_ugni_rdma_iface_ops,
                               &config->super UCS_STATS_ARG(NULL));
 
     /* Setting initial configuration */
@@ -262,9 +263,9 @@ exit:
 }
 
 UCS_CLASS_DEFINE(uct_ugni_rdma_iface_t, uct_ugni_iface_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_rdma_iface_t, uct_iface_t,
-                          uct_md_h, uct_worker_h,
-                          const char*, size_t, const uct_iface_config_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_rdma_iface_t, uct_iface_t, uct_md_h,
+                          uct_worker_h, const uct_iface_params_t*,
+                          const uct_iface_config_t*);
 
 UCT_TL_COMPONENT_DEFINE(uct_ugni_rdma_tl_component,
                         uct_ugni_rdma_query_tl_resources,

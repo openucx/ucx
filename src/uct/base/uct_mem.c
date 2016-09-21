@@ -313,7 +313,7 @@ static ucs_mpool_ops_t uct_iface_mpool_ops = {
 
 ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
                                   size_t elem_size, size_t align_offset, size_t alignment,
-                                  uct_iface_mpool_config_t *config, unsigned grow,
+                                  const uct_iface_mpool_config_t *config, unsigned grow,
                                   uct_iface_mpool_init_obj_cb_t init_obj_cb,
                                   const char *name)
 {

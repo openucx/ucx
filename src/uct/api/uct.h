@@ -311,6 +311,18 @@ struct uct_iface_attr {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters used for interface creation.
+ */
+struct uct_iface_params {
+    char                     *tl_name;    /**< Transport name */
+    char                     *dev_name;   /**< Device Name */
+    size_t                   rx_headroom; /**< How much bytes to reserve before
+                                               the receive segment.*/
+};
+
+
+/**
  * @ingroup UCT_MD
  * @brief  Memory domain capability flags.
  */
@@ -678,9 +690,7 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
  * @param [in]  md            Memory domain to create the interface on.
  * @param [in]  worker        Handle to worker which will be used to progress
  *                             communications on this interface.
- * @param [in]  tl_name       Transport name.
- * @param [in]  dev_name      Hardware device name,
- * @param [in]  rx_headroom   How much bytes to reserve before the receive segment.
+ * @param [in]  params        User defined @ref uct_iface_params_t parameters.
  * @param [in]  config        Interface configuration options. Should be obtained
  *                            from uct_iface_config_read() function, or point to
  *                            transport-specific structure which extends uct_iface_config_t.
@@ -689,8 +699,8 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
  * @return Error code.
  */
 ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
-                            const char *tl_name, const char *dev_name,
-                            size_t rx_headroom, const uct_iface_config_t *config,
+                            const uct_iface_params_t *params,
+                            const uct_iface_config_t *config,
                             uct_iface_h *iface_p);
 
 

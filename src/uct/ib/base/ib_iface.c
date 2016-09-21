@@ -127,7 +127,7 @@ static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem
 }
 
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
-                                          uct_ib_iface_config_t *config,
+                                          const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp)
 {
     unsigned grow;
@@ -248,7 +248,7 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
-                                           uct_ib_iface_config_t *config)
+                                           const uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint16_t pkey_tbl_len = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
@@ -293,7 +293,7 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
-                                          uct_ib_iface_config_t *config)
+                                          const uct_ib_iface_config_t *config)
 {
     unsigned i, j, num_path_bits;
     unsigned first, last;
@@ -362,9 +362,9 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
  * @param mss           Maximal segment size (transport limit).
  */
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
+                    uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
-                    size_t mss, uct_ib_iface_config_t *config)
+                    size_t mss, const uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
@@ -373,7 +373,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
                               &config->super UCS_STATS_ARG(dev->stats));
 
-    status = uct_ib_device_find_port(dev, dev_name, &port_num);
+    status = uct_ib_device_find_port(dev, params->dev_name, &port_num);
     if (status != UCS_OK) {
         goto err;
     }
@@ -381,10 +381,12 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->ops                      = ops;
 
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
-                                     ucs_max(sizeof(uct_am_recv_desc_t) + rx_headroom,
+                                     ucs_max(sizeof(uct_am_recv_desc_t) +
+                                             params->rx_headroom,
                                              rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;
-    self->config.rx_headroom_offset= self->config.rx_payload_offset - rx_headroom;
+    self->config.rx_headroom_offset= self->config.rx_payload_offset -
+                                     params->rx_headroom;
     self->config.seg_size          = ucs_min(mss, config->super.max_bcopy);
     self->config.tx_max_poll       = config->tx.max_poll;
     self->config.rx_max_poll       = config->rx.max_poll;

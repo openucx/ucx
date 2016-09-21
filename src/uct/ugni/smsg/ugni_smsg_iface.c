@@ -390,7 +390,7 @@ static ucs_mpool_ops_t uct_ugni_smsg_mbox_mpool_ops = {
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_ugni_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_iface_config_t);
@@ -401,12 +401,13 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, dev_name, &uct_ugni_smsg_iface_ops,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params->dev_name,
+                              &uct_ugni_smsg_iface_ops,
                               &config->super UCS_STATS_ARG(NULL));
 
     /* Setting initial configuration */
     self->config.smsg_seg_size = 2048;
-    self->config.rx_headroom  = rx_headroom;
+    self->config.rx_headroom  = params->rx_headroom;
     self->config.smsg_max_retransmit = 16;
     self->config.smsg_max_credit = 8;
     self->smsg_id = 0;
@@ -491,9 +492,9 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 }
 
 UCS_CLASS_DEFINE(uct_ugni_smsg_iface_t, uct_ugni_iface_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_iface_t, uct_iface_t,
-                          uct_md_h, uct_worker_h,
-                          const char*, size_t, const uct_iface_config_t *);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_iface_t, uct_iface_t, uct_md_h,
+                          uct_worker_h, const uct_iface_params_t*,
+                          const uct_iface_config_t *);
 
 UCT_TL_COMPONENT_DEFINE(uct_ugni_smsg_tl_component,
                         uct_ugni_smsg_query_tl_resources,

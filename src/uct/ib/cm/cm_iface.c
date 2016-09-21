@@ -253,7 +253,7 @@ static void uct_cm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
 }
 
 static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_cm_iface_config_t *config = ucs_derived_of(tl_config, uct_cm_iface_config_t);
@@ -263,8 +263,8 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, md, worker,
-                              dev_name, rx_headroom, 0 /* rx_priv_len */,
-                              0 /* rx_hdr_len */, 1 /* tx_cq_len */,
+                              params, 0 /* rx_priv_len */, 0 /* rx_hdr_len */,
+                              1 /* tx_cq_len */,
                               IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE, /* mss */
                               &config->super);
 
@@ -356,7 +356,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 
 UCS_CLASS_DEFINE(uct_cm_iface_t, uct_ib_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
-                                 const char*, size_t, const uct_iface_config_t*);
+                                 const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_iface_t, uct_iface_t);
 
 static ucs_status_t uct_cm_iface_query(uct_iface_h tl_iface,
