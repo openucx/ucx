@@ -25,24 +25,19 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t,
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_dc_iface_addr_t *if_addr = (const uct_dc_iface_addr_t *)iface_addr;
     ucs_status_t status;
-    struct ibv_ah *ah;
     int is_global;
-
     ucs_trace_func("");
+
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
-    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr, 0, &ah,
-                                    &is_global);
+    status = uct_ib_iface_mlx5_get_av(&iface->super.super.super, ib_addr, &self->av, 0, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
 
-    uct_ib_mlx5_get_av(ah, &self->av);
-    mlx5_av_base(&self->av)->key.dc_key      = htonll(UCT_IB_DC_KEY);
-    mlx5_av_base(&self->av)->dqp_dct         = htonl(uct_ib_unpack_uint24(if_addr->qp_num) |
-                                                     UCT_IB_MLX5_EXTENDED_UD_AV);
+    self->av.dqp_dct = htonl(uct_ib_unpack_uint24(if_addr->qp_num) |
+                             UCT_IB_MLX5_EXTENDED_UD_AV);
 
-    ibv_destroy_ah(ah);
     ucs_debug("created ep %p on iface %p", self, iface);
     return UCS_OK;
 }

@@ -193,8 +193,8 @@ done:
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
-                           uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size,
-                           struct mlx5_wqe_av *av, int qp_type)
+                           uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size, 
+                           uct_ib_mlx5_base_av_t *av, int qp_type)
 {
     uint16_t posted;
     struct mlx5_wqe_ctrl_seg *ctrl;
@@ -208,7 +208,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
         struct mlx5_wqe_datagram_seg *seg;
 
         seg = (struct mlx5_wqe_datagram_seg *)(ctrl+1);
-        uct_ib_mlx5_set_dgram_seg(seg, 0, av, 0);
+        uct_ib_mlx5_set_dgram_seg(seg, 0, av, 0, 0);
         mlx5_av_base(&seg->av)->key.dc_key = htonll(UCT_IB_DC_KEY);
     }
 
@@ -248,8 +248,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
                              const void *buffer, unsigned length,
                              /* SEND */ uint8_t am_id, uint64_t am_hdr,
                              /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-                             /* AV   */ struct mlx5_wqe_av *av,
-                             int qp_type
+                             /* AV   */ uct_ib_mlx5_base_av_t *av,
+                             int qp_type 
                            )
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
@@ -343,7 +343,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_ml
                            /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                            /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
                            /* ATOMIC */ uint64_t compare_mask, uint64_t compare, uint64_t swap_add,
-                           /* AV   */ struct mlx5_wqe_av *av,
+                           /* AV   */ uct_ib_mlx5_base_av_t *av,
                            int signal, int qp_type)
 {
     struct mlx5_wqe_ctrl_seg                     *ctrl;

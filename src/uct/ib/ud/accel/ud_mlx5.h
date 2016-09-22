@@ -17,8 +17,9 @@
 
 typedef struct {
     uct_ud_ep_t             super;
-    struct mlx5_wqe_av      av;
+    uct_ib_mlx5_base_av_t   av;
     uint8_t                 is_global;
+    struct mlx5_grh_av      grh_av;
 } uct_ud_mlx5_ep_t;
 
 

@@ -245,6 +245,17 @@ typedef struct uct_ib_mlx5_rxwq {
     struct mlx5_wqe_data_seg    *wqes;
 } uct_ib_mlx5_rxwq_t;
 
+typedef struct uct_ib_mlx5_base_av {
+    uint32_t                    dqp_dct;
+    uint8_t                     stat_rate_sl;
+    uint8_t                     fl_mlid;
+    uint16_t                    rlid;
+} uct_ib_mlx5_base_av_t;
+
+ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface, 
+                                      const uct_ib_address_t *ib_addr,
+                                      uct_ib_mlx5_base_av_t *av,
+                                      struct mlx5_grh_av *grh_av, int *is_global);
 
 ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
                                   uct_ib_mlx5_txwq_t *wq);
@@ -380,24 +391,25 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg, int is_global,
-                          struct mlx5_wqe_av *av, uint8_t path_bits)
+                          uct_ib_mlx5_base_av_t *av,
+                          struct mlx5_grh_av *grh_av, uint8_t path_bits)
 {
 
     mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_QKEY);
-    mlx5_av_base(&seg->av)->stat_rate_sl   = mlx5_av_base(av)->stat_rate_sl;
-    mlx5_av_base(&seg->av)->fl_mlid        = mlx5_av_base(av)->fl_mlid | path_bits;
-    mlx5_av_base(&seg->av)->rlid           = mlx5_av_base(av)->rlid | (path_bits << 8);
-    mlx5_av_base(&seg->av)->dqp_dct        = mlx5_av_base(av)->dqp_dct;
+    mlx5_av_base(&seg->av)->stat_rate_sl   = av->stat_rate_sl;
+    mlx5_av_base(&seg->av)->fl_mlid        = av->fl_mlid | path_bits;
+    mlx5_av_base(&seg->av)->rlid           = av->rlid | (path_bits << 8);
+    mlx5_av_base(&seg->av)->dqp_dct        = av->dqp_dct;
 
     if (is_global) {
 #if HAVE_STRUCT_MLX5_GRH_AV_RMAC
-        memcpy(mlx5_av_grh(&seg->av)->rmac, mlx5_av_grh(av)->rmac,
+        memcpy(mlx5_av_grh(&seg->av)->rmac, grh_av->rmac,
                sizeof(mlx5_av_grh(&seg->av)->rmac));
 #endif
-        mlx5_av_grh(&seg->av)->tclass      = mlx5_av_grh(av)->tclass;
-        mlx5_av_grh(&seg->av)->hop_limit   = mlx5_av_grh(av)->hop_limit;
-        mlx5_av_grh(&seg->av)->grh_gid_fl  = mlx5_av_grh(av)->grh_gid_fl;
-        memcpy(mlx5_av_grh(&seg->av)->rgid, mlx5_av_grh(av)->rgid,
+        mlx5_av_grh(&seg->av)->tclass      = grh_av->tclass;
+        mlx5_av_grh(&seg->av)->hop_limit   = grh_av->hop_limit;
+        mlx5_av_grh(&seg->av)->grh_gid_fl  = grh_av->grh_gid_fl;
+        memcpy(mlx5_av_grh(&seg->av)->rgid, grh_av->rgid,
                sizeof(mlx5_av_grh(&seg->av)->rgid));
     } else {
         mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
