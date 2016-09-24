@@ -219,14 +219,14 @@ ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return length;
 }
 
-ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_WRITE);
@@ -259,14 +259,14 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_READ);
@@ -321,7 +321,7 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                       unsigned header_length, const uct_iov_t *iov,
-                                      size_t iovlen, uct_completion_t *comp)
+                                      size_t iovcnt, uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -330,7 +330,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     struct ibv_sge sge[2];
     int send_flags;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, length,
                           iface->verbs_common.config.short_desc_size,

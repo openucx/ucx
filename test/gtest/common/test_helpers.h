@@ -441,19 +441,19 @@ public:
     } UCS_PP_APPEND_UNIQUE_ID(onexit_var);
 
 /**
- * Make iov[iovlen] array with pointer elements to original buffer
+ * Make iov[iovcnt] array with pointer elements to original buffer
  */
-#define UCS_TEST_GET_BUFFER_IOV(_name_iov, _name_iovlen, _buffer_ptr, _buffer_length, _memh, _iovlen) \
-        uct_iov_t _name_iov[_iovlen]; \
-        const size_t _name_iovlen = _iovlen; \
-        const size_t _buffer_iov_length = _buffer_length / _name_iovlen; \
+#define UCS_TEST_GET_BUFFER_IOV(_name_iov, _name_iovcnt, _buffer_ptr, _buffer_length, _memh, _iovcnt) \
+        uct_iov_t _name_iov[_iovcnt]; \
+        const size_t _name_iovcnt = _iovcnt; \
+        const size_t _buffer_iov_length = _buffer_length / _name_iovcnt; \
         size_t _buffer_iov_length_it = 0; \
-        for (size_t iov_it = 0; iov_it < _name_iovlen; ++iov_it) { \
+        for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
             _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _buffer_iov_length_it; \
             _name_iov[iov_it].count  = 1; \
             _name_iov[iov_it].stride = 0; \
             _name_iov[iov_it].memh   = _memh; \
-            if (iov_it == (_name_iovlen - 1)) { /* Last iteration */ \
+            if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
                 _name_iov[iov_it].length = _buffer_length - _buffer_iov_length_it; \
             } else { \
                 _name_iov[iov_it].length = _buffer_iov_length; \

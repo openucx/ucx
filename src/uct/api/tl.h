@@ -82,7 +82,7 @@ typedef struct uct_iface_ops {
     ssize_t      (*ep_put_bcopy)(uct_ep_h ep, uct_pack_callback_t pack_cb,
                                  void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 
-    ucs_status_t (*ep_put_zcopy)(uct_ep_h ep, const uct_iov_t *iov, size_t iovlen,
+    ucs_status_t (*ep_put_zcopy)(uct_ep_h ep, const uct_iov_t *iov, size_t iovcnt,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
 
@@ -93,7 +93,7 @@ typedef struct uct_iface_ops {
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
 
-    ucs_status_t (*ep_get_zcopy)(uct_ep_h ep, const uct_iov_t *iov, size_t iovlen,
+    ucs_status_t (*ep_get_zcopy)(uct_ep_h ep, const uct_iov_t *iov, size_t iovcnt,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp);
 
@@ -107,7 +107,7 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_am_zcopy)(uct_ep_h ep, uint8_t id, const void *header,
                                 unsigned header_length, const uct_iov_t *iov,
-                                size_t iovlen, uct_completion_t *comp);
+                                size_t iovcnt, uct_completion_t *comp);
 
     /* Atomics */
 

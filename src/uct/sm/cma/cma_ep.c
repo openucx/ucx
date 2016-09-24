@@ -77,11 +77,11 @@ static inline ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
-ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                   uint64_t remote_addr, uct_rkey_t rkey,
                                   uct_completion_t *comp)
 {
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     int ret = uct_cma_ep_common_zcopy(tl_ep,
                                       buffer,
@@ -98,11 +98,11 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
     return ret;
 }
 
-ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                    uint64_t remote_addr, uct_rkey_t rkey,
                                    uct_completion_t *comp)
 {
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     int ret = uct_cma_ep_common_zcopy(tl_ep,
                                       buffer,

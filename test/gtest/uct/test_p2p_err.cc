@@ -94,9 +94,9 @@ public:
                 break;
             case OP_PUT_ZCOPY:
             {
-                UCS_TEST_GET_BUFFER_IOV(iov, iovlen, buffer, length, memh,
+                UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer, length, memh,
                                         sender().iface_attr().cap.max_iov);
-                status = uct_ep_put_zcopy(sender_ep(), iov, iovlen,
+                status = uct_ep_put_zcopy(sender_ep(), iov, iovcnt,
                                           remote_addr, rkey, NULL);
             }
                 break;
@@ -111,9 +111,9 @@ public:
                 break;
             case OP_AM_ZCOPY:
             {
-                UCS_TEST_GET_BUFFER_IOV(iov, iovlen, buffer, 1, memh, 1);
+                UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer, 1, memh, 1);
                 status = uct_ep_am_zcopy(sender_ep(), am_id, buffer, length,
-                                         iov, iovlen, NULL);
+                                         iov, iovcnt, NULL);
             }
                 break;
             }

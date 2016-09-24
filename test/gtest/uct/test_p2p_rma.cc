@@ -41,10 +41,10 @@ public:
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovlen, sendbuf.ptr(), sendbuf.length(),
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                                 sendbuf.memh(), sender().iface_attr().cap.max_iov);
 
-        return uct_ep_put_zcopy(ep, iov, iovlen, recvbuf.addr(), recvbuf.rkey(), comp());
+        return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }
 
     ucs_status_t get_bcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
@@ -58,10 +58,10 @@ public:
     ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovlen, sendbuf.ptr(), sendbuf.length(),
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                                 sendbuf.memh(), sender().iface_attr().cap.max_iov);
 
-        return uct_ep_get_zcopy(ep, iov, iovlen, recvbuf.addr(), recvbuf.rkey(), comp());
+        return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }
 
     virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {

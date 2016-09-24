@@ -236,7 +236,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 static ucs_status_t
 uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                         unsigned header_length, const uct_iov_t *iov,
-                        size_t iovlen, uct_completion_t *comp)
+                        size_t iovcnt, uct_completion_t *comp)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -250,7 +250,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     unsigned wqe_size;
     uct_ud_neth_t *neth;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
     ib_memh = memh;
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,

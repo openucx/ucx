@@ -1224,9 +1224,9 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  *                         of @ref ::uct_iov_t structures. A particular structure
  *                         pointer must be valid address. NULL terminated pointer
  *                         is not required.
- * @param [in] iovlen      Size of the @a iov data @ref ::uct_iov_t structures
- *                         array. If @a iovlen is zero, the data is considered empty.
- *                         @a iovlen is limited by @ref uct_iface_attr_cap_max_iov
+ * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
+ *                         array. If @a iovcnt is zero, the data is considered empty.
+ *                         @a iovcnt is limited by @ref uct_iface_attr_cap_max_iov
  *                         "uct_iface_attr::cap::max_iov"
  * @param [in] remote_addr Remote address to place the @a iov data.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
@@ -1238,11 +1238,11 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  *
  */
 UCT_INLINE_API ucs_status_t uct_ep_put_zcopy(uct_ep_h ep,
-                                             const uct_iov_t *iov, size_t iovlen,
+                                             const uct_iov_t *iov, size_t iovcnt,
                                              uint64_t remote_addr, uct_rkey_t rkey,
                                              uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_put_zcopy(ep, iov, iovlen, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_put_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp);
 }
 
 
@@ -1276,9 +1276,9 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t 
  *                         of @ref ::uct_iov_t structures. A particular structure
  *                         pointer must be valid address. NULL terminated pointer
  *                         is not required.
- * @param [in] iovlen      Size of the @a iov data @ref ::uct_iov_t structures
- *                         array. If @a iovlen is zero, the data is considered empty.
- *                         @a iovlen is limited by @ref uct_iface_attr_cap_max_iov
+ * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
+ *                         array. If @a iovcnt is zero, the data is considered empty.
+ *                         @a iovcnt is limited by @ref uct_iface_attr_cap_max_iov
  *                         "uct_iface_attr::cap::max_iov"
  * @param [in] remote_addr Remote address of the data placed to the @a iov.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
@@ -1290,11 +1290,11 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t 
  *
  */
 UCT_INLINE_API ucs_status_t uct_ep_get_zcopy(uct_ep_h ep,
-                                             const uct_iov_t *iov, size_t iovlen,
+                                             const uct_iov_t *iov, size_t iovcnt,
                                              uint64_t remote_addr, uct_rkey_t rkey,
                                              uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_get_zcopy(ep, iov, iovlen, remote_addr, rkey, comp);
+    return ep->iface->ops.ep_get_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp);
 }
 
 
@@ -1339,9 +1339,9 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  *                           of @ref ::uct_iov_t structures. A particular structure
  *                           pointer must be valid address. NULL terminated pointer
  *                           is not required.
- * @param [in] iovlen        Size of the @a iov data @ref ::uct_iov_t structures
- *                           array. If @a iovlen is zero, the data is considered empty.
- *                           @a iovlen is limited by @ref uct_iface_attr_cap_max_iov
+ * @param [in] iovcnt        Size of the @a iov data @ref ::uct_iov_t structures
+ *                           array. If @a iovcnt is zero, the data is considered empty.
+ *                           @a iovcnt is limited by @ref uct_iface_attr_cap_max_iov
  *                           "uct_iface_attr::cap::max_iov"
  * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
  *
@@ -1352,10 +1352,10 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  */
 UCT_INLINE_API ucs_status_t uct_ep_am_zcopy(uct_ep_h ep, uint8_t id, void *header,
                                             unsigned header_length,
-                                            const uct_iov_t *iov, size_t iovlen,
+                                            const uct_iov_t *iov, size_t iovcnt,
                                             uct_completion_t *comp)
 {
-    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovlen, comp);
+    return ep->iface->ops.ep_am_zcopy(ep, id, header, header_length, iov, iovcnt, comp);
 }
 
 /**

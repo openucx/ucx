@@ -81,14 +81,14 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const void *buffer,
     return UCS_OK;
 }
 
-ucs_status_t uct_knem_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_knem_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                    uint64_t remote_addr, uct_rkey_t rkey,
                                    uct_completion_t *comp)
 {
     uct_knem_key_t *key = (uct_knem_key_t *)rkey;
     ucs_status_t status;
 
-    UCT_CHECK_PARAM(1 == iovlen, "iov[iovlen] has to be 1 at this time");
+    UCT_CHECK_PARAM(1 == iovcnt, "iov[iovcnt] has to be 1 at this time");
     size_t length = iov[0].length;
 
     status = uct_knem_rma(tl_ep, iov[0].buffer, length, remote_addr, key, 1);
@@ -96,14 +96,14 @@ ucs_status_t uct_knem_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     return status;
 }
 
-ucs_status_t uct_knem_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_knem_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                    uint64_t remote_addr, uct_rkey_t rkey,
                                    uct_completion_t *comp)
 {
     uct_knem_key_t *key = (uct_knem_key_t *)rkey;
     ucs_status_t status;
 
-    UCT_CHECK_PARAM(1 == iovlen, "iov[iovlen] has to be 1 at this time");
+    UCT_CHECK_PARAM(1 == iovcnt, "iov[iovcnt] has to be 1 at this time");
     size_t length = iov[0].length;
 
     status = uct_knem_rma(tl_ep, iov[0].buffer, length, remote_addr, key, 0);

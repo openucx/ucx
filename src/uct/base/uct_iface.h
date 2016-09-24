@@ -92,8 +92,8 @@ enum {
 /**
  * This macro should be deleted after UCT gather/scatter IOV interface changed
  */
-#define UCT_CHECK_PARAM_IOV(_iov, _iovlen, _buffer, _length, _memh) \
-    UCT_CHECK_PARAM(1 == _iovlen, "iov[iovlen] has to be 1 at this time"); \
+#define UCT_CHECK_PARAM_IOV(_iov, _iovcnt, _buffer, _length, _memh) \
+    UCT_CHECK_PARAM(1 == _iovcnt, "iov[iovcnt] has to be 1 at this time"); \
     void     *_buffer = _iov[0].buffer; \
     size_t    _length = _iov[0].length; \
     uct_mem_h _memh   = _iov[0].memh;

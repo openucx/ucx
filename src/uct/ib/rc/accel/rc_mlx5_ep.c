@@ -155,14 +155,14 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return length;
 }
 
-ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp)
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     UCT_CHECK_LENGTH(length, UCT_IB_MAX_MESSAGE_SIZE, "put_zcopy");
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_WRITE, buffer, length,
@@ -194,14 +194,14 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp)
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     UCT_CHECK_LENGTH(length, UCT_IB_MAX_MESSAGE_SIZE, "get_zcopy");
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_READ, buffer, length,
@@ -256,13 +256,13 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
 ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                                      unsigned header_length, const uct_iov_t *iov,
-                                     size_t iovlen, uct_completion_t *comp)
+                                     size_t iovcnt, uct_completion_t *comp)
 {
     uct_rc_mlx5_ep_t *ep  = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     ucs_status_t status;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     UCT_RC_MLX5_CHECK_AM_ZCOPY(id, header_length, length, iface->super.config.seg_size, IBV_QPT_RC);
 

@@ -194,7 +194,7 @@ ssize_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return uct_ugni_post_fma(iface, ep, fma, length);
 }
 
-ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                    uint64_t remote_addr, uct_rkey_t rkey,
                                    uct_completion_t *comp)
 {
@@ -202,7 +202,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_base_desc_t *rdma;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
     UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(length, iface->config.rdma_max_size, "put_zcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc, rdma,
@@ -694,7 +694,7 @@ static ucs_status_t uct_ugni_ep_get_composed(uct_ep_h tl_ep, void *buffer, size_
                                              remote_addr, rkey, comp);
 }
 
-ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovlen,
+ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                    uint64_t remote_addr, uct_rkey_t rkey,
                                    uct_completion_t *comp)
 {
@@ -702,7 +702,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_rdma_iface_t);
     uct_ugni_base_desc_t *rdma;
 
-    UCT_CHECK_PARAM_IOV(iov, iovlen, buffer, length, memh);
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
     UCT_SKIP_ZERO_LENGTH(length);
     UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
                      iface->config.rdma_max_size, "get_zcopy");
