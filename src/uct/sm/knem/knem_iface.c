@@ -21,8 +21,13 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
 
     /* default values for all shared memory transports */
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
+    iface_attr->cap.put.max_iov        = 1;
+
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.max_iov            = 1;
+    iface_attr->cap.get.max_iov        = 1;
+
+    iface_attr->cap.am.max_iov         = 1;
+
     iface_attr->iface_addr_len         = 0;
     iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
     iface_attr->ep_addr_len            = 0;

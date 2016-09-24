@@ -42,7 +42,7 @@ public:
                            const mapped_buffer &recvbuf)
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.max_iov);
+                                sendbuf.memh(), sender().iface_attr().cap.put.max_iov);
 
         return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }
@@ -59,7 +59,7 @@ public:
                            const mapped_buffer &recvbuf)
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.max_iov);
+                                sendbuf.memh(), sender().iface_attr().cap.get.max_iov);
 
         return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }

@@ -95,7 +95,7 @@ public:
             case OP_PUT_ZCOPY:
             {
                 UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer, length, memh,
-                                        sender().iface_attr().cap.max_iov);
+                                        sender().iface_attr().cap.put.max_iov);
                 status = uct_ep_put_zcopy(sender_ep(), iov, iovcnt,
                                           remote_addr, rkey, NULL);
             }

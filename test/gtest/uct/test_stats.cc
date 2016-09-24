@@ -154,7 +154,7 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
     EXPECT_UCS_OK(status);
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
-                            ucs_max(1UL, sender().iface_attr().cap.max_iov - 1));
+                            sender().iface_attr().cap.am.max_iov);
 
     status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, NULL);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
@@ -200,7 +200,7 @@ UCS_TEST_P(test_uct_stats, put_zcopy)
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
-                            sender().iface_attr().cap.max_iov);
+                            sender().iface_attr().cap.put.max_iov);
 
     status = uct_ep_put_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
@@ -233,7 +233,7 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
     check_caps(UCT_IFACE_FLAG_GET_ZCOPY);
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
-                            sender().iface_attr().cap.max_iov);
+                            sender().iface_attr().cap.get.max_iov);
 
     status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);

@@ -133,7 +133,7 @@ public:
 
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ((char*)sendbuf.ptr() + hdr_size),
                                 (sendbuf.length() - hdr_size), sendbuf.memh(),
-                                ucs_max(1UL, sender().iface_attr().cap.max_iov - 1));
+                                sender().iface_attr().cap.am.max_iov);
 
         return uct_ep_am_zcopy(ep,
                                AM_ID,

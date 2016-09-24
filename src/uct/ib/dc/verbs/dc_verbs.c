@@ -80,7 +80,10 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                       UCT_IFACE_FLAG_PENDING|
                                       UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
-    iface_attr->cap.max_iov         = 1;
+    /*TODO: remove max_iov initialization once we have a full functionality */
+    iface_attr->cap.put.max_iov     = 1;
+    iface_attr->cap.get.max_iov     = 1;
+    iface_attr->cap.am.max_iov      = 1;
 
     return UCS_OK;
 }

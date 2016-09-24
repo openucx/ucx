@@ -44,9 +44,14 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
     iface_attr->cap.put.max_short      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_bcopy      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
+    iface_attr->cap.put.max_iov        = 1;
+
     iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
     iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
-    iface_attr->cap.max_iov            = 1;
+    iface_attr->cap.get.max_iov        = 1;
+
+    iface_attr->cap.am.max_iov         = 1;
+
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = 0;

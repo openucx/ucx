@@ -264,6 +264,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref ::uct_ep_put_zcopy
+                                              @anchor uct_iface_attr_cap_put_max_iov */
         } put;                           /**< Attributes for PUT operations */
 
         struct {
@@ -271,6 +274,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_get_zcopy
+                                              @anchor uct_iface_attr_cap_get_max_iov */
         } get;                           /**< Attributes for GET operations */
 
         struct {
@@ -280,12 +286,11 @@ struct uct_iface_attr {
                                               and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */
             size_t           max_hdr;    /**< Max. header size for bcopy/zcopy */
+            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref ::uct_ep_am_zcopy
+                                              @anchor uct_iface_attr_cap_am_max_iov */
         } am;                            /**< Attributes for AM operations */
 
-        size_t               max_iov;    /**< Maximal @a size of @ref ::uct_iov_t
-                                              @a iov parameter in
-                                              @ref ::UCT_RMA "RMA operations"
-                                              @anchor uct_iface_attr_cap_max_iov */
         uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
     } cap;                               /**< Interface capabilities */
 
@@ -1226,8 +1231,8 @@ UCT_INLINE_API ssize_t uct_ep_put_bcopy(uct_ep_h ep, uct_pack_callback_t pack_cb
  *                         is not required.
  * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
  *                         array. If @a iovcnt is zero, the data is considered empty.
- *                         @a iovcnt is limited by @ref uct_iface_attr_cap_max_iov
- *                         "uct_iface_attr::cap::max_iov"
+ *                         @a iovcnt is limited by @ref uct_iface_attr_cap_put_max_iov
+ *                         "uct_iface_attr::cap::put::max_iov"
  * @param [in] remote_addr Remote address to place the @a iov data.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
  * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
@@ -1278,8 +1283,8 @@ UCT_INLINE_API ucs_status_t uct_ep_get_bcopy(uct_ep_h ep, uct_unpack_callback_t 
  *                         is not required.
  * @param [in] iovcnt      Size of the @a iov data @ref ::uct_iov_t structures
  *                         array. If @a iovcnt is zero, the data is considered empty.
- *                         @a iovcnt is limited by @ref uct_iface_attr_cap_max_iov
- *                         "uct_iface_attr::cap::max_iov"
+ *                         @a iovcnt is limited by @ref uct_iface_attr_cap_get_max_iov
+ *                         "uct_iface_attr::cap::get::max_iov"
  * @param [in] remote_addr Remote address of the data placed to the @a iov.
  * @param [in] rkey        Remote key descriptor provided by @ref ::uct_rkey_unpack
  * @param [in] comp        Completion handle as defined by @ref ::uct_completion_t.
@@ -1341,8 +1346,8 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  *                           is not required.
  * @param [in] iovcnt        Size of the @a iov data @ref ::uct_iov_t structures
  *                           array. If @a iovcnt is zero, the data is considered empty.
- *                           @a iovcnt is limited by @ref uct_iface_attr_cap_max_iov
- *                           "uct_iface_attr::cap::max_iov"
+ *                           @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                           "uct_iface_attr::cap::am::max_iov"
  * @param [in] comp          Completion handle as defined by @ref ::uct_completion_t.
  *
  * @return UCS_INPROGRESS    Some communication operations are still in progress.

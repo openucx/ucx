@@ -52,16 +52,17 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->cap.put.max_short      = UINT_MAX;
     attr->cap.put.max_bcopy      = SIZE_MAX;
     attr->cap.put.max_zcopy      = 0;
+    attr->cap.put.max_iov        = 1;
 
     attr->cap.get.max_bcopy      = SIZE_MAX;
     attr->cap.get.max_zcopy      = 0;
+    attr->cap.get.max_iov        = 1;
 
     attr->cap.am.max_short       = self_iface->data_length;
     attr->cap.am.max_bcopy       = self_iface->data_length;
     attr->cap.am.max_zcopy       = 0;
     attr->cap.am.max_hdr         = 0;
-
-    attr->cap.max_iov            = 1;
+    attr->cap.am.max_iov         = 1;
 
     attr->latency                = 0;
     attr->bandwidth              = 6911 * 1024.0 * 1024.0;
