@@ -130,13 +130,17 @@ public:
         size_t max_hdr  = ucs_min(sender().iface_attr().cap.am.max_hdr,
                                   sendbuf.length());
         size_t hdr_size = rand() % (max_hdr + 1);
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ((char*)sendbuf.ptr() + hdr_size),
+                                (sendbuf.length() - hdr_size), sendbuf.memh(),
+                                sender().iface_attr().cap.am.max_iov);
+
         return uct_ep_am_zcopy(ep,
                                AM_ID,
                                sendbuf.ptr(),
                                hdr_size,
-                               (char*)sendbuf.ptr() + hdr_size,
-                               sendbuf.length()     - hdr_size,
-                               sendbuf.memh(),
+                               iov,
+                               iovcnt,
                                comp());
     }
 

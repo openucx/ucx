@@ -60,9 +60,9 @@ ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsign
 ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                                  void *arg, uint64_t remote_addr, uct_rkey_t rkey);
 
-ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
-                                      uct_mem_h memh, uint64_t remote_addr,
-                                      uct_rkey_t rkey, uct_completion_t *comp);
+ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
                                       uct_unpack_callback_t unpack_cb,
@@ -70,9 +70,9 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp);
 
-ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                      uct_mem_h memh, uint64_t remote_addr,
-                                      uct_rkey_t rkey, uct_completion_t *comp);
+ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                      const void *payload, unsigned length);
@@ -81,9 +81,8 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                 uct_pack_callback_t pack_cb, void *arg);
 
 ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
-                                     unsigned header_length, const void *payload,
-                                     size_t length, uct_mem_h memh,
-                                     uct_completion_t *comp);
+                                     unsigned header_length, const uct_iov_t *iov,
+                                     size_t iovcnt, uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                          uint64_t remote_addr, uct_rkey_t rkey);

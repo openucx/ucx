@@ -46,7 +46,7 @@
  */
 #define UCT_RC_MLX5_CHECK_PUT_SHORT(_length, _qp_type) \
     UCT_CHECK_LENGTH(_length, UCT_RC_MLX5_PUT_MAX_SHORT(_qp_type), "put_short")
-                     
+
 
 enum {
     UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
@@ -72,7 +72,7 @@ ucs_status_t uct_rc_mlx5_iface_srq_init(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t
 
 void uct_rc_mlx5_iface_srq_cleanup(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq);
 
-ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, 
+ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
                                            uct_rc_iface_t *rc_iface,
                                            uct_rc_iface_config_t *config);
 
@@ -80,7 +80,7 @@ void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr, int qp_type);
 
-static inline void 
+static inline void
 uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *mlx5_iface,
                                    uct_rc_iface_t *rc_iface,
                                    uct_ib_iface_recv_desc_t *desc,
@@ -92,7 +92,7 @@ uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *mlx5_iface,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface, 
+uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                  uct_rc_iface_t *rc_iface)
 {
     uct_ib_mlx5_srq_seg_t *seg;
@@ -106,7 +106,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     ucs_status_t status;
     void *udesc;
 
-    ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, 
+    ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
 
     cqe = uct_ib_mlx5_get_cqe(&rc_iface->super, &mlx5_common_iface->rx.cq,
@@ -155,15 +155,15 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
                                      hdr + 1, byte_len - sizeof(*hdr), udesc);
     }
 
-    if ((status == UCS_OK) && 
-        (wqe_ctr == ((mlx5_common_iface->rx.srq.ready_idx + 1) & 
+    if ((status == UCS_OK) &&
+        (wqe_ctr == ((mlx5_common_iface->rx.srq.ready_idx + 1) &
                       mlx5_common_iface->rx.srq.mask))) {
         /* If the descriptor was not used - if there are no "holes", we can just
          * reuse it on the receive queue. Otherwise, ready pointer will stay behind
          * until post_recv allocated more descriptors from the memory pool, fills
          * the holes, and moves it forward.
          */
-        ucs_assert(wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) & 
+        ucs_assert(wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) &
                                 mlx5_common_iface->rx.srq.mask));
         ++mlx5_common_iface->rx.srq.ready_idx;
         ++mlx5_common_iface->rx.srq.free_idx;
@@ -193,7 +193,7 @@ done:
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
-                           uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size, 
+                           uint8_t opcode, uint8_t opmod, unsigned sig_flag, unsigned wqe_size,
                            struct mlx5_wqe_av *av, int qp_type)
 {
     uint16_t posted;
@@ -201,7 +201,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
 
     ctrl = txwq->curr;
     uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi,
-                             opcode, opmod, 
+                             opcode, opmod,
                              txqp->qp->qp_num, sig_flag, wqe_size);
 
     if (qp_type == IBV_EXP_QPT_DC_INI) {
@@ -213,7 +213,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
     }
 
     uct_ib_mlx5_log_tx(&iface->super,
-                       (qp_type == IBV_QPT_RC) ? IBV_QPT_RC : IBV_QPT_UD, 
+                       (qp_type == IBV_QPT_RC) ? IBV_QPT_RC : IBV_QPT_UD,
                        ctrl, txwq->qstart, txwq->qend,
                        (opcode == MLX5_OPCODE_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
@@ -221,7 +221,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
     if (sig_flag & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->sw_pi - posted;
     }
-    uct_rc_txqp_posted(txqp, iface, 
+    uct_rc_txqp_posted(txqp, iface,
                        posted, sig_flag & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 
@@ -249,7 +249,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
                              /* SEND */ uint8_t am_id, uint64_t am_hdr,
                              /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                              /* AV   */ struct mlx5_wqe_av *av,
-                             int qp_type 
+                             int qp_type
                            )
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
@@ -329,7 +329,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
  *            +--------+---------+--------+-------+
  * ATOMIC     | CTRL   | RADDR   | ATOMIC | DPSEG |
  *            +--------+---------+--------+-------+
- *            
+ *
  * CTRL is mlx5_wqe_ctrl_seg for RC and
  *         mlx5_wqe_ctrl_seg + mlx5_wqe_datagram_seg for DC
  *

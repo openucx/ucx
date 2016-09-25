@@ -212,19 +212,21 @@ ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        pack_cb, arg, length);
-    UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_WRITE, sge, 
+    UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_WRITE, sge,
                               length, remote_addr, rkey);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SIGNALED);
     return length;
 }
 
-ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const void *buffer, size_t length,
-                                       uct_mem_h memh, uint64_t remote_addr,
-                                       uct_rkey_t rkey, uct_completion_t *comp)
+ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
+
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_WRITE);
@@ -257,12 +259,14 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, void *buffer, size_t length,
-                                       uct_mem_h memh, uint64_t remote_addr,
-                                       uct_rkey_t rkey, uct_completion_t *comp)
+ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                                       uint64_t remote_addr, uct_rkey_t rkey,
+                                       uct_completion_t *comp)
 {
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
+
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
 
     status = uct_rc_verbs_ep_rdma_zcopy(ep, buffer, length, memh, remote_addr,
                                         rkey, comp, IBV_WR_RDMA_READ);
@@ -316,9 +320,8 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 }
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
-                                      unsigned header_length, const void *payload,
-                                      size_t length, uct_mem_h memh,
-                                      uct_completion_t *comp)
+                                      unsigned header_length, const uct_iov_t *iov,
+                                      size_t iovcnt, uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -327,7 +330,9 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     struct ibv_sge sge[2];
     int send_flags;
 
-    UCT_RC_CHECK_AM_ZCOPY(id, header_length, length, 
+    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
+
+    UCT_RC_CHECK_AM_ZCOPY(id, header_length, length,
                           iface->verbs_common.config.short_desc_size,
                           iface->super.super.config.seg_size);
 
@@ -335,7 +340,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_RC_CHECK_FC_WND(&iface->super, &ep->super, id);
     UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super, &iface->verbs_common.short_desc_mp,
                                       desc, id, header, header_length, comp, &send_flags);
-    uct_rc_verbs_am_zcopy_sge_fill(sge, header_length, payload, length, memh);
+    uct_rc_verbs_am_zcopy_sge_fill(sge, header_length, buffer, length, memh);
     UCT_RC_VERBS_FILL_AM_ZCOPY_WR(wr, sge, wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);

@@ -209,16 +209,19 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface, uct_iface_attr_t *ifa
     iface_attr->cap.put.max_short = UCT_RC_MLX5_PUT_MAX_SHORT(qp_type);
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+    iface_attr->cap.put.max_iov   = 1;
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
+    iface_attr->cap.get.max_iov   = 1;
 
     /* AM */
     iface_attr->cap.am.max_short  = UCT_RC_MLX5_AM_MAX_SHORT(qp_type) - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_hdr    = UCT_RC_MLX5_AM_MAX_HDR(qp_type) - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.max_iov    = 1;
 
     /* Atomics */
     iface_attr->cap.flags        |= UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF |

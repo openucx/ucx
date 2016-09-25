@@ -44,8 +44,14 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
     iface_attr->cap.put.max_short      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_bcopy      = iface->config.fma_seg_size;
     iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
+    iface_attr->cap.put.max_iov        = 1;
+
     iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
     iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
+    iface_attr->cap.get.max_iov        = 1;
+
+    iface_attr->cap.am.max_iov         = 1;
+
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = 0;
@@ -233,7 +239,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
         uct_ugni_rdma_iface_ops.ep_atomic_swap32    = uct_ugni_ep_atomic_swap32;
     }
 
-    /* TBD: eventually the uct_ugni_progress has to be moved to 
+    /* TBD: eventually the uct_ugni_progress has to be moved to
      * rdma layer so each ugni layer will have own progress */
     uct_worker_progress_register(worker, uct_ugni_progress, self);
     pthread_mutex_unlock(&uct_ugni_global_lock);

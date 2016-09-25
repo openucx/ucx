@@ -155,9 +155,11 @@ public:
         zcomp.func  = NULL;
 
         ucs_status_t status;
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(),
+                                sender().iface_attr().cap.am.max_iov);
         do {
-            status = uct_ep_am_zcopy(sender().ep(0), AM_ID, NULL, 0, sendbuf.ptr(),
-                                     sendbuf.length(), sendbuf.memh(), &zcomp);
+            status = uct_ep_am_zcopy(sender().ep(0), AM_ID, NULL, 0, iov, iovcnt, &zcomp);
         } while (status == UCS_ERR_NO_RESOURCE);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
         if (status == UCS_OK) {

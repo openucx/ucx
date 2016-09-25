@@ -73,7 +73,7 @@ public:
 
     void check_atomic_counters() {
         uint64_t v;
-        
+
         v = UCS_STATS_GET_COUNTER(uct_ep(sender())->stats, UCT_EP_STAT_ATOMIC);
         EXPECT_EQ(1UL, v);
         /* give atomic chance to complete */
@@ -124,7 +124,7 @@ UCS_TEST_P(test_uct_stats, am_short)
                              sizeof(send_data));
     EXPECT_UCS_OK(status);
 
-    check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_SHORT, 
+    check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_SHORT,
                       sizeof(hdr) + sizeof(send_data));
     check_am_rx_counters(sizeof(hdr) + sizeof(send_data));
 }
@@ -153,8 +153,10 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, 
-                             lbuf->ptr(), lbuf->length(), lbuf->memh(), NULL);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
+                            sender().iface_attr().cap.am.max_iov);
+
+    status = uct_ep_am_zcopy(sender_ep(), 0, 0, 0, iov, iovcnt, NULL);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     check_tx_counters(UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY, lbuf->length());
@@ -173,7 +175,7 @@ UCS_TEST_P(test_uct_stats, put_short)
                               rbuf->addr(), rbuf->rkey());
     EXPECT_UCS_OK(status);
 
-    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_SHORT, 
+    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_SHORT,
                       sizeof(send_data));
 }
 
@@ -187,7 +189,7 @@ UCS_TEST_P(test_uct_stats, put_bcopy)
                          rbuf->addr(), rbuf->rkey());
     EXPECT_EQ(lbuf->length(), v);
 
-    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_BCOPY, 
+    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_BCOPY,
                       lbuf->length());
 }
 
@@ -197,11 +199,13 @@ UCS_TEST_P(test_uct_stats, put_zcopy)
 
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
 
-    status = uct_ep_put_zcopy(sender_ep(), lbuf->ptr(), lbuf->length(), lbuf->memh(),
-                              rbuf->addr(), rbuf->rkey(), 0);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
+                            sender().iface_attr().cap.put.max_iov);
+
+    status = uct_ep_put_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
-    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_ZCOPY, 
+    check_tx_counters(UCT_EP_STAT_PUT, UCT_EP_STAT_BYTES_ZCOPY,
                       lbuf->length());
 }
 
@@ -212,13 +216,13 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
 
     check_caps(UCT_IFACE_FLAG_GET_BCOPY);
 
-    status = uct_ep_get_bcopy(sender_ep(), (uct_unpack_callback_t)memcpy, 
+    status = uct_ep_get_bcopy(sender_ep(), (uct_unpack_callback_t)memcpy,
                               lbuf->ptr(), lbuf->length(),
                               rbuf->addr(), rbuf->rkey(), NULL);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     short_progress_loop();
-    check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_BCOPY, 
+    check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_BCOPY,
                       lbuf->length());
 }
 
@@ -228,13 +232,14 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
 
     check_caps(UCT_IFACE_FLAG_GET_ZCOPY);
 
-    status = uct_ep_get_zcopy(sender_ep(), 
-                              lbuf->ptr(), lbuf->length(), lbuf->memh(),
-                              rbuf->addr(), rbuf->rkey(), 0);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
+                            sender().iface_attr().cap.get.max_iov);
+
+    status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
     short_progress_loop();
-    check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_ZCOPY, 
+    check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_ZCOPY,
                       lbuf->length());
 }
 
