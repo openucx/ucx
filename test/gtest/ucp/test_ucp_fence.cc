@@ -165,8 +165,8 @@ protected:
 
         ucp_rkey_destroy(rkey);
 
-        sender().disconnect();
-        receiver().disconnect();
+        disconnect(sender());
+        disconnect(receiver());
 
         status = ucp_mem_unmap(receiver().ucph(), memh);
         ASSERT_UCS_OK(status);

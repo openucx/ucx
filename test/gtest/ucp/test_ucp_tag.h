@@ -37,8 +37,6 @@ protected:
 
     virtual void init();
 
-    virtual void cleanup();
-
     static void request_init(void *request);
 
     static request* request_alloc();

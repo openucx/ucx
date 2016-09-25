@@ -32,14 +32,6 @@ void test_ucp_tag::init()
     dt_gen_finish_count = 0;
 }
 
-void test_ucp_tag::cleanup()
-{
-    sender().flush_worker();
-    receiver().flush_worker();
-    sender().disconnect();
-    ucp_test::cleanup();
-}
-
 void test_ucp_tag::request_init(void *request)
 {
     struct request *req = (struct request *)request;
