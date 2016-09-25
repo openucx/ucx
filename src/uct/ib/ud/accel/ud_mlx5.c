@@ -38,7 +38,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
                              wqe_size);
 
     seg = (struct mlx5_wqe_datagram_seg *)(ctrl+1);
-    uct_ib_mlx5_set_dgram_seg(seg, &ep->av, 0);
+    uct_ib_mlx5_set_dgram_seg(seg, ep->is_global, &ep->av, 0);
     mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_QKEY);
 
     uct_ib_mlx5_log_tx(&iface->super.super, IBV_QPT_UD, ctrl,
@@ -475,11 +475,15 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 {
     ucs_status_t status;
     struct ibv_ah *ah;
+    int is_global;
 
-    status = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ah);
+    status = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ah,
+                                    &is_global);
     if (status != UCS_OK) {
         return status;
     }
+
+    ep->is_global                             = is_global;
 
     uct_ib_mlx5_get_av(ah, &ep->av);
     mlx5_av_base(&ep->av)->key.qkey.qkey      = htonl(UCT_IB_QKEY);

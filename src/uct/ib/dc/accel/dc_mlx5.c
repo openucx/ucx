@@ -26,11 +26,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t,
     const uct_dc_iface_addr_t *if_addr = (const uct_dc_iface_addr_t *)iface_addr;
     ucs_status_t status;
     struct ibv_ah *ah;
+    int is_global;
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
-    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr, 0, &ah);
+    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr, 0, &ah,
+                                    &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }

@@ -390,6 +390,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t *)iface_addr;
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
+    int is_global;
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
@@ -410,7 +411,8 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
 
     ucs_assert_always(ep->ah == NULL);
 
-    status_ah = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ep->ah);
+    status_ah = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ep->ah,
+                                       &is_global);
     if (status_ah != UCS_OK) {
         uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
         *new_ep_p = NULL;
@@ -439,6 +441,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_ud_ep_addr_t *ud_ep_addr = (const uct_ud_ep_addr_t *)ep_addr;
     ucs_status_t status;
+    int is_global;
 
     status = uct_ud_ep_connect_to_ep(&ep->super, ib_addr, ud_ep_addr);
     if (status != UCS_OK) {
@@ -447,7 +450,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_assert_always(ep->ah == NULL);
     ep->dest_qpn = uct_ib_unpack_uint24(ud_ep_addr->iface_addr.qp_num);
 
-    return uct_ib_iface_create_ah(iface, ib_addr, 0, &ep->ah);
+    return uct_ib_iface_create_ah(iface, ib_addr, 0, &ep->ah, &is_global);
 }
 
 
