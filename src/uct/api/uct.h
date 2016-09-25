@@ -315,8 +315,8 @@ struct uct_iface_attr {
  * @brief Parameters used for interface creation.
  */
 struct uct_iface_params {
-    char                     *tl_name;    /**< Transport name */
-    char                     *dev_name;   /**< Device Name */
+    const char               *tl_name;    /**< Transport name */
+    const char               *dev_name;   /**< Device Name */
     size_t                   rx_headroom; /**< How much bytes to reserve before
                                                the receive segment.*/
 };
