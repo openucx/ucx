@@ -34,6 +34,8 @@ public:
 
         void disconnect();
 
+        void* disconnect_nb() const;
+
         void destroy_worker();
 
         ucp_ep_h ep() const;
@@ -95,9 +97,11 @@ public:
 protected:
     virtual void init();
     virtual void cleanup();
-    ucp_test_base::entity* create_entity(bool add_in_front = false);
+    entity* create_entity(bool add_in_front = false);
     void progress() const;
     void short_progress_loop() const;
+    void disconnect(const entity& entity);
+    void wait(void *req);
     static void disable_errors();
     static void restore_errors();
 

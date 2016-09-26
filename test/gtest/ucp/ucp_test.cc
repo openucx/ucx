@@ -41,7 +41,7 @@ void ucp_test::cleanup() {
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
     {
-        (*iter)->disconnect();
+        disconnect(**iter);
     }
     m_entities.clear();
 }
@@ -86,6 +86,30 @@ void ucp_test::short_progress_loop() const {
         progress();
         usleep(100);
     }
+}
+
+void ucp_test::disconnect(const entity& entity) {
+    void *dreq = entity.disconnect_nb();
+    if (!UCS_PTR_IS_PTR(dreq)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
+    }
+    wait(dreq);
+}
+
+void ucp_test::wait(void *req)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    ucs_status_t status;
+    do {
+        progress();
+        ucp_tag_recv_info info;
+        status = ucp_request_test(req, &info);
+    } while (status == UCS_INPROGRESS);
+    ASSERT_UCS_OK(status);
+    ucp_request_release(req);
 }
 
 std::vector<ucp_test_param>
@@ -278,6 +302,14 @@ void ucp_test_base::entity::fence() const {
 
 void ucp_test_base::entity::disconnect() {
     m_ep.reset();
+}
+
+void* ucp_test_base::entity::disconnect_nb() const {
+    ucp_ep_h ep = revoke_ep();
+    if (ep == NULL) {
+        return NULL;
+    }
+    return ucp_disconnect_nb(ep);
 }
 
 void ucp_test_base::entity::destroy_worker() {

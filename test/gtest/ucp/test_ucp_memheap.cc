@@ -77,8 +77,8 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     ucp_rkey_destroy(rkey);
     receiver().flush_worker();
 
-    sender().disconnect();
-    receiver().disconnect();
+    disconnect(sender());
+    disconnect(receiver());
 
     ucp_rkey_buffer_release(rkey_buffer);
     status = ucp_mem_unmap(receiver().ucph(), memh);
@@ -159,8 +159,8 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
     ucp_rkey_destroy(rkey);
     receiver().flush_worker();
 
-    sender().disconnect();
-    receiver().disconnect();
+    disconnect(sender());
+    disconnect(receiver());
 
     status = ucp_mem_unmap(receiver().ucph(), memh);
     ASSERT_UCS_OK(status);

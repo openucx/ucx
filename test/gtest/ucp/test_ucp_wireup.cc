@@ -50,8 +50,6 @@ protected:
 
     void disconnect(ucp_ep_h ep);
 
-    void wait(void *req);
-
     void waitall(std::vector<void*> reqs);
 
 private:
@@ -228,22 +226,6 @@ void test_ucp_wireup::disconnect(ucp_ep_h ep) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
     wait(req);
-}
-
-void test_ucp_wireup::wait(void *req)
-{
-    if (req == NULL) {
-        return;
-    }
-
-    ucs_status_t status;
-    do {
-        progress();
-        ucp_tag_recv_info info;
-        status = ucp_request_test(req, &info);
-    } while (status == UCS_INPROGRESS);
-    ASSERT_UCS_OK(status);
-    ucp_request_release(req);
 }
 
 void test_ucp_wireup::waitall(std::vector<void*> reqs)
@@ -505,7 +487,7 @@ UCS_TEST_P(test_ucp_wireup, disconnect_nb_onesided) {
     std::vector<void*> sreqs;
     send_nb(sender().ep(), 1000, 1000, sreqs);
 
-    void *dreq = ucp_disconnect_nb(sender().revoke_ep());
+    void *dreq = sender().disconnect_nb();
     if (!UCS_PTR_IS_PTR(dreq)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
     }
