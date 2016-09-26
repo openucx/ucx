@@ -208,7 +208,7 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp, uct_ib_
         struct mlx5_wqe_datagram_seg *seg;
 
         seg = (struct mlx5_wqe_datagram_seg *)(ctrl+1);
-        uct_ib_mlx5_set_dgram_seg(seg, 0, av, 0, 0);
+        uct_ib_mlx5_set_dgram_seg(seg, av, 0, 0);
         mlx5_av_base(&seg->av)->key.dc_key = htonll(UCT_IB_DC_KEY);
     }
 

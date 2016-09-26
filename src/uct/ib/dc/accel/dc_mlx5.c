@@ -30,7 +30,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
-    status = uct_ib_iface_mlx5_get_av(&iface->super.super.super, ib_addr, &self->av, 0, &is_global);
+    status = uct_ib_iface_mlx5_get_av(&iface->super.super.super, ib_addr,
+                                      &self->av, 0, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }

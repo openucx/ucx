@@ -390,7 +390,7 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg, int is_global,
+uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
                           uct_ib_mlx5_base_av_t *av,
                           struct mlx5_grh_av *grh_av, uint8_t path_bits)
 {
@@ -401,7 +401,7 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg, int is_global,
     mlx5_av_base(&seg->av)->rlid           = av->rlid | (path_bits << 8);
     mlx5_av_base(&seg->av)->dqp_dct        = av->dqp_dct;
 
-    if (is_global) {
+    if (grh_av) {
 #if HAVE_STRUCT_MLX5_GRH_AV_RMAC
         memcpy(mlx5_av_grh(&seg->av)->rmac, grh_av->rmac,
                sizeof(mlx5_av_grh(&seg->av)->rmac));
