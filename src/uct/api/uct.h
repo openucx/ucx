@@ -313,6 +313,9 @@ struct uct_iface_attr {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Parameters used for interface creation.
+ *
+ * This structure should be allocated by the user and should be passed to
+ * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
     const char               *tl_name;    /**< Transport name */
