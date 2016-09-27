@@ -31,8 +31,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t,
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
-    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr, 0, &ah,
-                                    &is_global);
+    status = uct_ib_iface_create_ah(&iface->super.super.super, ib_addr,
+                                    self->super.path_bits, &ah, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
