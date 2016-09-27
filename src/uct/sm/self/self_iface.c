@@ -136,17 +136,17 @@ static uct_iface_ops_t uct_self_iface_ops = {
 };
 
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     ucs_status_t status;
     uct_self_iface_config_t *self_config = 0;
 
     ucs_trace_func("Creating a loop-back transport self=%p rxh=%lu",
-                   self, rx_headroom);
+                   self, params->rx_headroom);
 
-    if (strcmp(dev_name, UCT_SELF_NAME) != 0) {
-        ucs_error("No device was found: %s", dev_name);
+    if (strcmp(params->dev_name, UCT_SELF_NAME) != 0) {
+        ucs_error("No device was found: %s", params->dev_name);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -156,14 +156,15 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     self_config = ucs_derived_of(tl_config, uct_self_iface_config_t);
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
-    self->rx_headroom = rx_headroom;
+    self->rx_headroom = params->rx_headroom;
     self->data_length = self_config->super.max_bcopy;
 
     /* create a memory pool for data transferred */
     status = uct_iface_mpool_init(&self->super,
                                   &self->msg_desc_mp,
-                                  sizeof(uct_am_recv_desc_t) + rx_headroom + self->data_length,
-                                  sizeof(uct_am_recv_desc_t) + rx_headroom,
+                                  sizeof(uct_am_recv_desc_t) + self->rx_headroom +
+                                                               self->data_length,
+                                  sizeof(uct_am_recv_desc_t) + self->rx_headroom,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &self_config->mp,
                                   256,
@@ -205,8 +206,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_self_iface_t)
 
 UCS_CLASS_DEFINE(uct_self_iface_t, uct_base_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_self_iface_t, uct_iface_t, uct_md_h,
-                                 uct_worker_h, const char *, size_t,
-                                 const uct_iface_config_t *);
+                                 uct_worker_h, const uct_iface_params_t*,
+                                 const uct_iface_config_t*);
 
 static ucs_status_t uct_self_query_tl_resources(uct_md_h md,
                                                 uct_tl_resource_desc_t **resource_p,

@@ -49,14 +49,19 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name, struct iface_info 
 {
     ucs_status_t status;
     uct_iface_config_t *config; /* Defines interface configuration options */
+    uct_iface_params_t params = {
+        .tl_name     = tl_name,
+        .dev_name    = dev_name,
+        .rx_headroom = 0
+    };
 
     /* Read transport-specific interface configuration */
     status = uct_iface_config_read(tl_name, NULL, NULL, &config);
     CHKERR_JUMP(UCS_OK != status, "setup iface_config", error_ret);
 
     /* Open communication interface */
-    status = uct_iface_open(iface_p->pd, iface_p->worker, tl_name, dev_name, 0, config,
-            &iface_p->iface);
+    status = uct_iface_open(iface_p->pd, iface_p->worker, &params, config,
+                            &iface_p->iface);
     uct_config_release(config);
     CHKERR_JUMP(UCS_OK != status, "open temporary interface", error_ret);
 

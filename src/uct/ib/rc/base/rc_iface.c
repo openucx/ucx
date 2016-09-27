@@ -194,7 +194,7 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 }
 
 static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
-                                      uct_rc_iface_config_t *config)
+                                      const uct_rc_iface_config_t *config)
 {
     enum ibv_mtu port_mtu = uct_ib_iface_port_attr(&iface->super)->active_mtu;
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
@@ -278,18 +278,19 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
-                    unsigned rx_priv_len, uct_rc_iface_config_t *config)
+                    uct_worker_h worker, const uct_iface_params_t *params,
+                    unsigned rx_priv_len, const uct_rc_iface_config_t *config)
 {
     struct ibv_srq_init_attr srq_init_attr;
     uct_ib_device_t *dev;
     ucs_status_t status;
+    unsigned tx_cq_len = config->tx.cq_len;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, dev_name, rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               rx_priv_len, sizeof(uct_rc_hdr_t), config->tx.cq_len,
                               SIZE_MAX, &config->super);
 
-    self->tx.cq_available           = config->tx.cq_len - 1; /* Reserve one for error */
+    self->tx.cq_available           = tx_cq_len - 1; /* Reserve one for error */
     self->tx.next_op                = 0;
     self->rx.available              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -297,7 +298,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.tx_min_inline      = config->super.tx.min_inline;
     self->config.tx_moderation      = ucs_min(config->super.tx.cq_moderation,
                                               config->super.tx.queue_len / 4);
-    self->config.tx_ops_mask        = ucs_roundup_pow2(config->tx.cq_len) - 1;
+    self->config.tx_ops_mask        = ucs_roundup_pow2(tx_cq_len) - 1;
     self->config.rx_inline          = config->super.rx.inl;
     self->config.min_rnr_timer      = uct_ib_to_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_fabric_time(config->tx.timeout);

@@ -239,7 +239,7 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 }
 
 static ucs_status_t
-uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ud_iface_config_t *config)
+uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
 {
     /* TODO: exp attrs autoconf */
     struct ibv_exp_qp_init_attr qp_init_attr;
@@ -385,30 +385,32 @@ void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface)
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
-                    unsigned ud_rx_priv_len, uct_ud_iface_config_t *config)
+                    uct_worker_h worker, const uct_iface_params_t *params,
+                    unsigned ud_rx_priv_len,
+                    const uct_ud_iface_config_t *config)
 {
     unsigned rx_priv_len, rx_hdr_len;
     ucs_status_t status;
     size_t data_size;
     int mtu;
 
-    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%u ud_rx_priv_len=%u",
-                   dev_name, self, ops, worker, rx_headroom, ud_rx_priv_len);
+    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu ud_rx_priv_len=%u",
+                   params->dev_name, self, ops, worker,
+                   params->rx_headroom, ud_rx_priv_len);
 
     if (worker->async == NULL) {
-        ucs_error("%s ud iface must have valid async context", dev_name);
+        ucs_error("%s ud iface must have valid async context", params->dev_name);
         return UCS_ERR_INVALID_PARAM;
     }
 
     if (config->super.tx.queue_len <= UCT_UD_TX_MODERATION) {
         ucs_error("%s ud iface tx queue is too short (%d <= %d)",
-                  dev_name,
+                  params->dev_name,
                   config->super.tx.queue_len, UCT_UD_TX_MODERATION);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_ib_device_mtu(dev_name, md, &mtu);
+    status = uct_ib_device_mtu(params->dev_name, md, &mtu);
     if (status != UCS_OK) {
         return status;
     }
@@ -417,8 +419,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
                   sizeof(uct_ud_recv_skb_t) - sizeof(uct_ib_iface_recv_desc_t);
     rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, dev_name,
-                              rx_headroom, rx_priv_len, rx_hdr_len,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker,
+                              params, rx_priv_len, rx_hdr_len,
                               config->super.tx.queue_len, mtu, &config->super);
 
     self->tx.unsignaled          = 0;
@@ -464,7 +466,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.in_pending = 0;
 
     ucs_queue_head_init(&self->rx.pending_q);
-
 
     return UCS_OK;
 

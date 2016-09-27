@@ -172,8 +172,9 @@ struct uct_rc_iface {
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
 };
-UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
-                  const char*, unsigned, unsigned, uct_rc_iface_config_t*)
+UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
+                  uct_worker_h, const uct_iface_params_t*,
+                  unsigned, const uct_rc_iface_config_t*)
 
 
 struct uct_rc_iface_send_op {

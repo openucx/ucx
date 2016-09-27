@@ -907,6 +907,11 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 {
     uct_iface_config_t *iface_config;
     ucs_status_t status;
+    uct_iface_params_t iface_params = {
+        .tl_name     = params->uct.tl_name,
+        .dev_name    = params->uct.dev_name,
+        .rx_headroom = 0
+    };
 
     status = ucs_async_context_init(&perf->uct.async, params->async_mode);
     if (status != UCS_OK) {
@@ -929,8 +934,8 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto out_destroy_md;
     }
 
-    status = uct_iface_open(perf->uct.md, perf->uct.worker, params->uct.tl_name,
-                            params->uct.dev_name, 0, iface_config, &perf->uct.iface);
+    status = uct_iface_open(perf->uct.md, perf->uct.worker, &iface_params,
+                            iface_config, &perf->uct.iface);
     uct_config_release(iface_config);
     if (status != UCS_OK) {
         ucs_error("Failed to open iface: %s", ucs_status_string(status));
