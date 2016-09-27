@@ -356,7 +356,7 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
 {
   uct_ugni_device_t *dev;
 
-  dev = uct_ugni_device_by_name(dev_name);
+  dev = uct_ugni_device_by_name(params->dev_name);
   if (NULL == dev) {
     ucs_error("No device was found: %s", params->dev_name);
     return UCS_ERR_NO_DEVICE;
