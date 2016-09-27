@@ -357,6 +357,15 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+static void uct_ib_set_cqe_size(struct ibv_context *ibv_context, size_t inl)
+{
+    if ((inl > 32) || (UCS_SYS_CACHE_LINE_SIZE > 64)) {
+        ibv_exp_setenv(ibv_context, "MLX5_CQE_SIZE", "128", 1);
+    } else {
+        ibv_exp_setenv(ibv_context, "MLX5_CQE_SIZE", "64", 1);
+    }
+}
+
 /**
  * @param rx_headroom   Headroom requested by the user.
  * @param rx_priv_len   Length of transport private data to reserve (0 if unused)
@@ -426,7 +435,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    /* TODO inline scatter for send SQ */
+    uct_ib_set_cqe_size(dev->ibv_context, 0);
     self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len,
                                   NULL, self->comp_channel, 0);
     if (self->send_cq == NULL) {
@@ -435,14 +444,9 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    if (config->rx.inl > 32 /*UCT_IB_MLX5_CQE64_MAX_INL*/) {
-        ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "128", 1);
-    }
-
+    uct_ib_set_cqe_size(dev->ibv_context, config->rx.inl);
     self->recv_cq = ibv_create_cq(dev->ibv_context, config->rx.queue_len,
                                   NULL, self->comp_channel, 0);
-    ibv_exp_setenv(dev->ibv_context, "MLX5_CQE_SIZE", "64", 1);
-
     if (self->recv_cq == NULL) {
         ucs_error("Failed to create recv cq: %m");
         status = UCS_ERR_IO_ERROR;
