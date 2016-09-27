@@ -33,11 +33,24 @@
     ((8) | ((_log_arg_size) - 2))
 
 #if HAVE_STRUCT_MLX5_WQE_AV_BASE
+
 #  define mlx5_av_base(_av)   (&(_av)->base)
 #  define mlx5_av_grh(_av)    (&(_av)->grh_sec)
+
 #else 
+
 #  define mlx5_av_base(_av)   (_av)
 #  define mlx5_av_grh(_av)    (_av)
+
+struct mlx5_grh_av {
+        uint8_t         reserved0[4];
+        uint8_t         rmac[6];
+        uint8_t         tclass;
+        uint8_t         hop_limit;
+        uint32_t        grh_gid_fl;
+        uint8_t         rgid[16];
+};
+
 #endif
 
 #if !(HAVE_MLX5_WQE_CTRL_SOLICITED)
