@@ -232,6 +232,7 @@ struct uct_ud_ep {
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
     ucs_wtimer_t     slow_timer;
     uint8_t          flags;
+    uint8_t          path_bits;
     UCS_STATS_NODE_DECLARE(stats);
     UCT_UD_EP_HOOK_DECLARE(timer_hook);
 #if ENABLE_DEBUG_DATA
