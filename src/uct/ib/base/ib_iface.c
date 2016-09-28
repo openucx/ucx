@@ -204,6 +204,7 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
                           &ah_attr->grh.dgid);
     ah_attr->sl            = iface->config.sl;
     ah_attr->src_path_bits = src_path_bits;
+    ah_attr->dlid          |= src_path_bits;
     ah_attr->port_num      = iface->config.port_num;
     if (ah_attr->is_global) {
         ah_attr->grh.sgid_index = iface->config.gid_index;
@@ -314,7 +315,7 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
                                  config->lid_path_bits.ranges[i].last);
     }
 
-    iface->path_bits = ucs_malloc(num_path_bits * sizeof(*iface->path_bits),
+    iface->path_bits = ucs_calloc(1, num_path_bits * sizeof(*iface->path_bits),
                                   "ib_path_bits");
     if (iface->path_bits == NULL) {
         return UCS_ERR_NO_MEMORY;

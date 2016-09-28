@@ -156,12 +156,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
+    self->path_bits = iface->super.path_bits[0]; /* TODO multi-rail */
+
     uct_worker_progress_register(iface->super.super.worker,
                                  ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
                                  iface);
 
     UCT_UD_EP_HOOK_INIT(self);
-    ucs_debug("NEW EP: iface=%p ep=%p id=%d", iface, self, self->ep_id);
+    ucs_debug("NEW EP: iface=%p ep=%p id=%d src_path_bits=%d",
+              iface, self, self->ep_id, self->path_bits);
     return UCS_OK;
 }
 

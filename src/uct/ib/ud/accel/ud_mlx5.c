@@ -477,8 +477,8 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     struct ibv_ah *ah;
     int is_global;
 
-    status = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ah,
-                                    &is_global);
+    status = uct_ib_iface_create_ah(&iface->super.super, ib_addr,
+                                    ep->super.path_bits, &ah, &is_global);
     if (status != UCS_OK) {
         return status;
     }
