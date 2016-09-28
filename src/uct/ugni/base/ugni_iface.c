@@ -349,15 +349,16 @@ ucs_status_t ugni_deactivate_iface(uct_ugni_iface_t *iface)
 }
 
 UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, uct_iface_ops_t *uct_ugni_iface_ops,
-                           const uct_iface_config_t *tl_config
-                           UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+                    const uct_iface_params_t *params,
+                    uct_iface_ops_t *uct_ugni_iface_ops,
+                    const uct_iface_config_t *tl_config
+                    UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
   uct_ugni_device_t *dev;
 
   dev = uct_ugni_device_by_name(dev_name);
   if (NULL == dev) {
-    ucs_error("No device was found: %s", dev_name);
+    ucs_error("No device was found: %s", params->dev_name);
     return UCS_ERR_NO_DEVICE;
   }
 
@@ -375,9 +376,9 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
   return UCS_OK;
 }
 
-UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t,
-                          uct_md_h, uct_worker_h,
-                          const char*, uct_iface_ops_t *, const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t *));
+UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
+                          const uct_iface_params_t*, uct_iface_ops_t *,
+                          const uct_iface_config_t * UCS_STATS_ARG(ucs_stats_node_t *));
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ugni_iface_t){
 

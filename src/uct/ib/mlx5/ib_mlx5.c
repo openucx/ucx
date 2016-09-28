@@ -300,14 +300,16 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
 
 ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
                                       const uct_ib_address_t *ib_addr,
+                                      uint8_t path_bits,
                                       uct_ib_mlx5_base_av_t *base_av,
-                                      struct mlx5_grh_av *grh_av, int *is_global)
+                                      struct mlx5_grh_av *grh_av,
+                                      int *is_global)
 {
     ucs_status_t status;
     struct ibv_ah *ah;
     struct mlx5_wqe_av mlx5_av;
 
-    status = uct_ib_iface_create_ah(iface, ib_addr, 0, &ah, is_global);
+    status = uct_ib_iface_create_ah(iface, ib_addr, path_bits, &ah, is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }

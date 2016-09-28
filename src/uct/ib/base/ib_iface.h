@@ -119,8 +119,9 @@ struct uct_ib_iface {
     uct_ib_iface_ops_t      *ops;
 
 };
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h, const char*,
-                  unsigned, unsigned, unsigned, unsigned, size_t, uct_ib_iface_config_t*)
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
+                  const uct_iface_params_t*, unsigned, unsigned, unsigned,
+                  size_t, const uct_ib_iface_config_t*)
 
 
 /*
@@ -176,8 +177,8 @@ extern const char *uct_ib_mtu_values[];
  * Create memory pool of receive descriptors.
  */
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
-                                            uct_ib_iface_config_t *config,
-                                            const char *name, ucs_mpool_t *mp);
+                                          const uct_ib_iface_config_t *config,
+                                          const char *name, ucs_mpool_t *mp);
 
 void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
 
@@ -249,7 +250,7 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     const uct_ib_address_t *ib_addr,
-                                    uint8_t src_path_bits,
+                                    uint8_t path_bits,
                                     struct ibv_ah **ah_p,
                                     int *is_global_p);
 

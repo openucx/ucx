@@ -31,6 +31,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t,
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
     status = uct_ib_iface_mlx5_get_av(&iface->super.super.super, ib_addr,
+                                      iface->super.super.super.path_bits[0],
                                       &self->av, NULL, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
@@ -607,7 +608,7 @@ static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface)
 }
 
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_dc_iface_config_t *config = ucs_derived_of(tl_config,
@@ -616,7 +617,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
-                              worker, dev_name, rx_headroom, 0, config);
+                              worker, params, 0, config);
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
                                            &config->super.super);
@@ -651,7 +652,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 UCS_CLASS_DEFINE(uct_dc_mlx5_iface_t, uct_dc_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_iface_t, uct_iface_t, uct_md_h,
-                                 uct_worker_h, const char*, size_t,
+                                 uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_mlx5_iface_t, uct_iface_t);

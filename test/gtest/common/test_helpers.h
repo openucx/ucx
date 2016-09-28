@@ -274,7 +274,7 @@ public:
     }
 
     operator T() const {
-        return m_value;
+        return get();
     }
 
     operator bool() const {
@@ -282,7 +282,7 @@ public:
     }
 
     T get() const {
-        return m_value;
+        return m_initialized ? m_value : NULL;
     }
 
 private:

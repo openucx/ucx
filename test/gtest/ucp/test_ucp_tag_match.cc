@@ -211,13 +211,6 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") 
         request_release(rreq1);
         request_release(rreq2);
     }
-
-    sender().flush_worker();
-    sender2.flush_worker();
-    receiver().flush_worker();
-
-    sender().disconnect();
-    sender2.disconnect();
 }
 
 UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {

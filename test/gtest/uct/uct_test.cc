@@ -208,6 +208,12 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                          size_t rx_headroom, uct_md_config_t *md_config) {
     ucs_status_t status;
 
+    uct_iface_params_t iface_params;
+
+    iface_params.tl_name     = const_cast<char*>(resource.tl_name.c_str());
+    iface_params.dev_name    = const_cast<char*>(resource.dev_name.c_str());
+    iface_params.rx_headroom = rx_headroom;
+
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
 
@@ -215,8 +221,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
                            uct_md_open, resource.md_name.c_str(), md_config);
 
     UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
-                           uct_iface_open, m_pd, m_worker, resource.tl_name.c_str(),
-                           resource.dev_name.c_str(), rx_headroom, iface_config);
+                           uct_iface_open, m_pd, m_worker, &iface_params, iface_config);
 
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);

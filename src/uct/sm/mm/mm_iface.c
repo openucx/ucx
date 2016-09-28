@@ -423,7 +423,7 @@ static void uct_mm_iface_singal_handler(void *arg)
 }
 
 static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_mm_iface_config_t *mm_config = ucs_derived_of(tl_config, uct_mm_iface_config_t);
@@ -467,7 +467,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                      1)));
     self->fifo_mask                = mm_config->fifo_size - 1;
     self->fifo_shift               = ucs_count_zero_bits(mm_config->fifo_size);
-    self->rx_headroom              = rx_headroom;
+    self->rx_headroom              = params->rx_headroom;
 
     /* create the receive FIFO */
     /* use specific allocator to allocate and attach memory and check the
@@ -489,7 +489,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     /* create a memory pool for receive descriptors */
     status = uct_iface_mpool_init(&self->super,
                                   &self->recv_desc_mp,
-                                  sizeof(uct_mm_recv_desc_t) + rx_headroom +
+                                  sizeof(uct_mm_recv_desc_t) + params->rx_headroom +
                                   self->config.seg_size,
                                   sizeof(uct_mm_recv_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
@@ -583,7 +583,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
 UCS_CLASS_DEFINE(uct_mm_iface_t, uct_base_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_iface_t, uct_iface_t, uct_md_h,
-                                 uct_worker_h, const char *, size_t,
+                                 uct_worker_h, const uct_iface_params_t *,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_iface_t, uct_iface_t);
 

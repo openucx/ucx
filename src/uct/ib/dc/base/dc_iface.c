@@ -144,13 +144,13 @@ err:
 }
 
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const char *dev_name, unsigned rx_headroom,
+                    uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config)
 {
     ucs_status_t status;
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, dev_name, rx_headroom,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rx_priv_len, &config->super.super);
 
     if (config->ndci < 1) {

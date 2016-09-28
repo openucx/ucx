@@ -265,10 +265,12 @@ typedef struct uct_ib_mlx5_base_av {
     uint16_t                    rlid;
 } uct_ib_mlx5_base_av_t;
 
-ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface, 
+ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
                                       const uct_ib_address_t *ib_addr,
-                                      uct_ib_mlx5_base_av_t *av,
-                                      struct mlx5_grh_av *grh_av, int *is_global);
+                                      uint8_t path_bits,
+                                      uct_ib_mlx5_base_av_t *base_av,
+                                      struct mlx5_grh_av *grh_av,
+                                      int *is_global);
 
 ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
                                   uct_ib_mlx5_txwq_t *wq);

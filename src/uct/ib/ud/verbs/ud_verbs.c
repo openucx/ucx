@@ -411,8 +411,8 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
 
     ucs_assert_always(ep->ah == NULL);
 
-    status_ah = uct_ib_iface_create_ah(&iface->super.super, ib_addr, 0, &ep->ah,
-                                       &is_global);
+    status_ah = uct_ib_iface_create_ah(&iface->super.super, ib_addr,
+                                       ep->super.path_bits, &ep->ah, &is_global);
     if (status_ah != UCS_OK) {
         uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
         *new_ep_p = NULL;
@@ -450,7 +450,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_assert_always(ep->ah == NULL);
     ep->dest_qpn = uct_ib_unpack_uint24(ud_ep_addr->iface_addr.qp_num);
 
-    return uct_ib_iface_create_ah(iface, ib_addr, 0, &ep->ah, &is_global);
+    return uct_ib_iface_create_ah(iface, ib_addr, ep->super.path_bits, &ep->ah, &is_global);
 }
 
 
@@ -535,7 +535,7 @@ uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface)
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worker,
-                           const char *dev_name, size_t rx_headroom,
+                           const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_ud_iface_config_t *config = ucs_derived_of(tl_config,
@@ -545,7 +545,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
-                              worker, dev_name, rx_headroom, 0, config);
+                              worker, params, 0, config);
 
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;
@@ -595,7 +595,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 UCS_CLASS_DEFINE(uct_ud_verbs_iface_t, uct_ud_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_iface_t, uct_iface_t, uct_md_h,
-                                 uct_worker_h, const char*, size_t,
+                                 uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_iface_t, uct_iface_t);
