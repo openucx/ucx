@@ -18,7 +18,6 @@ struct uct_dc_ep {
     uint8_t               dci;
     uint8_t               state;
     uint16_t              umr_offset;
-    uint8_t               path_bits;
 };
 
 UCS_CLASS_DECLARE(uct_dc_ep_t, uct_dc_iface_t *, const uct_dc_iface_addr_t *);

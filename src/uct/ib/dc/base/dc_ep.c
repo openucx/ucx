@@ -15,7 +15,6 @@ UCS_CLASS_INIT_FUNC(uct_dc_ep_t, uct_dc_iface_t *iface, const uct_dc_iface_addr_
     self->dci        = UCT_DC_EP_NO_DCI;
     self->state      = UCT_DC_EP_TX_OK;
     self->umr_offset = uct_ib_md_umr_offset(if_addr->umr_id);
-    self->path_bits  = iface->super.super.path_bits[0]; /* TODO multi-rail */
     return UCS_OK;
 }
 
