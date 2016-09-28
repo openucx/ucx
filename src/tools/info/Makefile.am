@@ -11,7 +11,6 @@ AM_CPPFLAGS           = \
     -I$(abs_top_builddir)/src
 if HAVE_IB
 AM_CPPFLAGS += $(IBVERBS_CPPFLAGS)
-AM_LDFLAGS   = $(IBVERBS_LDFLAGS) -lpthread
 endif
 
 BUILT_SOURCES = build_config.h
