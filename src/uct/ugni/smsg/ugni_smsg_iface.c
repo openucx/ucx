@@ -401,7 +401,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params->dev_name,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
                               &uct_ugni_smsg_iface_ops,
                               &config->super UCS_STATS_ARG(NULL));
 
