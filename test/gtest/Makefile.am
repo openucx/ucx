@@ -1,7 +1,8 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-#
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+# Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+#
 # See file LICENSE for terms.
 #
 
@@ -120,6 +121,8 @@ gtest_SOURCES = \
 if HAVE_IB
 gtest_SOURCES += \
     uct/test_ib.cc
+gtest_CPPFLAGS += \
+    $(IBVERBS_CPPFLAGS)
 if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/ud_base.cc \
