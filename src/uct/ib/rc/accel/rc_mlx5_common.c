@@ -156,11 +156,6 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, uc
         return status;
     }
 
-    if (uct_ib_mlx5_cqe_size(&iface->tx.cq) != sizeof(struct mlx5_cqe64)) {
-        ucs_error("TX CQE size is not 64");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     status = uct_ib_mlx5_get_cq(rc_iface->super.recv_cq, &iface->rx.cq);
     if (status != UCS_OK) {
         return status;
