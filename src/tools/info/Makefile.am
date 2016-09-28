@@ -1,5 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -8,6 +9,9 @@ bin_PROGRAMS          = ucx_info
 AM_CPPFLAGS           = \
     -I$(abs_top_srcdir)/src \
     -I$(abs_top_builddir)/src
+if HAVE_IB
+AM_CPPFLAGS += $(IBVERBS_CPPFLAGS)
+endif
 
 BUILT_SOURCES = build_config.h
 DISTCLEANFILES = build_config.h
@@ -17,7 +21,6 @@ DISTCLEANFILES = build_config.h
 #
 build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
-
 
 ucx_info_SOURCES  = \
 	build_info.c \
