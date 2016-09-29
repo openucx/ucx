@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -73,6 +74,8 @@ enum {
 typedef enum {
     UCP_ATOMIC_MODE_CPU,     /* Use CPU-based atomics */
     UCP_ATOMIC_MODE_DEVICE,  /* Use device-based atomics */
+    UCP_ATOMIC_MODE_GUESS,   /* If all transports support CPU AMOs only (no DEVICE),
+                              * the CPU is selected, otherwise DEVICE is selected */
     UCP_ATOMIC_MODE_LAST
 } ucp_atomic_mode_t;
 

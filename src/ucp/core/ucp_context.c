@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -22,6 +23,7 @@ ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
     [UCP_ATOMIC_MODE_DEVICE] = "device",
+    [UCP_ATOMIC_MODE_GUESS]  = "guess",
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
@@ -90,11 +92,15 @@ static ucs_config_field_t ucp_config_table[] = {
    "Estimation of buffer copy bandwidth",
    ucs_offsetof(ucp_config_t, ctx.bcopy_bw), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"ATOMIC_MODE", "device",
+  {"ATOMIC_MODE", "guess",
    "Atomic operations synchronization mode.\n"
    " cpu    - atomic operations are consistent with respect to the CPU.\n"
    " device - atomic operations are performed on one of the transport devices,\n"
-   "          and there is guarantee of consistency with respect to the CPU.",
+   "          and there is guarantee of consistency with respect to the CPU."
+   " guess  - atomic operations mode is configured based on underlying\n"
+   "          transport capabilities. If one of active transports supports\n"
+   "          the DEVICE atomic mode, the DEVICE mode is selected.\n"
+   "          Otherwise the CPU mode is selected.",
    ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
 
   {"LOG_DATA", "0",
