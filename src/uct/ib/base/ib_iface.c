@@ -196,15 +196,15 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
 }
 
 void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
-                               uint8_t src_path_bits, struct ibv_ah_attr *ah_attr)
+                               uint8_t path_bits, struct ibv_ah_attr *ah_attr)
 {
     memset(ah_attr, 0, sizeof(*ah_attr));
 
     uct_ib_address_unpack(ib_addr, &ah_attr->dlid, &ah_attr->is_global,
                           &ah_attr->grh.dgid);
     ah_attr->sl            = iface->config.sl;
-    ah_attr->src_path_bits = src_path_bits;
-    ah_attr->dlid          |= src_path_bits;
+    ah_attr->src_path_bits = path_bits;
+    ah_attr->dlid          |= path_bits;
     ah_attr->port_num      = iface->config.port_num;
     if (ah_attr->is_global) {
         ah_attr->grh.sgid_index = iface->config.gid_index;
@@ -213,7 +213,7 @@ void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     const uct_ib_address_t *ib_addr,
-                                    uint8_t src_path_bits,
+                                    uint8_t path_bits,
                                     struct ibv_ah **ah_p,
                                     int *is_global_p)
 {
@@ -222,13 +222,13 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
     char buf[128];
     char *p, *endp;
 
-    uct_ib_iface_fill_ah_attr(iface, ib_addr, src_path_bits, &ah_attr);
+    uct_ib_iface_fill_ah_attr(iface, ib_addr, path_bits, &ah_attr);
     ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
 
     if (ah == NULL) {
         p    = buf;
         endp = buf + sizeof(buf);
-        snprintf(p, endp - p, "dlid=%d sl=%d port=%d path_bits=%d",
+        snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
                  ah_attr.dlid, ah_attr.sl, ah_attr.port_num, ah_attr.src_path_bits);
         p += strlen(p);
 

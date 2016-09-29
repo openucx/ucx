@@ -21,7 +21,7 @@ typedef struct uct_dc_mlx5_iface {
 
 typedef struct uct_dc_mlx5_ep {
     uct_dc_ep_t                    super;
-    struct mlx5_wqe_av             av;
+    uct_ib_mlx5_base_av_t          av;
 } uct_dc_mlx5_ep_t;
 
 
