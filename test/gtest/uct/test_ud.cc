@@ -516,6 +516,19 @@ UCS_TEST_P(test_ud, ca_resend) {
     EXPECT_GE(2+2, ack_req_tx_cnt);
 }
 
+UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
+    /* single connect */
+    iface(m_e2)->rx.hook = drop_creq;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    m_e2->connect_to_iface(0, *m_e1);
+
+    short_progress_loop(50);
+
+    iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
+
+    short_progress_loop(100);
+}
 #endif
 
 UCS_TEST_P(test_ud, connect_iface_single) {
@@ -531,21 +544,6 @@ UCS_TEST_P(test_ud, connect_iface_single) {
 
     check_connection();
 }
-
-UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
-    /* single connect */
-    iface(m_e2)->rx.hook = drop_creq;
-
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
-
-    short_progress_loop(50);
-
-    iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
-
-    short_progress_loop(100);
-}
-
 
 UCS_TEST_P(test_ud, connect_iface_2to1) {
     /* 2 to 1 connect */
@@ -814,6 +812,7 @@ UCS_TEST_P(test_ud, res_skb_tx) {
     }
 }
 
+#ifdef UCT_UD_EP_DEBUG_HOOKS
 /* Simulate loss of ctl packets during simultaneous CREQs.
  * Use-case: CREQ and CREP packets from m_e2 to m_e1 are lost.
  * Check: that both eps (m_e1 and m_e2) are connected finally */
@@ -845,7 +844,7 @@ UCS_TEST_P(test_ud, ctls_loss) {
     EXPECT_TRUE(uct_ud_ep_is_connected(ep(m_e1)));
     EXPECT_TRUE(uct_ud_ep_is_connected(ep(m_e2)));
 }
-
+#endif
 
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud)
 _UCT_INSTANTIATE_TEST_CASE(test_ud, ud_mlx5)
