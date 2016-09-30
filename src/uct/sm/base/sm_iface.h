@@ -11,7 +11,7 @@
 
 
 #define UCT_SM_IFACE_DEVICE_ADDR_LEN    sizeof(uint64_t)
-
+#define UCT_SM_MAX_IOV                  16
 
 ucs_status_t uct_sm_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr);
