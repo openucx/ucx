@@ -151,7 +151,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
         goto err;
     }
     ibv_destroy_qp(qp);
-    self->verbs_common.config.max_inline = cap.max_inline_data;
+    self->verbs_common.config.max_inline   = cap.max_inline_data;
+    self->super.super.super.config.max_iov = ucs_min(UCT_IB_MAX_IOV,
+                                                     cap.max_send_sge);
 
     status = uct_rc_verbs_iface_prepost_recvs_common(&self->super);
     if (status != UCS_OK) {

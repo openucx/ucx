@@ -90,6 +90,15 @@ enum {
 
 
 /**
+ * Check the size of the IOV array
+ */
+#define UCT_CHECK_IOV_SIZE(_iovcnt, _max_iov, _name) \
+    UCT_CHECK_PARAM((_iovcnt) <= (_max_iov), \
+                    "iovcnt(%lu) should be limited by %lu in %s", \
+                    _iovcnt, _max_iov, _name)
+
+
+/**
  * This macro should be deleted after UCT gather/scatter IOV interface changed
  */
 #define UCT_CHECK_PARAM_IOV(_iov, _iovcnt, _buffer, _length, _memh) \
@@ -173,6 +182,7 @@ typedef struct uct_base_iface {
         unsigned            num_alloc_methods;
         uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
         ucs_log_level_t     failure_level;
+        size_t              max_iov;
     } config;
 
 } uct_base_iface_t;
@@ -492,6 +502,32 @@ void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
     if (--comp->count == 0) {
         comp->func(comp, status);
     }
+}
+
+/**
+ * Calculates total length of particular iov data buffer.
+ * Currently has no support for stride.
+ * If stride supported it should be like: length + ((count - 1) * stride)
+ */
+static UCS_F_ALWAYS_INLINE
+size_t uct_iov_get_length(const uct_iov_t *iov)
+{
+    return iov->count * iov->length;
+}
+
+/**
+ * Calculates total length of the iov array buffers.
+ */
+static UCS_F_ALWAYS_INLINE
+size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
+{
+    size_t iov_it, total_length = 0;
+
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        total_length += uct_iov_get_length(&iov[iov_it]);
+    }
+
+    return total_length;
 }
 
 

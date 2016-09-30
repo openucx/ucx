@@ -16,6 +16,7 @@
 #include <ucs/datastruct/mpool.inl>
 
 #define UCT_IB_DEVICE_NAME_LEN 256
+#define UCT_IB_MAX_IOV         8
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -296,7 +297,7 @@ static inline uint8_t uct_ib_iface_umr_id(uct_ib_iface_t *iface)
         VALGRIND_MAKE_MEM_DEFINED(_hdr, _wc[i].byte_len); \
         UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_RX, __FUNCTION__, \
                               _wc[i].wr_id, _wc[i].status); \
-               1; }); ++_i) 
+               1; }); ++_i)
 
 #define UCT_IB_IFACE_VERBS_FOREACH_TXWQE(_iface, _i, _wc, _wc_count) \
     for (_i = 0; _i < _wc_count && ({ \
@@ -305,6 +306,38 @@ static inline uint8_t uct_ib_iface_umr_id(uct_ib_iface_t *iface)
                       _iface, _i, ibv_wc_status_str(_wc[i].status), \
                       &_wc[i], (unsigned long long)_wc[i].wr_id); \
         } \
-               1; }); ++_i) 
+               1; }); ++_i)
+
+/**
+ * Fill ibv_sge data structure by data provided in uct_iov_t
+ * The function avoids copying IOVs with zero length
+ *
+ * @return Number of elements in sge[]
+ */
+static UCS_F_ALWAYS_INLINE
+size_t uct_rc_verbs_rdma_zcopy_sge_fill_iov(struct ibv_sge *sge,
+                                            const uct_iov_t *iov, size_t iovcnt)
+{
+    size_t iov_it, sge_it = 0;
+
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        sge[sge_it].length = uct_iov_get_length(&iov[iov_it]);
+        if (sge[sge_it].length > 0) {
+            sge[sge_it].addr   = (uintptr_t)(iov[iov_it].buffer);
+        } else {
+            continue; /* to avoid zero length elements in sge */
+        }
+
+        if (iov[sge_it].memh == UCT_INVALID_MEM_HANDLE) {
+            sge[sge_it].lkey = 0;
+        } else {
+            sge[sge_it].lkey = ((uct_ib_mem_t *)(iov[iov_it].memh))->lkey;
+        }
+        ++sge_it;
+    }
+
+    return sge_it;
+}
+
 
 #endif
