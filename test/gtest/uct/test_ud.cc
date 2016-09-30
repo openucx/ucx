@@ -30,11 +30,20 @@ public:
     }
 
     static int rx_ack_count;
+    static int tx_ackreq_psn;
 
     static ucs_status_t count_rx_acks(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     {
         if (UCT_UD_PSN_COMPARE(neth->ack_psn, >, ep->tx.acked_psn)) {
             rx_ack_count++;
+        }
+        return UCS_OK;
+    }
+
+    static ucs_status_t save_tx_ackreqs(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+    {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
+            tx_ackreq_psn = neth->psn;
         }
         return UCS_OK;
     }
@@ -126,6 +135,7 @@ public:
 
 int test_ud::ack_req_tx_cnt = 0;
 int test_ud::rx_ack_count   = 0;
+int test_ud::tx_ackreq_psn = 0;
 int test_ud::rx_drop_count  = 0;
 int test_ud::tx_count  = 0;
 
@@ -291,7 +301,7 @@ UCS_TEST_P(test_ud, ack_req_window) {
     }
     EXPECT_EQ(1, ack_req_tx_cnt);
     EXPECT_EQ(N/4, tx_ack_psn);
-    short_progress_loop();
+    short_progress_loop(100);
     EXPECT_EQ(2, ack_req_tx_cnt);
     EXPECT_EQ(N/4, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
@@ -408,15 +418,21 @@ UCS_TEST_P(test_ud, ca_ai) {
     EXPECT_EQ(UCT_UD_CA_MIN_WINDOW, ep(m_e2)->ca.cwnd);
 
     ep(m_e1, 0)->rx.rx_hook = count_rx_acks;
+    ep(m_e1, 0)->tx.tx_hook = save_tx_ackreqs;
     prev_cwnd = ep(m_e1)->ca.cwnd;
     rx_ack_count = 0;
 
     /* window increase upto max window should
      * happen when we receive acks */
-    while(ep(m_e1)->ca.cwnd < max_window) {
+    while (ep(m_e1)->ca.cwnd < max_window) {
        status = tx(m_e1);
        if (status != UCS_OK) {
-           progress();
+
+           /* progress until getting all acks for our requests */
+           do {
+               progress();
+           } while (UCT_UD_PSN_COMPARE(ep(m_e1)->tx.acked_psn, <, tx_ackreq_psn));
+
            /* it is possible to get no acks if tx queue is full.
             * But no more than 2 acks per window.
             * One at 1/4 and one at the end
@@ -445,7 +461,7 @@ UCS_TEST_P(test_ud, ca_md) {
 
     connect();
 
-    short_progress_loop();
+    short_progress_loop(100);
 
     /* assume we are at the max window
      * on receive drop all packets. After several retransmission
@@ -469,9 +485,9 @@ UCS_TEST_P(test_ud, ca_md) {
         } while (ep(m_e1, 0)->ca.cwnd != new_cwnd);
         short_progress_loop();
 
-        /* up to 2 additional ack_reqs per each resend */
-        EXPECT_LE(new_cwnd-1, tx_count);
-        EXPECT_GE(new_cwnd-1+2, tx_count);
+        /* up to 3 additional ack_reqs per each resend */
+        EXPECT_GE(tx_count, new_cwnd - 1);
+        EXPECT_LE(tx_count, new_cwnd - 1 + 3);
         EXPECT_EQ(ep(m_e1, 0)->ca.cwnd, new_cwnd);
 
     } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
