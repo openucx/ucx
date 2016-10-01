@@ -182,7 +182,6 @@ typedef struct uct_base_iface {
         unsigned            num_alloc_methods;
         uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
         ucs_log_level_t     failure_level;
-        size_t              max_iov;
     } config;
 
 } uct_base_iface_t;

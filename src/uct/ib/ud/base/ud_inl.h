@@ -98,16 +98,22 @@ static inline ucs_time_t uct_ud_fast_tick()
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_am_set_zcopy_desc(uct_ud_send_skb_t *skb, const void *payload, size_t length, 
-                         uint32_t lkey, uct_completion_t *comp)
+uct_ud_am_set_zcopy_desc(uct_ud_send_skb_t *skb, const uct_iov_t *iov, size_t iovcnt,
+                         uct_completion_t *comp)
 {
     uct_ud_zcopy_desc_t *zdesc;
+    size_t iov_it_length;
+    size_t iov_it;
 
     skb->flags        |= UCT_UD_SEND_SKB_FLAG_ZCOPY;
     zdesc              = uct_ud_zcopy_desc(skb);
-    zdesc->lkey        = lkey;
-    zdesc->payload     = payload;
-    zdesc->len         = length;
+    zdesc->iovcnt      = iovcnt;
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        iov_it_length = uct_iov_get_length(iov + iov_it);
+        ucs_assert(iov_it_length <= UINT16_MAX);
+        zdesc->iov[iov_it].buffer = iov[iov_it].buffer;
+        zdesc->iov[iov_it].length = iov_it_length;
+    }
     if (comp != NULL) {
         skb->flags        |= UCT_UD_SEND_SKB_FLAG_COMP;
         zdesc->super.comp  = comp;

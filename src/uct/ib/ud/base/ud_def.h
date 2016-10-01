@@ -15,7 +15,6 @@
 #include <uct/ib/base/ib_iface.h>
 
 #define UCT_UD_QP_HASH_SIZE     256
-#define UCT_UD_MAX_SGE          2
 #define UCT_UD_TX_MODERATION    64
 #define UCT_UD_MIN_INLINE       48
 #define UCT_UD_HASH_SIZE        997
@@ -153,11 +152,19 @@ typedef struct uct_ud_comp_desc {
 } uct_ud_comp_desc_t;
 
 
+/**
+ * Used to keep uct_iov_t buffers without datatype information.
+ */
+typedef struct uct_ud_iov {
+    void                   *buffer;   /**< Data buffer */
+    uint16_t                length;   /**< Length of the buffer in bytes */
+} UCS_S_PACKED uct_ud_iov_t;
+
+
 typedef struct uct_ud_zcopy_desc {
     uct_ud_comp_desc_t      super;
-    const void              *payload;
-    uint32_t                lkey;
-    uint32_t                len;
+    uct_ud_iov_t            iov[UCT_IB_MAX_IOV];
+    uint16_t                iovcnt; /* Count of the iov[] array valid elements */
 } uct_ud_zcopy_desc_t;
 
 

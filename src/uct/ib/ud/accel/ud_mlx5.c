@@ -298,7 +298,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     skb->len = sizeof(*neth) + header_length;
     memcpy(skb->neth, neth, sizeof(*neth));
     memcpy(skb->neth + 1, header, header_length);
-    uct_ud_am_set_zcopy_desc(skb, buffer, length, lkey, comp);
+    uct_ud_am_set_zcopy_desc(skb, iov, iovcnt, comp);
 
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
@@ -466,6 +466,10 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     ucs_trace_func("");
     uct_ud_iface_query(iface, iface_attr);
     iface_attr->cap.flags &= ~UCT_IFACE_FLAG_WAKEUP;
+
+    /* TODO. Remove following line after IOV support implementation */
+    iface_attr->cap.am.max_iov  = 1;
+
     return UCS_OK;
 }
 
@@ -639,6 +643,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               md, worker, params, 0, config);
+
+    uct_ib_iface_set_max_iov(&self->super.super, 1);
 
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
     if (status != UCS_OK) {

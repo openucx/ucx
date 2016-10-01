@@ -11,6 +11,7 @@
 #include <sys/uio.h>
 
 #include "cma_ep.h"
+#include <uct/sm/base/sm_iface.h>
 #include <ucs/debug/log.h>
 
 
@@ -124,12 +125,9 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
                                   uint64_t remote_addr, uct_rkey_t rkey,
                                   uct_completion_t *comp)
 {
-    uct_base_iface_t *iface = NULL;
     size_t length = 0;
 
-    iface = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
-
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_iov, "uct_cma_ep_put_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_cma_ep_put_zcopy");
 
     int ret = uct_cma_ep_common_zcopy(tl_ep,
                                       iov,
@@ -150,12 +148,9 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
                                   uint64_t remote_addr, uct_rkey_t rkey,
                                   uct_completion_t *comp)
 {
-    uct_base_iface_t *iface = NULL;
     size_t length = 0;
 
-    iface = ucs_derived_of(tl_ep->iface, uct_base_iface_t);
-
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_iov, "uct_cma_ep_get_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_cma_ep_get_zcopy");
 
     int ret = uct_cma_ep_common_zcopy(tl_ep,
                                       iov,
