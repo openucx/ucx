@@ -358,13 +358,42 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-static void uct_ib_set_cqe_size(struct ibv_context *ibv_context, size_t inl)
+static ucs_status_t uct_ib_set_cqe_size(struct ibv_context *ibv_context,
+                                        size_t inl)
 {
-    if ((inl > 32) || (UCS_SYS_CACHE_LINE_SIZE > 64)) {
-        ibv_exp_setenv(ibv_context, "MLX5_CQE_SIZE", "128", 1);
+    static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
+    const char *cqe_size_env_value;
+    size_t cqe_size_min, cqe_size;
+    char cqe_size_buf[32];
+    int ret;
+
+    cqe_size_min       = (inl > 32) ? 128 : 64;
+    cqe_size_env_value = getenv(cqe_size_env_var);
+
+    if (cqe_size_env_value != NULL) {
+        cqe_size = atol(cqe_size_env_value);
+        if (cqe_size < cqe_size_min) {
+            ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
+                      cqe_size_env_var, cqe_size, cqe_size_min, inl);
+            return UCS_ERR_INVALID_PARAM;
+        }
     } else {
-        ibv_exp_setenv(ibv_context, "MLX5_CQE_SIZE", "64", 1);
+        /* CQE size is not defined by the environment, set it according to inline
+         * size and cache line size.
+         */
+        cqe_size = ucs_max(cqe_size_min, UCS_SYS_CACHE_LINE_SIZE);
+        cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
+        cqe_size = ucs_min(cqe_size, 128); /* at most 128 */
+        snprintf(cqe_size_buf, sizeof(cqe_size_buf),"%zu", cqe_size);
+        ret = ibv_exp_setenv(ibv_context, cqe_size_env_var, cqe_size_buf, 1);
+        if (ret) {
+            ucs_error("ibv_exp_setenv(%s=%s) failed: %m", cqe_size_env_var,
+                      cqe_size_buf);
+            return UCS_ERR_INVALID_PARAM;
+        }
     }
+
+    return UCS_OK;
 }
 
 /**
@@ -436,7 +465,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    uct_ib_set_cqe_size(dev->ibv_context, 0);
+    status = uct_ib_set_cqe_size(dev->ibv_context, 0);
+    if (status != UCS_OK) {
+        goto err_destroy_comp_channel;
+    }
+
     self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len,
                                   NULL, self->comp_channel, 0);
     if (self->send_cq == NULL) {
@@ -445,7 +478,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    uct_ib_set_cqe_size(dev->ibv_context, config->rx.inl);
+    status = uct_ib_set_cqe_size(dev->ibv_context, config->rx.inl);
+    if (status != UCS_OK) {
+        goto err_destroy_send_cq;
+    }
+
     self->recv_cq = ibv_create_cq(dev->ibv_context, config->rx.queue_len,
                                   NULL, self->comp_channel, 0);
     if (self->recv_cq == NULL) {
