@@ -110,7 +110,7 @@ uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
     wr->wr_id             = txqp->unsignaled;
     wr->dc.ah             = ep->ah;
     wr->dc.dct_number     = ep->dest_qpn;
-    wr->dc.dct_access_key = UCT_IB_DC_KEY;
+    wr->dc.dct_access_key = UCT_IB_KEY;
 
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
                              (wr->exp_opcode == (int)IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
@@ -645,14 +645,14 @@ void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)
     self->inl_am_wr.num_sge                 = 2;
     self->inl_am_wr.exp_opcode              = IBV_WR_SEND;
     self->inl_am_wr.exp_send_flags          = IBV_SEND_INLINE;
-    self->inl_am_wr.dc.dct_access_key       = UCT_IB_DC_KEY;
+    self->inl_am_wr.dc.dct_access_key       = UCT_IB_KEY;
 
     memset(&self->inl_rwrite_wr, 0, sizeof(self->inl_rwrite_wr));
     self->inl_rwrite_wr.sg_list             = self->verbs_common.inl_sge;
     self->inl_rwrite_wr.num_sge             = 1;
     self->inl_rwrite_wr.exp_opcode          = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.exp_send_flags      = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
-    self->inl_rwrite_wr.dc.dct_access_key   = UCT_IB_DC_KEY;
+    self->inl_rwrite_wr.dc.dct_access_key   = UCT_IB_KEY;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worker,

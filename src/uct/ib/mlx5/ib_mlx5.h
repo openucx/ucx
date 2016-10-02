@@ -25,8 +25,8 @@
 #define UCT_IB_MLX5_CQE64_SIZE_LOG   6
 #define UCT_IB_MLX5_CQE128_SIZE_LOG  7
 #define UCT_IB_MLX5_MAX_BB           4
-#define UCT_IB_MLX5_WORKER_BF_KEY  0x00c1b7e8U
-#define UCT_IB_MLX5_EXTENDED_UD_AV   0x80000000U
+#define UCT_IB_MLX5_WORKER_BF_KEY    0x00c1b7e8u
+#define UCT_IB_MLX5_EXTENDED_UD_AV   0x80 /* htonl(0x80000000) */
 #define UCT_IB_MLX5_BF_REG_SIZE      256
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
@@ -263,7 +263,7 @@ typedef struct uct_ib_mlx5_base_av {
     uint8_t                     stat_rate_sl;
     uint8_t                     fl_mlid;
     uint16_t                    rlid;
-} uct_ib_mlx5_base_av_t;
+} UCS_S_PACKED uct_ib_mlx5_base_av_t;
 
 ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
                                       const uct_ib_address_t *ib_addr,
@@ -373,20 +373,6 @@ uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, void *seg_base, size_t seg_len)
     return rseg;
 }
 
-static unsigned UCS_F_ALWAYS_INLINE uct_ib_mlx5_ctrl_seg_size(int qp_type)
-{
-    switch (qp_type) {
-    case IBV_QPT_RC:
-        return sizeof(struct mlx5_wqe_ctrl_seg);
-    case IBV_EXP_QPT_DC_INI:
-        return sizeof(struct mlx5_wqe_ctrl_seg) + 
-               sizeof(struct mlx5_wqe_datagram_seg);
-    default:
-        ucs_fatal("unknown qp type %d", qp_type);
-    }
-    return 0;
-}
-
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_raddr,
                             uct_rkey_t rdma_rkey)
@@ -406,17 +392,21 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
-                          uct_ib_mlx5_base_av_t *av,
-                          struct mlx5_grh_av *grh_av, uint8_t path_bits)
+                          uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
+                          enum ibv_qp_type qp_type)
 {
-
-    mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_QKEY);
-    mlx5_av_base(&seg->av)->stat_rate_sl   = av->stat_rate_sl;
-    mlx5_av_base(&seg->av)->fl_mlid        = av->fl_mlid | path_bits;
-    mlx5_av_base(&seg->av)->rlid           = av->rlid | (path_bits << 8);
-    mlx5_av_base(&seg->av)->dqp_dct        = av->dqp_dct;
+    if (qp_type == IBV_QPT_UD) {
+        mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_KEY);
+    } else if (qp_type == IBV_EXP_QPT_DC_INI) {
+        mlx5_av_base(&seg->av)->key.dc_key     = htonll(UCT_IB_KEY);
+    }
+    mlx5_av_base(&seg->av)->dqp_dct            = av->dqp_dct;
+    mlx5_av_base(&seg->av)->stat_rate_sl       = av->stat_rate_sl;
+    mlx5_av_base(&seg->av)->fl_mlid            = av->fl_mlid;
+    mlx5_av_base(&seg->av)->rlid               = av->rlid;
 
     if (grh_av) {
+        ucs_assert(av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
 #if HAVE_STRUCT_MLX5_GRH_AV_RMAC
         memcpy(mlx5_av_grh(&seg->av)->rmac, grh_av->rmac,
                sizeof(mlx5_av_grh(&seg->av)->rmac));
@@ -426,7 +416,7 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
         mlx5_av_grh(&seg->av)->grh_gid_fl  = grh_av->grh_gid_fl;
         memcpy(mlx5_av_grh(&seg->av)->rgid, grh_av->rgid,
                sizeof(mlx5_av_grh(&seg->av)->rgid));
-    } else {
+    } else if (av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
         mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
     }
 }
@@ -541,6 +531,20 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
     ucs_assert(index <= srq->mask);
     return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
+}
+
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_ib_mlx5_wqe_av_size(uct_ib_mlx5_base_av_t *av)
+{
+#if HAVE_STRUCT_MLX5_WQE_AV_BASE
+    return (av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) ?
+                    sizeof(struct mlx5_wqe_av) :
+                    sizeof(struct mlx5_base_av);
+#else
+    ucs_assert(av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
+    return sizeof(struct mlx5_wqe_av);
+#endif
 }
 
 #endif

@@ -294,7 +294,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_attr.qp_state   = IBV_QPS_INIT;
     qp_attr.pkey_index = self->super.pkey_index;
     qp_attr.port_num   = self->super.config.port_num;
-    qp_attr.qkey       = UCT_IB_QKEY;
+    qp_attr.qkey       = UCT_IB_KEY;
     ret = ibv_modify_qp(self->qp, &qp_attr,
                         IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_QKEY);
     if (ret) {

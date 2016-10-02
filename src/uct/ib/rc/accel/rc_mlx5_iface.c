@@ -78,7 +78,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
 
     uct_rc_iface_query(iface, iface_attr);
-    uct_rc_mlx5_iface_common_query(iface, iface_attr, IBV_QPT_RC);
+    uct_rc_mlx5_iface_common_query(iface, iface_attr, 0);
 
     return UCS_OK;
 }

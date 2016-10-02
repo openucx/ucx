@@ -168,11 +168,19 @@ static uint64_t network_to_host(uint64_t value, int size)
         return value;
     }
 }
-static void uct_ib_mlx5_dump_dgram(char *buf, size_t max, struct mlx5_wqe_datagram_seg *seg)
+static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg)
 {
+    struct mlx5_wqe_datagram_seg *dgseg = seg;
+
     snprintf(buf, max-1, " [dlid %d rqpn 0x%x]",
-             ntohs(mlx5_av_base(&seg->av)->rlid),
-             ntohl(mlx5_av_base(&seg->av)->dqp_dct) & ~UCT_IB_MLX5_EXTENDED_UD_AV);
+             ntohs(mlx5_av_base(&dgseg->av)->rlid),
+             ntohl(mlx5_av_base(&dgseg->av)->dqp_dct) & ~UCT_IB_MLX5_EXTENDED_UD_AV);
+#if HAVE_STRUCT_MLX5_WQE_AV_BASE
+    if (!(mlx5_av_base(&dgseg->av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV)) {
+        return sizeof(struct mlx5_base_av);
+    }
+#endif
+    return sizeof(*dgseg);
 }
 
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
@@ -219,15 +227,12 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
         seg = qstart;
     }
 
-    if (qp_type == IBV_QPT_UD) {
-        struct mlx5_wqe_datagram_seg *av;
-
-        av = (struct mlx5_wqe_datagram_seg *)seg;
-        uct_ib_mlx5_dump_dgram(s, ends - s, av);
+    if ((qp_type == IBV_QPT_UD) || (qp_type == IBV_EXP_QPT_DC_INI)) {
+        size_t dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg);
         s += strlen(s);
 
-        seg = (char *)seg + sizeof(struct mlx5_wqe_datagram_seg);
-        ds -= ucs_div_round_up(sizeof(struct mlx5_wqe_datagram_seg), UCT_IB_MLX5_WQE_SEG_SIZE);
+        seg = (char *)seg + dg_size;
+        ds -= ucs_div_round_up(dg_size, UCT_IB_MLX5_WQE_SEG_SIZE);
     }
     if (seg == qend) {
         seg = qstart;
@@ -353,7 +358,7 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
     size_t length;
 
     length = ntohl(cqe->byte_cnt);
-    if (qp_type == IBV_QPT_UD) {
+    if ((qp_type == IBV_QPT_UD) || (qp_type == IBV_EXP_QPT_DC_INI)) {
         length -= UCT_IB_GRH_LEN;
         data   += UCT_IB_GRH_LEN;
     }

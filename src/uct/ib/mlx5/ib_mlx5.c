@@ -321,6 +321,11 @@ ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
     base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;
     base_av->rlid         = mlx5_av_base(&mlx5_av)->rlid;
 
+    /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
+     * the device supports compact address vector.
+     */
+    base_av->dqp_dct      = mlx5_av_base(&mlx5_av)->dqp_dct;
+
     if (*is_global) {
         ucs_assert_always(grh_av != NULL);
         memcpy(grh_av, mlx5_av_grh(&mlx5_av), sizeof(*grh_av));
