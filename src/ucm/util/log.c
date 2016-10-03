@@ -20,7 +20,6 @@
 
 static int  ucm_log_fileno = 1; /* stdout */
 static char ucm_log_hostname[40] = {0};
-static int  ucm_log_pid = -1;
 
 const char *ucm_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL] = "FATAL",
@@ -255,7 +254,7 @@ void __ucm_log(const char *file, unsigned line, const char *function,
 
     gettimeofday(&tv, NULL);
     ucm_log_snprintf(buf, UCM_LOG_BUG_SIZE - 1, "[%lu.%06lu] [%s:%d] %18s:%-4d UCX  %s ",
-                     tv.tv_sec, tv.tv_usec, ucm_log_hostname, ucm_log_pid,
+                     tv.tv_sec, tv.tv_usec, ucm_log_hostname, getpid(),
                      basename(file), line, ucm_log_level_names[level]);
     buf[UCM_LOG_BUG_SIZE - 1] = '\0';
 
@@ -276,5 +275,4 @@ void __ucm_log(const char *file, unsigned line, const char *function,
 
 UCS_STATIC_INIT {
     gethostname(ucm_log_hostname, sizeof(ucm_log_hostname));
-    ucm_log_pid = getpid();
 }

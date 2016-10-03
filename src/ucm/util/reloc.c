@@ -8,6 +8,12 @@
 #  include "config.h"
 #endif
 
+#ifndef NVALGRIND
+#  include <valgrind/memcheck.h>
+#else
+#  define RUNNING_ON_VALGRIND 0
+#endif
+
 #include "reloc.h"
 
 #include <ucs/sys/compiler.h>
@@ -15,6 +21,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/ucm_config.h>
 
+#include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -54,6 +61,17 @@ ucm_reloc_get_entry(ElfW(Addr) base, const ElfW(Phdr) *dphdr, ElfW(Sxword) tag)
     return 0;
 }
 
+static void ucm_reloc_file_lock(int fd, int l_type)
+{
+    struct flock fl = { l_type, SEEK_SET, 0, 0};
+    int ret;
+
+    ret = fcntl(fd, F_SETLKW, &fl);
+    if (ret < 0) {
+        ucm_warn("fcntl(fd=%d, F_SETLKW, l_type=%d) failed: %m", fd, l_type);
+    }
+}
+
 static int ucm_reloc_get_aux_phsize()
 {
 #define UCM_RELOC_AUXV_BUF_LEN 16
@@ -63,6 +81,7 @@ static int ucm_reloc_get_aux_phsize()
     ucm_auxv_t *auxv;
     unsigned count;
     ssize_t nread;
+    int found;
     int fd;
 
     /* Can avoid lock here - worst case we'll read the file more than once */
@@ -73,7 +92,18 @@ static int ucm_reloc_get_aux_phsize()
             return fd;
         }
 
+        if (RUNNING_ON_VALGRIND) {
+            /* Work around a bug caused by valgrind's fake /proc/self/auxv -
+             * every time this file is opened when running with valgrind, a
+             * a duplicate of the same fd is returned, so all share the same
+             * file offset.
+             */
+            ucm_reloc_file_lock(fd, F_WRLCK);
+            lseek(fd, 0, SEEK_SET);
+        }
+
         /* Use small buffer on the stack, avoid using malloc() */
+        found = 0;
         do {
             nread = read(fd, buffer, sizeof(buffer));
             if (nread < 0) {
@@ -87,13 +117,24 @@ static int ucm_reloc_get_aux_phsize()
                             ++auxv)
             {
                 if (auxv->type == AT_PHENT) {
+                    found  = 1;
                     phsize = auxv->value;
                     ucm_debug("read phent from %s: %d", proc_auxv_filename, phsize);
+                    if (phsize == 0) {
+                        ucm_error("phsize is 0");
+                    }
                     break;
                 }
             }
         } while ((count > 0) && (phsize == 0));
 
+        if (!found) {
+            ucm_error("AT_PHENT entry not found in %s", proc_auxv_filename);
+        }
+
+        if (RUNNING_ON_VALGRIND) {
+            ucm_reloc_file_lock(fd, F_UNLCK);
+        }
         close(fd);
     }
     return phsize;
