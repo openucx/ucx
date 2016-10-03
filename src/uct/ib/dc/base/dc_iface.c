@@ -143,6 +143,12 @@ err:
     return status;
 }
 
+void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config)
+{
+    iface->tx.available_quota = iface->super.config.tx_qp_len -
+                                ucs_min(iface->super.config.tx_qp_len, config->quota);
+}
+
 UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     unsigned rx_priv_len, uct_dc_iface_config_t *config)
@@ -167,6 +173,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     self->tx.ndci                    = config->ndci;
     self->tx.policy                  = config->tx_policy;
+    self->tx.available_quota         = 0; /* overridden by mlx5/verbs */
     self->super.config.tx_moderation = 0; /* disable tx moderation for dcs */
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis", self,
@@ -219,10 +226,15 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
      "           The dci is released once it has no outstanding operations.\n"
      "\n"
      "dcs_quota  same as dcs. In addition the dci is scheduled for release\n"
-     "           if it can not transmit and there are endpoints waiting for the dci allocation.\n"
-     "           The dci is released once it completes all outstanding operations.\n"  
+     "           if it has sent more than quota, and there are endpoints waiting for a dci.\n"
+     "           The dci is released once it completes all outstanding operations.\n"
      "           The policy ensures that there will be no starvation among endpoints.",
      ucs_offsetof(uct_dc_iface_config_t, tx_policy), UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
+
+    {"QUOTA", "32",
+     "When \"dcs_quota\" policy is selected, how much to send from a dci when\n"
+     "there are other endpoints waiting for it.",
+     ucs_offsetof(uct_dc_iface_config_t, quota), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };

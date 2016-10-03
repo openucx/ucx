@@ -170,7 +170,8 @@ static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t
 
 static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
-    ucs_status_t status;
+    uct_rc_txqp_t *txqp;
+    int16_t available;
     
     if (ep->dci != UCT_DC_EP_NO_DCI) {
         /* dci is already assigned - keep using it */
@@ -179,21 +180,35 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
             UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
             return UCS_ERR_NO_RESOURCE;
         }
-        status = uct_dc_iface_check_txqp(iface, ep, &iface->tx.dcis[ep->dci].txqp); 
-        /* if dci can not tx, and there are eps waiting for dci 
-         * allocation ep goes into tx_wait state
+
+        /* if dci has sent more than quota, and there are eps waiting for dci
+         * allocation ep goes into tx_wait state.
          */
+        txqp      = &iface->tx.dcis[ep->dci].txqp;
+        available = uct_rc_txqp_available(txqp);
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
-            (status != UCS_OK) && 
-            !ucs_arbiter_is_empty(uct_dc_iface_dci_waitq(iface))) {
+            (available <= iface->tx.available_quota) &&
+            !ucs_arbiter_is_empty(uct_dc_iface_dci_waitq(iface)))
+        {
             ep->state = UCT_DC_EP_TX_WAIT;
+            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
+            return UCS_ERR_NO_RESOURCE;
         }
-        return status;
+
+        if (available <= 0) {
+            UCS_STATS_UPDATE_COUNTER(txqp->stats, UCT_RC_TXQP_STAT_QP_FULL, 1);
+            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        return UCS_OK;
     }
+
     if (uct_dc_iface_dci_can_alloc_dcs(iface)) {
         uct_dc_iface_dci_alloc_dcs(iface, ep);
         return UCS_OK;
     }
+
     /* we will have to wait until someone releases dci */
     UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;

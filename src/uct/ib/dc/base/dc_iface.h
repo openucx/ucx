@@ -33,6 +33,7 @@ typedef struct uct_dc_iface_config {
     uct_rc_iface_config_t         super;
     int                           ndci;
     int                           tx_policy;
+    unsigned                      quota;
 } uct_dc_iface_config_t;
 
 
@@ -50,6 +51,8 @@ typedef struct uct_dc_iface {
         uct_dc_dci_t              dcis[UCT_DC_IFACE_MAX_DCIS]; /* Array of dcis */
         uint8_t                   ndci;                        /* Number of DCIs */
         uct_dc_tx_policty_t       policy;                      /* dci selection algorithm */
+        int16_t                   available_quota;             /* if available tx is lower, let
+                                                                  another endpoint use the dci */
 
         /* LIFO is only relevant for dcs allocation policy */
         uint8_t                   stack_top;                   /* dci stack top */
@@ -80,6 +83,7 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 
 ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 
+void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config);
 
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???

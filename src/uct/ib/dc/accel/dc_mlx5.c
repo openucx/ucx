@@ -630,6 +630,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
         goto err_common_cleanup;
     }
 
+    uct_dc_iface_set_quota(&self->super, config);
+
     /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_mlx5_iface_progress, self);
     ucs_debug("created dc iface %p", self);
