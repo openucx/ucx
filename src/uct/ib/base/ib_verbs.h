@@ -133,8 +133,11 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 /*
  * Safe setenv
  */
-#if !HAVE_DECL_IBV_EXP_SETENV
+#if HAVE_DECL_IBV_EXP_SETENV
+#  define ibv_exp_unsetenv(_c, _n)                  0
+#else
 #  define ibv_exp_setenv(_c, _n, _v, _o)            setenv(_n, _v, _o)
+#  define ibv_exp_unsetenv(_c, _n)                  unsetenv(_n)
 #endif
 
 

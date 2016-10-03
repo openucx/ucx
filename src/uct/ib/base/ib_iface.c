@@ -358,13 +358,17 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_set_cqe_size(struct ibv_context *ibv_context,
-                                        size_t inl)
+static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
+                                           size_t inl, struct ibv_cq **cq_p)
 {
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     const char *cqe_size_env_value;
     size_t cqe_size_min, cqe_size;
     char cqe_size_buf[32];
+    ucs_status_t status;
+    struct ibv_cq *cq;
+    int env_var_added = 0;
     int ret;
 
     cqe_size_min       = (inl > 32) ? 128 : 64;
@@ -375,7 +379,8 @@ static ucs_status_t uct_ib_set_cqe_size(struct ibv_context *ibv_context,
         if (cqe_size < cqe_size_min) {
             ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
                       cqe_size_env_var, cqe_size, cqe_size_min, inl);
-            return UCS_ERR_INVALID_PARAM;
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
         }
     } else {
         /* CQE size is not defined by the environment, set it according to inline
@@ -385,15 +390,39 @@ static ucs_status_t uct_ib_set_cqe_size(struct ibv_context *ibv_context,
         cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
         cqe_size = ucs_min(cqe_size, 128); /* at most 128 */
         snprintf(cqe_size_buf, sizeof(cqe_size_buf),"%zu", cqe_size);
-        ret = ibv_exp_setenv(ibv_context, cqe_size_env_var, cqe_size_buf, 1);
+        ucs_debug("%s: setting %s=%s", uct_ib_device_name(dev), cqe_size_env_var,
+                  cqe_size_buf);
+        ret = ibv_exp_setenv(dev->ibv_context, cqe_size_env_var, cqe_size_buf, 1);
         if (ret) {
             ucs_error("ibv_exp_setenv(%s=%s) failed: %m", cqe_size_env_var,
                       cqe_size_buf);
-            return UCS_ERR_INVALID_PARAM;
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
         }
+
+        env_var_added = 1;
     }
 
-    return UCS_OK;
+    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel, 0);
+    if (cq == NULL) {
+        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
+        status = UCS_ERR_IO_ERROR;
+        goto out_unsetenv;
+    }
+
+    *cq_p = cq;
+    status = UCS_OK;
+
+out_unsetenv:
+    if (env_var_added) {
+        /* if we created a new environment variable, remove it */
+        ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
+        if (ret) {
+            ucs_warn("unsetenv(%s) failed: %m", cqe_size_env_var);
+        }
+    }
+out:
+    return status;
 }
 
 /**
@@ -455,7 +484,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
-        ucs_error("Failed to create completion channel: %m");
+        ucs_error("ibv_create_comp_channel() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_free_path_bits;
     }
@@ -465,29 +494,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    status = uct_ib_set_cqe_size(dev->ibv_context, 0);
+    status = uct_ib_iface_create_cq(self, tx_cq_len, 0, &self->send_cq);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
 
-    self->send_cq = ibv_create_cq(dev->ibv_context, tx_cq_len,
-                                  NULL, self->comp_channel, 0);
-    if (self->send_cq == NULL) {
-        ucs_error("Failed to create send cq: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_destroy_comp_channel;
-    }
-
-    status = uct_ib_set_cqe_size(dev->ibv_context, config->rx.inl);
+    status = uct_ib_iface_create_cq(self, config->rx.queue_len, config->rx.inl,
+                                    &self->recv_cq);
     if (status != UCS_OK) {
-        goto err_destroy_send_cq;
-    }
-
-    self->recv_cq = ibv_create_cq(dev->ibv_context, config->rx.queue_len,
-                                  NULL, self->comp_channel, 0);
-    if (self->recv_cq == NULL) {
-        ucs_error("Failed to create recv cq: %m");
-        status = UCS_ERR_IO_ERROR;
         goto err_destroy_send_cq;
     }
 
