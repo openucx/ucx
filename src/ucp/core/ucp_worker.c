@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -357,6 +358,23 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     }
 }
 
+static void ucp_worker_init_guess_atomics(ucp_worker_h worker)
+{
+    ucp_context_h context = worker->context;
+    ucp_rsc_index_t rsc_index;
+    uint64_t accumulated_flags = 0;
+
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        accumulated_flags |= worker->iface_attrs[rsc_index].cap.flags;
+    }
+
+    if (accumulated_flags & UCT_IFACE_FLAG_ATOMIC_DEVICE) {
+	ucp_worker_init_device_atomics(worker);
+    } else {
+	ucp_worker_init_cpu_atomics(worker);
+    }
+}
+
 static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
@@ -364,10 +382,19 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
     worker->atomic_tls = 0;
 
     if (context->config.features & (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
-        if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_CPU) {
+        switch(context->config.ext.atomic_mode) {
+        case UCP_ATOMIC_MODE_CPU:
             ucp_worker_init_cpu_atomics(worker);
-        } else if (context->config.ext.atomic_mode == UCP_ATOMIC_MODE_DEVICE) {
+            break;
+        case UCP_ATOMIC_MODE_DEVICE:
             ucp_worker_init_device_atomics(worker);
+            break;
+        case UCP_ATOMIC_MODE_GUESS:
+            ucp_worker_init_guess_atomics(worker);
+            break;
+        default:
+            ucs_fatal("unsupported atomic mode: %d",
+                      context->config.ext.atomic_mode);
         }
     }
 }
