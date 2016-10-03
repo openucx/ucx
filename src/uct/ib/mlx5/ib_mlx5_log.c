@@ -175,12 +175,12 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg)
     snprintf(buf, max-1, " [dlid %d rqpn 0x%x]",
              ntohs(mlx5_av_base(&dgseg->av)->rlid),
              ntohl(mlx5_av_base(&dgseg->av)->dqp_dct) & ~UCT_IB_MLX5_EXTENDED_UD_AV);
-#if HAVE_STRUCT_MLX5_WQE_AV_BASE
-    if (!(mlx5_av_base(&dgseg->av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV)) {
-        return sizeof(struct mlx5_base_av);
+
+    if (mlx5_av_base(&dgseg->av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
+        return UCT_IB_MLX5_AV_FULL_SIZE;
+    } else {
+        return UCT_IB_MLX5_AV_BASE_SIZE;
     }
-#endif
-    return sizeof(*dgseg);
 }
 
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type,

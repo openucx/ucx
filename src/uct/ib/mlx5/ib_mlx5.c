@@ -230,14 +230,9 @@ ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d], ud_seg=%lu [ctl=%lu av=%lu] inl=%lu data=%lu", 
+    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d]",
               qp_info.sq.stride * qp_info.sq.wqe_cnt,
-              qp_info.sq.stride, qp_info.sq.wqe_cnt,
-              sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(struct mlx5_wqe_datagram_seg),
-              sizeof(struct mlx5_wqe_ctrl_seg),
-              sizeof(struct mlx5_wqe_datagram_seg),
-              sizeof(struct mlx5_wqe_inl_data_seg),
-              sizeof(struct mlx5_wqe_data_seg));
+              qp_info.sq.stride, qp_info.sq.wqe_cnt);
 
     wq->qstart     = qp_info.sq.buf;
     wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
@@ -325,6 +320,10 @@ ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
      * the device supports compact address vector.
      */
     base_av->dqp_dct      = mlx5_av_base(&mlx5_av)->dqp_dct;
+
+    ucs_assertv_always((UCT_IB_MLX5_AV_FULL_SIZE > UCT_IB_MLX5_AV_BASE_SIZE) ||
+                       (base_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV),
+                       "compact address vector not supported, and EXTENDED_AV flag is missing");
 
     if (*is_global) {
         ucs_assert_always(grh_av != NULL);

@@ -34,13 +34,17 @@
 
 #if HAVE_STRUCT_MLX5_WQE_AV_BASE
 
-#  define mlx5_av_base(_av)   (&(_av)->base)
-#  define mlx5_av_grh(_av)    (&(_av)->grh_sec)
+#  define mlx5_av_base(_av)         (&(_av)->base)
+#  define mlx5_av_grh(_av)          (&(_av)->grh_sec)
+#  define UCT_IB_MLX5_AV_BASE_SIZE  sizeof(struct mlx5_base_av)
+#  define UCT_IB_MLX5_AV_FULL_SIZE  sizeof(struct mlx5_wqe_av)
 
 #else 
 
-#  define mlx5_av_base(_av)   (_av)
-#  define mlx5_av_grh(_av)    (_av)
+#  define mlx5_av_base(_av)         (_av)
+#  define mlx5_av_grh(_av)          (_av)
+#  define UCT_IB_MLX5_AV_BASE_SIZE  sizeof(struct mlx5_wqe_av)
+#  define UCT_IB_MLX5_AV_FULL_SIZE  sizeof(struct mlx5_wqe_av)
 
 struct mlx5_grh_av {
         uint8_t         reserved0[4];
@@ -537,14 +541,9 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 static UCS_F_ALWAYS_INLINE size_t
 uct_ib_mlx5_wqe_av_size(uct_ib_mlx5_base_av_t *av)
 {
-#if HAVE_STRUCT_MLX5_WQE_AV_BASE
     return (av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) ?
-                    sizeof(struct mlx5_wqe_av) :
-                    sizeof(struct mlx5_base_av);
-#else
-    ucs_assert(av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
-    return sizeof(struct mlx5_wqe_av);
-#endif
+                    UCT_IB_MLX5_AV_FULL_SIZE :
+                    UCT_IB_MLX5_AV_BASE_SIZE;
 }
 
 #endif

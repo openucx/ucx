@@ -59,7 +59,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_dc_iface_query(&iface->super, iface_attr);
     uct_rc_mlx5_iface_common_query(&iface->super.super, iface_attr,
-                                   sizeof(struct mlx5_wqe_av));
+                                   UCT_IB_MLX5_AV_FULL_SIZE);
 
     /*TODO: remove flags once we have a full functionality */
     iface_attr->cap.flags           = UCT_IFACE_FLAG_AM_SHORT|
@@ -298,7 +298,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    UCT_RC_MLX5_CHECK_AM_SHORT(id, length, uct_ib_mlx5_wqe_av_size(&ep->av));
+    UCT_RC_MLX5_CHECK_AM_SHORT(id, length, UCT_IB_MLX5_AV_FULL_SIZE);
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
@@ -345,7 +345,7 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
     UCT_RC_MLX5_CHECK_AM_ZCOPY(id, header_length, length,
                                iface->super.super.super.config.seg_size,
-                               uct_ib_mlx5_wqe_av_size(&ep->av));
+                               UCT_IB_MLX5_AV_FULL_SIZE);
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_SEND, buffer, length, memh,
@@ -365,7 +365,7 @@ ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    UCT_RC_MLX5_CHECK_PUT_SHORT(length, uct_ib_mlx5_wqe_av_size(&ep->av));
+    UCT_RC_MLX5_CHECK_PUT_SHORT(length, UCT_IB_MLX5_AV_FULL_SIZE);
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
