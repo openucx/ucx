@@ -12,19 +12,16 @@
 #include <uct/ib/rc/base/rc_iface.h>
 
 
-ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_verbs_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
-
+ucs_config_field_t uct_rc_verbs_iface_common_config_table[] = {
   {"MAX_AM_HDR", "128",
    "Buffer size to reserve for active message headers. If set to 0, the transport will\n"
    "not support zero-copy active messages.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_rc_verbs_iface_common_config_t, max_am_hdr), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MAX_WR", "-1",
    "Limits the number of outstanding posted work requests. The actual limit is\n"
    "a minimum between this value and the TX queue length. -1 means no limit.",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
+   ucs_offsetof(uct_rc_verbs_iface_common_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };
@@ -103,27 +100,28 @@ void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *self)
 }
 
 
-ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *self,
+ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
-                                            uct_rc_verbs_iface_config_t *config)
+                                            uct_rc_verbs_iface_common_config_t *config,
+                                            uct_rc_iface_config_t *rc_config)
 {
     ucs_status_t status;
     size_t am_hdr_size;
 
-    memset(self->inl_sge, 0, sizeof(self->inl_sge));
+    memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
 
     /* Configuration */
     am_hdr_size = ucs_max(config->max_am_hdr, sizeof(uct_rc_hdr_t));
-    self->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
+    iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
 
     /* Create AM headers and Atomic mempool */
     status = uct_iface_mpool_init(&rc_iface->super.super,
-                                  &self->short_desc_mp,
+                                  &iface->short_desc_mp,
                                   sizeof(uct_rc_iface_send_desc_t) +
-                                      self->config.short_desc_size,
+                                      iface->config.short_desc_size,
                                   sizeof(uct_rc_iface_send_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.super.tx.mp,
+                                  &rc_config->super.tx.mp,
                                   rc_iface->config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_verbs_short_desc");

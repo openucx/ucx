@@ -24,7 +24,16 @@ typedef struct uct_rc_verbs_ep {
 
 
 /**
- * RC verbs remote endpoint.
+ * RC verbs interface configuration.
+ */
+typedef struct uct_rc_verbs_iface_config {
+    uct_rc_iface_config_t              super;
+    uct_rc_verbs_iface_common_config_t verbs_common;
+} uct_rc_verbs_iface_config_t;
+
+
+/**
+ * RC verbs interface.
  */
 typedef struct uct_rc_verbs_iface {
     uct_rc_iface_t              super;
