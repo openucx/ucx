@@ -226,7 +226,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     iface->tx.sge[1].lkey   = (ib_memh == UCT_INVALID_MEM_HANDLE) ? 0 : ib_memh->lkey;
     iface->tx.sge[1].length = length;
     iface->tx.sge[1].addr   = (uintptr_t)buffer;
-    iface->tx.wr_skb.num_sge = 2;
+    iface->tx.wr_skb.num_sge = length ? 2 : 1;
 
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
     iface->tx.wr_skb.num_sge = 1;
