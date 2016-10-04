@@ -30,10 +30,7 @@ typedef enum {
 
 
 typedef struct uct_dc_iface_config {
-    /* work around to do multiple inheritance:
-     * dc_verbs needs both dc_iface_config and verbs_common_iface config 
-     */
-    uct_rc_verbs_iface_config_t   super;
+    uct_rc_iface_config_t         super;
     int                           ndci;
     int                           tx_policy;
 } uct_dc_iface_config_t;

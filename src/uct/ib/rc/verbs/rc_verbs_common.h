@@ -20,17 +20,16 @@ typedef struct uct_rc_verbs_txcnt {
     uint16_t       ci;      /* consumer (ibv_poll_cq) completion count */
 } uct_rc_verbs_txcnt_t;
 
+
 /**
  * RC/DC verbs interface configuration
  */
-typedef struct uct_rc_verbs_iface_config {
-    uct_rc_iface_config_t  super;
+typedef struct uct_rc_verbs_iface_common_config {
     size_t                 max_am_hdr;
     unsigned               tx_max_wr;
     /* TODO flags for exp APIs */
-} uct_rc_verbs_iface_config_t;
+} uct_rc_verbs_iface_common_config_t;
 
-extern ucs_config_field_t uct_rc_verbs_iface_config_table[];
 
 typedef struct uct_rc_verbs_iface_common {
     struct ibv_sge         inl_sge[2];
@@ -43,6 +42,7 @@ typedef struct uct_rc_verbs_iface_common {
     } config;
 } uct_rc_verbs_iface_common_t;
 
+extern ucs_config_field_t uct_rc_verbs_iface_common_config_table[];
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
@@ -63,7 +63,8 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
 
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
-                                            uct_rc_verbs_iface_config_t *config);
+                                            uct_rc_verbs_iface_common_config_t *config,
+                                            uct_rc_iface_config_t *rc_config);
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 

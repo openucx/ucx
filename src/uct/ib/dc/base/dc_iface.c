@@ -151,7 +151,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
-                              rx_priv_len, &config->super.super);
+                              rx_priv_len, &config->super);
 
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
@@ -205,8 +205,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
 
 ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"DC_", "", NULL,
-        ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_config_table)},
+    {"RC_", "", NULL,
+     ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
     {"NUM_DCI", "8", 
      "Number of DC initiator QPs used by the interface (up to " UCS_PP_QUOTE(UCT_DC_IFACE_MAX_DCIS) ")",

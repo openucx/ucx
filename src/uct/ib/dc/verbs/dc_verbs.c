@@ -17,6 +17,18 @@
 #include <string.h>
 
 
+static ucs_config_field_t uct_dc_verbs_iface_config_table[] = {
+  {"DC_", "", NULL,
+   ucs_offsetof(uct_dc_verbs_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_dc_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_dc_verbs_iface_config_t, verbs_common),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
+
+  {NULL}
+};
+
 static UCS_CLASS_INIT_FUNC(uct_dc_verbs_ep_t,
                            uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
@@ -659,8 +671,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_dc_iface_config_t *config = ucs_derived_of(tl_config,
-                                                   uct_dc_iface_config_t);
+    uct_dc_verbs_iface_config_t *config = ucs_derived_of(tl_config,
+                                                         uct_dc_verbs_iface_config_t);
     struct ibv_qp_init_attr dci_init_attr;
     struct ibv_qp_attr dci_attr;
     ucs_status_t status;
@@ -668,12 +680,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_verbs_iface_ops, md,
-                              worker, params, 0, config);
+                              worker, params, 0, &config->super);
 
     uct_dc_verbs_iface_init_wrs(self);
 
     status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super,
-                                            &config->super);
+                                            &config->verbs_common, &config->super.super);
     if (status != UCS_OK) {
         goto err;
     }
@@ -743,7 +755,7 @@ UCT_TL_COMPONENT_DEFINE(uct_dc_verbs_tl,
                         uct_dc_verbs_iface_t,
                         "dc",
                         "DC_VERBS_",
-                        uct_dc_iface_config_table,
-                        uct_dc_iface_config_t);
+                        uct_dc_verbs_iface_config_table,
+                        uct_dc_verbs_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_dc_verbs_tl);
 
