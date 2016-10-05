@@ -149,6 +149,14 @@ const char *uct_ib_device_name(uct_ib_device_t *dev);
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
 
 
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+/**
+ * @return 1 if the gid_raw is 0, 0 otherwise.
+ */
+int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
+#endif
+
+
 /**
  * Convert time-in-seconds to IB fabric time value
  */

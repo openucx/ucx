@@ -646,7 +646,7 @@ int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size)
 
 
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-static int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
+int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
 {
     return ((uint64_t)gid_raw == 0) && ((uint64_t)(gid_raw + 8) == 0);
 }
