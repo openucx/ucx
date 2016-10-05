@@ -183,8 +183,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
     /* How many times to repeat */
     int repeat_count;
     repeat_count = (256 * 1024) / ((max_length + min_length) / 2);
-    if (repeat_count > 3000) {
-        repeat_count = 3000;
+    if (repeat_count > 1000) {
+        repeat_count = 1000;
     }
     repeat_count /= ucs::test_time_multiplier();
     if (repeat_count == 0) {
