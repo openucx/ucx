@@ -704,6 +704,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
         uct_rc_txqp_available_set(&self->super.tx.dcis[i].txqp,
                                   self->super.super.config.tx_qp_len);
     }
+    uct_dc_iface_set_quota(&self->super, &config->super);
 
     status = uct_rc_verbs_iface_prepost_recvs_common(&self->super.super);
     if (status != UCS_OK) {
