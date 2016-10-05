@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -473,11 +474,14 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
 }
 
 
-static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void *dst, void *src)
+static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
+                                                       void * restrict src)
 {
-#ifdef __SSE4_2__
+#if defined( __SSE4_2__)
         UCS_WORD_COPY(dst, src, __m128i, MLX5_SEND_WQE_BB);
-#else 
+#elif defined(__ARM_NEON)
+        UCS_WORD_COPY(dst, src, int16x8_t, MLX5_SEND_WQE_BB);
+#else /* NO SIMD support */
         UCS_WORD_COPY(dst, src, uint64_t, MLX5_SEND_WQE_BB);
 #endif
 }
