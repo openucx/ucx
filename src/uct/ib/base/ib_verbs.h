@@ -174,6 +174,15 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
 #endif /* HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE */
 
+
+/* Ethernet link layer */
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+#  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    ((_attr)->link_layer == IBV_LINK_LAYER_ETHERNET)
+#else
+#  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
+#endif
+
+
 typedef uint8_t uct_ib_uint24_t[3];
 
 static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, const uint32_t qp_num)

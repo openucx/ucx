@@ -30,6 +30,19 @@ const char *uct_ib_mtu_values[] = {
     [UCT_IB_MTU_LAST]       = NULL
 };
 
+enum {
+    UCT_IB_IFACE_ADDRESS_TYPE_AUTO  = UCT_IB_ADDRESS_TYPE_LAST,
+    UCT_IB_IFACE_ADDRESS_TYPE_LAST
+};
+
+static const char *uct_ib_iface_addr_types[] = {
+   [UCT_IB_ADDRESS_TYPE_LINK_LOCAL] = "ib_local",
+   [UCT_IB_ADDRESS_TYPE_SITE_LOCAL] = "ib_site_local",
+   [UCT_IB_ADDRESS_TYPE_GLOBAL]     = "ib_global",
+   [UCT_IB_ADDRESS_TYPE_ETH]        = "eth",
+   [UCT_IB_IFACE_ADDRESS_TYPE_AUTO] = "auto",
+   [UCT_IB_IFACE_ADDRESS_TYPE_LAST] = NULL
+};
 
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "", NULL,
@@ -87,6 +100,12 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", 65536, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
+
+  {"ADDR_TYPE", "auto",
+   "Set the interface address type. \"auto\" mode detects the type according to\n"
+   "link layer type and IB subnet prefix.",
+   ucs_offsetof(uct_ib_iface_config_t, addr_type),
+   UCS_CONFIG_TYPE_ENUM(uct_ib_iface_addr_types)},
 
   {"GID_INDEX", "0",
    "Port GID index to use.",
@@ -179,16 +198,13 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-    if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
+    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
         /* RoCE */
         /* there shouldn't be a lid and the gid flag should be on */
         return ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) &&
                 !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) &&
                 (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID));
-    } else
-#endif
-    {
+    } else {
         /* IB */
         return ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
                 (gid.global.subnet_prefix == iface->gid.global.subnet_prefix));
@@ -506,14 +522,16 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     /* Address scope and size */
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-    if (uct_ib_iface_port_attr(self)->link_layer == IBV_LINK_LAYER_ETHERNET) {
-        self->addr_type = UCT_IB_ADDRESS_TYPE_ETH;
-       } else
-#endif
-       {
-        self->addr_type = uct_ib_address_scope(self->gid.global.subnet_prefix);
-       }
+    if (config->addr_type == UCT_IB_IFACE_ADDRESS_TYPE_AUTO) {
+        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(self))) {
+            self->addr_type = UCT_IB_ADDRESS_TYPE_ETH;
+        } else {
+            self->addr_type = uct_ib_address_scope(self->gid.global.subnet_prefix);
+        }
+    } else {
+        ucs_assert(config->addr_type < UCT_IB_ADDRESS_TYPE_LAST);
+        self->addr_type = config->addr_type;
+    }
 
     self->addr_size  = uct_ib_address_size(self->addr_type);
 
@@ -662,14 +680,11 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     extra_pkt_len = UCT_IB_BTH_LEN + xport_hdr_len +  UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-    if (uct_ib_iface_port_attr(iface)->link_layer == IBV_LINK_LAYER_ETHERNET) {
+    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
         extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
-            /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
-    } else
-#endif
-    {
-      extra_pkt_len += UCT_IB_LRH_LEN;
+    } else {
+        /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
+        extra_pkt_len += UCT_IB_LRH_LEN;
     }
 
     iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);

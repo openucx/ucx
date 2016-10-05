@@ -141,19 +141,15 @@ public:
         /* check the lmc value in the port */
         lmc_find(port_attr, port_desc);
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
-        if (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) {
-                test_eth_port(port_attr, ibctx, port_num, ib_config, port_desc);
-                goto out;
-            }
-#endif
+        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+            test_eth_port(port_attr, ibctx, port_num, ib_config, port_desc);
+            goto out;
+        }
 
         /* find the configured pkey */
         pkey_find(dev_name, port_num, port_attr, ibctx, port_desc);
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
 out:
-#endif
         ibv_close_device(ibctx);
         ibv_free_device_list(device_list);
     }
