@@ -35,8 +35,11 @@ public:
     } recv_desc_t;
 
     typedef struct {
-        unsigned have_pkey; /* if 1 - means that the pkey is higher than zero */
+        unsigned have_pkey; /* if 1 - means that the configured pkey was found */
         unsigned have_lmc;  /* if 1 - means that the lmc is higher than zero */
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+        unsigned have_valid_gid_idx;
+#endif
     } ib_port_desc_t;
 
     static ucs_status_t ib_am_handler(void *arg, void *data, size_t length, void *desc) {
@@ -53,13 +56,60 @@ public:
         return UCS_OK;
     }
 
+    void pkey_find(const char *dev_name, unsigned port_num, struct ibv_port_attr port_attr,
+                  struct ibv_context *ibctx, ib_port_desc_t *port_desc) {
+         uint16_t table_idx, pkey, pkey_partition;
+         uct_ib_iface_config_t *ib_config = ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
+
+         /* check if the configured pkey exists in the port's pkey table */
+           for (table_idx = 0; table_idx < port_attr.pkey_tbl_len; table_idx++) {
+               if(ibv_query_pkey(ibctx, port_num, table_idx, &pkey)) {
+                   UCS_TEST_ABORT("Failed to query pkey on port " << port_num << " on device: " << dev_name);
+               }
+               pkey_partition = ntohs(pkey) & UCT_IB_PKEY_PARTITION_MASK;
+               if (pkey_partition == (ib_config->pkey_value & UCT_IB_PKEY_PARTITION_MASK)) {
+                   port_desc->have_pkey = 1;
+                   break;
+               }
+           }
+    }
+
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+    void test_eth_port(struct ibv_port_attr port_attr, struct ibv_context *ibctx,
+                       unsigned port_num, uct_ib_iface_config_t *ib_config,
+                       ib_port_desc_t *port_desc) {
+
+        union ibv_gid gid;
+
+        /* no pkeys for Ethernet */
+        port_desc->have_pkey = 0;
+
+        /* check the gid index */
+        if (ibv_query_gid(ibctx, port_num, ib_config->gid_index, &gid) != 0) {
+            UCS_TEST_ABORT("Failed to query gid (index=" << ib_config->gid_index << ")");
+        }
+        if (uct_ib_device_is_gid_raw_empty(gid.raw)) {
+            port_desc->have_valid_gid_idx = 0;
+        } else {
+            port_desc->have_valid_gid_idx = 1;
+        }
+
+    }
+#endif
+
+    void lmc_find(struct ibv_port_attr port_attr, ib_port_desc_t *port_desc) {
+
+         if (port_attr.lmc > 0) {
+             port_desc->have_lmc = 1;
+         }
+    }
+
     void port_attr_test(const char *dev_name, unsigned port_num, ib_port_desc_t *port_desc) {
         struct ibv_device **device_list;
         struct ibv_context *ibctx = NULL;
         struct ibv_port_attr port_attr;
         uct_ib_iface_config_t *ib_config = ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
         int num_devices, i, found = 0;
-        uint16_t table_idx, pkey, pkey_partition;
 
         /* get device list */
         device_list = ibv_get_device_list(&num_devices);
@@ -84,33 +134,22 @@ public:
             UCS_TEST_ABORT("The requested device: " << dev_name << ", wasn't found in the device list.");
         }
 
-        /* check if the configured pkey exists in the port's pkey table */
         if (ibv_query_port(ibctx, port_num, &port_attr) != 0) {
             UCS_TEST_ABORT("Failed to query port " << port_num << " on device: " << dev_name);
         }
 
+        /* check the lmc value in the port */
+        lmc_find(port_attr, port_desc);
+
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
         if (port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) {
-            port_desc->have_pkey = 0;
-            goto out;
-        }
+                test_eth_port(port_attr, ibctx, port_num, ib_config, port_desc);
+                goto out;
+            }
 #endif
 
-        for (table_idx = 0; table_idx < port_attr.pkey_tbl_len; table_idx++) {
-            if(ibv_query_pkey(ibctx, port_num, table_idx, &pkey)) {
-                UCS_TEST_ABORT("Failed to query pkey on port " << port_num << " on device: " << dev_name);
-            }
-            pkey_partition = ntohs(pkey) & UCT_IB_PKEY_PARTITION_MASK;
-            if (pkey_partition == (ib_config->pkey_value & UCT_IB_PKEY_PARTITION_MASK)) {
-                port_desc->have_pkey = 1;
-                break;
-            }
-        }
-
-        /* check the lmc value in the port */
-        if (port_attr.lmc > 0) {
-            port_desc->have_lmc = 1;
-        }
+        /* find the configured pkey */
+        pkey_find(dev_name, port_num, port_attr, ibctx, port_desc);
 
 #if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
 out:
@@ -165,6 +204,31 @@ out:
         free(ib_addr);
     }
 
+    void send_recv_short() {
+        uint64_t send_data   = 0xdeadbeef;
+        uint64_t test_ib_hdr = 0xbeef;
+        recv_desc_t *recv_buffer;
+
+        initialize();
+        check_caps(UCT_IFACE_FLAG_AM_SHORT);
+
+        recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
+        recv_buffer->length = 0; /* Initialize length to 0 */
+
+        /* set a callback for the uct to invoke for receiving the data */
+        uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
+
+        /* send the data */
+        uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
+
+        short_progress_loop(100.0);
+
+        ASSERT_EQ(sizeof(send_data), recv_buffer->length);
+        EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
+
+        free(recv_buffer);
+    }
+
     uct_ib_device_t *ib_device(entity *entity) {
         uct_ib_iface_t *iface = ucs_derived_of(entity->iface(), uct_ib_iface_t);
         return uct_ib_iface_device(iface);
@@ -174,11 +238,9 @@ protected:
     entity *m_e1, *m_e2;
 };
 
+
 UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
 {
-    uint64_t send_data   = 0xdeadbeef;
-    uint64_t test_ib_hdr = 0xbeef;
-    recv_desc_t *recv_buffer;
     ib_port_desc_t *port_desc;
 
     /* check if the configured pkey exists in the port's pkey table.
@@ -187,37 +249,17 @@ UCS_TEST_P(test_uct_ib, non_default_pkey, "IB_PKEY=0x2")
     test_port_avail(port_desc);
 
     if (port_desc->have_pkey) {
-        initialize();
         free(port_desc);
     } else {
         free(port_desc);
         UCS_TEST_SKIP_R("pkey not found or not an IB port");
     }
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
-    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
-    recv_buffer->length = 0; /* Initialize length to 0 */
-
-    /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
-
-    /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
-
-    short_progress_loop(100.0);
-
-    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
-    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
-
-    free(recv_buffer);
+    send_recv_short();
 }
 
 UCS_TEST_P(test_uct_ib, non_default_lmc, "IB_LID_PATH_BITS=1")
 {
-    uint64_t send_data   = 0xdeadbeef;
-    uint64_t test_ib_hdr = 0xbeef;
-    recv_desc_t *recv_buffer;
     ib_port_desc_t *port_desc;
 
     /* check if a non zero lmc is set on the port.
@@ -226,31 +268,35 @@ UCS_TEST_P(test_uct_ib, non_default_lmc, "IB_LID_PATH_BITS=1")
     test_port_avail(port_desc);
 
     if (port_desc->have_lmc) {
-        initialize();
         free(port_desc);
     } else {
         free(port_desc);
         UCS_TEST_SKIP_R("lmc is set to zero on an IB port");
     }
 
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
-
-    recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
-    recv_buffer->length = 0; /* Initialize length to 0 */
-
-    /* set a callback for the uct to invoke for receiving the data */
-    uct_iface_set_am_handler(m_e2->iface(), 0, ib_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
-
-    /* send the data */
-    uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
-
-    short_progress_loop(100.0);
-
-    ASSERT_EQ(sizeof(send_data), recv_buffer->length);
-    EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
-
-    free(recv_buffer);
+    send_recv_short();
 }
+
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+UCS_TEST_P(test_uct_ib, non_default_gid_idx, "IB_GID_INDEX=1")
+{
+    ib_port_desc_t *port_desc;
+
+    /* check if a non zero gid index can be used on the port.
+     * skip this test if it isn't. */
+    port_desc = (ib_port_desc_t *) calloc(1, sizeof(*port_desc));
+    test_port_avail(port_desc);
+
+    if (port_desc->have_valid_gid_idx) {
+        free(port_desc);
+    } else {
+        free(port_desc);
+        UCS_TEST_SKIP_R("the configured gid index (1) cannot be used on the port");
+    }
+
+    send_recv_short();
+}
+#endif
 
 UCS_TEST_P(test_uct_ib, address_pack) {
     initialize();
