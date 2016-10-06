@@ -175,6 +175,9 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
     ucp_request_t  *req = (ucp_request_t *)request - 1;
     ucs_status_t status;
 
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
+
     ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
                               UCP_REQUEST_FLAG_EXTERNAL);
 
@@ -189,6 +192,8 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
         ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nbr");
     }
 
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 
@@ -199,10 +204,15 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
 {
     ucp_request_t *req;
     ucs_status_t status;
+    ucs_status_ptr_t ret;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     req = ucp_tag_recv_request_get(worker, buffer, count, datatype);
     if (ucs_unlikely(req == NULL)) {
-        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out;
     }
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb", req,
@@ -217,7 +227,12 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
         cb(req + 1, status, &req->recv.info);
         ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nb");
     }
-    return req + 1;
+
+    ret = req + 1;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    return ret;
 }
 
 ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
@@ -230,13 +245,18 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     ucp_request_t *req;
     ucp_tag_t tag;
     unsigned save_rreq = 1;
+    ucs_status_ptr_t ret;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     ucs_trace_req("msg_recv_nb buffer %p count %zu message %p", buffer, count,
                   message);
 
     req = ucp_tag_recv_request_get(worker, buffer, count, datatype);
     if (req == NULL) {
-        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out;
     }
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb", req,
@@ -262,7 +282,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         save_rreq = 0;
     } else {
         ucs_mpool_put(req);
-        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+        ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+        goto out;
     }
 
     /* Since the message contains only the first fragment, we might want
@@ -287,7 +308,12 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         req->recv.datatype = datatype;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
     }
-    return req + 1;
+
+    ret = req + 1;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    return ret;
 }
 
 void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req)

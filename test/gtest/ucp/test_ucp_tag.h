@@ -50,33 +50,33 @@ protected:
                                   ucp_tag_recv_info_t *info);
 
     request * send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag);
+                      ucp_tag_t tag, int ep_index = 0);
 
     void send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
-                ucp_tag_t tag);
+                ucp_tag_t tag, int buf_index = 0);
 
     request * send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                           ucp_tag_t tag);
+                           ucp_tag_t tag, int buf_index = 0);
 
     request* recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                     ucp_tag_t tag, ucp_tag_t tag_mask);
+                     ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);
 
     request* recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                         ucp_tag_t tag, ucp_tag_t tag_mask);
+                         ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);
 
     request* recv_cb_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                        ucp_tag_t tag, ucp_tag_t tag_mask);
+                        ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);
 
     ucs_status_t recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
-                        ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
+                        ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info, int buf_index = 0);
 
     ucs_status_t recv_req_b(void *buffer, size_t count, ucp_datatype_t datatype,
-                            ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
+                            ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info, int buf_index = 0);
 
     ucs_status_t recv_cb_b(void *buffer, size_t count, ucp_datatype_t datatype,
-                           ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info);
+                           ucp_tag_t tag, ucp_tag_t tag_mask, ucp_tag_recv_info_t *info, int buf_index = 0);
 
-    void wait(request *req);
+    void wait(request *req, int buf_index = 0);
 
     static void* dt_common_start(size_t count);
 

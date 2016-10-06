@@ -11,47 +11,63 @@ extern "C" {
 }
 #include <common/test.h>
 
+#define MT_TEST_NUM_THREADS 4
 
 struct ucp_test_param {
     ucp_params_t              ctx_params;
     std::vector<std::string>  transports;
     int                       variant;
+    int                       thread_type;
 };
 
 class ucp_test_base : public ucs::test_base {
 public:
+    enum {
+        SINGLE_THREAD = 42,
+        MULTI_THREAD_CONTEXT,
+        MULTI_THREAD_WORKER
+    };
+
     class entity {
     public:
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config);
 
+        ~entity();
+
         void connect(const entity* other);
 
-        void flush_ep() const;
+        void flush_ep(int ep_index = 0) const;
 
-        void flush_worker() const;
+        void flush_worker(int worker_index = 0) const;
 
-        void fence() const;
+        void fence(int worker_index = 0) const;
 
-        void disconnect();
+        void disconnect(int ep_index = 0);
 
-        void* disconnect_nb() const;
+        void* disconnect_nb(int ep_index = 0) const;
 
-        void destroy_worker();
+        void destroy_worker(int worker_index = 0);
 
-        ucp_ep_h ep() const;
+        ucp_ep_h ep(int ep_index = 0) const;
 
-        ucp_ep_h revoke_ep() const;
+        ucp_ep_h revoke_ep(int ep_index = 0) const;
 
-        ucp_worker_h worker() const;
+        ucp_worker_h worker(int worker_index = 0) const;
 
         ucp_context_h ucph() const;
 
-        void progress();
+        void progress(int worker_index = 0);
+
+        int get_num_workers() const;
+
+        void cleanup();
 
     protected:
         ucs::handle<ucp_context_h> m_ucph;
-        ucs::handle<ucp_worker_h>  m_worker;
-        ucs::handle<ucp_ep_h>      m_ep;
+        std::vector<ucs::handle<ucp_worker_h> >  m_workers;
+        std::vector<ucs::handle<ucp_ep_h> >      m_eps;
+
+        int num_workers;
     };
 };
 
@@ -90,7 +106,8 @@ public:
                                  const std::string& test_case_name,
                                  const std::string& tls,
                                  int variant,
-                                 std::vector<ucp_test_param>& test_params);
+                                 std::vector<ucp_test_param>& test_params,
+                                 int thread_type = SINGLE_THREAD);
 
     virtual void modify_config(const std::string& name, const std::string& value);
 
@@ -98,10 +115,10 @@ protected:
     virtual void init();
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
-    void progress() const;
-    void short_progress_loop() const;
+    void progress(int worker_index = 0) const;
+    void short_progress_loop(int worker_index = 0) const;
     void disconnect(const entity& entity);
-    void wait(void *req);
+    void wait(void *req, int worker_index = 0);
     static void disable_errors();
     static void restore_errors();
 
