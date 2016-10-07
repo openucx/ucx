@@ -689,7 +689,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
 ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
 {
-    int res, ack_count = 0;
+    int res, send_cq_count = 0, recv_cq_count = 0;
     ucs_status_t status;
     struct ibv_cq *cq;
     void *cq_context;
@@ -697,15 +697,26 @@ ucs_status_t uct_ib_iface_wakeup_arm(uct_wakeup_h wakeup)
 
     do {
         res = ibv_get_cq_event(iface->comp_channel, &cq, &cq_context);
-        ack_count++;
+        if (0 == res) {
+            if (iface->send_cq == cq) {
+                ++send_cq_count;
+            }
+            if (iface->recv_cq == cq) {
+                ++recv_cq_count;
+            }
+        }
     } while (res == 0);
 
     if (errno != EAGAIN) {
         return UCS_ERR_IO_ERROR;
     }
 
-    if (ack_count > 1) {
-        ibv_ack_cq_events(cq, ack_count - 1);
+    if (send_cq_count > 0) {
+        ibv_ack_cq_events(iface->send_cq, send_cq_count);
+    }
+
+    if (recv_cq_count > 0) {
+        ibv_ack_cq_events(iface->recv_cq, recv_cq_count);
     }
 
     if (wakeup->events & UCT_WAKEUP_TX_COMPLETION) {
