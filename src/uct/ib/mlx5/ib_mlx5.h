@@ -474,15 +474,14 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
 }
 
 
-static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
-                                                       void * restrict src)
+static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void *dst, void *src)
 {
 #if defined( __SSE4_2__)
-        UCS_WORD_COPY(dst, src, __m128i, MLX5_SEND_WQE_BB);
+    UCS_WORD_COPY(dst, src, __m128i, MLX5_SEND_WQE_BB);
 #elif defined(__ARM_NEON)
-        UCS_WORD_COPY(dst, src, int16x8_t, MLX5_SEND_WQE_BB);
+    UCS_WORD_COPY(dst, src, int16x8_t, MLX5_SEND_WQE_BB);
 #else /* NO SIMD support */
-        UCS_WORD_COPY(dst, src, uint64_t, MLX5_SEND_WQE_BB);
+    UCS_WORD_COPY(dst, src, uint64_t, MLX5_SEND_WQE_BB);
 #endif
 }
 
