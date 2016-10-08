@@ -206,6 +206,12 @@ ssize_t ucs_read_file(char *buffer, size_t max, int silent,
 
 
 /**
+ * @return Regular _SC_IOV_MAX on the system.
+ */
+size_t ucs_get_max_iov();
+
+
+/**
  * @return Regular page size on the system.
  */
 size_t ucs_get_page_size();

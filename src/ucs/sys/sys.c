@@ -390,6 +390,16 @@ out:
     return read_bytes;
 }
 
+size_t ucs_get_max_iov()
+{
+    static size_t max_iov = 1;
+
+    if (1 == max_iov) {
+        max_iov = ucs_max(sysconf(_SC_IOV_MAX), 1); /* max_iov shouldn't be zero */
+    }
+    return max_iov;
+}
+
 size_t ucs_get_page_size()
 {
     static size_t page_size = 0;

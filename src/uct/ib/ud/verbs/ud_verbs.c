@@ -201,15 +201,15 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_ud_verbs_iface_t);
     uct_ud_send_skb_t *skb;
-    uct_ib_mem_t *ib_memh = NULL;
     ucs_status_t status;
 
-    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
-    ib_memh = memh;
-
+    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
+                       "uct_ud_verbs_ep_am_zcopy");
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
                      iface->super.config.max_inline, "am_zcopy header");
-    UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length, length);
+
+    UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length,
+                              uct_iov_total_length(iov, iovcnt));
 
     uct_ud_enter(&iface->super);
     uct_ud_iface_progress_pending_tx(&iface->super);
@@ -223,17 +223,16 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     memcpy(skb->neth + 1, header, header_length);
     skb->len = sizeof(uct_ud_neth_t) + header_length;
 
-    iface->tx.sge[1].lkey   = (ib_memh == UCT_INVALID_MEM_HANDLE) ? 0 : ib_memh->lkey;
-    iface->tx.sge[1].length = length;
-    iface->tx.sge[1].addr   = (uintptr_t)buffer;
-    iface->tx.wr_skb.num_sge = length ? 2 : 1;
+    iface->tx.wr_skb.num_sge = uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
+                                                         iov, iovcnt) + 1;
 
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
     iface->tx.wr_skb.num_sge = 1;
 
-    uct_ud_am_set_zcopy_desc(skb, buffer, length, iface->tx.sge[1].lkey, comp);
+    uct_ud_am_set_zcopy_desc(skb, iov, iovcnt, comp);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
-    UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length +
+                      uct_iov_total_length(iov, iovcnt));
     uct_ud_leave(&iface->super);
     return UCS_INPROGRESS;
 }
@@ -554,7 +553,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->tx.wr_inl.imm_data          = 0;
     self->tx.wr_inl.next              = 0;
     self->tx.wr_inl.sg_list           = self->tx.sge;
-    self->tx.wr_inl.num_sge           = UCT_UD_MAX_SGE;
+    self->tx.wr_inl.num_sge           = 2;
 
     memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
     self->tx.wr_skb.opcode            = IBV_WR_SEND;
