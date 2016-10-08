@@ -59,6 +59,9 @@ struct uct_ib_iface_config {
         uct_iface_mpool_config_t mp;
     } rx;
 
+    /* Change the address type */
+    int                     addr_type;
+
     /* IB GID index to use  */
     unsigned                gid_index;
 

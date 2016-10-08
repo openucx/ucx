@@ -60,7 +60,8 @@ typedef enum {
     UCT_IB_ADDRESS_TYPE_LINK_LOCAL,   /* Subnet-local address */
     UCT_IB_ADDRESS_TYPE_SITE_LOCAL,   /* Site local, 16-bit subnet prefix */
     UCT_IB_ADDRESS_TYPE_GLOBAL,       /* Global, 64-bit subnet prefix */
-    UCT_IB_ADDRESS_TYPE_ETH           /* RoCE  address */
+    UCT_IB_ADDRESS_TYPE_ETH,          /* RoCE  address */
+    UCT_IB_ADDRESS_TYPE_LAST
 } uct_ib_address_type_t;
 
 
@@ -149,12 +150,10 @@ const char *uct_ib_device_name(uct_ib_device_t *dev);
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
 
 
-#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
 /**
  * @return 1 if the gid_raw is 0, 0 otherwise.
  */
 int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw);
-#endif
 
 
 /**
