@@ -279,7 +279,7 @@ UCS_TEST_P(test_uct_ib, non_default_gid_idx, "IB_GID_INDEX=1")
     ib_port_desc_t *port_desc;
 
     /* check if a non zero gid index can be used on the port.
-     * skip this test if it isn't. */
+     * skip this test if it cannot. */
     port_desc = (ib_port_desc_t *) calloc(1, sizeof(*port_desc));
     test_port_avail(port_desc);
 
