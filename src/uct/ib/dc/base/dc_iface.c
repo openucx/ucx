@@ -135,7 +135,7 @@ static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
         iface->tx.dcis_stack[i] = i;
         iface->tx.dcis[i].ep    = NULL;
     }
-
+    uct_ib_iface_set_max_iov(&iface->super.super, cap.max_send_sge);
     return UCS_OK;
 
 err:
