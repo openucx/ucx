@@ -646,7 +646,7 @@ int uct_ib_atomic_is_be_reply(uct_ib_device_t *dev, int ext, size_t size)
 
 int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
 {
-    return ((uint64_t)gid_raw == 0) && ((uint64_t)(gid_raw + 8) == 0);
+    return (*(uint64_t *)gid_raw == 0) && (*(uint64_t *)(gid_raw + 8) == 0);
 }
 
 ucs_status_t 
