@@ -183,7 +183,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     mkdir -p $GTEST_REPORT_DIR
 
     echo "Running unit tests"
-    $AFFINITY $TIMEOUT make -C test/gtest test UCS_HANDLE_ERRORS=bt
+    $AFFINITY $TIMEOUT make -C test/gtest test UCS_HANDLE_ERRORS=bt UCX_IB_ETH_PAUSE_ON=y
     (cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
     echo "Running valgrind tests"
@@ -191,7 +191,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     then
         module load tools/valgrind-latest
     fi
-    $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
+    $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt UCX_IB_ETH_PAUSE_ON=y VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
     (cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
     module unload tools/valgrind-latest
 
