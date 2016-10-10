@@ -270,12 +270,6 @@ typedef struct uct_ib_mlx5_base_av {
     uint16_t                    rlid;
 } UCS_S_PACKED uct_ib_mlx5_base_av_t;
 
-ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
-                                      const uct_ib_address_t *ib_addr,
-                                      uint8_t path_bits,
-                                      uct_ib_mlx5_base_av_t *base_av,
-                                      struct mlx5_grh_av *grh_av,
-                                      int *is_global);
 
 ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
                                   uct_ib_mlx5_txwq_t *wq);
@@ -539,15 +533,6 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
 {
     ucs_assert(index <= srq->mask);
     return srq->buf + index * UCT_IB_MLX5_SRQ_STRIDE;
-}
-
-
-static UCS_F_ALWAYS_INLINE size_t
-uct_ib_mlx5_wqe_av_size(uct_ib_mlx5_base_av_t *av)
-{
-    return (av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) ?
-                    UCT_IB_MLX5_AV_FULL_SIZE :
-                    UCT_IB_MLX5_AV_BASE_SIZE;
 }
 
 #endif

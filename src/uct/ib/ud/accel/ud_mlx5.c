@@ -23,6 +23,18 @@
 #include <uct/ib/ud/base/ud_inl.h>
 
 
+static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
+  {"UD_", "", NULL,
+   ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_ud_mlx5_iface_config_t, mlx5_common),
+   UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
+
+  {NULL}
+};
+
 static UCS_F_ALWAYS_INLINE size_t
 uct_ud_mlx5_ep_ctrl_av_size(uct_ud_mlx5_ep_t *ep)
 {
@@ -484,9 +496,9 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     ucs_status_t status;
     int is_global;
 
-    status = uct_ib_iface_mlx5_get_av(&iface->super.super, ib_addr,
-                                      ep->super.path_bits, &ep->av, &ep->grh_av,
-                                      &is_global);
+    status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->mlx5_common,
+                                      ib_addr, ep->super.path_bits, &ep->av,
+                                      &ep->grh_av, &is_global);
     if (status != UCS_OK) {
         return status;
     }
@@ -637,15 +649,15 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_ud_iface_config_t *config = ucs_derived_of(tl_config,
-                                                   uct_ud_iface_config_t);
+    uct_ud_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
+                                                        uct_ud_mlx5_iface_config_t);
     ucs_status_t status;
     int i;
 
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              md, worker, params, 0, config);
+                              md, worker, params, 0, &config->super);
 
     uct_ib_iface_set_max_iov(&self->super.super, 1);
 
@@ -667,6 +679,11 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     self->super.tx.available = self->tx.wq.bb_max;
 
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ud_mlx5_iface_common_init(&self->mlx5_common, &config->mlx5_common);
     if (status != UCS_OK) {
         return status;
     }
@@ -724,6 +741,6 @@ UCT_TL_COMPONENT_DEFINE(uct_ud_mlx5_tl,
                         uct_ud_mlx5_iface_t,
                         "ud_mlx5",
                         "UD_MLX5_",
-                        uct_ud_iface_config_table,
-                        uct_ud_iface_config_t);
+                        uct_ud_mlx5_iface_config_table,
+                        uct_ud_mlx5_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_ud_mlx5_tl);

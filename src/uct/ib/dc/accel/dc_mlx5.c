@@ -16,6 +16,19 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
+
+static ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
+  {"DC_", "", NULL,
+   ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_dc_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_dc_mlx5_iface_config_t, ud_common),
+   UCS_CONFIG_TYPE_TABLE(uct_ud_mlx5_iface_common_config_table)},
+
+  {NULL}
+};
+
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_iface_t *tl_iface,
                            const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr)
@@ -29,8 +42,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_iface_t *tl_iface,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_ep_t, &iface->super, if_addr);
 
-    status = uct_ib_iface_mlx5_get_av(&iface->super.super.super, ib_addr,
-                                      iface->super.super.super.path_bits[0],
+    status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
+                                      ib_addr, iface->super.super.super.path_bits[0],
                                       &self->av, NULL, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
@@ -612,33 +625,38 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_dc_iface_config_t *config = ucs_derived_of(tl_config,
-                                                   uct_dc_iface_config_t);
+    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
+                                                        uct_dc_mlx5_iface_config_t);
     ucs_status_t status;
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_dc_iface_t, &uct_dc_mlx5_iface_ops, md,
-                              worker, params, 0, config);
+                              worker, params, 0, &config->super);
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
-                                           &config->super);
+                                           &config->super.super);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = uct_dc_mlx5_iface_init_dcis(self);
+    status = uct_ud_mlx5_iface_common_init(&self->ud_common, &config->ud_common);
     if (status != UCS_OK) {
-        goto err_common_cleanup;
+        goto err_rc_mlx5_common_cleanup;
     }
 
-    uct_dc_iface_set_quota(&self->super, config);
+    status = uct_dc_mlx5_iface_init_dcis(self);
+    if (status != UCS_OK) {
+        goto err_rc_mlx5_common_cleanup;
+    }
+
+    uct_dc_iface_set_quota(&self->super, &config->super);
 
     /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_mlx5_iface_progress, self);
     ucs_debug("created dc iface %p", self);
     return UCS_OK;
 
-err_common_cleanup:
+err_rc_mlx5_common_cleanup:
     uct_rc_mlx5_iface_common_cleanup(&self->mlx5_common);
 err:
     return status;
@@ -679,7 +697,7 @@ UCT_TL_COMPONENT_DEFINE(uct_dc_mlx5_tl,
                         uct_dc_mlx5_iface_t,
                         "dc_mlx5",
                         "DC_MLX5_",
-                        uct_dc_iface_config_table,
-                        uct_dc_iface_config_t);
+                        uct_dc_mlx5_iface_config_table,
+                        uct_dc_mlx5_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_dc_mlx5_tl);
 
