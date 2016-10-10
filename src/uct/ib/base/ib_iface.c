@@ -198,16 +198,22 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
 
     uct_ib_address_unpack(ib_addr, &lid, &is_global, &gid);
 
-    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
-        /* RoCE */
-        /* there shouldn't be a lid and the gid flag should be on */
-        return ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) &&
-                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) &&
-                (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID));
-    } else {
+    switch (iface->addr_type) {
+    case UCT_IB_ADDRESS_TYPE_LINK_LOCAL:
         /* IB */
-        return ((ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
-                (gid.global.subnet_prefix == iface->gid.global.subnet_prefix));
+        return ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB;
+    case UCT_IB_ADDRESS_TYPE_SITE_LOCAL:
+    case UCT_IB_ADDRESS_TYPE_GLOBAL:
+        /* IB + same subnet prefix */
+        return (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB) &&
+               (gid.global.subnet_prefix == iface->gid.global.subnet_prefix);
+    case UCT_IB_ADDRESS_TYPE_ETH:
+        /* there shouldn't be a lid and the gid flag should be on */
+        return (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) &&
+               (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) &&
+               !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID);
+    default:
+        return 0;
     }
 }
 
