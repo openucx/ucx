@@ -154,6 +154,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         remote_md_index += remote_md_gap;      /* Calculate next index of remote MD*/
         md_map >>= remote_md_gap;                   /* Remove the gap from the map */
         ucs_assert(md_map & 1);
+        ucs_assert_always(remote_md_index <= UCP_MD_INDEX_BITS);
 
         /* Unpack only reachable rkeys */
         if (UCS_BIT(remote_md_index) & ucp_ep_config(ep)->key.reachable_md_map) {

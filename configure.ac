@@ -3,6 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University 
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
@@ -68,6 +69,7 @@ AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 AC_HEADER_STDC
 LT_LIB_M
+AC_C_RESTRICT
 
 m4_include([config/m4/pkg.m4])
 PKG_PROG_PKG_CONFIG

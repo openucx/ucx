@@ -288,6 +288,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
 
     self->config.max_inline = qp_init_attr.cap.max_inline_data;
     ucs_assert_always(qp_init_attr.cap.max_inline_data >= UCT_UD_MIN_INLINE);
+    uct_ib_iface_set_max_iov(&self->super, qp_init_attr.cap.max_send_sge);
 
     memset(&qp_attr, 0, sizeof(qp_attr));
     /* Modify QP to INIT state */
@@ -526,7 +527,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_zcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_hdr        = iface->config.max_inline - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_iov        = 1;
+    /* The first iov is reserved for the header */
+    iface_attr->cap.am.max_iov        = uct_ib_iface_get_max_iov(&iface->super) - 1;
 
     iface_attr->cap.put.max_short     = iface->config.max_inline - sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
     iface_attr->cap.put.max_bcopy     = 0;

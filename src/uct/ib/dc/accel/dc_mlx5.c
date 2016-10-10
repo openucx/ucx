@@ -621,7 +621,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
                               worker, params, 0, config);
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super.super,
-                                           &config->super.super);
+                                           &config->super);
     if (status != UCS_OK) {
         goto err;
     }
@@ -630,6 +630,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
+
+    uct_dc_iface_set_quota(&self->super, config);
 
     /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_mlx5_iface_progress, self);

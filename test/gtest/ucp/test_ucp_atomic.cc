@@ -20,6 +20,8 @@ test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
                                  UCP_ATOMIC_MODE_CPU, result);
     generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                  UCP_ATOMIC_MODE_DEVICE, result);
+    generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                 UCP_ATOMIC_MODE_GUESS, result);
     return result;
 }
 
@@ -27,6 +29,7 @@ void test_ucp_atomic::init() {
     const char *atomic_mode =
                     (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
                     (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
+                    (GetParam().variant == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                     "";
     modify_config("ATOMIC_MODE", atomic_mode);
     test_ucp_memheap::init();

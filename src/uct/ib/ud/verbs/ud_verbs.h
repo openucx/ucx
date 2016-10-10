@@ -23,7 +23,7 @@ typedef struct {
 typedef struct {
     uct_ud_iface_t          super;
     struct {
-        struct ibv_sge      sge[UCT_UD_MAX_SGE];
+        struct ibv_sge      sge[UCT_IB_MAX_IOV];
         struct ibv_send_wr  wr_inl;
         struct ibv_send_wr  wr_skb;
     } tx;

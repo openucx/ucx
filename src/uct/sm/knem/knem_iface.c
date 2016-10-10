@@ -21,10 +21,10 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
 
     /* default values for all shared memory transports */
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.put.max_iov        = 1;
+    iface_attr->cap.put.max_iov        = uct_sm_get_max_iov();
 
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.get.max_iov        = 1;
+    iface_attr->cap.get.max_iov        = uct_sm_get_max_iov();
 
     iface_attr->cap.am.max_iov         = 1;
 
@@ -63,6 +63,8 @@ static UCS_CLASS_INIT_FUNC(uct_knem_iface_t, uct_md_h md, uct_worker_h worker,
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_knem_iface_ops, md, worker,
                               tl_config UCS_STATS_ARG(NULL));
     self->knem_md = (uct_knem_md_t *)md;
+    uct_sm_get_max_iov(); /* to initialize ucs_get_max_iov static variable */
+
     return UCS_OK;
 }
 

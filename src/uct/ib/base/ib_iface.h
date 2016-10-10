@@ -16,7 +16,7 @@
 #include <ucs/datastruct/mpool.inl>
 
 #define UCT_IB_DEVICE_NAME_LEN 256
-#define UCT_IB_MAX_IOV         8
+#define UCT_IB_MAX_IOV         8UL
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -58,6 +58,9 @@ struct uct_ib_iface_config {
         size_t              inl;             /* Inline space to reserve in CQ/QP */
         uct_iface_mpool_config_t mp;
     } rx;
+
+    /* Change the address type */
+    int                     addr_type;
 
     /* IB GID index to use  */
     unsigned                gid_index;
@@ -115,6 +118,7 @@ struct uct_ib_iface {
         uint8_t             port_num;
         uint8_t             sl;
         uint8_t             gid_index;
+        size_t              max_iov;             /* Maximum buffers in IOV array */
     } config;
 
     uct_ib_iface_ops_t      *ops;
@@ -315,8 +319,8 @@ static inline uint8_t uct_ib_iface_umr_id(uct_ib_iface_t *iface)
  * @return Number of elements in sge[]
  */
 static UCS_F_ALWAYS_INLINE
-size_t uct_rc_verbs_rdma_zcopy_sge_fill_iov(struct ibv_sge *sge,
-                                            const uct_iov_t *iov, size_t iovcnt)
+size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
+                                 size_t iovcnt)
 {
     size_t iov_it, sge_it = 0;
 
@@ -337,6 +341,20 @@ size_t uct_rc_verbs_rdma_zcopy_sge_fill_iov(struct ibv_sge *sge,
     }
 
     return sge_it;
+}
+
+
+static UCS_F_ALWAYS_INLINE
+size_t uct_ib_iface_get_max_iov(uct_ib_iface_t *iface)
+{
+    return iface->config.max_iov;
+}
+
+
+static UCS_F_ALWAYS_INLINE
+void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
+{
+    iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, max_iov);
 }
 
 

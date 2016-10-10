@@ -300,7 +300,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     skb->len = sizeof(*neth) + header_length;
     memcpy(skb->neth, neth, sizeof(*neth));
     memcpy(skb->neth + 1, header, header_length);
-    uct_ud_am_set_zcopy_desc(skb, buffer, length, lkey, comp);
+    uct_ud_am_set_zcopy_desc(skb, iov, iovcnt, comp);
 
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
@@ -380,7 +380,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
 
     cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->rx.cq,
-                              UCT_IB_MLX5_CQE64_SIZE_LOG);
+                              iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
         status = UCS_ERR_NO_PROGRESS;
         goto out;
@@ -420,7 +420,7 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
     struct mlx5_cqe64 *cqe;
 
     cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->tx.cq,
-                              UCT_IB_MLX5_CQE64_SIZE_LOG);
+                              iface->rx.cq.cqe_size_log);
     if (cqe == NULL) {
         return;
     }
@@ -469,6 +469,10 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     ucs_trace_func("");
     uct_ud_iface_query(iface, iface_attr);
     iface_attr->cap.flags &= ~UCT_IFACE_FLAG_WAKEUP;
+
+    /* TODO. Remove following line after IOV support implementation */
+    iface_attr->cap.am.max_iov  = 1;
+
     return UCS_OK;
 }
 
@@ -643,27 +647,16 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               md, worker, params, 0, config);
 
+    uct_ib_iface_set_max_iov(&self->super.super, 1);
+
     status = uct_ib_mlx5_get_cq(self->super.super.send_cq, &self->tx.cq);
     if (status != UCS_OK) {
         return status;
-    }
-    if (uct_ib_mlx5_cqe_size(&self->tx.cq) != sizeof(struct mlx5_cqe64)) {
-        ucs_error("TX CQE size (%d) is not %d",
-                  uct_ib_mlx5_cqe_size(&self->tx.cq),
-                  (int)sizeof(struct mlx5_cqe64));
-        return UCS_ERR_IO_ERROR;
     }
 
     status = uct_ib_mlx5_get_cq(self->super.super.recv_cq, &self->rx.cq);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (uct_ib_mlx5_cqe_size(&self->rx.cq) != sizeof(struct mlx5_cqe64)) {
-        ucs_error("RX CQE size (%d) is not %d",
-                  uct_ib_mlx5_cqe_size(&self->rx.cq),
-                  (int)sizeof(struct mlx5_cqe64));
-        return UCS_ERR_IO_ERROR;
     }
 
     status = uct_ib_mlx5_get_txwq(self->super.super.super.worker, self->super.qp,

@@ -133,8 +133,11 @@ static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
 /*
  * Safe setenv
  */
-#if !HAVE_DECL_IBV_EXP_SETENV
+#if HAVE_DECL_IBV_EXP_SETENV
+#  define ibv_exp_unsetenv(_c, _n)                  0
+#else
 #  define ibv_exp_setenv(_c, _n, _v, _o)            setenv(_n, _v, _o)
+#  define ibv_exp_unsetenv(_c, _n)                  unsetenv(_n)
 #endif
 
 
@@ -170,6 +173,15 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_EXP_HAVE_ATOMIC_GLOB(_attr)           ((_attr)->atomic_cap == IBV_ATOMIC_GLOB)
 #  define IBV_EXP_HAVE_ATOMIC_HCA_REPLY_BE(_attr)   0
 #endif /* HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE */
+
+
+/* Ethernet link layer */
+#if HAVE_DECL_IBV_LINK_LAYER_ETHERNET
+#  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    ((_attr)->link_layer == IBV_LINK_LAYER_ETHERNET)
+#else
+#  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
+#endif
+
 
 typedef uint8_t uct_ib_uint24_t[3];
 

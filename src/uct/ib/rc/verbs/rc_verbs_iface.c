@@ -18,6 +18,18 @@
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 
+static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
+  {"RC_", "", NULL,
+   ucs_offsetof(uct_rc_verbs_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_verbs_iface_config_t, verbs_common),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
+
+  {NULL}
+};
+
 static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
                                                     int fill)
 {
@@ -134,13 +146,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->inl_rwrite_wr.opcode              = IBV_WR_RDMA_WRITE;
     self->inl_rwrite_wr.send_flags          = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
 
-    self->config.tx_max_wr                  = ucs_min(config->tx_max_wr,
+    self->config.tx_max_wr                  = ucs_min(config->verbs_common.tx_max_wr,
                                                       self->super.config.tx_qp_len);
     self->super.config.tx_moderation        = ucs_min(self->super.config.tx_moderation,
                                                       self->config.tx_max_wr / 4);
 
-    status = uct_rc_verbs_iface_common_init(&self->verbs_common,
-                                            &self->super, config);
+    status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super,
+                                            &config->verbs_common, &config->super);
     if (status != UCS_OK) {
         return status;
     }
@@ -152,8 +164,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
     ibv_destroy_qp(qp);
     self->verbs_common.config.max_inline   = cap.max_inline_data;
-    self->super.super.super.config.max_iov = ucs_min(UCT_IB_MAX_IOV,
-                                                     cap.max_send_sge);
+    uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);
 
     status = uct_rc_verbs_iface_prepost_recvs_common(&self->super);
     if (status != UCS_OK) {

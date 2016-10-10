@@ -12,6 +12,12 @@
 #include <uct/ib/rc/verbs/rc_verbs_common.h>
 
 
+typedef struct uct_dc_verbs_iface_config {
+    uct_dc_iface_config_t              super;
+    uct_rc_verbs_iface_common_config_t verbs_common;
+} uct_dc_verbs_iface_config_t;
+
+
 typedef struct uct_dc_verbs_iface { 
     uct_dc_iface_t                 super;
     struct ibv_exp_send_wr         inl_am_wr;
