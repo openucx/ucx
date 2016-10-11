@@ -346,8 +346,8 @@ uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
  *
  */
 static UCS_F_ALWAYS_INLINE void
-uct_ib_mlx5_inline_copy(void *dest, const void *src, unsigned length, 
-                        uct_ib_mlx5_txwq_t *wq)
+uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
+                        length, uct_ib_mlx5_txwq_t *wq)
 {
     ptrdiff_t n;
 
