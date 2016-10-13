@@ -87,6 +87,7 @@ public:
     {
         const mapped_buffer *recvbuf = (const mapped_buffer *)arg;
         memcpy(recvbuf->ptr(), data, ucs_min(length, recvbuf->length()));
+        am_done = 1;
         return UCS_OK;
     }
 
@@ -187,13 +188,16 @@ public:
         mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
 
+        am_done = 0;
         uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
                                  UCT_AM_CB_FLAG_ASYNC);
         blocking_am_bcopy(sendbuf);
         (this->*flush)();
         sender().destroy_ep(0);
 
-        short_progress_loop();
+        while (!am_done) {
+            short_progress_loop();
+        }
 
         uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
@@ -246,7 +250,10 @@ protected:
         return **(m_entities.end() - 1);
     }
 
+    static int am_done;
 };
+
+int uct_flush_test::am_done = 0;
 
 UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_no_comp) {
     test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
