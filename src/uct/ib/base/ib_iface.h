@@ -354,7 +354,12 @@ size_t uct_ib_iface_get_max_iov(uct_ib_iface_t *iface)
 static UCS_F_ALWAYS_INLINE
 void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
 {
-    iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, max_iov);
+    size_t min_iov_requested;
+
+    ucs_assert((ssize_t)max_iov > 0);
+
+    min_iov_requested = ucs_max(max_iov, 1UL); /* max_iov mustn't be 0 */
+    iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, min_iov_requested);
 }
 
 
