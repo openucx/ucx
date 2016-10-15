@@ -1342,8 +1342,8 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
  * @ingroup UCT_RMA
  * @brief Send active message while avoiding local memory copy
  *
- * The output data placed into @a iov array of @ref ::uct_iov_t structures
- * from remote side ("gather output"). Buffers in @a iov are processed in array order.
+ * The input data in @a iov array of @ref ::uct_iov_t structures sent to remote
+ * side ("gather output"). Buffers in @a iov are processed in array order.
  * This means that the function complete iov[0] before proceeding to
  * iov[1], and so on.
  *
