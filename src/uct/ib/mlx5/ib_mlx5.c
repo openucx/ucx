@@ -230,14 +230,9 @@ ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d], ud_seg=%lu [ctl=%lu av=%lu] inl=%lu data=%lu", 
+    ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d]",
               qp_info.sq.stride * qp_info.sq.wqe_cnt,
-              qp_info.sq.stride, qp_info.sq.wqe_cnt,
-              sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(struct mlx5_wqe_datagram_seg),
-              sizeof(struct mlx5_wqe_ctrl_seg),
-              sizeof(struct mlx5_wqe_datagram_seg),
-              sizeof(struct mlx5_wqe_inl_data_seg),
-              sizeof(struct mlx5_wqe_data_seg));
+              qp_info.sq.stride, qp_info.sq.wqe_cnt);
 
     wq->qstart     = qp_info.sq.buf;
     wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
@@ -297,35 +292,4 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
 
     return UCS_OK;
 }
-
-ucs_status_t uct_ib_iface_mlx5_get_av(uct_ib_iface_t *iface,
-                                      const uct_ib_address_t *ib_addr,
-                                      uint8_t path_bits,
-                                      uct_ib_mlx5_base_av_t *base_av,
-                                      struct mlx5_grh_av *grh_av,
-                                      int *is_global)
-{
-    ucs_status_t status;
-    struct ibv_ah *ah;
-    struct mlx5_wqe_av mlx5_av;
-
-    status = uct_ib_iface_create_ah(iface, ib_addr, path_bits, &ah, is_global);
-    if (status != UCS_OK) {
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    uct_ib_mlx5_get_av(ah, &mlx5_av);
-    ibv_destroy_ah(ah);
-
-    base_av->stat_rate_sl = mlx5_av_base(&mlx5_av)->stat_rate_sl;
-    base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;
-    base_av->rlid         = mlx5_av_base(&mlx5_av)->rlid;
-
-    if (*is_global) {
-        ucs_assert_always(grh_av != NULL);
-        memcpy(grh_av, mlx5_av_grh(&mlx5_av), sizeof(*grh_av));
-    }
-    return UCS_OK;
-}
-
 

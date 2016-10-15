@@ -123,9 +123,11 @@ noinst_HEADERS += \
 
 if HAVE_MLX5_HW
 noinst_HEADERS += \
+	ib/ud/accel/ud_mlx5_common.h \
 	ib/ud/accel/ud_mlx5.h
 
 libuct_la_SOURCES += \
+	ib/ud/accel/ud_mlx5_common.c \
 	ib/ud/accel/ud_mlx5.c 
 endif
 endif

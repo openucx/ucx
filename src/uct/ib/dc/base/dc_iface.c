@@ -21,7 +21,7 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     init_attr.pd               = uct_ib_iface_md(&iface->super.super)->pd;
     init_attr.cq               = iface->super.super.recv_cq;
     init_attr.srq              = iface->super.rx.srq;
-    init_attr.dc_key           = UCT_IB_DC_KEY;
+    init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
     init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
@@ -51,7 +51,7 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
     attr.pkey_index      = 0;
     attr.qp_access_flags = 0;
     attr.port_num        = iface->super.super.config.port_num;
-    attr.dct_key         = UCT_IB_DC_KEY;
+    attr.dct_key         = UCT_IB_KEY;
 
     if (ibv_exp_modify_qp(dci->qp, &attr,
                          IBV_EXP_QP_STATE        |
@@ -248,7 +248,6 @@ void uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->iface_addr_len = sizeof(uct_dc_iface_addr_t);
-
 }
 
 ucs_status_t

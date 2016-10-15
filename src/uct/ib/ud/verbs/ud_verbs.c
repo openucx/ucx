@@ -549,7 +549,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;
     self->tx.wr_inl.wr_id             = 0xBEEBBEEB;
-    self->tx.wr_inl.wr.ud.remote_qkey = UCT_IB_QKEY;
+    self->tx.wr_inl.wr.ud.remote_qkey = UCT_IB_KEY;
     self->tx.wr_inl.imm_data          = 0;
     self->tx.wr_inl.next              = 0;
     self->tx.wr_inl.sg_list           = self->tx.sge;
@@ -558,7 +558,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
     self->tx.wr_skb.opcode            = IBV_WR_SEND;
     self->tx.wr_skb.wr_id             = 0xFAAFFAAF;
-    self->tx.wr_skb.wr.ud.remote_qkey = UCT_IB_QKEY;
+    self->tx.wr_skb.wr.ud.remote_qkey = UCT_IB_KEY;
     self->tx.wr_skb.imm_data          = 0;
     self->tx.wr_skb.next              = 0;
     self->tx.wr_skb.sg_list           = self->tx.sge;
