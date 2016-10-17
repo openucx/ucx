@@ -14,6 +14,7 @@
 
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
+#define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 
 #define UCT_RC_MLX5_PUT_MAX_SHORT(_av_size) \
     UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
@@ -33,7 +34,7 @@
     (sizeof(struct mlx5_wqe_ctrl_seg) + \
      (_av_size) + \
      sizeof(struct mlx5_wqe_inl_data_seg) + \
-     sizeof(struct mlx5_wqe_data_seg))
+     UCT_IB_MLX5_AM_ZCOPY_MAX_IOV * sizeof(struct mlx5_wqe_data_seg))
 
 
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
@@ -511,6 +512,79 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
                                  opmod, signal, wqe_size, av);
+}
+
+static UCS_F_ALWAYS_INLINE
+void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
+                                    uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
+                                    unsigned opcode_flags,
+                         /* IOV  */ const uct_iov_t *iov, size_t iovcnt,
+                         /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
+                         /* RDMA */ uint64_t remote_addr, uct_rkey_t rkey,
+                         /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size,
+                                    int signal)
+{
+    struct mlx5_wqe_ctrl_seg     *ctrl;
+    struct mlx5_wqe_raddr_seg    *raddr;
+    struct mlx5_wqe_data_seg     *dptr;
+    struct mlx5_wqe_inl_data_seg *inl;
+    uct_rc_hdr_t                 *rch;
+    unsigned                      wqe_size, inl_seg_size, ctrl_av_size;
+
+    if (!signal) {
+        signal = uct_rc_iface_tx_moderation(iface, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
+    } else {
+        ucs_assert(signal == MLX5_WQE_CTRL_CQ_UPDATE);
+    }
+
+    ctrl         = txwq->curr;
+    ctrl_av_size = sizeof(*ctrl) + av_size;
+
+    switch (opcode_flags) {
+    case MLX5_OPCODE_SEND:
+        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len,
+                                             UCT_IB_MLX5_WQE_SEG_SIZE);
+
+        ucs_assert(uct_iov_total_length(iov, iovcnt) + sizeof(*rch) + am_hdr_len <=
+                   iface->super.config.seg_size);
+
+        /* Inline segment with AM ID and header */
+        inl              = uct_ib_mlx5_get_next_seg(txwq, ctrl, ctrl_av_size);
+        inl->byte_count  = htonl((sizeof(*rch) + am_hdr_len) | MLX5_INLINE_SEG);
+        rch              = (uct_rc_hdr_t *)(inl + 1);
+        rch->am_id       = am_id;
+
+        uct_ib_mlx5_inline_copy(rch + 1, am_hdr, am_hdr_len, txwq);
+
+        /* Data segment with payload */
+        dptr             = (struct mlx5_wqe_data_seg *)((char *)inl + inl_seg_size);
+        wqe_size         = ctrl_av_size + inl_seg_size +
+                           uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt);
+
+        ucs_assert(wqe_size <= (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB));
+        break;
+
+    case MLX5_OPCODE_RDMA_READ:
+    case MLX5_OPCODE_RDMA_WRITE:
+        /* Set RDMA segment */
+        ucs_assert(uct_iov_total_length(iov, iovcnt) <= UCT_IB_MAX_MESSAGE_SIZE);
+
+        raddr            = uct_ib_mlx5_get_next_seg(txwq, ctrl, ctrl_av_size);
+        uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
+
+        /* Data segment */
+        wqe_size         = ctrl_av_size + sizeof(*raddr) +
+                           uct_ib_mlx5_set_data_seg_iov(txwq, (void*)(raddr + 1),
+                                                        iov, iovcnt);
+        break;
+
+    default:
+        ucs_fatal("invalid send opcode");
+    }
+
+    uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
+                                 (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
+                                 0, signal, wqe_size, av);
 }
 
 #endif

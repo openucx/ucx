@@ -95,11 +95,6 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                       UCT_IFACE_FLAG_PENDING|
                                       UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
-    /*TODO: remove max_iov initialization once we have a full functionality */
-    iface_attr->cap.put.max_iov     = 1;
-    iface_attr->cap.get.max_iov     = 1;
-    iface_attr->cap.am.max_iov      = 1;
-
     return UCS_OK;
 }
 
@@ -139,8 +134,7 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
-                             unsigned opcode, const void *buffer,
-                             unsigned length, uct_ib_mem_t *memh,
+                             unsigned opcode, const uct_iov_t *iov, size_t iovcnt,
                              /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                              /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                              uct_completion_t *comp)
@@ -151,13 +145,12 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
     sn = txwq->sw_pi;
-    uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
-                               opcode, buffer, length, &memh->lkey,
-                               am_id, am_hdr, am_hdr_len,
-                               rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
-                               0, 0, 0,
-                               &ep->av, uct_ib_mlx5_wqe_av_size(&ep->av),
-                               MLX5_WQE_CTRL_CQ_UPDATE);
+    uct_rc_mlx5_txqp_dptr_post_iov(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp,
+                                   txwq, opcode, iov, iovcnt,
+                                   am_id, am_hdr, am_hdr_len,
+                                   rdma_raddr, uct_ib_md_direct_rkey(rdma_rkey),
+                                   &ep->av, uct_ib_mlx5_wqe_av_size(&ep->av),
+                                   MLX5_WQE_CTRL_CQ_UPDATE);
 
     uct_rc_txqp_add_send_comp(&iface->super.super, txqp, comp, sn);
 }
@@ -355,16 +348,18 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
-    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
-    UCT_RC_MLX5_CHECK_AM_ZCOPY(id, header_length, length,
+    UCT_CHECK_IOV_SIZE(iovcnt, UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
+                       "uct_dc_mlx5_ep_am_zcopy");
+    UCT_RC_MLX5_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
                                iface->super.super.super.config.seg_size,
                                UCT_IB_MLX5_AV_FULL_SIZE);
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
-    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_SEND, buffer, length, memh,
+    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_SEND, iov, iovcnt,
                                  id, header, header_length, 0, 0, comp);
 
-    UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length + length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length +
+                      uct_iov_total_length(iov, iovcnt));
 
     return UCS_INPROGRESS;
 }
@@ -419,15 +414,17 @@ ucs_status_t uct_dc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
-    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
-
-    UCT_CHECK_LENGTH(length, UCT_IB_MAX_MESSAGE_SIZE, "put_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super.super),
+                       "uct_dc_mlx5_ep_put_zcopy");
+    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), UCT_IB_MAX_MESSAGE_SIZE,
+                     "put_zcopy");
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
-    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_RDMA_WRITE, buffer, length,
-                                 memh, 0, NULL, 0, remote_addr, rkey, comp);
+    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_RDMA_WRITE, iov, iovcnt,
+                                 0, NULL, 0, remote_addr, rkey, comp);
 
-    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY,
+                      uct_iov_total_length(iov, iovcnt));
     return UCS_INPROGRESS;
 }
 
@@ -460,14 +457,16 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
 
-    UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
-
-    UCT_CHECK_LENGTH(length, UCT_IB_MAX_MESSAGE_SIZE, "get_zcopy");
+    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super.super),
+                       "uct_dc_mlx5_ep_get_zcopy");
+    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), UCT_IB_MAX_MESSAGE_SIZE,
+                     "get_zcopy");
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
-    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_RDMA_READ, buffer, length,
-                                 memh, 0, NULL, 0, remote_addr, rkey, comp);
-    UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, length);
+    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_RDMA_READ, iov, iovcnt,
+                                 0, NULL, 0, remote_addr, rkey, comp);
+    UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY,
+                      uct_iov_total_length(iov, iovcnt));
     return UCS_INPROGRESS;
 }
 
@@ -650,6 +649,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     }
 
     uct_dc_iface_set_quota(&self->super, &config->super);
+    /* Set max_iov for put_zcopy and get_zcopy */
+    uct_ib_iface_set_max_iov(&self->super.super.super,
+                             ((UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB) -
+                             sizeof(struct mlx5_wqe_raddr_seg) -
+                             sizeof(struct mlx5_wqe_ctrl_seg) -
+                             UCT_IB_MLX5_AV_FULL_SIZE) /
+                             sizeof(struct mlx5_wqe_data_seg));
 
     /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_mlx5_iface_progress, self);
