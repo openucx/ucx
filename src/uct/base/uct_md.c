@@ -210,7 +210,7 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_md_component_t *mdc,
 }
 
 static UCS_CLASS_INIT_FUNC(uct_worker_t, ucs_async_context_t *async,
-                           ucs_thread_mode_t thread_mode)
+                           ucs_worker_param_t *param, ucs_thread_mode_t thread_mode)
 {
     self->async       = async;
     self->thread_mode = thread_mode;
@@ -256,7 +256,8 @@ void uct_worker_slowpath_progress_unregister(uct_worker_h worker,
 
 UCS_CLASS_DEFINE(uct_worker_t, void);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_worker_t, uct_worker_t,
-                                ucs_async_context_t*, ucs_thread_mode_t)
+                                ucs_async_context_t*, ucs_worker_param_t*,
+                                ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_worker_t, uct_worker_t)
 
 

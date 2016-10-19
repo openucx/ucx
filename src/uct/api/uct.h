@@ -17,6 +17,7 @@
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
+#include <ucs/type/worker_param.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -503,6 +504,7 @@ void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources);
  * @param [out] worker_p      Filled with a pointer to the worker object.
  */
 ucs_status_t uct_worker_create(ucs_async_context_t *async,
+                               ucs_worker_param_t *param,
                                ucs_thread_mode_t thread_mode,
                                uct_worker_h *worker_p);
 

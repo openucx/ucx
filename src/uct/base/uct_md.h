@@ -153,6 +153,7 @@ typedef struct uct_worker uct_worker_t;
 struct uct_worker {
     ucs_async_context_t    *async;
     ucs_callbackq_t        progress_q;
+    ucs_worker_param_t     worker_params;
     ucs_thread_mode_t      thread_mode;
     ucs_list_link_t        tl_data;
 };

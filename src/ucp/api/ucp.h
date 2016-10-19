@@ -10,6 +10,7 @@
 #include <ucp/api/ucp_def.h>
 #include <ucp/api/ucp_version.h>
 #include <ucs/type/thread_mode.h>
+#include <ucs/type/worker_param.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/math.h>
 #include <stdio.h>
@@ -636,8 +637,8 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
-                               ucp_worker_h *worker_p);
+ucs_status_t ucp_worker_create(ucp_context_h context, ucs_worker_param_t *param, 
+                               ucs_thread_mode_t thread_mode, ucp_worker_h *worker_p);
 
 
 /**

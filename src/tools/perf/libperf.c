@@ -913,8 +913,9 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto out;
     }
 
-    status = uct_worker_create(&perf->uct.async, params->thread_mode,
-                               &perf->uct.worker);
+    ucs_worker_param_t worker_params;
+    status = uct_worker_create(&perf->uct.async, &worker_params, 
+                               params->thread_mode, &perf->uct.worker);
     if (status != UCS_OK) {
         goto out_cleanup_async;
     }
@@ -1006,9 +1007,10 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     if (status != UCS_OK) {
         goto err;
     }
-
-    status = ucp_worker_create(perf->ucp.context, params->thread_mode,
-                               &perf->ucp.worker);
+    
+    ucs_worker_param_t worker_params;
+    status = ucp_worker_create(perf->ucp.context, &worker_params, 
+                               params->thread_mode, &perf->ucp.worker);
     if (status != UCS_OK) {
         goto err_cleanup;
     }

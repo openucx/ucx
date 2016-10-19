@@ -9,13 +9,11 @@
 
 #include <sched.h>
 
-
 /**
  * Specifies CPU parameters.
  */
 typedef struct ucs_worker_param {
     cpu_set_t cpu_cores;
 } ucs_worker_param_t;
-
 
 #endif

@@ -42,8 +42,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     if (!(print_opts & (PRINT_UCP_WORKER|PRINT_UCP_EP))) {
         goto out_cleanup_context;
     }
-
-    status = ucp_worker_create(context, UCS_THREAD_MODE_MULTI, &worker);
+    ucs_worker_param_t worker_params;
+    status = ucp_worker_create(context, &worker_params, UCS_THREAD_MODE_MULTI, &worker);
     if (status != UCS_OK) {
         printf("<Failed to create UCP worker>\n");
         goto out_cleanup_context;

@@ -404,8 +404,8 @@ out:
     return config_idx;
 }
 
-ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
-                               ucp_worker_h *worker_p)
+ucs_status_t ucp_worker_create(ucp_context_h context, ucs_worker_param_t *worker_param,
+                               ucs_thread_mode_t thread_mode, ucp_worker_h *worker_p)
 {
     ucp_rsc_index_t tl_id;
     ucp_worker_h worker;
@@ -465,7 +465,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     }
 
     /* Create the underlying UCT worker */
-    status = uct_worker_create(&worker->async, thread_mode, &worker->uct);
+    status = uct_worker_create(&worker->async, worker_param, thread_mode, &worker->uct);
     if (status != UCS_OK) {
         goto err_destroy_async;
     }
