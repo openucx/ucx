@@ -78,74 +78,6 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     return count;
 }
 
-ucs_status_t uct_rc_mlx5_iface_srq_init(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
-{
-    uct_ib_mlx5_srq_info_t srq_info;
-    uct_ib_mlx5_srq_seg_t *seg;
-    ucs_status_t status;
-    unsigned i;
-
-    status = uct_ib_mlx5_get_srq_info(iface->rx.srq, &srq_info);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (srq_info.head != 0) {
-        ucs_error("SRQ head is not 0 (%d)", srq_info.head);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if (srq_info.stride != UCT_IB_MLX5_SRQ_STRIDE) {
-        ucs_error("SRQ stride is not %lu (%d)", UCT_IB_MLX5_SRQ_STRIDE,
-                  srq_info.stride);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if (!ucs_is_pow2(srq_info.tail + 1)) {
-        ucs_error("SRQ length is not power of 2 (%d)", srq_info.tail + 1);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    iface->rx.available = srq_info.tail + 1;
-    srq->buf             = srq_info.buf;
-    srq->db              = srq_info.dbrec;
-    srq->free_idx        = srq_info.tail;
-    srq->ready_idx       = -1;
-    srq->sw_pi           = -1;
-    srq->mask            = srq_info.tail;
-    srq->tail            = srq_info.tail;
-
-    for (i = srq_info.head; i <= srq_info.tail; ++i) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, i);
-        seg->srq.ooo         = 0;
-        seg->srq.desc        = NULL;
-        seg->dptr.byte_count = htonl(iface->super.config.seg_size);
-    }
-
-    return UCS_OK;
-}
-
-void uct_rc_mlx5_iface_srq_cleanup(uct_rc_iface_t *iface, uct_ib_mlx5_srq_t *srq)
-{
-    uct_ib_mlx5_srq_info_t srq_info;
-    uct_ib_mlx5_srq_seg_t *seg;
-    ucs_status_t status;
-    unsigned index, next;
-
-    status = uct_ib_mlx5_get_srq_info(iface->rx.srq, &srq_info);
-    ucs_assert_always(status == UCS_OK);
-
-    /* Restore order of all segments which the driver has put on its free list */
-    index = srq->tail;
-    while (index != srq_info.tail) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, index);
-        next = ntohs(seg->srq.next_wqe_index);
-        seg->srq.next_wqe_index = htons((index + 1) & srq->mask);
-        index = next;
-    }
-    srq->tail = index;
-}
-
 ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, uct_rc_iface_t *rc_iface,
                                            uct_rc_iface_config_t *config)
 {
@@ -161,11 +93,13 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, uc
         return status;
     }
 
-    status = uct_rc_mlx5_iface_srq_init(rc_iface, &iface->rx.srq);
+    status = uct_ib_mlx5_srq_init(&iface->rx.srq, rc_iface->rx.srq,
+                                  rc_iface->super.config.seg_size);
     if (status != UCS_OK) {
         return status;
     }
 
+    rc_iface->rx.available = iface->rx.srq.mask + 1;
     if (uct_rc_mlx5_iface_srq_post_recv(rc_iface, &iface->rx.srq) == 0) {
         ucs_error("Failed to post receives");
         return UCS_ERR_NO_MEMORY;

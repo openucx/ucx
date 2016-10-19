@@ -56,7 +56,8 @@ libuct_la_SOURCES += \
 	
 noinst_HEADERS += \
 	ib/mlx5/ib_mlx5_log.h \
-	ib/mlx5/ib_mlx5.h
+	ib/mlx5/ib_mlx5.h \
+	ib/mlx5/ib_mlx5.inl
 endif
 
 

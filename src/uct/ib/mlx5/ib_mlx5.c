@@ -5,6 +5,7 @@
 */
 
 #include "ib_mlx5.h"
+#include "ib_mlx5.inl"
 #include "ib_mlx5_log.h"
 
 #include <uct/ib/base/ib_verbs.h>
@@ -16,7 +17,33 @@
 #include <string.h>
 
 
-ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *qp_info)
+typedef struct uct_ib_mlx5_qp_info {
+    uint32_t           qpn;           /* QP number */
+    volatile uint32_t  *dbrec;        /* QP doorbell record in RAM */
+
+    struct {
+            void       *buf;          /* Work queue buffer */
+            unsigned   wqe_cnt;       /* Number of WQEs in the work queue */
+            unsigned   stride;        /* Size of each WQE */
+    } sq, rq;
+
+    struct {
+            void       *reg;          /* BlueFlame register */
+            unsigned   size;          /* BlueFlame register size (0 - unsupported) */
+    } bf;
+} uct_ib_mlx5_qp_info_t;
+
+
+typedef struct uct_ib_mlx5_srq_info {
+    void               *buf;          /* SRQ queue buffer */
+    volatile uint32_t  *dbrec;        /* SRQ doorbell record in RAM */
+    unsigned           stride;        /* Size of each WQE */
+    unsigned           head;
+    unsigned           tail;
+} uct_ib_mlx5_srq_info_t;
+
+
+static ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *qp_info)
 {
 #if HAVE_DECL_IBV_MLX5_EXP_GET_QP_INFO
     struct ibv_mlx5_qp_info ibv_qp_info;
@@ -65,7 +92,8 @@ ucs_status_t uct_ib_mlx5_get_qp_info(struct ibv_qp *qp, uct_ib_mlx5_qp_info_t *q
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq, uct_ib_mlx5_srq_info_t *srq_info)
+static ucs_status_t uct_ib_mlx5_get_srq_info(struct ibv_srq *srq,
+                                             uct_ib_mlx5_srq_info_t *srq_info)
 {
 #if HAVE_DECL_IBV_MLX5_EXP_GET_SRQ_INFO
     struct ibv_mlx5_srq_info ibv_srq_info;
@@ -209,13 +237,13 @@ static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
 {
 }
 
-ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
-                                  uct_ib_mlx5_txwq_t *wq)
+ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq,
+                                   struct ibv_qp *verbs_qp)
 {
     uct_ib_mlx5_qp_info_t qp_info;
     ucs_status_t status;
 
-    status = uct_ib_mlx5_get_qp_info(qp, &qp_info);
+    status = uct_ib_mlx5_get_qp_info(verbs_qp, &qp_info);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");
         return UCS_ERR_IO_ERROR;
@@ -234,43 +262,43 @@ ucs_status_t uct_ib_mlx5_get_txwq(uct_worker_h worker, struct ibv_qp *qp,
               qp_info.sq.stride * qp_info.sq.wqe_cnt,
               qp_info.sq.stride, qp_info.sq.wqe_cnt);
 
-    wq->qstart     = qp_info.sq.buf;
-    wq->qend       = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
-    wq->curr       = wq->qstart;
-    wq->sw_pi      = wq->prev_sw_pi = 0;
-    wq->bf         = uct_worker_tl_data_get(worker,
+    txwq->qstart   = qp_info.sq.buf;
+    txwq->qend     = qp_info.sq.buf + (qp_info.sq.stride * qp_info.sq.wqe_cnt);
+    txwq->curr     = txwq->qstart;
+    txwq->sw_pi    = txwq->prev_sw_pi = 0;
+    txwq->bf       = uct_worker_tl_data_get(worker,
                                             UCT_IB_MLX5_WORKER_BF_KEY,
                                             uct_ib_mlx5_bf_t,
                                             uct_ib_mlx5_bf_cmp,
                                             uct_ib_mlx5_bf_init,
                                             (uintptr_t)qp_info.bf.reg);
-    wq->dbrec      = &qp_info.dbrec[MLX5_SND_DBR];
+    txwq->dbrec    = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not 
      *    really know how many bb is there (but no more than max bb
      *  - on send we check that there is at least one bb. We know
      *  exact number of bbs once we acually are sending.
      */
-    wq->bb_max     = qp_info.sq.wqe_cnt - 2*UCT_IB_MLX5_MAX_BB;
+    txwq->bb_max   = qp_info.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
 #if ENABLE_ASSERT
-    wq->hw_ci      = 0xFFFF;
+    txwq->hw_ci    = 0xFFFF;
 #endif
-    ucs_assert_always(wq->bb_max > 0);
-    memset(wq->qstart, 0, wq->qend - wq->qstart); 
+    ucs_assert_always(txwq->bb_max > 0);
+    memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
     return UCS_OK;
 } 
 
-void uct_ib_mlx5_put_txwq(uct_worker_h worker, uct_ib_mlx5_txwq_t *wq)
+void uct_ib_mlx5_txwq_cleanup(uct_worker_h worker, uct_ib_mlx5_txwq_t* txwq)
 {
-    uct_worker_tl_data_put(wq->bf, uct_ib_mlx5_bf_cleanup);
+    uct_worker_tl_data_put(txwq->bf, uct_ib_mlx5_bf_cleanup);
 }
 
-ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
+ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *rxwq)
 {
     uct_ib_mlx5_qp_info_t qp_info;
     ucs_status_t status;
 
-    status = uct_ib_mlx5_get_qp_info(qp, &qp_info);
+    status = uct_ib_mlx5_get_qp_info(verbs_qp, &qp_info);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");
         return UCS_ERR_IO_ERROR;
@@ -283,13 +311,81 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq)
                   qp_info.rq.stride);
         return UCS_ERR_IO_ERROR;
     }
-    wq->wqes            = qp_info.rq.buf;
-    wq->rq_wqe_counter  = 0;
-    wq->cq_wqe_counter  = 0;
-    wq->mask            = qp_info.rq.wqe_cnt - 1;
-    wq->dbrec           = &qp_info.dbrec[MLX5_RCV_DBR];
-    memset(wq->wqes, 0, qp_info.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg)); 
+    rxwq->wqes            = qp_info.rq.buf;
+    rxwq->rq_wqe_counter  = 0;
+    rxwq->cq_wqe_counter  = 0;
+    rxwq->mask            = qp_info.rq.wqe_cnt - 1;
+    rxwq->dbrec           = &qp_info.dbrec[MLX5_RCV_DBR];
+    memset(rxwq->wqes, 0, qp_info.rq.wqe_cnt * sizeof(struct mlx5_wqe_data_seg));
 
     return UCS_OK;
+}
+
+ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
+                                  size_t sg_byte_count)
+{
+    uct_ib_mlx5_srq_info_t srq_info;
+    uct_ib_mlx5_srq_seg_t *seg;
+    ucs_status_t status;
+    unsigned i;
+
+    status = uct_ib_mlx5_get_srq_info(verbs_srq, &srq_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (srq_info.head != 0) {
+        ucs_error("SRQ head is not 0 (%d)", srq_info.head);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (srq_info.stride != UCT_IB_MLX5_SRQ_STRIDE) {
+        ucs_error("SRQ stride is not %lu (%d)", UCT_IB_MLX5_SRQ_STRIDE,
+                  srq_info.stride);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (!ucs_is_pow2(srq_info.tail + 1)) {
+        ucs_error("SRQ length is not power of 2 (%d)", srq_info.tail + 1);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    srq->buf             = srq_info.buf;
+    srq->db              = srq_info.dbrec;
+    srq->free_idx        = srq_info.tail;
+    srq->ready_idx       = -1;
+    srq->sw_pi           = -1;
+    srq->mask            = srq_info.tail;
+    srq->tail            = srq_info.tail;
+
+    for (i = srq_info.head; i <= srq_info.tail; ++i) {
+        seg = uct_ib_mlx5_srq_get_wqe(srq, i);
+        seg->srq.ooo         = 0;
+        seg->srq.desc        = NULL;
+        seg->dptr.byte_count = htonl(sg_byte_count);
+    }
+
+    return UCS_OK;
+}
+
+void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
+{
+    uct_ib_mlx5_srq_info_t srq_info;
+    uct_ib_mlx5_srq_seg_t *seg;
+    ucs_status_t status;
+    unsigned index, next;
+
+    status = uct_ib_mlx5_get_srq_info(verbs_srq, &srq_info);
+    ucs_assert_always(status == UCS_OK);
+
+    /* Restore order of all segments which the driver has put on its free list */
+    index = srq->tail;
+    while (index != srq_info.tail) {
+        seg = uct_ib_mlx5_srq_get_wqe(srq, index);
+        next = ntohs(seg->srq.next_wqe_index);
+        seg->srq.next_wqe_index = htons((index + 1) & srq->mask);
+        index = next;
+    }
+    srq->tail = index;
 }
 

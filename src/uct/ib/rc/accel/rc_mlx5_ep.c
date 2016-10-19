@@ -431,8 +431,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super);
 
-    status = uct_ib_mlx5_get_txwq(iface->super.super.super.worker,
-                                  self->super.txqp.qp, &self->tx.wq);
+    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker, &self->tx.wq,
+                                   self->super.txqp.qp);
     if (status != UCS_OK) {
         ucs_error("Failed to get mlx5 QP information");
         return status;
@@ -453,7 +453,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                                                 uct_rc_mlx5_iface_t);
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    uct_rc_mlx5_iface_progress, iface);
-    uct_ib_mlx5_put_txwq(iface->super.super.super.worker, &self->tx.wq);
+    uct_ib_mlx5_txwq_cleanup(iface->super.super.super.worker, &self->tx.wq);
 
     /* Synchronize CQ index with the driver, since it would remove pending
      * completions for this QP (both send and receive) during ibv_destroy_qp().
@@ -461,7 +461,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->mlx5_common.tx.cq.cq_ci);
     uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->mlx5_common.rx.cq.cq_ci);
     uct_rc_ep_reset_qp(&self->super);
-    uct_rc_mlx5_iface_srq_cleanup(&iface->super, &iface->mlx5_common.rx.srq);
+    uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq);
     iface->mlx5_common.tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.send_cq);
     iface->mlx5_common.rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.recv_cq);
 }
