@@ -221,6 +221,11 @@ AC_CONFIG_FILES([Makefile
                  src/uct/api/version.h
                  ])
 AS_IF([test "x$with_docs_only" == xyes], [], [
+AC_CONFIG_LINKS([
+                 debian/compat:debian/compat
+                 debian/copyright:debian/copyright
+                 debian/ucx.prerm:debian/ucx.prerm
+                 ])
 AC_CONFIG_FILES([
                  ucx.spec
                  ucx.pc
