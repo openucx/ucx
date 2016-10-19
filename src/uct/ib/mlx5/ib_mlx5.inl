@@ -119,18 +119,35 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
     }
 }
 
-static UCS_F_ALWAYS_INLINE void *
-uct_ib_mlx5_get_next_seg(uct_ib_mlx5_txwq_t *wq, void *seg_base, size_t seg_len)
+/* wrapping of 'seg' should not happen */
+static UCS_F_ALWAYS_INLINE void*
+uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
 {
-    void *rseg;
+    ucs_assertv(((unsigned long)seg % UCT_IB_MLX5_WQE_SEG_SIZE) == 0, "seg=%p", seg);
+    ucs_assertv(seg >= txwq->qstart, "seg=%p qstart=%p", seg, txwq->qstart);
+    ucs_assertv(seg <  txwq->qend,   "seg=%p qend=%p",   seg, txwq->qend);
+    return seg;
+}
 
-    rseg = seg_base + seg_len;
-    if (ucs_unlikely(rseg >= wq->qend)) {
-        rseg = wq->qstart;
+/* wrapping of 'seg' could happen, but only on exact 'qend' boundary */
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_txwq_wrap_exact(uct_ib_mlx5_txwq_t *txwq, void *seg)
+{
+    ucs_assert(seg <= txwq->qend);
+    if (ucs_unlikely(seg == txwq->qend)) {
+        seg = txwq->qstart;
     }
-    ucs_assert(((unsigned long)rseg % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    ucs_assert(rseg >= wq->qstart && rseg < wq->qend);
-    return rseg;
+    return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
+}
+
+/* wrapping of 'seg' could happen, even past 'qend' boundary */
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
+{
+    if (ucs_unlikely(seg >= txwq->qend)) {
+        seg -= (txwq->qend - txwq->qstart);
+    }
+    return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -257,15 +274,8 @@ unsigned uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
         }
         ucs_assert(iov[iov_it].memh != UCT_INVALID_MEM_HANDLE);
 
-        /* check consistency of the circular buffer
-         * assume dptr_it 16 bytes aligned and can't go behind txwq->end
-         */
-        ucs_assert(0 == (((uintptr_t)dptr_it) % sizeof(*dptr)));
-        if (ucs_unlikely(dptr_it == txwq->qend)) {
-            dptr_it = txwq->qstart;
-        }
-        ucs_assert((void*)dptr_it >= txwq->qstart);
-        ucs_assert((void*)(((struct mlx5_wqe_data_seg *)dptr_it) + 1) <= txwq->qend);
+        /* assume dptr_it 16 bytes aligned and can't go behind txwq->end */
+        dptr_it = uct_ib_mlx5_txwq_wrap_exact(txwq, dptr_it);
 
         /* place data into the buffer */
         uct_ib_mlx5_set_data_seg((void *)dptr_it, iov[iov_it].buffer,

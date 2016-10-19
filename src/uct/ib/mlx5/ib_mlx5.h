@@ -181,8 +181,6 @@ struct uct_ib_mlx5_atomic_masked_fadd32_seg {
 struct uct_ib_mlx5_atomic_masked_cswap64_seg {
     uint64_t           swap;
     uint64_t           compare;
-    uint64_t           swap_mask;
-    uint64_t           compare_mask;
 } UCS_S_PACKED;
 
 
