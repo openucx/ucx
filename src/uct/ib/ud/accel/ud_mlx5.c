@@ -4,6 +4,8 @@
 * See file LICENSE for terms.
 */
 
+#include "ud_mlx5.h"
+
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_iface.h>
 #include <uct/base/uct_md.h>
@@ -15,11 +17,11 @@
 #include <arpa/inet.h> /* For htonl */
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5.inl>
 
 #include <uct/ib/ud/base/ud_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_def.h>
-#include "ud_mlx5.h"
 #include <uct/ib/ud/base/ud_inl.h>
 
 
@@ -671,8 +673,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    status = uct_ib_mlx5_get_txwq(self->super.super.super.worker, self->super.qp,
-                                  &self->tx.wq);
+    status = uct_ib_mlx5_txwq_init(self->super.super.super.worker, &self->tx.wq,
+                                   self->super.qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -712,7 +714,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
     uct_ud_enter(&self->super);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
     uct_ud_iface_begin_cleanup(&self->super);
-    uct_ib_mlx5_put_txwq(self->super.super.super.worker, &self->tx.wq);
+    uct_ib_mlx5_txwq_cleanup(self->super.super.super.worker, &self->tx.wq);
     uct_ud_leave(&self->super);
 }
 

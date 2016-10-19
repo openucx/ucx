@@ -604,9 +604,9 @@ static ucs_status_t uct_dc_mlx5_iface_init_dcis(uct_dc_mlx5_iface_t *iface)
 
     bb_max = 0;
     for (i = 0; i < iface->super.tx.ndci; i++) {
-        status = uct_ib_mlx5_get_txwq(iface->super.super.super.super.worker,
-                                      iface->super.tx.dcis[i].txqp.qp,
-                                      &iface->dci_wqs[i]);
+        status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
+                                       &iface->dci_wqs[i],
+                                       iface->super.tx.dcis[i].txqp.qp);
         if (status != UCS_OK) {
             return status;
         }
