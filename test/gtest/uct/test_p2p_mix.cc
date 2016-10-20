@@ -108,13 +108,18 @@ public:
                           uct_completion_t *comp)
     {
         ucs_status_t status;
+        size_t header_length;
         uct_iov_t iov;
 
-        iov.buffer = sendbuf.ptr();
+        header_length = ucs_min(rand() % sender().iface_attr().cap.am.max_hdr,
+                                sendbuf.length());
+
+        iov.buffer = (char*)sendbuf.ptr() + header_length;
         iov.count  = 1;
-        iov.length = sendbuf.length();
+        iov.length = sendbuf.length() - header_length;
         iov.memh   = sendbuf.memh();
-        status = uct_ep_am_zcopy(sender().ep(0), AM_ID, NULL, 0, &iov, 1, comp);
+        status = uct_ep_am_zcopy(sender().ep(0), AM_ID, sendbuf.ptr(), header_length,
+                                 &iov, 1, comp);
         if (status == UCS_OK || status == UCS_INPROGRESS) {
             ucs_atomic_add32(&am_pending, +1);
         }
@@ -136,11 +141,13 @@ public:
             if (status == UCS_OK) {
                 break;
             } else if (status == UCS_INPROGRESS) {
+                /* coverity[loop_condition] */
                 while (comp.count > 0) {
                     progress();
                 }
                 break;
             } else if (status == UCS_ERR_NO_RESOURCE) {
+                progress();
                 continue;
             } else {
                 ASSERT_UCS_OK(status);
@@ -199,6 +206,10 @@ protected:
 uint32_t uct_p2p_mix_test::am_pending = 0;
 
 UCS_TEST_P(uct_p2p_mix_test, mix1) {
+
+    if (m_avail_send_funcs.size() == 0) {
+        UCS_TEST_SKIP_R("unsupported");
+    }
 
     mapped_buffer sendbuf(m_send_size, 0, sender());
     mapped_buffer recvbuf(m_send_size, 0, receiver());

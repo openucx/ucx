@@ -47,6 +47,7 @@ uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
 }
 
+
 /* check that work queue has enough space for the new work request */
 static inline void
 uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
@@ -96,6 +97,7 @@ uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
 #endif
 }
 
+
 /**
  * Copy data to inline segment, taking into account QP wrap-around.
  *
@@ -119,6 +121,7 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
     }
 }
 
+
 /* wrapping of 'seg' should not happen */
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
@@ -128,6 +131,7 @@ uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
     ucs_assertv(seg <  txwq->qend,   "seg=%p qend=%p",   seg, txwq->qend);
     return seg;
 }
+
 
 /* wrapping of 'seg' could happen, but only on exact 'qend' boundary */
 static UCS_F_ALWAYS_INLINE void *
@@ -140,6 +144,7 @@ uct_ib_mlx5_txwq_wrap_exact(uct_ib_mlx5_txwq_t *txwq, void *seg)
     return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
 }
 
+
 /* wrapping of 'seg' could happen, even past 'qend' boundary */
 static UCS_F_ALWAYS_INLINE void *
 uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
@@ -149,6 +154,7 @@ uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
     }
     return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
 }
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_raddr,
@@ -172,6 +178,7 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
     raddr->rkey  = htonl(rdma_rkey);
 #endif
 }
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
@@ -203,6 +210,7 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
         mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
     }
 }
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
@@ -247,6 +255,7 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 #endif
 }
 
+
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
                          const void *address,
@@ -258,31 +267,27 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
     dptr->addr       = htonll((uintptr_t)address);
 }
 
+
 static UCS_F_ALWAYS_INLINE
 unsigned uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
                                       struct mlx5_wqe_data_seg *dptr,
                                       const uct_iov_t *iov, size_t iovcnt)
 {
-    size_t   iov_it;
-    char    *dptr_it;
     unsigned len = 0;
+    size_t   iov_it;
 
-    dptr_it = (char *)dptr;
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
         if (!iov[iov_it].length) { /* Skip zero length WQE*/
             continue;
         }
         ucs_assert(iov[iov_it].memh != UCT_INVALID_MEM_HANDLE);
 
-        /* assume dptr_it 16 bytes aligned and can't go behind txwq->end */
-        dptr_it = uct_ib_mlx5_txwq_wrap_exact(txwq, dptr_it);
-
         /* place data into the buffer */
-        uct_ib_mlx5_set_data_seg((void *)dptr_it, iov[iov_it].buffer,
-                                 iov[iov_it].length,
+        dptr = uct_ib_mlx5_txwq_wrap_any(txwq, dptr);
+        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer, iov[iov_it].length,
                                  ((uct_ib_mem_t*)iov[iov_it].memh)->lkey);
-        len     += sizeof(*dptr);
-        dptr_it += sizeof(*dptr);
+        len += sizeof(*dptr);
+        ++dptr;
     }
     return len;
 }
