@@ -54,7 +54,6 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             return packed_len; /* Failed */
         }
 
-        req->send.state.offset += packed_len - hdr_size_first;
         return UCS_INPROGRESS;
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
@@ -63,7 +62,6 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             return packed_len; /* Failed */
         }
 
-        req->send.state.offset += packed_len - hdr_size_middle;
         ucs_assertv((packed_len < 0) || (packed_len <= max_middle + hdr_size_middle),
                     "packed_len=%zd max_middle=%zu hdr_size_middle=%zu",
                     packed_len, max_middle, hdr_size_middle);

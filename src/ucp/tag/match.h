@@ -9,6 +9,7 @@
 
 #include <ucp/core/ucp_request.h>
 #include <ucp/dt/dt_contig.h>
+#include <ucp/dt/dt_iov.h>
 #include <ucp/dt/dt_generic.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>

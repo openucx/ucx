@@ -160,6 +160,7 @@ enum ucp_context_attr_field {
 enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
+    UCP_DATATYPE_IOV     = 2,      /**< Scatter-gather list with multiple pointers */
     UCP_DATATYPE_GENERIC = 7,      /**< Generic datatype with
                                         user-defined pack/unpack routines */
     UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
@@ -182,6 +183,34 @@ enum ucp_dt_type {
  */
 #define ucp_dt_make_contig(_elem_size) \
     (((ucp_datatype_t)(_elem_size) << UCP_DATATYPE_SHIFT) | UCP_DATATYPE_CONTIG)
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Generate an identifier for Scatter-gather IOV data type.
+ *
+ * This macro creates an identifier for datatype of scatter-gather list
+ * with multiple pointers
+ *
+ * @return Data-type identifier.
+ */
+#define ucp_dt_make_iov() (UCP_DATATYPE_IOV)
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Structure for scatter-gather I/O.
+ *
+ * This structure is used to specify a list of buffers which can be used
+ * within a single data transfer function call.
+ *
+ * @note If @a length is zero, the memory pointed to by @a buffer
+ *       will not be accessed. Otherwise, @a buffer must point to valid memory.
+ */
+typedef struct ucp_dt_iov {
+    void   *buffer;   /**< Pointer to a data buffer */
+    size_t  length;   /**< Length of the @a buffer in bytes */
+} ucp_dt_iov_t;
 
 
 /**
