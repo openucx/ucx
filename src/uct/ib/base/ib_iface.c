@@ -11,6 +11,7 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/type/component.h>
 #include <ucs/type/class.h>
+#include <ucs/type/cpu_set.h>
 #include <ucs/debug/log.h>
 #include <string.h>
 #include <stdlib.h>
@@ -392,7 +393,8 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
-                                           size_t inl, struct ibv_cq **cq_p)
+                                           size_t inl, struct ibv_cq **cq_p,
+                                           int cq_comp_vector)
 {
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
@@ -436,7 +438,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         env_var_added = 1;
     }
 
-    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel, 0);
+    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel, cq_comp_vector);
     if (cq == NULL) {
         ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
         status = UCS_ERR_IO_ERROR;
@@ -472,6 +474,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
     uint8_t port_num;
+    int cq_comp_vector;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
                               &config->super UCS_STATS_ARG(dev->stats));
@@ -527,13 +530,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    status = uct_ib_iface_create_cq(self, tx_cq_len, 0, &self->send_cq);
+    cq_comp_vector = ucs_cpu_set_find_lcs(&params->cpu_mask);
+    status = uct_ib_iface_create_cq(self, tx_cq_len, 0, &self->send_cq, cq_comp_vector);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
 
     status = uct_ib_iface_create_cq(self, config->rx.queue_len, config->rx.inl,
-                                    &self->recv_cq);
+                                    &self->recv_cq, cq_comp_vector);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }

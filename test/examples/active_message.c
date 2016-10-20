@@ -55,6 +55,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name, struct iface_info 
         .rx_headroom = 0
     };
 
+    UCS_CPU_ZERO(&params.cpu_mask);
     /* Read transport-specific interface configuration */
     status = uct_iface_config_read(tl_name, NULL, NULL, &config);
     CHKERR_JUMP(UCS_OK != status, "setup iface_config", error_ret);

@@ -17,6 +17,7 @@
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
+#include <ucs/type/cpu_set.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -318,6 +319,7 @@ struct uct_iface_attr {
  * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
+    ucs_cpu_set_t            cpu_mask;    /**< Mask of CPUs to use for resources */
     const char               *tl_name;    /**< Transport name */
     const char               *dev_name;   /**< Device Name */
     size_t                   rx_headroom; /**< How much bytes to reserve before
