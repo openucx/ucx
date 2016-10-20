@@ -2,7 +2,7 @@ Source: @PACKAGE@
 Section: libs
 Priority: extra
 Maintainer: support@openucx.org
-Build-Depends: libibverbs-dev
+Build-Depends:
 Standards-Version: @MAJOR_VERSION@.@MINOR_VERSION@
 Homepage: http://openucx.org
 

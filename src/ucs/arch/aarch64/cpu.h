@@ -8,7 +8,6 @@
 #ifndef UCS_AARCH64_CPU_H_
 #define UCS_AARCH64_CPU_H_
 
-#include <ucs/debug/log.h>
 #include <time.h>
 #include <sys/times.h>
 #include <ucs/arch/generic/cpu.h>
