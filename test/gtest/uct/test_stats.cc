@@ -378,7 +378,7 @@ UCS_TEST_P(test_uct_stats, flush_wait_ep)
     count_wait = 0;
     do {
         status = uct_ep_flush(sender_ep(), 0, NULL);
-        if (status == UCS_INPROGRESS) {
+        if (status != UCS_OK) {
             count_wait++;
         }
         progress();
