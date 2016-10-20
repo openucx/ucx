@@ -160,6 +160,9 @@ UCS_TEST_P(test_ud_slow_timer, partial_drop) {
     short_progress_loop();
     
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
+    while (ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts) < N) {
+        progress();
+    }
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
 #endif

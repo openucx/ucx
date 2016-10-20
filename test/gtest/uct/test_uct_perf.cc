@@ -31,12 +31,12 @@ test_perf::test_spec test_uct_perf::tests[] =
   { "am rate", "Mpps",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 2000000l,
-    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 1.1, 80.0 },
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0 },
 
   { "am rate64", "Mpps",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 64, 1, 2000000l,
-    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 1.1, 80.0 },
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0 },
 
   { "am bcopy bw", "MB/sec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
@@ -56,7 +56,7 @@ test_perf::test_spec test_uct_perf::tests[] =
   { "put rate", "Mpps",
     UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 8, 1, 2000000l,
-    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 1.5, 80.0 },
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0 },
 
   { "put bcopy bw", "MB/sec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
@@ -71,7 +71,7 @@ test_perf::test_spec test_uct_perf::tests[] =
   { "get latency", "usec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_ZCOPY, 8, 1, 100000l,
-    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 2.5 },
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 3.5 },
 
   { "atomic add latency", "usec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
