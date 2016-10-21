@@ -213,7 +213,7 @@ public:
         ucs_status_t status;
         do {
             progress();
-            status = uct_ep_flush(sender().ep(0), 0, NULL);
+            status = uct_iface_flush(sender().iface(), 0, NULL);
         } while ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS));
         ASSERT_UCS_OK(status);
     }
