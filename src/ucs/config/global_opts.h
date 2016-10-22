@@ -81,6 +81,15 @@ typedef struct {
      */
     char                     *memtrack_dest;
 
+    /* Profiling mode */
+    int                      profile_mode;
+
+    /* Profiling output file name */
+    char                     *profile_file;
+
+    /* Limit for profiling log size */
+     size_t                   profile_log_size;
+
 } ucs_global_opts_t;
 
 

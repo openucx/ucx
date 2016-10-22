@@ -15,6 +15,7 @@ $basedir/../configure \
 	--enable-gtest \
     --with-valgrind \
 	--enable-instrumentation \
+	--enable-profiling \
 	--enable-frame-pointer \
 	--enable-stats \
 	--enable-memtrack \

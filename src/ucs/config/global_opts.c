@@ -8,6 +8,7 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/debug/instrument.h>
+#include <ucs/debug/profile.h>
 #include <ucs/debug/log.h>
 #include <sys/signal.h>
 
@@ -33,6 +34,8 @@ ucs_global_opts_t ucs_global_opts = {
     .instrument_file       = "",
     .instrument_types      = 0,
     .instrument_max_size   = 1048576,
+    .profile_mode          = UCS_PROFILE_MODE_OFF,
+    .profile_file          = ""
 };
 
 static const char *handle_error_modes[] = {
@@ -158,6 +161,25 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Maximal size of instrumentation data. New records will replace old records.",
   ucs_offsetof(ucs_global_opts_t, instrument_max_size),
   UCS_CONFIG_TYPE_MEMUNITS},
+#endif
+
+#if HAVE_PROFILING
+  {"PROFILE_MODE", "off",
+   "Profile collection mode:\n"
+   " - off   - No profiling.\n"
+   " - log   - Record all timestamps.\n"
+   " - accum - Accumulate measurements per location.\n",
+   ucs_offsetof(ucs_global_opts_t, profile_mode),
+   UCS_CONFIG_TYPE_ENUM(ucs_profile_mode_names)},
+
+  {"PROFILE_FILE", "",
+   "File name to dump profiling data to.\n"
+   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.\n",
+   ucs_offsetof(ucs_global_opts_t, profile_file), UCS_CONFIG_TYPE_STRING},
+
+  {"PROFILE_LOG_SIZE", "4mb",
+   "Maximal size of profiling log. New records will replace old records.",
+   ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
 #endif
 
  {NULL}

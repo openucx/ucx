@@ -18,6 +18,7 @@ $basedir/../configure \
 	--disable-params-check \
 	--enable-backtrace-detail \
 	--enable-instrumentation \
+	--enable-profiling \
 	--enable-frame-pointer \
 	--enable-stats \
 	--enable-memtrack \

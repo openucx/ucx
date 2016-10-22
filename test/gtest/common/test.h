@@ -25,7 +25,7 @@ namespace ucs {
  * Base class for tests
  */
 class test_base {
-protected:
+public:
     test_base();
     virtual ~test_base();
 

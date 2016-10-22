@@ -175,6 +175,10 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     echo "Running ucx_info"
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
 
+    echo "Running profiling test"
+    UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./test/apps/profiling
+    ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep "printf" -C 20
+
     export GTEST_RANDOM_SEED=0
     export GTEST_SHUFFLE=1
     export GTEST_TAP=2

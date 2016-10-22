@@ -10,6 +10,7 @@
 
 #include "debug.h"
 #include "log.h"
+#include "profile.h"
 
 #include <ucs/sys/sys.h>
 #include <sys/wait.h>
@@ -881,10 +882,8 @@ void ucs_handle_error()
 static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
-
-    ucs_log_fatal_error("Got debug signal, raising log level",
-                        ucs_get_host_name(), getpid());
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+    ucs_profile_dump();
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))

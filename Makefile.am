@@ -31,6 +31,8 @@ SUBDIRS = \
 	src/ucp \
 	src/tools/info \
 	src/tools/perf \
+	src/tools/profile \
+	test/apps \
 	test/examples
 
 if HAVE_GTEST
