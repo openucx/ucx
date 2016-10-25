@@ -16,7 +16,6 @@
 
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW   0x100
 #define UCT_RC_MLX5_OPCODE_MASK       0xff
-#define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
 
 #define UCT_RC_MLX5_PUT_MAX_SHORT(_av_size) \
     UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
@@ -31,17 +30,9 @@
      (_av_size) + \
      sizeof(struct mlx5_wqe_inl_data_seg))
 
-#define UCT_RC_MLX5_AM_MAX_HDR(_av_size) \
-    UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
-    (sizeof(struct mlx5_wqe_ctrl_seg) + \
-     (_av_size) + \
-     sizeof(struct mlx5_wqe_inl_data_seg) + \
-     UCT_IB_MLX5_AM_ZCOPY_MAX_IOV * sizeof(struct mlx5_wqe_data_seg))
-
-
 #define UCT_RC_MLX5_CHECK_AM_ZCOPY(_id, _header_length, _length, _seg_size, _av_size) \
     UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, \
-                          UCT_RC_MLX5_AM_MAX_HDR(_av_size), _seg_size)
+                          UCT_IB_MLX5_AM_MAX_HDR(_av_size), _seg_size)
 
 #define UCT_RC_MLX5_CHECK_AM_SHORT(_id, _length, _av_size) \
     UCT_RC_CHECK_AM_SHORT(_id, _length, UCT_RC_MLX5_AM_MAX_SHORT(_av_size))

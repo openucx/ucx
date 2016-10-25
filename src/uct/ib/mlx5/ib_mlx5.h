@@ -63,6 +63,15 @@ struct mlx5_grh_av {
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
+#define UCT_IB_MLX5_AM_ZCOPY_MAX_IOV  3UL
+
+#define UCT_IB_MLX5_AM_MAX_HDR(_av_size) \
+        UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB - \
+        (sizeof(struct mlx5_wqe_ctrl_seg) + \
+        (_av_size) + \
+        sizeof(struct mlx5_wqe_inl_data_seg) + \
+        UCT_IB_MLX5_AM_ZCOPY_MAX_IOV * sizeof(struct mlx5_wqe_data_seg))
+
 
 #define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
                                   sizeof(struct mlx5_wqe_data_seg))
