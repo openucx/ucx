@@ -784,7 +784,7 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
     sent_skb = ucs_queue_iter_elem(sent_skb, ep->resend.pos, queue);
     if ((sent_skb == NULL) || UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
         ucs_debug("ep(%p): out of window(psn=%d/max_psn=%d) - can not resend more", 
-                  ep, sent_skb->neth->psn, ep->tx.max_psn);
+                  ep, sent_skb ? sent_skb->neth->psn : -1, ep->tx.max_psn);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
         return NULL;
     }
