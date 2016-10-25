@@ -1,5 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) The University of Tennessee and The University
+*               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -246,7 +248,7 @@ public:
 
         buffer      = m_perf.send_buffer;
         length      = m_perf.params.message_size;
-        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr;
+        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr + m_perf.offset;
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         ep          = m_perf.uct.peers[1 - my_index].ep;
 
@@ -307,7 +309,7 @@ public:
         ep          = m_perf.uct.peers[1 - my_index].ep;
         buffer      = m_perf.send_buffer;
         length      = m_perf.params.message_size;
-        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr;
+        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr + m_perf.offset;
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         fc_window   = m_perf.params.uct.fc_window;
 

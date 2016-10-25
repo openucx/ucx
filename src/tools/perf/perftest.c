@@ -598,6 +598,8 @@ static unsigned sock_rte_group_index(void *rte_group)
 
 static void sock_rte_barrier(void *rte_group)
 {
+#pragma omp master
+  {
     sock_rte_group_t *group = rte_group;
     const unsigned magic = 0xdeadbeef;
     unsigned sync;
@@ -609,6 +611,8 @@ static void sock_rte_barrier(void *rte_group)
     safe_recv(group->connfd, &sync, sizeof(unsigned));
 
     ucs_assert(sync == magic);
+  }
+#pragma omp barrier
 }
 
 static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,
@@ -791,7 +795,9 @@ static unsigned mpi_rte_group_index(void *rte_group)
 
 static void mpi_rte_barrier(void *rte_group)
 {
+#pragma omp master
     MPI_Barrier(MPI_COMM_WORLD);
+#pragma omp barrier
 }
 
 static void mpi_rte_post_vec(void *rte_group, const struct iovec *iovec,
@@ -874,6 +880,8 @@ static unsigned ext_rte_group_index(void *rte_group)
 
 static void ext_rte_barrier(void *rte_group)
 {
+#pragma omp master
+  {
     rte_group_t group = (rte_group_t)rte_group;
     int rc;
 
@@ -881,6 +889,8 @@ static void ext_rte_barrier(void *rte_group)
     if (RTE_SUCCESS != rc) {
         ucs_error("Failed to rte_barrier");
     }
+  }
+#pragma omp barrier
 }
 
 static void ext_rte_post_vec(void *rte_group, const struct iovec* iovec,

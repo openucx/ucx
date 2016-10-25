@@ -1,8 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University 
-*               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) The University of Tennessee and The University
+*               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -115,6 +115,8 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
 
     ucs_assert(perf->uct.recv_mem.md == perf->uct.md);
     perf->recv_buffer = perf->uct.recv_mem.address;
+
+    perf->offset = 0;
 
     ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
               perf->send_buffer, perf->recv_buffer);
@@ -1062,7 +1064,7 @@ static struct {
     [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup, ucp_perf_test_dispatch}
 };
 
-static int ucx_perf_thread_spawn(ucx_perf_params_t* params, 
+static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
                                  ucx_perf_result_t* result);
 
 ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
@@ -1118,19 +1120,20 @@ out:
     return status;
 }
 
-
+#if _OPENMP
 /* multiple threads sharing the same worker/iface */
+#include <omp.h>
 
 typedef struct {
     pthread_t           pt;
     int                 tid;
     int                 ntid;
-    pthread_barrier_t*  tbarrier;
     ucs_status_t*       statuses;
     ucx_perf_context_t  perf;
     ucx_perf_params_t   params;
     ucx_perf_result_t   result;
 } ucx_perf_thread_context_t;
+
 
 static void* ucx_perf_thread_run_test(void* arg) {
     ucx_perf_thread_context_t* tctx = (ucx_perf_thread_context_t*) arg;
@@ -1138,36 +1141,33 @@ static void* ucx_perf_thread_run_test(void* arg) {
     ucx_perf_result_t* result = &tctx->result;
     ucx_perf_context_t* perf = &tctx->perf;
     ucs_status_t* statuses = tctx->statuses;
-    pthread_barrier_t* tbarrier = tctx->tbarrier;
     int tid = tctx->tid;
     int i;
 
     if (params->warmup_iter > 0) {
         ucx_perf_set_warmup(perf, params);
         statuses[tid] = ucx_perf_funcs[params->api].run(perf);
-        pthread_barrier_wait(tbarrier);
+        rte_call(perf, barrier);
         for (i = 0; i < tctx->ntid; i++) {
             if (UCS_OK != statuses[i]) {
                 goto out;
             }
         }
-        if (0 == tid) {
-            rte_call(perf, barrier);
-            ucx_perf_test_reset(perf, params);
-        }
+#pragma omp master
+        ucx_perf_test_reset(perf, params);
     }
 
     /* Run test */
-    pthread_barrier_wait(tbarrier);
+#pragma omp barrier
     statuses[tid] = ucx_perf_funcs[params->api].run(perf);
-    pthread_barrier_wait(tbarrier);
+    rte_call(perf, barrier);
     for (i = 0; i < tctx->ntid; i++) {
         if (UCS_OK != statuses[i]) {
             goto out;
         }
     }
-    if (0 == tid) {
-        rte_call(perf, barrier);
+#pragma omp master
+    {
         /* Assuming all threads are fairly treated, reporting only tid==0
             TODO: aggregate reports */
         ucx_perf_calc_result(perf, result);
@@ -1178,19 +1178,19 @@ out:
     return &statuses[tid];
 }
 
-static int ucx_perf_thread_spawn(ucx_perf_params_t* params, 
+static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
                                  ucx_perf_result_t* result) {
     ucx_perf_context_t perf;
-    ucs_status_t status;
-    int ti;
-    int nti = params->thread_count;
+    ucs_status_t status = UCS_OK;
+    int ti, nti;
 
-    ucx_perf_thread_context_t* tctx = 
+    omp_set_num_threads(params->thread_count);
+    nti = params->thread_count;
+
+    ucx_perf_thread_context_t* tctx =
         calloc(nti, sizeof(ucx_perf_thread_context_t));
-    ucs_status_t* statuses = 
+    ucs_status_t* statuses =
         calloc(nti, sizeof(ucs_status_t));
-    pthread_barrier_t tbarrier;
-    pthread_barrier_init(&tbarrier, NULL, nti);
 
     ucx_perf_test_reset(&perf, params);
     status = ucx_perf_funcs[params->api].setup(&perf, params);
@@ -1198,35 +1198,40 @@ static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
         goto out_cleanup;
     }
 
+#pragma omp parallel private(ti)
+{
+    ti = omp_get_thread_num();
+    tctx[ti].tid = ti;
+    tctx[ti].ntid = nti;
+    tctx[ti].statuses = statuses;
+    tctx[ti].params = *params;
+    tctx[ti].perf = perf;
+    /* Doctor the src and dst buffers to make them thread specific */
+    tctx[ti].perf.send_buffer += ti * params->message_size;
+    tctx[ti].perf.recv_buffer += ti * params->message_size;
+    tctx[ti].perf.offset = ti * params->message_size;
+    ucx_perf_thread_run_test((void*)&tctx[ti]);
+}
     for (ti = 0; ti < nti; ti++) {
-        tctx[ti].tid = ti;
-        tctx[ti].ntid = nti;
-        tctx[ti].tbarrier = &tbarrier;
-        tctx[ti].statuses = statuses;
-        tctx[ti].params = *params;
-        tctx[ti].perf = perf;
-        /* Doctor the src and dst buffers to make them thread specific */
-        tctx[ti].perf.send_buffer += ti * params->message_size;
-        tctx[ti].perf.recv_buffer += ti * params->message_size;
-        pthread_create(&tctx[ti].pt, NULL, 
-                       ucx_perf_thread_run_test, (void*)&tctx[ti]);
-    }
-    
-    for (ti = 0; ti < nti; ti++) {
-        pthread_join(tctx[ti].pt, NULL);
         if (UCS_OK != statuses[ti]) {
             ucs_error("Thread %d failed to run test: %s", tctx[ti].tid, ucs_status_string(statuses[ti]));
             status = statuses[ti];
         }
     }
-    
+
     ucx_perf_funcs[params->api].cleanup(&perf);
 
 out_cleanup:
-    pthread_barrier_destroy(&tbarrier);
     free(statuses);
     free(tctx);
 
     return status;
 }
+#else
+static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
+                                 ucx_perf_result_t* result) {
+    ucs_error("Invalid test parameter (thread mode requested without OpenMP capabilities)");
+    return UCS_ERR_INVALID_PARAM;
+}
+#endif /* _OPENMP */
 

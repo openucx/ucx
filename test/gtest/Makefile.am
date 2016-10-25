@@ -34,7 +34,7 @@ gtest_LDADD = \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
-	$(top_builddir)/src/tools/perf/libucxperf.la \
+	$(OPENMP_CFLAGS) $(top_builddir)/src/tools/perf/libucxperf.la \
 	$(GTEST_LIBS)
 
 gtest_CPPFLAGS = \
