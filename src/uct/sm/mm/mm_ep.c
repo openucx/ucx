@@ -14,6 +14,30 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_mm_remote_seg_t,
                                         UCT_MM_BASE_ADDRESS_HASH_SIZE,
                                         uct_mm_remote_seg_hash)
 
+static ucs_status_t uct_mm_ep_signal_remote(uct_mm_ep_t *ep,
+                                            uct_mm_iface_conn_signal_t sig);
+
+void uct_mm_ep_connected(uct_mm_ep_t *ep)
+{
+    /* point the ep->fifo_ctl to the remote fifo.
+     * it's an aligned pointer to the beginning of the ctl struct in the remote FIFO */
+    ep->fifo_ctl    = uct_mm_set_fifo_ctl(ep->mapped_desc.address);
+    ep->cached_tail = ep->fifo_ctl->tail;
+}
+
+static void
+uct_mm_ep_signal_remote_slow_path_callback(ucs_callbackq_slow_elem_t *self)
+{
+    uct_mm_ep_t *ep = ucs_container_of(self, uct_mm_ep_t, cbq_elem);
+
+    uct_mm_ep_signal_remote(ep, UCT_MM_IFACE_SIGNAL_CONNECT);
+}
+
+void uct_mm_ep_remove_slow_path_callback(uct_mm_iface_t *iface, uct_mm_ep_t *ep)
+{
+    uct_worker_slowpath_progress_unregister(iface->super.worker, &ep->cbq_elem);
+    ep->cbq_elem_on = 0;
+}
 
 /* send a signal to remote interface using Unix-domain socket */
 static ucs_status_t
@@ -25,28 +49,52 @@ uct_mm_ep_signal_remote(uct_mm_ep_t *ep, uct_mm_iface_conn_signal_t sig)
     /**
      * Send connect message to remote interface
      */
-    for (;;) {
-        ret = sendto(iface->signal_fd, &sig, sizeof(sig), 0,
-                     (const struct sockaddr*)&ep->cached_signal_sockaddr,
-                     ep->cached_signal_addrlen);
-        if (ret >= 0) {
-            ucs_assert(ret == sizeof(sig));
-            return UCS_OK;
-        } else if (errno == EAGAIN) {
-            /* If sending a signal has failed, retry.
-             * Note the by default the receiver might have a limited backlog,
-             * on Linux systems it is net.unix.max_dgram_qlen (10 by default).
-             */
-            uct_mm_iface_recv_messages(iface);
-        } else {
-            if ((sig == UCT_MM_IFACE_SIGNAL_DISCONNECT) && (errno == ECONNREFUSED)) {
-                ucs_debug("failed to send disconnect signal: connection refused");
-            } else {
-                ucs_error("failed to send %sconnect signal: %m",
-                          (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
-            }
-            return UCS_ERR_IO_ERROR;
+    ret = sendto(iface->signal_fd, &sig, sizeof(sig), 0,
+                 (const struct sockaddr*)&ep->cached_signal_sockaddr,
+                 ep->cached_signal_addrlen);
+    if (ret >= 0) {
+        ucs_assert(ret == sizeof(sig));
+        ucs_debug("Sent connect from socket %d to %p", iface->signal_fd,
+                  (const struct sockaddr*)&ep->cached_signal_sockaddr);
+
+        if (ep->cbq_elem_on) {
+            uct_mm_ep_remove_slow_path_callback(iface, ep);
         }
+
+        /* point the ep->fifo_ctl to the remote fifo */
+        uct_mm_ep_connected(ep);
+
+        return UCS_OK;
+    } else if (errno == EAGAIN) {
+        /* If sending a signal has failed, retry.
+         * Note that by default the receiver might have a limited backlog,
+         * on Linux systems it is net.unix.max_dgram_qlen (10 by default).
+         */
+        ucs_debug("Failed to send connect from socket %d to %p", iface->signal_fd,
+                  (const struct sockaddr*)&ep->cached_signal_sockaddr);
+
+        /* If sending the Connect message failed with EAGAIN, try again later.
+         * Don't keep trying now in a loop since this may cause a deadlock which
+         * prevents the reading of incoming messages which blocks the remote sender.
+         * Add the sending attempt as a callback to a slow progress.
+         */
+        if ((!ep->cbq_elem_on) && (sig == UCT_MM_IFACE_SIGNAL_CONNECT)) {
+             ep->cbq_elem.cb = uct_mm_ep_signal_remote_slow_path_callback;
+             uct_worker_slowpath_progress_register(iface->super.worker, &ep->cbq_elem);
+             ep->cbq_elem_on = 1;
+        }
+
+        /* Return UCS_OK in this case even though couldn't send, so that the
+         * calling flow would release the lock and allow the reading of incoming
+         * Connect messages. */
+        return UCS_OK;
+    } else {
+        if (errno == ECONNREFUSED) {
+            ucs_debug("failed to send connect signal: connection refused");
+        } else {
+            ucs_error("failed to send connect signal: %m");
+        }
+        return UCS_ERR_IO_ERROR;
     }
 }
 
@@ -58,6 +106,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
     const uct_mm_iface_addr_t *addr = (const void*)iface_addr;
     ucs_status_t status;
     size_t size_to_attach;
+    uct_mm_fifo_ctl_t *remote_fifo_ctl;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
@@ -79,10 +128,23 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, uct_iface_t *tl_iface,
 
     self->mapped_desc.length     = size_to_attach;
     self->mapped_desc.mmid       = addr->id;
-    uct_mm_set_fifo_ptrs(self->mapped_desc.address, &self->fifo_ctl, &self->fifo);
-    self->cached_tail            = self->fifo_ctl->tail;
-    self->cached_signal_addrlen  = self->fifo_ctl->signal_addrlen;
-    self->cached_signal_sockaddr = self->fifo_ctl->signal_sockaddr;
+
+    /* Set the fifo ctl to a dummy struct. It will switch to the real fifo_ctl,
+     * which points to the remote peer's fifo, once the connection establishment
+     * message is sent successfully on the unix socket */
+    self->fifo_ctl = &iface->dummy_fifo_ctl;
+
+    self->cached_tail = self->fifo_ctl->tail;
+
+    /* set the ep->fifo ptr to point to the beginning of the fifo elements at
+     * the remote peer */
+    uct_mm_set_fifo_elems_ptr(self->mapped_desc.address, &self->fifo);
+
+    remote_fifo_ctl   = uct_mm_set_fifo_ctl(self->mapped_desc.address);
+    self->cached_signal_addrlen  = remote_fifo_ctl->signal_addrlen;
+    self->cached_signal_sockaddr = remote_fifo_ctl->signal_sockaddr;
+
+    self->cbq_elem_on = 0;
 
     /* Send connect message to remote side so it will start polling */
     status = uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_CONNECT);
@@ -113,7 +175,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     uct_mm_remote_seg_t *remote_seg;
     struct sglib_hashed_uct_mm_remote_seg_t_iterator iter;
 
-    uct_mm_ep_signal_remote(self, UCT_MM_IFACE_SIGNAL_DISCONNECT);
+    /* don't send a disconnect message for now since it may prevent the receiver
+     * from progressing and reading incoming messages  */
+
+    /* make sure the slow path function isn't invoked after the ep's cleanup */
+    if (self->cbq_elem_on) {
+        ucs_debug("Removing a remaining slow path progress function.");
+        uct_mm_ep_remove_slow_path_callback(iface, self);
+    }
 
     uct_worker_progress_unregister(iface->super.worker, uct_mm_iface_progress,
                                    iface);

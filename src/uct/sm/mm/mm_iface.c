@@ -317,7 +317,8 @@ ucs_status_t uct_mm_allocate_fifo_mem(uct_mm_iface_t *iface,
         return status;
     }
 
-    uct_mm_set_fifo_ptrs(iface->shared_mem, &ctl, &iface->recv_fifo_elements);
+    ctl = uct_mm_set_fifo_ctl(iface->shared_mem);
+    uct_mm_set_fifo_elems_ptr(iface->shared_mem, &iface->recv_fifo_elements);
 
     /* Make sure head and tail are cache-aligned, and not on same cacheline, to
      * avoid false-sharing.
@@ -386,7 +387,7 @@ err:
     return status;
 }
 
-void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
+static void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
 {
     uct_mm_iface_conn_signal_t sig;
     int ret;
@@ -394,15 +395,9 @@ void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
     for (;;) {
         ret = recvfrom(iface->signal_fd, &sig, sizeof(sig), 0, NULL, 0);
         if (ret == sizeof(sig)) {
-            ucs_debug("mm_iface %p: got %sconnect message", iface,
-                      (sig == UCT_MM_IFACE_SIGNAL_CONNECT) ? "" : "dis");
-            if (sig == UCT_MM_IFACE_SIGNAL_CONNECT) {
-                ucs_callbackq_add_safe(&iface->super.worker->progress_q,
-                                        uct_mm_iface_progress, iface);
-            } else {
-                ucs_callbackq_remove_safe(&iface->super.worker->progress_q,
-                                          uct_mm_iface_progress, iface);
-            }
+            ucs_debug("mm_iface %p: got connect message", iface);
+            ucs_callbackq_add_safe(&iface->super.worker->progress_q,
+                                   uct_mm_iface_progress, iface);
         } else {
             if (ret < 0) {
                 if (errno != EAGAIN) {
@@ -420,6 +415,12 @@ void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
 static void uct_mm_iface_singal_handler(void *arg)
 {
     uct_mm_iface_recv_messages(arg);
+}
+
+static void uct_mm_iface_init_dummy_fifo_ctl(uct_mm_iface_t *iface)
+{
+    iface->dummy_fifo_ctl.head = iface->config.fifo_size;
+    iface->dummy_fifo_ctl.tail = 0;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -524,13 +525,13 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
         }
     }
 
+    uct_mm_iface_init_dummy_fifo_ctl(self);
+
     ucs_arbiter_init(&self->arbiter);
 
     ucs_async_set_event_handler((worker->async != NULL) ? worker->async->mode : UCS_ASYNC_MODE_THREAD,
                                 self->signal_fd, POLLIN, uct_mm_iface_singal_handler,
                                 self, worker->async);
-
-    uct_worker_progress_register(worker, uct_mm_iface_progress, self);
 
     ucs_debug("Created an MM iface. FIFO mm id: %zu", self->fifo_mm_id);
     return UCS_OK;

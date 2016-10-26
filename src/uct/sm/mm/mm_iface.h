@@ -32,7 +32,6 @@
 
 typedef enum {
     UCT_MM_IFACE_SIGNAL_CONNECT    = 0,
-    UCT_MM_IFACE_SIGNAL_DISCONNECT = 1,
 } uct_mm_iface_conn_signal_t;
 
 
@@ -44,6 +43,18 @@ typedef struct uct_mm_iface_config {
                                                    /* shared memory buffers */
     uct_iface_mpool_config_t mp;
 } uct_mm_iface_config_t;
+
+
+struct uct_mm_fifo_ctl {
+    /* 1st cacheline */
+    volatile uint64_t  head;       /* where to write next */
+    socklen_t          signal_addrlen;   /* address length of signaling socket */
+    struct sockaddr_un signal_sockaddr;  /* address of signaling socket */
+    UCS_CACHELINE_PADDING(uint64_t, socklen_t, struct sockaddr_un);
+
+    /* 2nd cacheline */
+    volatile uint64_t  tail;       /* how much was read */
+} UCS_S_PACKED;
 
 
 struct uct_mm_iface {
@@ -77,6 +88,9 @@ struct uct_mm_iface {
     ucs_arbiter_t           arbiter;
     const char              *path;            /* path to the backing file (for 'posix') */
 
+    uct_mm_fifo_ctl_t       dummy_fifo_ctl;   /* a dummy fifo_ctl to be used until
+                                               * connection is established */
+
     struct {
         unsigned fifo_size;
         unsigned fifo_elem_size;
@@ -99,18 +113,6 @@ struct uct_mm_fifo_element {
                                      * within the memory chunk it belongs to */
     void            *desc_chunk_base_addr;
     /* the data follows here (in case of inline messaging) */
-} UCS_S_PACKED;
-
-
-struct uct_mm_fifo_ctl {
-    /* 1st cacheline */
-    volatile uint64_t  head;       /* where to write next */
-    socklen_t          signal_addrlen;   /* address length of signaling socket */
-    struct sockaddr_un signal_sockaddr;  /* address of signaling socket */
-    UCS_CACHELINE_PADDING(uint64_t, socklen_t, struct sockaddr_un);
-
-    /* 2nd cacheline */
-    volatile uint64_t  tail;       /* how much was read */
 } UCS_S_PACKED;
 
 
@@ -137,31 +139,35 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
     return status;
 }
 
+
+static uct_mm_fifo_ctl_t* uct_mm_set_fifo_ctl(void *mem_region)
+{
+    return (uct_mm_fifo_ctl_t*) ucs_align_up_pow2
+           ((uintptr_t) mem_region , UCS_SYS_CACHE_LINE_SIZE);
+}
+
 /**
  * Set aligned pointers of the FIFO according to the beginning of the allocated
  * memory.
  *
  * @param [in] mem_region  pointer to the beginning of the allocated memory.
- * @param [out] fifo_ctl an aligned pointer to the beginning of the ctl struct in the FIFO
  * @param [out] fifo_elems an aligned pointer to the first FIFO element.
  */
-static inline void uct_mm_set_fifo_ptrs(void *mem_region, uct_mm_fifo_ctl_t **fifo_ctl,
-		                                void **fifo_elems)
+static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems)
 {
+   uct_mm_fifo_ctl_t *fifo_ctl;
+
    /* initiate the the uct_mm_fifo_ctl struct, holding the head and the tail */
-   *fifo_ctl   = (uct_mm_fifo_ctl_t*) ucs_align_up_pow2
-                ((uintptr_t) mem_region , UCS_SYS_CACHE_LINE_SIZE);
+   fifo_ctl = uct_mm_set_fifo_ctl(mem_region);
 
    /* initiate the pointer to the beginning of the first FIFO element */
-   *fifo_elems = (void*) *fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
+   *fifo_elems = (void*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 }
 
 void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
 ucs_status_t uct_mm_flush();
 
 void uct_mm_iface_progress(void *arg);
-
-void uct_mm_iface_recv_messages(uct_mm_iface_t *iface);
 
 extern uct_tl_component_t uct_mm_tl;
 

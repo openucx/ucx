@@ -48,7 +48,8 @@ struct ucs_callbackq_elem {
  */
 struct ucs_callbackq {
     ucs_callbackq_elem_t             *start;    /**< Iteration start pointer */
-    ucs_callbackq_elem_t             *end;      /**< Iteration end pointer */
+    ucs_callbackq_elem_t             *end;      /**< Iteration end pointer
+                                                     (end of last element) */
     ucs_callbackq_elem_t             *ptr;      /**< Array of elements */
     size_t                           size;      /**< Array size */
     ucs_list_link_t                  slow_path; /**< List of slow path callbacks */

@@ -82,18 +82,15 @@ static void ucs_callbackq_remove_elem(ucs_callbackq_t *cbq, ucs_callbackq_elem_t
     --cbq->end;
 }
 
-/*
- * Service callback is a special callback in the callback queue, which is always
- * in the first entry in the array. It is responsible for adding / removing items
- * to the callback queue on behalf of other threads, since it is guaranteed to
- * run from the "main" thread.
+/* *
+ * Perform the operation of the service callback - remove all the elements from
+ * the queue whose refcount is zero and move the start pointer to after the service
+ * callback function.
  */
-static void ucs_callbackq_service_cb(void *arg)
+static void ucs_callbackq_invoke_service_cb(ucs_callbackq_t *cbq)
 {
-    ucs_callbackq_t *cbq = arg;
     ucs_callbackq_elem_t *elem;
 
-    ucs_callbackq_enter(cbq);
     elem = cbq->ptr + 1;
     while (elem < cbq->end) {
         if (elem->refcount == 0) {
@@ -103,6 +100,20 @@ static void ucs_callbackq_service_cb(void *arg)
         }
     }
     ucs_callbackq_service_disable(cbq);
+}
+
+/*
+ * Service callback is a special callback in the callback queue, which is always
+ * in the first entry in the array. It is responsible for adding / removing items
+ * to the callback queue on behalf of other threads, since it is guaranteed to
+ * run from the thread which is dispatching the callbacks.
+ */
+static void ucs_callbackq_service_cb(void *arg)
+{
+    ucs_callbackq_t *cbq = arg;
+
+    ucs_callbackq_enter(cbq);
+    ucs_callbackq_invoke_service_cb(cbq);
     ucs_callbackq_leave(cbq);
 }
 
@@ -134,6 +145,8 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
     ucs_callbackq_elem_t *elem;
     char func_name[200];
 
+    /* to execute pending remove requests */
+    ucs_callbackq_invoke_service_cb(cbq);
     if (cbq->start != cbq->end) {
         ucs_warn("%zd callbacks still remain in callback queue",
                  cbq->end - cbq->start);
