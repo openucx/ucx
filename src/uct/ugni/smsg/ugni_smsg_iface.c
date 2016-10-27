@@ -276,11 +276,11 @@ static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
     
     if(uct_ugni_can_flush(&ep->super)) {
-        UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_ep->iface, uct_base_iface_t));
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
         status = UCS_OK;
     } else {
         ep->super.flush_flag = 1;
-        UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
         status = UCS_ERR_NO_RESOURCE;
     }
 
