@@ -50,6 +50,7 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
     ucs_assert(NULL != message_pointer);
     message_pointer->ep->outstanding--;
     iface->super.outstanding--;
+    uct_ugni_ep_check_flush(message_pointer->ep);
     sglib_hashed_uct_ugni_smsg_desc_t_delete(iface->smsg_list,message_pointer);
     ucs_mpool_put(message_pointer);
     return UCS_INPROGRESS;
@@ -265,19 +266,25 @@ static ucs_status_t uct_ugni_smsg_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                            uct_completion_t *comp)
 {
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
+    ucs_status_t status;
 
-    if (comp != NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    /* Even if we have no outstanding requests we can still get back send credits */
+    status = progress_local_cq(ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t));
+
+    if((0 == ep->super.outstanding) && (ep->super.arb_size == 0)) {
+        ep->super.flush_flag = 0;
     }
-
-    if (0 == ep->super.outstanding) {
-        /* We progress the local CQ anyways because we may get back send credits */
-        progress_local_cq(ucs_derived_of(tl_ep->iface, uct_ugni_smsg_iface_t));
+    
+    if(uct_ugni_can_flush(&ep->super)) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_ep->iface, uct_base_iface_t));
-        return UCS_OK;
+        status = UCS_OK;
     } else {
-        return uct_ugni_smsg_iface_flush(tl_ep->iface, 0, NULL);
+        ep->super.flush_flag = 1;
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
+        status = UCS_ERR_NO_RESOURCE;
     }
+
+    return status;
 }
 
 uct_iface_ops_t uct_ugni_smsg_iface_ops = {

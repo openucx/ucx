@@ -36,11 +36,6 @@ typedef struct uct_ugni_smsg_iface {
     uct_ugni_smsg_desc_t *       smsg_list[UCT_UGNI_HASH_SIZE]; /**< A list of descriptors currently outstanding */
 } uct_ugni_smsg_iface_t;
 
-typedef struct uct_ugni_iface_config {
-    uct_iface_config_t       super;
-    uct_iface_mpool_config_t mpool;
-} uct_ugni_iface_config_t;
-
 typedef struct uct_ugni_smsg_header {
     uint32_t length;
 } uct_ugni_smsg_header_t;

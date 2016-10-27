@@ -116,7 +116,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_ep_t)
 
     do {
         status = iface->super.super.super.ops.ep_flush(&self->super.super.super, 0, NULL);
-    } while(UCS_INPROGRESS == status);
+    } while(UCS_OK != status);
 
     progress_remote_cq(iface);
 
@@ -205,7 +205,7 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
 {
     gni_return_t gni_rc;
 
-    if (ucs_unlikely(ep->super.arb_size > 0 && ep->super.arb_sched == 0)) {
+    if (ucs_unlikely(!uct_ugni_can_send(&ep->super))) {
         goto exit_no_res;
     }
 
@@ -227,6 +227,8 @@ uct_ugni_smsg_ep_am_common_send(uct_ugni_smsg_ep_t *ep, uct_ugni_smsg_iface_t *i
     return UCS_OK;
 
 exit_no_res:
+    ucs_trace("Can't send: arb_size = %u arb_sched = %u flush_flag = %u",
+              ep->super.arb_size, ep->super.arb_sched, ep->super.flush_flag);
     ucs_mpool_put(desc);
     UCS_STATS_UPDATE_COUNTER(ep->super.super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;

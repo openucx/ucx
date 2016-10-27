@@ -96,8 +96,13 @@ static inline ucs_status_t uct_ugni_post_rdma(uct_ugni_rdma_iface_t *iface,
 {
     gni_return_t ugni_rc;
 
+    if (ucs_unlikely(!uct_ugni_can_send(ep))) {
+        ucs_mpool_put(rdma);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     ugni_rc = GNI_PostRdma(ep->ep, &rdma->desc);
-    if (GNI_RC_SUCCESS != ugni_rc) {
+    if (ucs_unlikely(GNI_RC_SUCCESS != ugni_rc)) {
         ucs_mpool_put(rdma);
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
             ucs_debug("GNI_PostRdma failed, Error status: %s %d",
@@ -123,8 +128,13 @@ static inline ssize_t uct_ugni_post_fma(uct_ugni_rdma_iface_t *iface,
 {
     gni_return_t ugni_rc;
 
+    if (ucs_unlikely(!uct_ugni_can_send(ep))) {
+        ucs_mpool_put(fma);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     ugni_rc = GNI_PostFma(ep->ep, &fma->desc);
-    if (GNI_RC_SUCCESS != ugni_rc) {
+    if (ucs_unlikely(GNI_RC_SUCCESS != ugni_rc)) {
         ucs_mpool_put(fma);
         if(GNI_RC_ERROR_RESOURCE == ugni_rc || GNI_RC_ERROR_NOMEM == ugni_rc) {
             ucs_debug("GNI_PostFma failed, Error status: %s %d",
