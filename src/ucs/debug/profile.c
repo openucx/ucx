@@ -11,9 +11,8 @@
 #if HAVE_PROFILING
 
 const char *ucs_profile_mode_names[] = {
-    [UCS_PROFILE_MODE_OFF]   = "off",
-    [UCS_PROFILE_MODE_LOG]   = "log",
     [UCS_PROFILE_MODE_ACCUM] = "accum",
+    [UCS_PROFILE_MODE_LOG]   = "log",
     [UCS_PROFILE_MODE_LAST]  = NULL
 };
 
@@ -52,7 +51,7 @@ static void ucs_profile_write()
     char filename[1024] = {0};
     int fd;
 
-    if (ucs_global_opts.profile_mode == UCS_PROFILE_MODE_OFF) {
+    if (!ucs_global_opts.profile_mode) {
         return;
     }
 
@@ -67,6 +66,7 @@ static void ucs_profile_write()
     }
 
     /* write header */
+    memset(&header, 0, sizeof(header));
     ucs_read_file(header.cmdline, sizeof(header.cmdline), 1, "/proc/self/cmdline");
     strncpy(header.hostname, ucs_get_host_name(), sizeof(header.hostname) - 1);
     header.pid = getpid();
@@ -132,7 +132,7 @@ void ucs_profile_global_init()
 {
     size_t num_records;
 
-    if (ucs_global_opts.profile_mode == UCS_PROFILE_MODE_OFF) {
+    if (!ucs_global_opts.profile_mode) {
         goto off;
     }
 
@@ -141,7 +141,7 @@ void ucs_profile_global_init()
         goto disable;
     }
 
-    if (ucs_global_opts.profile_mode == UCS_PROFILE_MODE_LOG) {
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         num_records = ucs_global_opts.profile_log_size / sizeof(ucs_profile_record_t);
         ucs_profile_ctx.log.start = ucs_calloc(num_records,
                                                sizeof(ucs_profile_record_t),
@@ -153,13 +153,18 @@ void ucs_profile_global_init()
 
         ucs_profile_ctx.log.end     = ucs_profile_ctx.log.start + num_records;
         ucs_profile_ctx.log.current = ucs_profile_ctx.log.start;
+        ucs_profile_ctx.log.wraparound = 0;
+    }
+
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+        ucs_profile_ctx.accum.stack_top = -1;
     }
 
     ucs_info("profiling is enabled");
     return;
 
 disable:
-    ucs_global_opts.profile_mode = UCS_PROFILE_MODE_OFF;
+    ucs_global_opts.profile_mode = 0;
 off:
     ucs_trace("profiling is disabled");
 }
@@ -168,6 +173,7 @@ void ucs_profile_global_cleanup()
 {
     ucs_profile_write();
     ucs_free(ucs_profile_ctx.log.start);
+    ucs_profile_ctx.log.start = NULL;
 }
 
 void ucs_profile_dump()
@@ -184,7 +190,7 @@ void ucs_profile_dump()
         loc->total_time = 0;
     }
 
-    if (ucs_global_opts.profile_mode == UCS_PROFILE_MODE_LOG) {
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         ucs_profile_ctx.log.wraparound = 0;
         ucs_profile_ctx.log.current    = ucs_profile_ctx.log.start;
     }

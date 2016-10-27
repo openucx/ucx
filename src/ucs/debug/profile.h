@@ -20,14 +20,13 @@
 
 
 /**
- * Profiling mode
+ * Profiling modes
  */
-typedef enum {
-    UCS_PROFILE_MODE_OFF,     /* Inactive */
-    UCS_PROFILE_MODE_LOG,     /* Record all events */
-    UCS_PROFILE_MODE_ACCUM,   /* Accumulate elapsed time for each location */
+enum {
+    UCS_PROFILE_MODE_ACCUM, /* Accumulate elapsed time per location */
+    UCS_PROFILE_MODE_LOG,   /* Record all events */
     UCS_PROFILE_MODE_LAST
-} ucs_profile_mode_t;
+};
 
 
 /**
@@ -48,7 +47,7 @@ typedef struct ucs_profile_header {
     char                     cmdline[1024]; /* Command line */
     char                     hostname[40];  /* Host name */
     uint32_t                 pid;           /* Process ID */
-    int                      mode;          /* Profiling mode */
+    uint32_t                 mode;          /* Profiling mode */
     uint32_t                 num_locations; /* Number of locations in the file */
     uint64_t                 num_records;   /* Number of records in the file */
     uint64_t                 one_second;    /* How much time is one second on the sampled machine */
@@ -157,7 +156,7 @@ retry:
     }
 
     current_time = ucs_get_time();
-    if (ucs_global_opts.profile_mode == UCS_PROFILE_MODE_ACCUM) {
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
         loc              = &ctx->locations[*location_p - 1];
         switch (type) {
         case UCS_PROFILE_TYPE_SAMPLE:
@@ -179,7 +178,8 @@ retry:
             break;
         }
         ++loc->count;
-    } else if (ucs_global_opts.profile_mode == UCS_PROFILE_MODE_LOG) {
+    }
+    if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         rec              = ctx->log.current;
         rec->timestamp   = current_time;
         rec->location    = *location_p - 1;

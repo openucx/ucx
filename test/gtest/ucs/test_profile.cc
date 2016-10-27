@@ -52,7 +52,7 @@ public:
     static const int   MIN_LINE;
     static const int   MAX_LINE;
 
-    void test_header(ucs_profile_header_t *hdr, ucs_profile_mode_t exp_mode);
+    void test_header(ucs_profile_header_t *hdr, unsigned exp_mode);
     void test_locations(ucs_profile_location_t *locations, unsigned num_locations,
                         uint64_t exp_count);
 };
@@ -80,8 +80,7 @@ UCS_PROFILE_FUNC(int, profile_test_func2, (a, b), int a, int b)
 
 const int test_profile::MAX_LINE = __LINE__;
 
-void test_profile::test_header(ucs_profile_header_t *hdr,
-                               ucs_profile_mode_t exp_mode)
+void test_profile::test_header(ucs_profile_header_t *hdr, unsigned exp_mode)
 {
     EXPECT_EQ(std::string(ucs_get_host_name()), std::string(hdr->hostname));
     EXPECT_EQ(getpid(),                         hdr->pid);
@@ -98,7 +97,7 @@ void test_profile::test_locations(ucs_profile_location_t *locations,
         EXPECT_EQ(std::string(basename(__FILE__)), std::string(loc->file));
         EXPECT_GE(loc->line, MIN_LINE);
         EXPECT_LE(loc->line, MAX_LINE);
-        EXPECT_LT(loc->total_time, ucs_time_from_msec(1.0));
+        EXPECT_LT(loc->total_time, ucs_time_from_msec(1.0) * ucs::test_time_multiplier());
         EXPECT_EQ(exp_count, locations[i].count);
         loc_names.insert(loc->name);
     }
@@ -117,7 +116,7 @@ UCS_TEST_F(test_profile, accum) {
 
     std::string data = p.read();
     ucs_profile_header_t *hdr = reinterpret_cast<ucs_profile_header_t*>(&data[0]);
-    test_header(hdr, UCS_PROFILE_MODE_ACCUM);
+    test_header(hdr, UCS_BIT(UCS_PROFILE_MODE_ACCUM));
 
     EXPECT_EQ(9, hdr->num_locations);
     test_locations(reinterpret_cast<ucs_profile_location_t*>(hdr + 1),
@@ -137,7 +136,7 @@ UCS_TEST_F(test_profile, log) {
 
     std::string data = p.read();
     ucs_profile_header_t *hdr = reinterpret_cast<ucs_profile_header_t*>(&data[0]);
-    test_header(hdr, UCS_PROFILE_MODE_LOG);
+    test_header(hdr, UCS_BIT(UCS_PROFILE_MODE_LOG));
 
     EXPECT_EQ(9, hdr->num_locations);
     ucs_profile_location_t *locations = reinterpret_cast<ucs_profile_location_t*>(hdr + 1);

@@ -8,12 +8,14 @@
 
 #include <sys/signal.h>
 #include <sys/fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <stdio.h>
+#include <stdlib.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
 
 
 #define INDENT             4
@@ -251,6 +253,8 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
         }
         prev_time = rec->timestamp;
     }
+
+    free(scope_ends);
 }
 
 static void close_pipes()
@@ -259,13 +263,32 @@ static void close_pipes()
     close(output_pipefds[1]);
 }
 
-static int redirect_output()
+static int redirect_output(const ucs_profile_header_t *hdr)
 {
     char *less_argv[] = {LESS_COMMAND,
                          "-R" /* show colors */,
                          NULL};;
+    struct winsize wsz;
+    uint64_t num_lines;
     pid_t pid;
     int ret;
+
+    ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &wsz);
+    if (ret < 0) {
+        fprintf(stderr, "ioctl(TIOCGWINSZ) failed: %m\n");
+        return ret;
+    }
+
+    num_lines = 6 + /* header */
+                ((hdr->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) ?
+                                (hdr->num_locations + 2) : 0) +
+                ((hdr->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) ?
+                                (hdr->num_records    + 1) : 0) +
+                1; /* footer */
+
+    if (num_lines <= wsz.ws_row) {
+        return 0; /* no need to use 'less' */
+    }
 
     ret = pipe(output_pipefds);
     if (ret < 0) {
@@ -321,27 +344,25 @@ static int show_profile_data(profile_data_t *data, options_t *opts)
 {
     int ret;
 
-    switch (data->header->mode) {
-    case UCS_PROFILE_MODE_ACCUM:
-        show_header(data, opts);
-        show_profile_data_accum(data, opts);
-        break;
-    case UCS_PROFILE_MODE_LOG:
-        if (!opts->raw) {
-            ret = redirect_output();
-            if (ret < 0) {
-                return ret;
-            }
+    if (!opts->raw) {
+        ret = redirect_output(data->header);
+        if (ret < 0) {
+            return ret;
         }
-
-        show_header(data, opts);
-        show_profile_data_log(data, opts);
-        break;
-    default:
-        break;
     }
 
-    printf("\n");
+    show_header(data, opts);
+
+    if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
+        show_profile_data_accum(data, opts);
+        printf("\n");
+    }
+
+    if (data->header->mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
+        show_profile_data_log(data, opts);
+        printf("\n");
+    }
+
     return 0;
 }
 

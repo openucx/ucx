@@ -34,7 +34,7 @@ ucs_global_opts_t ucs_global_opts = {
     .instrument_file       = "",
     .instrument_types      = 0,
     .instrument_max_size   = 1048576,
-    .profile_mode          = UCS_PROFILE_MODE_OFF,
+    .profile_mode          = 0,
     .profile_file          = ""
 };
 
@@ -164,13 +164,12 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #endif
 
 #if HAVE_PROFILING
-  {"PROFILE_MODE", "off",
-   "Profile collection mode:\n"
-   " - off   - No profiling.\n"
+  {"PROFILE_MODE", "",
+   "Profile collection modes. If none is specified, profiling is disabled.\n"
    " - log   - Record all timestamps.\n"
    " - accum - Accumulate measurements per location.\n",
    ucs_offsetof(ucs_global_opts_t, profile_mode),
-   UCS_CONFIG_TYPE_ENUM(ucs_profile_mode_names)},
+   UCS_CONFIG_TYPE_BITMAP(ucs_profile_mode_names)},
 
   {"PROFILE_FILE", "",
    "File name to dump profiling data to.\n"

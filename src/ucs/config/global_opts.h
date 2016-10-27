@@ -82,7 +82,7 @@ typedef struct {
     char                     *memtrack_dest;
 
     /* Profiling mode */
-    int                      profile_mode;
+    unsigned                 profile_mode;
 
     /* Profiling output file name */
     char                     *profile_file;
