@@ -83,7 +83,7 @@ const int test_profile::MAX_LINE = __LINE__;
 void test_profile::test_header(ucs_profile_header_t *hdr, unsigned exp_mode)
 {
     EXPECT_EQ(std::string(ucs_get_host_name()), std::string(hdr->hostname));
-    EXPECT_EQ(getpid(),                         hdr->pid);
+    EXPECT_EQ(getpid(),                         (pid_t)hdr->pid);
     EXPECT_EQ(exp_mode,                         hdr->mode);
     EXPECT_NEAR(hdr->one_second / ucs_time_from_sec(1.0), 1.0, 0.01);
 }
@@ -118,12 +118,12 @@ UCS_TEST_F(test_profile, accum) {
     ucs_profile_header_t *hdr = reinterpret_cast<ucs_profile_header_t*>(&data[0]);
     test_header(hdr, UCS_BIT(UCS_PROFILE_MODE_ACCUM));
 
-    EXPECT_EQ(9, hdr->num_locations);
+    EXPECT_EQ(9u, hdr->num_locations);
     test_locations(reinterpret_cast<ucs_profile_location_t*>(hdr + 1),
                    hdr->num_locations,
                    1);
 
-    EXPECT_EQ(0, hdr->num_records);
+    EXPECT_EQ(0u, hdr->num_records);
 }
 
 UCS_TEST_F(test_profile, log) {
@@ -138,7 +138,7 @@ UCS_TEST_F(test_profile, log) {
     ucs_profile_header_t *hdr = reinterpret_cast<ucs_profile_header_t*>(&data[0]);
     test_header(hdr, UCS_BIT(UCS_PROFILE_MODE_LOG));
 
-    EXPECT_EQ(9, hdr->num_locations);
+    EXPECT_EQ(9u, hdr->num_locations);
     ucs_profile_location_t *locations = reinterpret_cast<ucs_profile_location_t*>(hdr + 1);
     test_locations(locations, hdr->num_locations, 0);
 
@@ -148,8 +148,8 @@ UCS_TEST_F(test_profile, log) {
     uint64_t prev_ts = records[0].timestamp;
     for (uint64_t i = 0; i < hdr->num_records; ++i) {
         ucs_profile_record_t *rec = &records[i];
-        EXPECT_GE(rec->location, 0);
-        EXPECT_LT(rec->location, 9);
+        EXPECT_GE(rec->location, 0u);
+        EXPECT_LT(rec->location, 9u);
         EXPECT_GE(rec->timestamp, prev_ts);
         prev_ts = rec->timestamp;
     }
