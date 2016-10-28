@@ -218,9 +218,10 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     rm -f jenkins_sidelinks.txt
     echo 1..1 > coverity.tap
     if [ $nerrors -gt 0 ]; then
+        cov-format-errors --dir $cov_build --emacs-style
         echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
     else
-        echo ok 1 Coverity found no issues >> coverity.tap
+        echo "ok 1 Coverity found no issues" >> coverity.tap
     fi
     echo Coverity report: $cov_url
     printf "%s\t%s\n" Coverity $cov_url >> jenkins_sidelinks.txt
