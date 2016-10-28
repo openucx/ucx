@@ -92,7 +92,7 @@ test_ucp_wireup::enum_test_params(const ucp_params_t& ctx_params,
 void test_ucp_wireup::init() {
     ucp_test::init();
 
-    m_send_data.resize(BUFFER_LENGTH, SEND_DATA);
+    m_send_data.resize(BUFFER_LENGTH, elem_type(SEND_DATA));
     m_recv_data.resize(BUFFER_LENGTH, 0);
 
     if (GetParam().variant == UCP_FEATURE_RMA) {
