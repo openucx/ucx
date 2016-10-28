@@ -153,7 +153,6 @@ void ucs_profile_global_init()
 
         ucs_profile_ctx.log.end     = ucs_profile_ctx.log.start + num_records;
         ucs_profile_ctx.log.current = ucs_profile_ctx.log.start;
-        ucs_profile_ctx.log.wraparound = 0;
     }
 
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
@@ -173,7 +172,10 @@ void ucs_profile_global_cleanup()
 {
     ucs_profile_write();
     ucs_free(ucs_profile_ctx.log.start);
-    ucs_profile_ctx.log.start = NULL;
+    ucs_profile_ctx.log.start      = NULL;
+    ucs_profile_ctx.log.end        = NULL;
+    ucs_profile_ctx.log.current    = NULL;
+    ucs_profile_ctx.log.wraparound = 0;
 }
 
 void ucs_profile_dump()
