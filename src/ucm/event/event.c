@@ -25,8 +25,7 @@
 #include <stdlib.h>
 
 
-static pthread_mutex_t ucm_event_lock = PTHREAD_MUTEX_INITIALIZER;
-static volatile pthread_t ucm_event_lock_owner = (pthread_t)-1;
+static pthread_mutex_t ucm_event_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 static ucs_list_link_t ucm_event_handlers;
 static int ucm_external_events = 0;
 
@@ -123,22 +122,11 @@ static void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
 
 static void ucm_event_enter()
 {
-    pthread_t self;
-
-    self = pthread_self();
-    if (pthread_mutex_trylock(&ucm_event_lock) != 0) {
-        ucs_memory_cpu_load_fence();
-        if (ucm_event_lock_owner == self) {
-            ucm_fatal("Detected recursive call to memory event handler");
-        }
-        pthread_mutex_lock(&ucm_event_lock);
-    }
-    ucm_event_lock_owner = self;
+    pthread_mutex_lock(&ucm_event_lock);
 }
 
 static void ucm_event_leave()
 {
-    ucm_event_lock_owner = (pthread_t)-1;
     pthread_mutex_unlock(&ucm_event_lock);
 }
 
