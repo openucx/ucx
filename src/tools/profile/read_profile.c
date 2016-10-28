@@ -93,6 +93,7 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
     if (data->mem == MAP_FAILED) {
         fprintf(stderr, "mmap(%s, length=%zd) failed: %m\n", file_name,
                 data->length);
+        ret = -1;
         goto out_close;
     }
 
