@@ -88,6 +88,9 @@ typedef enum {
      ((_code) >= UCS_ERR_LAST_ENDPOINT_FAILURE)
 
 /**
+ * @ingroup UCS_RESOURCE
+ * @brief Status pointer
+ *
  * A pointer can represent one of these values:
  * - NULL / UCS_OK
  * - Error code pointer (UCS_ERR_xx)
