@@ -178,6 +178,8 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     echo "Running profiling test"
     UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./test/apps/profiling
     ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep "printf" -C 20
+    ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep -q "calc_pi"
+    ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep -q "print_pi"
 
     export GTEST_RANDOM_SEED=0
     export GTEST_SHUFFLE=1

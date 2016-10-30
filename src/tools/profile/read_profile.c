@@ -126,18 +126,43 @@ static double time_to_usec(profile_data_t *data, options_t *opts, uint64_t time)
     return time * time_units_val[opts->time_units] / data->header->one_second;
 }
 
+static int compare_locations(const void *l1, const void *l2)
+{
+    const ucs_profile_location_t *loc1 = l1;
+    const ucs_profile_location_t *loc2 = l2;
+    return (loc1->total_time > loc2->total_time) ? -1 :
+           (loc1->total_time < loc2->total_time) ? +1 :
+           0;
+}
+
 static void show_profile_data_accum(profile_data_t *data, options_t *opts)
 {
-    const ucs_profile_location_t *loc;
+    uint32_t num_locations = data->header->num_locations;
+    ucs_profile_location_t *sorted_locations;
+    ucs_profile_location_t *loc;
 
+    sorted_locations = malloc(sizeof(*sorted_locations) * num_locations);
+    if (sorted_locations == NULL) {
+        return;
+    }
+
+    /* Sort locations */
+    memcpy(sorted_locations, data->locations, sizeof(*sorted_locations) * num_locations);
+    qsort(sorted_locations, num_locations, sizeof(*sorted_locations), compare_locations);
+
+    /* Print locations */
     printf("%25s %13s %13s %10s             FILE     FUNCTION\n",
            "NAME", "AVG", "TOTAL", "COUNT");
-
-    for (loc = data->locations; loc < data->locations + data->header->num_locations;
-                    ++loc)
-    {
+    for (loc = sorted_locations; loc < sorted_locations + num_locations; ++loc) {
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SAMPLE:
+            printf("%25s %13s %13s %10ld %15s:%-4d %s()\n",
+                   loc->name,
+                   "-",
+                   "-",
+                   (long)loc->count,
+                   loc->file, loc->line, loc->function);
+            break;
         case UCS_PROFILE_TYPE_SCOPE_END:
             printf("%25s %13.3f %13.0f %10ld %15s:%-4d %s()\n",
                    loc->name,
@@ -145,10 +170,13 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
                    time_to_usec(data, opts, loc->total_time),
                    (long)loc->count,
                    loc->file, loc->line, loc->function);
+            break;
         default:
             break;
         }
     }
+
+    free(sorted_locations);
 }
 
 static void show_profile_data_log(profile_data_t *data, options_t *opts)

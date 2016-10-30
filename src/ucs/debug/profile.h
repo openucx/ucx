@@ -159,12 +159,6 @@ retry:
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
         loc              = &ctx->locations[*location_p - 1];
         switch (type) {
-        case UCS_PROFILE_TYPE_SAMPLE:
-            if (ctx->accum.stack_top >= 0) {
-                loc->total_time += current_time - ctx->accum.stack[ctx->accum.stack_top];
-                ctx->accum.stack[ctx->accum.stack_top] = current_time;
-            }
-            break;
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
             ctx->accum.stack[++ctx->accum.stack_top] = current_time;
             ucs_assert(ctx->accum.stack_top < UCS_PROFILE_STACK_MAX);
