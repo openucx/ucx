@@ -32,19 +32,19 @@ uct_ud_ep_ctl_op_add_safe(uct_ud_iface_t *iface, uct_ud_ep_t *ep, int op)
     }
 }
 
-/* 
- * check iface resources:tx_queue and return 
- * prefetched/cached skb 
+/*
+ * check iface resources:tx_queue and return
+ * prefetched/cached skb
  *
- * NOTE: caller must not return skn to mpool until it is 
- * removed from the cache 
- * skb is removed from cache by 
+ * NOTE: caller must not return skn to mpool until it is
+ * removed from the cache
+ * skb is removed from cache by
  *  uct_ud_iface_complete_tx_inl()
  *  uct_ud_iface_complete_tx_skb()
  *
  * In case of error flow caller must do nothing with the skb
  */
-static UCS_F_ALWAYS_INLINE 
+static UCS_F_ALWAYS_INLINE
 uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
                                            uct_ud_ep_t *ep)
 {
@@ -74,7 +74,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
 static UCS_F_ALWAYS_INLINE uct_ud_send_skb_t *
 uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    if (ucs_unlikely(!uct_ud_ep_is_connected(ep) || 
+    if (ucs_unlikely(!uct_ud_ep_is_connected(ep) ||
                      uct_ud_ep_no_window(ep))) {
         ucs_trace_data("iface=%p ep=%p (%d->%d) no ep resources (psn=%u max_psn=%u)",
                        iface, ep, ep->ep_id, ep->dest_ep_id,
@@ -131,13 +131,13 @@ uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     memcpy(data, buffer, length);
     ucs_queue_push(&ep->tx.window, &skb->queue);
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
-                   uct_ud_iface_get_async_time(iface) - 
+                   uct_ud_iface_get_async_time(iface) -
                    ucs_twheel_get_time(&iface->async.slow_timer) +
                    uct_ud_slow_tick());
     ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                              uct_ud_send_skb_t *skb)
 {
@@ -145,7 +145,7 @@ uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ep->tx.psn++;
     ucs_queue_push(&ep->tx.window, &skb->queue);
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
-                   uct_ud_iface_get_async_time(iface) - 
+                   uct_ud_iface_get_async_time(iface) -
                    ucs_twheel_get_time(&iface->async.slow_timer) +
                    uct_ud_slow_tick());
     ep->tx.send_time = uct_ud_iface_get_async_time(iface);

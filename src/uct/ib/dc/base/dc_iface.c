@@ -25,15 +25,15 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
     init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
     init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
-                                 IBV_EXP_ACCESS_REMOTE_READ | 
+                                 IBV_EXP_ACCESS_REMOTE_READ |
                                  IBV_EXP_ACCESS_REMOTE_ATOMIC;
     init_attr.min_rnr_timer    = iface->super.config.min_rnr_timer;
     init_attr.hop_limit        = 1;
     init_attr.inline_size      = iface->super.config.rx_inline;
 
-    iface->rx.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super)->ibv_context, 
+    iface->rx.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super)->ibv_context,
                                        &init_attr);
-    if (iface->rx.dct == NULL) { 
+    if (iface->rx.dct == NULL) {
         ucs_error("Failed to created DC target %m");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -42,7 +42,7 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 }
 
 /* take dc qp to rts state */
-static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci) 
+static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci)
 {
     struct ibv_exp_qp_attr attr;
 
@@ -119,8 +119,8 @@ static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
 
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
-        status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super, 
-                                  IBV_EXP_QPT_DC_INI, &cap 
+        status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super,
+                                  IBV_EXP_QPT_DC_INI, &cap
                                   UCS_STATS_ARG(iface->super.stats));
         if (status != UCS_OK) {
             goto err;
@@ -215,11 +215,11 @@ ucs_config_field_t uct_dc_iface_config_table[] = {
     {"RC_", "", NULL,
      ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
-    {"NUM_DCI", "8", 
+    {"NUM_DCI", "8",
      "Number of DC initiator QPs used by the interface (up to " UCS_PP_QUOTE(UCT_DC_IFACE_MAX_DCIS) ")",
      ucs_offsetof(uct_dc_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
-    {"TX_POLICY", "dcs_quota", 
+    {"TX_POLICY", "dcs_quota",
      "Specifies how DC initiator (dci) is selected by the endpoint. The policies are:\n"
      "\n"
      "dcs        the endpoint either uses already assigned dci or a dci is allocated in the LIFO order.\n"
@@ -273,7 +273,7 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 }
 
 
-static inline ucs_status_t uct_dc_iface_flush_dcis(uct_dc_iface_t *iface) 
+static inline ucs_status_t uct_dc_iface_flush_dcis(uct_dc_iface_t *iface)
 {
     int i;
     int is_flush_done = 1;
@@ -290,14 +290,14 @@ ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_comple
 {
     uct_dc_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_iface_t);
     ucs_status_t status;
-    
+
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
     status = uct_dc_iface_flush_dcis(iface);
     if (status == UCS_OK) {
         UCT_TL_IFACE_STAT_FLUSH(&iface->super.super.super);
-    } 
+    }
     else if (status == UCS_INPROGRESS) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super.super);
     }

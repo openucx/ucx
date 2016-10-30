@@ -45,7 +45,7 @@ typedef struct uct_dc_dci {
 } uct_dc_dci_t;
 
 
-typedef struct uct_dc_iface { 
+typedef struct uct_dc_iface {
     uct_rc_iface_t                super;
     struct {
         uct_dc_dci_t              dcis[UCT_DC_IFACE_MAX_DCIS]; /* Array of dcis */
@@ -60,7 +60,7 @@ typedef struct uct_dc_iface {
 
         ucs_arbiter_t             dci_arbiter;
     } tx;
-    struct { 
+    struct {
         struct ibv_exp_dct        *dct;
     } rx;
 } uct_dc_iface_t;
@@ -89,7 +89,7 @@ void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
  *
  * linear search is most probably the best way to go
- * because the number of dcis is usually small 
+ * because the number of dcis is usually small
  */
 static inline uint8_t uct_dc_iface_dci_find(uct_dc_iface_t *iface, uint32_t qp_num)
 {
@@ -100,7 +100,7 @@ static inline uint8_t uct_dc_iface_dci_find(uct_dc_iface_t *iface, uint32_t qp_n
             return i;
         }
     }
-    ucs_fatal("DCI (qpnum=%d) does not exist", qp_num); 
+    ucs_fatal("DCI (qpnum=%d) does not exist", qp_num);
 }
 
 static inline int uct_dc_iface_dci_has_tx_resources(uct_dc_iface_t *iface, uint8_t dci)
@@ -114,13 +114,13 @@ static inline ucs_arbiter_t *uct_dc_iface_tx_waitq(uct_dc_iface_t *iface)
     return &iface->tx.dci_arbiter;
 }
 
-/* returns pending queue of eps waiting for the dci allocation */ 
+/* returns pending queue of eps waiting for the dci allocation */
 static inline ucs_arbiter_t *uct_dc_iface_dci_waitq(uct_dc_iface_t *iface)
 {
     return &iface->super.tx.arbiter;
 }
 
-static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci) 
+static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci)
 {
     uct_rc_txqp_t *txqp;
 
@@ -129,9 +129,9 @@ static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci
     if (uct_rc_txqp_available(txqp) == (int16_t)iface->super.config.tx_qp_len) {
         return UCS_OK;
     }
-    ucs_trace_data("dci %d is not flushed %d/%d", dci, 
+    ucs_trace_data("dci %d is not flushed %d/%d", dci,
                     txqp->available, iface->super.config.tx_qp_len);
-    ucs_assertv(uct_rc_txqp_unsignaled(txqp) == 0, 
+    ucs_assertv(uct_rc_txqp_unsignaled(txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
 }

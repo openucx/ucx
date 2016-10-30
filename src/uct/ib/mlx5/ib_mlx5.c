@@ -274,7 +274,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
                                             (uintptr_t)qp_info.bf.reg);
     txwq->dbrec    = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
-     *  - on completion we only get the index of last wqe and we do not 
+     *  - on completion we only get the index of last wqe and we do not
      *    really know how many bb is there (but no more than max bb
      *  - on send we check that there is at least one bb. We know
      *  exact number of bbs once we acually are sending.
@@ -286,7 +286,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
     ucs_assert_always(txwq->bb_max > 0);
     memset(txwq->qstart, 0, txwq->qend - txwq->qstart);
     return UCS_OK;
-} 
+}
 
 void uct_ib_mlx5_txwq_cleanup(uct_worker_h worker, uct_ib_mlx5_txwq_t* txwq)
 {
@@ -306,7 +306,7 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
 
     if (!ucs_is_pow2(qp_info.rq.wqe_cnt) ||
         qp_info.rq.stride != sizeof(struct mlx5_wqe_data_seg)) {
-        ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters", 
+        ucs_error("mlx5 rx wq [count=%d stride=%d] has invalid parameters",
                   qp_info.rq.wqe_cnt,
                   qp_info.rq.stride);
         return UCS_ERR_IO_ERROR;

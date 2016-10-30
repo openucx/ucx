@@ -81,7 +81,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md) 
+static ucs_status_t uct_ib_md_umr_qp_create(uct_ib_md_t *md)
 {
 #if HAVE_EXP_UMR
     struct ibv_exp_qp_init_attr qp_init_attr;
@@ -203,7 +203,7 @@ err:
 #endif
 }
 
-static void uct_ib_md_umr_qp_destroy(uct_ib_md_t *md) 
+static void uct_ib_md_umr_qp_destroy(uct_ib_md_t *md)
 {
 #if HAVE_EXP_UMR
     if (md->umr_qp != NULL) {
@@ -223,7 +223,7 @@ uint8_t  uct_ib_md_umr_id(uct_ib_md_t *md)
     }
     /* Generate umr id. We want umrs for same virtual adresses to have different
      * ids across proceses.
-     * 
+     *
      * Usually parallel processes running on the same node as part of a single
      * job will have consequitive pids. For example mpi ranks, slurm spawned tasks...
      */
@@ -315,13 +315,13 @@ struct ibv_mr *uct_ib_md_create_umr(uct_ib_md_t *md, struct ibv_mr *mr)
         if (ret < 0) {
             ucs_error("ibv_exp_poll_cq(umr_cq) failed: %m");
             goto err_free_umr;
-        } 
+        }
         if (ret == 1) {
             if (wc.status != IBV_WC_SUCCESS) {
                 ucs_error("UMR_FILL completed with error: %s vendor_err %d",
                           ibv_wc_status_str(wc.status), wc.vendor_err);
                 goto err_free_umr;
-            } 
+            }
             break;
         }
     }
@@ -371,12 +371,12 @@ static void uct_ib_memh_free(uct_ib_mem_t *memh)
     ucs_free(memh);
 }
 
-static uct_ib_mem_t *uct_ib_memh_alloc() 
+static uct_ib_mem_t *uct_ib_memh_alloc()
 {
     return ucs_calloc(1, sizeof(uct_ib_mem_t), "ib_memh");
 }
 
-static ucs_status_t 
+static ucs_status_t
 uct_ib_mem_alloc_internal(uct_md_h uct_md, size_t *length_p, void **address_p,
                           uct_ib_mem_t *memh UCS_MEMTRACK_ARG)
 {
@@ -533,7 +533,7 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h md, uct_mem_h memh,
     umr_key = ib_memh->umr != NULL ? ib_memh->umr->rkey : ib_memh->mr->rkey;
     *rkey_p |= (((uint64_t)umr_key) << 32);
 
-    ucs_trace("packed rkey: umr=0x%x mr=0x%x", 
+    ucs_trace("packed rkey: umr=0x%x mr=0x%x",
               uct_ib_md_umr_rkey(*rkey_p), uct_ib_md_direct_rkey(*rkey_p));
     return UCS_OK;
 }
@@ -546,7 +546,7 @@ static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
 
     *rkey_p   = ib_rkey;
     *handle_p = NULL;
-    ucs_trace("unpacked rkey: 0x%llx umr=0x%x mr=0x%x", 
+    ucs_trace("unpacked rkey: 0x%llx umr=0x%x mr=0x%x",
               (unsigned long long)ib_rkey,
               uct_ib_md_umr_rkey(ib_rkey), uct_ib_md_direct_rkey(ib_rkey));
     return UCS_OK;
@@ -675,7 +675,7 @@ static void uct_ib_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_mem_t *memh = &region->memh;
 
-    snprintf(buf, max, "lkey 0x%x rkey 0x%x umr: lkey 0x%x rkey 0x%x", 
+    snprintf(buf, max, "lkey 0x%x rkey 0x%x umr: lkey 0x%x rkey 0x%x",
              memh->mr->lkey, memh->mr->rkey,
              memh->umr ? memh->umr->lkey : 0,
              memh->umr ? memh->umr->rkey : 0

@@ -80,7 +80,7 @@ enum {
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return UCS_ERR_NO_RESOURCE; \
-    } 
+    }
 
 #define UCT_RC_CHECK_TXQP(_iface, _ep, _txqp) \
     if (uct_rc_txqp_available(_txqp) <= 0) { \
@@ -141,7 +141,7 @@ typedef struct uct_rc_txqp {
     uint16_t            unsignaled;
     int16_t             available;
     UCS_STATS_NODE_DECLARE(stats);
-} uct_rc_txqp_t; 
+} uct_rc_txqp_t;
 
 typedef struct uct_rc_fc {
     /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
@@ -217,22 +217,22 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
 
-static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp) 
+static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp)
 {
     return txqp->available;
 }
 
-static inline void uct_rc_txqp_available_add(uct_rc_txqp_t *txqp, int16_t val) 
+static inline void uct_rc_txqp_available_add(uct_rc_txqp_t *txqp, int16_t val)
 {
     txqp->available += val;
 }
 
-static inline void uct_rc_txqp_available_set(uct_rc_txqp_t *txqp, int16_t val) 
+static inline void uct_rc_txqp_available_set(uct_rc_txqp_t *txqp, int16_t val)
 {
     txqp->available = val;
 }
 
-static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp) 
+static inline uint16_t uct_rc_txqp_unsignaled(uct_rc_txqp_t *txqp)
 {
     return txqp->unsignaled;
 }
@@ -284,8 +284,8 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
-static inline void 
-uct_rc_txqp_completion(uct_rc_txqp_t *txqp, uint16_t sn) 
+static inline void
+uct_rc_txqp_completion(uct_rc_txqp_t *txqp, uint16_t sn)
 {
     uct_rc_iface_send_op_t *op;
 

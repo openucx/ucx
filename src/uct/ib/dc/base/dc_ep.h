@@ -38,7 +38,7 @@ void uct_dc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, vo
 static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
     /* TODO: other policies have to add group always */
-    if (uct_dc_iface_dci_has_tx_resources(iface, ep->dci)) { 
+    if (uct_dc_iface_dci_has_tx_resources(iface, ep->dci)) {
         ucs_arbiter_group_schedule(uct_dc_iface_tx_waitq(iface), &ep->arb_group);
     }
 }
@@ -56,20 +56,20 @@ static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t 
  *      ep send, gets some completion, sends more, repeat
  * - dcs + quota:
  *    - same as dcs with following addition:
- *    - if dci can not tx, and there are eps waiting for dci 
+ *    - if dci can not tx, and there are eps waiting for dci
  *      allocation ep goes into tx_wait state
- *    - in tx_wait state: 
+ *    - in tx_wait state:
  *          - ep can not transmit while there are eps
  *            waiting for dci allocation. This will break
  *            starvation.
  *          - if there are no eps are waiting for dci allocation
- *            ep goes back to normal state 
+ *            ep goes back to normal state
  *
  * Not implemented policies:
  *
  * - hash:
  *    - dci is allocated to ep by some hash function
- *      for example dlid % ndci 
+ *      for example dlid % ndci
  *
  * - random
  *    - dci is choosen by random() % ndci
@@ -78,7 +78,7 @@ static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t 
 
 enum uct_dc_ep_state {
     UCT_DC_EP_TX_OK,
-    UCT_DC_EP_TX_WAIT          
+    UCT_DC_EP_TX_WAIT
 };
 
 #define UCT_DC_EP_NO_DCI ((uint8_t)-1)
@@ -114,9 +114,9 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
             return;
         }
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
-            /* in tx_wait state: 
+            /* in tx_wait state:
              * -  if there are no eps are waiting for dci allocation
-             *    ep goes back to normal state 
+             *    ep goes back to normal state
              */
             if (ep->state == UCT_DC_EP_TX_WAIT) {
                 if (!ucs_arbiter_is_empty(uct_dc_iface_dci_waitq(iface))) {
@@ -125,7 +125,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
                 ep->state = UCT_DC_EP_TX_OK;
             }
         }
-        ucs_arbiter_group_schedule(uct_dc_iface_tx_waitq(iface), &ep->arb_group); 
+        ucs_arbiter_group_schedule(uct_dc_iface_tx_waitq(iface), &ep->arb_group);
         return;
     }
     iface->tx.stack_top--;
@@ -135,7 +135,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
         /* ep was destroyed while holding dci */
         return;
     }
-            
+
     ucs_assert(iface->tx.dcis[dci].ep->dci != UCT_DC_EP_NO_DCI);
     ep->dci   = UCT_DC_EP_NO_DCI;
     ep->state = UCT_DC_EP_TX_OK;
@@ -144,20 +144,20 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
     /* it is possible that dci is released while ep still has scheduled pending ops.
      * move the group to the 'wait for dci alloc' state
      */
-    ucs_arbiter_group_desched(uct_dc_iface_tx_waitq(iface), &ep->arb_group); 
+    ucs_arbiter_group_desched(uct_dc_iface_tx_waitq(iface), &ep->arb_group);
     ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
 }
 
-static inline ucs_status_t 
+static inline ucs_status_t
 uct_dc_iface_check_txqp(uct_dc_iface_t *iface, uct_dc_ep_t *ep, uct_rc_txqp_t *txqp)
 {
     UCT_RC_CHECK_TXQP(&iface->super, ep, txqp);
     return UCS_OK;
 }
-         
+
 static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
-    /* take a first available dci from stack. 
+    /* take a first available dci from stack.
      * There is no need to check txqp because
      * dci must have resources to transmit.
      */
@@ -172,7 +172,7 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
 {
     uct_rc_txqp_t *txqp;
     int16_t available;
-    
+
     if (ep->dci != UCT_DC_EP_NO_DCI) {
         /* dci is already assigned - keep using it */
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&

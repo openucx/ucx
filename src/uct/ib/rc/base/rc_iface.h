@@ -69,14 +69,14 @@
 
 #define UCT_RC_IFACE_GET_TX_ATOMIC_ADD_DESC(_iface, _mp, _desc) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-    _desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; 
+    _desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 
 #define UCT_RC_IFACE_GET_TX_ATOMIC_DESC(_iface, _mp, _desc, _handler, _result, _comp) \
     UCT_CHECK_PARAM(_comp != NULL, "completion must be non-NULL"); \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
     _desc->super.handler   = _handler; \
     _desc->super.buffer    = _result; \
-    _desc->super.user_comp = _comp; 
+    _desc->super.user_comp = _comp;
 
 
 enum {
@@ -258,13 +258,13 @@ uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
 }
 
 
-static inline void 
-uct_rc_bcopy_desc_fill(uct_rc_iface_send_desc_t *desc, uint8_t id, 
+static inline void
+uct_rc_bcopy_desc_fill(uct_rc_iface_send_desc_t *desc, uint8_t id,
                        uct_pack_callback_t pack_cb, void *arg, size_t *length)
 {
     uct_rc_hdr_t *rch;
 
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; 
+    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
     rch = (uct_rc_hdr_t *)(desc + 1);
     rch->am_id = id;
     *length = pack_cb(rch + 1, arg);
