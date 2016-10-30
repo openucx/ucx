@@ -1,9 +1,9 @@
-/** 
+/**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*   
+*
 * See file LICENSE for terms.
 */
-    
+
 #ifndef UD_DEF_H_
 #define UD_DEF_H_
 
@@ -32,7 +32,7 @@
  * so add 1 to the max/min window constants instead of doing this in the code
  */
 #define UCT_UD_CA_MIN_WINDOW    2
-#define UCT_UD_CA_MAX_WINDOW    1025 
+#define UCT_UD_CA_MAX_WINDOW    1025
 
 
 typedef uint16_t                 uct_ud_psn_t;
@@ -71,37 +71,37 @@ enum {
 /*
 network header layout
 
-A - ack request 
+A - ack request
 E - explicit congestion notification (ecn)
 N - negative acknoledgement
 P - put emulation (will be disabled in the future)
-C - control packet extended header 
+C - control packet extended header
 
 Active message packet header
 
- 3         2 2 2 2             1 1 
- 1         6 5 4 3             6 5                             0 
+ 3         2 2 2 2             1 1
+ 1         6 5 4 3             6 5                             0
 +---------------------------------------------------------------+
-| am_id   |E|A|1|            dest_ep_id (24 bit)                | 
+| am_id   |E|A|1|            dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
 
 Control packet header
 
- 3   2 2 2 2 2 2 2             1 1 
- 1   9 8 7 6 5 4 3             6 5                             0 
+ 3   2 2 2 2 2 2 2             1 1
+ 1   9 8 7 6 5 4 3             6 5                             0
 +---------------------------------------------------------------+
 |rsv|C|P|N|E|A|0|            dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
 
-    // neth layout in human readable form 
+    // neth layout in human readable form
     uint32_t           dest_ep_id:24;
     uint8_t            is_am:1;
     union {
-        struct { // am false 
+        struct { // am false
             uint8_t ack_req:1;
             uint8_t ecn:1;
             uint8_t nak:1;
@@ -109,7 +109,7 @@ Control packet header
             uint8_t ctl:1;
             uint8_t reserved:2;
         } ctl;
-        struct { // am true 
+        struct { // am true
             uint8_t ack_req:1;
             uint8_t ecn:1;
             uint8_t am_id:5;
@@ -177,10 +177,10 @@ typedef struct uct_ud_send_skb_inl {
 typedef struct uct_ud_recv_skb {
     uct_ib_iface_recv_desc_t super;
     union {
-        struct { 
+        struct {
             ucs_frag_list_elem_t     elem;
         } ooo;
-        struct { 
+        struct {
             ucs_queue_elem_t         queue;
             uint32_t                 len;
         } am;

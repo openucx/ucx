@@ -41,7 +41,7 @@
 #  define UCT_IB_MLX5_AV_BASE_SIZE  sizeof(struct mlx5_base_av)
 #  define UCT_IB_MLX5_AV_FULL_SIZE  sizeof(struct mlx5_wqe_av)
 
-#else 
+#else
 
 #  define mlx5_av_base(_av)         (_av)
 #  define mlx5_av_grh(_av)          (_av)

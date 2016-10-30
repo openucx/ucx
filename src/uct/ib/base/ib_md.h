@@ -87,7 +87,7 @@ extern uct_md_component_t uct_ib_mdc;
  * rkey is packed/unpacked is such a way that:
  * low  32 bits contain a direct key
  * high 32 bits always contain a valid key. Either a umr key
- * or a direct one. 
+ * or a direct one.
  */
 static inline uint32_t uct_ib_md_umr_rkey(uct_rkey_t rkey)
 {

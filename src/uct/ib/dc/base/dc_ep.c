@@ -36,7 +36,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     iface->tx.dcis[self->dci].ep = NULL;
 }
 
-/* TODO: 
+/* TODO:
    currently pending code supports only dcs policy
    support hash/random policies
  */
@@ -66,7 +66,7 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
     ucs_arbiter_elem_init((ucs_arbiter_elem_t *)r->priv);
 
     /* no dci:
-     *  Do not grab dci here. Instead put the group on dci allocation arbiter. 
+     *  Do not grab dci here. Instead put the group on dci allocation arbiter.
      *  This way we can assure fairness between all eps waiting for
      *  dci allocation.
      */
@@ -84,7 +84,7 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
 /**
  * dispatch requests waiting for dci allocation
  */
-ucs_arbiter_cb_result_t 
+ucs_arbiter_cb_result_t
 uct_dc_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
                                  ucs_arbiter_elem_t *elem,
                                  void *arg)
@@ -110,7 +110,7 @@ uct_dc_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
 /**
  * dispatch requests waiting for tx resources
  */
-ucs_arbiter_cb_result_t 
+ucs_arbiter_cb_result_t
 uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
                                ucs_arbiter_elem_t *elem,
                                void *arg)
@@ -133,11 +133,11 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     }
     if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
-    } 
+    }
     if (!uct_dc_iface_dci_has_tx_resources(iface, ep->dci)) {
         /* TODO: only good for dcs policy */
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-    } 
+    }
     if (ep->state == UCT_DC_EP_TX_WAIT) {
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }

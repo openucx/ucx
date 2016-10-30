@@ -121,7 +121,7 @@ struct uct_ud_iface {
         unsigned             max_inline;
     } config;
     ucs_ptr_array_t       eps;
-    uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE]; 
+    uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
         int               timer_id;
         ucs_twheel_t      slow_timer;
@@ -186,7 +186,7 @@ static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
 
 uct_ud_send_skb_t *uct_ud_iface_res_skb_get(uct_ud_iface_t *iface);
 
-static inline void 
+static inline void
 uct_ud_iface_res_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
 {
     if (skb != &iface->tx.skb_inl.super) {
@@ -210,11 +210,11 @@ static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
     UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
 }
 
-/* 
-management of connecting endpoints (cep) 
+/*
+management of connecting endpoints (cep)
 
 Such endpoint are created either by explicitely calling ep_create_connected()
-or implicitely as a result of UD connection protocol. Calling 
+or implicitely as a result of UD connection protocol. Calling
 ep_create_connected() may reuse already existing endpoint that was implicitely
 created.
 
@@ -224,7 +224,7 @@ The protocol allows connection establishment in environment where UD packets
 can be dropped, duplicated or reordered. The connection is done as 3 way
 handshake:
 
-1: CREQ (src_if_addr, src_ep_addr, conn_id) 
+1: CREQ (src_if_addr, src_ep_addr, conn_id)
 Connection request. It includes source interface address, source ep address
 and connection id.
 
@@ -235,7 +235,7 @@ simultanuous connection establishment. The case when both sides call
 ep_create_connected(). The rule is that connected endpoints must have
 same conn_id.
 
-2: CREP (dest_ep_id) 
+2: CREP (dest_ep_id)
 
 Connection reply. It includes id of destination endpoint and optinally ACK
 request flag. From this point reliability is handled by UD protocol as
@@ -253,7 +253,7 @@ Ack on connection reply. It may be send as part of the data packet.
 Implicit endpoints reuse
 
 Endpoints created upon receive of CREP request can be re-used when
-application calls ep_create_connected(). 
+application calls ep_create_connected().
 
 Data structure
 
@@ -261,9 +261,9 @@ Hash table and double linked sorted list:
 hash(src_if_addr) -> peer ->ep (list sorted in descending order)
 
 List is used to save memory (8 bytes instead of 500-1000 bytes of hashtable)
-In many cases list will provide fast lookup and insertion. 
+In many cases list will provide fast lookup and insertion.
 It is expected that most of connect requests will arrive in order. In
-such case the insertion is O(1) because it is done to the head of the 
+such case the insertion is O(1) because it is done to the head of the
 list. Lookup is O(number of 'passive' eps) which is expected to be small.
 
 TODO: add and maintain pointer to the list element with conn_id equal to
@@ -273,15 +273,15 @@ Connection id assignment:
 
   0 1 ... conn_last_id, +1, +2, ... UCT_UD_EP_CONN_ID_MAX
 
-Ids upto (not including) conn_last_id are already assigned to endpoints. 
-Any endpoint with conn_id >= conn_last_id is created on receive of CREQ 
+Ids upto (not including) conn_last_id are already assigned to endpoints.
+Any endpoint with conn_id >= conn_last_id is created on receive of CREQ
 There may be holes because CREQs are not received in order.
 
-Call to ep_create_connected() will try reuse endpoint with 
+Call to ep_create_connected() will try reuse endpoint with
 conn_id = conn_last_id
 
 If there is no such endpoint new endpoint with id conn_last_id
-will be created. 
+will be created.
 
 In both cases conn_last_id = conn_last_id + 1
 
@@ -340,7 +340,7 @@ uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
 {
-    if (ucs_unlikely(iface->tx.pending_q_len > 0 && 
+    if (ucs_unlikely(iface->tx.pending_q_len > 0 &&
                      iface->tx.in_pending == 0)) {
         iface->tx.in_pending = 1;
         ucs_arbiter_dispatch(&iface->tx.pending_q, 1,
@@ -350,7 +350,7 @@ uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
 }
 
 /* Go over all active eps and remove them. Do it this way because class destructors are not
- * virtual 
+ * virtual
  */
 #define UCT_UD_IFACE_DELETE_EPS(_iface, _ep_type_t) \
     { \
@@ -363,7 +363,7 @@ uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
 
 ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 
-static UCS_F_ALWAYS_INLINE ucs_status_t 
+static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->rx.pending_q))) {
@@ -393,10 +393,10 @@ uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
      } while(0);
 
 #define UCT_UD_CHECK_BCOPY_LENGTH(iface, len) \
-    UCT_UD_CHECK_LENGTH(iface, 0, len, "am_bcopy length") 
+    UCT_UD_CHECK_LENGTH(iface, 0, len, "am_bcopy length")
 
 #define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len) \
-    UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, "am_zcopy payload") 
+    UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, "am_zcopy payload")
 
 #else
 #define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len)

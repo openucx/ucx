@@ -18,7 +18,7 @@
 
 #define UCT_UD_EP_NULL_ID     ((1<<24)-1)
 #define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
-#define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX 
+#define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX
 
 #ifdef UCT_UD_EP_DEBUG_HOOKS
 /*
@@ -37,7 +37,7 @@
 
   uct_ep_t ep;
   ....
-  // clear ack request bin on all outgoing packets 
+  // clear ack request bin on all outgoing packets
   ucs_derived_of(ep, uct_ud_ep_t)->tx.tx_hook = clear_ack_req;
 
 */
@@ -67,52 +67,52 @@ do { \
    (ep)->timer_hook = uct_ud_ep_null_hook; \
 } while(0);
 
-#else 
+#else
 
 #define UCT_UD_EP_HOOK_DECLARE(name)
-#define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len) 
-#define UCT_UD_EP_HOOK_CALL_TX(ep, neth) 
-#define UCT_UD_EP_HOOK_CALL_TIMER(ep) 
-#define UCT_UD_EP_HOOK_INIT(ep) 
+#define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len)
+#define UCT_UD_EP_HOOK_CALL_TX(ep, neth)
+#define UCT_UD_EP_HOOK_CALL_TIMER(ep)
+#define UCT_UD_EP_HOOK_INIT(ep)
 
 #endif
 
 
 /**
- * Slow ep timer 
+ * Slow ep timer
  * The purpose of the slow timer is to schedule resends and ack replies.
  * The timer is a wheel timer. Timer wheel sweep is done on every async
- * progress invocation. One tick usually happens once in 0.1 seconds. 
+ * progress invocation. One tick usually happens once in 0.1 seconds.
  * It is best to avoid to take time in the fast path.
  *
- * wheel_time is the time of last timer wheel sweep. 
+ * wheel_time is the time of last timer wheel sweep.
  * on send:
- *   - try to start wheel timer. 
+ *   - try to start wheel timer.
  *   - send_time = wheel_time. That is sending a packet resets retransmission
  *   timeout. This does not allow infinite number of resets because number of
- *   outstanding packets is bound by the TX window size. 
+ *   outstanding packets is bound by the TX window size.
  * on ack recv:
  *   - send_time = wheel_time. (advance last send time)
  * on timer expiration:
- *   - if wheel_time - saved_time > 3*one_tick_time 
- *        schedule resend 
+ *   - if wheel_time - saved_time > 3*one_tick_time
+ *        schedule resend
  *        send_time = wheel_time
- *        consgestion avoidance decreases tx window 
+ *        consgestion avoidance decreases tx window
  *   - if window is not empty resched timer
  *   3x is needed to avoid false resends because of errors in timekeeping
  *
  * Fast ep timer (Not implemented)
  *
  * The purpose of the fast timer is to detect packet loss as early as
- * possible. The timer is a wheel timer. Fast timer sweep is done on 
+ * possible. The timer is a wheel timer. Fast timer sweep is done on
  * CQ polling which happens either in explicit polling or in async
- * progress. As a result fast timer resolution may vary.   
+ * progress. As a result fast timer resolution may vary.
  *
  * TODO: adaptive CHK algo description
  *
  * Fast time is relatively expensive. It is best to disable if packet loss
  * is not expected. Usual reasons for packet loss are: slow receiver,
- * many to one traffic pattern. 
+ * many to one traffic pattern.
  */
 
 /* Congestion avoidance and retransmits
@@ -122,11 +122,11 @@ do { \
  *
  * tx window is increased when ack is received and decreased when
  * resend is scheduled. Ack must be a 'new' one that is it must
- * acknowledge packets on window. Increasing window on ack does not casue 
- * exponential window increase because, unlike tcp, only two acks 
+ * acknowledge packets on window. Increasing window on ack does not casue
+ * exponential window increase because, unlike tcp, only two acks
  * per window are sent.
  *
- * Todo: 
+ * Todo:
  *
  * Consider trigering window decrease before resend timeout:
  * - on ECN (explicit congestion notification) from receiever. ECN can
@@ -144,22 +144,22 @@ do { \
  * [acked_psn+1, psn-1]. These values are saved as 'resend window'
  *
  * Resend operation will resend no more then the current cwnd
- * If ack arrives when resend window is active it means that 
+ * If ack arrives when resend window is active it means that
  *  - something new in the resend window was acked. As a
  *  resutlt a new resend operation will be scheduled.
- *  - either resend window or something beyond it was 
+ *  - either resend window or something beyond it was
  *  acked. It means that no more retransmisions are needed.
  *  Current 'resend window' is deactivated
- * 
+ *
  * When retransmitting, ack is requested if:
  * psn == acked_psn + 1 or
  * psn % UCT_UD_RESENDS_PER_ACK = 0
  */
 
-/* 
+/*
  * Endpoint pending control operations. The operations
  * are executed in time of progress along with
- * pending requests added by uct user. 
+ * pending requests added by uct user.
  */
 enum {
     UCT_UD_EP_OP_NONE       = 0,
@@ -174,13 +174,13 @@ enum {
 #define UCT_UD_EP_OP_CTL_HI_PRIO  (UCT_UD_EP_OP_CREQ|UCT_UD_EP_OP_CREP|UCT_UD_EP_OP_RESEND)
 
 typedef struct uct_ud_ep_pending_op {
-    ucs_arbiter_group_t   group;  
+    ucs_arbiter_group_t   group;
     uint32_t              ops;    /* bitmask that describes what control ops are sceduled */
     ucs_arbiter_elem_t    elem;
 } uct_ud_ep_pending_op_t;
 
 enum {
-    UCT_UD_EP_STAT_TODO 
+    UCT_UD_EP_STAT_TODO
 };
 
 /* TODO: optimize endpoint memory footprint */
@@ -250,7 +250,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep, 
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
                                      const uct_ib_address_t *ib_addr,
                                      const uct_ud_ep_addr_t *ep_addr);
 
@@ -269,7 +269,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
                                                uct_ud_ep_t **new_ep_p,
                                                uct_ud_send_skb_t **skb_p);
 
-void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep, 
+void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
                                  const uct_ib_address_t *ib_addr,
                                   const uct_ud_iface_addr_t *if_addr);
 
@@ -285,7 +285,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
 {
     neth->packet_type = (id << UCT_UD_PACKET_AM_ID_SHIFT) |
-                        ep->dest_ep_id | 
+                        ep->dest_ep_id |
                         UCT_UD_PACKET_FLAG_AM;
 }
 
@@ -295,8 +295,8 @@ uct_ud_neth_set_type_put(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     neth->packet_type = ep->dest_ep_id | UCT_UD_PACKET_FLAG_PUT;
 }
 
-void uct_ud_ep_process_rx(uct_ud_iface_t *iface, 
-                          uct_ud_neth_t *neth, unsigned byte_len, 
+void uct_ud_ep_process_rx(uct_ud_iface_t *iface,
+                          uct_ud_neth_t *neth, unsigned byte_len,
                           uct_ud_recv_skb_t *skb, int is_async);
 
 
@@ -316,7 +316,7 @@ uct_ud_neth_ctl_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     neth->packet_type = ep->dest_ep_id|UCT_UD_PACKET_FLAG_ACK_REQ;
 }
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_init_data(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn = ep->tx.psn;
@@ -354,7 +354,7 @@ uct_ud_ep_ctl_op_check(uct_ud_ep_t *ep, uint32_t op)
 static UCS_F_ALWAYS_INLINE int
 uct_ud_ep_ctl_op_isany(uct_ud_ep_t *ep)
 {
-    return ep->tx.pending.ops; 
+    return ep->tx.pending.ops;
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -395,12 +395,12 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_req_ack(uct_ud_ep_t *ep)
 }
 
 
-static UCS_F_ALWAYS_INLINE void 
+static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->packet_type |= uct_ud_ep_req_ack(ep) << UCT_UD_PACKET_ACK_REQ_SHIFT;
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK|UCT_UD_EP_OP_ACK_REQ);
 }
 
-#endif 
+#endif
 

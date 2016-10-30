@@ -595,7 +595,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
         wrs[count].sg.lkey   = desc->lkey;
         wrs[count].ibwr.num_sge = 1;
         wrs[count].ibwr.wr_id   = (uintptr_t)desc;
-        wrs[count].ibwr.sg_list = &wrs[count].sg;  
+        wrs[count].ibwr.sg_list = &wrs[count].sg;
         wrs[count].ibwr.next    = &wrs[count + 1].ibwr;
         ++count;
     }

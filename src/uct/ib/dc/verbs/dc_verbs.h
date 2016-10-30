@@ -18,7 +18,7 @@ typedef struct uct_dc_verbs_iface_config {
 } uct_dc_verbs_iface_config_t;
 
 
-typedef struct uct_dc_verbs_iface { 
+typedef struct uct_dc_verbs_iface {
     uct_dc_iface_t                 super;
     struct ibv_exp_send_wr         inl_am_wr;
     struct ibv_exp_send_wr         inl_rwrite_wr;

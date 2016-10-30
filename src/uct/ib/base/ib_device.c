@@ -649,7 +649,7 @@ int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
     return (*(uint64_t *)gid_raw == 0) && (*(uint64_t *)(gid_raw + 8) == 0);
 }
 
-ucs_status_t 
+ucs_status_t
 uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_index,
                         union ibv_gid *gid)
 {
