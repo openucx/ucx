@@ -791,7 +791,8 @@ FILE_PATTERNS          = ucp.h      \
                          ucp_def.h  \
                          uct.h      \
                          uct_def.h  \
-                         status.h
+                         status.h   \
+                         thread_mode.h
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
 # be searched for input files as well.

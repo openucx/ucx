@@ -1143,6 +1143,9 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  * words, the completion of a message can be signaled by the return code or
  * the call-back.
  *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).
  * @param [in]  count       Number of elements to send
@@ -1179,6 +1182,9 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * is a remote tag match on the message (which does not always mean the remote
  * receive has been completed). This function never completes "in-place", and
  * always returns a request handle.
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
  *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).
