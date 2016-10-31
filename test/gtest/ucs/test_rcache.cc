@@ -420,9 +420,11 @@ UCS_MT_TEST_F(test_rcache, merge_expand_prot, 6) {
     /* Get 2-nd part - should merge with region1 with full protection */
     void *ptr2 = (char*)mem + size1;
     region *region2 = get(ptr2, size2, PROT_WRITE);
-    EXPECT_LE(region2->super.super.start, (uintptr_t)ptr1);
-    EXPECT_GE(region2->super.super.end, (uintptr_t)ptr2 + size2);
-    EXPECT_EQ(PROT_READ|PROT_WRITE, region2->super.prot);
+    if (!(region1->super.flags & UCS_RCACHE_REGION_FLAG_INVALID)) {
+        EXPECT_LE(region2->super.super.start, (uintptr_t)ptr1);
+        EXPECT_TRUE(region2->super.prot & PROT_READ);
+    }
+    EXPECT_TRUE(region2->super.prot & PROT_WRITE);
 
     put(region1);
     put(region2);
