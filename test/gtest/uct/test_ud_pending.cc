@@ -147,6 +147,8 @@ UCS_TEST_P(test_ud_pending, err_busy) {
 
 UCS_TEST_P(test_ud_pending, connect)
 {
+    disable_async(m_e1);
+    disable_async(m_e2);
     post_pending_reqs();
     short_progress_loop(50.0);
     check_pending_reqs();
@@ -154,6 +156,8 @@ UCS_TEST_P(test_ud_pending, connect)
 
 UCS_TEST_P(test_ud_pending, flush)
 {
+    disable_async(m_e1);
+    disable_async(m_e2);
     post_pending_reqs();
     flush();
     check_pending_reqs();
