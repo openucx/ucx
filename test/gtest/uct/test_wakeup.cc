@@ -95,7 +95,8 @@ UCS_TEST_P(test_uct_wakeup, am)
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));
 
     /* make sure the file descriptor IS signaled */
-    EXPECT_EQ(uct_wakeup_wait(wakeup_handle), UCS_OK);
+    ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
+
     uct_wakeup_close(wakeup_handle);
     free(recv_buffer);
 }

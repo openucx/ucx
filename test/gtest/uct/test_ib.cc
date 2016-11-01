@@ -481,13 +481,13 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
     /* make sure the file descriptor is signaled */
     ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
 
-    status = uct_wakeup_wait(wakeup_handle);
+    /* Acknowledge all the requests */
+    status = uct_wakeup_efd_arm(wakeup_handle);
     ASSERT_EQ(status, UCS_OK);
 
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);
     check_recv_cq(m_e1->iface(), 1);
-
 }
 
 
