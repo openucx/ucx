@@ -765,8 +765,14 @@ ucs_status_t uct_ib_iface_wakeup_get_fd(uct_wakeup_h wakeup, int *fd_p)
 
 ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup)
 {
+    ucs_status_t status;
     int res;
     struct pollfd polled = { .fd = wakeup->fd, .events = POLLIN };
+
+    status = wakeup->iface->ops.iface_wakeup_arm(wakeup);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     do {
         res = poll(&polled, 1, -1);
@@ -776,7 +782,7 @@ ucs_status_t uct_ib_iface_wakeup_wait(uct_wakeup_h wakeup)
         return UCS_ERR_IO_ERROR;
     }
 
-    return uct_ib_iface_wakeup_arm(wakeup);
+    return status;
 }
 
 ucs_status_t uct_ib_iface_wakeup_open(uct_iface_h iface, unsigned events,
