@@ -26,6 +26,7 @@ noinst_HEADERS = \
 	core/ucp_request.inl \
 	core/ucp_worker.h \
 	dt/dt_contig.h \
+	dt/dt_iov.h \
 	dt/dt_generic.h \
 	proto/proto.h \
 	proto/proto_am.inl \
@@ -46,6 +47,7 @@ libucp_la_SOURCES = \
 	core/ucp_version.c \
 	core/ucp_worker.c \
 	dt/dt_contig.c \
+	dt/dt_iov.c \
 	dt/dt_generic.c \
 	proto/proto_am.c \
 	rma/basic_rma.c \

@@ -50,11 +50,15 @@ typedef void (*ucp_request_callback_t)(ucp_request_t *req);
 
 
 typedef struct ucp_send_state {
-    size_t                        offset;
+    size_t                        offset;  /* Total offset in overall payload. */
     union {
         struct {
             uct_mem_h             memh;
         } contig;
+        struct {
+            size_t                iov_offset;     /* Offset in the IOV item */
+            size_t                iovcnt_offset;  /* The IOV item to start copy */
+        } iov;
         struct {
             void                  *state;
         } generic;

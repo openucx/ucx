@@ -94,6 +94,7 @@ protected:
 
     static const uint32_t MAGIC = 0xd7d7d7d7U;
     static const ucp_datatype_t DATATYPE;
+    static const ucp_datatype_t DATATYPE_IOV;
     static ucp_generic_dt_ops test_dt_ops;
     static int dt_gen_start_count;
     static int dt_gen_finish_count;

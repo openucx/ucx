@@ -71,6 +71,27 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
     return UCS_OK;
 }
 
+static ucs_status_t ucp_tag_req_start_iov(ucp_request_t *req, size_t count,
+                                          ssize_t max_short, size_t zcopy_thresh,
+                                          size_t rndv_thresh,
+                                          const ucp_proto_t *proto)
+{
+    ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
+    size_t only_hdr_size = proto->only_hdr_size;
+
+    req->send.length = ucp_dt_iov_length(req->send.buffer, count);
+    req->send.state.dt.iov.iovcnt_offset = 0;
+    req->send.state.dt.iov.iov_offset    = 0;
+
+    /* bcopy */
+    if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
+        req->send.uct.func = proto->contig_bcopy_single;
+    } else {
+        req->send.uct.func = proto->contig_bcopy_multi;
+    }
+    return UCS_OK;
+}
+
 static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
                                       size_t rndv_thresh,
                                       const ucp_proto_t *progress)
@@ -104,6 +125,14 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
     case UCP_DATATYPE_CONTIG:
         status = ucp_tag_req_start_contig(req, count, max_short, zcopy_thresh,
                                           rndv_thresh, proto);
+        if (status != UCS_OK) {
+            return UCS_STATUS_PTR(status);
+        }
+        break;
+
+    case UCP_DATATYPE_IOV:
+        status = ucp_tag_req_start_iov(req, count, max_short, zcopy_thresh,
+                                       rndv_thresh, proto);
         if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
