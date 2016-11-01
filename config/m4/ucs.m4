@@ -22,6 +22,24 @@ AS_IF([test "x$enable_instrumentation" == xyes],
 
 
 #
+# Internal profiling support.
+# This option may affect perofrmance so it is off by default.
+#
+AC_ARG_ENABLE([profiling],
+	AS_HELP_STRING([--enable-profiling], [Enable profiling support, default: NO]),
+	[],
+	[enable_profiling=no])
+
+AS_IF([test "x$enable_profiling" == xyes],
+	[AS_MESSAGE([enabling profiling])
+	 AC_DEFINE([HAVE_PROFILING], [1], [Enable profiling])
+	 HAVE_PROFILING=yes]
+	[:]
+)
+AM_CONDITIONAL([HAVE_PROFILING],[test "x$HAVE_PROFILING" = "xyes"])
+
+
+#
 # Detailed backtrace with debug information.
 # This option requires binutils-devel package.
 #

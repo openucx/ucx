@@ -59,6 +59,7 @@ nobase_dist_libucs_la_HEADERS = \
 	debug/instrument.h \
 	debug/log.h \
 	debug/memtrack.h \
+	debug/profile.h \
 	stats/libstats.h \
 	stats/stats.h \
 	sys/compiler.h \
@@ -100,6 +101,7 @@ libucs_la_SOURCES = \
 	debug/instrument.c \
 	debug/log.c \
 	debug/memtrack.c \
+	debug/profile.c \
 	stats/stats.c \
 	sys/init.c \
 	sys/math.c \

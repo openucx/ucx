@@ -10,6 +10,7 @@
 #include <ucs/debug/instrument.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/debug/profile.h>
 #include <ucs/stats/stats.h>
 #include <ucs/async/async.h>
 
@@ -82,12 +83,14 @@ static void UCS_F_CTOR ucs_init()
     ucs_memtrack_init();
     ucs_debug_init();
     ucs_instrument_init();
+    ucs_profile_global_init();
     ucs_async_global_init();
 }
 
 static void UCS_F_DTOR ucs_cleanup(void)
 {
     ucs_async_global_cleanup();
+    ucs_profile_global_cleanup();
     ucs_instrument_cleanup();
     ucs_debug_cleanup();
     ucs_memtrack_cleanup();
