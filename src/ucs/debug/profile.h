@@ -23,8 +23,8 @@
  * Profiling modes
  */
 enum {
-    UCS_PROFILE_MODE_ACCUM, /* Accumulate elapsed time per location */
-    UCS_PROFILE_MODE_LOG,   /* Record all events */
+    UCS_PROFILE_MODE_ACCUM, /**< Accumulate elapsed time per location */
+    UCS_PROFILE_MODE_LOG,   /**< Record all events */
     UCS_PROFILE_MODE_LAST
 };
 
@@ -33,9 +33,9 @@ enum {
  * Profiling location type
  */
 typedef enum {
-    UCS_PROFILE_TYPE_SAMPLE,        /* Sample only */
-    UCS_PROFILE_TYPE_SCOPE_BEGIN,   /* Begin a scope */
-    UCS_PROFILE_TYPE_SCOPE_END,     /* End a scope */
+    UCS_PROFILE_TYPE_SAMPLE,        /**< Sample only */
+    UCS_PROFILE_TYPE_SCOPE_BEGIN,   /**< Begin a scope */
+    UCS_PROFILE_TYPE_SCOPE_END,     /**< End a scope */
     UCS_PROFILE_TYPE_LAST
 } ucs_profile_type_t;
 
@@ -44,13 +44,13 @@ typedef enum {
  * Profile output file header
  */
 typedef struct ucs_profile_header {
-    char                     cmdline[1024]; /* Command line */
-    char                     hostname[40];  /* Host name */
-    uint32_t                 pid;           /* Process ID */
-    uint32_t                 mode;          /* Profiling mode */
-    uint32_t                 num_locations; /* Number of locations in the file */
-    uint64_t                 num_records;   /* Number of records in the file */
-    uint64_t                 one_second;    /* How much time is one second on the sampled machine */
+    char                     cmdline[1024]; /**< Command line */
+    char                     hostname[40];  /**< Host name */
+    uint32_t                 pid;           /**< Process ID */
+    uint32_t                 mode;          /**< Profiling mode */
+    uint32_t                 num_locations; /**< Number of locations in the file */
+    uint64_t                 num_records;   /**< Number of records in the file */
+    uint64_t                 one_second;    /**< How much time is one second on the sampled machine */
 } UCS_S_PACKED ucs_profile_header_t;
 
 
@@ -58,8 +58,8 @@ typedef struct ucs_profile_header {
  * Profile output file sample record
  */
 typedef struct ucs_profile_record {
-    uint64_t                 timestamp;     /* Record timestamp */
-    uint32_t                 location;      /* Location identifier */
+    uint64_t                 timestamp;     /**< Record timestamp */
+    uint32_t                 location;      /**< Location identifier */
 } UCS_S_PACKED ucs_profile_record_t;
 
 
@@ -67,13 +67,13 @@ typedef struct ucs_profile_record {
  * Profile location record
  */
 typedef struct ucs_profile_location {
-    char                     file[64];      /* Source file name */
-    char                     function[64];  /* Function name */
-    char                     name[32];      /* User-provided name */
-    int                      line;          /* Source line number */
-    uint8_t                  type;          /* From ucs_profile_type_t */
-    uint64_t                 total_time;    /* Total interval from previous location */
-    size_t                   count;         /* Number of times we've hit this location */
+    char                     file[64];      /**< Source file name */
+    char                     function[64];  /**< Function name */
+    char                     name[32];      /**< User-provided name */
+    int                      line;          /**< Source line number */
+    uint8_t                  type;          /**< From ucs_profile_type_t */
+    uint64_t                 total_time;    /**< Total interval from previous location */
+    size_t                   count;         /**< Number of times we've hit this location */
 } UCS_S_PACKED ucs_profile_location_t;
 
 
@@ -82,19 +82,19 @@ typedef struct ucs_profile_location {
  */
 typedef struct ucs_profile_global_context {
 
-    ucs_profile_location_t   *locations;    /* Array of all locations */
-    unsigned                 num_locations; /* Number of valid locations */
-    unsigned                 max_locations; /* Size of locations array */
+    ucs_profile_location_t   *locations;    /**< Array of all locations */
+    unsigned                 num_locations; /**< Number of valid locations */
+    unsigned                 max_locations; /**< Size of locations array */
 
     struct {
-        ucs_profile_record_t *start, *end;  /* Circular log buffer */
-        ucs_profile_record_t *current;      /* Current log pointer */
-        int                  wraparound;    /* Whether log was rotated */
+        ucs_profile_record_t *start, *end;  /**< Circular log buffer */
+        ucs_profile_record_t *current;      /**< Current log pointer */
+        int                  wraparound;    /**< Whether log was rotated */
     } log;
 
     struct {
-        int                  stack_top;     /* Index of stack top */
-        ucs_time_t           stack[UCS_PROFILE_STACK_MAX]; /* Timestamps for each nested scope */
+        int                  stack_top;     /**< Index of stack top */
+        ucs_time_t           stack[UCS_PROFILE_STACK_MAX]; /**< Timestamps for each nested scope */
     } accum;
 
 } ucs_profile_global_context_t;
@@ -125,19 +125,34 @@ extern const char *ucs_profile_mode_names[];
 /*
  * Register a profiling location - should be called once per location in the
  * code, before the first record of each such location is made.
+ * Should not be used directly - use UCS_PROFILE macros instead.
+ *
+ * @param [in]  type      Location type.
+ * @param [in]  file      Source file name.
+ * @param [in]  line      Source line number.
+ * @param [in]  function  Calling function name.
+ * @param [in]  name      Location name.
  *
  * @return 0 for disabled record, positive instrumentation record id otherwise.
  */
-int ucs_profile_get_location(ucs_profile_type_t type, const char *file, int line,
-                             const char *function, const char *name);
+int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
+                             const char *file, int line, const char *function);
 
 
 /*
  * Store a new record with the given data.
+ * Should not be used directly - use UCS_PROFILE macros instead.
+ *
+ * @param [in]     type        Location type.
+ * @param [in]     name        Location name.
+ * @param [in]     file        Source file name.
+ * @param [in]     line        Source line number.
+ * @param [in]     function    Calling function name.
+ * @param [in,out] location_p  Variable used to maintain the location ID.
  */
 static inline void ucs_profile_record(ucs_profile_type_t type, const char *name,
-                                      int *location_p, const char *file,
-                                      int line, const char *function)
+                                      const char *file, int line,
+                                      const char *function, int *location_p)
 {
     extern ucs_profile_global_context_t ucs_profile_ctx;
     ucs_profile_global_context_t *ctx = &ucs_profile_ctx;
@@ -151,7 +166,7 @@ retry:
     }
 
     if (ucs_unlikely(*location_p == -1)) {
-        *location_p = ucs_profile_get_location(type, file, line, function, name);
+        *location_p = ucs_profile_get_location(type, name, file, line, function);
         goto retry;
     }
 
@@ -184,13 +199,13 @@ retry:
     }
 }
 
-/* Helper marco */
+/* Helper macro */
 #define _UCS_PROFILE_RECORD(_type, _name, _location_p) \
-    ucs_profile_record((_type), (_name), (_location_p), \
-                       __FILE__, __LINE__, __FUNCTION__) \
+    ucs_profile_record((_type), (_name), __FILE__, __LINE__, __FUNCTION__, \
+                       (_location_p))
 
 
-/* Helper marco */
+/* Helper macro */
 #define __UCS_PROFILE_CODE(_name, _loop) \
     int _loop_var ; \
     for (({ UCS_PROFILE_SCOPE_BEGIN(); _loop_var = 1;}); \
@@ -198,7 +213,7 @@ retry:
          ({ UCS_PROFILE_SCOPE_END(_name); _loop_var = 0;}))
 
 
-/* Helper marco */
+/* Helper macro */
 #define _UCS_PROFILE_CODE(_name, _var_suffix) \
     __UCS_PROFILE_CODE(_name, UCS_PP_TOKENPASTE(loop, _var_suffix))
 
@@ -216,6 +231,11 @@ retry:
     }
 
 
+/**
+ * Record a profiling sample event.
+ *
+ * @param _name   Event name.
+ */
 #define UCS_PROFILE_SAMPLE(_name) \
     UCS_PROFILE(UCS_PROFILE_TYPE_SAMPLE, (_name))
 
@@ -249,6 +269,8 @@ retry:
  *  UCS_PROFILE_CODE(<name>) {
  *     <code>
  *  }
+ *
+ * @param _name   Scope name.
  */
 #define UCS_PROFILE_CODE(_name) \
     _UCS_PROFILE_CODE(_name, UCS_PP_UNIQUE_ID)

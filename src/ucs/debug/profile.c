@@ -94,8 +94,8 @@ static void ucs_profile_write()
     close(fd);
 }
 
-int ucs_profile_get_location(ucs_profile_type_t type, const char *file, int line,
-                             const char *function, const char *name)
+int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
+                             const char *file, int line, const char *function)
 {
     ucs_profile_location_t *loc;
     int location;
