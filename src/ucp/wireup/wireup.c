@@ -60,7 +60,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     }
 
 out:
-    ucp_request_complete_send(req, UCS_OK);
+    ucs_free((void*)req->send.buffer);
+    ucs_free(req);
     return UCS_OK;
 }
 
@@ -69,12 +70,6 @@ static unsigned ucp_wireup_address_index(const unsigned *order,
                                          ucp_rsc_index_t tl_index)
 {
     return order[ucs_count_one_bits(tl_bitmap & UCS_MASK(tl_index))];
-}
-
-void ucp_wireup_msg_send_completion(void *request, ucs_status_t status)
-{
-    ucp_request_t *req = (ucp_request_t *)request - 1;
-    ucs_free((void*)req->send.buffer);
 }
 
 /*
@@ -93,14 +88,16 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
 
     ucs_assert(ep->cfg_index != (uint8_t)-1);
 
-    req = ucs_mpool_get(&ep->worker->req_mp);
+    /* We cannot allocate from memory pool because it's not thread safe
+     * and this function may be called from any thread
+     */
+    req = ucs_malloc(sizeof(*req), "wireup_msg_req");
     if (req == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    req->flags                   = UCP_REQUEST_FLAG_RELEASED;
+    req->flags                   = 0;
     req->send.ep                 = ep;
-    req->send.cb                 = ucp_wireup_msg_send_completion;
     req->send.wireup.type        = type;
     req->send.uct.func           = ucp_wireup_msg_progress;
 
