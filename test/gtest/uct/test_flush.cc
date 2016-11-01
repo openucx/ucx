@@ -342,6 +342,7 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
              it = reqs.erase(it);
              status = UCS_OK;
          } else {
+             ++count;
              ++it;
          }
          ASSERT_UCS_OK(status);
