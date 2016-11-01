@@ -5,7 +5,9 @@
 */
 
 #include "uct_p2p_test.h"
-
+extern "C" {
+#include <ucs/arch/atomic.h>
+}
 
 class uct_flush_test : public uct_test {
 public:
@@ -38,6 +40,7 @@ public:
 
             m_sender->connect(0, *m_receiver, 0);
         }
+        am_rx_count = 0;
     }
 
     static size_t pack_cb(void *dest, void *arg)
@@ -87,7 +90,7 @@ public:
     {
         const mapped_buffer *recvbuf = (const mapped_buffer *)arg;
         memcpy(recvbuf->ptr(), data, ucs_min(length, recvbuf->length()));
-        am_done = 1;
+        ucs_atomic_add32(&am_rx_count, 1);
         return UCS_OK;
     }
 
@@ -130,7 +133,7 @@ public:
         }
     }
 
-    virtual void test_flush_put_bcopy(flush_func_t flush) {
+    void test_flush_put_bcopy(flush_func_t flush) {
         const size_t length = 8;
         check_caps(UCT_IFACE_FLAG_PUT_SHORT);
         mapped_buffer sendbuf(length, SEED1, sender());
@@ -141,7 +144,13 @@ public:
         recvbuf.pattern_check(SEED3);
     }
 
-    virtual void test_flush_am_zcopy(flush_func_t flush) {
+    void wait_am(unsigned count) {
+        while (am_rx_count < count) {
+            short_progress_loop();
+        }
+    }
+
+    void test_flush_am_zcopy(flush_func_t flush) {
         const size_t length = 8;
         check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
         mapped_buffer sendbuf(length, SEED1, sender());
@@ -174,31 +183,27 @@ public:
 
         sender().destroy_ep(0);
 
-        short_progress_loop();
+        wait_am(1);
 
         uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
         recvbuf.pattern_check(SEED3);
     }
 
-    virtual void test_flush_am_disconnect(flush_func_t flush) {
+    void test_flush_am_disconnect(flush_func_t flush) {
         const size_t length = 8;
         check_caps(UCT_IFACE_FLAG_AM_BCOPY);
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(length, SEED2, receiver());
         sendbuf.pattern_fill(SEED3);
 
-        am_done = 0;
         uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, &recvbuf,
                                  UCT_AM_CB_FLAG_ASYNC);
         blocking_am_bcopy(sendbuf);
         (this->*flush)();
         sender().destroy_ep(0);
 
-        while (!am_done) {
-            short_progress_loop();
-        }
-
+        wait_am(1);
         uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
         recvbuf.pattern_check(SEED3);
@@ -250,10 +255,10 @@ protected:
         return **(m_entities.end() - 1);
     }
 
-    static int am_done;
+    static uint32_t am_rx_count;
 };
 
-int uct_flush_test::am_done = 0;
+uint32_t uct_flush_test::am_rx_count = 0;
 
 UCS_TEST_P(uct_flush_test, put_bcopy_flush_ep_no_comp) {
     test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
@@ -380,7 +385,7 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
 
      sender().destroy_ep(0);
 
-     short_progress_loop();
+     wait_am(count);
 
      uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
