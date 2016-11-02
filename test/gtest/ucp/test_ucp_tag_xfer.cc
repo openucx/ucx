@@ -7,8 +7,7 @@
 
 #include "test_ucp_tag.h"
 
-#include <ucp/dt/dt_contig.h>
-#include <ucp/dt/dt_iov.h>
+#include <ucp/dt/dt.h>
 
 #include <common/test_helpers.h>
 #include <iostream>

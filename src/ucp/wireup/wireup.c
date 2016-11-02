@@ -11,7 +11,6 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_worker.h>
-#include <ucp/dt/dt_contig.h>
 #include <ucp/tag/eager.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>

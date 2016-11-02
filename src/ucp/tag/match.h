@@ -8,9 +8,7 @@
 #define UCP_TAG_MATCH_H_
 
 #include <ucp/core/ucp_request.h>
-#include <ucp/dt/dt_contig.h>
-#include <ucp/dt/dt_iov.h>
-#include <ucp/dt/dt_generic.h>
+#include <ucp/dt/dt.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 
