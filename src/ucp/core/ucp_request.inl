@@ -69,19 +69,15 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status,
                           req, info->length);
 }
 
-static UCS_F_ALWAYS_INLINE size_t
-ucp_request_generic_dt_pack(ucp_request_t *req, void *dest, size_t length)
+static UCS_F_ALWAYS_INLINE
+void ucp_request_generic_dt_finish(ucp_request_t *req)
 {
-    ucp_dt_generic_t *dt = ucp_dt_generic(req->send.datatype);
-    return dt->ops.pack(req->send.state.dt.generic.state,
-                        req->send.state.offset, dest, length);
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_generic_dt_finish(ucp_request_t *req)
-{
-    ucp_dt_generic_t *dt = ucp_dt_generic(req->send.datatype);
-    return dt->ops.finish(req->send.state.dt.generic.state);
+    ucp_dt_generic_t *dt;
+    if (UCP_DATATYPE_GENERIC == (req->send.datatype & UCP_DATATYPE_CLASS_MASK)) {
+        dt = ucp_dt_generic(req->send.datatype);
+        ucs_assert(NULL != dt);
+        dt->ops.finish(req->send.state.dt.generic.state);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
