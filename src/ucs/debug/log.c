@@ -133,10 +133,12 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     /* flush the log file if the log_level of this message is fatal or error */
     if (level <= UCS_LOG_LEVEL_ERROR) {
         ucs_log_flush();
+        if (level <= UCS_LOG_LEVEL_FATAL) {
+            ucs_handle_error();
+        }
     }
 
     return UCS_LOG_FUNC_RC_CONTINUE;
-
 }
 
 void ucs_log_push_handler(ucs_log_func_t handler)

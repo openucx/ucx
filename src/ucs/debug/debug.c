@@ -17,6 +17,7 @@
 #include <execinfo.h>
 #include <dlfcn.h>
 #include <link.h>
+#include <dirent.h>
 #ifdef HAVE_DETAILED_BACKTRACE
 #  if HAVE_LIBIBERTY_H
 #    include <libiberty.h>
@@ -666,21 +667,58 @@ static void UCS_F_NOINLINE ucs_debug_freeze()
     }
 }
 
-static int ucs_debug_stop_exclude_thread = -1;
 static void ucs_debug_stop_handler(int signo)
 {
-    if (ucs_get_tid() == ucs_debug_stop_exclude_thread) {
-        return;
-    }
-
     ucs_debug_freeze();
 }
 
 static void ucs_debug_stop_other_threads()
 {
-    ucs_debug_stop_exclude_thread = ucs_get_tid();
+    static const char *task_dir = "/proc/self/task";
+    struct dirent *entry, *result;
+    ssize_t name_max;
+    DIR *dir;
+    int ret;
+    int tid;
+
+    dir = opendir(task_dir);
+    if (dir == NULL) {
+        ucs_log_fatal_error("Unable to open %s: %m", task_dir);
+        return;
+    }
+
     signal(SIGUSR1, ucs_debug_stop_handler);
-    kill(0, SIGUSR1);
+
+    name_max = ucs_max(255, pathconf(task_dir, _PC_NAME_MAX));
+    entry = alloca(ucs_offsetof(struct dirent, d_name) + name_max + 1);
+
+    for (;;) {
+        ret = readdir_r(dir, entry, &result);
+        if (ret < 0) {
+            ucs_log_fatal_error("Unable to read from %s: %m", task_dir);
+            break;
+        }
+
+        if (result == NULL) {
+            break;
+        }
+
+        if (!strncmp(entry->d_name, ".", 1)) {
+            continue;
+        }
+
+        tid = atoi(entry->d_name);
+        if ((tid == 0) || (tid == ucs_get_tid())) {
+            continue;
+        }
+
+        ret = ucs_tgkill(getpid(), tid, SIGUSR1);
+        if (ret < 0) {
+             break;
+        }
+    }
+
+    closedir(dir);
 }
 
 static ucs_status_t ucs_error_freeze()
@@ -918,7 +956,9 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "ucs_error_signal_handler") ||
            !strcmp(symbol, "ucs_debug_backtrace_create") ||
            !strcmp(symbol, "ucs_debug_show_innermost_source_file") ||
+           !strcmp(symbol, "ucs_log_default_handler") ||
            !strcmp(symbol, "__ucs_abort") ||
+           !strcmp(symbol, "__ucs_log") ||
            (address == ucs_debug_signal_restorer);
 }
 
