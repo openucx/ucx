@@ -26,10 +26,13 @@ protected:
                                                     bool sync);
 
     void test_xfer(xfer_func_t func, bool expected, bool sync);
+    void test_run_xfer(bool send_contig, bool recv_contig,
+                       bool expected, bool sync);
 
 private:
-    size_t do_xfer(const void *sendbuf, void *recvbuf, ucp_datatype_t dt,
-                   size_t count, bool expected, bool sync);
+    size_t do_xfer(const void *sendbuf, void *recvbuf, size_t count,
+                   ucp_datatype_t send_dt, ucp_datatype_t recv_dt,
+                   bool expected, bool sync);
 
     request* do_send(const void *sendbuf, size_t count, ucp_datatype_t dt, bool sync);
 
@@ -62,14 +65,70 @@ void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync)
     }
 }
 
+void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
+                                      bool expected, bool sync)
+{
+    static const size_t count = 1148544;
+    uint8_t *sendbuf, *recvbuf;
+    ucp_datatype_t send_dt, recv_dt;
+    ucs_status_t status;
+    size_t recvd;
+
+    dt_gen_start_count  = 0;
+    dt_gen_finish_count = 0;
+
+    if (send_contig) {
+        /* the sender has a contig datatype for the data buffer */
+        sendbuf = (uint8_t*)malloc(count * sizeof(*sendbuf));
+        for (unsigned i = 0; i < count; ++i) {
+             sendbuf[i] = i % 256;
+        }
+        send_dt = DATATYPE;
+    } else {
+        /* the sender has a generic datatype */
+        status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, &send_dt);
+        ASSERT_UCS_OK(status);
+        sendbuf = NULL;
+    }
+
+    if (recv_contig) {
+        /* the recv has a contig datatype for the data buffer */
+        recvbuf = (uint8_t*)malloc(count * sizeof(*recvbuf));
+        recv_dt = DATATYPE;
+    } else {
+        /* the receiver has a generic datatype */
+        status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, &recv_dt);
+        /* the recvbuf can be NULL because we only validate the received data in the
+         * unpack function - we don't copy it to the recvbuf */
+        ASSERT_UCS_OK(status);
+        recvbuf = NULL;
+    }
+
+    /* coverity[var_deref_model] */
+    recvd = do_xfer(&sendbuf[0], &recvbuf[0], count, send_dt, recv_dt, expected, sync);
+    EXPECT_EQ(count * sizeof(uint8_t), recvd);
+
+    if (send_contig) {
+        free(sendbuf);
+    } else {
+        ucp_dt_destroy(send_dt);
+    }
+
+    if (recv_contig) {
+        free(recvbuf);
+    } else {
+        ucp_dt_destroy(recv_dt);
+    }
+}
+
 void test_ucp_tag_xfer::test_xfer_contig(size_t size, bool expected, bool sync)
 {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf);
-
-    size_t recvd = do_xfer(&sendbuf[0], &recvbuf[0], size, DATATYPE, expected, sync);
+    size_t recvd = do_xfer(&sendbuf[0], &recvbuf[0], size, DATATYPE, DATATYPE,
+                           expected, sync);
     ASSERT_EQ(sendbuf.size(), recvd);
     EXPECT_TRUE(!memcmp(&sendbuf[0], &recvbuf[0], recvd));
 }
@@ -84,10 +143,10 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync)
     dt_gen_start_count  = 0;
     dt_gen_finish_count = 0;
 
-    status = ucp_dt_create_generic(&test_dt_ops, this, &dt);
+    status = ucp_dt_create_generic(&test_dt_uint32_ops, this, &dt);
     ASSERT_UCS_OK(status);
 
-    recvd = do_xfer(NULL, NULL, count, dt, expected, sync);
+    recvd = do_xfer(NULL, NULL, count, dt, dt, expected, sync);
     EXPECT_EQ(count * sizeof(uint32_t), recvd);
 
     EXPECT_EQ(2, dt_gen_start_count);
@@ -105,7 +164,8 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync)
 
     UCS_TEST_GET_BUFFER_DT_IOV(iov, iovcnt, sendbuf.data(), sendbuf.size(), 20);
 
-    size_t recvd = do_xfer(&iov, &recvbuf[0], iovcnt, DATATYPE_IOV, expected, sync);
+    size_t recvd = do_xfer(&iov, &recvbuf[0], iovcnt, DATATYPE_IOV, DATATYPE_IOV,
+                           expected, sync);
 
     ASSERT_EQ(sendbuf.size(), recvd);
     EXPECT_TRUE(!memcmp(sendbuf.data(), recvbuf.data(), recvd));
@@ -122,12 +182,12 @@ test_ucp_tag_xfer::do_send(const void *sendbuf, size_t count, ucp_datatype_t dt,
     }
 }
 
-size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf, size_t count,
-                                  ucp_datatype_t dt, bool expected, bool sync)
+size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
+                                  size_t count, ucp_datatype_t send_dt,
+                                  ucp_datatype_t recv_dt, bool expected, bool sync)
 {
     request *rreq, *sreq;
     size_t recvd;
-    ucp_datatype_t recv_dt = dt;
     size_t recv_count = count;
 
     if (UCP_DATATYPE_IOV == (recv_dt & UCP_DATATYPE_CLASS_MASK)) {
@@ -136,9 +196,9 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf, size_t cou
     }
     if (expected) {
         rreq = recv_nb(recvbuf, recv_count, recv_dt, RECV_TAG, RECV_MASK);
-        sreq = do_send(sendbuf, count, dt, sync);
+        sreq = do_send(sendbuf, count, send_dt, sync);
     } else {
-        sreq = do_send(sendbuf, count, dt, sync);
+        sreq = do_send(sendbuf, count, send_dt, sync);
         short_progress_loop();
         if (sync) {
             EXPECT_FALSE(sreq->completed);
@@ -209,6 +269,7 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_sync) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, true);
 }
 
+
 UCS_TEST_P(test_ucp_tag_xfer, iov_exp_sync) {
     if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
                                        (instead request) if send operation
@@ -220,6 +281,62 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_exp_sync) {
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_unexp_sync) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, true);
+}
+
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp, "RNDV_THRESH=1248576") {
+    test_run_xfer(true, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp, "RNDV_THRESH=1248576") {
+    test_run_xfer(false, false, true, false);
+
+}
+
+/* send_contig_recv_contig */
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp, "RNDV_THRESH=1248576") {
+    test_run_xfer(true, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync, "RNDV_THRESH=1248576") {
+    test_run_xfer(true, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync, "RNDV_THRESH=1248576") {
+    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
+                                       (instead request) if send operation
+                                       completed immediately */
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
+    test_run_xfer(true, false, true, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp, "RNDV_THRESH=1248576") {
+    test_run_xfer(true, false, false, false);
+}
+
+/* send_generic_recv_contig */
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp, "RNDV_THRESH=1248576") {
+    test_run_xfer(false, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync, "RNDV_THRESH=1248576") {
+    test_run_xfer(false, true, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync, "RNDV_THRESH=1248576") {
+    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
+                                       (instead request) if send operation
+                                       completed immediately */
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
+    test_run_xfer(false, true, true, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp, "RNDV_THRESH=1248576") {
+    test_run_xfer(false, true, false, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)

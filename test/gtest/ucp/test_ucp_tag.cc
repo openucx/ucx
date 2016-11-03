@@ -226,7 +226,7 @@ ucs_status_t test_ucp_tag::recv_req_b(void *buffer, size_t count, ucp_datatype_t
     return status;
 }
 
-void* test_ucp_tag::dt_start(size_t count)
+void* test_ucp_tag::dt_common_start(size_t count)
 {
     dt_gen_state *dt_state = new dt_gen_state;
     dt_state->count   = count;
@@ -236,23 +236,23 @@ void* test_ucp_tag::dt_start(size_t count)
     return dt_state;
 }
 
-void* test_ucp_tag::dt_start_pack(void *context, const void *buffer, size_t count)
+void* test_ucp_tag::dt_common_start_pack(void *context, const void *buffer, size_t count)
 {
-    return dt_start(count);
+    return dt_common_start(count);
 }
 
-void* test_ucp_tag::dt_start_unpack(void *context, void *buffer, size_t count)
+void* test_ucp_tag::dt_common_start_unpack(void *context, void *buffer, size_t count)
 {
-    return dt_start(count);
+    return dt_common_start(count);
 }
 
-size_t test_ucp_tag::dt_packed_size(void *state)
+size_t test_ucp_tag::dt_uint32_packed_size(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
     return dt_state->count * sizeof(uint32_t);
 }
 
-size_t test_ucp_tag::dt_pack(void *state, size_t offset, void *dest, size_t max_length)
+size_t test_ucp_tag::dt_uint32_pack(void *state, size_t offset, void *dest, size_t max_length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
     uint32_t *p = (uint32_t*)dest;
@@ -272,7 +272,7 @@ size_t test_ucp_tag::dt_pack(void *state, size_t offset, void *dest, size_t max_
     return count * sizeof(uint32_t);
 }
 
-ucs_status_t test_ucp_tag::dt_unpack(void *state, size_t offset, const void *src,
+ucs_status_t test_ucp_tag::dt_uint32_unpack(void *state, size_t offset, const void *src,
                                      size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
@@ -288,13 +288,14 @@ ucs_status_t test_ucp_tag::dt_unpack(void *state, size_t offset, const void *src
         uint32_t actual   = ((uint32_t*)src)[i];
         if (actual != expected) {
             UCS_TEST_ABORT("Invalid data at index " << i << ". expected: " <<
-                           expected << " actual: " << actual << ".");
+                           expected << " actual: " << actual << " offset: " <<
+                           offset << ".");
         }
     }
     return UCS_OK;
 }
 
-void test_ucp_tag::dt_finish(void *state)
+void test_ucp_tag::dt_common_finish(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
     --dt_state->started;
@@ -303,16 +304,71 @@ void test_ucp_tag::dt_finish(void *state)
     delete dt_state;
 }
 
+size_t test_ucp_tag::dt_uint8_packed_size(void *state)
+{
+    dt_gen_state *dt_state = (dt_gen_state*)state;
+    return dt_state->count;
+}
+
+size_t test_ucp_tag::dt_uint8_pack(void *state, size_t offset, void *dest, size_t max_length)
+{
+    dt_gen_state *dt_state = (dt_gen_state*)state;
+    uint8_t *p = (uint8_t*)dest;
+    uint32_t count;
+
+    EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
+    EXPECT_EQ(1, dt_state->started);
+    EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
+
+    ucs_assert((offset % sizeof(uint8_t)) == 0);
+
+    count = ucs_min(max_length, dt_state->count - offset );
+    for (unsigned i = 0; i < count; ++i) {
+        p[i] = offset + i;
+    }
+    return count * sizeof(uint8_t);
+}
+
+ucs_status_t test_ucp_tag::dt_uint8_unpack(void *state, size_t offset, const void *src,
+                                           size_t length)
+{
+    dt_gen_state *dt_state = (dt_gen_state*)state;
+
+    EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
+    EXPECT_EQ(1, dt_state->started);
+    EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
+
+    for (unsigned i = 0; i < length; ++i) {
+        uint8_t expected = offset + i;
+        uint8_t actual   = ((uint8_t*)src)[i];
+        if (actual != expected) {
+            UCS_TEST_ABORT("Invalid data at index " << i << ". expected: " <<
+                           expected << " actual: " << actual << " offset: " <<
+                           offset << ".");
+        }
+    }
+    return UCS_OK;
+}
+
 const ucp_datatype_t test_ucp_tag::DATATYPE     = ucp_dt_make_contig(1);
 const ucp_datatype_t test_ucp_tag::DATATYPE_IOV = ucp_dt_make_iov();
 
-ucp_generic_dt_ops test_ucp_tag::test_dt_ops = {
-    test_ucp_tag::dt_start_pack,
-    test_ucp_tag::dt_start_unpack,
-    test_ucp_tag::dt_packed_size,
-    test_ucp_tag::dt_pack,
-    test_ucp_tag::dt_unpack,
-    test_ucp_tag::dt_finish
+ucp_generic_dt_ops test_ucp_tag::test_dt_uint32_ops = {
+    test_ucp_tag::dt_common_start_pack,
+    test_ucp_tag::dt_common_start_unpack,
+    test_ucp_tag::dt_uint32_packed_size,
+    test_ucp_tag::dt_uint32_pack,
+    test_ucp_tag::dt_uint32_unpack,
+    test_ucp_tag::dt_common_finish
+};
+
+ucp_generic_dt_ops test_ucp_tag::test_dt_uint8_ops = {
+    test_ucp_tag::dt_common_start_pack,
+    test_ucp_tag::dt_common_start_unpack,
+    test_ucp_tag::dt_uint8_packed_size,
+    test_ucp_tag::dt_uint8_pack,
+    test_ucp_tag::dt_uint8_unpack,
+    test_ucp_tag::dt_common_finish
 };
 
 int test_ucp_tag::dt_gen_start_count = 0;
