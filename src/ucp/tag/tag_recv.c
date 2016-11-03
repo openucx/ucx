@@ -81,13 +81,24 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
     req->flags = UCP_REQUEST_FLAG_EXPECTED | UCP_REQUEST_FLAG_RECV | req_flags;
     req->recv.state.offset = 0;
 
-    if ((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC) {
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_IOV:
+        req->recv.state.dt.iov.iov_offset    = 0;
+        req->recv.state.dt.iov.iovcnt_offset = 0;
+        break;
+
+    case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
         req->recv.state.dt.generic.state = dt_gen->ops.start_unpack(dt_gen->context,
                                                                     buffer, count);
         ucs_debug("req %p buffer %p count %zu dt_gen state=%p", req, buffer, count,
                   req->recv.state.dt.generic.state);
+        break;
+
+    default:
+        break;
     }
+
     if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.info.sender_tag = 0;
     }

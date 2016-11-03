@@ -157,14 +157,16 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync)
 
 void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync)
 {
+    const size_t iovcnt = 20;
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    UCS_TEST_GET_BUFFER_DT_IOV(iov, iovcnt, sendbuf.data(), sendbuf.size(), 20);
+    UCS_TEST_GET_BUFFER_DT_IOV(send_iov, send_iovcnt, sendbuf.data(), sendbuf.size(), iovcnt);
+    UCS_TEST_GET_BUFFER_DT_IOV(recv_iov, recv_iovcnt, recvbuf.data(), recvbuf.size(), iovcnt);
 
-    size_t recvd = do_xfer(&iov, &recvbuf[0], iovcnt, DATATYPE_IOV, DATATYPE_IOV,
+    size_t recvd = do_xfer(&send_iov, &recv_iov, iovcnt, DATATYPE_IOV, DATATYPE_IOV,
                            expected, sync);
 
     ASSERT_EQ(sendbuf.size(), recvd);
@@ -190,10 +192,6 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
     size_t recvd;
     size_t recv_count = count;
 
-    if (UCP_DATATYPE_IOV == (recv_dt & UCP_DATATYPE_CLASS_MASK)) {
-        recv_dt = DATATYPE;
-        recv_count = ucp_dt_iov_length((const ucp_dt_iov_t *)sendbuf, count);
-    }
     if (expected) {
         rreq = recv_nb(recvbuf, recv_count, recv_dt, RECV_TAG, RECV_MASK);
         sreq = do_send(sendbuf, count, send_dt, sync);

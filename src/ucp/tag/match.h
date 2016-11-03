@@ -85,6 +85,18 @@ ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
         memcpy(buffer + offset, recv_data, recv_length);
         return UCS_OK;
 
+    case UCP_DATATYPE_IOV:
+        buffer_size = ucp_dt_iov_scatter(buffer, count, recv_data, recv_length,
+                                         &state->dt.iov.iov_offset,
+                                         &state->dt.iov.iovcnt_offset);
+        if (ucs_unlikely(recv_length > buffer_size)) {
+            ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu"
+                      " iovcnt %zu iovcnt_offset %zu",
+                      recv_length, offset, buffer_size, count, state->dt.iov.iovcnt_offset);
+            return UCS_ERR_MESSAGE_TRUNCATED;
+        }
+        return UCS_OK;
+
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
 

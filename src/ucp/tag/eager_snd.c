@@ -33,7 +33,7 @@ size_t ucp_tag_pack_eager_dt_copy(void *dest, const void *src, ucp_frag_state_t 
         break;
 
     case UCP_DATATYPE_IOV:
-        ucp_dt_iov_memcpy(dest, src, length, &state->dt.iov.iov_offset,
+        ucp_dt_iov_gather(dest, src, length, &state->dt.iov.iov_offset,
                           &state->dt.iov.iovcnt_offset);
         result_len = length;
         break;
