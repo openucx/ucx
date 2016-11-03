@@ -37,7 +37,7 @@ if HAVE_GTEST
 SUBDIRS += test/gtest
 endif
 
-if HAVE_MPI
+if HAVE_MPICC
 SUBDIRS += test/mpi
 endif
 
