@@ -698,6 +698,11 @@ pid_t ucs_get_tid(void)
     return syscall(SYS_gettid);
 }
 
+int ucs_tgkill(int tgid, int tid, int sig)
+{
+    return syscall(SYS_tgkill, tgid, tid, sig);
+}
+
 double ucs_get_cpuinfo_clock_freq(const char *mhz_header)
 {
     double mhz = 0.0;

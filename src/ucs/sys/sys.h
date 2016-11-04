@@ -289,6 +289,12 @@ pid_t ucs_get_tid(void);
 
 
 /**
+ * Send signal to a thread.
+ */
+int ucs_tgkill(int tgid, int tid, int sig);
+
+
+/**
  * Get CPU frequency from /proc/cpuinfo. Return value is clocks-per-second.
  *
  * @param mhz_header String in /proc/cpuinfo which precedes the clock speed number.
