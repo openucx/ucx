@@ -22,6 +22,11 @@ DISTCLEANFILES = build_config.h
 build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
 
+ucx_info_CFLAGS =
+if HAVE_CRAY_UGNI
+ucx_info_CFLAGS += $(CRAY_UGNI_CFLAGS)
+endif
+
 ucx_info_SOURCES  = \
 	build_info.c \
 	cfg_info.c \
