@@ -399,7 +399,7 @@ UCS_TEST_P(test_ucp_wireup, connect_disconnect) {
     if (!is_loopback()) {
         receiver().connect(&sender());
     }
-    sender().disconnect();
+    test_ucp_wireup::disconnect(sender().revoke_ep());
     if (!is_loopback()) {
         receiver().disconnect();
     }
