@@ -838,14 +838,25 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  * by calling @ref ucp_worker_signal .
  *
  * @code {.c}
- * status = ucp_worker_get_efd (worker, &fd);
- * while (1) {
- *     ucp_worker_arm (worker);
- *     poll (&fd, nfds, timeout);
- *     <handle event>
+ * void application_initialization() {
+ *     ...
+ *     status = ucp_worker_get_efd(worker, &fd);
+ *     ...
  * }
- *
- * - The code in this example, could be replaced by ucp_worker_wait.
+ * void process_comminucation() {
+ *     for (;;) {
+ *         ucp_worker_progress(worker);
+ *         check_for_events();              // receive() operations
+ *         status = ucp_worker_arm(worker); // arm the worker and clean-up fd
+ *         if (UCS_OK == status) {
+ *             poll(&fds, nfds, timeout);   // wait for events
+ *         } else if (UCS_ERR_BUSY == status) {
+ *             continue;                    // poll for more events
+ *         } else {
+ *             abort();
+ *         }
+ *     }
+ * }
  * @endcode
  *
  * @note UCP @ref ucp_feature "features" have to be triggered
@@ -853,7 +864,14 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  *
  * @param [in]  worker    Worker of notified events.
  *
- * @return Error code as defined by @ref ucs_status_t
+ * @return ::UCS_OK        The operation completed successfully. File descriptor
+ *                         will be signaled by new events.
+ * @return ::UCS_ERR_BUSY  There are unprocessed events which prevent the
+ *                         file descriptor from being armed. These events should
+ *                         be removed by calling @ref ucp_worker_progress().
+ *                         The operation is not completed. File descriptor
+ *                         will not be signaled by new events.
+ * @return @ref ucs_status_t "Other" different error codes in case of issues.
  */
 ucs_status_t ucp_worker_arm(ucp_worker_h worker);
 

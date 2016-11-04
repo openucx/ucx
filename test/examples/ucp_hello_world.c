@@ -136,6 +136,10 @@ static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
     }
     /* Need to prepare ucp_worker before epoll_wait */
     status = ucp_worker_arm(ucp_worker);
+    if (status == UCS_ERR_BUSY) { /* some events are arrived already */
+        ret = UCS_OK;
+        goto err_fd;
+    }
     if (status != UCS_OK) {
         goto err_fd;
     }

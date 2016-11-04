@@ -60,7 +60,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     }
 
     ASSERT_EQ(poll(&polled, 1, 1), 1);
-    ASSERT_UCS_OK(ucp_worker_arm(recv_worker));
+    EXPECT_EQ(ucp_worker_arm(recv_worker), UCS_ERR_BUSY);
 
     uint64_t recv_data = 0;
     req = ucp_tag_recv_nb(receiver().worker(), &recv_data, sizeof(recv_data),

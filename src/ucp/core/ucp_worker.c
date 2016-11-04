@@ -674,7 +674,9 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     }
 
     status = ucp_worker_arm(worker);
-    if (status != UCS_OK) {
+    if (UCS_ERR_BUSY == status) { /* if UCS_ERR_BUSY returned - no poll() must called */
+        return UCS_OK;
+    } else if (status != UCS_OK) {
         return status;
     }
 

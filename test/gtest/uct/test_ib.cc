@@ -443,7 +443,7 @@ UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
     ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
 
     status = uct_wakeup_efd_arm(wakeup_handle);
-    ASSERT_EQ(status, UCS_OK);
+    ASSERT_EQ(status, UCS_ERR_BUSY);
 
     /* make sure [send|recv]_cq handled properly */
     check_send_cq(m_e1->iface(), 1);
@@ -482,7 +482,7 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
     ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
 
     /* Acknowledge all the requests */
-    status = uct_wakeup_efd_arm(wakeup_handle);
+    status = uct_wakeup_wait(wakeup_handle);
     ASSERT_EQ(status, UCS_OK);
 
     /* make sure [send|recv]_cq handled properly */
