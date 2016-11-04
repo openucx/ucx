@@ -12,7 +12,6 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.inl>
-#include <ucp/dt/dt_generic.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/instrument.h>
 #include <string.h>
@@ -219,8 +218,8 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb",
-                          req, ucp_contig_dt_length(datatype, count));
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb", req,
+                          ucp_dt_length(datatype, count, buffer, &req->send.state));
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
 
@@ -245,8 +244,8 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_sync_nb",
-                          req, ucp_contig_dt_length(datatype, count));
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_sync_nb", req,
+                          ucp_dt_length(datatype, count, buffer, &req->send.state));
 
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);

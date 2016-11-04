@@ -25,6 +25,7 @@ noinst_HEADERS = \
 	core/ucp_request.h \
 	core/ucp_request.inl \
 	core/ucp_worker.h \
+	dt/dt.h \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
 	dt/dt_generic.h \

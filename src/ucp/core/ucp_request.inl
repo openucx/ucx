@@ -9,7 +9,7 @@
 #include "ucp_ep.inl"
 
 #include <ucp/core/ucp_worker.h>
-#include <ucp/dt/dt_generic.h>
+#include <ucp/dt/dt.h>
 #include <ucs/debug/instrument.h>
 #include <ucs/datastruct/mpool.inl>
 #include <inttypes.h>

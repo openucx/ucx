@@ -9,6 +9,7 @@
 #define UCP_DT_CONTIG_H_
 
 #include <ucp/api/ucp.h>
+#include <ucs/debug/log.h>
 
 
 /**
@@ -30,6 +31,7 @@ static inline size_t ucp_contig_dt_elem_size(ucp_datatype_t datatype)
 
 static inline size_t ucp_contig_dt_length(ucp_datatype_t datatype, size_t count)
 {
+    ucs_assert(UCP_DATATYPE_CONTIG == (datatype & UCP_DATATYPE_CLASS_MASK));
     return count * ucp_contig_dt_elem_size(datatype);
 }
 

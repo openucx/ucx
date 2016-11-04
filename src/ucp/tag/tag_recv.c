@@ -167,8 +167,8 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
     ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
                               UCP_REQUEST_FLAG_EXTERNAL);
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr",
-                          req, ucp_contig_dt_length(datatype, count));
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr", req,
+                          ucp_dt_length(datatype, count, buffer, &req->recv.state));
 
     req->recv.cb  = NULL;
     status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
@@ -194,8 +194,8 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb",
-                          req, ucp_contig_dt_length(datatype, count));
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb", req,
+                          ucp_dt_length(datatype, count, buffer, &req->recv.state));
 
     req->recv.cb = cb;
 
@@ -228,8 +228,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb",
-                          req, ucp_contig_dt_length(datatype, count));
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb", req,
+                          ucp_dt_length(datatype, count, buffer, &req->recv.state));
 
     req->recv.cb       = cb;
 
