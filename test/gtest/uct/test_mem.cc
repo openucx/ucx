@@ -57,6 +57,7 @@ UCS_TEST_P(test_mem, pd_alloc) {
     ucs_status_t status;
     uct_md_h pd;
     uct_md_config_t *md_config;
+    int nonblock;
 
     status = uct_query_md_resources(&md_resources, &num_md_resources);
     ASSERT_UCS_OK(status);
@@ -77,18 +78,21 @@ UCS_TEST_P(test_mem, pd_alloc) {
         status = uct_md_query(pd, &md_attr);
         ASSERT_UCS_OK(status);
 
-        status = uct_mem_alloc(min_length, 0, methods, 3, &pd, 1, "test", &mem);
-        ASSERT_UCS_OK(status);
+        for (nonblock = 0; nonblock <= 1; ++nonblock) {
+            int flags = nonblock ? UCT_MD_MEM_FLAG_NONBLOCK : 0;
+            status = uct_mem_alloc(min_length, flags, methods, 3, &pd, 1, "test", &mem);
+            ASSERT_UCS_OK(status);
 
-        if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
-            EXPECT_EQ(UCT_ALLOC_METHOD_MD, mem.method);
-        } else {
-            EXPECT_NE(UCT_ALLOC_METHOD_MD, mem.method);
+            if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
+                EXPECT_EQ(UCT_ALLOC_METHOD_MD, mem.method);
+            } else {
+                EXPECT_NE(UCT_ALLOC_METHOD_MD, mem.method);
+            }
+
+            check_mem(mem, min_length);
+
+            uct_mem_free(&mem);
         }
-
-        check_mem(mem, min_length);
-
-        uct_mem_free(&mem);
 
         uct_md_close(pd);
     }

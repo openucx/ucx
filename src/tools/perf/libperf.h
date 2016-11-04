@@ -65,10 +65,11 @@ typedef enum {
 
 
 enum ucx_perf_test_flags {
-    UCX_PERF_TEST_FLAG_VALIDATE   = UCS_BIT(1), /* Validate data. Affects performance. */
-    UCX_PERF_TEST_FLAG_ONE_SIDED  = UCS_BIT(2), /* For test which involve only one side,
-                                                   the responder would not call progress(). */
-    UCX_PERF_TEST_FLAG_VERBOSE    = UCS_BIT(3)  /* Print error messages */
+    UCX_PERF_TEST_FLAG_VALIDATE     = UCS_BIT(1), /* Validate data. Affects performance. */
+    UCX_PERF_TEST_FLAG_ONE_SIDED    = UCS_BIT(2), /* For test which involve only one side,
+                                                     the responder would not call progress(). */
+    UCX_PERF_TEST_FLAG_MAP_NONBLOCK = UCS_BIT(3), /* Map memory in non-blocking mode */
+    UCX_PERF_TEST_FLAG_VERBOSE      = UCS_BIT(7)  /* Print error messages */
 };
 
 enum {
