@@ -16,11 +16,11 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
                        uct_pack_callback_t pack_cb)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep = req->send.ep;
+    ucp_ep_t *ep       = req->send.ep;
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb, req);
+    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb, req);
     if (packed_len < 0) {
         return packed_len;
     }
@@ -31,14 +31,14 @@ ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
 static UCS_F_ALWAYS_INLINE
 ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                    uint8_t am_id_middle, uint8_t am_id_last,
-                                   size_t hdr_size_first, size_t hdr_size_middle,
+                                   size_t hdr_size_middle,
                                    uct_pack_callback_t pack_first,
                                    uct_pack_callback_t pack_middle,
                                    uct_pack_callback_t pack_last)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep = req->send.ep;
-    size_t max_middle = ucp_ep_config(ep)->max_am_bcopy - hdr_size_middle;
+    ucp_ep_t *ep       = req->send.ep;
+    size_t max_middle  = ucp_ep_config(ep)->max_am_bcopy - hdr_size_middle;
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;

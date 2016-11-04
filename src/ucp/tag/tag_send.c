@@ -42,9 +42,9 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
     } else if (length < zcopy_thresh) {
         /* bcopy */
         if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
-            req->send.uct.func = proto->contig_bcopy_single;
+            req->send.uct.func = proto->bcopy_single;
         } else {
-            req->send.uct.func = proto->contig_bcopy_multi;
+            req->send.uct.func = proto->bcopy_multi;
         }
     } else {
         /* eager zcopy */
@@ -84,9 +84,9 @@ static ucs_status_t ucp_tag_req_start_iov(ucp_request_t *req, size_t count,
 
     /* bcopy */
     if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
-        req->send.uct.func = proto->contig_bcopy_single;
+        req->send.uct.func = proto->bcopy_single;
     } else {
-        req->send.uct.func = proto->contig_bcopy_multi;
+        req->send.uct.func = proto->bcopy_multi;
     }
     return UCS_OK;
 }
@@ -107,9 +107,9 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     req->send.length = length = dt_gen->ops.packed_size(state);
 
     if (length <= config->max_am_bcopy - progress->only_hdr_size) {
-        req->send.uct.func = progress->generic_single;
+        req->send.uct.func = progress->bcopy_single;
     } else {
-        req->send.uct.func = progress->generic_multi;
+        req->send.uct.func = progress->bcopy_multi;
     }
 }
 
