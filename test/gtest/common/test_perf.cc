@@ -250,22 +250,34 @@ void test_perf::run_test(const test_spec& test, unsigned flags, double min, doub
     }
     cpus.resize(2);
 
-    char result_str[200] = {0};
-    test_result result = run_multi_threaded(test, flags, tl_name, dev_name, cpus);
-    if ((result.status == UCS_ERR_UNSUPPORTED) ||
-        (result.status == UCS_ERR_UNREACHABLE))
-    {
-        return;
+    for (int i = 0; i < 5; ++i) {
+        test_result result = run_multi_threaded(test, flags, tl_name, dev_name,
+                                                cpus);
+        if ((result.status == UCS_ERR_UNSUPPORTED) ||
+            (result.status == UCS_ERR_UNREACHABLE))
+        {
+            return; /* Skipped */
+        }
+
+        ASSERT_UCS_OK(result.status);
+
+        double value = *(double*)( ((char*)&result.result) + test.field_offset) *
+                        test.norm;
+        char result_str[200] = {0};
+        snprintf(result_str, sizeof(result_str) - 1, "%s %25s : %.3f %s",
+                 dev_name.c_str(), test.title, value, test.units);
+        if (i == 0) {
+            UCS_TEST_MESSAGE << result_str;
+        } else {
+            UCS_TEST_MESSAGE << result_str << " (attempt " << i << ")";
+        }
+
+        if ((value >= min) && (value <= max)) {
+            return; /* Success */
+        }
     }
 
-    ASSERT_UCS_OK(result.status);
-
-    double value = *(double*)( ((char*)&result.result) + test.field_offset) * test.norm;
-    snprintf(result_str, sizeof(result_str) - 1, "%s %25s : %.3f %s",
-             dev_name.c_str(), test.title, value, test.units);
-    UCS_TEST_MESSAGE << result_str;
-
-    EXPECT_GE(value, min);
-    EXPECT_LT(value, max);
+    ADD_FAILURE() << "Invalid " << test.title << " performance, expected: " <<
+                    std::setprecision(3) << min << ".." << max;
 }
 

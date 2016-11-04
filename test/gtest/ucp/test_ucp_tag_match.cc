@@ -62,7 +62,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_exp_medium) {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
@@ -98,7 +98,7 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
 
     /* 2nd send */
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
@@ -140,8 +140,8 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") 
         std::vector<char> recvbuf1(size, 0);
         std::vector<char> recvbuf2(size, 0);
 
-        ucs::fill_random(sendbuf1.begin(), sendbuf1.end());
-        ucs::fill_random(sendbuf2.begin(), sendbuf2.end());
+        ucs::fill_random(sendbuf1);
+        ucs::fill_random(sendbuf2);
 
         /* Two sends with different tags */
 
@@ -219,7 +219,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     request *my_recv_req;
     my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
@@ -383,7 +383,7 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     /* sender - send the rts*/
     my_send_req = send_sync_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
@@ -420,7 +420,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
         UCS_TEST_SKIP_R("loop-back unsupported");
     }
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     /* receiver - put the receive request into expected */
     my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
@@ -462,7 +462,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
         UCS_TEST_SKIP_R("loop-back unsupported");
     }
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
@@ -502,7 +502,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
         UCS_TEST_SKIP_R("loop-back unsupported");
     }
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
@@ -535,7 +535,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
         UCS_TEST_SKIP_R("loop-back unsupported");
     }
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     /* receiver - put the receive request into expected */
     my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);

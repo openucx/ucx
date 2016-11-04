@@ -67,9 +67,9 @@ void test_ucp_tag_xfer::test_xfer_contig(size_t size, bool expected, bool sync)
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
-    size_t recvd = do_xfer(&sendbuf[0], &recvbuf[0], size, DATATYPE, expected, sync);
+    ucs::fill_random(sendbuf);
 
+    size_t recvd = do_xfer(&sendbuf[0], &recvbuf[0], size, DATATYPE, expected, sync);
     ASSERT_EQ(sendbuf.size(), recvd);
     EXPECT_TRUE(!memcmp(&sendbuf[0], &recvbuf[0], recvd));
 }

@@ -52,7 +52,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     for (int i = 0; i < max_iter; ++i) {
         expected_data[i].resize(size);
 
-        ucs::fill_random(expected_data[i].begin(), expected_data[i].end());
+        ucs::fill_random(expected_data[i]);
 
         ucs_assert(size * i + alignment <= memheap_size);
 
@@ -139,7 +139,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
         std::string expected_data;
         expected_data.resize(size);
 
-        ucs::fill_random(expected_data.begin(), expected_data.end());
+        ucs::fill_random(expected_data);
 
         (this->*send)(&sender(), size, (void*)((uintptr_t)memheap + offset),
                       rkey, expected_data);

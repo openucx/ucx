@@ -95,6 +95,14 @@ static void fill_random(OutputIterator begin, OutputIterator end) {
     }
 }
 
+void fill_random(void *data, size_t size);
+
+/* C can be vector or string */
+template <typename C>
+static void fill_random(C& c) {
+    fill_random(&c[0], sizeof(c[0]) * c.size());
+}
+
 template <typename T>
 static inline T random_upper() {
   return static_cast<T>((rand() / static_cast<double>(RAND_MAX)) * std::numeric_limits<T>::max());

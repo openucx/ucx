@@ -32,7 +32,7 @@ public:
         std::vector<char> sendbuf(s_size, 0);
         std::vector<char> recvbuf(r_size, 0);
 
-        ucs::fill_random(sendbuf.begin(), sendbuf.end());
+        ucs::fill_random(sendbuf);
 
         message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff,
                                    is_recv_msg, &info);
@@ -140,7 +140,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+    ucs::fill_random(sendbuf);
 
     message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff, 1, &info);
     EXPECT_TRUE(message == NULL);

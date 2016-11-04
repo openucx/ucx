@@ -3,11 +3,12 @@
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
 
-if HAVE_MPI
+if HAVE_MPICC
 ucx_perftest_CC = $(MPICC)
 else
 ucx_perftest_CC = $(CC)

@@ -41,6 +41,22 @@ std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec) {
     return os << std::endl;
 }
 
+void fill_random(void *data, size_t size)
+{
+    if (ucs::test_time_multiplier() > 1) {
+        memset(data, 0, size);
+        return;
+    }
+
+    uint64_t seed = rand();
+    for (size_t i = 0; i < size / sizeof(uint64_t); ++i) {
+        ((uint64_t*)data)[i] = seed;
+        seed = seed * 10 + 17;
+    }
+    size_t remainder = size % sizeof(uint64_t);
+    memset((char*)data + size - remainder, 0xab, remainder);
+}
+
 scoped_setenv::scoped_setenv(const char *name, const char *value) : m_name(name) {
     if (getenv(name)) {
         m_old_value = getenv(m_name.c_str());
