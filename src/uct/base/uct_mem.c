@@ -32,7 +32,7 @@ const char *uct_alloc_method_names[] = {
 };
 
 
-ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
+ucs_status_t uct_mem_alloc(size_t min_length, unsigned flags, uct_alloc_method_t *methods,
                            unsigned num_methods, uct_md_h *mds, unsigned num_mds,
                            const char *alloc_name, uct_allocated_memory_t *mem)
 {
@@ -81,7 +81,7 @@ ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
                  * allocation.
                  */
                 alloc_length = min_length;
-                status = uct_md_mem_alloc(md, &alloc_length, &address,
+                status = uct_md_mem_alloc(md, &alloc_length, &address, flags,
                                           alloc_name, &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s: %s",
@@ -187,14 +187,14 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
     }
 }
 
-ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length,
+ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned flags,
                                  const char *name, uct_allocated_memory_t *mem)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     uct_md_attr_t md_attr;
     ucs_status_t status;
 
-    status = uct_mem_alloc(length, iface->config.alloc_methods,
+    status = uct_mem_alloc(length, 0, iface->config.alloc_methods,
                            iface->config.num_alloc_methods, &iface->md, 1,
                            name, mem);
     if (status != UCS_OK) {
@@ -217,7 +217,8 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length,
             goto err_free;
         }
 
-        status = uct_md_mem_reg(iface->md, mem->address, mem->length, &mem->memh);
+        status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
+                                &mem->memh);
         if (status != UCS_OK) {
             goto err_free;
         }
@@ -257,7 +258,8 @@ static ucs_status_t uct_iface_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
     size_t length;
 
     length = sizeof(*hdr) + *size_p;
-    status = uct_iface_mem_alloc(&iface->super, length, ucs_mpool_name(mp), &mem);
+    status = uct_iface_mem_alloc(&iface->super, length, 0, ucs_mpool_name(mp),
+                                 &mem);
     if (status != UCS_OK) {
         return status;
     }

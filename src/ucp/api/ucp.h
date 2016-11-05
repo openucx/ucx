@@ -171,6 +171,22 @@ enum ucp_dt_type {
 
 
 /**
+ * @ingroup UCP_MEM
+ * @brief UCP memory mapping flags.
+ *
+ * The enumeration list describes the memory mapping flags supported by @ref
+ * ucp_mem_map() function.
+ */
+enum {
+    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0) /**< Complete the mapping faster, possibly by
+                                           not populating the pages in the mapping
+                                           up-front, and mapping them later when
+                                           they are accessed by communication
+                                           routines. */
+};
+
+
+/**
  * @ingroup UCP_DATATYPE
  * @brief Generate an identifier for contiguous data type.
  *
@@ -998,7 +1014,7 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  *                            mapped (registered) memory segment and returns its
  *                            address in this argument.
  * @param [in]     length     Length (in bytes) to allocate or map (register).
- * @param [in]     flags      Allocation flags (currently reserved - set to 0).
+ * @param [in]     flags      Allocation flags, UCP_MEM_MAP_xx.
  * @param [out]    memh_p     UCP @ref ucp_mem_h "handle" for the allocated
  *                            segment.
  *

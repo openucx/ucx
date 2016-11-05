@@ -26,7 +26,7 @@ static ucs_status_t uct_self_query_md_resources(uct_md_resource_desc_t **resourc
 }
 
 static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
-                                     uct_mem_h *memh_p)
+                                     unsigned flags, uct_mem_h *memh_p)
 {
     /* We have to emulate memory registration. Return dummy pointer */
     *memh_p = (void *) 0xdeadbeef;

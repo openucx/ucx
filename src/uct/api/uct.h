@@ -337,6 +337,19 @@ enum {
 
 /**
  * @ingroup UCT_MD
+ * @brief  Memory domain capability flags.
+ */
+enum {
+    UCT_MD_MEM_FLAG_NONBLOCK = UCS_BIT(0), /**< Hint to perform non-blocking
+                                                allocation/registration: page
+                                                mapping may be deferred until
+                                                it is accessed by the CPU or a
+                                                transport. */
+};
+
+
+/**
+ * @ingroup UCT_MD
  * @brief  Memory domain attributes.
  *
  * This structure defines the attributes of a Memory Domain which includes
@@ -847,7 +860,7 @@ ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
 /**
  * @ingroup UCT_RESOURCE
  */
-ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length,
+ucs_status_t uct_iface_mem_alloc(uct_iface_h iface, size_t length, unsigned flags,
                                  const char *name, uct_allocated_memory_t *mem);
 
 void uct_iface_mem_free(const uct_allocated_memory_t *mem);
@@ -996,12 +1009,14 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
  *                              return, filled with the actual size that was allocated,
  *                              which may be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
+ * @param [in]     flags       Memory allocation flags, UCT_MD_MEM_FLAG_xx.
  * @param [in]     name        Name of the allocated region, used to track memory
  *                              usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              const char *name, uct_mem_h *memh_p);
+                              unsigned flags, const char *name, uct_mem_h *memh_p);
+
 
 /**
  * @ingroup UCT_MD
@@ -1023,10 +1038,11 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  * @param [in]     md        Memory domain to register memory on.
  * @param [out]    address   Memory to register.
  * @param [in]     length    Size of memory to register. Must be >0.
+ * @param [in]     flags     Memory allocation flags, UCT_MD_MEM_FLAG_xx.
  * @param [out]    memh_p    Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
-                            uct_mem_h *memh_p);
+                            unsigned flags, uct_mem_h *memh_p);
 
 
 /**
@@ -1052,6 +1068,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  *
  * @param [in]     min_length  Minimal size to allocate. The actual size may be
  *                             larger, for example because of alignment restrictions.
+ * @param [in]     flags       Memory allocation flags, UCT_MD_MEM_FLAG_xx.
  * @param [in]     methods     Array of memory allocation methods to attempt.
  * @param [in]     num_methods Length of 'methods' array.
  * @param [in]     mds         Array of memory domains to attempt to allocate
@@ -1063,7 +1080,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [out]    mem         In case of success, filled with information about
  *                              the allocated memory. @ref uct_allocated_memory_t.
  */
-ucs_status_t uct_mem_alloc(size_t min_length, uct_alloc_method_t *methods,
+ucs_status_t uct_mem_alloc(size_t min_length, unsigned flags, uct_alloc_method_t *methods,
                            unsigned num_methods, uct_md_h *mds, unsigned num_mds,
                            const char *name, uct_allocated_memory_t *mem);
 

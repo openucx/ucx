@@ -237,7 +237,7 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
     status = uct_md_query(m_pd, &md_attr);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_mem_alloc(m_iface, length, "test", mem);
+    status = uct_iface_mem_alloc(m_iface, length, 0, "test", mem);
     ASSERT_UCS_OK(status);
 
     rkey_buffer = malloc(md_attr.rkey_packed_size);

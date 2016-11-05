@@ -23,7 +23,7 @@ ucs_config_field_t uct_mm_md_config_table[] = {
 };
 
 ucs_status_t uct_mm_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              uct_mem_h *memh_p UCS_MEMTRACK_ARG)
+                              unsigned flags, uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     ucs_status_t status;
     uct_mm_seg_t *seg;
@@ -67,7 +67,7 @@ ucs_status_t uct_mm_mem_free(uct_md_h md, uct_mem_h memh)
 }
 
 ucs_status_t uct_mm_mem_reg(uct_md_h md, void *address, size_t length,
-                            uct_mem_h *memh_p)
+                            unsigned flags, uct_mem_h *memh_p)
 {
     ucs_status_t status;
     uct_mm_seg_t *seg;

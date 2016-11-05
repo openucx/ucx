@@ -122,7 +122,7 @@ UCS_TEST_P(test_pd, alloc) {
             continue;
         }
 
-        status = uct_md_mem_alloc(pd(), &size, &address, "test", &memh);
+        status = uct_md_mem_alloc(pd(), &size, &address, 0, "test", &memh);
         if (size == 0) {
             EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
             continue;
@@ -157,7 +157,7 @@ UCS_TEST_P(test_pd, reg) {
 
         memset(address, 0xBB, size);
 
-        status = uct_md_mem_reg(pd(), address, size, &memh);
+        status = uct_md_mem_reg(pd(), address, size, 0, &memh);
 
         ASSERT_UCS_OK(status);
         ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
@@ -185,7 +185,7 @@ UCS_TEST_P(test_pd, reg_perf) {
         ucs_time_t start_time = ucs_get_time();
         for (unsigned i = 0; i < count; ++i) {
             uct_mem_h memh;
-            status = uct_md_mem_reg(pd(), ptr, size, &memh);
+            status = uct_md_mem_reg(pd(), ptr, size, 0, &memh);
             ASSERT_UCS_OK(status);
             ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
 
