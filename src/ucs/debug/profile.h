@@ -70,6 +70,7 @@ typedef struct ucs_profile_location {
     char                     file[64];      /**< Source file name */
     char                     function[64];  /**< Function name */
     char                     name[32];      /**< User-provided name */
+    int                      *loc_id_p;     /**< Back-pointer for location ID */
     int                      line;          /**< Source line number */
     uint8_t                  type;          /**< From ucs_profile_type_t */
     uint64_t                 total_time;    /**< Total interval from previous location */
@@ -132,11 +133,13 @@ extern const char *ucs_profile_mode_names[];
  * @param [in]  line      Source line number.
  * @param [in]  function  Calling function name.
  * @param [in]  name      Location name.
- *
- * @return 0 for disabled record, positive instrumentation record id otherwise.
+ * @param [out] loc_id_p  Filled with location ID:
+ *                          0   - profiling is disabled
+ *                          >0  - location index + 1
  */
-int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
-                             const char *file, int line, const char *function);
+void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
+                              const char *file, int line, const char *function,
+                              int *loc_id_p);
 
 
 /*
@@ -148,31 +151,33 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
  * @param [in]     file        Source file name.
  * @param [in]     line        Source line number.
  * @param [in]     function    Calling function name.
- * @param [in,out] location_p  Variable used to maintain the location ID.
+ * @param [in,out] loc_id_p    Variable used to maintain the location ID.
  */
 static inline void ucs_profile_record(ucs_profile_type_t type, const char *name,
                                       const char *file, int line,
-                                      const char *function, int *location_p)
+                                      const char *function, int *loc_id_p)
 {
     extern ucs_profile_global_context_t ucs_profile_ctx;
     ucs_profile_global_context_t *ctx = &ucs_profile_ctx;
     ucs_profile_record_t   *rec;
     ucs_profile_location_t *loc;
     ucs_time_t current_time;
+    int loc_id;
 
 retry:
-    if (ucs_likely(*location_p == 0)) {
+    loc_id = *loc_id_p;
+    if (ucs_likely(loc_id == 0)) {
         return;
     }
 
-    if (ucs_unlikely(*location_p == -1)) {
-        *location_p = ucs_profile_get_location(type, name, file, line, function);
+    if (ucs_unlikely(loc_id == -1)) {
+        ucs_profile_get_location(type, name, file, line, function, loc_id_p);
         goto retry;
     }
 
     current_time = ucs_get_time();
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_ACCUM)) {
-        loc              = &ctx->locations[*location_p - 1];
+        loc              = &ctx->locations[loc_id - 1];
         switch (type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
             ctx->accum.stack[++ctx->accum.stack_top] = current_time;
@@ -191,7 +196,7 @@ retry:
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         rec              = ctx->log.current;
         rec->timestamp   = current_time;
-        rec->location    = *location_p - 1;
+        rec->location    = loc_id - 1;
         if (++ctx->log.current >= ctx->log.end) {
             ctx->log.current    = ctx->log.start;
             ctx->log.wraparound = 1;
@@ -200,9 +205,9 @@ retry:
 }
 
 /* Helper macro */
-#define _UCS_PROFILE_RECORD(_type, _name, _location_p) \
+#define _UCS_PROFILE_RECORD(_type, _name, _loc_id_p) \
     ucs_profile_record((_type), (_name), __FILE__, __LINE__, __FUNCTION__, \
-                       (_location_p))
+                       (_loc_id_p))
 
 
 /* Helper macro */
@@ -226,8 +231,8 @@ retry:
  */
 #define UCS_PROFILE(_type, _name) \
     { \
-        static int location = -1; \
-        _UCS_PROFILE_RECORD((_type), (_name), &location); \
+        static int loc_id = -1; \
+        _UCS_PROFILE_RECORD((_type), (_name), &loc_id); \
     }
 
 
