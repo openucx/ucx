@@ -68,7 +68,7 @@ void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync)
 void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
                                       bool expected, bool sync)
 {
-    static const size_t count = 1148544;
+    static const size_t count = 1148544 / ucs::test_time_multiplier();
     uint8_t *sendbuf, *recvbuf;
     ucp_datatype_t send_dt, recv_dt;
     ucs_status_t status;
@@ -269,7 +269,6 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_sync) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, true);
 }
 
-
 UCS_TEST_P(test_ucp_tag_xfer, iov_exp_sync) {
     if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
                                        (instead request) if send operation
@@ -283,14 +282,12 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_unexp_sync) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, true);
 }
 
-
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp, "RNDV_THRESH=1248576") {
     test_run_xfer(true, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp, "RNDV_THRESH=1248576") {
     test_run_xfer(false, false, true, false);
-
 }
 
 /* send_contig_recv_contig */
