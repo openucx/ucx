@@ -675,8 +675,7 @@ static void ucs_debug_stop_handler(int signo)
 static void ucs_debug_stop_other_threads()
 {
     static const char *task_dir = "/proc/self/task";
-    struct dirent *entry, *result;
-    ssize_t name_max;
+    struct dirent *entry;
     DIR *dir;
     int ret;
     int tid;
@@ -689,17 +688,13 @@ static void ucs_debug_stop_other_threads()
 
     signal(SIGUSR1, ucs_debug_stop_handler);
 
-    name_max = ucs_max(255, pathconf(task_dir, _PC_NAME_MAX));
-    entry = alloca(ucs_offsetof(struct dirent, d_name) + name_max + 1);
-
     for (;;) {
-        ret = readdir_r(dir, entry, &result);
-        if (ret < 0) {
-            ucs_log_fatal_error("Unable to read from %s: %m", task_dir);
-            break;
-        }
-
-        if (result == NULL) {
+        errno = 0;
+        entry = readdir(dir);
+        if (entry == NULL) {
+            if (errno != 0) {
+                ucs_log_fatal_error("Unable to read from %s: %m", task_dir);
+            }
             break;
         }
 
