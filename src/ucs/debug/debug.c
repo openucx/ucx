@@ -676,7 +676,6 @@ static void ucs_debug_stop_other_threads()
 {
     static const char *task_dir = "/proc/self/task";
     struct dirent *entry;
-    ssize_t name_max;
     DIR *dir;
     int ret;
     int tid;
@@ -688,9 +687,6 @@ static void ucs_debug_stop_other_threads()
     }
 
     signal(SIGUSR1, ucs_debug_stop_handler);
-
-    name_max = ucs_max(255, pathconf(task_dir, _PC_NAME_MAX));
-    entry = alloca(ucs_offsetof(struct dirent, d_name) + name_max + 1);
 
     for (;;) {
         errno = 0;
