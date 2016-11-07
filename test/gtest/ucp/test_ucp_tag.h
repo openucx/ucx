@@ -18,7 +18,8 @@ public:
 protected:
     enum {
         RECV_REQ_INTERNAL = DEFAULT_PARAM_VARIANT,
-        RECV_REQ_EXTERNAL
+        RECV_REQ_EXTERNAL   /* for a receive request that was allocated by
+                               the upper layer and not by ucx */
     };
 
     struct request {
@@ -77,25 +78,33 @@ protected:
 
     void wait(request *req);
 
-    static void* dt_start(size_t count);
+    static void* dt_common_start(size_t count);
 
-    static void* dt_start_pack(void *context, const void *buffer, size_t count);
+    static void* dt_common_start_pack(void *context, const void *buffer, size_t count);
 
-    static void* dt_start_unpack(void *context, void *buffer, size_t count);
+    static void* dt_common_start_unpack(void *context, void *buffer, size_t count);
 
-    static size_t dt_packed_size(void *state);
+    static size_t dt_uint32_packed_size(void *state);
 
-    static size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length);
+    static size_t dt_uint32_pack(void *state, size_t offset, void *dest, size_t max_length);
 
-    static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
+    static ucs_status_t dt_uint32_unpack(void *state, size_t offset, const void *src,
                                   size_t length);
 
-    static void dt_finish(void *state);
+    static void dt_common_finish(void *state);
+
+    static size_t dt_uint8_packed_size(void *state);
+
+    static size_t dt_uint8_pack(void *state, size_t offset, void *dest, size_t max_length);
+
+    static ucs_status_t dt_uint8_unpack(void *state, size_t offset, const void *src,
+                                       size_t length);
 
     static const uint32_t MAGIC = 0xd7d7d7d7U;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
-    static ucp_generic_dt_ops test_dt_ops;
+    static ucp_generic_dt_ops test_dt_uint32_ops;
+    static ucp_generic_dt_ops test_dt_uint8_ops;
     static int dt_gen_start_count;
     static int dt_gen_finish_count;
     static ucp_context_attr_t ctx_attr;
