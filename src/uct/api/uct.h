@@ -813,11 +813,21 @@ ucs_status_t uct_wakeup_efd_get(uct_wakeup_h wakeup, int *fd_p);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Request the next notification on the event.
+ * @brief Turn on event notification for the next event.
+ *
+ * This routine needs to be called before waiting on each notification on this
+ * interface, so will typically be called once the processing of the previous
+ * event is over, as part of the wake-up mechanism.
  *
  * @param [in] wakeup      Handle to the notification event.
  *
- * @return Error code.
+ * @return ::UCS_OK        The operation completed successfully. File descriptor
+ *                         will be signaled by new events.
+ * @return ::UCS_ERR_BUSY  There are unprocessed events which prevent the
+ *                         file descriptor from being armed.
+ *                         The operation is not completed. File descriptor
+ *                         will not be signaled by new events.
+ * @return @ref ucs_status_t "Other" different error codes in case of issues.
  */
 ucs_status_t uct_wakeup_efd_arm(uct_wakeup_h wakeup);
 
