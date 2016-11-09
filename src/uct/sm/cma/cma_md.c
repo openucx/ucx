@@ -39,7 +39,7 @@ static ucs_status_t uct_cma_query_md_resources(uct_md_resource_desc_t **resource
 }
 
 static ucs_status_t uct_cma_mem_reg(uct_md_h md, void *address, size_t length,
-                        uct_mem_h *memh_p)
+                                    unsigned flags, uct_mem_h *memh_p)
 {
     /* For testing we have to make sure that
      * memh_h != UCT_INVALID_MEM_HANDLE

@@ -417,7 +417,8 @@ uct_ib_mem_alloc_internal(uct_md_h uct_md, size_t *length_p, void **address_p,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
+static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
+                                     void **address_p, unsigned flags,
                                      uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     uct_ib_mem_t *memh;
@@ -487,7 +488,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address, size
 }
 
 static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length,
-                                   uct_mem_h *memh_p)
+                                   unsigned flags, uct_mem_h *memh_p)
 {
     ucs_status_t status;
     uct_ib_mem_t *memh;
@@ -571,7 +572,7 @@ static inline uct_ib_rcache_region_t* uct_ib_rache_region_from_memh(uct_mem_h me
 
 static ucs_status_t
 uct_ib_mem_rcache_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
-                        uct_mem_h *memh_p UCS_MEMTRACK_ARG)
+                        unsigned flags, uct_mem_h *memh_p UCS_MEMTRACK_ARG)
 {
     uct_ib_rcache_region_t *region;
     ucs_status_t status;
@@ -606,7 +607,8 @@ static ucs_status_t uct_ib_mem_rcache_free(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
-                                          size_t length, uct_mem_h *memh_p)
+                                          size_t length, unsigned flags,
+                                          uct_mem_h *memh_p)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_rcache_region_t *rregion;

@@ -71,7 +71,7 @@ static void uct_knem_md_close(uct_md_h md)
 }
 
 static ucs_status_t uct_knem_mem_reg(uct_md_h md, void *address, size_t length,
-                                     uct_mem_h *memh_p)
+                                     unsigned flags, uct_mem_h *memh_p)
 {
     int rc;
     struct knem_cmd_create_region create;

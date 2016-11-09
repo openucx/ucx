@@ -40,7 +40,7 @@ UCS_TEST_P(test_mem, nopd_alloc) {
     methods[0] = GetParam();
     methods[1] = UCT_ALLOC_METHOD_HEAP;
 
-    status = uct_mem_alloc(min_length, methods, 2, NULL, 0, "test", &mem);
+    status = uct_mem_alloc(min_length, 0, methods, 2, NULL, 0, "test", &mem);
     ASSERT_UCS_OK(status);
 
     check_mem(mem, min_length);
@@ -77,7 +77,7 @@ UCS_TEST_P(test_mem, pd_alloc) {
         status = uct_md_query(pd, &md_attr);
         ASSERT_UCS_OK(status);
 
-        status = uct_mem_alloc(min_length, methods, 3, &pd, 1, "test", &mem);
+        status = uct_mem_alloc(min_length, 0, methods, 3, &pd, 1, "test", &mem);
         ASSERT_UCS_OK(status);
 
         if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {

@@ -69,7 +69,7 @@ static ucs_status_t ucp_memh_dereg_mds(ucp_context_h context, ucp_mem_h memh,
  * allocation. It will be put in the array of keys in the proper index.
  */
 static ucs_status_t ucp_memh_reg_mds(ucp_context_h context, ucp_mem_h memh,
-                                     uct_mem_h alloc_md_memh)
+                                     unsigned uct_flags, uct_mem_h alloc_md_memh)
 {
     uct_mem_h dummy_md_memh;
     unsigned uct_memh_count;
@@ -89,7 +89,8 @@ static ucs_status_t ucp_memh_reg_mds(ucp_context_h context, ucp_mem_h memh,
         } else if (context->md_attrs[md_index].cap.flags & UCT_MD_FLAG_REG) {
             /* If the MD supports registration, register on it as well */
             status = uct_md_mem_reg(context->mds[md_index], memh->address,
-                                    memh->length, &memh->uct[uct_memh_count]);
+                                    memh->length, uct_flags,
+                                    &memh->uct[uct_memh_count]);
             if (status != UCS_OK) {
                 ucp_memh_dereg_mds(context, memh, &dummy_md_memh);
                 return status;
@@ -118,7 +119,7 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
 }
 
 static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
-                                  const char *name, ucp_mem_h memh)
+                                  unsigned uct_flags, const char *name, ucp_mem_h memh)
 {
     uct_allocated_memory_t mem;
     uct_alloc_method_t method;
@@ -148,7 +149,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
             }
         }
 
-        status = uct_mem_alloc(length, &method, 1, mds, num_mds, name, &mem);
+        status = uct_mem_alloc(length, uct_flags, &method, 1, mds, num_mds, name, &mem);
         if (status == UCS_OK) {
             goto allocated;
         }
@@ -164,7 +165,7 @@ allocated:
     memh->length       = mem.length;
     memh->alloc_method = mem.method;
     memh->alloc_md     = mem.md;
-    status = ucp_memh_reg_mds(context, memh, mem.memh);
+    status = ucp_memh_reg_mds(context, memh, uct_flags, mem.memh);
     if (status != UCS_OK) {
         uct_mem_free(&mem);
     }
@@ -178,6 +179,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
                          unsigned flags, ucp_mem_h *memh_p)
 {
     ucs_status_t status;
+    unsigned uct_flags;
     ucp_mem_h memh;
 
     if (length == 0) {
@@ -195,8 +197,13 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
         goto err;
     }
 
+    uct_flags = 0;
+    if (flags & UCP_MEM_MAP_NONBLOCK) {
+        uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+    }
+
     if (*address_p == NULL) {
-        status = ucp_mem_alloc(context, length, "user allocation", memh);
+        status = ucp_mem_alloc(context, length, uct_flags, "user allocation", memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
@@ -208,7 +215,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
         memh->length       = length;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
-        status = ucp_memh_reg_mds(context, memh, UCT_INVALID_MEM_HANDLE);
+        status = ucp_memh_reg_mds(context, memh, uct_flags, UCT_INVALID_MEM_HANDLE);
         if (status != UCS_OK) {
             goto err_free_memh;
         }

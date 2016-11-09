@@ -503,9 +503,9 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 }
 
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              const char *alloc_name, uct_mem_h *memh_p)
+                              unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
-    return md->ops->mem_alloc(md, length_p, address_p, memh_p UCS_MEMTRACK_VAL);
+    return md->ops->mem_alloc(md, length_p, address_p, flags, memh_p UCS_MEMTRACK_VAL);
 }
 
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
@@ -514,13 +514,13 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
 }
 
 ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
-                            uct_mem_h *memh_p)
+                            unsigned flags, uct_mem_h *memh_p)
 {
     if ((length == 0) || (address == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    return md->ops->mem_reg(md, address, length, memh_p);
+    return md->ops->mem_reg(md, address, length, flags, memh_p);
 }
 
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)

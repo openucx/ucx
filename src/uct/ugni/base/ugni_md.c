@@ -55,7 +55,7 @@ static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 }
 
 static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
-                                     uct_mem_h *memh_p)
+                                     unsigned flags, uct_mem_h *memh_p)
 {
     ucs_status_t status;
     gni_return_t ugni_rc;

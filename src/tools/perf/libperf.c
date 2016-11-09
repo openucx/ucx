@@ -95,7 +95,7 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
     /* TODO use params->alignment  */
 
     status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 params->message_size * params->thread_count,
+                                 params->message_size * params->thread_count, 0,
                                  "perftest", &perf->uct.send_mem);
     if (status != UCS_OK) {
         ucs_error("Failed allocate send buffer: %s", ucs_status_string(status));
@@ -106,7 +106,7 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
     perf->send_buffer = perf->uct.send_mem.address;
 
     status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 params->message_size * params->thread_count,
+                                 params->message_size * params->thread_count, 0,
                                  "perftest", &perf->uct.recv_mem);
     if (status != UCS_OK) {
         ucs_error("Failed allocate receive buffer: %s", ucs_status_string(status));
