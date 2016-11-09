@@ -1,6 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
- * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2015-2016. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -85,7 +85,6 @@ struct ucp_request {
 
             union {
                 ucp_tag_t         tag;      /* Tagged send */
-
                 ucp_wireup_msg_t  wireup;
 
                 struct {
@@ -118,7 +117,13 @@ struct ucp_request {
                     uint8_t                   cbq_elem_on;
                     ucp_lane_map_t            lanes;     /* Which lanes need to be flushed */
                 } flush;
-
+                struct {
+                    uint64_t              remote_addr; /* Remote address */
+                    ucp_atomic_fetch_op_t op; /* Requested AMO */
+                    ucp_rkey_h            rkey;     /* Remote memory key */
+                    uint64_t              value;
+                    void                  *result;
+                } amo;
             };
 
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
