@@ -26,6 +26,8 @@ typedef struct {
 
 void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req);
 
+size_t ucp_tag_pack_dt_copy(void *dest, const void *src, ucp_frag_state_t *state,
+                                size_t length, ucp_datatype_t datatype);
 
 static UCS_F_ALWAYS_INLINE
 int ucp_tag_is_match(ucp_tag_t tag, ucp_tag_t exp_tag, ucp_tag_t tag_mask)

@@ -62,8 +62,13 @@ enum {
     UCP_AM_ID_EAGER_SYNC_ACK    =  8, /* Eager-sync acknowledge */
 
     UCP_AM_ID_RNDV_RTS          =  9, /* Ready-to-Send to init rendezvous */
-    UCP_AM_ID_RNDV_ATS          =  10,/* Ack-to-Send after finishing a get operation */
-
+    UCP_AM_ID_RNDV_ATS          =  10, /* Ack-to-Send after finishing a get operation */
+    UCP_AM_ID_RNDV_RTR          =  11, /* Ready-to-Receive rendezvous for a receiver
+                                          with a generic datatype */
+    UCP_AM_ID_RNDV_DATA         =  12, /* Rndv data fragments when using software
+                                          rndv (bcopy) */
+    UCP_AM_ID_RNDV_DATA_LAST    =  13, /* The last rndv data fragment when using
+                                          software rndv (bcopy) */
     UCP_AM_ID_LAST
 };
 

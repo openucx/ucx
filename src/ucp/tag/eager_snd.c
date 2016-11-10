@@ -11,47 +11,6 @@
 #include <ucp/proto/proto_am.inl>
 
 
-/**
- * Common function to copy data with specified offset from particular datatype
- * to the descriptor
- */
-static UCS_F_ALWAYS_INLINE
-size_t ucp_tag_pack_eager_dt_copy(void *dest, const void *src, ucp_frag_state_t *state,
-                                size_t length, ucp_datatype_t datatype)
-{
-    ucp_dt_generic_t *dt;
-    size_t result_len = 0;
-
-    if (!length) {
-        return length;
-    }
-
-    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
-    case UCP_DATATYPE_CONTIG:
-        memcpy(dest, src + state->offset, length);
-        result_len = length;
-        break;
-
-    case UCP_DATATYPE_IOV:
-        ucp_dt_iov_gather(dest, src, length, &state->dt.iov.iov_offset,
-                          &state->dt.iov.iovcnt_offset);
-        result_len = length;
-        break;
-
-    case UCP_DATATYPE_GENERIC:
-        dt = ucp_dt_generic(datatype);
-        result_len = dt->ops.pack(state->dt.generic.state, state->offset, dest,
-                                  length);
-        break;
-
-    default:
-        ucs_error("Invalid data type");
-    }
-
-    state->offset += result_len;
-    return result_len;
-}
-
 /* packing  start */
 
 static size_t ucp_tag_pack_eager_single_dt(void *dest, void *arg)
@@ -63,9 +22,9 @@ static size_t ucp_tag_pack_eager_single_dt(void *dest, void *arg)
     hdr->super.tag = req->send.tag;
 
     ucs_assert(req->send.state.offset == 0);
-    length = ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
-                                        &req->send.state, req->send.length,
-                                        req->send.datatype);
+    length = ucp_tag_pack_dt_copy(hdr + 1, req->send.buffer,
+                                  &req->send.state, req->send.length,
+                                  req->send.datatype);
     ucs_assert(length == req->send.length);
     return sizeof(*hdr) + length;
 }
@@ -81,9 +40,9 @@ static size_t ucp_tag_pack_eager_sync_single_dt(void *dest, void *arg)
     hdr->req.reqptr      = (uintptr_t)req;
 
     ucs_assert(req->send.state.offset == 0);
-    length = ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
-                                        &req->send.state, req->send.length,
-                                        req->send.datatype);
+    length = ucp_tag_pack_dt_copy(hdr + 1, req->send.buffer,
+                                  &req->send.state, req->send.length,
+                                  req->send.datatype);
     ucs_assert(length == req->send.length);
     return sizeof(*hdr) + length;
 }
@@ -102,9 +61,9 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     ucs_debug("pack eager_first paylen %zu", length);
     ucs_assert(req->send.state.offset == 0);
     ucs_assert(req->send.length > length);
-    return sizeof(*hdr) + ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
-                                                     &req->send.state,
-                                                     length, req->send.datatype);
+    return sizeof(*hdr) + ucp_tag_pack_dt_copy(hdr + 1, req->send.buffer,
+                                               &req->send.state,
+                                               length, req->send.datatype);
 }
 
 static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
@@ -123,9 +82,9 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     ucs_debug("pack eager_sync_first paylen %zu", length);
     ucs_assert(req->send.state.offset == 0);
     ucs_assert(req->send.length > length);
-    return sizeof(*hdr) + ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
-                                                     &req->send.state,
-                                                     length, req->send.datatype);
+    return sizeof(*hdr) + ucp_tag_pack_dt_copy(hdr + 1, req->send.buffer,
+                                               &req->send.state,
+                                               length, req->send.datatype);
 }
 
 static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
@@ -138,9 +97,9 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
     ucs_debug("pack eager_middle paylen %zu offset %zu", length,
               req->send.state.offset);
     hdr->super.tag = req->send.tag;
-    return sizeof(*hdr) + ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
-                                                     &req->send.state,
-                                                     length, req->send.datatype);
+    return sizeof(*hdr) + ucp_tag_pack_dt_copy(hdr + 1, req->send.buffer,
+                                               &req->send.state,
+                                               length, req->send.datatype);
 }
 
 static size_t ucp_tag_pack_eager_last_dt(void *dest, void *arg)
@@ -151,9 +110,9 @@ static size_t ucp_tag_pack_eager_last_dt(void *dest, void *arg)
 
     length         = req->send.length - req->send.state.offset;
     hdr->super.tag = req->send.tag;
-    ret_length     = ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
-                                                &req->send.state, length,
-                                                req->send.datatype);
+    ret_length     = ucp_tag_pack_dt_copy(hdr + 1, req->send.buffer,
+                                          &req->send.state, length,
+                                          req->send.datatype);
     ucs_debug("pack eager_last paylen %zu offset %zu", length,
               req->send.state.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
@@ -186,7 +145,7 @@ static ucs_status_t ucp_tag_eager_bcopy_single(uct_pending_req_t *self)
                                                  ucp_tag_pack_eager_single_dt);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_generic_dt_finish(req);
+        ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
     }
     return status;
@@ -204,7 +163,7 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
                                                 ucp_tag_pack_eager_last_dt);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_generic_dt_finish(req);
+        ucp_request_send_generic_dt_finish(req);
         ucp_request_complete_send(req, UCS_OK);
     }
     return status;
@@ -281,7 +240,7 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_single(uct_pending_req_t *self)
                                                  ucp_tag_pack_eager_sync_single_dt);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_generic_dt_finish(req);
+        ucp_request_send_generic_dt_finish(req);
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
     }
     return status;
@@ -299,7 +258,7 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
                                                 ucp_tag_pack_eager_last_dt);
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_generic_dt_finish(req);
+        ucp_request_send_generic_dt_finish(req);
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
     }
     return status;

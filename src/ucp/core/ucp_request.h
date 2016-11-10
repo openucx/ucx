@@ -95,6 +95,7 @@ struct ucp_request {
                     uintptr_t     remote_request;
                     uint8_t       am_id;
                     ucs_status_t  status;
+                    uintptr_t     rreq; /* receive request on the recv side */
                 } proto;
 
                 struct {

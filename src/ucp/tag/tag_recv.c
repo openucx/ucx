@@ -280,8 +280,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     } else if (save_rreq) {
         ucs_trace_req("msg_recv_nb returning inprogress request %p (%p)", req, req + 1);
         /* For eager - need to put the recv_req in expected since more packets
-         * will follow. For rndv - don't need to keep the recv_req as the match
-         * to the rts already happened. */
+         * will follow. For rndv - don't need to keep the recv_req in the expected queue
+         * as the match to the RTS already happened. */
         req->recv.buffer   = buffer;
         req->recv.count    = count;
         req->recv.datatype = datatype;
