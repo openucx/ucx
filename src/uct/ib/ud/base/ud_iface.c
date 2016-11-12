@@ -28,7 +28,7 @@ static void uct_ud_iface_timer(void *arg);
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
-static void uct_ud_iface_cq_event(void *arg);
+static void uct_ud_iface_event(void *arg);
 
 
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
@@ -228,6 +228,18 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
     uct_ud_iface_cep_remove(ep);
 }
 
+static void uct_ud_iface_async_handler_remove(ucs_callbackq_slow_elem_t *self)
+{
+    uct_ud_iface_t *iface = ucs_container_of(self, uct_ud_iface_t, async.cbq_elem);
+
+    ucs_trace_func("iface=%p remove async fd=%d and unregister. slow-path %d",
+                   iface, iface->super.comp_channel->fd, iface->async.cbq_elem_on);
+    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
+
+    /* need to call this callback only once. unregistering... */
+    uct_ud_iface_async_remove_cb_enable(iface, 0);
+}
+
 static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
                                        uct_mem_h memh)
 {
@@ -356,7 +368,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
     }
 
     status = ucs_async_set_event_handler(async_mode, iface->super.comp_channel->fd,
-                                         POLLIN, uct_ud_iface_cq_event, iface, async);
+                                         POLLIN, uct_ud_iface_event, iface, async);
     if (status != UCS_OK) {
         goto err_remove_timer;
     }
@@ -430,6 +442,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     UCT_UD_IFACE_HOOK_INIT(self);
+
+    self->async.cbq_elem.cb      = uct_ud_iface_async_handler_remove;
+    self->async.cbq_elem_on      = 0;
 
     if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
@@ -514,14 +529,15 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
                        iface_attr);
 
-    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT |
-                                        UCT_IFACE_FLAG_AM_BCOPY |
-                                        UCT_IFACE_FLAG_AM_ZCOPY |
-                                        UCT_IFACE_FLAG_CONNECT_TO_EP |
+    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT         |
+                                        UCT_IFACE_FLAG_AM_BCOPY         |
+                                        UCT_IFACE_FLAG_AM_ZCOPY         |
+                                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_PENDING |
-                                        UCT_IFACE_FLAG_AM_CB_SYNC |
-                                        UCT_IFACE_FLAG_AM_CB_ASYNC;
+                                        UCT_IFACE_FLAG_PENDING          |
+                                        UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                        UCT_IFACE_FLAG_AM_CB_ASYNC      |
+                                        UCT_IFACE_FLAG_WAKEUP;
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
@@ -722,27 +738,12 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
 }
 
-static void uct_ud_iface_cq_event(void *arg)
+static void uct_ud_iface_event(void *arg)
 {
-    uct_ud_iface_t *iface = arg;
-    struct ibv_cq *cq;
-    void *cq_context;
-    int ret;
-
-    uct_ud_enter(iface);
-    for (;;) {
-        ret = ibv_get_cq_event(iface->super.comp_channel, &cq, &cq_context);
-        if (ret < 0) {
-            if (errno != EAGAIN) {
-                ucs_error("ibv_get_cq_event() failed: %m");
-            }
-            break;
-        }
-        ibv_ack_cq_events(cq, 1);
-    }
-    uct_ud_iface_async_progress(iface);
-    uct_ib_iface_arm_rx_cq(&iface->super, 1);
-    uct_ud_leave(iface);
+    uct_ud_enter(arg);
+    ucs_trace_async("iface(%p) uct_ud_iface_event", arg);
+    uct_ud_iface_async_progress(arg);
+    uct_ud_leave(arg);
 }
 
 static void uct_ud_iface_timer(void *arg)

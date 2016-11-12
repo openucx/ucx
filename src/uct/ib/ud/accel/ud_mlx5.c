@@ -473,7 +473,6 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
     ucs_trace_func("");
     uct_ud_iface_query(iface, iface_attr);
-    iface_attr->cap.flags &= ~UCT_IFACE_FLAG_WAKEUP;
 
     iface_attr->cap.am.max_iov  = uct_ib_iface_get_max_iov(&iface->super);
 
@@ -605,6 +604,12 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
     .iface_flush              = uct_ud_iface_flush,
     .iface_release_am_desc    = uct_ud_iface_release_am_desc,
+    .iface_wakeup_open        = uct_ib_iface_wakeup_open,
+    .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
+    .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
+    .iface_wakeup_wait        = uct_ib_iface_wakeup_wait,
+    .iface_wakeup_signal      = uct_ib_iface_wakeup_signal,
+    .iface_wakeup_close       = uct_ib_iface_wakeup_close,
     .iface_get_address        = uct_ud_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable,

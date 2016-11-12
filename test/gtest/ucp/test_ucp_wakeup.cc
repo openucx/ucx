@@ -40,6 +40,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     const uint64_t TAG = 0xdeadbeef;
     uint64_t send_data = 0x12121212;
     void *req;
+    ucs_status_t status;
 
     polled.events = POLLIN;
     sender().connect(&receiver());
@@ -48,8 +49,11 @@ UCS_TEST_P(test_ucp_wakeup, efd)
     ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
 
     polled.fd = recv_efd;
-    EXPECT_EQ(poll(&polled, 1, 0), 0);
-    ASSERT_UCS_OK(ucp_worker_arm(recv_worker));
+
+    do {
+        status = ucp_worker_arm(recv_worker);
+    } while (UCS_ERR_BUSY == status);
+    ASSERT_EQ(UCS_OK, status);
 
     req = ucp_tag_send_nb(sender().ep(), &send_data, sizeof(send_data), DATATYPE,
                           TAG, send_completion);
