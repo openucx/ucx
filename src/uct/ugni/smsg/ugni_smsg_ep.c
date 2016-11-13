@@ -290,8 +290,8 @@ ssize_t uct_ugni_smsg_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
                              desc, return UCS_ERR_NO_RESOURCE);
 
-    ucs_trace_data("AM_BCOPY [%p] am_id: %d buf=%p",
-                   iface, id, arg );
+    ucs_trace_data("AM_BCOPY [%p] am_id: %d send request %p",
+                   iface, id, arg);
 
     smsg_header = (uct_ugni_smsg_header_t *)(desc+1);
     smsg_data = (void*)(smsg_header+1);

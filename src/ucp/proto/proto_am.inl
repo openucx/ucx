@@ -42,7 +42,9 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;
+    ucp_frag_state_t saved_state;
 
+    saved_state    = req->send.state;
     offset         = req->send.state.offset;
     req->send.lane = ucp_ep_get_am_lane(ep);
     uct_ep         = ep->uct_eps[req->send.lane];
@@ -51,7 +53,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         /* First */
         packed_len = uct_ep_am_bcopy(uct_ep, am_id_first, pack_first, req);
         if (packed_len < 0) {
-            return packed_len; /* Failed */
+            goto err; /* Failed */
         }
 
         return UCS_INPROGRESS;
@@ -59,7 +61,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         /* Middle */
         packed_len = uct_ep_am_bcopy(uct_ep, am_id_middle, pack_middle, req);
         if (packed_len < 0) {
-            return packed_len; /* Failed */
+            goto err; /* Failed */
         }
 
         ucs_assertv((packed_len < 0) || (packed_len <= max_middle + hdr_size_middle),
@@ -70,11 +72,15 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         /* Last */
         packed_len = uct_ep_am_bcopy(uct_ep, am_id_last, pack_last, req);
         if (packed_len < 0) {
-            return packed_len; /* Failed */
+            goto err; /* Failed */
         }
 
         return UCS_OK;
     }
+
+err:
+    req->send.state = saved_state; /* need to restore the offsets state */
+    return packed_len;
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE

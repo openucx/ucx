@@ -49,7 +49,7 @@ enum {
 typedef void (*ucp_request_callback_t)(ucp_request_t *req);
 
 
-typedef struct ucp_send_state {
+typedef struct ucp_frag_state {
     size_t                        offset;  /* Total offset in overall payload. */
     union {
         struct {

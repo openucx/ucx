@@ -99,6 +99,7 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     hdr->super.super.tag = req->send.tag;
     hdr->total_len       = req->send.length;
 
+    ucs_debug("pack eager_first paylen %zu", length);
     ucs_assert(req->send.state.offset == 0);
     ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
@@ -134,7 +135,8 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
     size_t length;
 
     length         = ucp_ep_config(req->send.ep)->max_am_bcopy - sizeof(*hdr);
-    ucs_debug("pack eager_middle paylen %zu", length);
+    ucs_debug("pack eager_middle paylen %zu offset %zu", length,
+              req->send.state.offset);
     hdr->super.tag = req->send.tag;
     return sizeof(*hdr) + ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
                                                      &req->send.state,
@@ -152,6 +154,8 @@ static size_t ucp_tag_pack_eager_last_dt(void *dest, void *arg)
     ret_length     = ucp_tag_pack_eager_dt_copy(hdr + 1, req->send.buffer,
                                                 &req->send.state, length,
                                                 req->send.datatype);
+    ucs_debug("pack eager_last paylen %zu offset %zu", length,
+              req->send.state.offset);
     ucs_assertv(ret_length == length, "length=%zu, max_length=%zu",
                 ret_length, length);
     return sizeof(*hdr) + ret_length;
