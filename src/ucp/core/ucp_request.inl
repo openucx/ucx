@@ -73,7 +73,7 @@ static UCS_F_ALWAYS_INLINE
 void ucp_request_send_generic_dt_finish(ucp_request_t *req)
 {
     ucp_dt_generic_t *dt;
-    if (UCP_DATATYPE_GENERIC == (req->send.datatype & UCP_DATATYPE_CLASS_MASK)) {
+    if (UCP_DT_IS_GENERIC(req->send.datatype)) {
         dt = ucp_dt_generic(req->send.datatype);
         ucs_assert(NULL != dt);
         dt->ops.finish(req->send.state.dt.generic.state);
@@ -84,7 +84,7 @@ static UCS_F_ALWAYS_INLINE
 void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 {
     ucp_dt_generic_t *dt;
-    if (UCP_DATATYPE_GENERIC == (req->send.datatype & UCP_DATATYPE_CLASS_MASK)) {
+    if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
         dt = ucp_dt_generic(req->recv.datatype);
         ucs_assert(NULL != dt);
         dt->ops.finish(req->recv.state.dt.generic.state);

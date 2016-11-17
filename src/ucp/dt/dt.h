@@ -44,5 +44,4 @@ size_t ucp_dt_length(ucp_datatype_t datatype, size_t count,
     return 0;
 }
 
-
 #endif

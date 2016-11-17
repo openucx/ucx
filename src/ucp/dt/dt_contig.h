@@ -29,9 +29,12 @@ static inline size_t ucp_contig_dt_elem_size(ucp_datatype_t datatype)
     return datatype >> UCP_DATATYPE_SHIFT;
 }
 
+#define UCP_DT_IS_CONTIG(_datatype) \
+          (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)
+
 static inline size_t ucp_contig_dt_length(ucp_datatype_t datatype, size_t count)
 {
-    ucs_assert(UCP_DATATYPE_CONTIG == (datatype & UCP_DATATYPE_CLASS_MASK));
+    ucs_assert(UCP_DT_IS_CONTIG(datatype));
     return count * ucp_contig_dt_elem_size(datatype);
 }
 
