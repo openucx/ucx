@@ -6,9 +6,9 @@
   This header is for ANSI C/C++ only.  You can set any of
   the following #defines before including:
 
-  * If USE_DL_PREFIX is defined, it is assumed that malloc.c 
+  * If UCM_MALLOC_PREFIX is defined, it is assumed that malloc.c
     was also compiled with this option, so all routines
-    have names starting with "dl".
+    have names starting with the value of UCM_MALLOC_PREFIX.
 
   * If HAVE_USR_INCLUDE_MALLOC_H is defined, it is assumed that this
     file will be #included AFTER <malloc.h>. This is needed only if
@@ -46,31 +46,33 @@ extern "C" {
 #endif  /* ONLY_MSPACES */
 #endif  /* MSPACES */
 
+#include <ucs/sys/preprocessor.h>
+
 #if !ONLY_MSPACES
 
-#ifndef USE_DL_PREFIX
-#define dlcalloc               calloc
-#define dlfree                 free
-#define dlmalloc               malloc
-#define dlmemalign             memalign
-#define dlposix_memalign       posix_memalign
-#define dlrealloc              realloc
-#define dlvalloc               valloc
-#define dlpvalloc              pvalloc
-#define dlmallinfo             mallinfo
-#define dlmallopt              mallopt
-#define dlmalloc_trim          malloc_trim
-#define dlmalloc_stats         malloc_stats
-#define dlmalloc_usable_size   malloc_usable_size
-#define dlmalloc_footprint     malloc_footprint
-#define dlmalloc_max_footprint malloc_max_footprint
-#define dlmalloc_footprint_limit malloc_footprint_limit
-#define dlmalloc_set_footprint_limit malloc_set_footprint_limit
-#define dlmalloc_inspect_all   malloc_inspect_all
-#define dlindependent_calloc   independent_calloc
-#define dlindependent_comalloc independent_comalloc
-#define dlbulk_free            bulk_free
-#endif /* USE_DL_PREFIX */
+#ifdef UCM_MALLOC_PREFIX
+#define dlcalloc                     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, calloc)
+#define dlfree                       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, free)
+#define dlmalloc                     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc)
+#define dlmemalign                   UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, memalign)
+#define dlposix_memalign             UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, posix_memalign)
+#define dlrealloc                    UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, realloc)
+#define dlvalloc                     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, valloc)
+#define dlpvalloc                    UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, pvalloc)
+#define dlmallinfo                   UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallinfo)
+#define dlmallopt                    UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallopt)
+#define dlmalloc_trim                UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_trim)
+#define dlmalloc_stats               UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_stats)
+#define dlmalloc_usable_size         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_usable_size)
+#define dlmalloc_footprint           UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_footprint)
+#define dlmalloc_max_footprint       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_max_footprint)
+#define dlmalloc_footprint_limit     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_footprint_limit)
+#define dlmalloc_set_footprint_limit UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_set_footprint_limit)
+#define dlmalloc_inspect_all         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_inspect_all)
+#define dlindependent_calloc         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_calloc)
+#define dlindependent_comalloc       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_comalloc)
+#define dlbulk_free                  UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, bulk_free)
+#endif /* UCM_MALLOC_PREFIX */
 
 #if !NO_MALLINFO 
 #ifndef HAVE_USR_INCLUDE_MALLOC_H

@@ -736,23 +736,23 @@ extern "C" {
 
 /* ------------------- Declarations of public routines ------------------- */
 
-#ifdef PTMALLOC_PREFIX
-#define dlcalloc               UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, calloc)
-#define dlfree                 UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, free)
-#define dlmalloc               UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc)
-#define dlmemalign             UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, memalign)
-#define dlrealloc              UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, realloc)
-#define dlvalloc               UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, valloc)
-#define dlpvalloc              UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, pvalloc)
-#define dlmallinfo             UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, mallinfo)
-#define dlmallopt              UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, mallopt)
-#define dlmalloc_trim          UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_trim)
-#define dlmalloc_stats         UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_stats)
-#define dlmalloc_usable_size   UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_usable_size)
-#define dlmalloc_footprint     UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, malloc_footprint)
-#define dlindependent_calloc   UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, independent_calloc)
-#define dlindependent_comalloc UCS_PP_TOKENPASTE(PTMALLOC_PREFIX, independent_comalloc)
-#endif /* PTMALLOC_PREFIX */
+#ifdef UCM_MALLOC_PREFIX
+#define dlcalloc               UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, calloc)
+#define dlfree                 UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, free)
+#define dlmalloc               UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc)
+#define dlmemalign             UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, memalign)
+#define dlrealloc              UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, realloc)
+#define dlvalloc               UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, valloc)
+#define dlpvalloc              UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, pvalloc)
+#define dlmallinfo             UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallinfo)
+#define dlmallopt              UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallopt)
+#define dlmalloc_trim          UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_trim)
+#define dlmalloc_stats         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_stats)
+#define dlmalloc_usable_size   UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_usable_size)
+#define dlmalloc_footprint     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_footprint)
+#define dlindependent_calloc   UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_calloc)
+#define dlindependent_comalloc UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_comalloc)
+#endif /* UCM_MALLOC_PREFIX */
 
 
 /*

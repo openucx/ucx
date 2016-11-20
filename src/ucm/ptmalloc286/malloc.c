@@ -197,7 +197,7 @@
     #define mymalloc(bytes)  mspace_malloc(mymspace, bytes)
 
   (Note: If you only need one instance of an mspace, you can instead
-  use "USE_DL_PREFIX" to relabel the global malloc.)
+  use "UCM_MALLOC_PREFIX" to relabel the global malloc.)
 
   You can similarly create thread-local allocators by storing
   mspaces as thread-locals. For example:
@@ -292,7 +292,7 @@ FOOTERS                  default: 0
 INSECURE                 default: 0
   If true, omit checks for usage errors and heap space overwrites.
 
-USE_DL_PREFIX            default: NOT defined
+UCM_MALLOC_PREFIX            default: NOT defined
   Causes compiler to prefix all public routines with the string 'dl'.
   This can be useful when you only want to use this malloc in one part
   of a program, using your regular system malloc elsewhere.
@@ -521,6 +521,12 @@ MAX_RELEASE_CHECK_RATE   default: 4095 unless not HAVE_MMAP
   improvement at the expense of carrying around more memory.
 */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include <ucs/sys/preprocessor.h>
+
 /* Version identifier to allow people to support multiple versions */
 #ifndef DLMALLOC_VERSION
 #define DLMALLOC_VERSION 20806
@@ -645,7 +651,9 @@ MAX_RELEASE_CHECK_RATE   default: 4095 unless not HAVE_MMAP
 #ifndef HAVE_MREMAP
 #ifdef linux
 #define HAVE_MREMAP 1
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE /* Turns on mremap() definition */
+#endif /* _GNU_SOURCE */
 #else   /* linux */
 #define HAVE_MREMAP 0
 #endif  /* linux */
@@ -812,30 +820,30 @@ extern "C" {
 
 /* ------------------- Declarations of public routines ------------------- */
 
-#ifndef USE_DL_PREFIX
-#define dlcalloc               calloc
-#define dlfree                 free
-#define dlmalloc               malloc
-#define dlmemalign             memalign
-#define dlposix_memalign       posix_memalign
-#define dlrealloc              realloc
-#define dlrealloc_in_place     realloc_in_place
-#define dlvalloc               valloc
-#define dlpvalloc              pvalloc
-#define dlmallinfo             mallinfo
-#define dlmallopt              mallopt
-#define dlmalloc_trim          malloc_trim
-#define dlmalloc_stats         malloc_stats
-#define dlmalloc_usable_size   malloc_usable_size
-#define dlmalloc_footprint     malloc_footprint
-#define dlmalloc_max_footprint malloc_max_footprint
-#define dlmalloc_footprint_limit malloc_footprint_limit
-#define dlmalloc_set_footprint_limit malloc_set_footprint_limit
-#define dlmalloc_inspect_all   malloc_inspect_all
-#define dlindependent_calloc   independent_calloc
-#define dlindependent_comalloc independent_comalloc
-#define dlbulk_free            bulk_free
-#endif /* USE_DL_PREFIX */
+#ifdef UCM_MALLOC_PREFIX
+#define dlcalloc                     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, calloc)
+#define dlfree                       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, free)
+#define dlmalloc                     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc)
+#define dlmemalign                   UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, memalign)
+#define dlposix_memalign             UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, posix_memalign)
+#define dlrealloc                    UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, realloc)
+#define dlrealloc_in_place           UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, realloc_in_place)
+#define dlvalloc                     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, valloc)
+#define dlpvalloc                    UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, pvalloc)
+#define dlmallinfo                   UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallinfo)
+#define dlmallopt                    UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, mallopt)
+#define dlmalloc_trim                UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_trim)
+#define dlmalloc_stats               UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_stats)
+#define dlmalloc_usable_size         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_usable_size)
+#define dlmalloc_footprint           UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_footprint)
+#define dlmalloc_max_footprint       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_max_footprint)
+#define dlmalloc_footprint_limit     UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_footprint_limit)
+#define dlmalloc_set_footprint_limit UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_set_footprint_limit)
+#define dlmalloc_inspect_all         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, malloc_inspect_all)
+#define dlindependent_calloc         UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_calloc)
+#define dlindependent_comalloc       UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, independent_comalloc)
+#define dlbulk_free                  UCS_PP_TOKENPASTE(UCM_MALLOC_PREFIX, bulk_free)
+#endif /* UCM_MALLOC_PREFIX */
 
 /*
   malloc(size_t n)
@@ -4308,6 +4316,7 @@ static int sys_trim(mstate m, size_t pad) {
             size_t newsize = sp->size - extra;
             (void)newsize; /* placate people compiling -Wunused-variable */
             /* Prefer mremap, fall back to munmap */
+            /* coverity[offset_free] */
             if ((CALL_MREMAP(sp->base, sp->size, newsize, 0) != MFAIL) ||
                 (CALL_MUNMAP(sp->base + newsize, extra) == 0)) {
               released = extra;
@@ -5300,6 +5309,7 @@ void* dlpvalloc(size_t bytes) {
 void** dlindependent_calloc(size_t n_elements, size_t elem_size,
                             void* chunks[]) {
   size_t sz = elem_size; /* serves as 1-element array */
+  /* coverity[callee_ptr_arith] */
   return ialloc(gm, n_elements, &sz, 3, chunks);
 }
 
@@ -6183,7 +6193,7 @@ History:
           (e.g. WIN32 platforms)
          * Cleanup header file inclusion for WIN32 platforms
          * Cleanup code to avoid Microsoft Visual C++ compiler complaints
-         * Add 'USE_DL_PREFIX' to quickly allow co-existence with existing
+         * Add 'UCM_MALLOC_PREFIX' to quickly allow co-existence with existing
            memory allocation routines
          * Set 'malloc_getpagesize' for WIN32 platforms (needs more work)
          * Use 'assert' rather than 'ASSERT' in WIN32 code to conform to
