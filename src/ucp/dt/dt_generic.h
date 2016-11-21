@@ -25,4 +25,7 @@ static inline ucp_dt_generic_t* ucp_dt_generic(ucp_datatype_t datatype)
     return (ucp_dt_generic_t*)(void*)(datatype & ~UCP_DATATYPE_CLASS_MASK);
 }
 
+#define UCP_DT_IS_GENERIC(_datatype) \
+          (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC)
+
 #endif

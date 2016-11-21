@@ -93,7 +93,7 @@ static ucs_status_t ucp_tag_req_start_iov(ucp_request_t *req, size_t count,
 
 static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
                                       size_t rndv_thresh,
-                                      const ucp_proto_t *progress)
+                                      const ucp_proto_t *proto)
 {
     ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
     ucp_dt_generic_t *dt_gen;
@@ -106,10 +106,10 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     req->send.state.dt.generic.state = state;
     req->send.length = length = dt_gen->ops.packed_size(state);
 
-    if (length <= config->max_am_bcopy - progress->only_hdr_size) {
-        req->send.uct.func = progress->bcopy_single;
+    if (length <= config->max_am_bcopy - proto->only_hdr_size) {
+        req->send.uct.func = proto->bcopy_single;
     } else {
-        req->send.uct.func = progress->bcopy_multi;
+        req->send.uct.func = proto->bcopy_multi;
     }
 }
 
@@ -197,7 +197,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    if (ucs_likely((datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG)) {
+    if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
         length = ucp_contig_dt_length(datatype, count);
         UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                               "ucp_tag_send_nb (eager - start)",
@@ -274,3 +274,44 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,
     req->send.proto.status         = UCS_OK;
     ucp_request_start_send(req);
 }
+
+/**
+ * Common function to copy data with specified offset from particular datatype
+ * to the descriptor
+ */
+size_t ucp_tag_pack_dt_copy(void *dest, const void *src, ucp_frag_state_t *state,
+                                size_t length, ucp_datatype_t datatype)
+{
+    ucp_dt_generic_t *dt;
+    size_t result_len = 0;
+
+    if (!length) {
+        return length;
+    }
+
+    switch (datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        memcpy(dest, src + state->offset, length);
+        result_len = length;
+        break;
+
+    case UCP_DATATYPE_IOV:
+        ucp_dt_iov_gather(dest, src, length, &state->dt.iov.iov_offset,
+                          &state->dt.iov.iovcnt_offset);
+        result_len = length;
+        break;
+
+    case UCP_DATATYPE_GENERIC:
+        dt = ucp_dt_generic(datatype);
+        result_len = dt->ops.pack(state->dt.generic.state, state->offset, dest,
+                                  length);
+        break;
+
+    default:
+        ucs_error("Invalid data type");
+    }
+
+    state->offset += result_len;
+    return result_len;
+}
+

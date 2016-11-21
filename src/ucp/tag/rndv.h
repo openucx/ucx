@@ -18,11 +18,27 @@
  */
 typedef struct {
     ucp_tag_hdr_t             super;
-    ucp_request_hdr_t         req;      /* request on the rndv initiator side */
-    uint64_t                  address;  /* holds the address of the data on the sender's side */
+    ucp_request_hdr_t         sreq;     /* send request on the rndv initiator side */
+    uint64_t                  address;  /* holds the address of the data buffer on the sender's side */
     size_t                    size;     /* size of the data for sending */
     /* packed rkey follows */
 } UCS_S_PACKED ucp_rndv_rts_hdr_t;
+
+/*
+ * Rendezvous RTR
+ */
+typedef struct {
+    uintptr_t                 sreq_ptr; /* request on the rndv initiator side - sender */
+    uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
+} UCS_S_PACKED ucp_rndv_rtr_hdr_t;
+
+/*
+ * RNDV_DATA
+ */
+typedef struct {
+    uintptr_t                 rreq_ptr; /* request on the rndv receiver side */
+} UCS_S_PACKED ucp_rndv_data_hdr_t;
+
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 

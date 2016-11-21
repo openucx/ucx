@@ -92,9 +92,10 @@ struct ucp_request {
                 } rma;
 
                 struct {
-                    uintptr_t     remote_request;
+                    uintptr_t     remote_request; /* pointer to the send request on receiver side */
                     uint8_t       am_id;
                     ucs_status_t  status;
+                    uintptr_t     rreq_ptr; /* receive request ptr on the recv side */
                 } proto;
 
                 struct {
@@ -103,10 +104,10 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t      remote_address;
-                    uintptr_t     remote_request;
+                    uint64_t      remote_address; /* address of the sender's data buffer */
+                    uintptr_t     remote_request; /* pointer to the sender's send request */
                     uct_rkey_bundle_t rkey_bundle;
-                    ucp_request_t *rreq; /* receive request on the recv side */
+                    ucp_request_t *rreq;    /* receive request on the recv side */
                 } rndv_get;
 
                 struct {
