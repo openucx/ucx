@@ -246,33 +246,36 @@ void* test_ucp_tag::dt_common_start_unpack(void *context, void *buffer, size_t c
     return dt_common_start(count);
 }
 
-size_t test_ucp_tag::dt_uint32_packed_size(void *state)
+template <typename T>
+size_t test_ucp_tag::dt_packed_size(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
-    return dt_state->count * sizeof(uint32_t);
+    return dt_state->count * sizeof(T);
 }
 
-size_t test_ucp_tag::dt_uint32_pack(void *state, size_t offset, void *dest, size_t max_length)
+template <typename T>
+size_t test_ucp_tag::dt_pack(void *state, size_t offset, void *dest, size_t max_length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
-    uint32_t *p = (uint32_t*)dest;
+    T *p = reinterpret_cast<T*> (dest);
     uint32_t count;
 
     EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
     EXPECT_EQ(1, dt_state->started);
     EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
 
-    ucs_assert((offset % sizeof(uint32_t)) == 0);
+    ucs_assert((offset % sizeof(T)) == 0);
 
-    count = ucs_min(max_length / sizeof(uint32_t),
-                    dt_state->count - (offset / sizeof(uint32_t)));
+    count = ucs_min(max_length / sizeof(T),
+                    dt_state->count - (offset / sizeof(T)));
     for (unsigned i = 0; i < count; ++i) {
-        p[i] = (offset / sizeof(uint32_t)) + i;
+        p[i] = (offset / sizeof(T)) + i;
     }
-    return count * sizeof(uint32_t);
+    return count * sizeof(T);
 }
 
-ucs_status_t test_ucp_tag::dt_uint32_unpack(void *state, size_t offset, const void *src,
+template <typename T>
+ucs_status_t test_ucp_tag::dt_unpack(void *state, size_t offset, const void *src,
                                      size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
@@ -282,10 +285,10 @@ ucs_status_t test_ucp_tag::dt_uint32_unpack(void *state, size_t offset, const vo
     EXPECT_EQ(1, dt_state->started);
     EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
 
-    count = length / sizeof(uint32_t);
+    count = length / sizeof(T);
     for (unsigned i = 0; i < count; ++i) {
-        uint32_t expected = (offset / sizeof(uint32_t)) + i;
-        uint32_t actual   = ((uint32_t*)src)[i];
+        T expected = (offset / sizeof(T)) + i;
+        T actual   = ((T*)src)[i];
         if (actual != expected) {
             UCS_TEST_ABORT("Invalid data at index " << i << ". expected: " <<
                            expected << " actual: " << actual << " offset: " <<
@@ -304,70 +307,24 @@ void test_ucp_tag::dt_common_finish(void *state)
     delete dt_state;
 }
 
-size_t test_ucp_tag::dt_uint8_packed_size(void *state)
-{
-    dt_gen_state *dt_state = (dt_gen_state*)state;
-    return dt_state->count;
-}
-
-size_t test_ucp_tag::dt_uint8_pack(void *state, size_t offset, void *dest, size_t max_length)
-{
-    dt_gen_state *dt_state = (dt_gen_state*)state;
-    uint8_t *p = (uint8_t*)dest;
-    uint32_t count;
-
-    EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
-    EXPECT_EQ(1, dt_state->started);
-    EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
-
-    ucs_assert((offset % sizeof(uint8_t)) == 0);
-
-    count = ucs_min(max_length, dt_state->count - offset );
-    for (unsigned i = 0; i < count; ++i) {
-        p[i] = offset + i;
-    }
-    return count * sizeof(uint8_t);
-}
-
-ucs_status_t test_ucp_tag::dt_uint8_unpack(void *state, size_t offset, const void *src,
-                                           size_t length)
-{
-    dt_gen_state *dt_state = (dt_gen_state*)state;
-
-    EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
-    EXPECT_EQ(1, dt_state->started);
-    EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
-
-    for (unsigned i = 0; i < length; ++i) {
-        uint8_t expected = offset + i;
-        uint8_t actual   = ((uint8_t*)src)[i];
-        if (actual != expected) {
-            UCS_TEST_ABORT("Invalid data at index " << i << ". expected: " <<
-                           expected << " actual: " << actual << " offset: " <<
-                           offset << ".");
-        }
-    }
-    return UCS_OK;
-}
-
 const ucp_datatype_t test_ucp_tag::DATATYPE     = ucp_dt_make_contig(1);
 const ucp_datatype_t test_ucp_tag::DATATYPE_IOV = ucp_dt_make_iov();
 
 ucp_generic_dt_ops test_ucp_tag::test_dt_uint32_ops = {
     test_ucp_tag::dt_common_start_pack,
     test_ucp_tag::dt_common_start_unpack,
-    test_ucp_tag::dt_uint32_packed_size,
-    test_ucp_tag::dt_uint32_pack,
-    test_ucp_tag::dt_uint32_unpack,
+    test_ucp_tag::dt_packed_size<uint32_t>,
+    test_ucp_tag::dt_pack<uint32_t>,
+    test_ucp_tag::dt_unpack<uint32_t>,
     test_ucp_tag::dt_common_finish
 };
 
 ucp_generic_dt_ops test_ucp_tag::test_dt_uint8_ops = {
     test_ucp_tag::dt_common_start_pack,
     test_ucp_tag::dt_common_start_unpack,
-    test_ucp_tag::dt_uint8_packed_size,
-    test_ucp_tag::dt_uint8_pack,
-    test_ucp_tag::dt_uint8_unpack,
+    test_ucp_tag::dt_packed_size<uint8_t>,
+    test_ucp_tag::dt_pack<uint8_t>,
+    test_ucp_tag::dt_unpack<uint8_t>,
     test_ucp_tag::dt_common_finish
 };
 
