@@ -13,11 +13,11 @@
 #include <malloc.h>
 #undef M_TRIM_THRESHOLD
 #undef M_MMAP_THRESHOLD
+#include "allocator.h" /* have to be included after malloc.h */
 
 #include <ucm/api/ucm.h>
 #include <ucm/event/event.h>
 #include <ucm/mmap/mmap.h>
-#include <ucm/ptmalloc3/malloc-2.8.3.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/ucm_config.h>
