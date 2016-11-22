@@ -84,21 +84,17 @@ protected:
 
     static void* dt_common_start_unpack(void *context, void *buffer, size_t count);
 
-    static size_t dt_uint32_packed_size(void *state);
+    template <typename T>
+    static size_t dt_packed_size(void *state);
 
-    static size_t dt_uint32_pack(void *state, size_t offset, void *dest, size_t max_length);
+    template <typename T>
+    static size_t dt_pack(void *state, size_t offset, void *dest, size_t max_length);
 
-    static ucs_status_t dt_uint32_unpack(void *state, size_t offset, const void *src,
+    template <typename T>
+    static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
                                   size_t length);
 
     static void dt_common_finish(void *state);
-
-    static size_t dt_uint8_packed_size(void *state);
-
-    static size_t dt_uint8_pack(void *state, size_t offset, void *dest, size_t max_length);
-
-    static ucs_status_t dt_uint8_unpack(void *state, size_t offset, const void *src,
-                                       size_t length);
 
     static const uint32_t MAGIC = 0xd7d7d7d7U;
     static const ucp_datatype_t DATATYPE;
