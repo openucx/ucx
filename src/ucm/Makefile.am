@@ -8,8 +8,10 @@ lib_LTLIBRARIES = libucm.la
 
 libucm_ladir       = $(includedir)/ucm
 libucm_la_LIBADD   = # ../ucs/libucs.la
-libucm_la_LDFLAGS  = -Xlinker -z -Xlinker nodelete \
-                     -Xlinker -z -Xlinker interpose
+libucm_la_LDFLAGS  = \
+    -ldl -version-info $(SOVERSION) \
+    -Xlinker -z -Xlinker nodelete \
+    -Xlinker -z -Xlinker interpose
 
 libucm_la_CPPFLAGS = \
     -I$(abs_top_srcdir)/src \
