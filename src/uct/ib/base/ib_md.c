@@ -615,7 +615,7 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     ucs_status_t status;
 
     status = ucs_rcache_get(md->rcache, address, length, PROT_READ|PROT_WRITE,
-                            &rregion);
+                            NULL, &rregion);
     if (status != UCS_OK) {
         return status;
     }
@@ -646,7 +646,7 @@ static uct_md_ops_t uct_ib_md_rcache_ops = {
 
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
-                                             ucs_rcache_region_t *rregion)
+                                             void *arg, ucs_rcache_region_t *rregion)
 {
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_md_t *md = context;
