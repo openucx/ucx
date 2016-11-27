@@ -43,7 +43,7 @@ typedef struct uct_ib_md {
     int                      eth_pause; /**< Pause Frame on an Ethernet network */
     int                      prefetch_mr; /**< Auto-prefetch non-blocking memory
                                                registrations / allocations */
-    size_t                   odp_max_size; /*< Maximal memory region size for ODP */
+    size_t                   odp_max_size; /**< Maximal memory region size for ODP */
 #if HAVE_EXP_UMR
     /* keep it in md because pd is needed to create umr_qp/cq */
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
@@ -72,9 +72,9 @@ typedef struct uct_ib_md_config {
     int                     eth_pause;     /**< Whether or not Pause Frame is
                                                 enabled on the Ethernet network */
     size_t                  odp_max_size;  /**< Maximal region size to use with
-                                                ODP. 0 - disable./ */
+                                                ODP. 0 - disable. */
     int                     prefetch_mr;   /**< Auto-prefetch non-blocking memory
-                                                 registrations / allocations */
+                                                registrations / allocations */
 } uct_ib_md_config_t;
 
 

@@ -495,7 +495,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
 #if HAVE_EXP_UMR
     if ((memh->umr) == NULL && (md->umr_qp)) {
         ibv_dereg_mr(memh->mr);
-        status = UCS_ERR_IO_ERROR;;
+        status = UCS_ERR_IO_ERROR;
         goto err_free_memh;
     }
 #endif
