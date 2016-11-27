@@ -965,7 +965,7 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
  * @ingroup UCP_ENDPOINT
  * @brief Print endpoint information.
  *
- * This routine prints information about the endpoint transport methods, thier
+ * This routine prints information about the endpoint transport methods, their
  * thresholds, and other useful information associated with the endpoint.
  *
  * @param [in] ep           Endpoint object whose configuration to print.
@@ -983,9 +983,9 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  * This routine flushes all outstanding AMO and RMA communications on the
  * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
  * @a ep prior to this call are completed both at the origin and at the target
- * @ref ucp_ep_h "endpont" when this call returns.
+ * @ref ucp_ep_h "endpoint" when this call returns.
  *
- * @param [in] ep        UCP endpont.
+ * @param [in] ep        UCP endpoint.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -1160,7 +1160,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
  * @ref ucp_ep_rkey_unpack "ucp_ep_rkey_unpack()" routine the behaviour of this
  * routine is undefined.
  *
- * @param [in]  rkey         Romote key to destroy.
+ * @param [in]  rkey         Remote key to destroy.
  */
 void ucp_rkey_destroy(ucp_rkey_h rkey);
 
@@ -1172,7 +1172,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  *
  * This routine returns a local memory address for the remote address such that
  * application can use the local address for direct memory load and store
- * operations. If the underlaying hardware does not support this capability
+ * operations. If the underlying hardware does not support this capability
  * this routine will return a corresponding error.
  *
  * @param [in]  ep              Endpoint handle that was used for rkey object
@@ -1923,7 +1923,7 @@ void ucp_dt_destroy(ucp_datatype_t datatype);
  *
  * @note The primary difference between @ref ucp_worker_fence "ucp_worker_fence()"
  * and the @ref ucp_worker_flush "ucp_worker_flush()" is the fact the fence
- * routine does not guarante completion of the operations on the call return but
+ * routine does not guarantee completion of the operations on the call return but
  * only ensures the order between communication operations. The
  * @ref ucp_worker_flush "flush" operation on return guarantees that all
  * operations are completed and corresponding memory regions were updated.

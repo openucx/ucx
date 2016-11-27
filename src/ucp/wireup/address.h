@@ -93,9 +93,9 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitm
  * Unpack a list of addresses.
  *
  * @param [in]  buffer           Buffer with data to unpack.
- * @param [out] name             Filled with remote worker name.
- * @param [in]  max              Maximal length on 'name'.
  * @param [out] remote_uuid_p    Filled with remote worker uuid.
+ * @param [out] remote_name      Filled with remote worker name.
+ * @param [in]  max              Maximal length on @a remote_name.
  * @param [out] address_count_p  Filled with amount of addresses in the list.
  * @param [out] address_list_p   Filled with pointer to unpacked address list.
  *                                It should be released by ucs_free().
