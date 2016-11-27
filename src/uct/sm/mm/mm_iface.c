@@ -83,10 +83,12 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     /* default values for all shared memory transports */
     iface_attr->cap.put.max_short      = UINT_MAX;
     iface_attr->cap.put.max_bcopy      = SIZE_MAX;
+    iface_attr->cap.put.min_zcopy      = 0;
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
     iface_attr->cap.put.max_iov        = 1;
 
     iface_attr->cap.get.max_bcopy      = SIZE_MAX;
+    iface_attr->cap.get.min_zcopy      = 0;
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
     iface_attr->cap.get.max_iov        = 1;
 

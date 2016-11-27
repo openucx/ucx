@@ -393,6 +393,8 @@ int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
             bytes = UCS_MBYTE;
         } else if (!strcasecmp(units, "gb") || !strcasecmp(units, "g")) {
             bytes = UCS_GBYTE;
+        } else if (!strcasecmp(units, "tb") || !strcasecmp(units, "t")) {
+            bytes = UCS_TBYTE;
         } else {
             return 0;
         }
@@ -413,7 +415,7 @@ int ucs_config_sprintf_memunits(char *buf, size_t max, void *src, const void *ar
     } else if (sz == UCS_CONFIG_MEMUNITS_AUTO) {
         snprintf(buf, max, "auto");
     } else {
-        snprintf(buf, max, "%zu", sz);
+        ucs_memunits_to_str(sz, buf, max);
     }
     return 1;
 }

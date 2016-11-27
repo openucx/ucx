@@ -52,10 +52,12 @@ static ucs_status_t uct_cuda_iface_query(uct_iface_h iface,
 
     iface_attr->cap.put.max_short      = 0;
     iface_attr->cap.put.max_bcopy      = 0;
+    iface_attr->cap.put.min_zcopy      = 0;
     iface_attr->cap.put.max_zcopy      = 0;
     iface_attr->cap.put.max_iov        = 1;
 
     iface_attr->cap.get.max_bcopy      = 0;
+    iface_attr->cap.get.min_zcopy      = 0;
     iface_attr->cap.get.max_zcopy      = 0;
     iface_attr->cap.get.max_iov        = 1;
 

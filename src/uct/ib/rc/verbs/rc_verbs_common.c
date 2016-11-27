@@ -32,11 +32,13 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     /* PUT */
     iface_attr->cap.put.max_short = verbs_iface->config.max_inline;
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
     iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
+    iface_attr->cap.get.min_zcopy = 0;
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
     iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 

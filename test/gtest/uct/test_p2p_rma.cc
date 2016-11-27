@@ -112,7 +112,8 @@ UCS_TEST_P(uct_p2p_rma_test, get_bcopy) {
 UCS_TEST_P(uct_p2p_rma_test, get_zcopy) {
     check_caps(UCT_IFACE_FLAG_GET_ZCOPY);
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
-                    1ul, sender().iface_attr().cap.get.max_zcopy,
+                    ucs_max(1ull, sender().iface_attr().cap.get.min_zcopy),
+                    sender().iface_attr().cap.get.max_zcopy,
                     DIRECTION_RECV_TO_SEND);
 }
 

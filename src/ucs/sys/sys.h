@@ -191,6 +191,18 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
 
 
 /**
+ * Convert a memory units value to a string which is abbreviated if possible.
+ * For example:
+ *  1024 -> 1kb
+ *
+ * @param value  Value to convert.
+ * @param buf    Buffer to place the string.
+ * @param max    Maximal length of the buffer.
+ */
+void ucs_memunits_to_str(size_t value, char *buf, size_t max);
+
+
+/**
  * Read file contents into a string. If the size of the data is smaller than the
  * supplied upper limit (max), a null terminator is appended to the data.
  *
