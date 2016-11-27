@@ -695,8 +695,11 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
         return 0;
     }
 
-    if (IBV_DEVICE_HAS_DC(&dev->dev_attr) &&
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, dc), required_rc_odp_caps))
+    if (IBV_DEVICE_HAS_DC(&dev->dev_attr)
+#  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS_PER_TRANSPORT_CAPS_DC_ODP_CAPS
+        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, dc), required_rc_odp_caps)
+#  endif
+        )
     {
         return 0;
     }

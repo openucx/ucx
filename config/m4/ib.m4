@@ -201,6 +201,7 @@ AS_IF([test "x$with_ib" == xyes],
 
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
                          struct ibv_exp_device_attr.odp_caps,
+                         struct ibv_exp_device_attr.odp_caps.per_transport_caps.dc_odp_caps,
                          struct ibv_exp_device_attr.odp_mr_max_size,
                          struct ibv_exp_qp_init_attr.max_inl_recv,
                          struct ibv_async_event.element.dct],
