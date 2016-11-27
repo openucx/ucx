@@ -432,14 +432,17 @@ static ucs_status_t ucp_rndv_progress_bcopy_send(uct_pending_req_t *self)
 
     if (sreq->send.length <= ucp_ep_config(ep)->max_am_bcopy - sizeof(ucp_rndv_data_hdr_t)) {
         /* send a single bcopy message */
-        ucs_trace_data("send on sreq %p, am lane: %d. single message "
-                       "(bcopy), size: %zu", sreq, sreq->send.lane, sreq->send.length);
+        ucs_trace_data("send on sreq %p, am lane: %d, datatype: %zu. single message "
+                       "(bcopy), size: %zu", sreq, sreq->send.lane,
+                       (sreq->send.datatype & UCP_DATATYPE_CLASS_MASK), sreq->send.length);
         status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_DATA_LAST,
                                         ucp_rndv_pack_single_data);
     } else {
         /* send multiple bcopy messages (fragments of the original send message) */
-        ucs_trace_data("send on sreq %p, am lane: %d, offset: %zu. multi message (bcopy)",
-                       sreq, sreq->send.lane, sreq->send.state.offset);
+        ucs_trace_data("send on sreq %p, size: %zu ,am lane: %d, offset: %zu, datatype: %zu. "
+                       "multi message (bcopy)",
+                       sreq, sreq->send.length, sreq->send.lane, sreq->send.state.offset,
+                       (sreq->send.datatype & UCP_DATATYPE_CLASS_MASK));
         status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA_LAST,
@@ -495,6 +498,37 @@ static ucs_status_t ucp_rndv_zcopy_multi(uct_pending_req_t *self)
                                  ucp_rndv_zcopy_req_complete);
 }
 
+static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
+{
+    size_t max_zcopy;
+    ucs_status_t status;
+
+    ucs_trace_data("send on sreq %p with zcopy, am lane: %d, datatype: %zu, "
+                   "size: %zu", sreq, sreq->send.lane,
+                   (sreq->send.datatype & UCP_DATATYPE_CLASS_MASK),
+                   sreq->send.length);
+
+    if (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep)) {
+        /* dereg the original send request since we are going to send on the AM lane next */
+        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(ep));
+        status = ucp_request_send_buffer_reg(sreq, ucp_ep_get_am_lane(ep));
+        ucs_assert_always(status == UCS_OK);
+    }
+
+    sreq->send.uct_comp.func = ucp_rndv_contig_zcopy_completion;
+
+    max_zcopy = ucp_ep_config(ep)->max_am_zcopy;
+    if (sreq->send.length <= max_zcopy - sizeof(ucp_rndv_data_hdr_t)) {
+        sreq->send.uct_comp.count = 1;
+        sreq->send.uct.func = ucp_rndv_zcopy_single;
+    } else {
+        /* calculate number of zcopy fragments */
+        sreq->send.uct_comp.count = 1 + (sreq->send.length - 1) /
+                                    (max_zcopy - sizeof(ucp_rndv_data_hdr_t));
+        sreq->send.uct.func = ucp_rndv_zcopy_multi;
+    }
+}
+
 static ucs_status_t
 ucp_rndv_rtr_handler(void *arg, void *data, size_t length, void *desc)
 {
@@ -508,31 +542,7 @@ ucp_rndv_rtr_handler(void *arg, void *data, size_t length, void *desc)
 
     if (sreq->send.length >= ucp_ep_config(ep)->zcopy_thresh) {
         /* send with zcopy */
-        size_t max_zcopy;
-        ucs_status_t status;
-
-        ucs_trace_data("send on sreq %p with zcopy, am lane: %d, size: %zu",
-                       sreq, sreq->send.lane, sreq->send.length);
-
-        if (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep)) {
-            /* dereg the original send request since we are going to send on the AM lane next */
-            ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(ep));
-            status = ucp_request_send_buffer_reg(sreq, ucp_ep_get_am_lane(ep));
-            ucs_assert_always(status == UCS_OK);
-        }
-
-        sreq->send.uct_comp.func = ucp_rndv_contig_zcopy_completion;
-
-        max_zcopy = ucp_ep_config(ep)->max_am_zcopy;
-        if (sreq->send.length <= max_zcopy - sizeof(ucp_rndv_data_hdr_t)) {
-            sreq->send.uct_comp.count = 1;
-            sreq->send.uct.func = ucp_rndv_zcopy_single;
-        } else {
-            /* calculate number of zcopy fragments */
-            sreq->send.uct_comp.count = 1 + (sreq->send.length - 1) /
-                                        (max_zcopy - sizeof(ucp_rndv_data_hdr_t));
-            sreq->send.uct.func = ucp_rndv_zcopy_multi;
-        }
+        ucp_rndv_prepare_zcopy(sreq, ep);
     } else {
         /* send with bcopy */
         /* dereg the original send request since we are going to send with bcopy */
