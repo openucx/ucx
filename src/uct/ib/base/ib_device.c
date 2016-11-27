@@ -152,6 +152,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
     }
 
     /* Read device properties */
+    memset(&dev->dev_attr, 0, sizeof(dev->dev_attr));
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
     ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
     if (ret != 0) {
