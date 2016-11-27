@@ -206,7 +206,7 @@ retry:
 
 
 /* Helper macro */
-#define __UCS_PROFILE_CODE(_name, _loop) \
+#define __UCS_PROFILE_CODE(_name, _loop_var) \
     int _loop_var ; \
     for (({ UCS_PROFILE_SCOPE_BEGIN(); _loop_var = 1;}); \
          _loop_var; \

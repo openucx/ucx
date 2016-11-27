@@ -402,20 +402,22 @@ int parse_args(int argc, char **argv, options_t *opts)
     opts->raw         = !isatty(fileno(stdout));
     opts->time_units  = TIME_UNITS_USEC;
 
-    while ( (c = getopt(argc, argv, "hru:")) != -1 ) {
+    while ( (c = getopt(argc, argv, "hrt:")) != -1 ) {
         switch (c) {
         case 'r':
             opts->raw = 1;
             break;
-        case 'u':
+        case 't':
             if (!strcasecmp(optarg, "sec")) {
                 opts->time_units = TIME_UNITS_SEC;
             } else if (!strcasecmp(optarg, "msec")) {
                 opts->time_units = TIME_UNITS_MSEC;
             } else if (!strcasecmp(optarg, "usec")) {
                 opts->time_units = TIME_UNITS_USEC;
-            } else if (!strcasecmp(optarg, "msec")) {
+            } else if (!strcasecmp(optarg, "nsec")) {
                 opts->time_units = TIME_UNITS_NSEC;
+            } else {
+                return -1;
             }
             break;
         case 'h':
