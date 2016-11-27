@@ -76,7 +76,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqM:T:d:x:A:"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqM:T:d:x:A:B"
 
 
 test_type_t tests[] = {
@@ -344,6 +344,7 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -A <mode>      Async progress mode. (thread)\n");
     printf("                        thread     : Use separate progress thread.\n");
     printf("                        signal     : Use signal based timer.\n"); 
+    printf("     -B             Register memory with NONBLOCK flag.\n");
 #if HAVE_MPI
     printf("     -P <0|1>       Disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
@@ -443,6 +444,9 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         return UCS_OK;
     case 'o':
         params->flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
+        return UCS_OK;
+    case 'B':
+        params->flags |= UCX_PERF_TEST_FLAG_MAP_NONBLOCK;
         return UCS_OK;
     case 'q':
         params->flags &= ~UCX_PERF_TEST_FLAG_VERBOSE;

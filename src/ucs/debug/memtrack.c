@@ -517,6 +517,11 @@ void ucs_memtrack_releasing(void **ptr_p)
     ucs_memtrack_record_release(buffer, 0);
 }
 
+void ucs_memtrack_releasing_adjusted(void *ptr)
+{
+    ucs_memtrack_record_release(ptr, 0);
+}
+
 static uint64_t ucs_memtrack_entry_hash(ucs_memtrack_entry_t *entry)
 {
     return ucs_string_to_id(entry->name);

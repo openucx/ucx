@@ -68,47 +68,31 @@
 /*
  * Contiguous pages support
  */
-#if HAVE_DECL_IBV_EXP_ACCESS_ALLOCATE_MR
-
+#if HAVE_DECL_IBV_EXP_DEVICE_MR_ALLOCATE
 #  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_MR_ALLOCATE)
-
-#elif HAVE_DECL_IBV_ACCESS_ALLOCATE_MR
-
-#  define IBV_EXP_ACCESS_ALLOCATE_MR                IBV_ACCESS_ALLOCATE_MR
-#  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          ((_attr)->device_cap_flags & IBV_ACCESS_ALLOCATE_MR)
-
-struct ibv_exp_reg_mr_in {
-    struct ibv_pd *pd;
-    void *addr;
-    size_t length;
-    uint64_t exp_access;
-    uint32_t comp_mask;
-    uint32_t create_flags;
-};
-
-static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
-{
-    return ibv_reg_mr(in->pd, in->addr, in->length, in->exp_access);
-}
-
 #else
+#  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)         0
+#endif
 
-#  define IBV_EXP_ACCESS_ALLOCATE_MR                0
-#  define IBV_EXP_HAVE_CONTIG_PAGES(_attr)          0
 
-struct ibv_exp_reg_mr_in {
-    void    *dummy1, *dummy2;
-    size_t   dymmu3, dummy4;
-    uint32_t dummy5, dummy6;
-};
+/*
+ * On-demand paging support
+ */
+#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+#  define IBV_EXP_HAVE_ODP(_attr)                   ((_attr)->odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT)
+#  define IBV_EXP_ODP_CAPS(_attr, _xport)           ((_attr)->odp_caps.per_transport_caps._xport##_odp_caps)
+#else
+#  define IBV_EXP_HAVE_ODP(_attr)                   0
+#  define IBV_EXP_ODP_CAPS(_attr, _xport)           0
+#endif
 
-static inline struct ibv_mr *ibv_exp_reg_mr(struct ibv_exp_reg_mr_in *in)
-{
-    return NULL;
-}
+#if !HAVE_DECL_IBV_EXP_ACCESS_ON_DEMAND
+#  define IBV_EXP_ACCESS_ON_DEMAND                  0
+#endif
 
-#endif /* HAVE_DECL_IBV_ACCESS_ALLOCATE_MR */
-
+#if !HAVE_DECL_IBV_EXP_PREFETCH_WRITE_ACCESS
+#  define IBV_EXP_PREFETCH_WRITE_ACCESS             IBV_EXP_ACCESS_LOCAL_WRITE
+#endif
 
 /*
  * DC support

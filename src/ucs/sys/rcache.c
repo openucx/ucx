@@ -375,7 +375,7 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
 
 static ucs_status_t
 ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
-                         int prot, ucs_rcache_region_t **region_p)
+                         int prot, void *arg, ucs_rcache_region_t **region_p)
 {
     ucs_rcache_region_t *region;
     ucs_pgt_addr_t start, end;
@@ -432,7 +432,7 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
     region->flags    = UCS_RCACHE_REGION_FLAG_PGTABLE;
     region->refcount = 0;
     region->status   = status = rcache->params.ops->mem_reg(rcache->params.context,
-                                                            rcache, region);
+                                                            rcache, arg, region);
     if (status != UCS_OK) {
         /* In case region is not registered, we don't return it to the user,
          * so no need to increment reference count.
@@ -461,7 +461,7 @@ void ucs_rcache_region_hold(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                            int prot, ucs_rcache_region_t **region_p)
+                            int prot, void *arg, ucs_rcache_region_t **region_p)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -492,7 +492,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
      * - could not find cached region
      * - found unregistered region
      */
-    return ucs_rcache_create_region(rcache, address, length, prot, region_p);
+    return ucs_rcache_create_region(rcache, address, length, prot, arg, region_p);
 }
 
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)

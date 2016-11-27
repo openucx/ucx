@@ -146,7 +146,8 @@ protected:
 
         memheap = malloc(memheap_size);
 
-        status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size, 0, &memh);
+        status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size,
+                             GetParam().variant, &memh);
         ASSERT_UCS_OK(status);
 
         memset(memheap, 0, memheap_size);

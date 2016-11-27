@@ -40,6 +40,13 @@ public:
                                                                void *memheap_addr,
                                                                ucp_rkey_h rkey,
                                                                std::string& expected_data);
+
+    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
+                                                        const std::string& name,
+                                                        const std::string& test_case_name,
+                                                        const std::string& tls);
+
+
 protected:
     void test_blocking_xfer(blocking_send_func_t send, size_t alignment,
                             bool malloc_allocate, bool is_ep_flush);

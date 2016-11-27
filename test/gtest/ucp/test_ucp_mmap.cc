@@ -15,6 +15,14 @@ public:
         return params;
     }
 
+    static int rand_flags() {
+        if ((rand() % 2) == 0) {
+            return 0;
+        } else {
+            return UCP_MEM_MAP_NONBLOCK;
+        }
+    }
+
 protected:
     void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy);
 };
@@ -60,7 +68,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
 
         ucp_mem_h memh;
         void *ptr = NULL;
-        status = ucp_mem_map(sender().ucph(), &ptr, size, 0, &memh);
+        status = ucp_mem_map(sender().ucph(), &ptr, size, rand_flags(), &memh);
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
@@ -84,7 +92,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
         void *ptr = malloc(size);
 
         ucp_mem_h memh;
-        status = ucp_mem_map(sender().ucph(), &ptr, size, 0, &memh);
+        status = ucp_mem_map(sender().ucph(), &ptr, size, rand_flags(), &memh);
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
@@ -110,10 +118,10 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
 
     /* Check that ucp_mem_map accepts any value for buffer if size is 0 and
      * UCP_MEM_FLAG_ZERO_REG flag is passed to it. */
-    status = ucp_mem_map(sender().ucph(), &ptr, 0, 0, &memh[0]);
+    status = ucp_mem_map(sender().ucph(), &ptr, 0, rand_flags(), &memh[0]);
     ASSERT_UCS_OK(status);
     ptr = dummy;
-    status = ucp_mem_map(sender().ucph(), &ptr, 0, 0, &memh[1]);
+    status = ucp_mem_map(sender().ucph(), &ptr, 0, rand_flags(), &memh[1]);
     ASSERT_UCS_OK(status);
 
     for (i = 0; i < buf_num; i++) {

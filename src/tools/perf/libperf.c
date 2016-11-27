@@ -91,12 +91,16 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
                                             ucx_perf_params_t *params)
 {
     ucs_status_t status;
+    unsigned flags;
 
     /* TODO use params->alignment  */
 
+    flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
+                    UCT_MD_MEM_FLAG_NONBLOCK : 0;
+
     status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 params->message_size * params->thread_count, 0,
-                                 "perftest", &perf->uct.send_mem);
+                                 params->message_size * params->thread_count,
+                                 flags, "perftest", &perf->uct.send_mem);
     if (status != UCS_OK) {
         ucs_error("Failed allocate send buffer: %s", ucs_status_string(status));
         goto err;
@@ -106,8 +110,8 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
     perf->send_buffer = perf->uct.send_mem.address;
 
     status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 params->message_size * params->thread_count, 0,
-                                 "perftest", &perf->uct.recv_mem);
+                                 params->message_size * params->thread_count,
+                                 flags, "perftest", &perf->uct.recv_mem);
     if (status != UCS_OK) {
         ucs_error("Failed allocate receive buffer: %s", ucs_status_string(status));
         goto err_free_send;
@@ -645,7 +649,9 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
     perf->send_buffer = NULL;
     status = ucp_mem_map(perf->ucp.context, &perf->send_buffer,
                          params->message_size * params->thread_count,
-                         0, &perf->ucp.send_memh);
+                         (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
+                                         UCP_MEM_MAP_NONBLOCK : 0,
+                         &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
     }

@@ -142,18 +142,20 @@ AS_IF([test "x$with_ib" == xyes],
 
        AC_CHECK_DECLS([IBV_LINK_LAYER_INFINIBAND,
                        IBV_LINK_LAYER_ETHERNET,
-                       IBV_EVENT_GID_CHANGE,
-                       IBV_DEVICE_MR_ALLOCATE,
-                       IBV_ACCESS_ALLOCATE_MR],
+                       IBV_EVENT_GID_CHANGE],
                       [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS([IBV_EXP_CQ_IGNORE_OVERRUN,
                        IBV_EXP_ACCESS_ALLOCATE_MR,
+                       IBV_EXP_ACCESS_ON_DEMAND,
                        IBV_EXP_DEVICE_MR_ALLOCATE,
                        IBV_EXP_WR_NOP,
                        IBV_EXP_DEVICE_DC_TRANSPORT,
                        IBV_EXP_ATOMIC_HCA_REPLY_BE,
+                       IBV_EXP_PREFETCH_WRITE_ACCESS,
+                       ibv_exp_reg_mr,
                        ibv_exp_create_qp,
+                       ibv_exp_prefetch_mr,
                        ibv_exp_setenv],
                       [], [], [[#include <infiniband/verbs_exp.h>]])
 
@@ -198,6 +200,9 @@ AS_IF([test "x$with_ib" == xyes],
                        [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
+                         struct ibv_exp_device_attr.odp_caps,
+                         struct ibv_exp_device_attr.odp_caps.per_transport_caps.dc_odp_caps,
+                         struct ibv_exp_device_attr.odp_mr_max_size,
                          struct ibv_exp_qp_init_attr.max_inl_recv,
                          struct ibv_async_event.element.dct],
                         [], [], [[#include <infiniband/verbs_exp.h>]])

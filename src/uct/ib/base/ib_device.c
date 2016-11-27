@@ -152,6 +152,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
     }
 
     /* Read device properties */
+    memset(&dev->dev_attr, 0, sizeof(dev->dev_attr));
     IBV_EXP_DEVICE_ATTR_SET_COMP_MASK(&dev->dev_attr);
     ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
     if (ret != 0) {
@@ -680,3 +681,37 @@ uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num, unsigned gid_ind
     return UCS_OK;
 }
 
+size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
+{
+#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+    uint32_t required_ud_odp_caps = IBV_EXP_ODP_SUPPORT_SEND;
+    uint32_t required_rc_odp_caps = IBV_EXP_ODP_SUPPORT_SEND |
+                                    IBV_EXP_ODP_SUPPORT_WRITE |
+                                    IBV_EXP_ODP_SUPPORT_READ;
+
+    if (!IBV_EXP_HAVE_ODP(&dev->dev_attr) ||
+        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, rc), required_rc_odp_caps) ||
+        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, ud), required_ud_odp_caps))
+    {
+        return 0;
+    }
+
+    if (IBV_DEVICE_HAS_DC(&dev->dev_attr)
+#  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS_PER_TRANSPORT_CAPS_DC_ODP_CAPS
+        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, dc), required_rc_odp_caps)
+#  endif
+        )
+    {
+        return 0;
+    }
+
+#  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE
+    return dev->dev_attr.odp_mr_max_size;
+#  else
+    return 1ul << 28; /* Limit ODP to 256 MB by default */
+#  endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE */
+
+#else
+    return 0;
+#endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS */
+}

@@ -153,6 +153,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ib_address_t);
         PRINT_SIZE(uct_ib_device_t);
         PRINT_SIZE(uct_ib_md_t);
+        PRINT_SIZE(uct_ib_mem_t);
         PRINT_SIZE(uct_ib_rcache_region_t);
         PRINT_SIZE(uct_ib_iface_t);
         PRINT_SIZE(uct_ib_iface_config_t);
