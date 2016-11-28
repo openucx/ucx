@@ -76,7 +76,7 @@
  */
 
 /**
- * @defgroup UCT_RMA  UCT Remote memory access operations.
+ * @defgroup UCT_RMA  UCT Remote memory access operations
  * @ingroup UCT_API
  * @{
  * Defines remote memory access operations.
@@ -84,10 +84,10 @@
  */
 
 /**
- * @defgroup UCT_AMO   UCT Atomic operations.
+ * @defgroup UCT_AMO   UCT Atomic operations
  * @ingroup UCT_API
  * @{
- * Defines atomic operations..
+ * Defines atomic operations.
  * @}
  */
 
@@ -924,11 +924,11 @@ ucs_status_t uct_iface_set_am_handler(uct_iface_h iface, uint8_t id,
  * @brief Set active message tracer for the interface.
  *
  * Sets a function which dumps active message debug information to a buffer,
- * which is printed every time the an active message is sent or received, when
+ * which is printed every time an active message is sent or received, when
  * data tracing is on. Without the tracer, only transport-level information is
  * printed.
  *
- * @param [in]  iface    Interface to set the active message handler for.
+ * @param [in]  iface    Interface to set the active message tracer for.
  * @param [in]  tracer   Active message tracer. NULL to clear.
  * @param [in]  arg      Tracer custom argument.
  */
@@ -1366,7 +1366,7 @@ UCT_INLINE_API ssize_t uct_ep_am_bcopy(uct_ep_h ep, uint8_t id,
 
 
 /**
- * @ingroup UCT_RMA
+ * @ingroup UCT_AM
  * @brief Send active message while avoiding local memory copy
  *
  * The input data in @a iov array of @ref ::uct_iov_t structures sent to remote
