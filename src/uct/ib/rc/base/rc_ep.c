@@ -285,13 +285,13 @@ void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                       buffer + strlen(buffer), max - strlen(buffer));
 }
 
-void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
+    VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
 
-    desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
+    desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
 
@@ -299,19 +299,21 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op)
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
-void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op)
+void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
+                                               const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(desc + 1, desc->super.length);
+    VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
 
-    desc->unpack_cb(desc->super.unpack_arg, desc + 1, desc->super.length);
+    desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
     ucs_mpool_put(desc);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
-void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op)
+void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
+                                             const void *resp)
 {
     uct_invoke_completion(op->user_comp, UCS_OK);
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
@@ -447,11 +449,11 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
 
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
-            (uct_rc_iface_send_op_t *op) \
+            (uct_rc_iface_send_op_t *op, const void *resp) \
     { \
         uct_rc_iface_send_desc_t *desc = \
             ucs_derived_of(op, uct_rc_iface_send_desc_t); \
-        uint##_num_bits##_t *value = (void*)(desc + 1); \
+        const uint##_num_bits##_t *value = resp; \
         uint##_num_bits##_t *dest = desc->super.buffer; \
         \
         VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
@@ -472,3 +474,11 @@ UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 0);
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 1);
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(64, 0);
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(64, 1);
+
+void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    uct_invoke_completion(desc->super.user_comp, UCS_OK);
+    ucs_mpool_put(desc);
+    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
+}

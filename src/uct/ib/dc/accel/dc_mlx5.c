@@ -512,9 +512,6 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 
     ucs_memory_cpu_load_fence();
 
-    ucs_assertv(!(cqe->op_own & (MLX5_INLINE_SCATTER_32|MLX5_INLINE_SCATTER_64)),
-                "tx inline scatter not supported");
-
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     dci = uct_dc_iface_dci_find(&iface->super, qp_num);
     txqp = &iface->super.tx.dcis[dci].txqp;
@@ -522,8 +519,9 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 
     hw_ci = ntohs(cqe->wqe_counter);
     uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
-    uct_rc_txqp_completion(txqp, hw_ci);
     iface->super.super.tx.cq_available++;
+
+    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 
     uct_dc_iface_dci_put(&iface->super, dci);
     if (uct_dc_iface_dci_can_alloc(&iface->super)) {

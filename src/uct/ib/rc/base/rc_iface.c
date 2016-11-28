@@ -486,7 +486,8 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = iface->config.tx_min_inline;
     qp_init_attr.qp_type             = qp_type;
-    qp_init_attr.sq_sig_all          = 0;
+    qp_init_attr.sq_sig_all          = !iface->config.tx_moderation;
+
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp_init_attr.comp_mask           = IBV_EXP_QP_INIT_ATTR_PD;
     qp_init_attr.pd                  = uct_ib_iface_md(&iface->super)->pd;
@@ -505,7 +506,7 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
 #  if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
     qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    qp_init_attr.max_inl_recv       = iface->config.rx_inline;
+    qp_init_attr.max_inl_recv         = iface->config.rx_inline;
 #  endif
 
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
@@ -530,13 +531,4 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     *qp_p = qp;
     *cap  = qp_init_attr.cap;
     return UCS_OK;
-}
-
-
-void uct_rc_am_zcopy_handler(uct_rc_iface_send_op_t *op)
-{
-    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    uct_invoke_completion(desc->super.user_comp, UCS_OK);
-    ucs_mpool_put(desc);
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }

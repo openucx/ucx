@@ -78,7 +78,34 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     return count;
 }
 
-ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, uct_rc_iface_t *rc_iface,
+#define UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(_bits) \
+    static void \
+    uct_rc_mlx5_common_atomic##_bits##_le_handler(uct_rc_iface_send_op_t *op, \
+                                                  const void *resp) \
+    { \
+        uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t); \
+        uint##_bits##_t *dest        = desc->super.buffer; \
+        const uint##_bits##_t *value = resp; \
+        \
+        VALGRIND_MAKE_MEM_DEFINED(value, sizeof(*value)); \
+        if (resp == (desc + 1)) { \
+            *dest = *value; /* response in desc buffer */ \
+        } else if (_bits == 32) { \
+            *dest = ntohl(*value);  /* response in CQE as 32-bit value */ \
+        } else if (_bits == 64) { \
+            *dest = ntohll(*value); /* response in CQE as 64-bit value */ \
+        } \
+        \
+        uct_invoke_completion(desc->super.user_comp, UCS_OK); \
+        ucs_mpool_put(desc); \
+        UCT_IB_INSTRUMENT_RECORD_SEND_OP(op); \
+    }
+
+UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(32)
+UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
+
+ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
+                                           uct_rc_iface_t *rc_iface,
                                            uct_rc_iface_config_t *config)
 {
     ucs_status_t status;
@@ -123,6 +150,20 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface, uc
     if (status != UCS_OK) {
         UCS_STATS_NODE_FREE(iface->stats);
     }
+
+    /* For little-endian atomic reply, override the default functions, to still
+     * treat the response as big-endian when it arrives in the CQE.
+     */
+    if (!uct_ib_atomic_is_be_reply(uct_ib_iface_device(&rc_iface->super), 0, sizeof(uint64_t))) {
+        rc_iface->config.atomic64_handler    = uct_rc_mlx5_common_atomic64_le_handler;
+    }
+    if (!uct_ib_atomic_is_be_reply(uct_ib_iface_device(&rc_iface->super), 1, sizeof(uint32_t))) {
+       rc_iface->config.atomic32_ext_handler = uct_rc_mlx5_common_atomic32_le_handler;
+    }
+    if (!uct_ib_atomic_is_be_reply(uct_ib_iface_device(&rc_iface->super), 1, sizeof(uint64_t))) {
+       rc_iface->config.atomic64_ext_handler = uct_rc_mlx5_common_atomic64_le_handler;
+    }
+
     return status;
 }
 
@@ -144,7 +185,7 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
-    iface_attr->cap.get.min_zcopy = 0;
+    iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
     iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 

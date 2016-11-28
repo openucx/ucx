@@ -67,6 +67,11 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "enough will be sent inline.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_inline), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"TX_INLINE_RESP", "32",
+   "Bytes to reserve in send WQE for inline response. Responses which are small\n"
+   "enough, such as of atomic operations and small reads, will be received inline.",
+   ucs_offsetof(uct_ib_iface_config_t, tx.inl_resp), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"TX_MIN_SGE", "3",
    "Number of SG entries to reserve in the send WQE.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
@@ -392,7 +397,7 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
-                                           size_t inl, struct ibv_cq **cq_p)
+                                           size_t *inl, struct ibv_cq **cq_p)
 {
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
@@ -404,14 +409,14 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
     int env_var_added = 0;
     int ret;
 
-    cqe_size_min       = (inl > 32) ? 128 : 64;
+    cqe_size_min       = (*inl > 32) ? 128 : 64;
     cqe_size_env_value = getenv(cqe_size_env_var);
 
     if (cqe_size_env_value != NULL) {
         cqe_size = atol(cqe_size_env_value);
         if (cqe_size < cqe_size_min) {
             ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
-                      cqe_size_env_var, cqe_size, cqe_size_min, inl);
+                      cqe_size_env_var, cqe_size, cqe_size_min, *inl);
             status = UCS_ERR_INVALID_PARAM;
             goto out;
         }
@@ -444,6 +449,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
     }
 
     *cq_p = cq;
+    *inl  = cqe_size / 2;
     status = UCS_OK;
 
 out_unsetenv:
@@ -472,6 +478,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     ucs_status_t status;
     uint8_t port_num;
+    size_t inl;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
                               &config->super UCS_STATS_ARG(dev->stats));
@@ -527,12 +534,16 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    status = uct_ib_iface_create_cq(self, tx_cq_len, 0, &self->send_cq);
+    inl = config->rx.inl;
+    status = uct_ib_iface_create_cq(self, tx_cq_len, &inl, &self->send_cq);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
+    ucs_assert_always(inl <= UINT8_MAX);
+    self->config.max_inl_resp = inl;
 
-    status = uct_ib_iface_create_cq(self, config->rx.queue_len, config->rx.inl,
+    inl = config->rx.inl;
+    status = uct_ib_iface_create_cq(self, config->rx.queue_len, &inl,
                                     &self->recv_cq);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;

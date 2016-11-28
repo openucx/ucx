@@ -87,7 +87,7 @@ enum {
 };
 
 
-typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op);
+typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *resp);
 
 
 struct uct_rc_iface_config {
@@ -226,6 +226,8 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
+void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+
 /**
  * Creates an RC or DCI QP and fills 'cap' with QP capabilities;
  */
@@ -270,8 +272,6 @@ uct_rc_bcopy_desc_fill(uct_rc_iface_send_desc_t *desc, uint8_t id,
     *length = pack_cb(rch + 1, arg);
 }
 
-void uct_rc_am_zcopy_handler(uct_rc_iface_send_op_t *op);
-
 static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
                                                     uct_completion_t *comp,
                                                     int *send_flags)
@@ -280,7 +280,7 @@ static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
         desc->super.handler   = (uct_rc_send_handler_t)ucs_mpool_put;
         *send_flags           = 0;
     } else {
-        desc->super.handler   = uct_rc_am_zcopy_handler;
+        desc->super.handler   = uct_rc_ep_am_zcopy_handler;
         desc->super.user_comp = comp;
         *send_flags           = IBV_SEND_SIGNALED;
     }
