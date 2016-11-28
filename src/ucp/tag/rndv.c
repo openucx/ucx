@@ -422,7 +422,7 @@ static size_t ucp_rndv_pack_multi_data_last(void *dest, void *arg)
                                                sreq->send.datatype);
 }
 
-static ucs_status_t ucp_rndv_progress_send(uct_pending_req_t *self)
+static ucs_status_t ucp_rndv_progress_bcopy_send(uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = sreq->send.ep;
@@ -432,14 +432,17 @@ static ucs_status_t ucp_rndv_progress_send(uct_pending_req_t *self)
 
     if (sreq->send.length <= ucp_ep_config(ep)->max_am_bcopy - sizeof(ucp_rndv_data_hdr_t)) {
         /* send a single bcopy message */
-        ucs_trace_data("send on sreq %p, am lane: %d. single message "
-                       "(bcopy), size: %zu", sreq, sreq->send.lane, sreq->send.length);
+        ucs_trace_data("send on sreq %p, am lane: %d, datatype: %zu. single message "
+                       "(bcopy), size: %zu", sreq, sreq->send.lane,
+                       (sreq->send.datatype & UCP_DATATYPE_CLASS_MASK), sreq->send.length);
         status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_DATA_LAST,
                                         ucp_rndv_pack_single_data);
     } else {
         /* send multiple bcopy messages (fragments of the original send message) */
-        ucs_trace_data("send on sreq %p, am lane: %d. multi message (bcopy)",
-                       sreq, sreq->send.lane);
+        ucs_trace_data("send on sreq %p, size: %zu ,am lane: %d, offset: %zu, datatype: %zu. "
+                       "multi message (bcopy)",
+                       sreq, sreq->send.length, sreq->send.lane, sreq->send.state.offset,
+                       (sreq->send.datatype & UCP_DATATYPE_CLASS_MASK));
         status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA_LAST,
@@ -455,22 +458,99 @@ static ucs_status_t ucp_rndv_progress_send(uct_pending_req_t *self)
     return status;
 }
 
+static void ucp_rndv_zcopy_req_complete(ucp_request_t *req)
+{
+    ucp_request_send_buffer_dereg(req, ucp_ep_get_am_lane(req->send.ep));
+    ucp_request_complete_send(req, UCS_OK);
+}
+
+static void ucp_rndv_contig_zcopy_completion(uct_completion_t *self,
+                                             ucs_status_t status)
+{
+    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct_comp);
+    ucp_rndv_zcopy_req_complete(sreq);
+}
+
+static ucs_status_t ucp_rndv_zcopy_single(uct_pending_req_t *self)
+{
+    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_rndv_data_hdr_t hdr;
+
+    hdr.rreq_ptr = sreq->send.proto.rreq_ptr;
+
+    return ucp_do_am_zcopy_single(self, UCP_AM_ID_RNDV_DATA_LAST, &hdr, sizeof(hdr),
+                                  ucp_rndv_zcopy_req_complete);
+}
+
+static ucs_status_t ucp_rndv_zcopy_multi(uct_pending_req_t *self)
+{
+    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_rndv_data_hdr_t hdr;
+
+    hdr.rreq_ptr = sreq->send.proto.rreq_ptr;
+
+    return ucp_do_am_zcopy_multi(self,
+                                 UCP_AM_ID_RNDV_DATA,
+                                 UCP_AM_ID_RNDV_DATA,
+                                 UCP_AM_ID_RNDV_DATA_LAST,
+                                 &hdr, sizeof(hdr),
+                                 &hdr, sizeof(hdr),
+                                 ucp_rndv_zcopy_req_complete);
+}
+
+static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
+{
+    size_t max_zcopy;
+    ucs_status_t status;
+
+    ucs_trace_data("send on sreq %p with zcopy, am lane: %d, datatype: %zu, "
+                   "size: %zu", sreq, sreq->send.lane,
+                   (sreq->send.datatype & UCP_DATATYPE_CLASS_MASK),
+                   sreq->send.length);
+
+    if (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep)) {
+        /* dereg the original send request since we are going to send on the AM lane next */
+        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(ep));
+        status = ucp_request_send_buffer_reg(sreq, ucp_ep_get_am_lane(ep));
+        ucs_assert_always(status == UCS_OK);
+    }
+
+    sreq->send.uct_comp.func = ucp_rndv_contig_zcopy_completion;
+
+    max_zcopy = ucp_ep_config(ep)->max_am_zcopy;
+    if (sreq->send.length <= max_zcopy - sizeof(ucp_rndv_data_hdr_t)) {
+        sreq->send.uct_comp.count = 1;
+        sreq->send.uct.func = ucp_rndv_zcopy_single;
+    } else {
+        /* calculate number of zcopy fragments */
+        sreq->send.uct_comp.count = 1 + (sreq->send.length - 1) /
+                                    (max_zcopy - sizeof(ucp_rndv_data_hdr_t));
+        sreq->send.uct.func = ucp_rndv_zcopy_multi;
+    }
+}
+
 static ucs_status_t
 ucp_rndv_rtr_handler(void *arg, void *data, size_t length, void *desc)
 {
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     ucp_request_t *sreq = (ucp_request_t*) rndv_rtr_hdr->sreq_ptr;
+    ucp_ep_h ep = sreq->send.ep;
 
     /* make sure that the ep on which the rtr was received on is connected */
-    ucs_assert_always(!ucp_ep_is_stub(sreq->send.ep));
+    ucs_assert_always(!ucp_ep_is_stub(ep));
     ucs_trace_req("RTR received. start sending on sreq %p", sreq);
 
-    /* dereg the original send request since we are going to send with bcopy */
-    ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(sreq->send.ep));
+    if (sreq->send.length >= ucp_ep_config(ep)->zcopy_thresh) {
+        /* send with zcopy */
+        ucp_rndv_prepare_zcopy(sreq, ep);
+    } else {
+        /* send with bcopy */
+        /* dereg the original send request since we are going to send with bcopy */
+        ucp_request_send_buffer_dereg(sreq, ucp_ep_get_rndv_get_lane(ep));
+        sreq->send.uct.func = ucp_rndv_progress_bcopy_send;
+    }
 
-    sreq->send.uct.func       = ucp_rndv_progress_send;
     sreq->send.proto.rreq_ptr = rndv_rtr_hdr->rreq_ptr;
-
     ucp_request_start_send(sreq);
     return UCS_OK;
 }
