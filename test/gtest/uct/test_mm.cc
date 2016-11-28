@@ -88,7 +88,7 @@ UCS_TEST_P(test_uct_mm, open_for_posix) {
         /* send the data */
         uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));
 
-        short_progress_loop();
+        short_progress_loop(50);
 
         ASSERT_EQ(sizeof(send_data), recv_buffer->length);
         EXPECT_EQ(send_data, *(uint64_t*)(recv_buffer+1));
