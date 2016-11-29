@@ -17,7 +17,7 @@ define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs
 # This is the API version (see libtool library versioning)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 # current:rev:age
-define([libucx_so_version], 2:1:0)
+define([libucx_so_version], 0:0:0)
 
 AC_INIT([ucx], [ucx_ver_major.ucx_ver_minor])
 
