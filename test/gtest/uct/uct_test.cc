@@ -190,6 +190,17 @@ void uct_test::short_progress_loop(double delay_ms) const {
     }
 }
 
+void uct_test::wait_for_flag(volatile unsigned *flag, double timeout)
+{
+    ucs_time_t loop_end_limit;
+
+    loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+
+    while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
+        short_progress_loop();
+    }
+}
+
 void uct_test::twait(int delta_ms) {
     ucs_time_t now, t1, t2;
     int left;

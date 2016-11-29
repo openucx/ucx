@@ -162,6 +162,7 @@ protected:
     void progress() const;
     void flush() const;
     virtual void short_progress_loop(double delay_ms=1.0) const;
+    void wait_for_flag(volatile unsigned *flag, double timeout = 10.0);
     virtual void twait(int delta_ms);
 
     uct_test::entity* create_entity(size_t rx_headroom);
