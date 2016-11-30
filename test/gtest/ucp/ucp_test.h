@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <ucp/api/ucp.h>
+#include <ucs/time/time.h>
 }
 #include <common/test.h>
 
@@ -15,6 +16,7 @@ extern "C" {
 
 struct ucp_test_param {
     ucp_params_t              ctx_params;
+    ucp_worker_params_t       worker_params;
     std::vector<std::string>  transports;
     int                       variant;
     int                       thread_type;
@@ -94,14 +96,17 @@ public:
 
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
+                     const ucp_worker_params_t& worker_params,
                      const std::string& name,
                      const std::string& test_case_name,
                      const std::string& tls);
 
     static ucp_params_t get_ctx_params();
+    static ucp_worker_params_t get_worker_params();
 
     static void
     generate_test_params_variant(const ucp_params_t& ctx_params,
+                                 const ucp_worker_params_t& worker_params,
                                  const std::string& name,
                                  const std::string& test_case_name,
                                  const std::string& tls,
@@ -115,8 +120,10 @@ protected:
     virtual void init();
     virtual void cleanup();
     entity* create_entity(bool add_in_front = false);
+
     void progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
+    void wait_for_flag(volatile size_t *flag, double timeout = 10.0);
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);
     static void disable_errors();
@@ -150,6 +157,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 #define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
     INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
                             testing::ValuesIn(_test_case::enum_test_params(_test_case::get_ctx_params(), \
+                                                                           _test_case::get_worker_params(), \
                                                                            #_name, \
                                                                            #_test_case, \
                                                                            _tls)));

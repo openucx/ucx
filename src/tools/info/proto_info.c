@@ -18,6 +18,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     ucp_context_h context;
     ucp_worker_h worker;
     ucp_params_t params;
+    ucp_worker_params_t worker_params;
+    ucp_ep_params_t ep_params;
     ucp_address_t *address;
     size_t address_length;
     ucp_ep_h ep;
@@ -43,7 +45,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         goto out_cleanup_context;
     }
 
-    status = ucp_worker_create(context, UCS_THREAD_MODE_MULTI, &worker);
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+
+    status = ucp_worker_create(context, &worker_params, &worker);
     if (status != UCS_OK) {
         printf("<Failed to create UCP worker>\n");
         goto out_cleanup_context;
@@ -60,7 +65,10 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
             goto out_destroy_worker;
         }
 
-        status = ucp_ep_create(worker, address, &ep);
+        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address    = address;
+
+        status = ucp_ep_create(worker, &ep_params, &ep);
         ucp_worker_release_address(worker, address);
         if (status != UCS_OK) {
             printf("<Failed to get create UCP endpoint>\n");

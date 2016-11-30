@@ -141,6 +141,45 @@ enum ucp_feature {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_worker_params_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_worker_params_field {
+    UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /* UCP thread mode */
+};
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_params_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_ep_params_field {
+    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0), /* Address of remote peer */
+};
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief UCP memory mapping parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_mem_map_params_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_mem_map_params_field {
+    UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /* Address of remote peer */
+    UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /* Length of memory to
+                                                     allocate/register */
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /* Allocation flags */
+};
+
+
+/**
  * @ingroup UCP_CONTEXT
  * @brief UCP context attributes field mask.
  *
@@ -478,6 +517,108 @@ typedef struct ucp_worker_attr {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief Tuning parameters for the UCP worker.
+ *
+ * The structure defines the parameters that are used for the
+ * UCP worker tuning during the UCP worker @ref ucp_worker_create "creation".
+ */
+typedef struct ucp_worker_params {
+    /**
+     * Mask of valid fields in this structure, using bits from @ref ucp_worker_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Thread safety "mode" for the worker object and resources associated with it.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * UCP_WORKER_PARAM_FIELD_THREAD_MODE), the UCS_THREAD_MODE_SINGLE mode
+     * will be used.
+     */
+    ucs_thread_mode_t       thread_mode;
+} ucp_worker_params_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Tuning parameters for the UCP endpoint.
+ *
+ * The structure defines the parameters that are used for the
+ * UCP endpoint tuning during the UCP ep @ref ucp_ep_create "creation".
+ */
+typedef struct ucp_ep_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Destination address; the address must be obtained using
+     * @ref ucp_worker_get_address.
+     * This field is mandatory for filling (along with its corresponding bit
+     * in the field_mask - UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).
+     * The ucp_ep_create routine will return with an error if the address isn't
+     * specified.
+     */
+    const ucp_address_t     *address;
+} ucp_ep_params_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Tuning parameters for the UCP memory mapping.
+ *
+ * The structure defines the parameters that are used for the
+ * UCP memory mapping tuning during the @ref ucp_mem_map "ucp_mem_map" routine.
+ */
+typedef struct ucp_mem_map_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_mem_map_params_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * If the address is not NULL, the routine maps (registers) the memory segment
+     * pointed to by this address.
+     * If the pointer is NULL, the library allocates mapped (registered) memory
+     * segment and returns its address in this argument.
+     * Therefore, this value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * UCP_MEM_MAP_PARAM_FIELD_ADDRESS), the ucp_mem_map routine will consider
+     * address as set to NULL and will allocate memory.
+     */
+     void                   *address;
+
+     /**
+      * Length (in bytes) to allocate or map (register).
+      * This field is mandatory for filling (along with its corresponding bit
+      * in the field_mask - UCP_MEM_MAP_PARAM_FIELD_LENGTH).
+      * The ucp_mem_map routine will return with an error if the length isn't
+      * specified.
+      */
+     size_t                 length;
+
+     /**
+      * Allocation flags, UCP_MEM_MAP_xx.
+      * This value is optional.
+      * If it's not set (along with its corresponding bit in the field_mask -
+      * UCP_MEM_MAP_PARAM_FIELD_FLAGS), the ucp_mem_map routine will consider
+      * the flags as set to zero.
+      */
+     unsigned               flags;
+} ucp_mem_map_params_t;
+
+
+/**
  * @ingroup UCP_CONTEXT
  * @brief UCP receive information descriptor
  *
@@ -721,14 +862,15 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream);
  *
  * @param [in] context     Handle to @ref ucp_context_h
  *                         "UCP application context".
- * @param [in] thread_mode Thread safety @ref ucs_thread_mode_t "mode" for
- *                         the worker object and resources associated with it.
+ * @param [in] params      User defined @ref ucp_worker_params_t "tunings" for the
+ *                         @ref ucp_worker_h "UCP worker".
  * @param [out] worker_p   A pointer to the worker object allocated by the
  *                         UCP library
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
+ucs_status_t ucp_worker_create(ucp_context_h context,
+                               const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p);
 
 
@@ -982,14 +1124,13 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *
  * @param [in]  worker      Handle to the worker; the endpoint
  *                          is associated with the worker.
- * @param [in]  address     Destination address; the address must be obtained
- *                          using @ref ucp_worker_get_address
- *                          "ucp_worker_get_address()" routine.
+ * @param [in]  params      User defined @ref ucp_ep_params_t "tunings" for the
+ *                          @ref ucp_ep_h "UCP endpoint".
  * @param [out] ep_p        A handle to the created endpoint.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
+ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p);
 
 
@@ -1086,20 +1227,15 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  *
  * @param [in]     context    Application @ref ucp_context_h "context" to map
  *                            (register) and allocate the memory on.
- * @param [inout]  address_p  If the pointer to the address is not NULL,
- *                            the routine maps (registers) the memory segment.
- *                            if the pointer is NULL, the library allocates
- *                            mapped (registered) memory segment and returns its
- *                            address in this argument.
- * @param [in]     length     Length (in bytes) to allocate or map (register).
- * @param [in]     flags      Allocation flags, UCP_MEM_MAP_xx.
+ * @param [in]     params     User defined @ref ucp_mem_map_params_t "tunings" for the
+ *                            @ref ucp_mem_h "UCP memory handle".
  * @param [out]    memh_p     UCP @ref ucp_mem_h "handle" for the allocated
  *                            segment.
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
-                         unsigned flags, ucp_mem_h *memh_p);
+ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
+                         ucp_mem_h *memh_p);
 
 
 /**

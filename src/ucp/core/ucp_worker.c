@@ -435,7 +435,8 @@ out:
     return config_idx;
 }
 
-ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_mode,
+ucs_status_t ucp_worker_create(ucp_context_h context,
+                               const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
     ucp_rsc_index_t tl_id;
@@ -454,7 +455,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
         return UCS_ERR_NO_MEMORY;
     }
 
-    if (thread_mode != UCS_THREAD_MODE_MULTI) {
+    if (params->thread_mode != UCS_THREAD_MODE_MULTI) {
         worker->mt_lock.mt_type = UCP_MT_TYPE_NONE;
     } else if (context->config.ext.use_mt_mutex) {
         worker->mt_lock.mt_type = UCP_MT_TYPE_MUTEX;
@@ -505,7 +506,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
     }
 
     /* Create the underlying UCT worker */
-    status = uct_worker_create(&worker->async, thread_mode, &worker->uct);
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
+        status = uct_worker_create(&worker->async, params->thread_mode, &worker->uct);
+    } else {
+        status = uct_worker_create(&worker->async, UCS_THREAD_MODE_SINGLE, &worker->uct);
+    }
     if (status != UCS_OK) {
         goto err_destroy_async;
     }
