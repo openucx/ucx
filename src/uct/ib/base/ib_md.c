@@ -11,12 +11,48 @@
 
 #include <ucs/arch/atomic.h>
 #include <pthread.h>
+#include <numaif.h>
+#include <numa.h>
+
 
 #define UCT_IB_MD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
+
+#if HAVE_STRUCT_BITMASK
+#  define numa_nodemask_p(_nm)            (_nm)->maskp
+#  define numa_nodemask_size(_nm)         (_nm)->size
+#  define numa_get_thread_node_mask(_nmp) \
+        { \
+            numa_free_nodemask(*(_nmp)); \
+            *(_nmp) = numa_get_run_node_mask(); \
+        }
+#else
+#  define numa_allocate_nodemask()        ucs_malloc(sizeof(nodemask_t), "nodemask")
+#  define numa_free_nodemask(_nm)         ucs_free(_nm)
+#  define numa_nodemask_p(_nm)            (_nm)->maskp.n
+#  define numa_nodemask_size(_nm)         ((size_t)NUMA_NUM_NODES)
+#  define numa_bitmask_clearall(_nm)      nodemask_zero(&(_nm)->maskp)
+#  define numa_bitmask_setbit(_nm, _n)    nodemask_set(&(_nm)->maskp, _n)
+#  define numa_get_thread_node_mask(_nmp) \
+        { \
+            (*(_nmp))->maskp = numa_get_run_node_mask(); \
+        }
+
+struct bitmask {
+    nodemask_t maskp;
+};
+#endif
+
+
+static const char *uct_ib_numa_policy_names[] = {
+    [UCT_IB_NUMA_POLICY_DEFAULT]   = "default",
+    [UCT_IB_NUMA_POLICY_PREFERRED] = "preferred",
+    [UCT_IB_NUMA_POLICY_BIND]      = "bind",
+    [UCT_IB_NUMA_POLICY_LAST]      = NULL,
+};
 
 static ucs_config_field_t uct_ib_md_config_table[] = {
   {"", "", NULL,
@@ -49,13 +85,24 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "well on a lossy fabric when working with RoCE.",
    ucs_offsetof(uct_ib_md_config_t, eth_pause), UCS_CONFIG_TYPE_BOOL},
 
-  {"ODP_MAX_SIZE", "auto",
-   "Maximal memory region size to enable on-demand-paging (ODP) for. 0 - disable.\n",
-   ucs_offsetof(uct_ib_md_config_t, odp_max_size), UCS_CONFIG_TYPE_MEMUNITS},
+  {"ODP_NUMA_POLICY", "preferred",
+   "Override NUMA policy for ODP regions, to avoid extra page migrations.\n"
+   " - default: Do no change existing policy.\n"
+   " - preferred/bind:\n"
+   "     Unless the memory policy of the current thread is MPOL_BIND, set the\n"
+   "     policy of ODP regions to MPOL_PREFERRED/MPOL_BIND, respectively.\n"
+   "     If the numa node mask of the current thread is not defined, use the numa\n"
+   "     nodes which correspond to its cpu affinity mask.",
+   ucs_offsetof(uct_ib_md_config_t, odp.numa_policy),
+   UCS_CONFIG_TYPE_ENUM(uct_ib_numa_policy_names)},
 
-  {"PREFETCH_MR", "y",
-   "Prefetch memory regions created with NONBLOCKING flag.\n",
-   ucs_offsetof(uct_ib_md_config_t, prefetch_mr), UCS_CONFIG_TYPE_BOOL},
+  {"ODP_PREFETCH", "y",
+   "Prefetch memory regions created with ODP.\n",
+   ucs_offsetof(uct_ib_md_config_t, odp.prefetch), UCS_CONFIG_TYPE_BOOL},
+
+  {"ODP_MAX_SIZE", "auto",
+   "Maximal memory region size to enable ODP for. 0 - disable.\n",
+   ucs_offsetof(uct_ib_md_config_t, odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -428,12 +475,96 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     uint64_t exp_access = 0;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
-        (length <= md->odp_max_size))
+        (length <= md->odp.max_size))
     {
         exp_access |= IBV_EXP_ACCESS_ON_DEMAND;
     }
 
     return exp_access;
+}
+
+static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh,
+                                               uint64_t mr_access_flags)
+{
+    int ret, old_policy, new_policy;
+    struct bitmask *nodemask;
+    uintptr_t start, end;
+    ucs_status_t status;
+
+    if (!(mr_access_flags & IBV_EXP_ACCESS_ON_DEMAND) ||
+        (md->odp.numa_policy == UCT_IB_NUMA_POLICY_DEFAULT) ||
+        (numa_available() < 0))
+    {
+        status = UCS_OK;
+        goto out;
+    }
+
+    nodemask = numa_allocate_nodemask();
+    if (nodemask == NULL) {
+        ucs_warn("Failed to allocate numa node mask");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    ret = get_mempolicy(&old_policy, numa_nodemask_p(nodemask),
+                        numa_nodemask_size(nodemask), NULL, 0);
+    if (ret < 0) {
+        ucs_warn("get_mempolicy(maxnode=%zu) failed: %m",
+                 numa_nodemask_size(nodemask));
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_free;
+    }
+
+    switch (old_policy) {
+    case MPOL_DEFAULT:
+        /* if no policy is defined, use the numa node of the current cpu */
+        numa_get_thread_node_mask(&nodemask);
+        break;
+    case MPOL_BIND:
+        /* if the current policy is BIND, keep it as-is */
+        status = UCS_OK;
+        goto out_free;
+    default:
+        break;
+    }
+
+    switch (md->odp.numa_policy) {
+    case UCT_IB_NUMA_POLICY_BIND:
+        new_policy = MPOL_BIND;
+        break;
+    case UCT_IB_NUMA_POLICY_PREFERRED:
+        new_policy = MPOL_PREFERRED;
+        break;
+    default:
+        ucs_error("unexpected numa policy %d", md->odp.numa_policy);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_free;
+    }
+
+    if (new_policy != old_policy) {
+        start = ucs_align_up_pow2((uintptr_t)memh->mr->addr, ucs_get_page_size());
+        end   = ucs_align_up_pow2((uintptr_t)memh->mr->addr + memh->mr->length,
+                                  ucs_get_page_size());
+        ucs_trace("0x%lx..0x%lx: changing numa policy from %d to %d, "
+                  "nodemask[0]=0x%lx", start, end, old_policy, new_policy,
+                  numa_nodemask_p(nodemask)[0]);
+
+        ret = mbind((void*)start, end - start, new_policy,
+                    numa_nodemask_p(nodemask), numa_nodemask_size(nodemask), 0);
+        if (ret < 0) {
+            ucs_warn("mbind(addr=0x%lx length=%ld policy=%d) failed: %m",
+                     start, end - start, new_policy);
+            status = UCS_ERR_IO_ERROR;
+            goto out_free;
+        }
+    }
+
+    status = UCS_OK;
+
+out_free:
+    numa_free_nodemask(nodemask);
+out:
+    return status;
 }
 
 static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh,
@@ -443,7 +574,7 @@ static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh,
     struct ibv_exp_prefetch_attr attr;
     int ret;
 
-    if ((mr_access_flags & IBV_EXP_ACCESS_ON_DEMAND) && md->prefetch_mr) {
+    if ((mr_access_flags & IBV_EXP_ACCESS_ON_DEMAND) && md->odp.prefetch) {
         attr.flags     = IBV_EXP_PREFETCH_WRITE_ACCESS;
         attr.addr      = memh->mr->addr;
         attr.length    = memh->mr->length;
@@ -500,6 +631,7 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     }
 #endif
 
+    uct_ib_mem_set_numa_policy(md, memh, exp_access);
     uct_ib_mem_prefetch(md, memh, exp_access);
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
@@ -562,6 +694,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     }
 #endif
 
+    uct_ib_mem_set_numa_policy(md, memh, exp_access);
     uct_ib_mem_prefetch(md, memh, exp_access);
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
@@ -872,9 +1005,12 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     md->eth_pause   = md_config->eth_pause;
-    md->prefetch_mr = md_config->prefetch_mr;
     md->rcache      = NULL;
     md->reg_cost    = md_config->uc_reg_cost;
+    md->odp         = md_config->odp;
+    if (md->odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
+        md->odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+    }
 
     if (md_config->rcache.enable != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
@@ -898,12 +1034,6 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
                           ucs_status_string(status));
             }
         }
-    }
-
-    if (md_config->odp_max_size == UCS_CONFIG_MEMUNITS_AUTO) {
-        md->odp_max_size = uct_ib_device_odp_max_size(&md->dev);
-    } else {
-        md->odp_max_size = md_config->odp_max_size;
     }
 
     if (uct_ib_md_umr_qp_create(md) != UCS_OK) {
