@@ -62,11 +62,9 @@ typedef struct uct_ib_md {
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     int                      eth_pause; /**< Pause Frame on an Ethernet network */
     uct_ib_odp_config_t      odp;       /**< ODP configuration */
-#if HAVE_EXP_UMR
     /* keep it in md because pd is needed to create umr_qp/cq */
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
-#endif
     UCS_STATS_NODE_DECLARE(stats);
 } uct_ib_md_t;
 
