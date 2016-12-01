@@ -1,0 +1,4 @@
+--regex-c=/\s*UCS_PROFILE_FUNC\s*\(\s*\w+\s*,\s*(\w+),.*/\1/f/
+--regex-c=/\s*UCS_PROFILE_FUNC_VOID\s*\(\s*(\w+),.*/\1/f/
+--exclude=contrib
+--exclude=build-*
