@@ -83,6 +83,9 @@ struct ucs_rcache_params {
     size_t                 region_struct_size;  /**< Size of memory region structure,
                                                      must be at least the size
                                                      of @ref ucs_rcache_region_t */
+    size_t                 alignment;           /**< Force-align regions to this size.
+                                                     Must be smaller or equal to
+                                                     system page size. */
     int                    ucm_event_priority;  /**< Priority of memory events */
     const ucs_rcache_ops_t *ops;                /**< Memory operations functions */
     void                   *context;            /**< User-defined context that will
@@ -102,7 +105,6 @@ struct ucs_rcache_region {
 
 struct ucs_rcache {
     ucs_rcache_params_t    params;   /**< rcache parameters (immutable) */
-    size_t                 page_size;/**< Page size we use */
     pthread_rwlock_t       lock;     /**< Protects the page table and all regions
                                           whose refcount is 0 */
     ucs_pgtable_t          pgtable;  /**< page table to hold the regions */

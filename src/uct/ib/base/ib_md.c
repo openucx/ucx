@@ -20,6 +20,7 @@
                                   IBV_ACCESS_REMOTE_WRITE | \
                                   IBV_ACCESS_REMOTE_READ | \
                                   IBV_ACCESS_REMOTE_ATOMIC)
+#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 #if HAVE_STRUCT_BITMASK
 #  define numa_nodemask_p(_nm)            (_nm)->maskp
@@ -60,6 +61,11 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
   {"RCACHE", "try", "Enable using memory registration cache",
    ucs_offsetof(uct_ib_md_config_t, rcache.enable), UCS_CONFIG_TYPE_TERNARY},
+
+  {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCT_IB_MD_RCACHE_DEFAULT_ALIGN),
+   "Registration cache address alignment, must be power of 2\n"
+   "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
+   ucs_offsetof(uct_ib_md_config_t, rcache.alignment), UCS_CONFIG_TYPE_UINT},
 
   {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
    ucs_offsetof(uct_ib_md_config_t, rcache.event_prio), UCS_CONFIG_TYPE_UINT},
@@ -1013,7 +1019,9 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     }
 
     if (md_config->rcache.enable != UCS_NO) {
+        UCS_STATIC_ASSERT(UCS_PGT_ADDR_ALIGN >= UCT_IB_MD_RCACHE_DEFAULT_ALIGN);
         rcache_params.region_struct_size = sizeof(uct_ib_rcache_region_t);
+        rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_ib_rcache_ops;
