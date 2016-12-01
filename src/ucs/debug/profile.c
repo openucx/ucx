@@ -94,15 +94,25 @@ static void ucs_profile_write()
     close(fd);
 }
 
-int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
-                             const char *file, int line, const char *function)
+void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
+                              const char *file, int line, const char *function,
+                              int *loc_id_p)
 {
     ucs_profile_location_t *loc;
     int location;
 
+    /* Location ID must be uninitialized */
+    ucs_assert(*loc_id_p == -1);
+
+    /* Check if profiling is disabled */
+    if (!ucs_global_opts.profile_mode) {
+        *loc_id_p = 0;
+        return;
+    }
+
     location = ucs_profile_ctx.num_locations++;
 
-    /* Expand array if needed */
+    /* Reallocate array if needed */
     if (ucs_profile_ctx.num_locations > ucs_profile_ctx.max_locations) {
         ucs_profile_ctx.max_locations = ucs_profile_ctx.num_locations * 2;
         ucs_profile_ctx.locations = ucs_realloc(ucs_profile_ctx.locations,
@@ -111,7 +121,8 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
                                                 "profile_locations");
         if (ucs_profile_ctx.locations == NULL) {
             ucs_warn("failed to expand locations array");
-            return 0;
+            *loc_id_p = 0;
+            return;
         }
     }
 
@@ -124,8 +135,8 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
     loc->type       = type;
     loc->total_time = 0;
     loc->count      = 0;
-
-    return location + 1;
+    loc->loc_id_p   = loc_id_p;
+    *loc_id_p       = location + 1;
 }
 
 void ucs_profile_global_init()
@@ -168,6 +179,23 @@ off:
     ucs_trace("profiling is disabled");
 }
 
+static void ucs_profile_reset_locations()
+{
+    ucs_profile_location_t *loc;
+
+    for (loc = ucs_profile_ctx.locations;
+         loc < ucs_profile_ctx.locations + ucs_profile_ctx.num_locations;
+         ++loc)
+    {
+        *loc->loc_id_p = -1;
+    }
+
+    ucs_profile_ctx.num_locations = 0;
+    ucs_profile_ctx.max_locations = 0;
+    ucs_free(ucs_profile_ctx.locations);
+    ucs_profile_ctx.locations = NULL;
+}
+
 void ucs_profile_global_cleanup()
 {
     ucs_profile_write();
@@ -176,6 +204,7 @@ void ucs_profile_global_cleanup()
     ucs_profile_ctx.log.end        = NULL;
     ucs_profile_ctx.log.current    = NULL;
     ucs_profile_ctx.log.wraparound = 0;
+    ucs_profile_reset_locations();
 }
 
 void ucs_profile_dump()
