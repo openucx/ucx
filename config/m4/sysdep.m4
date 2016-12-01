@@ -102,6 +102,17 @@ AS_IF([test "x$with_valgrind" == xno],
 
 
 #
+# NUMA support
+#
+AC_CHECK_HEADERS([numa.h numaif.h], [],
+                 [AC_MSG_ERROR([NUMA headers not found])])
+AC_CHECK_LIB(numa, mbind,
+             [AC_SUBST(NUMA_LIBS, [-lnuma])],
+             [AC_MSG_ERROR([NUMA library not found])])
+AC_CHECK_TYPES([struct bitmask], [], [], [[#include <numa.h>]])
+
+
+#
 # Malloc hooks
 #
 AC_MSG_CHECKING([malloc hooks])

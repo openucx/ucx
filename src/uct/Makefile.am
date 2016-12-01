@@ -34,7 +34,7 @@ libuct_la_SOURCES = \
 
 if HAVE_IB
 libuct_la_CPPFLAGS += $(IBVERBS_CPPFLAGS)
-libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS) -lpthread
+libuct_la_LDFLAGS +=  $(IBVERBS_LDFLAGS) $(NUMA_LIBS) -lpthread
 noinst_HEADERS += \
 	ib/base/ib_device.h \
 	ib/base/ib_iface.h \

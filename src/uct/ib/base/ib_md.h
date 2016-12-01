@@ -25,6 +25,26 @@ enum {
     UCT_IB_MD_STAT_LAST
 };
 
+
+/*
+ * NUMA policy
+ */
+typedef enum {
+    UCT_IB_NUMA_POLICY_DEFAULT,
+    UCT_IB_NUMA_POLICY_BIND,
+    UCT_IB_NUMA_POLICY_PREFERRED,
+    UCT_IB_NUMA_POLICY_LAST
+} uct_ib_numa_policy_t;
+
+
+typedef struct uct_ib_odp_config {
+    uct_ib_numa_policy_t numa_policy;/**< NUMA policy flags for ODP */
+    int                  prefetch;   /**< Auto-prefetch non-blocking memory
+                                          registrations / allocations */
+    size_t               max_size;   /**< Maximal memory region size for ODP */
+} uct_ib_odp_config_t;
+
+
 typedef struct uct_ib_mem {
     uint32_t                lkey;
     struct ibv_mr           *mr;
@@ -41,9 +61,7 @@ typedef struct uct_ib_md {
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
     int                      eth_pause; /**< Pause Frame on an Ethernet network */
-    int                      prefetch_mr; /**< Auto-prefetch non-blocking memory
-                                               registrations / allocations */
-    size_t                   odp_max_size; /**< Maximal memory region size for ODP */
+    uct_ib_odp_config_t      odp;       /**< ODP configuration */
 #if HAVE_EXP_UMR
     /* keep it in md because pd is needed to create umr_qp/cq */
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
@@ -71,10 +89,7 @@ typedef struct uct_ib_md_config {
     unsigned                fork_init;     /**< Use ibv_fork_init() */
     int                     eth_pause;     /**< Whether or not Pause Frame is
                                                 enabled on the Ethernet network */
-    size_t                  odp_max_size;  /**< Maximal region size to use with
-                                                ODP. 0 - disable. */
-    int                     prefetch_mr;   /**< Auto-prefetch non-blocking memory
-                                                registrations / allocations */
+    uct_ib_odp_config_t      odp;          /**< ODP configuration */
 } uct_ib_md_config_t;
 
 
