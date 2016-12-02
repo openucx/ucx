@@ -194,6 +194,16 @@ AS_IF([test "x$with_docs_only" == xyes],
 
 
      #
+     # Enable multithreading support
+     #
+     AC_ARG_ENABLE([mt],
+                   AS_HELP_STRING([--enable-mt],
+                                  [Enable thread support in UCP and UCT, default: NO]),
+         [AC_DEFINE([ENABLE_MT], [1], [Enable thread support in UCP and UCT])],
+         [AC_DEFINE([ENABLE_MT], [0])])
+
+
+     #
      # Path for valgrind-enabled libraries
      #
      AC_SUBST([VALGRIND_LIBPATH], [${valgrind_libpath}])

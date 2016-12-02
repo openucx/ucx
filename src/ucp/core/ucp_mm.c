@@ -182,10 +182,14 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
     unsigned uct_flags;
     ucp_mem_h memh;
 
+    /* always acquire context lock */
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
     if (length == 0) {
         ucs_debug("mapping zero length buffer, return dummy memh");
         *memh_p = &ucp_mem_dummy_handle;
-        return UCS_OK;
+        status  = UCS_OK;
+        goto out;
     }
 
     /* Allocate the memory handle */
@@ -194,7 +198,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
                       "ucp_memh");
     if (memh == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto out;
     }
 
     uct_flags = 0;
@@ -225,11 +229,13 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
               (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" : "allocated",
               memh->address, memh->length, memh, memh->md_map);
     *memh_p = memh;
-    return UCS_OK;
+    status  = UCS_OK;
+    goto out;
 
 err_free_memh:
     ucs_free(memh);
-err:
+out:
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
 
@@ -239,15 +245,19 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
     uct_mem_h alloc_md_memh;
     ucs_status_t status;
 
+    /* always acquire context lock */
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
     ucs_debug("unmapping buffer %p memh %p", memh->address, memh);
     if (memh == &ucp_mem_dummy_handle) {
-        return UCS_OK;
+        status = UCS_OK;
+        goto out;
     }
 
     /* Unregister from all memory domains */
     status = ucp_memh_dereg_mds(context, memh, &alloc_md_memh);
     if (status != UCS_OK) {
-        return status;
+        goto out;
     }
 
     /* If the memory was also allocated, release it */
@@ -260,10 +270,13 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
 
         status = uct_mem_free(&mem);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
     }
 
     ucs_free(memh);
-    return UCS_OK;
+    status = UCS_OK;
+out:
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+    return status;
 }

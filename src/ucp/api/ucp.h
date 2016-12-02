@@ -110,11 +110,12 @@
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_params_field {
-    UCP_PARAM_FIELD_FEATURES        = UCS_BIT(0), /* features */
-    UCP_PARAM_FIELD_REQUEST_SIZE    = UCS_BIT(1), /* request_size */
-    UCP_PARAM_FIELD_REQUEST_INIT    = UCS_BIT(2), /* request_init */
-    UCP_PARAM_FIELD_REQUEST_CLEANUP = UCS_BIT(3), /* request_cleanup */
-    UCP_PARAM_FIELD_TAG_SENDER_MASK = UCS_BIT(4)  /* tag_sender_mask */
+    UCP_PARAM_FIELD_FEATURES          = UCS_BIT(0), /**< features */
+    UCP_PARAM_FIELD_REQUEST_SIZE      = UCS_BIT(1), /**< request_size */
+    UCP_PARAM_FIELD_REQUEST_INIT      = UCS_BIT(2), /**< request_init */
+    UCP_PARAM_FIELD_REQUEST_CLEANUP   = UCS_BIT(3), /**< request_cleanup */
+    UCP_PARAM_FIELD_TAG_SENDER_MASK   = UCS_BIT(4), /**< tag_sender_mask */
+    UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5)  /**< context thread flag */
 };
 
 
@@ -147,9 +148,20 @@ enum ucp_feature {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_context_attr_field {
-    UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0) /* UCP request size */
+    UCP_CONTEXT_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
+    UCP_CONTEXT_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1)  /**< UCP context thread flag */
 };
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_worker_attr_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_worker_attr_field {
+    UCP_WORKER_ATTR_FIELD_THREAD_MODE = UCS_BIT(0)  /**< UCP thread mode */
+};
 
 /**
  * @ingroup UCP_DATATYPE
@@ -402,6 +414,19 @@ typedef struct ucp_params {
      * This field defaults to 0 if not specified.
      */
     uint64_t                           tag_sender_mask;
+
+    /**
+     * This flag indicates if this context is shared by multiple workers
+     * from different threads. If so, this context needs thread safety
+     * support; otherwise, the context does not need to provide thread
+     * safety.
+     * For example, if the context is used by single worker, and that
+     * worker is shared by multiple threads, this context does not need
+     * thread safety; if the context is used by worker 1 and worker 2,
+     * and worker 1 is used by thread 1 and worker 2 is used by thread 2,
+     * then this context needs thread safety.
+     */
+    int                                mt_workers_shared;
 } ucp_params_t;
 
 
@@ -427,7 +452,29 @@ typedef struct ucp_context_attr {
      * UCP request data, which is defined by this value.
      */
     size_t                request_size;
+
+    /**
+     * Thread safe level of the context. For supported thread levels please
+     * see @ref ucs_thread_mode_t.
+     */
+    ucs_thread_mode_t     thread_mode;
 } ucp_context_attr_t;
+
+
+typedef struct ucp_worker_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_worker_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t              field_mask;
+
+    /**
+     * Thread safe level of the worker.
+     */
+    ucs_thread_mode_t     thread_mode;
+} ucp_worker_attr_t;
 
 
 /**
@@ -702,6 +749,19 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
  */
 void ucp_worker_destroy(ucp_worker_h worker);
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief Get attributes specific to a particular worker.
+ *
+ * This routine fetches information about the worker.
+ *
+ * @param [in]  worker     Worker object to query.
+ * @param [out] attr       Filled with attributes of worker.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_worker_query(ucp_worker_h worker,
+                              ucp_worker_attr_t *attr);
 
 /**
  * @ingroup UCP_WORKER
