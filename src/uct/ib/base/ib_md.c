@@ -542,7 +542,7 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
     }
 
     if (new_policy != old_policy) {
-        start = ucs_align_up_pow2((uintptr_t)memh->mr->addr, ucs_get_page_size());
+        start = ucs_align_down_pow2((uintptr_t)memh->mr->addr, ucs_get_page_size());
         end   = ucs_align_up_pow2((uintptr_t)memh->mr->addr + memh->mr->length,
                                   ucs_get_page_size());
         ucs_trace("0x%lx..0x%lx: changing numa policy from %d to %d, "
