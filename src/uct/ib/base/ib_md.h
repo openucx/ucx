@@ -79,6 +79,7 @@ typedef struct uct_ib_md_config {
 
     struct {
         ucs_ternary_value_t  enable;       /**< Enable registration cache */
+        size_t               alignment;    /**< Force address alignment */
         unsigned             event_prio;   /**< Memory events priority */
         double               overhead;     /**< Lookup overhead estimation */
     } rcache;

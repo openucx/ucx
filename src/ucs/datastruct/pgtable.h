@@ -23,13 +23,13 @@
 
 
 /* Address alignment requirements */
-#define UCS_PGT_ADDR_SHIFT         10
+#define UCS_PGT_ADDR_SHIFT         4
 #define UCS_PGT_ADDR_ALIGN         (1ul << UCS_PGT_ADDR_SHIFT)
 #define UCS_PGT_ADDR_ORDER          (sizeof(ucs_pgt_addr_t) * 8)
 #define UCS_PGT_ADDR_MAX           ((ucs_pgt_addr_t)-1)
 
 /* Page table entry/directory constants */
-#define UCS_PGT_ENTRY_SHIFT        9
+#define UCS_PGT_ENTRY_SHIFT        4
 #define UCS_PGT_ENTRIES_PER_DIR    (1ul << (UCS_PGT_ENTRY_SHIFT))
 #define UCS_PGT_ENTRY_MASK         (UCS_PGT_ENTRIES_PER_DIR - 1)
 

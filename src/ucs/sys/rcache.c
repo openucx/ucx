@@ -387,8 +387,10 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
     pthread_rwlock_wrlock(&rcache->lock);
 
     /* Align to page size */
-    start = ucs_align_down_pow2((uintptr_t)address,          rcache->page_size);
-    end   = ucs_align_up_pow2  ((uintptr_t)address + length, rcache->page_size);
+    start = ucs_align_down_pow2((uintptr_t)address,
+                                rcache->params.alignment);
+    end   = ucs_align_up_pow2  ((uintptr_t)address + length,
+                                rcache->params.alignment);
 
     /* Check overlap with existing regions */
     status = ucs_rcache_check_overlap(rcache, &start, &end, &prot, &region);
@@ -518,18 +520,22 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_status_t status;
     int ret;
 
-    self->page_size = ucs_get_page_size();
-    if (!ucs_is_pow2(self->page_size) || (self->page_size < UCS_PGT_ADDR_ALIGN)) {
-        ucs_error("system page size (%zu) does not fit page table page size (%zu)",
-                  self->page_size, UCS_PGT_ADDR_ALIGN);
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-
     if (params->region_struct_size < sizeof(ucs_rcache_region_t)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
+
+    if (!ucs_is_pow2(params->alignment) ||
+        (params->alignment < UCS_PGT_ADDR_ALIGN) ||
+        (params->alignment > ucs_get_page_size()))
+    {
+        ucs_error("invalid regcache alignment (%zu): must be a power of 2 "
+                  "between %zu and %zu",
+                  params->alignment, UCS_PGT_ADDR_ALIGN, ucs_get_page_size());
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
     self->params = *params;
 
     self->name = strdup(name);
