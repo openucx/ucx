@@ -10,6 +10,8 @@
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
+#include <ucp/dt/dt_contig.h>
+#include <ucs/debug/profile.h>
 
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/mpool.inl>
@@ -24,8 +26,9 @@
         return UCS_ERR_INVALID_PARAM; \
     }
 
-ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
-                     uint64_t remote_addr, ucp_rkey_h rkey)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
+                 ucp_ep_h ep, const void *buffer, size_t length,
+                 uint64_t remote_addr, ucp_rkey_h rkey)
 {
     ucp_ep_rma_config_t *rma_config;
     ucs_status_t status;
@@ -45,7 +48,7 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
     for (;;) {
         UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
         if (length <= rma_config->max_put_short) {
-            status = uct_ep_put_short(ep->uct_eps[lane], buffer, length,
+            status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[lane], buffer, length,
                                       remote_addr, uct_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 break;
@@ -53,14 +56,16 @@ ucs_status_t ucp_put(ucp_ep_h ep, const void *buffer, size_t length,
         } else {
             if (length <= ucp_ep_config(ep)->bcopy_thresh) {
                 frag_length = ucs_min(length, rma_config->max_put_short);
-                status = uct_ep_put_short(ep->uct_eps[lane], buffer, frag_length,
+                status = UCS_PROFILE_CALL(uct_ep_put_short,
+                                          ep->uct_eps[lane], buffer, frag_length,
                                           remote_addr, uct_rkey);
             } else {
                 ucp_memcpy_pack_context_t pack_ctx;
                 pack_ctx.src    = buffer;
                 pack_ctx.length = frag_length =
                                 ucs_min(length, rma_config->max_put_bcopy);
-                packed_len = uct_ep_put_bcopy(ep->uct_eps[lane], ucp_memcpy_pack,
+                packed_len = UCS_PROFILE_CALL(uct_ep_put_bcopy,
+                                              ep->uct_eps[lane], ucp_memcpy_pack,
                                               &pack_ctx, remote_addr, uct_rkey);
                 status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
             }
@@ -191,8 +196,9 @@ out:
     return status;
 }
 
-ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
-                     uint64_t remote_addr, ucp_rkey_h rkey)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
+                 ucp_ep_h ep, void *buffer, size_t length,
+                 uint64_t remote_addr, ucp_rkey_h rkey)
 {
     ucp_ep_rma_config_t *rma_config;
     uct_completion_t comp;
@@ -214,7 +220,8 @@ ucs_status_t ucp_get(ucp_ep_h ep, void *buffer, size_t length,
          * fragment.
          */
         frag_length = ucs_min(rma_config->max_get_bcopy, length);
-        status = uct_ep_get_bcopy(ep->uct_eps[lane], (uct_unpack_callback_t)memcpy,
+        status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
+                                  ep->uct_eps[lane], (uct_unpack_callback_t)memcpy,
                                   (void*)buffer, frag_length, remote_addr,
                                   uct_rkey, &comp);
         if (ucs_likely(status == UCS_OK)) {
@@ -324,7 +331,7 @@ out:
     return status;
 }
 
-ucs_status_t ucp_worker_fence(ucp_worker_h worker)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
     unsigned rsc_index;
     ucs_status_t status;
@@ -348,7 +355,7 @@ out:
     return status;
 }
 
-ucs_status_t ucp_worker_flush(ucp_worker_h worker)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 {
     unsigned rsc_index;
 
@@ -374,7 +381,7 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker)
     return UCS_OK;
 }
 
-ucs_status_t ucp_ep_flush(ucp_ep_h ep)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
     ucs_status_t status;

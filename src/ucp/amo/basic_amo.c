@@ -8,6 +8,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/profile.h>
 #include <inttypes.h>
 
 
@@ -29,8 +30,9 @@
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
         for (;;) { \
             UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
-            status = _uct_func((_ep)->uct_eps[lane], _param, _remote_addr, \
-                               uct_rkey); \
+            status = UCS_PROFILE_CALL(_uct_func, \
+                                      (_ep)->uct_eps[lane], _param, _remote_addr, \
+                                      uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
                 UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
                 return status; \
@@ -54,8 +56,9 @@
         \
         for (;;) { \
             UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
-            status = _uct_func((_ep)->uct_eps[lane], UCS_PP_TUPLE_BREAK _params, \
-                               _remote_addr, uct_rkey, _result, &comp); \
+            status = UCS_PROFILE_CALL(_uct_func, \
+                                      (_ep)->uct_eps[lane], UCS_PP_TUPLE_BREAK _params, \
+                                      _remote_addr, uct_rkey, _result, &comp); \
             if (ucs_likely(status == UCS_OK)) { \
                 goto out; \
             } else if (status == UCS_INPROGRESS) { \
@@ -75,57 +78,65 @@
         return UCS_OK; \
     }
 
-ucs_status_t ucp_atomic_add32(ucp_ep_h ep, uint32_t add,
-                              uint64_t remote_addr, ucp_rkey_h rkey)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_add32, (ep, add, remote_addr, rkey),
+                 ucp_ep_h ep, uint32_t add, uint64_t remote_addr, ucp_rkey_h rkey)
 {
     UCP_AMO_WITHOUT_RESULT(ep, add, remote_addr, rkey,
                            uct_ep_atomic_add32, sizeof(uint32_t));
 }
 
-ucs_status_t ucp_atomic_add64(ucp_ep_h ep, uint64_t add,
-                              uint64_t remote_addr, ucp_rkey_h rkey)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_add64, (ep, add, remote_addr, rkey),
+                 ucp_ep_h ep, uint64_t add, uint64_t remote_addr, ucp_rkey_h rkey)
 {
     UCP_AMO_WITHOUT_RESULT(ep, add, remote_addr, rkey,
                            uct_ep_atomic_add64, sizeof(uint64_t));
 }
 
-ucs_status_t ucp_atomic_fadd32(ucp_ep_h ep, uint32_t add, uint64_t remote_addr,
-                               ucp_rkey_h rkey, uint32_t *result)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_fadd32, (ep, add, remote_addr, rkey, result),
+                 ucp_ep_h ep, uint32_t add, uint64_t remote_addr, ucp_rkey_h rkey,
+                 uint32_t *result)
 {
     UCP_AMO_WITH_RESULT(ep, (add), remote_addr, rkey, result,
                         uct_ep_atomic_fadd32, sizeof(uint32_t));
 }
 
-ucs_status_t ucp_atomic_fadd64(ucp_ep_h ep, uint64_t add, uint64_t remote_addr,
-                               ucp_rkey_h rkey, uint64_t *result)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_fadd64, (ep, add, remote_addr, rkey, result),
+                 ucp_ep_h ep, uint64_t add, uint64_t remote_addr, ucp_rkey_h rkey,
+                 uint64_t *result)
 {
     UCP_AMO_WITH_RESULT(ep, (add), remote_addr, rkey, result,
                         uct_ep_atomic_fadd64, sizeof(uint64_t));
 }
 
-ucs_status_t ucp_atomic_swap32(ucp_ep_h ep, uint32_t swap, uint64_t remote_addr,
-                               ucp_rkey_h rkey, uint32_t *result)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_swap32, (ep, swap, remote_addr, rkey, result),
+                 ucp_ep_h ep, uint32_t swap, uint64_t remote_addr, ucp_rkey_h rkey,
+                 uint32_t *result)
 {
     UCP_AMO_WITH_RESULT(ep, (swap), remote_addr, rkey, result,
                                uct_ep_atomic_swap32, sizeof(uint32_t));
 }
 
-ucs_status_t ucp_atomic_swap64(ucp_ep_h ep, uint64_t swap, uint64_t remote_addr,
-                               ucp_rkey_h rkey, uint64_t *result)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_swap64, (ep, swap, remote_addr, rkey, result),
+                 ucp_ep_h ep, uint64_t swap, uint64_t remote_addr, ucp_rkey_h rkey,
+                 uint64_t *result)
 {
     UCP_AMO_WITH_RESULT(ep, (swap), remote_addr, rkey, result,
                         uct_ep_atomic_swap64, sizeof(uint64_t));
 }
 
-ucs_status_t ucp_atomic_cswap32(ucp_ep_h ep, uint32_t compare, uint32_t swap,
-                                uint64_t remote_addr, ucp_rkey_h rkey, uint32_t *result)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_cswap32,
+                 (ep, compare, swap, remote_addr, rkey, result),
+                 ucp_ep_h ep, uint32_t compare, uint32_t swap,
+                 uint64_t remote_addr, ucp_rkey_h rkey, uint32_t *result)
 {
     UCP_AMO_WITH_RESULT(ep, (compare, swap), remote_addr, rkey, result,
                         uct_ep_atomic_cswap32, sizeof(uint32_t));
 }
 
-ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
-                                uint64_t remote_addr, ucp_rkey_h rkey, uint64_t *result)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_cswap64,
+                 (ep, compare, swap, remote_addr, rkey, result),
+                 ucp_ep_h ep, uint64_t compare, uint64_t swap,
+                 uint64_t remote_addr, ucp_rkey_h rkey, uint64_t *result)
 {
     UCP_AMO_WITH_RESULT(ep, (compare, swap), remote_addr, rkey, result,
                         uct_ep_atomic_cswap64, sizeof(uint64_t));
