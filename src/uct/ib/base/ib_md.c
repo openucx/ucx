@@ -977,9 +977,6 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     md->rcache          = NULL;
     md->reg_cost        = md_config->uc_reg_cost;
     md->odp             = md_config->odp;
-    if (md->odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
-        md->odp.max_size = uct_ib_device_odp_max_size(&md->dev);
-    }
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class, NULL,
@@ -1004,6 +1001,11 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     status = uct_ib_device_init(&md->dev, ib_device UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
+    }
+
+    if (md->odp.max_size == UCS_CONFIG_MEMUNITS_AUTO) {
+        /* Must be done after we open and query the device */
+        md->odp.max_size = uct_ib_device_odp_max_size(&md->dev);
     }
 
     /* Allocate memory domain */
