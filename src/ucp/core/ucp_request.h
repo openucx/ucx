@@ -80,6 +80,7 @@ struct ucp_request {
             ucp_datatype_t        datatype; /* Send type */
             size_t                length;   /* Total length, in bytes */
             ucp_send_callback_t   cb;       /* Completion callback */
+            uct_mem_h             mem;      /* handle for zcopy */
 
             union {
                 ucp_tag_t         tag;      /* Tagged send */
