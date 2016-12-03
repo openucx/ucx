@@ -451,18 +451,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context, ucs_thread_mode_t thread_m
                            sizeof(*worker->ep_config) * config_count,
                         "ucp worker");
     if (worker == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
-
-    if (thread_mode != UCS_THREAD_MODE_MULTI) {
-        worker->mt_lock.mt_type = UCP_MT_TYPE_NONE;
-    } else if (context->config.ext.use_mt_mutex) {
-        worker->mt_lock.mt_type = UCP_MT_TYPE_MUTEX;
-    } else {
-        worker->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
-    }
-
-    UCP_THREAD_LOCK_INIT_CONDITIONAL(&worker->mt_lock);
 
     worker->context         = context;
     worker->uuid            = ucs_generate_uuid((uintptr_t)worker);
@@ -547,8 +538,8 @@ err_free_attrs:
 err_free_ifaces:
     ucs_free(worker->ifaces);
 err_free:
-    UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(&worker->mt_lock);
     ucs_free(worker);
+err:
     return status;
 }
 
@@ -574,22 +565,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker->iface_attrs);
     ucs_free(worker->ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
-    UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(&worker->mt_lock);
     ucs_free(worker);
-}
-
-ucs_status_t ucp_worker_query(ucp_worker_h worker,
-                              ucp_worker_attr_t *attr)
-{
-    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
-        if (UCP_THREAD_IS_REQUIRED(&worker->mt_lock)) {
-            attr->thread_mode = UCS_THREAD_MODE_MULTI;
-        } else {
-            attr->thread_mode = UCS_THREAD_MODE_SINGLE;
-        }
-    }
-
-    return UCS_OK;
 }
 
 void ucp_worker_progress(ucp_worker_h worker)
@@ -597,16 +573,12 @@ void ucp_worker_progress(ucp_worker_h worker)
     /* worker->inprogress is used only for assertion check.
      * coverity[assert_side_effect]
      */
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     ucs_assert(worker->inprogress++ == 0);
     uct_worker_progress(worker->uct);
     ucs_async_check_miss(&worker->async);
 
     /* coverity[assert_side_effect] */
     ucs_assert(--worker->inprogress == 0);
-
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 }
 
 ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
@@ -617,19 +589,15 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
     ucp_rsc_index_t tl_id;
     ucp_context_h context = worker->context;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     if (worker->wakeup.wakeup_efd != -1) {
         *fd = worker->wakeup.wakeup_efd;
-        status = UCS_OK;
-        goto out;
+        return UCS_OK;
     }
 
     res_fd = epoll_create(context->num_tls);
     if (res_fd == -1) {
         ucs_error("Failed to create epoll descriptor: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto out;
+        return UCS_ERR_IO_ERROR;
     }
 
     status = ucp_worker_wakeup_add_fd(res_fd, worker->wakeup.wakeup_pipe[0]);
@@ -654,13 +622,10 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
 
     worker->wakeup.wakeup_efd = res_fd;
     *fd = res_fd;
-    status = UCS_OK;
-    goto out;
+    return UCS_OK;
 
 epoll_cleanup:
     close(res_fd);
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 
@@ -703,25 +668,21 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
     struct epoll_event *events;
     ucp_context_h context = worker->context;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     status = ucp_worker_get_efd(worker, &epoll_fd);
     if (status != UCS_OK) {
-        goto out;
+        return status;
     }
 
     status = ucp_worker_arm(worker);
     if (UCS_ERR_BUSY == status) { /* if UCS_ERR_BUSY returned - no poll() must called */
-        status = UCS_OK;
-        goto out;
+        return UCS_OK;
     } else if (status != UCS_OK) {
-        goto out;
+        return status;
     }
 
     events = ucs_malloc(context->num_tls * sizeof(*events), "wakeup events");
     if (events == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
+        return UCS_ERR_NO_MEMORY;
     }
 
     do {
@@ -734,47 +695,30 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
 
     if (res == -1) {
         ucs_error("Polling internally for events failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto out;
+        return UCS_ERR_IO_ERROR;
     }
 
-    status = UCS_OK;
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-    return status;
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_signal(ucp_worker_h worker)
 {
     char buf = 0;
-    int res;
-    ucs_status_t status = UCS_OK;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
-    res = write(worker->wakeup.wakeup_pipe[1], &buf, 1);
+    int res = write(worker->wakeup.wakeup_pipe[1], &buf, 1);
     if ((res != 1)  && (errno != EAGAIN)) {
         ucs_error("Signaling wakeup failed: %m");
-        status = UCS_ERR_IO_ERROR;
+        return UCS_ERR_IO_ERROR;
     }
 
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-    return status;
+    return UCS_OK;
 }
 
 ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
                                     size_t *address_length_p)
 {
-    ucs_status_t status;
-
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
-    status = ucp_address_pack(worker, NULL, -1, NULL, address_length_p,
-                              (void**)address_p);
-
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-
-    return status;
+    return ucp_address_pack(worker, NULL, -1, NULL, address_length_p,
+                            (void**)address_p);
 }
 
 void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
@@ -869,8 +813,6 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     ucp_rsc_index_t rsc_index;
     int first;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP worker '%s'\n", ucp_worker_get_name(worker));
     fprintf(stream, "#\n");
@@ -898,6 +840,4 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     fprintf(stream, "\n");
 
     fprintf(stream, "#\n");
-
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 }

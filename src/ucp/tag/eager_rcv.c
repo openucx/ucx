@@ -28,8 +28,6 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     size_t recv_len;
     ucp_tag_t recv_tag;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
-
     ucs_assert(length >= hdr_len);
     recv_tag = eager_hdr->super.tag;
 
@@ -64,8 +62,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
             } else {
                 req->recv.state.offset += recv_len;
             }
-            status = UCS_OK;
-            goto out;
+            return UCS_OK;
         }
     }
 
@@ -83,11 +80,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     rdesc->hdr_len = hdr_len;
     rdesc->flags   = flags;
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
-
-    status = UCS_INPROGRESS;
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
-    return status;
+    return UCS_INPROGRESS;
 }
 
 static ucs_status_t ucp_eager_only_handler(void *arg, void *data, size_t length,

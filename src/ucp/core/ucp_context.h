@@ -13,110 +13,7 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/type/component.h>
-#include <ucs/type/spinlock.h>
-#include "config.h"
 
-typedef enum ucp_mt_type {
-    UCP_MT_TYPE_NONE = 0,
-    UCP_MT_TYPE_SPINLOCK,
-    UCP_MT_TYPE_MUTEX
-} ucp_mt_type_t;
-
-typedef struct ucp_mt_lock {
-    ucp_mt_type_t                 mt_type;
-    union {
-        /* Lock for multithreading support. Either spinlock or mutex is used at
-           at one time. Spinlock is the default option. */
-        pthread_mutex_t           mt_mutex;
-        ucs_spinlock_t            mt_spinlock;
-    } lock;
-} ucp_mt_lock_t;
-
-#if ENABLE_MT
-#define UCP_THREAD_IS_REQUIRED(_lock_ptr) ((_lock_ptr)->mt_type)
-#define UCP_THREAD_LOCK_INIT(_lock_ptr)                                 \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_init(&((_lock_ptr)->lock.mt_mutex), NULL);    \
-        } else {                                                        \
-            ucs_spinlock_init(&((_lock_ptr)->lock.mt_spinlock));        \
-        }                                                               \
-    }
-#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                             \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_destroy(&((_lock_ptr)->lock.mt_mutex));       \
-        } else {                                                        \
-            ucs_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock));     \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_ENTER(_lock_ptr)                                  \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_lock(&((_lock_ptr)->lock.mt_mutex));          \
-        } else {                                                        \
-            ucs_spin_lock(&((_lock_ptr)->lock.mt_spinlock));            \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_EXIT(_lock_ptr)                                   \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_unlock(&((_lock_ptr)->lock.mt_mutex));        \
-        } else {                                                        \
-            ucs_spin_unlock(&((_lock_ptr)->lock.mt_spinlock));          \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_YIELD(_lock_ptr)                                  \
-    {                                                                   \
-        UCP_THREAD_CS_EXIT(_lock_ptr);                                  \
-        sched_yield();                                                  \
-        UCP_THREAD_CS_ENTER(_lock_ptr);                                 \
-    }
-#define UCP_THREAD_LOCK_INIT_CONDITIONAL(_lock_ptr)                     \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_LOCK_INIT(_lock_ptr);                            \
-        }                                                               \
-    }
-#define UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(_lock_ptr)                 \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_LOCK_FINALIZE(_lock_ptr);                        \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr)                      \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_ENTER(_lock_ptr);                             \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr)                       \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_EXIT(_lock_ptr);                              \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_YIELD_CONDITIONAL(_lock_ptr)                      \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr);                  \
-            sched_yield();                                              \
-            UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr);                 \
-        }                                                               \
-    }
-#else
-#define UCP_THREAD_IS_REQUIRED(_lock_ptr)                0
-#define UCP_THREAD_LOCK_INIT(_lock_ptr)                  {}
-#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)              {}
-#define UCP_THREAD_CS_ENTER(_lock_ptr)                   {}
-#define UCP_THREAD_CS_EXIT(_lock_ptr)                    {}
-#define UCP_THREAD_CS_YIELD(_lock_ptr)                   {}
-#define UCP_THREAD_LOCK_INIT_CONDITIONAL(_lock_ptr)      {}
-#define UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(_lock_ptr)  {}
-#define UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr)       {}
-#define UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr)        {}
-#define UCP_THREAD_CS_YIELD_CONDITIONAL(_lock_ptr)       {}
-#endif
 
 #define UCP_WORKER_NAME_MAX          32   /* Worker name for debugging */
 #define UCP_MIN_BCOPY                64   /* Minimal size for bcopy */
@@ -206,8 +103,6 @@ typedef struct ucp_context_config {
     unsigned                               max_worker_name;
     /** Atomic mode */
     ucp_atomic_mode_t                      atomic_mode;
-    /** If use mutex for MT support or not */
-    int                                    use_mt_mutex;
 } ucp_context_config_t;
 
 
@@ -295,9 +190,6 @@ typedef struct ucp_context {
         ucp_context_config_t      ext;
 
     } config;
-
-    /* All configurations about multithreading support */
-    ucp_mt_lock_t                 mt_lock;
 
 } ucp_context_t;
 
