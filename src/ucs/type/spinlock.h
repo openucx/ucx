@@ -35,18 +35,6 @@ static inline ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
     return UCS_OK;
 }
 
-static inline ucs_status_t ucs_spinlock_destroy(ucs_spinlock_t *lock)
-{
-    int ret;
-
-    ret = pthread_spin_destroy(&lock->lock);
-    if (ret != 0) {
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
 static inline int ucs_spin_is_owner(ucs_spinlock_t *lock, pthread_t self)
 {
     return lock->owner == self;

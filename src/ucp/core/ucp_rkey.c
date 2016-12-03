@@ -26,9 +26,6 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     ucs_status_t status;
     char UCS_V_UNUSED buf[128];
 
-    /* always acquire context lock */
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-
     ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%x",
               memh->address, memh, memh->md_map);
 
@@ -36,8 +33,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         /* dummy memh, return dummy key */
         *rkey_buffer_p = &ucp_mem_dummy_buffer;
         *size_p        = sizeof(ucp_mem_dummy_buffer);
-        status         = UCS_OK;
-        goto out;
+        return UCS_OK;
     }
 
     size = sizeof(ucp_md_map_t);
@@ -51,7 +47,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     rkey_buffer = ucs_malloc(size, "ucp_rkey_buffer");
     if (rkey_buffer == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto out;
+        goto err;
     }
 
     p = rkey_buffer;
@@ -86,13 +82,11 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     *rkey_buffer_p = rkey_buffer;
     *size_p        = size;
-    status         = UCS_OK;
-    goto out;
+    return UCS_OK;
 
 err_destroy:
     ucs_free(rkey_buffer);
-out:
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
+err:
     return status;
 }
 

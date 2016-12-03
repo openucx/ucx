@@ -150,8 +150,6 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
     uint64_t dest_uuid;
     ucp_ep_h ep;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     UCS_ASYNC_BLOCK(&worker->async);
 
     status = ucp_address_unpack(address, &dest_uuid, peer_name, sizeof(peer_name),
@@ -198,7 +196,6 @@ out_free_address:
     ucs_free(address_list);
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return status;
 }
 
@@ -474,14 +471,9 @@ ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep)
     ucp_worker_h worker = ep->worker;
     void *request;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     UCS_ASYNC_BLOCK(&worker->async);
     request = ucp_disconnect_nb_internal(ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
-
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-
     return request;
 }
 
@@ -491,15 +483,13 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_status_ptr_t *request;
     ucs_status_t status;
 
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
     request = ucp_disconnect_nb(ep);
     if (request == NULL) {
-        goto out;
+        return;
     } else if (UCS_PTR_IS_ERR(request)) {
         ucs_warn("disconnect failed: %s",
                  ucs_status_string(UCS_PTR_STATUS(request)));
-        goto out;
+        return;
     } else {
         do {
             ucp_worker_progress(worker);
@@ -507,10 +497,6 @@ void ucp_ep_destroy(ucp_ep_h ep)
         } while (status == UCS_INPROGRESS);
         ucp_request_release(request);
     }
-
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
-    return;
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
@@ -858,8 +844,6 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP endpoint\n");
     fprintf(stream, "#\n");
@@ -875,6 +859,4 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL);
 
     fprintf(stream, "#\n");
-
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
 }

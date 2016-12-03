@@ -336,9 +336,6 @@ ucp_rndv_rts_handler(void *arg, void *data, size_t length, void *desc)
     ucp_tag_t recv_tag = rndv_rts_hdr->super.tag;
     ucp_request_t *rreq;
     ucs_queue_iter_t iter;
-    ucs_status_t status;
-
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
 
     /* Search in expected queue */
     ucs_queue_for_each_safe(rreq, iter, &context->tag.expected, recv.queue) {
@@ -351,8 +348,7 @@ ucp_rndv_rts_handler(void *arg, void *data, size_t length, void *desc)
                               rreq->recv.state.offset, "expected-rndv");
             ucs_queue_del_iter(&context->tag.expected, iter);
             ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
-            status = UCS_OK;
-            goto out;
+            return UCS_OK;
         }
     }
 
@@ -367,11 +363,7 @@ ucp_rndv_rts_handler(void *arg, void *data, size_t length, void *desc)
     rdesc->flags   = UCP_RECV_DESC_FLAG_FIRST | UCP_RECV_DESC_FLAG_LAST |
                      UCP_RECV_DESC_FLAG_RNDV;
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
-
-    status = UCS_INPROGRESS;
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
-    return status;
+    return UCS_INPROGRESS;
 }
 
 static ucs_status_t

@@ -26,7 +26,6 @@
         uct_rkey_t uct_rkey; \
         ucp_lane_index_t lane; \
         \
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
         for (;;) { \
             UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
@@ -34,12 +33,10 @@
                                       (_ep)->uct_eps[lane], _param, _remote_addr, \
                                       uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
-                UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
                 return status; \
             } \
             ucp_worker_progress((_ep)->worker); \
         } \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
         return UCS_OK; \
     }
 
@@ -50,7 +47,6 @@
         uct_rkey_t uct_rkey; \
         ucp_lane_index_t lane; \
         \
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
         UCP_RMA_CHECK_ATOMIC(_remote_addr, _size); \
         comp.count = 2; \
         \
@@ -64,7 +60,6 @@
             } else if (status == UCS_INPROGRESS) { \
                 goto out_wait; \
             } else if (status != UCS_ERR_NO_RESOURCE) { \
-                UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
                 return status; \
             } \
             ucp_worker_progress((_ep)->worker); \
@@ -74,7 +69,6 @@
             ucp_worker_progress((_ep)->worker); \
         } while (comp.count != 1); \
     out: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
         return UCS_OK; \
     }
 

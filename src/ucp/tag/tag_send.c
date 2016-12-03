@@ -193,9 +193,6 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     ucs_status_t status;
     ucp_request_t *req;
     size_t length;
-    ucs_status_ptr_t ret;
-
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     ucs_trace_req("send_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
@@ -211,16 +208,14 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                 UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                                       "ucp_tag_send_nb (eager - finish)",
                                       buffer, length);
-                ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
-                goto out;
+                return UCS_STATUS_PTR(status); /* UCS_OK also goes here */
             }
         }
     }
 
     req = ucp_request_get(ep->worker);
     if (req == NULL) {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-        goto out;
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb", req,
@@ -228,14 +223,11 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
 
-    ret = ucp_tag_send_req(req, count,
-                           ucp_ep_config(ep)->max_eager_short,
-                           ucp_ep_config(ep)->zcopy_thresh,
-                           ucp_ep_config(ep)->rndv_thresh,
-                           cb, &ucp_tag_eager_proto);
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
-    return ret;
+    return ucp_tag_send_req(req, count,
+                            ucp_ep_config(ep)->max_eager_short,
+                            ucp_ep_config(ep)->zcopy_thresh,
+                            ucp_ep_config(ep)->rndv_thresh,
+                            cb, &ucp_tag_eager_proto);
 }
 
 ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
@@ -243,17 +235,13 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
                                       ucp_send_callback_t cb)
 {
     ucp_request_t *req;
-    ucs_status_ptr_t ret;
-
-    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     ucs_trace_req("send_sync_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
     req = ucp_request_get(ep->worker);
     if (req == NULL) {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-        goto out;
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_sync_nb", req,
@@ -264,14 +252,11 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
 
-    ret = ucp_tag_send_req(req, count,
-                           -1, /* disable short method */
-                           ucp_ep_config(ep)->sync_zcopy_thresh,
-                           ucp_ep_config(ep)->sync_rndv_thresh,
-                           cb, &ucp_tag_eager_sync_proto);
-out:
-    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
-    return ret;
+    return ucp_tag_send_req(req, count,
+                            -1, /* disable short method */
+                            ucp_ep_config(ep)->sync_zcopy_thresh,
+                            ucp_ep_config(ep)->sync_rndv_thresh,
+                            cb, &ucp_tag_eager_sync_proto);
 }
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, uint64_t sender_uuid,

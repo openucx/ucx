@@ -64,7 +64,6 @@ typedef struct ucp_worker {
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count; /* Current number of configurations */
-    ucp_mt_lock_t                 mt_lock; /* All configurations about multithreading support */
     ucp_ep_config_t               ep_config[0];  /* Array of transport limits and thresholds */
 } ucp_worker_t;
 
