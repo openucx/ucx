@@ -12,6 +12,37 @@ const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_LAST]          = NULL
 };
 
+ucs_config_field_t uct_dc_iface_config_table[] = {
+    {"RC_", "IB_TX_QUEUE_LEN=128", NULL,
+     ucs_offsetof(uct_dc_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+
+    {"NUM_DCI", "8",
+     "Number of DC initiator QPs (DCI) used by the interface "
+     "(up to " UCS_PP_QUOTE(UCT_DC_IFACE_MAX_DCIS) ").",
+     ucs_offsetof(uct_dc_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
+
+    {"TX_POLICY", "dcs_quota",
+     "Specifies how DC initiator (DCI) is selected by the endpoint. The policies are:\n"
+     "\n"
+     "dcs        The endpoint either uses already assigned DCI or one is allocated\n"
+     "           in a LIFO order, and released once it has no outstanding operations.\n"
+     "\n"
+     "dcs_quota  Same as \"dcs\" but in addition the DCI is scheduled for release\n"
+     "           if it has sent more than quota, and there are endpoints waiting for a DCI.\n"
+     "           The dci is released once it completes all outstanding operations.\n"
+     "           This policy ensures that there will be no starvation among endpoints.",
+     ucs_offsetof(uct_dc_iface_config_t, tx_policy),
+     UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
+
+    {"QUOTA", "32",
+     "When \"dcs_quota\" policy is selected, how much to send from a DCI when\n"
+     "there are other endpoints waiting for it.",
+     ucs_offsetof(uct_dc_iface_config_t, quota), UCS_CONFIG_TYPE_UINT},
+
+    {NULL}
+};
+
 static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 {
     struct ibv_exp_dct_init_attr init_attr;
@@ -208,36 +239,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
 }
 
-
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
-
-ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"RC_", "", NULL,
-     ucs_offsetof(uct_dc_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
-
-    {"NUM_DCI", "8",
-     "Number of DC initiator QPs used by the interface (up to " UCS_PP_QUOTE(UCT_DC_IFACE_MAX_DCIS) ")",
-     ucs_offsetof(uct_dc_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
-
-    {"TX_POLICY", "dcs_quota",
-     "Specifies how DC initiator (dci) is selected by the endpoint. The policies are:\n"
-     "\n"
-     "dcs        the endpoint either uses already assigned dci or a dci is allocated in the LIFO order.\n"
-     "           The dci is released once it has no outstanding operations.\n"
-     "\n"
-     "dcs_quota  same as dcs. In addition the dci is scheduled for release\n"
-     "           if it has sent more than quota, and there are endpoints waiting for a dci.\n"
-     "           The dci is released once it completes all outstanding operations.\n"
-     "           The policy ensures that there will be no starvation among endpoints.",
-     ucs_offsetof(uct_dc_iface_config_t, tx_policy), UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
-
-    {"QUOTA", "32",
-     "When \"dcs_quota\" policy is selected, how much to send from a dci when\n"
-     "there are other endpoints waiting for it.",
-     ucs_offsetof(uct_dc_iface_config_t, quota), UCS_CONFIG_TYPE_UINT},
-
-    {NULL}
-};
 
 void uct_dc_iface_query(uct_dc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
