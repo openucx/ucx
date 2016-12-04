@@ -13,6 +13,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/class.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_request.inl>
 
 
 typedef struct {
@@ -137,7 +138,7 @@ static ucs_status_t ucp_stub_ep_progress_pending(uct_pending_req_t *self)
     status = req->func(req);
     if (status == UCS_OK) {
         ucs_atomic_add32(&stub_ep->pending_count, -1);
-        ucs_mpool_put(proxy_req);
+        ucp_request_put(proxy_req);
     }
     return status;
 }
@@ -151,7 +152,7 @@ static void ucp_stub_ep_pending_req_release(uct_pending_req_t *self,
 
     parg->cb(proxy_req->send.proxy.req, parg->arg);
     ucs_atomic_add32(&stub_ep->pending_count, -1);
-    ucs_mpool_put(proxy_req);
+    ucp_request_put(proxy_req);
 }
 
 static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req)
@@ -180,7 +181,7 @@ static ucs_status_t ucp_stub_pending_add(uct_ep_h uct_ep, uct_pending_req_t *req
         if (status == UCS_OK) {
             ucs_atomic_add32(&stub_ep->pending_count, +1);
         } else {
-            ucs_mpool_put(proxy_req);
+            ucp_request_put(proxy_req);
         }
     } else {
         ucs_queue_push(&stub_ep->pending_q, ucp_stub_ep_req_priv(req));

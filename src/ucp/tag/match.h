@@ -10,6 +10,7 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/dt/dt.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/profile.h>
 #include <ucs/sys/compiler.h>
 
 #include <string.h>
@@ -83,21 +84,23 @@ ucp_tag_process_recv(void *buffer, size_t buffer_size, ucp_datatype_t datatype,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        memcpy(buffer + offset, recv_data, recv_length);
+        UCS_PROFILE_CALL(memcpy, buffer + offset, recv_data, recv_length);
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:
-        ucp_dt_iov_scatter(buffer, state->dt.iov.iovcnt, recv_data, recv_length,
-                           &state->dt.iov.iov_offset,
-                           &state->dt.iov.iovcnt_offset);
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, buffer, state->dt.iov.iovcnt,
+                         recv_data, recv_length, &state->dt.iov.iov_offset,
+                         &state->dt.iov.iovcnt_offset);
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
-        status = dt_gen->ops.unpack(state->dt.generic.state, offset, recv_data,
-                                    recv_length);
+        status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
+                                        state->dt.generic.state, offset,
+                                        recv_data, recv_length);
         if (last) {
-            dt_gen->ops.finish(state->dt.generic.state);
+            UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
+                                        state->dt.generic.state);
         }
         return status;
 

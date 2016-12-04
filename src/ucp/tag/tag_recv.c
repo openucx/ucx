@@ -48,6 +48,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                               tag_mask, req->recv.state.offset, "unexpected");
             ucs_queue_del_iter(&context->tag.unexpected, iter);
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
+                UCS_PROFILE_REQUEST_EVENT(req, "eager_match", 0);
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
                                                buffer, buffer_size, datatype,
                                                &req->recv.state, info);
@@ -93,8 +94,9 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
 
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
-        req->recv.state.dt.generic.state = dt_gen->ops.start_unpack(dt_gen->context,
-                                                                    buffer, count);
+        req->recv.state.dt.generic.state =
+                        UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
+                                               dt_gen->context, buffer, count);
         ucs_debug("req %p buffer %p count %zu dt_gen state=%p", req, buffer, count,
                   req->recv.state.dt.generic.state);
         break;
@@ -134,6 +136,7 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 
     req->status = status;
     req->flags |= UCP_REQUEST_FLAG_COMPLETED;
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -170,9 +173,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t buffer_size,
     return status;
 }
 
-ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
-                              uintptr_t datatype, ucp_tag_t tag,
-                              ucp_tag_t tag_mask, void *request)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
+                 (worker, buffer, count, datatype, tag, tag_mask, request),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                 void *request)
 {
     ucp_request_t  *req = (ucp_request_t *)request - 1;
     ucs_status_t status;
@@ -197,10 +202,11 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
     return status;
 }
 
-ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
-                                 size_t count, uintptr_t datatype,
-                                 ucp_tag_t tag, ucp_tag_t tag_mask,
-                                 ucp_tag_recv_callback_t cb)
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
+                 (worker, buffer, count, datatype, tag, tag_mask, cb),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                 ucp_tag_recv_callback_t cb)
 {
     ucp_request_t *req;
     ucs_status_t status;
@@ -233,10 +239,11 @@ out:
     return ret;
 }
 
-ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
-                                     size_t count, ucp_datatype_t datatype,
-                                     ucp_tag_message_h message,
-                                     ucp_tag_recv_callback_t cb)
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
+                 (worker, buffer, count, datatype, message, cb),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 uintptr_t datatype, ucp_tag_message_h message,
+                 ucp_tag_recv_callback_t cb)
 {
     ucp_recv_desc_t *rdesc = message;
     ucs_status_t status;
@@ -263,6 +270,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     /* First, handle the first packet that was already matched */
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
         tag = ((ucp_tag_hdr_t*)(rdesc + 1))->tag;
+        UCS_PROFILE_REQUEST_EVENT(req, "eager_match", 0);
         status = ucp_eager_unexp_match(worker, rdesc, tag, rdesc->flags,
                                        buffer, buffer_size, datatype,
                                        &req->recv.state, &req->recv.info);
@@ -279,7 +287,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         save_rreq = 0;
         UCP_WORKER_STAT_RNDV(worker, UNEXP);
     } else {
-        ucs_mpool_put(req);
+        ucp_request_put(req);
         ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
         goto out;
     }
