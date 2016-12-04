@@ -36,6 +36,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_iface_t *tl_iface,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_dc_iface_addr_t *if_addr = (const uct_dc_iface_addr_t *)iface_addr;
+    struct mlx5_grh_av grh_av;
     ucs_status_t status;
     int is_global;
     ucs_trace_func("");
@@ -44,9 +45,14 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_iface_t *tl_iface,
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
                                       ib_addr, iface->super.super.super.path_bits[0],
-                                      &self->av, NULL, &is_global);
+                                      &self->av, &grh_av, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
+    }
+
+    if (is_global) {
+        ucs_error("dc_mlx5 transport does not support global address");
+        return UCS_ERR_UNREACHABLE;
     }
 
     self->av.dqp_dct |= htonl(uct_ib_unpack_uint24(if_addr->qp_num));
