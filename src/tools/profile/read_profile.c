@@ -5,6 +5,7 @@
  */
 
 #include <ucs/debug/profile.h>
+#include <ucs/datastruct/khash.h>
 
 #include <sys/signal.h>
 #include <sys/fcntl.h>
@@ -179,6 +180,8 @@ static void show_profile_data_accum(profile_data_t *data, options_t *opts)
     free(sorted_locations);
 }
 
+KHASH_MAP_INIT_INT64(request_ids, int)
+
 static void show_profile_data_log(profile_data_t *data, options_t *opts)
 {
     size_t num_recods               = data->header->num_records;
@@ -186,20 +189,25 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     const ucs_profile_record_t **scope_ends;
     const ucs_profile_location_t *loc;
     const ucs_profile_record_t *rec, *se, **sep;
-    off_t min_nesting_idx;
     int nesting, min_nesting;
     uint64_t prev_time;
+    const char *action;
     char buf[256];
+    khash_t(request_ids) reqids;
+    int hash_extra_status;
+    khiter_t hash_it;
+    int reqid, reqid_ctr = 1;
 
 #define NAME_COLOR       (opts->raw ? "" : TERM_COLOR_CYAN)
 #define TS_COLOR         (opts->raw ? "" : TERM_COLOR_WHITE)
 #define LOC_COLOR        (opts->raw ? "" : TERM_COLOR_GRAY)
+#define REQ_COLOR        (opts->raw ? "" : TERM_COLOR_YELLOW)
 #define CLEAR_COLOR      (opts->raw ? "" : TERM_COLOR_CLEAR)
 #define RECORD_FMT       "%s%10.3f%s%*s"
 #define RECORD_ARG(_ts)  TS_COLOR, time_to_usec(data, opts, (_ts)), CLEAR_COLOR, \
                          INDENT * nesting, ""
 #define PRINT_RECORD()   printf("%-*s %s%15s:%-4d %s()%s\n", \
-                                (int)(50 + strlen(NAME_COLOR) + \
+                                (int)(60 + strlen(NAME_COLOR) + \
                                       2 * strlen(TS_COLOR) + \
                                       3 * strlen(CLEAR_COLOR)), \
                                 buf, \
@@ -218,24 +226,22 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
     /* Find the first record with minimal nesting level, which is the base of call stack */
     nesting         = 0;
     min_nesting     = 0;
-    min_nesting_idx = -1;
     for (rec = data->records; rec < data->records + num_recods; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
-            ++nesting;
             stack[nesting + UCS_PROFILE_STACK_MAX] = &scope_ends[rec - data->records];
+            ++nesting;
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
+            --nesting;
             if (nesting < min_nesting) {
                 min_nesting     = nesting;
-                min_nesting_idx = rec - data->records;
             }
             sep = stack[nesting + UCS_PROFILE_STACK_MAX];
             if (sep != NULL) {
                 *sep = rec;
             }
-            --nesting;
             break;
         default:
             break;
@@ -248,17 +254,13 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
         prev_time = 0;
     }
 
+    kh_init_inplace(request_ids, &reqids);
+
     /* Display records */
-    nesting = 0;
-    for (rec = data->records + min_nesting_idx + 1; rec < data->records + num_recods; ++rec) {
+    nesting = -min_nesting;
+    for (rec = data->records; rec < data->records + num_recods; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
-        case UCS_PROFILE_TYPE_SAMPLE:
-            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s",
-                     RECORD_ARG(rec->timestamp - prev_time),
-                     NAME_COLOR, loc->name, CLEAR_COLOR);
-            PRINT_RECORD();
-            break;
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
             se = scope_ends[rec - data->records];
             if (se != NULL) {
@@ -277,12 +279,62 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts)
             --nesting;
             printf(RECORD_FMT"  }\n", RECORD_ARG(rec->timestamp - prev_time));
             break;
+        case UCS_PROFILE_TYPE_SAMPLE:
+            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s",
+                     RECORD_ARG(rec->timestamp - prev_time),
+                     NAME_COLOR, loc->name, CLEAR_COLOR);
+            PRINT_RECORD();
+            break;
+        case UCS_PROFILE_TYPE_REQUEST_NEW:
+        case UCS_PROFILE_TYPE_REQUEST_EVENT:
+        case UCS_PROFILE_TYPE_REQUEST_FREE:
+            if (loc->type == UCS_PROFILE_TYPE_REQUEST_NEW) {
+                hash_it = kh_put(request_ids, &reqids, rec->param64,
+                                 &hash_extra_status);
+                if (hash_it == kh_end(&reqids)) {
+                    if (hash_extra_status == 0) {
+                        /* old request was not released, replace it */
+                        hash_it = kh_get(request_ids, &reqids, rec->param64);
+                        reqid = reqid_ctr++;
+                        kh_value(&reqids, hash_it) = reqid;
+                    } else {
+                        reqid = 0; /* error inserting to hash */
+                    }
+                } else {
+                    /* new request */
+                    reqid = reqid_ctr++;
+                    kh_value(&reqids, hash_it) = reqid;
+                }
+                action = "NEW ";
+            } else {
+                hash_it = kh_get(request_ids, &reqids, rec->param64);
+                if (hash_it == kh_end(&reqids)) {
+                    reqid = 0; /* could not find request */
+                } else {
+                    reqid = kh_value(&reqids, hash_it);
+                    if (loc->type == UCS_PROFILE_TYPE_REQUEST_FREE) {
+                        kh_del(request_ids, &reqids, hash_it);
+                    }
+                }
+                if (loc->type == UCS_PROFILE_TYPE_REQUEST_FREE) {
+                    action = "FREE";
+                } else {
+                    action = "";
+                }
+            }
+            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s%s %s{%d}%s",
+                     RECORD_ARG(rec->timestamp - prev_time),
+                     REQ_COLOR, action, loc->name, CLEAR_COLOR,
+                     REQ_COLOR, reqid, CLEAR_COLOR);
+            PRINT_RECORD();
+            break;
         default:
             break;
         }
         prev_time = rec->timestamp;
     }
 
+    kh_destroy_inplace(request_ids, &reqids);
     free(scope_ends);
 }
 

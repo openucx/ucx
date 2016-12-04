@@ -66,8 +66,13 @@ static int sum(int a, int b)
 
 const int test_profile::MIN_LINE = __LINE__;
 
+static void *test_request = &test_request;
+
 UCS_PROFILE_FUNC_VOID(profile_test_func1, ())
 {
+    UCS_PROFILE_REQUEST_NEW(test_request, "allocate", 10);
+    UCS_PROFILE_REQUEST_EVENT(test_request, "work", 0);
+    UCS_PROFILE_REQUEST_FREE(test_request);
     UCS_PROFILE_CODE("code") {
         UCS_PROFILE_SAMPLE("sample");
     }
@@ -107,6 +112,8 @@ void test_profile::test_locations(ucs_profile_location_t *locations,
     EXPECT_NE(loc_names.end(), loc_names.find("code"));
     EXPECT_NE(loc_names.end(), loc_names.find("sample"));
     EXPECT_NE(loc_names.end(), loc_names.find("sum"));
+    EXPECT_NE(loc_names.end(), loc_names.find("allocate"));
+    EXPECT_NE(loc_names.end(), loc_names.find("work"));
 }
 
 UCS_TEST_F(test_profile, accum) {
@@ -118,7 +125,7 @@ UCS_TEST_F(test_profile, accum) {
     ucs_profile_header_t *hdr = reinterpret_cast<ucs_profile_header_t*>(&data[0]);
     test_header(hdr, UCS_BIT(UCS_PROFILE_MODE_ACCUM));
 
-    EXPECT_EQ(9u, hdr->num_locations);
+    EXPECT_EQ(12u, hdr->num_locations);
     test_locations(reinterpret_cast<ucs_profile_location_t*>(hdr + 1),
                    hdr->num_locations,
                    1);
@@ -138,20 +145,27 @@ UCS_TEST_F(test_profile, log) {
     ucs_profile_header_t *hdr = reinterpret_cast<ucs_profile_header_t*>(&data[0]);
     test_header(hdr, UCS_BIT(UCS_PROFILE_MODE_LOG));
 
-    EXPECT_EQ(9u, hdr->num_locations);
+    EXPECT_EQ(12u, hdr->num_locations);
     ucs_profile_location_t *locations = reinterpret_cast<ucs_profile_location_t*>(hdr + 1);
     test_locations(locations, hdr->num_locations, 0);
 
-    EXPECT_EQ(9 * ITER, (int)hdr->num_records);
+    EXPECT_EQ(12 * ITER, (int)hdr->num_records);
     ucs_profile_record_t *records = reinterpret_cast<ucs_profile_record_t*>(locations +
                                                                             hdr->num_locations);
     uint64_t prev_ts = records[0].timestamp;
     for (uint64_t i = 0; i < hdr->num_records; ++i) {
         ucs_profile_record_t *rec = &records[i];
         EXPECT_GE(rec->location, 0u);
-        EXPECT_LT(rec->location, 9u);
+        EXPECT_LT(rec->location, 12u);
         EXPECT_GE(rec->timestamp, prev_ts);
         prev_ts = rec->timestamp;
+        ucs_profile_location_t *loc = &locations[rec->location];
+        if ((loc->type == UCS_PROFILE_TYPE_REQUEST_NEW) ||
+            (loc->type == UCS_PROFILE_TYPE_REQUEST_EVENT) ||
+            (loc->type == UCS_PROFILE_TYPE_REQUEST_FREE))
+        {
+            EXPECT_EQ((uintptr_t)&test_request, rec->param64);
+        }
     }
 }
 

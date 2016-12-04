@@ -36,6 +36,9 @@ typedef enum {
     UCS_PROFILE_TYPE_SAMPLE,        /**< Sample only */
     UCS_PROFILE_TYPE_SCOPE_BEGIN,   /**< Begin a scope */
     UCS_PROFILE_TYPE_SCOPE_END,     /**< End a scope */
+    UCS_PROFILE_TYPE_REQUEST_NEW,   /**< New asynchronous request */
+    UCS_PROFILE_TYPE_REQUEST_EVENT, /**< Some progress is made on a request */
+    UCS_PROFILE_TYPE_REQUEST_FREE,  /**< Asynchronous request released */
     UCS_PROFILE_TYPE_LAST
 } ucs_profile_type_t;
 
@@ -59,6 +62,8 @@ typedef struct ucs_profile_header {
  */
 typedef struct ucs_profile_record {
     uint64_t                 timestamp;     /**< Record timestamp */
+    uint64_t                 param64;       /**< Custom 64-bit parameter */
+    uint32_t                 param32;       /**< Custom 32-bit parameter */
     uint32_t                 location;      /**< Location identifier */
 } UCS_S_PACKED ucs_profile_record_t;
 
@@ -148,12 +153,15 @@ void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
  *
  * @param [in]     type        Location type.
  * @param [in]     name        Location name.
+ * @param [in]     param32     custom 32-bit parameter.
+ * @param [in]     param64     custom 64-bit parameter.
  * @param [in]     file        Source file name.
  * @param [in]     line        Source line number.
  * @param [in]     function    Calling function name.
  * @param [in,out] loc_id_p    Variable used to maintain the location ID.
  */
 static inline void ucs_profile_record(ucs_profile_type_t type, const char *name,
+                                      uint32_t param32, uint64_t param64,
                                       const char *file, int line,
                                       const char *function, int *loc_id_p)
 {
@@ -196,6 +204,8 @@ retry:
     if (ucs_global_opts.profile_mode & UCS_BIT(UCS_PROFILE_MODE_LOG)) {
         rec              = ctx->log.current;
         rec->timestamp   = current_time;
+        rec->param64     = param64;
+        rec->param32     = param32;
         rec->location    = loc_id - 1;
         if (++ctx->log.current >= ctx->log.end) {
             ctx->log.current    = ctx->log.start;
@@ -205,9 +215,9 @@ retry:
 }
 
 /* Helper macro */
-#define _UCS_PROFILE_RECORD(_type, _name, _loc_id_p) \
-    ucs_profile_record((_type), (_name), __FILE__, __LINE__, __FUNCTION__, \
-                       (_loc_id_p))
+#define _UCS_PROFILE_RECORD(_type, _name, _param64, _param32, _loc_id_p) \
+    ucs_profile_record((_type), (_name), (_param64), (_param32),  __FILE__, \
+                       __LINE__, __FUNCTION__, (_loc_id_p))
 
 
 /* Helper macro */
@@ -226,13 +236,15 @@ retry:
 /**
  * Record a profiling event.
  *
- * @param _type   Event type.
- * @param _name   Event name.
+ * @param _type     Event type.
+ * @param _name     Event name.
+ * @param _param32  Custom 32-bit parameter.
+ * @param _param64  Custom 64-bit parameter.
  */
-#define UCS_PROFILE(_type, _name) \
+#define UCS_PROFILE(_type, _name, _param32, _param64) \
     { \
         static int loc_id = -1; \
-        _UCS_PROFILE_RECORD((_type), (_name), &loc_id); \
+        _UCS_PROFILE_RECORD((_type), (_name), (_param32), (_param64), &loc_id); \
     }
 
 
@@ -242,7 +254,7 @@ retry:
  * @param _name   Event name.
  */
 #define UCS_PROFILE_SAMPLE(_name) \
-    UCS_PROFILE(UCS_PROFILE_TYPE_SAMPLE, (_name))
+    UCS_PROFILE(UCS_PROFILE_TYPE_SAMPLE, (_name), 0, 0)
 
 
 /**
@@ -250,7 +262,7 @@ retry:
  */
 #define UCS_PROFILE_SCOPE_BEGIN() \
     { \
-        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_BEGIN, ""); \
+        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_BEGIN, "", 0, 0); \
         ucs_compiler_fence(); \
     }
 
@@ -263,7 +275,7 @@ retry:
 #define UCS_PROFILE_SCOPE_END(_name) \
     { \
         ucs_compiler_fence(); \
-        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_END, _name); \
+        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_END, _name, 0, 0); \
     }
 
 
@@ -355,6 +367,37 @@ retry:
     }
 
 
+/*
+ * Profile a new request allocation.
+ *
+ * @param _req      Request pointer.
+ * @param _name     Allocation site name.
+ * @param _param32  Custom 32-bit parameter.
+ */
+#define UCS_PROFILE_REQUEST_NEW(_req, _name, _param32) \
+    UCS_PROFILE(UCS_PROFILE_TYPE_REQUEST_NEW, (_name), (_param32), (uintptr_t)(_req));
+
+
+/*
+ * Profile a request progress event.
+ *
+ * @param _req      Request pointer.
+ * @param _name     Event name.
+ * @param _param32  Custom 32-bit parameter.
+ */
+#define UCS_PROFILE_REQUEST_EVENT(_req, _name, _param32) \
+    UCS_PROFILE(UCS_PROFILE_TYPE_REQUEST_EVENT, (_name), (_param32), (uintptr_t)(_req));
+
+
+/*
+ * Profile a request release.
+ *
+ * @param _req      Request pointer.
+ */
+#define UCS_PROFILE_REQUEST_FREE(_req) \
+    UCS_PROFILE(UCS_PROFILE_TYPE_REQUEST_FREE, "", 0, (uintptr_t)(_req));
+
+
 #else
 
 #define UCS_PROFILE(...)                                    UCS_EMPTY_STATEMENT
@@ -363,8 +406,12 @@ retry:
 #define UCS_PROFILE_SCOPE_END(_name)                        UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_CODE(_name)
 #define UCS_PROFILE_FUNC(_ret_type, _name, _arglist, ...)   _ret_type _name(__VA_ARGS__)
+#define UCS_PROFILE_FUNC_VOID(_name, _arglist, ...)         void _name(__VA_ARGS__)
 #define UCS_PROFILE_CALL(_func, ...)                        _func(__VA_ARGS__)
 #define UCS_PROFILE_CALL_VOID(_func, ...)                   _func(__VA_ARGS__)
+#define UCS_PROFILE_REQUEST_NEW(...)                        UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_REQUEST_EVENT(...)                      UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_REQUEST_FREE(...)                       UCS_EMPTY_STATEMENT
 
 #endif
 
