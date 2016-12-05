@@ -37,6 +37,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
     ssize_t packed_len;
     ucp_lane_index_t lane;
 
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
     /* Loop until all message has been sent.
@@ -82,6 +84,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
         ucp_worker_progress(ep->worker);
     }
 
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }
 
@@ -169,6 +172,8 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     uct_rkey_t uct_rkey;
     ucs_status_t status;
 
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
 
@@ -178,13 +183,17 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                                   uct_rkey);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
             /* Return on error or success */
-            return status;
+            goto out;
         }
     }
 
     ucp_rma_start_nbi(ep, buffer, length, remote_addr, rkey,
                         ucp_progress_put_nbi);
-    return UCS_INPROGRESS;
+
+    status = UCS_INPROGRESS;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
@@ -197,6 +206,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
     uct_rkey_t uct_rkey;
     size_t frag_length;
     ucp_lane_index_t lane;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
 
@@ -221,7 +232,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
         } else if (status == UCS_ERR_NO_RESOURCE) {
             goto retry;
         } else {
-            return status;
+            goto out;
         }
 
 posted:
@@ -240,7 +251,11 @@ retry:
     while (comp.count > 1) {
         ucp_worker_progress(ep->worker);
     }
-    return UCS_OK;
+
+    status = UCS_OK;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    return status;
 }
 
 static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
@@ -288,6 +303,8 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
     uct_rkey_t uct_rkey;
     ucs_status_t status;
 
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
 
@@ -301,19 +318,25 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                                   NULL);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
             /* Return on error or success */
-            return status;
+            goto out;
         }
     }
 
     ucp_rma_start_nbi(ep, buffer, length, remote_addr, rkey,
                       ucp_progress_get_nbi);
-    return UCS_INPROGRESS;
+
+    status = UCS_INPROGRESS;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 {
     unsigned rsc_index;
     ucs_status_t status;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
         if (worker->ifaces[rsc_index] == NULL) {
@@ -322,16 +345,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 
         status = uct_iface_fence(worker->ifaces[rsc_index], 0);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
     }
+    status = UCS_OK;
 
-    return UCS_OK;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 {
     unsigned rsc_index;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     while (worker->stub_pend_count > 0) {
         ucp_worker_progress(worker);
@@ -348,6 +376,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
         }
     }
 
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
     return UCS_OK;
 }
 
@@ -356,17 +386,23 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
     ucp_lane_index_t lane;
     ucs_status_t status;
 
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         for (;;) {
             status = uct_ep_flush(ep->uct_eps[lane], 0, NULL);
             if (status == UCS_OK) {
                 break;
             } else if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
-                return status;
+                goto out;
             }
             ucp_worker_progress(ep->worker);
         }
     }
-    return UCS_OK;
+
+    status = UCS_OK;
+out:
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    return status;
 }
 

@@ -111,6 +111,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "Maximal length of worker name. Affects the size of worker address in debug builds.",
    ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
 
+  {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
+   "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
+   "y      - Use mutex for multithreading support in UCP.\n",
+   ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -576,6 +581,19 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         ucs_warn("empty features set passed to ucp context create");
     }
 
+    if (params->mt_workers_shared == 0) {
+        context->mt_lock.mt_type = UCP_MT_TYPE_NONE;
+    } else if (config->ctx.use_mt_mutex) {
+        context->mt_lock.mt_type = UCP_MT_TYPE_MUTEX;
+    } else {
+        context->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
+    }
+
+    /* always init MT lock in context even though it is disabled by user,
+     * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
+     * routines */
+    UCP_THREAD_LOCK_INIT(&context->mt_lock);
+
     context->config.features        = params->features;
     context->config.tag_sender_mask = params->tag_sender_mask;
     context->config.request.size    = params->request_size;
@@ -641,6 +659,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 err_free:
     ucs_free(context->config.alloc_methods);
 err:
+    UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
     return status;
 }
 
@@ -707,6 +726,7 @@ void ucp_cleanup(ucp_context_h context)
 {
     ucp_free_resources(context);
     ucp_free_config(context);
+    UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
     ucs_free(context);
 }
 
@@ -745,7 +765,17 @@ uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context)
 
 ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 {
-    attr->request_size = sizeof(ucp_request_t);
+    if (attr->field_mask & UCP_ATTR_FIELD_REQUEST_SIZE) {
+        attr->request_size = sizeof(ucp_request_t);
+    }
+    if (attr->field_mask & UCP_ATTR_FIELD_THREAD_MODE) {
+        if (UCP_THREAD_IS_REQUIRED(&context->mt_lock)) {
+            attr->thread_mode = UCS_THREAD_MODE_MULTI;
+        } else {
+            attr->thread_mode = UCS_THREAD_MODE_SINGLE;
+        }
+    }
+
     return UCS_OK;
 }
 

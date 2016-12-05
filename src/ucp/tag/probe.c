@@ -57,7 +57,16 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
                                    ucp_tag_recv_info_t *info)
 {
     ucp_context_h context = worker->context;
+    ucp_recv_desc_t *ret;
+
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64, tag, tag_mask);
-    return ucp_tag_probe_search(context, tag, tag_mask, info, remove);
+    ret = ucp_tag_probe_search(context, tag, tag_mask, info, remove);
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+
+    return ret;
 }
