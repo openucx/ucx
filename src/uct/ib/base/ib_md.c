@@ -386,13 +386,13 @@ static ucs_status_t uct_ib_md_post_umr(uct_ib_md_t *md, struct ibv_mr *mr,
     wr.ext_op.umr.base_addr                        = (uint64_t) (uintptr_t) mr->addr + offset;
     wr.ext_op.umr.num_mrs                          = 1;
 #else
-    mem_reg.m_key                                        = mr;
-    wr.ext_op.atomic_mr.memory_key.mkey_type             = IBV_EXP_UMR_MEM_LAYOUT_NONCONTIG;
-    wr.ext_op.atomic_mr.memory_key.mem_list.mem_reg_list = &mem_reg;
-    wr.ext_op.atomic_mr.memory_key.access                = UCT_IB_MEM_ACCESS_FLAGS;
-    wr.ext_op.atomic_mr.memory_key.modified_mr           = umr;
-    wr.ext_op.atomic_mr.memory_key.region_base_addr      = mr->addr + offset;
-    wr.num_sge                                           = 1;
+    mem_reg.m_key                                  = mr;
+    wr.ext_op.umr.memory_key.mkey_type             = IBV_EXP_UMR_MEM_LAYOUT_NONCONTIG;
+    wr.ext_op.umr.memory_key.mem_list.mem_reg_list = &mem_reg;
+    wr.ext_op.umr.memory_key.access                = UCT_IB_MEM_ACCESS_FLAGS;
+    wr.ext_op.umr.memory_key.modified_mr           = umr;
+    wr.ext_op.umr.memory_key.region_base_addr      = mr->addr + offset;
+    wr.num_sge                                     = 1;
 #endif
 
     wr.exp_opcode                                  = IBV_EXP_WR_UMR_FILL;
