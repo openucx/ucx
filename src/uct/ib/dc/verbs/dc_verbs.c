@@ -363,11 +363,13 @@ uct_dc_verbs_iface_atomic_post(uct_dc_verbs_iface_t *iface, uct_dc_verbs_ep_t *e
                                uint64_t swap, uint64_t remote_addr, uct_rkey_t rkey,
                                uct_rc_iface_send_desc_t *desc, int force_sig)
 {
-    struct ibv_sge sge;
+    uint32_t ib_rkey = uct_ib_resolve_atomic_rkey(rkey, ep->super.atomic_mr_offset,
+                                                  &remote_addr);
     struct ibv_exp_send_wr wr;
+    struct ibv_sge sge;
 
-    UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.exp_opcode, sge, opcode,
-                                compare_add, swap, remote_addr, rkey, ep->super.umr_offset);
+    UCT_RC_VERBS_FILL_ATOMIC_WR(wr, wr.exp_opcode, sge, opcode, compare_add,
+                                swap, remote_addr, ib_rkey);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig);
 }
@@ -401,7 +403,7 @@ uct_dc_verbs_iface_ext_atomic_post(uct_dc_verbs_iface_t *iface, uct_dc_verbs_ep_
     struct ibv_exp_send_wr wr;
 
     uct_rc_verbs_fill_ext_atomic_wr(&wr, &sge, opcode, length, compare_mask,
-                                    compare_add, swap, remote_addr, rkey, ep->super.umr_offset);
+                                    compare_add, swap, remote_addr, rkey, ep->super.atomic_mr_offset);
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, force_sig|IBV_EXP_SEND_EXT_ATOMIC_INLINE);
 }

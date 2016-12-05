@@ -17,7 +17,7 @@ struct uct_dc_ep {
     ucs_arbiter_group_t   arb_group;
     uint8_t               dci;
     uint8_t               state;
-    uint16_t              umr_offset;
+    uint16_t              atomic_mr_offset;
 };
 
 UCS_CLASS_DECLARE(uct_dc_ep_t, uct_dc_iface_t *, const uct_dc_iface_addr_t *);
