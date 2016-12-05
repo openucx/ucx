@@ -148,7 +148,7 @@ enum ucp_feature {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_worker_params_field {
-    UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /* UCP thread mode */
+    UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
 };
 
 
@@ -160,7 +160,7 @@ enum ucp_worker_params_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_ep_params_field {
-    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0), /* Address of remote peer */
+    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0), /**< Address of remote peer */
 };
 
 
@@ -172,10 +172,12 @@ enum ucp_ep_params_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_mem_map_params_field {
-    UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /* Address of remote peer */
-    UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /* Length of memory to
-                                                     allocate/register */
-    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /* Allocation flags */
+    UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of remote peer */
+    UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory that
+                                                       would be allocated or
+                                                       registered in the
+                                                       ucp_mem_map routine.*/
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /**< Allocation flags */
 };
 
 
@@ -608,7 +610,7 @@ typedef struct ucp_mem_map_params {
      size_t                 length;
 
      /**
-      * Allocation flags, UCP_MEM_MAP_xx.
+      * Allocation flags, e.g. @ref UCP_MEM_MAP_NONBLOCK "UCP_MEM_MAP_NONBLOCK".
       * This value is optional.
       * If it's not set (along with its corresponding bit in the field_mask -
       * UCP_MEM_MAP_PARAM_FIELD_FLAGS), the ucp_mem_map routine will consider
@@ -779,7 +781,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
  *
  * @param [in]  config        UCP configuration descriptor allocated through
  *                            @ref ucp_config_read "ucp_config_read()" routine.
- * @param [in]  params        User defined @ref ucp_params_t "tunings" for the
+ * @param [in]  params        User defined @ref ucp_params_t configurations for the
  *                            @ref ucp_context_h "UCP application context".
  * @param [out] context_p     Initialized @ref ucp_context_h
  *                            "UCP application context".
@@ -862,7 +864,7 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream);
  *
  * @param [in] context     Handle to @ref ucp_context_h
  *                         "UCP application context".
- * @param [in] params      User defined @ref ucp_worker_params_t "tunings" for the
+ * @param [in] params      User defined @ref ucp_worker_params_t configurations for the
  *                         @ref ucp_worker_h "UCP worker".
  * @param [out] worker_p   A pointer to the worker object allocated by the
  *                         UCP library
@@ -1124,8 +1126,8 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *
  * @param [in]  worker      Handle to the worker; the endpoint
  *                          is associated with the worker.
- * @param [in]  params      User defined @ref ucp_ep_params_t "tunings" for the
- *                          @ref ucp_ep_h "UCP endpoint".
+ * @param [in]  params      User defined @ref ucp_ep_params_t configurations
+ *                          for the @ref ucp_ep_h "UCP endpoint".
  * @param [out] ep_p        A handle to the created endpoint.
  *
  * @return Error code as defined by @ref ucs_status_t
@@ -1227,8 +1229,8 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  *
  * @param [in]     context    Application @ref ucp_context_h "context" to map
  *                            (register) and allocate the memory on.
- * @param [in]     params     User defined @ref ucp_mem_map_params_t "tunings" for the
- *                            @ref ucp_mem_h "UCP memory handle".
+ * @param [in]     params     User defined @ref ucp_mem_map_params_t configurations
+ *                            for the @ref ucp_mem_h "UCP memory handle".
  * @param [out]    memh_p     UCP @ref ucp_mem_h "handle" for the allocated
  *                            segment.
  *
