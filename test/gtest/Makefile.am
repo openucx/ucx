@@ -24,6 +24,7 @@ VALGRIND_ARGS = \
 	--leak-check=full \
 	--track-origins=yes \
 	--fair-sched=try \
+	--suppressions=$(top_srcdir)/contrib/valgrind.supp \
 	$(VALGRIND_EXTRA_ARGS)
 
 noinst_PROGRAMS = gtest
@@ -42,7 +43,8 @@ gtest_CPPFLAGS = \
 	-I$(top_srcdir)/test \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/test/gtest \
-	$(GTEST_CPPFLAGS)
+	$(GTEST_CPPFLAGS) \
+	$(OPENMP_CFLAGS)
 
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install
 gtest_CXXFLAGS = $(GTEST_CXXFLAGS) -g -O3 -fno-tree-vectorize
@@ -87,6 +89,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \
+	ucp/test_ucp_tag_mt.cc \
 	ucp/test_ucp_tag_probe.cc \
 	ucp/test_ucp_tag_xfer.cc \
 	ucp/test_ucp_tag.cc \

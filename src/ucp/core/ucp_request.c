@@ -44,8 +44,14 @@ void ucp_request_release(void *request)
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_EXTERNAL));
 
     if ((req->flags |= UCP_REQUEST_FLAG_RELEASED) & UCP_REQUEST_FLAG_COMPLETED) {
+        ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req), ucp_worker_t, req_mp);
+
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+
         ucs_trace_data("put %p to mpool", req);
         ucs_mpool_put_inline(req);
+
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     }
 }
 
@@ -58,8 +64,14 @@ void ucp_request_cancel(ucp_worker_h worker, void *request)
     }
 
     if (req->flags & UCP_REQUEST_FLAG_EXPECTED) {
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
+        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
+
         ucp_tag_cancel_expected(worker->context, req);
         ucp_request_complete_recv(req, UCS_ERR_CANCELED, NULL);
+
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     }
 }
 
