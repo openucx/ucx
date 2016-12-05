@@ -55,6 +55,7 @@ EXTRA_DIST += contrib/ucx_perftest_config/msg_pow2
 EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
+EXTRA_DIST += debian
 endif #!DOCS_ONLY
 EXTRA_DIST += doc/uml/uct.dot
 
