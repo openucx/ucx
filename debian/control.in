@@ -4,7 +4,7 @@ Priority: extra
 Maintainer: ucx-group@elist.ornl.gov
 Build-Depends:
 Standards-Version: @MAJOR_VERSION@.@MINOR_VERSION@
-Homepage: http://openucx.org
+Homepage: http://www.openucx.org
 
 #Package: ucx-dev
 #Section: libdevel

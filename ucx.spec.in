@@ -33,7 +33,7 @@ BuildRequires: valgrind-devel
 %endif
 
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
-URL: http://openucx.org
+URL: http://www.openucx.org
 Prefix: %{prefix}
 Provides: ucx
 Packager: openucx
