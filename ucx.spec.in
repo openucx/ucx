@@ -19,7 +19,7 @@ Summary: Unified Communication X
 Version: %{version}
 Release: %{rel}
 
-License: Proprietary
+License: BSDv3
 Group: Applications
 Source: %{pkgname}-%{version}.tar.gz
 Requires: libibverbs
