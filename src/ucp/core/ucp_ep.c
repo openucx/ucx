@@ -252,9 +252,11 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 req->send.flush.lanes &= ~UCS_BIT(lane);
             } else if (status != UCS_ERR_BUSY) {
                 ucp_ep_flush_error(req, status);
+                break;
             }
         } else {
             ucp_ep_flush_error(req, status);
+            break;
         }
     }
 }
