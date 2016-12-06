@@ -114,3 +114,12 @@ ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
     uct_md_h uct_md = ucp_ep_md(req->send.ep, lane);
     (void)uct_md_mem_dereg(uct_md, req->send.state.dt.contig.memh);
 }
+
+static UCS_F_ALWAYS_INLINE void 
+ucp_request_wait_uct_comp(ucp_request_t *req)
+{
+    while (req->send.uct_comp.count > 0) {
+        ucp_worker_progress(req->send.ep->worker);
+    }
+}
+
