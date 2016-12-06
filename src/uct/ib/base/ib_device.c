@@ -689,7 +689,8 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
                                     IBV_EXP_ODP_SUPPORT_WRITE |
                                     IBV_EXP_ODP_SUPPORT_READ;
 
-    if (!IBV_EXP_HAVE_ODP(&dev->dev_attr) ||
+    if (RUNNING_ON_VALGRIND ||
+        !IBV_EXP_HAVE_ODP(&dev->dev_attr) ||
         !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, rc), required_rc_odp_caps) ||
         !ucs_test_all_flags(IBV_EXP_ODP_CAPS(&dev->dev_attr, ud), required_ud_odp_caps))
     {
