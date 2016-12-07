@@ -1,15 +1,15 @@
 Source: @PACKAGE@
 Section: libs
 Priority: extra
-Maintainer: support@openucx.org
+Maintainer: ucx-group@elist.ornl.gov
 Build-Depends:
 Standards-Version: @MAJOR_VERSION@.@MINOR_VERSION@
-Homepage: http://openucx.org
+Homepage: http://www.openucx.org
 
-#Package: mxm-dev
+#Package: ucx-dev
 #Section: libdevel
 #Architecture: any
-#Depends: mxm (= ${binary:Version})
+#Depends: ucx (= ${binary:Version})
 #Description: Header files for UCX library
 
 Package: @PACKAGE@
