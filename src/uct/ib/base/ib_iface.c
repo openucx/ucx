@@ -220,16 +220,27 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
 void uct_ib_iface_fill_ah_attr(uct_ib_iface_t *iface, const uct_ib_address_t *ib_addr,
                                uint8_t path_bits, struct ibv_ah_attr *ah_attr)
 {
+    uint8_t is_global;
+
     memset(ah_attr, 0, sizeof(*ah_attr));
 
-    uct_ib_address_unpack(ib_addr, &ah_attr->dlid, &ah_attr->is_global,
-                          &ah_attr->grh.dgid);
+    uct_ib_address_unpack(ib_addr, &ah_attr->dlid, &is_global, &ah_attr->grh.dgid);
     ah_attr->sl            = iface->config.sl;
     ah_attr->src_path_bits = path_bits;
-    ah_attr->dlid          |= path_bits;
+    ah_attr->dlid         |= path_bits;
     ah_attr->port_num      = iface->config.port_num;
-    if (ah_attr->is_global) {
+
+    /* Create a global address only if we cannot reach the destination using local
+     * address. It means either an Ethernet address, or IB address on a different subnet.
+     */
+    if (is_global &&
+        ((iface->addr_type == UCT_IB_ADDRESS_TYPE_ETH) ||
+         (iface->gid.global.subnet_prefix != ah_attr->grh.dgid.global.subnet_prefix)))
+    {
+        ah_attr->is_global      = 1;
         ah_attr->grh.sgid_index = iface->config.gid_index;
+    } else {
+        ah_attr->is_global      = 0;
     }
 }
 
