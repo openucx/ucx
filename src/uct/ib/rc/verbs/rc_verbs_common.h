@@ -215,14 +215,14 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
     }
 
 #define UCT_RC_VERBS_FILL_ATOMIC_WR(_wr, _wr_opcode, _sge, _opcode, \
-                                    _compare_add, _swap, _remote_addr, _rkey, _umr_offset) \
+                                    _compare_add, _swap, _remote_addr, _rkey) \
     _wr.sg_list               = &_sge; \
     _wr.num_sge               = 1; \
     _wr_opcode                = _opcode; \
     _wr.wr.atomic.compare_add = _compare_add; \
     _wr.wr.atomic.swap        = _swap; \
-    _wr.wr.atomic.remote_addr = _remote_addr + _umr_offset; \
-    _wr.wr.atomic.rkey        = uct_ib_md_umr_rkey(_rkey);  \
+    _wr.wr.atomic.remote_addr = _remote_addr; \
+    _wr.wr.atomic.rkey        = _rkey;  \
     _sge.length               = sizeof(uint64_t);
 
 
@@ -231,7 +231,7 @@ static inline void
 uct_rc_verbs_fill_ext_atomic_wr(struct ibv_exp_send_wr *wr, struct ibv_sge *sge,
                                 int opcode, uint32_t length, uint32_t compare_mask,
                                 uint64_t compare_add, uint64_t swap, uint64_t remote_addr,
-                                uct_rkey_t rkey, size_t umr_offset)
+                                uct_rkey_t rkey, size_t atomic_mr_offset)
 {
     sge->length        = length;
     wr->sg_list        = sge;
@@ -240,8 +240,10 @@ uct_rc_verbs_fill_ext_atomic_wr(struct ibv_exp_send_wr *wr, struct ibv_sge *sge,
     wr->comp_mask      = 0;
 
     wr->ext_op.masked_atomics.log_arg_sz  = ucs_ilog2(length);
-    wr->ext_op.masked_atomics.remote_addr = remote_addr + umr_offset;
-    wr->ext_op.masked_atomics.rkey        = uct_ib_md_umr_rkey(rkey);
+    wr->ext_op.masked_atomics.rkey        = uct_ib_resolve_atomic_rkey(rkey,
+                                                                       atomic_mr_offset,
+                                                                       &remote_addr);
+    wr->ext_op.masked_atomics.remote_addr = remote_addr;
 
     switch (opcode) {
     case IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP:

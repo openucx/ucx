@@ -35,6 +35,7 @@
 #define UCT_IB_PKEY_PARTITION_MASK  0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK 0x8000 /* Full/send-only member */
 #define UCT_IB_DEV_MAX_PORTS        2
+#define UCT_IB_INVALID_RKEY         0xffffffffu
 #define UCT_IB_KEY                  0x1ee7a330
 #define UCT_IB_LINK_LOCAL_PREFIX    ntohll(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX    ntohll(0xfec0000000000000ul) /* IBTA 4.1.1 12b */

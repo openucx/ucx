@@ -276,17 +276,17 @@ static void uct_ib_md_umr_qp_destroy(uct_ib_md_t *md)
 #endif
 }
 
-uint8_t  uct_ib_md_umr_id(uct_ib_md_t *md)
+uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 {
 #if HAVE_EXP_UMR
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
         return 0;
     }
-    /* Generate umr id. We want umrs for same virtual adresses to have different
-     * ids across proceses.
+    /* Generate atomic UMR id. We want umrs for same virtual addresses to have
+     * different ids across processes.
      *
      * Usually parallel processes running on the same node as part of a single
-     * job will have consequitive pids. For example mpi ranks, slurm spawned tasks...
+     * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
      */
     return getpid() % 256;
 #else
@@ -459,8 +459,9 @@ static ucs_status_t uct_ib_memh_dereg(uct_ib_mem_t *memh)
     ucs_status_t s1, s2;
 
     s1 = s2 = UCS_OK;
-    if (memh->umr != NULL) {
-        s2 = uct_ib_dereg_mr(memh->umr);
+    if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
+        s2 = uct_ib_dereg_mr(memh->atomic_mr);
+        memh->flags &= ~UCT_IB_MEM_FLAG_ATOMIC_MR;
     }
     if (memh->mr != NULL) {
         s1 = uct_ib_dereg_mr(memh->mr);
@@ -492,15 +493,14 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     return exp_access;
 }
 
-static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh,
-                                               uint64_t mr_access_flags)
+static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
     int ret, old_policy, new_policy;
     struct bitmask *nodemask;
     uintptr_t start, end;
     ucs_status_t status;
 
-    if (!(mr_access_flags & IBV_EXP_ACCESS_ON_DEMAND) ||
+    if (!(memh->flags & UCT_IB_MEM_FLAG_ODP) ||
         (md->odp.numa_policy == UCT_IB_NUMA_POLICY_DEFAULT) ||
         (numa_available() < 0))
     {
@@ -576,14 +576,13 @@ out:
     return status;
 }
 
-static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh,
-                                        uint64_t mr_access_flags)
+static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
 #if HAVE_DECL_IBV_EXP_PREFETCH_MR
     struct ibv_exp_prefetch_attr attr;
     int ret;
 
-    if ((mr_access_flags & IBV_EXP_ACCESS_ON_DEMAND) && md->odp.prefetch) {
+    if ((memh->flags & UCT_IB_MEM_FLAG_ODP) && md->odp.prefetch) {
         attr.flags     = IBV_EXP_PREFETCH_WRITE_ACCESS;
         attr.addr      = memh->mr->addr;
         attr.length    = memh->mr->length;
@@ -599,6 +598,15 @@ static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh,
 #endif
 
     return UCS_OK;
+}
+
+static void uct_ib_mem_init(uct_ib_mem_t *memh, uint64_t exp_access)
+{
+    memh->lkey  = memh->mr->lkey;
+    memh->flags = 0;
+    if (exp_access & IBV_EXP_ACCESS_ON_DEMAND) {
+        memh->flags |= UCT_IB_MEM_FLAG_ODP;
+    }
 }
 
 static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
@@ -629,10 +637,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
     ucs_trace("allocated memory %p..%p on %s lkey 0x%x rkey 0x%x",
               memh->mr->addr, memh->mr->addr + memh->mr->length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
-    memh->lkey = memh->mr->lkey;
 
-    uct_ib_mem_set_numa_policy(md, memh, exp_access);
-    uct_ib_mem_prefetch(md, memh, exp_access);
+    uct_ib_mem_init(memh, exp_access);
+    uct_ib_mem_set_numa_policy(md, memh);
+    uct_ib_mem_prefetch(md, memh);
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
     *address_p = memh->mr->addr;
@@ -683,10 +691,10 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
     ucs_trace("registered memory %p..%p on %s lkey 0x%x rkey 0x%x",
               address, address + length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
-    memh->lkey = memh->mr->lkey;
 
-    uct_ib_mem_set_numa_policy(md, memh, exp_access);
-    uct_ib_mem_prefetch(md, memh, exp_access);
+    uct_ib_mem_init(memh, exp_access);
+    uct_ib_mem_set_numa_policy(md, memh);
+    uct_ib_mem_prefetch(md, memh);
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
     return UCS_OK;
@@ -731,34 +739,35 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
 static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                                      void *rkey_buffer)
 {
-    uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_mem_t *memh = uct_memh;
-    uint64_t *rkey_p   = rkey_buffer;
+    uct_ib_md_t *md         = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_mem_t *memh      = uct_memh;
+    uint64_t *packed_rkey_p = rkey_buffer;
+    uint32_t atomic_rkey;
+    uint16_t umr_offset;
     ucs_status_t status;
-    uint32_t umr_key;
 
-    if (memh->umr != NULL) {
-        umr_key = memh->umr->rkey;
-    } else if (md->umr_qp != NULL) {
+    if (!(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
+        !(memh->flags & UCT_IB_MEM_FLAG_ODP))
+    {
         /* create UMR on-demand */
-        status = uct_ib_md_post_umr(md, memh->mr,
-                                    uct_ib_md_umr_offset(uct_ib_md_umr_id(md)),
-                                    &memh->umr);
+        ucs_assert(memh->atomic_mr == NULL);
+        umr_offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
+        status = uct_ib_md_post_umr(md, memh->mr, umr_offset, &memh->atomic_mr);
         if (status == UCS_OK) {
-            umr_key = memh->umr->rkey;
-        } else if (status == UCS_ERR_UNSUPPORTED) {
-            umr_key = memh->mr->rkey;
-        } else {
+            memh->flags |= UCT_IB_MEM_FLAG_ATOMIC_MR;
+        } else if (status != UCS_ERR_UNSUPPORTED) {
             return status;
         }
+    }
+    if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
+        ucs_assert(memh->atomic_mr != NULL);
+        atomic_rkey = memh->atomic_mr->rkey;
     } else {
-        umr_key = memh->mr->rkey;
+        atomic_rkey = UCT_IB_INVALID_RKEY;
     }
 
-    *rkey_p = (((uint64_t)umr_key) << 32) | memh->mr->rkey;
-
-    ucs_trace("packed rkey: umr=0x%x mr=0x%x",
-              uct_ib_md_umr_rkey(*rkey_p), uct_ib_md_direct_rkey(*rkey_p));
+    *packed_rkey_p = (((uint64_t)atomic_rkey) << 32) | memh->mr->rkey;
+    ucs_trace("packed rkey: direct 0x%x indirect 0x%x", memh->mr->rkey, atomic_rkey);
     return UCS_OK;
 }
 
@@ -766,13 +775,13 @@ static ucs_status_t uct_ib_rkey_unpack(uct_md_component_t *mdc,
                                        const void *rkey_buffer, uct_rkey_t *rkey_p,
                                        void **handle_p)
 {
-    uint64_t ib_rkey = *(const uint64_t*)rkey_buffer;
+    uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
-    *rkey_p   = ib_rkey;
+    *rkey_p   = packed_rkey;
     *handle_p = NULL;
-    ucs_trace("unpacked rkey: 0x%llx umr=0x%x mr=0x%x",
-              (unsigned long long)ib_rkey,
-              uct_ib_md_umr_rkey(ib_rkey), uct_ib_md_direct_rkey(ib_rkey));
+    ucs_trace("unpacked rkey 0x%llx: direct 0x%x indirect 0x%x",
+              (unsigned long long)packed_rkey,
+              uct_ib_md_direct_rkey(*rkey_p), uct_ib_md_indirect_rkey(*rkey_p));
     return UCS_OK;
 }
 
@@ -865,10 +874,12 @@ static void uct_ib_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
     uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
     uct_ib_mem_t *memh = &region->memh;
 
-    snprintf(buf, max, "lkey 0x%x rkey 0x%x umr: lkey 0x%x rkey 0x%x",
+    snprintf(buf, max, "lkey 0x%x rkey 0x%x atomic: lkey 0x%x rkey 0x%x",
              memh->mr->lkey, memh->mr->rkey,
-             memh->umr ? memh->umr->lkey : 0,
-             memh->umr ? memh->umr->rkey : 0
+             (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) ? memh->atomic_mr->lkey :
+                             UCT_IB_INVALID_RKEY,
+             (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) ? memh->atomic_mr->rkey :
+                             UCT_IB_INVALID_RKEY
              );
 }
 

@@ -72,16 +72,16 @@ uct_rc_mlx5_ep_atomic_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
 {
     uct_rc_iface_t *iface  = ucs_derived_of(ep->super.super.super.iface,
                                             uct_rc_iface_t);
+    uint32_t ib_rkey = uct_ib_resolve_atomic_rkey(rkey, ep->super.atomic_mr_offset,
+                                                  &remote_addr);
+
     desc->super.sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post(iface, IBV_QPT_RC,
                                &ep->super.txqp, &ep->tx.wq,
                                opcode, desc + 1, length, &desc->lkey,
-                               0, NULL, 0,
-                               remote_addr + ep->super.umr_offset,
-                               uct_ib_md_umr_rkey(rkey), compare_mask,
-                               compare, swap_add,
-                               NULL, 0,
-                               signal);
+                               0, NULL, 0, remote_addr, ib_rkey,
+                               compare_mask, compare, swap_add,
+                               NULL, 0, signal);
 
     UCT_TL_EP_STAT_ATOMIC(&ep->super.super);
     uct_rc_txqp_add_send_op(&ep->super.txqp, &desc->super);

@@ -37,6 +37,12 @@ typedef enum {
 } uct_ib_numa_policy_t;
 
 
+enum {
+    UCT_IB_MEM_FLAG_ODP       = UCS_BIT(0),
+    UCT_IB_MEM_FLAG_ATOMIC_MR = UCS_BIT(1)
+};
+
+
 typedef struct uct_ib_odp_config {
     uct_ib_numa_policy_t numa_policy;/**< NUMA policy flags for ODP */
     int                  prefetch;   /**< Auto-prefetch non-blocking memory
@@ -47,8 +53,9 @@ typedef struct uct_ib_odp_config {
 
 typedef struct uct_ib_mem {
     uint32_t                lkey;
+    uint32_t                flags;
     struct ibv_mr           *mr;
-    struct ibv_mr           *umr;
+    struct ibv_mr           *atomic_mr;
 } uct_ib_mem_t;
 
 /**
@@ -103,27 +110,47 @@ typedef struct uct_ib_rcache_region {
 
 extern uct_md_component_t uct_ib_mdc;
 
+
+/**
+ * Calculate unique id for atomic
+ */
+uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md);
+
+
+static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
+{
+    return (uint32_t)uct_rkey;
+}
+
+
+static uint32_t uct_ib_md_indirect_rkey(uct_rkey_t uct_rkey)
+{
+    return uct_rkey >> 32;
+}
+
+
 /**
  * rkey is packed/unpacked is such a way that:
  * low  32 bits contain a direct key
- * high 32 bits always contain a valid key. Either a umr key
- * or a direct one.
+ * high 32 bits contain either UCT_IB_INVALID_RKEY or a valid indirect key.
  */
-static inline uint32_t uct_ib_md_umr_rkey(uct_rkey_t rkey)
+static inline uint32_t uct_ib_resolve_atomic_rkey(uct_rkey_t uct_rkey,
+                                                  uint16_t atomic_mr_offset,
+                                                  uint64_t *remote_addr_p)
 {
-    return (uint32_t)(rkey >> 32);
+    uint32_t atomic_rkey = uct_ib_md_indirect_rkey(uct_rkey);
+    if (atomic_rkey == UCT_IB_INVALID_RKEY) {
+        return uct_ib_md_direct_rkey(uct_rkey);
+    } else {
+        *remote_addr_p += atomic_mr_offset;
+        return atomic_rkey;
+    }
 }
 
-static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t rkey)
-{
-    return (uint32_t)rkey;
-}
 
-uint8_t  uct_ib_md_umr_id(uct_ib_md_t *md);
-
-static inline uint16_t uct_ib_md_umr_offset(uint8_t umr_id)
+static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
 {
-    return 8 * umr_id;
+    return 8 * atomic_mr_id;
 }
 
 #endif

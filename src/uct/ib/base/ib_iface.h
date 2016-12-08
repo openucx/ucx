@@ -276,12 +276,10 @@ ucs_status_t uct_ib_iface_arm_tx_cq(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_arm_rx_cq(uct_ib_iface_t *iface, int solicited);
 
-static inline uint8_t uct_ib_iface_umr_id(uct_ib_iface_t *iface)
-{
-    uct_ib_md_t *md;
 
-    md = ucs_derived_of(iface->super.md, uct_ib_md_t);
-    return uct_ib_md_umr_id(md);
+static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
+{
+    return uct_ib_md_get_atomic_mr_id(ucs_derived_of(iface->super.md, uct_ib_md_t));
 }
 
 

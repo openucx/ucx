@@ -161,16 +161,16 @@ uct_dc_mlx5_iface_atomic_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                               uint64_t remote_addr, uct_rkey_t rkey,
                               uint64_t compare_mask, uint64_t compare, uint64_t swap_add)
 {
-    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+    uint32_t ib_rkey = uct_ib_resolve_atomic_rkey(rkey, ep->super.atomic_mr_offset,
+                                                  &remote_addr);
 
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
     desc->super.sn = txwq->sw_pi;
     uct_rc_mlx5_txqp_dptr_post(&iface->super.super, IBV_EXP_QPT_DC_INI, txqp, txwq,
                                opcode, desc + 1, length, &desc->lkey,
-                               0, NULL, 0,
-                               remote_addr + ep->super.umr_offset,
-                               uct_ib_md_umr_rkey(rkey),
+                               0, NULL, 0, remote_addr, ib_rkey,
                                compare_mask, compare, swap_add,
                                &ep->av, uct_ib_mlx5_wqe_av_size(&ep->av),
                                MLX5_WQE_CTRL_CQ_UPDATE);

@@ -191,7 +191,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_ib_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
-    rc_addr->umr_id = uct_ib_iface_umr_id(iface);
+    rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(iface);
     return UCS_OK;
 }
 
@@ -246,16 +246,16 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
         return UCS_ERR_IO_ERROR;
     }
 
-    ep->umr_offset = uct_ib_md_umr_offset(rc_addr->umr_id);
+    ep->atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
 
     ucs_debug("connected rc qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
               "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d "
-              "umr_offset 0x%0x", ep->txqp.qp->qp_num,
+              "atomic_mr_offset 0x%0x", ep->txqp.qp->qp_num,
               UCT_IB_IFACE_ARG(&iface->super), qp_attr.ah_attr.dlid,
               ep->path_bits, qp_attr.ah_attr.sl, qp_attr.dest_qp_num,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
-              qp_attr.max_rd_atomic, ep->umr_offset);
+              qp_attr.max_rd_atomic, ep->atomic_mr_offset);
 
     return UCS_OK;
 }
