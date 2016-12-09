@@ -101,14 +101,14 @@ void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
     ucs_profile_location_t *loc;
     int location;
 
-    /* Location ID must be uninitialized */
-    ucs_assert(*loc_id_p == -1);
-
     /* Check if profiling is disabled */
     if (!ucs_global_opts.profile_mode) {
         *loc_id_p = 0;
         return;
     }
+
+    /* Location ID must be uninitialized */
+    ucs_assert(*loc_id_p == -1);
 
     location = ucs_profile_ctx.num_locations++;
 
