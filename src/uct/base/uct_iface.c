@@ -5,9 +5,11 @@
 * See file LICENSE for terms.
 */
 
-#include <uct/api/uct.h>
 #include "uct_iface.h"
 #include "uct_md.h"
+
+#include <uct/api/uct.h>
+#include <ucs/time/time.h>
 
 
 #if ENABLE_STATS
@@ -118,6 +120,22 @@ void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
 {
     if (iface->am_tracer != NULL) {
         iface->am_tracer(iface->am_tracer_arg, type, id, data, length, buffer, max);
+    }
+}
+
+void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp)
+{
+    static ucs_time_t warn_time = 0;
+    ucs_time_t now = ucs_get_time();
+
+    /* Limit the rate of warning to once in 30 seconds. This gives reasonable
+     * indication about a deadlock without flooding with warnings messages. */
+    if (warn_time == 0) {
+        warn_time = now;
+    }
+    if (now - warn_time > ucs_time_from_sec(30)) {
+        ucs_warn("Memory pool %s is empty", ucs_mpool_name(mp));
+        warn_time = now;
     }
 }
 
