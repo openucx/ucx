@@ -301,6 +301,7 @@ typedef struct uct_iface_mpool_config {
     { \
         _desc = ucs_mpool_get_inline(_mp); \
         if (ucs_unlikely((_desc) == NULL)) { \
+            uct_iface_mpool_empty_warn(_iface, _mp); \
             _failure; \
         } \
         \
@@ -455,6 +456,7 @@ void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
                        uint8_t id, const void *data, size_t length,
                        char *buffer, size_t max);
 
+void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 
 void uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h tl_iface);
 

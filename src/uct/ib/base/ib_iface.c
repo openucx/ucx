@@ -98,7 +98,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "size than requested with the same hardware resources, it will be used instead.",
    ucs_offsetof(uct_ib_iface_config_t, rx.inl), UCS_CONFIG_TYPE_MEMUNITS},
 
-  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", 65536, 0, "receive",
+  UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
 
   {"ADDR_TYPE", "auto",
