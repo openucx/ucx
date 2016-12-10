@@ -70,8 +70,8 @@ void print_sys_info()
     printf("# CPU model: %s\n", cpu_model_names[ucs_arch_get_cpu_model()]);
 
     printf("# Memcpy bandwidth:\n");
-    for (size = 4096; size <= 256 * 1024 * 1024; size *= 2) {
+    for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
         printf("#     %10zu bytes: %.3f MB/s\n", size,
-               measure_memcpy_bandwidth(size) / 1024 / 1024);
+               measure_memcpy_bandwidth(size) / UCS_MBYTE);
     }
 }

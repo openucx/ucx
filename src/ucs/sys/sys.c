@@ -24,7 +24,7 @@
 #include <sched.h>
 
 /* Default huge page size is 2 MBytes */
-#define UCS_DEFAULT_HUGEPAGE_SIZE  (2 * 1024 * 1024)
+#define UCS_DEFAULT_HUGEPAGE_SIZE  (2 * UCS_MBYTE)
 #define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
 
 
