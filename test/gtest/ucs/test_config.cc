@@ -110,8 +110,8 @@ protected:
      */
     class car_opts {
     public:
-        car_opts(const char *table_prefix = NULL) :
-            m_opts(parse(table_prefix)) {
+        car_opts(const char *env_prefix, const char *table_prefix) :
+            m_opts(parse(env_prefix, table_prefix)) {
         }
 
         car_opts(const car_opts& orig)
@@ -139,11 +139,12 @@ protected:
         }
     private:
 
-        static car_opts_t parse(const char *table_prefix) {
+        static car_opts_t parse(const char *env_prefix,
+                                const char *table_prefix) {
             car_opts_t tmp;
             ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
                                                               car_opts_table,
-                                                              NULL,
+                                                              env_prefix,
                                                               table_prefix,
                                                               0);
             ASSERT_UCS_OK(status);
@@ -155,7 +156,7 @@ protected:
 };
 
 UCS_TEST_F(test_config, parse_default) {
-    car_opts opts("TEST");
+    car_opts opts(NULL, "TEST");
 
     EXPECT_EQ((unsigned)999, opts->price);
     EXPECT_EQ(std::string("Chevy"), opts->brand);
@@ -173,7 +174,7 @@ UCS_TEST_F(test_config, clone) {
 
     {
         ucs::scoped_setenv env1("UCX_COLOR", "white");
-        car_opts opts;
+        car_opts opts(NULL, NULL);
         EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
         ucs::scoped_setenv env2("UCX_COLOR", "black");
@@ -185,18 +186,26 @@ UCS_TEST_F(test_config, clone) {
 }
 
 UCS_TEST_F(test_config, set) {
-    car_opts opts;
+    car_opts opts(NULL, NULL);
     EXPECT_EQ((unsigned)COLOR_RED, opts->color);
 
     opts.set("COLOR", "white");
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 }
 
-UCS_TEST_F(test_config, set_with_prefix) {
+UCS_TEST_F(test_config, set_with_table_prefix) {
     ucs::scoped_setenv env1("UCX_COLOR", "black");
     ucs::scoped_setenv env2("UCX_CARS_COLOR", "white");
 
-    car_opts opts("CARS_");
+    car_opts opts(NULL, "CARS_");
+    EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
+}
+
+UCS_TEST_F(test_config, set_with_env_prefix) {
+    ucs::scoped_setenv env1("UCX_COLOR", "black");
+    ucs::scoped_setenv env2("UCX_TEST_COLOR", "white");
+
+    car_opts opts("TEST", NULL);
     EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 }
 
@@ -212,7 +221,7 @@ UCS_TEST_F(test_config, performance) {
 
     /* Now test the time */
     UCS_TEST_TIME_LIMIT(0.005) {
-        car_opts opts;
+        car_opts opts(NULL, NULL);
     }
 }
 
@@ -221,7 +230,7 @@ UCS_TEST_F(test_config, dump) {
     size_t dump_size;
     char line_buf[1024];
 
-    car_opts opts;
+    car_opts opts(NULL, NULL);
 
     /* Dump configuration to a memory buffer */
     dump_data = NULL;
