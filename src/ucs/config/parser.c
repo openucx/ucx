@@ -887,17 +887,29 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          int ignore_errors)
 {
     ucs_status_t status;
+    char prefix[128];
 
+    /* Set default values */
     status = ucs_config_parser_set_default_values(opts, fields);
     if (status != UCS_OK) {
         goto err;
     }
 
-    /* TODO use env_prefix as well */
+    /* Apply environment variables */
     status = ucs_config_apply_env_vars(opts, fields, UCS_CONFIG_PREFIX,
                                        table_prefix, 1, ignore_errors);
     if (status != UCS_OK) {
         goto err_free;
+    }
+
+    /* Apply environment variables with custom prefix */
+    if ((env_prefix != NULL) && (strlen(env_prefix) > 0)) {
+        snprintf(prefix, sizeof(prefix), "%s%s_", UCS_CONFIG_PREFIX, env_prefix);
+        status = ucs_config_apply_env_vars(opts, fields, prefix, table_prefix,
+                                           1, ignore_errors);
+        if (status != UCS_OK) {
+            goto err_free;
+        }
     }
 
     return UCS_OK;
