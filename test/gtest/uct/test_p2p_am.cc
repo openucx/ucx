@@ -369,7 +369,25 @@ public:
         return status;
     }
 
-    unsigned    m_rx_buf_limit_failed;
+    static ucs_log_func_rc_t
+    no_rx_buffs_log_handler(const char *file, unsigned line, const char *function,
+                            ucs_log_level_t level, const char *prefix,
+                            const char *message, va_list ap)
+    {
+        /* Ignore warnings about empty memory pool */
+        if ((level == UCS_LOG_LEVEL_WARN) &&
+            !strcmp(function, UCS_PP_QUOTE(uct_iface_mpool_empty_warn)))
+        {
+            char buf[200];
+            vsnprintf(buf, sizeof(buf), message, ap);
+            UCS_TEST_MESSAGE << file << ":" << line << ": " << buf;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    unsigned m_rx_buf_limit_failed;
 };
 
 
@@ -441,13 +459,15 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
 
     /* set a callback for the uct to invoke for receiving the data */
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler, (void*)this, UCT_AM_CB_FLAG_SYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                      (void*)this, UCT_AM_CB_FLAG_SYNC);
     ASSERT_UCS_OK(status);
 
     /* send many messages and progress the receiver. the receiver will keep getting
      * UCS_INPROGRESS from the recv-handler and will keep consuming its rx memory pool.
      * the goal is to make the receiver's rx memory pool run out.
      * once this happens, the sender shouldn't be able to send */
+    ucs_log_push_handler(no_rx_buffs_log_handler);
     set_keep_data(true);
     status = send_with_timeout(sender_ep(), sendbuf, recvbuf, 1);
     while (status != UCS_ERR_NO_RESOURCE) {
@@ -457,6 +477,7 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
     set_keep_data(false);
     check_backlog();
     short_progress_loop();
+    ucs_log_pop_handler();
 
     /* check that now the sender is able to send */
     EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 6));
