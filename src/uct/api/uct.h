@@ -288,6 +288,9 @@ struct uct_iface_attr {
         struct {
             size_t           max_short;  /**< Total max. size (incl. the header) */
             size_t           max_bcopy;  /**< Total max. size (incl. the header) */
+            size_t           min_zcopy;  /**< Minimal size for am_zcopy (incl. the
+                                              header and total of @ref uct_iov_t::length
+                                              of the @a iov parameter) */
             size_t           max_zcopy;  /**< Total max. size (incl. the header
                                               and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */

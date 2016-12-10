@@ -95,6 +95,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_short       = iface->config.fifo_elem_size -
                                          sizeof(uct_mm_fifo_element_t);
     iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
+    iface_attr->cap.am.min_zcopy       = 0;
     iface_attr->cap.am.max_zcopy       = 0;
     iface_attr->cap.am.max_iov         = 1;
 

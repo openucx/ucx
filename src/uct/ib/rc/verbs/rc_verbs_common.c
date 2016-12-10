@@ -45,6 +45,7 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     /* AM */
     iface_attr->cap.am.max_short  = verbs_iface->config.max_inline - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
+    iface_attr->cap.am.min_zcopy  = 0;
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     /* The first IOV is reserved for the header */
     iface_attr->cap.am.max_iov    = uct_ib_iface_get_max_iov(&iface->super) - 1;

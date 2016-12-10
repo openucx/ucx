@@ -133,8 +133,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
                    iface_attr.cap.get.max_zcopy, iface_attr.cap.get.max_iov);
         PRINT_CAP(AM_SHORT,  iface_attr.cap.flags, iface_attr.cap.am.max_short);
         PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
-        PRINT_ZCAP(AM_ZCOPY,  iface_attr.cap.flags, 0, iface_attr.cap.am.max_zcopy,
-                   iface_attr.cap.am.max_iov);
+        PRINT_ZCAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.min_zcopy,
+                   iface_attr.cap.am.max_zcopy, iface_attr.cap.am.max_iov);
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
             printf("#            am header: %s\n",
                    size_limit_to_str(0, iface_attr.cap.am.max_hdr));

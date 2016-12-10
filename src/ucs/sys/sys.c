@@ -353,7 +353,7 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
 
 void ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
-    static const char * suffixes[] = {"", "kb", "mb", "gb", "tb"};
+    static const char * suffixes[] = {"", "k", "m", "g", "t"};
 
     const char **suffix;
 

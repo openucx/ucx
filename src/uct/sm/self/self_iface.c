@@ -62,6 +62,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
 
     attr->cap.am.max_short       = self_iface->data_length;
     attr->cap.am.max_bcopy       = self_iface->data_length;
+    attr->cap.am.min_zcopy       = 0;
     attr->cap.am.max_zcopy       = 0;
     attr->cap.am.max_hdr         = 0;
     attr->cap.am.max_iov         = 1;

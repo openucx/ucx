@@ -597,6 +597,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                     config->zcopy_thresh      = context->config.ext.zcopy_thresh;
                     config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
                 }
+
+                config->zcopy_thresh = ucs_max(config->zcopy_thresh,
+                                               iface_attr->cap.am.min_zcopy);
             }
         } else {
             config->max_am_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */

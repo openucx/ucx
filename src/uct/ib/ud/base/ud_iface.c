@@ -525,6 +525,7 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.min_zcopy      = 0;
     iface_attr->cap.am.max_zcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_hdr        = iface->config.max_inline - sizeof(uct_ud_neth_t);
     /* The first iov is reserved for the header */
@@ -532,10 +533,6 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
 
     iface_attr->cap.put.max_short     = iface->config.max_inline -
                                         sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
-    iface_attr->cap.put.max_bcopy     = 0;
-    iface_attr->cap.put.min_zcopy     = 0;
-    iface_attr->cap.put.max_zcopy     = 0;
-    iface_attr->cap.put.max_iov       = 0;
 
     iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
     iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
