@@ -62,6 +62,7 @@ UCS_TEST_P(test_uct_wakeup, am)
     recv_desc_t *recv_buffer;
     uct_wakeup_h wakeup_handle;
     struct pollfd wakeup_fd;
+    ucs_status_t status;
 
     initialize();
     check_caps(UCT_IFACE_FLAG_WAKEUP);
@@ -87,7 +88,11 @@ UCS_TEST_P(test_uct_wakeup, am)
 
     /* make sure the file descriptor IS signaled ONCE */
     ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
-    ASSERT_EQ(uct_wakeup_efd_arm(wakeup_handle), UCS_ERR_BUSY);
+    do {
+        status = uct_wakeup_efd_arm(wakeup_handle);
+    } while (UCS_ERR_BUSY == status);
+    ASSERT_EQ(UCS_OK, status);
+
     wakeup_fd.revents = 0;
     EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
 

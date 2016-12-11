@@ -15,6 +15,9 @@ extern "C" {
 #include <uct/ib/ud/base/ud_iface.h>
 };
 
+#define TEST_UD_PROGRESS_TIMEOUT 300.0
+
+
 class ud_base_test : public uct_test {
 public:
     virtual void init();

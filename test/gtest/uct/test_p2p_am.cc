@@ -182,10 +182,10 @@ public:
 
         if (ucs_log_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             if (&sender() == &receiver()) {
-                EXPECT_EQ(2u, m_send_tracer.count);
+                EXPECT_UD_CHECK(2u, m_send_tracer.count, LE, EQ);
             } else {
-                EXPECT_EQ(1u, m_send_tracer.count);
-                EXPECT_EQ(1u, m_recv_tracer.count);
+                EXPECT_UD_CHECK(1u, m_send_tracer.count, LE, EQ);
+                EXPECT_UD_CHECK(1u, m_recv_tracer.count, LE, EQ);
             }
         }
     }

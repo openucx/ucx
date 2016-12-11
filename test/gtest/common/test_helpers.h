@@ -418,6 +418,15 @@ public:
         } \
     } while (0)
 
+#define EXPECT_UD_CHECK(_val1, _val2, _exp_ud, _exp_non_ud) \
+    do { \
+        if ((GetParam()->tl_name == "ud") || (GetParam()->tl_name == "ud_mlx5")) { \
+            EXPECT_##_exp_ud(_val1, _val2); \
+        } else { \
+            EXPECT_##_exp_non_ud(_val1, _val2); \
+        } \
+    } while (0)
+
 
 /* Run code block with given time limit */
 #define UCS_TEST_TIME_LIMIT(_seconds) \

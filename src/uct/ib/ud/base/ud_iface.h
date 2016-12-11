@@ -123,8 +123,11 @@ struct uct_ud_iface {
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
-        int               timer_id;
-        ucs_twheel_t      slow_timer;
+        ucs_twheel_t              slow_timer;
+        int                       timer_id;
+        uint8_t                   cbq_elem_on; /* To avoid double registering */
+        ucs_callbackq_slow_elem_t cbq_elem;    /* Slow-path callback to remove
+                                                  FD from async poll */
     } async;
 };
 
@@ -381,6 +384,21 @@ uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
         return;
     }
     uct_ud_iface_dispatch_async_comps_do(iface);
+}
+
+static UCS_F_ALWAYS_INLINE
+void uct_ud_iface_async_remove_cb_enable(uct_ud_iface_t *iface, uint8_t do_reg)
+{
+
+    if (do_reg && (0 == iface->async.cbq_elem_on)) { /* prevent double registering */
+        uct_worker_slowpath_progress_register(iface->super.super.worker,
+                                              &iface->async.cbq_elem);
+        iface->async.cbq_elem_on = 1;
+    } else if ((!do_reg) && (1 == iface->async.cbq_elem_on)) {
+        uct_worker_slowpath_progress_unregister(iface->super.super.worker,
+                                                &iface->async.cbq_elem);
+        iface->async.cbq_elem_on = 0;
+    }
 }
 
 #if ENABLE_PARAMS_CHECK
