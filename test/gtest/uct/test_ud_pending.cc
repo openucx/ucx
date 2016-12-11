@@ -150,7 +150,7 @@ UCS_TEST_P(test_ud_pending, connect)
     disable_async(m_e1);
     disable_async(m_e2);
     post_pending_reqs();
-    short_progress_loop(50.0);
+    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
     check_pending_reqs();
 }
 
