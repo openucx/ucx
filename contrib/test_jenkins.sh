@@ -176,10 +176,14 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     $AFFINITY $TIMEOUT ./src/tools/info/ucx_info -f -c -v -y -d -b -p -w -e -uart
 
     echo "Running profiling test"
-    UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./test/apps/profiling
+    UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./test/apps/test_profiling
     ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep "printf" -C 20
     ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep -q "calc_pi"
     ${ucx_inst}/bin/ucx_read_profile -r ucx_jenkins.prof | grep -q "print_pi"
+
+    echo "Running dlopen test"
+    strace ./test/apps/test_profiling &> strace.log
+    ! grep '^socket' strace.log
 
     export GTEST_RANDOM_SEED=0
     export GTEST_SHUFFLE=1

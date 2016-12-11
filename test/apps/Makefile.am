@@ -5,11 +5,20 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_PROFILING
 noinst_PROGRAMS = \
-	profiling
+	test_dlopen
 
-profiling_SOURCES  = profiling.c
-profiling_LDADD    = $(top_builddir)/src/ucs/libucs.la
-profiling_CPPFLAGS = -g -I$(top_srcdir)/src
+
+objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
+
+test_dlopen_SOURCES = dlopen.c
+test_dlopen_CPPFLAGS = -g -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+
+if HAVE_PROFILING
+noinst_PROGRAMS += \
+	test_profiling
+
+test_profiling_SOURCES  = profiling.c
+test_profiling_LDADD    = $(top_builddir)/src/ucs/libucs.la
+test_profiling_CPPFLAGS = -g -I$(top_srcdir)/src
 endif
