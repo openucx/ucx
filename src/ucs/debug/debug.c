@@ -533,16 +533,6 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 #endif /* HAVE_DETAILED_BACKTRACE */
 
-static const char * ucs_debug_getlogin()
-{
-    static char login_str[64] = {0};
-
-    if (login_str[0] == '\0') {
-        getlogin_r(login_str, sizeof(login_str));
-    }
-    return login_str;
-}
-
 static void *ucs_debug_alloc_mem(size_t length)
 {
     void *ptr;
@@ -620,7 +610,7 @@ static ucs_status_t ucs_debugger_attach()
         /* Generate a file name for gdb commands */
         memset(gdb_commands_file, 0, sizeof(gdb_commands_file));
         snprintf(gdb_commands_file, sizeof(gdb_commands_file) - 1,
-                 "/tmp/.gdbcommands.%s", ucs_debug_getlogin());
+                 "/tmp/.gdbcommands.uid-%d", geteuid());
 
         /* Write gdb commands and add the file to argv is successful */
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);
@@ -1020,7 +1010,6 @@ void ucs_debug_init()
         signal(ucs_global_opts.debug_signo, ucs_debug_signal_handler);
     }
 
-    (void)ucs_debug_getlogin();
 #ifdef HAVE_DETAILED_BACKTRACE
     bfd_init();
 #endif
