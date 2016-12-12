@@ -110,7 +110,7 @@ ucs_status_t uct_mm_mem_dereg(uct_md_h md, uct_mem_h memh)
 
 ucs_status_t uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags     = 0;
+    md_attr->cap.flags     = UCT_MD_FLAG_RKEY;
     if (uct_mm_md_mapper_ops(md)->alloc != NULL) {
         md_attr->cap.flags |= UCT_MD_FLAG_ALLOC;
     }
