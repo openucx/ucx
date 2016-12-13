@@ -178,6 +178,7 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     test_xfer_prepare_bufs(sendbuf, recvbuf, count, send_contig, recv_contig,
                            &send_dt, &recv_dt);
 
+    info.length = 0;
     message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff, 1, &info);
     EXPECT_TRUE(message == NULL);
 
@@ -188,7 +189,7 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     }
 
     /* put RTS into the unexpected queue */
-    short_progress_loop();
+    wait_for_flag(&info.length);
 
     message = ucp_tag_probe_nb(receiver().worker(), RECV_TAG, RECV_MASK, 1, &info);
     /* make sure that there was a match (RTS) */

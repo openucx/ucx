@@ -67,8 +67,16 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
         size_t size = rand() % (1024 * 1024);
 
         ucp_mem_h memh;
-        void *ptr = NULL;
-        status = ucp_mem_map(sender().ucph(), &ptr, size, rand_flags(), &memh);
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = NULL;
+        params.length     = size;
+        params.flags      = rand_flags();
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
@@ -92,7 +100,16 @@ UCS_TEST_P(test_ucp_mmap, reg) {
         void *ptr = malloc(size);
 
         ucp_mem_h memh;
-        status = ucp_mem_map(sender().ucph(), &ptr, size, rand_flags(), &memh);
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = ptr;
+        params.length     = size;
+        params.flags      = rand_flags();
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
@@ -111,17 +128,26 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
     int buf_num = 2;
     ucp_mem_h memh[buf_num];
     int dummy[1];
-    void *ptr = NULL;
+    ucp_mem_map_params_t params;
     int i;
 
     sender().connect(&sender());
 
     /* Check that ucp_mem_map accepts any value for buffer if size is 0 and
      * UCP_MEM_FLAG_ZERO_REG flag is passed to it. */
-    status = ucp_mem_map(sender().ucph(), &ptr, 0, rand_flags(), &memh[0]);
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = NULL;
+    params.length     = 0;
+    params.flags      = rand_flags();
+
+    status = ucp_mem_map(sender().ucph(), &params, &memh[0]);
     ASSERT_UCS_OK(status);
-    ptr = dummy;
-    status = ucp_mem_map(sender().ucph(), &ptr, 0, rand_flags(), &memh[1]);
+
+    params.address = dummy;
+    status = ucp_mem_map(sender().ucph(), &params, &memh[1]);
     ASSERT_UCS_OK(status);
 
     for (i = 0; i < buf_num; i++) {

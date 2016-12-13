@@ -163,13 +163,17 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h server_ep;
+    ucp_ep_params_t ep_params;
     struct msg *msg = 0;
     struct ucx_context *request = 0;
     size_t msg_len = 0;
     int ret = -1;
 
     /* Send client UCX address to server */
-    status = ucp_ep_create(ucp_worker, peer_addr, &server_ep);
+    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address    = peer_addr;
+
+    status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -267,6 +271,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h client_ep;
+    ucp_ep_params_t ep_params;
     struct msg *msg = 0;
     struct ucx_context *request = 0;
     size_t msg_len = 0;
@@ -329,7 +334,10 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     free(msg);
 
     /* Send test string to client */
-    status = ucp_ep_create(ucp_worker, peer_addr, &client_ep);
+    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address    = peer_addr;
+
+    status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -398,6 +406,7 @@ int main(int argc, char **argv)
 {
     /* UCP temporary vars */
     ucp_params_t ucp_params;
+    ucp_worker_params_t worker_params;
     ucp_config_t *config;
     ucs_status_t status;
 
@@ -438,7 +447,10 @@ int main(int argc, char **argv)
         goto err;
     }
 
-    status = ucp_worker_create(ucp_context, UCS_THREAD_MODE_SINGLE, &ucp_worker);
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+
+    status = ucp_worker_create(ucp_context, &worker_params, &ucp_worker);
     if (status != UCS_OK) {
         goto err_cleanup;
     }

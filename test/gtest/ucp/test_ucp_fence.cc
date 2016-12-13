@@ -130,6 +130,7 @@ protected:
         static const size_t memheap_size = sizeof(uint64_t);
         ucs_status_t status;
 
+        ucp_mem_map_params_t params;
         ucp_mem_h memh;
         void *memheap;
 
@@ -146,8 +147,14 @@ protected:
 
         memheap = malloc(memheap_size);
 
-        status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size,
-                             GetParam().variant, &memh);
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = memheap;
+        params.length     = memheap_size;
+        params.flags      = GetParam().variant;
+
+        status = ucp_mem_map(receiver().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
 
         memset(memheap, 0, memheap_size);

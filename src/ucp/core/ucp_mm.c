@@ -175,8 +175,8 @@ out:
 }
 
 
-ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
-                         unsigned flags, ucp_mem_h *memh_p)
+ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
+                         ucp_mem_h *memh_p)
 {
     ucs_status_t status;
     unsigned uct_flags;
@@ -185,7 +185,14 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    if (length == 0) {
+    if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_LENGTH)) {
+        status = UCS_ERR_INVALID_PARAM;
+        ucs_error("The length value for mapping memory isn't set: %s",
+                  ucs_status_string(status));
+        goto out;
+    }
+
+    if (params->length == 0) {
         ucs_debug("mapping zero length buffer, return dummy memh");
         *memh_p = &ucp_mem_dummy_handle;
         status  = UCS_OK;
@@ -202,21 +209,26 @@ ucs_status_t ucp_mem_map(ucp_context_h context, void **address_p, size_t length,
     }
 
     uct_flags = 0;
-    if (flags & UCP_MEM_MAP_NONBLOCK) {
+    if ((params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) &&
+        (params->flags & UCP_MEM_MAP_NONBLOCK)) {
         uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
     }
 
-    if (*address_p == NULL) {
-        status = ucp_mem_alloc(context, length, uct_flags, "user allocation", memh);
+    if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS)) {
+        params->address = NULL;
+    }
+
+    if (params->address == NULL) {
+        status = ucp_mem_alloc(context, params->length, uct_flags, "user allocation", memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
 
-        *address_p = memh->address;
+        params->address = memh->address;
     } else {
-        ucs_debug("registering user memory at %p length %zu", *address_p, length);
-        memh->address      = *address_p;
-        memh->length       = length;
+        ucs_debug("registering user memory at %p length %zu", params->address, params->length);
+        memh->address      = params->address;
+        memh->length       = params->length;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         status = ucp_memh_reg_mds(context, memh, uct_flags, UCT_INVALID_MEM_HANDLE);

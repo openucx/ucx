@@ -10,14 +10,16 @@
 
 std::vector<ucp_test_param>
 test_ucp_memheap::enum_test_params(const ucp_params_t& ctx_params,
-                                  const std::string& name,
-                                  const std::string& test_case_name,
-                                  const std::string& tls)
+                                   const ucp_worker_params_t& worker_params,
+                                   const std::string& name,
+                                   const std::string& test_case_name,
+                                   const std::string& tls)
 {
     std::vector<ucp_test_param> result;
-    generate_test_params_variant(ctx_params, name, test_case_name,
+    generate_test_params_variant(ctx_params, worker_params, name, test_case_name,
                                  tls, 0, result);
-    generate_test_params_variant(ctx_params, name, test_case_name + "/map_nb",
+    generate_test_params_variant(ctx_params, worker_params, name,
+                                 test_case_name + "/map_nb",
                                  tls, UCP_MEM_MAP_NONBLOCK, result);
     return result;
 }
@@ -30,6 +32,7 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     static const int max_iter = 300 / ucs::test_time_multiplier();
     static const size_t size = ucs_max((size_t)rand() % (12*1024), alignment);
     static const size_t memheap_size = max_iter * size + alignment;
+    ucp_mem_map_params_t params;
     ucs_status_t status;
 
     sender().connect(&receiver());
@@ -46,10 +49,17 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
         memheap = NULL;
     }
 
-    status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size,
-                         GetParam().variant, &memh);
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = memheap;
+    params.length     = memheap_size;
+    params.flags      = GetParam().variant;
+
+    status = ucp_mem_map(receiver().ucph(), &params, &memh);
     ASSERT_UCS_OK(status);
 
+    memheap = params.address;
     memset(memheap, 0, memheap_size);
 
     void *rkey_buffer;
@@ -108,6 +118,7 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
                                           bool malloc_allocate, bool is_ep_flush)
 {
     static const size_t memheap_size = 3 * 1024;
+    ucp_mem_map_params_t params;
     ucs_status_t status;
     size_t size;
 
@@ -125,10 +136,17 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
         memheap = NULL;
     }
 
-    status = ucp_mem_map(receiver().ucph(), &memheap, memheap_size,
-                         GetParam().variant, &memh);
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = memheap;
+    params.length     = memheap_size;
+    params.flags      = GetParam().variant;
+
+    status = ucp_mem_map(receiver().ucph(), &params, &memh);
     ASSERT_UCS_OK(status);
 
+    memheap = params.address;
     memset(memheap, 0, memheap_size);
 
     void *rkey_buffer;

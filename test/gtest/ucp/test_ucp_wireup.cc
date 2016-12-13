@@ -19,6 +19,7 @@ class test_ucp_wireup : public ucp_test {
 public:
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
+                     const ucp_worker_params_t& worker_params,
                      const std::string& name,
                      const std::string& test_case_name,
                      const std::string& tls);
@@ -71,6 +72,7 @@ private:
 
 std::vector<ucp_test_param>
 test_ucp_wireup::enum_test_params(const ucp_params_t& ctx_params,
+                                  const ucp_worker_params_t& worker_params,
                                   const std::string& name,
                                   const std::string& test_case_name,
                                   const std::string& tls)
@@ -79,11 +81,11 @@ test_ucp_wireup::enum_test_params(const ucp_params_t& ctx_params,
     ucp_params_t tmp_ctx_params = ctx_params;
 
     tmp_ctx_params.features = UCP_FEATURE_RMA;
-    generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/rma",
+    generate_test_params_variant(tmp_ctx_params, worker_params, name, test_case_name + "/rma",
                                  tls, TEST_RMA, result);
 
     tmp_ctx_params.features = UCP_FEATURE_TAG;
-    generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
+    generate_test_params_variant(tmp_ctx_params, worker_params, name, test_case_name + "/tag",
                                  tls, TEST_TAG, result);
 
     return result;
@@ -97,14 +99,19 @@ void test_ucp_wireup::init() {
 
     if (GetParam().variant == UCP_FEATURE_RMA) {
         ucs_status_t status;
+        ucp_mem_map_params_t params;
 
-        void *ptr   = &m_recv_data[0];
-        size_t size = m_recv_data.size() * sizeof(m_recv_data[0]);
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = &m_recv_data[0];
+        params.length     = m_recv_data.size() * sizeof(m_recv_data[0]);
+        params.flags      = 0;
 
-        status = ucp_mem_map(receiver().ucph(), &ptr, size, 0, &m_memh1);
+        status = ucp_mem_map(receiver().ucph(), &params, &m_memh1);
         ASSERT_UCS_OK(status);
 
-        status = ucp_mem_map(sender().ucph(), &ptr, size, 0, &m_memh2);
+        status = ucp_mem_map(sender().ucph(), &params, &m_memh2);
         ASSERT_UCS_OK(status);
 
         m_rkey1 = get_rkey(m_memh1);

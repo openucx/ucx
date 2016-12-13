@@ -139,7 +139,8 @@ int ucp_ep_is_stub(ucp_ep_h ep)
     return ucp_ep_get_rsc_index(ep, 0) == UCP_NULL_RESOURCE;
 }
 
-ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
+ucs_status_t ucp_ep_create(ucp_worker_h worker,
+                           const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p)
 {
     char peer_name[UCP_WORKER_NAME_MAX];
@@ -154,10 +155,16 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_address_t *address,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    status = ucp_address_unpack(address, &dest_uuid, peer_name, sizeof(peer_name),
-                                &address_count, &address_list);
-    if (status != UCS_OK) {
-        ucs_error("failed to unpack remote address: %s", ucs_status_string(status));
+    if (params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) {
+        status = ucp_address_unpack(params->address, &dest_uuid, peer_name, sizeof(peer_name),
+                                    &address_count, &address_list);
+        if (status != UCS_OK) {
+            ucs_error("failed to unpack remote address: %s", ucs_status_string(status));
+            goto out;
+        }
+    } else {
+        status = UCS_ERR_INVALID_PARAM;
+        ucs_error("remote address is missing: %s", ucs_status_string(status));
         goto out;
     }
 

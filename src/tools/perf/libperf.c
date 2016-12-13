@@ -645,24 +645,39 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
 static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_params_t *params)
 {
     ucs_status_t status;
+    ucp_mem_map_params_t mem_map_params;
 
-    perf->send_buffer = NULL;
-    status = ucp_mem_map(perf->ucp.context, &perf->send_buffer,
-                         params->message_size * params->thread_count,
-                         (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
-                                         UCP_MEM_MAP_NONBLOCK : 0,
+    perf->send_buffer         = NULL;
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_map_params.address    = perf->send_buffer;
+    mem_map_params.length     = params->message_size * params->thread_count;
+    mem_map_params.flags      = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
+                                 UCP_MEM_MAP_NONBLOCK : 0;
+
+    status = ucp_mem_map(perf->ucp.context, &mem_map_params,
                          &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
     }
+    perf->send_buffer = mem_map_params.address;
 
     perf->recv_buffer = NULL;
-    status = ucp_mem_map(perf->ucp.context, &perf->recv_buffer,
-                         params->message_size * params->thread_count,
-                         0, &perf->ucp.recv_memh);
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_map_params.address    = perf->recv_buffer;
+    mem_map_params.length     = params->message_size * params->thread_count;
+    mem_map_params.flags      = 0;
+
+    status = ucp_mem_map(perf->ucp.context, &mem_map_params, &perf->ucp.recv_memh);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
     }
+    perf->recv_buffer = mem_map_params.address;
 
     return UCS_OK;
 
@@ -725,6 +740,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     unsigned group_size, i, group_index;
     ucp_address_t *address;
     size_t address_length = 0;
+    ucp_ep_params_t ep_params;
     ucs_status_t status;
     struct iovec vec[3];
     void *rkey_buffer;
@@ -797,7 +813,10 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
         rkey_buffer = (void*)address + remote_info->ucp.addr_len;
         perf->ucp.peers[i].remote_addr = remote_info->recv_buffer;
 
-        status = ucp_ep_create(perf->ucp.worker, address, &perf->ucp.peers[i].ep);
+        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address    = address;
+
+        status = ucp_ep_create(perf->ucp.worker, &ep_params, &perf->ucp.peers[i].ep);
         if (status != UCS_OK) {
             if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
@@ -995,6 +1014,7 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
 static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *params)
 {
     ucp_params_t ucp_params;
+    ucp_worker_params_t worker_params;
     ucp_config_t *config;
     ucs_status_t status;
     uint64_t features;
@@ -1020,7 +1040,10 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err;
     }
 
-    status = ucp_worker_create(perf->ucp.context, params->thread_mode,
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.thread_mode = params->thread_mode;
+
+    status = ucp_worker_create(perf->ucp.context, &worker_params,
                                &perf->ucp.worker);
     if (status != UCS_OK) {
         goto err_cleanup;
