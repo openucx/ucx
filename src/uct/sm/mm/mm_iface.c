@@ -558,7 +558,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_iface_t)
     ucs_status_t status;
     size_t size_to_free;
 
-    ucs_async_unset_event_handler(self->signal_fd);
+    ucs_async_remove_handler(self->signal_fd, 1);
 
     ucs_callbackq_remove_all(&self->super.worker->progress_q,
                              uct_mm_iface_progress, self);

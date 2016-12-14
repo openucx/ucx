@@ -234,7 +234,7 @@ static void uct_ud_iface_async_handler_remove(ucs_callbackq_slow_elem_t *self)
 
     ucs_trace_func("iface=%p remove async fd=%d and unregister. slow-path %d",
                    iface, iface->super.comp_channel->fd, iface->async.cbq_elem_on);
-    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
+    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
 
     /* need to call this callback only once. unregistering... */
     uct_ud_iface_async_remove_cb_enable(iface, 0);
@@ -381,9 +381,9 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
     return UCS_OK;
 
 err_unset_event_handler:
-    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
+    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
 err_remove_timer:
-    ucs_async_remove_timer(iface->async.timer_id);
+    ucs_async_remove_handler(iface->async.timer_id, 1);
 err_twheel_cleanup:
     ucs_twheel_cleanup(&iface->async.slow_timer);
 err:
@@ -392,8 +392,8 @@ err:
 
 void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface)
 {
-    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
-    ucs_async_remove_timer(iface->async.timer_id);
+    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
+    ucs_async_remove_handler(iface->async.timer_id, 1);
     ucs_twheel_cleanup(&iface->async.slow_timer);
 }
 

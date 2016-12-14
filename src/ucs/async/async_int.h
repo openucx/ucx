@@ -10,6 +10,7 @@
 #include "async.h"
 
 #include <ucs/datastruct/queue.h>
+#include <ucs/time/timerq.h>
 
 
 /* Async event handler */
@@ -20,18 +21,30 @@ struct ucs_async_handler {
     ucs_async_event_cb_t       cb;      /* Callback function */
     void                       *arg;    /* Callback argument */
     ucs_async_context_t        *async;  /* Async context for the handler. Can be NULL */
-    volatile uint32_t          missed; /* Protect against adding to miss queue multiple times */
-    ucs_async_handler_t        *next;
+    volatile uint32_t          missed;  /* Protect against adding to miss queue multiple times */
+    volatile uint32_t          refcount;
 };
 
 
 /**
  * Dispatch event coming from async context.
  *
- * @param id         Handler to dispatch.
+ * @param id         Array of event IDs to dispatch.
+ * @param count      Number of events
  * @param from_async Whether the handler is called from async context or main context.
  */
-ucs_status_t ucs_async_dispatch_handler(int id, int from_async);
+ucs_status_t ucs_async_dispatch_handlers(int *events, size_t count, int from_async);
+
+
+/**
+ * Dispatch timers from a timer queue.
+ *
+ * @param timerq        Timer queue whose timers to dispatch.
+ * @param current_time  Current time for checking timer expiration.
+ * @param from_async    Whether the handler is called from async context or main context.
+ */
+ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
+                                       ucs_time_t current_time, int from_async);
 
 
 /**

@@ -235,7 +235,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
-    ucs_async_unset_event_handler(dev->ibv_context->async_fd);
+    ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
     UCS_STATS_NODE_FREE(dev->stats);
     ibv_close_device(dev->ibv_context);
 }

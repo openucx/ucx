@@ -85,7 +85,7 @@ void ud_base_test::set_tx_win(entity *e, uct_ud_psn_t size)
 
 void ud_base_test::disable_async(entity *e) 
 {
-    ucs_async_remove_timer(iface(e)->async.timer_id);
+    ucs_async_remove_handler(iface(e)->async.timer_id, 1);
 }
 
 

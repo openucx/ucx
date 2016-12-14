@@ -73,10 +73,18 @@ static inline ucs_time_t ucs_timerq_min_interval(ucs_timer_queue_t *timerq) {
 
 
 /**
+ * @return Number of timers in the queue.
+ */
+static inline int ucs_timerq_size(ucs_timer_queue_t *timerq) {
+    return timerq->num_timers;
+}
+
+
+/**
  * @return Whether there are no timers.
  */
 static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
-    return timerq->num_timers == 0;
+    return ucs_timerq_size(timerq) == 0;
 }
 
 
