@@ -40,11 +40,11 @@ typedef ucs_status_t
  * in the completion callback 
  */
 
-static inline ucs_status_t
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_request_advance(ucp_request_t *req, size_t frag_length, 
                         ucs_status_t status)
 {
-    if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
+    if (ucs_likely((status == UCS_OK) || (status == UCS_INPROGRESS))) {
         req->send.length -= frag_length;
         if (req->send.length == 0) {
             if (req->send.uct_comp.count == 0) {
@@ -68,7 +68,7 @@ ucp_rma_request_bcopy_completion(uct_completion_t *self, ucs_status_t status)
     ucp_request_put(req, UCS_OK);
 }
 
-static inline ucs_status_t
+static UCS_F_ALWAYS_INLINE void
 ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer, 
                      size_t length, uint64_t remote_addr, ucp_rkey_h rkey,
                      uct_pending_callback_t cb, ucp_lane_index_t lane,
@@ -88,10 +88,9 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
 #if ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
-    return UCS_OK;
 }
 
-static inline ucs_status_t 
+static UCS_F_ALWAYS_INLINE ucs_status_t 
 ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey, 
                        const ucp_ep_rma_config_t *rma_config)
 {
@@ -123,7 +122,7 @@ ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey,
     return ucp_rma_request_advance(req, packed_len, status);    
 }
 
-static ucs_status_t 
+static UCS_F_ALWAYS_INLINE ucs_status_t 
 ucp_progress_get_inner(ucp_request_t *req, uct_rkey_t uct_rkey, 
                        const ucp_ep_rma_config_t *rma_config)
 {
@@ -188,11 +187,8 @@ ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote
     ucs_assert((send_func == ucp_progress_put_inner) ||
                (send_func == ucp_progress_get_inner));
 
-    status = ucp_rma_request_init(&req, ep, buffer, length, remote_addr, rkey,
-                                  NULL, lane, 0);
-    if (status != UCS_OK) {
-        return status;
-    }
+    ucp_rma_request_init(&req, ep, buffer, length, remote_addr, rkey, NULL,
+                         lane, 0);
 
     /* Loop until all message has been sent.
      * We re-check the configuration on every iteration except for zcopy, 
@@ -242,11 +238,11 @@ ucp_rma_nbi(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote_addr
      */
     do {
         status = send_func(req, uct_rkey, rma_config);
-        if (status == UCS_ERR_NO_RESOURCE) {
+        if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
             if (ucp_request_pending_add(req, &status)) {
                 return status;
             }
-        } else if (status < 0) {
+        } else if (ucs_unlikely(status < 0)) {
             return status;
         } else {
             if (status != UCS_INPROGRESS) {
