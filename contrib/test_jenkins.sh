@@ -63,9 +63,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     if [ -n "$EXECUTOR_NUMBER" ]; then
         AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
         TIMEOUT="timeout 80m"
+        TIMEOUT_VALGRIND="timeout 100m"
     else
         AFFINITY=""
         TIMEOUT=""
+        TIMEOUT_VALGRIND=""
     fi
 
     # Load newer doxygen
@@ -207,7 +209,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     then
         module load tools/valgrind-latest
     fi
-    $AFFINITY $TIMEOUT make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
+    $AFFINITY $TIMEOUT_VALGRIND make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
     (cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
     module unload tools/valgrind-latest
 
