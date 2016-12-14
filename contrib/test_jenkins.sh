@@ -160,6 +160,12 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
 
 
+    echo "Check --disable-numa compilation option"
+    ../contrib/configure-devel --prefix=$ucx_inst --disable-numa
+    make $make_opt clean
+    make $make_opt all
+    make $make_opt distclean
+
     module unload hpcx-gcc
 
     module load intel/ics

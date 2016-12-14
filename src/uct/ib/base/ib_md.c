@@ -11,9 +11,11 @@
 
 #include <ucs/arch/atomic.h>
 #include <pthread.h>
+
+#ifndef UCT_MD_DISABLE_NUMA
 #include <numaif.h>
 #include <numa.h>
-
+#endif
 
 #define UCT_IB_MD_PREFIX         "ib"
 #define UCT_IB_MEM_ACCESS_FLAGS  (IBV_ACCESS_LOCAL_WRITE | \
@@ -22,6 +24,7 @@
                                   IBV_ACCESS_REMOTE_ATOMIC)
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
+#ifndef UCT_MD_DISABLE_NUMA
 #if HAVE_STRUCT_BITMASK
 #  define numa_nodemask_p(_nm)            (_nm)->maskp
 #  define numa_nodemask_size(_nm)         (_nm)->size
@@ -46,7 +49,7 @@ struct bitmask {
     nodemask_t maskp;
 };
 #endif
-
+#endif /* UCT_MD_DISABLE_NUMA */
 
 static const char *uct_ib_numa_policy_names[] = {
     [UCT_IB_NUMA_POLICY_DEFAULT]   = "default",
@@ -493,6 +496,7 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     return exp_access;
 }
 
+#ifndef UCT_MD_DISABLE_NUMA
 static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
     int ret, old_policy, new_policy;
@@ -575,6 +579,12 @@ out_free:
 out:
     return status;
 }
+#else
+static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *memh)
+{
+    return UCS_OK;
+}
+#endif /* UCT_MD_DISABLE_NUMA */
 
 static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
