@@ -534,8 +534,8 @@ static double ucp_wireup_rndv_score_func(const uct_md_attr_t *md_attr,
                                          const uct_iface_attr_t *iface_attr,
                                          const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    /* highest bandwidth */
-    return iface_attr->bandwidth;
+    /* highest bandwidth with lowest overhead */
+    return (iface_attr->bandwidth) * (1 / iface_attr->overhead);
 }
 
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
@@ -604,7 +604,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
         return UCS_OK;
     }
 
-    /* Select one lane for the Rendezvous protocol (for the actual data. not for rts) */
+    /* Select one lane for the Rendezvous protocol (for the actual data. not for rts/rtr) */
     criteria.title              = "rendezvous";
     criteria.local_md_flags     = UCT_MD_FLAG_REG;
     criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
