@@ -295,11 +295,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
 
     if (length <= rma_config->max_put_short) {
-        status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[lane], buffer,
-                                  length, remote_addr, uct_rkey);
-        if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-            goto out;
-        }
+        do {
+            /* testing shows that for put message rate it is better to finish
+             * put_short here instead of doing it once, getting NO_RESOURCE 
+             * and coninuing to ucp_rma_blocking()
+             */
+            status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[lane], buffer,
+                                      length, remote_addr, uct_rkey);
+            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
+                goto out;
+            }
+            ucp_worker_progress(ep->worker);
+            UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+        } while(1);
     }
 
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
