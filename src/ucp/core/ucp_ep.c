@@ -620,6 +620,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                     config->zcopy_thresh      = context->config.ext.zcopy_thresh;
                     config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
                 }
+
+                config->zcopy_thresh = ucs_max(config->zcopy_thresh,
+                                               iface_attr->cap.am.min_zcopy);
             }
         } else {
             config->max_am_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
@@ -688,21 +691,23 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                     rndv_thresh = context->config.ext.rndv_thresh_fallback;
                     ucs_trace("rendezvous threshold is %zu", rndv_thresh);
                 }
-
-                /* for the 'auto' mode in the rndv_threshold, we enforce the usage of rndv
-                 * to a value that can be set by the user.
-                 * to disable rndv, need to set a high value for the rndv_threshold
-                 * (without the 'auto' mode)*/
-                config->rndv_thresh        = rndv_thresh;
-                config->sync_rndv_thresh   = rndv_thresh;
-                config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
-
             } else {
-                config->rndv_thresh        = context->config.ext.rndv_thresh;
-                config->sync_rndv_thresh   = context->config.ext.rndv_thresh;
-                config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
-                ucs_trace("rendezvous threshold is %zu", config->rndv_thresh);
+                /* In order to disable rendezvous, need to set the threshold to
+                 * infinite (-1).
+                 */
+                rndv_thresh = context->config.ext.rndv_thresh;
             }
+
+            /* use rendezvous only starting from minimal zero-copy get size */
+            ucs_assert(iface_attr->cap.get.min_zcopy <= iface_attr->cap.get.max_zcopy);
+            rndv_thresh                = ucs_max(rndv_thresh,
+                                                 iface_attr->cap.get.min_zcopy);
+
+            config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
+            config->rndv_thresh        = rndv_thresh;
+            config->sync_rndv_thresh   = rndv_thresh;
+
+            ucs_trace("rendezvous threshold is %zu", config->rndv_thresh);
         } else {
             ucs_debug("rendezvous protocol is not supported ");
         }

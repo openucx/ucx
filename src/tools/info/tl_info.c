@@ -15,9 +15,18 @@
 #define PRINT_CAP(_name, _cap_flags, _max) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name)) { \
         char *s = strduplower(#_name); \
-        printf("#         %12s: %s\n", s, size_limit_to_str(_max)); \
+        printf("#         %12s: %s\n", s, size_limit_to_str(0, _max)); \
         free(s); \
     }
+
+#define PRINT_ZCAP(_name, _cap_flags, _min, _max, _max_iov) \
+    if ((_cap_flags) & (UCT_IFACE_FLAG_##_name)) { \
+        char *s = strduplower(#_name); \
+        printf("#         %12s: %s, up to %zu iov\n", s, \
+               size_limit_to_str((_min), (_max)), (_max_iov)); \
+        free(s); \
+    }
+
 #define PRINT_ATOMIC_CAP(_name, _cap_flags) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name##32 | UCT_IFACE_FLAG_##_name##64)) { \
         char *s = strduplower(#_name); \
@@ -49,24 +58,31 @@ static char *strduplower(const char *str)
     return s;
 }
 
-static const char *size_limit_to_str(size_t size)
+static const char *size_limit_to_str(size_t min_size, size_t max_size)
 {
-    static const char * suffixes[] = {"", " KiB", " MiB", " GiB", " TiB", " PiB",
-                                      " EiB", " ZiB"};
     static char buf[128];
-    const char **suffix;
+    char *ptr, *end;
 
-    if (size == SIZE_MAX) {
-        return "unlimited";
+    ptr = buf;
+    end = buf + sizeof(buf);
+
+    if ((min_size == 0) && (max_size == SIZE_MAX)) {
+        snprintf(ptr, end - ptr, "unlimited");
     } else {
-        suffix = &suffixes[0];
-        while ((size > 10000) && ((size % 1024) == 0)) {
-            size /= 1024;
-            ++suffix;
+        if (min_size == 0) {
+            snprintf(ptr, end - ptr, "<= ");
+            ptr += strlen(ptr);
+        } else {
+            ucs_memunits_to_str(min_size, ptr, end - ptr);
+            ptr += strlen(ptr);
+
+            snprintf(ptr, end - ptr, "..");
+            ptr += strlen(ptr);
         }
-        snprintf(buf, sizeof(buf), "<= %zu%s", size, *suffix);
-        return buf;
+        ucs_memunits_to_str(max_size, ptr, end - ptr);
     }
+
+    return buf;
 }
 
 static void print_iface_info(uct_worker_h worker, uct_md_h md,
@@ -110,15 +126,18 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 
         PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
         PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
-        PRINT_CAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_zcopy);
+        PRINT_ZCAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.min_zcopy,
+                   iface_attr.cap.put.max_zcopy, iface_attr.cap.put.max_iov);
         PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
-        PRINT_CAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_zcopy);
+        PRINT_ZCAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.min_zcopy,
+                   iface_attr.cap.get.max_zcopy, iface_attr.cap.get.max_iov);
         PRINT_CAP(AM_SHORT,  iface_attr.cap.flags, iface_attr.cap.am.max_short);
         PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
-        PRINT_CAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_zcopy);
+        PRINT_ZCAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.min_zcopy,
+                   iface_attr.cap.am.max_zcopy, iface_attr.cap.am.max_iov);
         if (iface_attr.cap.flags & (UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
             printf("#            am header: %s\n",
-                   size_limit_to_str(iface_attr.cap.am.max_hdr));
+                   size_limit_to_str(0, iface_attr.cap.am.max_hdr));
         }
 
         PRINT_ATOMIC_CAP(ATOMIC_ADD,   iface_attr.cap.flags);
@@ -289,11 +308,11 @@ static void print_md_info(const char *md_name, int print_opts,
         printf("#            component: %s\n", md_attr.component_name);
         if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
             printf("#             allocate: %s\n",
-                   size_limit_to_str(md_attr.cap.max_alloc));
+                   size_limit_to_str(0, md_attr.cap.max_alloc));
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
             printf("#             register: %s, cost: %.0f",
-                   size_limit_to_str(md_attr.cap.max_reg),
+                   size_limit_to_str(0, md_attr.cap.max_reg),
                    md_attr.reg_cost.overhead * 1e9);
             if (md_attr.reg_cost.growth * 1e9 > 1e-3) {
                 printf("+(%.3f*<SIZE>)", md_attr.reg_cost.growth * 1e9);

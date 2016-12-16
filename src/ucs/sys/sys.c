@@ -351,6 +351,24 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
     va_end(ap);
 }
 
+void ucs_memunits_to_str(size_t value, char *buf, size_t max)
+{
+    static const char * suffixes[] = {"", "k", "m", "g", "t"};
+
+    const char **suffix;
+
+    if (value == SIZE_MAX) {
+        strncpy(buf, "(inf)", max);
+    } else {
+        suffix = &suffixes[0];
+        while ((value >= 1024) && ((value % 1024) == 0)) {
+            value /= 1024;
+            ++suffix;
+        }
+        snprintf(buf, max, "%zu%s", value, *suffix);
+    }
+}
+
 ssize_t ucs_read_file(char *buffer, size_t max, int silent,
                       const char *filename_fmt, ...)
 {

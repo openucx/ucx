@@ -18,6 +18,7 @@
 #define UCS_KBYTE    (1ull << 10)
 #define UCS_MBYTE    (1ull << 20)
 #define UCS_GBYTE    (1ull << 30)
+#define UCS_TBYTE    (1ull << 40)
 
 #define ucs_min(a, b) \
 ({ \

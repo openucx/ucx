@@ -261,6 +261,9 @@ struct uct_iface_attr {
         struct {
             size_t           max_short;  /**< Maximal size for put_short */
             size_t           max_bcopy;  /**< Maximal size for put_bcopy */
+            size_t           min_zcopy;  /**< Minimal size for put_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
             size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
@@ -271,6 +274,9 @@ struct uct_iface_attr {
 
         struct {
             size_t           max_bcopy;  /**< Maximal size for get_bcopy */
+            size_t           min_zcopy;  /**< Minimal size for get_zcopy (total
+                                              of @ref uct_iov_t::length of the
+                                              @a iov parameter) */
             size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
@@ -282,6 +288,9 @@ struct uct_iface_attr {
         struct {
             size_t           max_short;  /**< Total max. size (incl. the header) */
             size_t           max_bcopy;  /**< Total max. size (incl. the header) */
+            size_t           min_zcopy;  /**< Minimal size for am_zcopy (incl. the
+                                              header and total of @ref uct_iov_t::length
+                                              of the @a iov parameter) */
             size_t           max_zcopy;  /**< Total max. size (incl. the header
                                               and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */

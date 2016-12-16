@@ -34,9 +34,11 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
+    iface_attr->cap.put.min_zcopy      = 0;
     iface_attr->cap.put.max_zcopy      = SIZE_MAX;
     iface_attr->cap.put.max_iov        = uct_sm_get_max_iov();
 
+    iface_attr->cap.get.min_zcopy      = 0;
     iface_attr->cap.get.max_zcopy      = SIZE_MAX;
     iface_attr->cap.get.max_iov        = uct_sm_get_max_iov();
 

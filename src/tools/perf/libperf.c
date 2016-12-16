@@ -301,29 +301,36 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     uct_iface_attr_t attr;
     ucs_status_t status;
     uint64_t required_flags;
-    size_t max_size;
+    size_t min_size, max_size;
 
     status = uct_iface_query(iface, &attr);
     if (status != UCS_OK) {
         return status;
     }
 
+    min_size = 0;
     switch (params->command) {
     case UCX_PERF_CMD_AM:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_AM_SHORT,
                                     UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_ZCOPY);
+        min_size = __get_max_size(params->uct.data_layout, 0, 0,
+                                  attr.cap.am.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, attr.cap.am.max_short,
                                   attr.cap.am.max_bcopy, attr.cap.am.max_zcopy);
         break;
     case UCX_PERF_CMD_PUT:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_PUT_SHORT,
                                     UCT_IFACE_FLAG_PUT_BCOPY, UCT_IFACE_FLAG_PUT_ZCOPY);
+        min_size = __get_max_size(params->uct.data_layout, 0, 0,
+                                  attr.cap.put.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, attr.cap.put.max_short,
                                   attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
         break;
     case UCX_PERF_CMD_GET:
         required_flags = __get_flag(params->uct.data_layout, 0,
                                     UCT_IFACE_FLAG_GET_BCOPY, UCT_IFACE_FLAG_GET_ZCOPY);
+        min_size = __get_max_size(params->uct.data_layout, 0, 0,
+                                  attr.cap.get.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, 0,
                                   attr.cap.get.max_bcopy, attr.cap.get.max_zcopy);
         break;
@@ -366,11 +373,18 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if (params->message_size < min_size) {
+        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+            ucs_error("Message size too small");
+        }
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (params->message_size > max_size) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too big");
         }
-        return UCS_ERR_INVALID_PARAM;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (params->command == UCX_PERF_CMD_AM) {
@@ -389,7 +403,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("AM header size too big");
             }
-            return UCS_ERR_INVALID_PARAM;
+            return UCS_ERR_UNSUPPORTED;
         }
 
         if (params->am_hdr_size > params->message_size) {
