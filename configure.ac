@@ -45,6 +45,9 @@ AC_CONFIG_MACRO_DIR([config/m4])
 define([ucx_prefix], [/opt/ucx])
 AC_PREFIX_DEFAULT([ucx_prefix])
 
+top_top_srcdir=$srcdir
+AC_SUBST(top_top_srcdir)
+
 RPM_RELEASE=1
 BUILD_TS=ts
 MAJOR_VERSION=ucx_ver_major
