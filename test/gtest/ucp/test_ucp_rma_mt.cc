@@ -88,7 +88,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         target_data[i] = 0;
     }
 
-#if _OPENMP
+#if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
@@ -114,7 +114,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         target_data[i] = 0;
     }
 
-#if _OPENMP
+#if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
@@ -140,7 +140,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         target_data[i] = 0xdeadbeefdeadbeef + 10 * i;
     }
 
-#if _OPENMP
+#if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
@@ -166,7 +166,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         target_data[i] = 0xdeadbeefdeadbeef + 10 * i;
     }
 
-#if _OPENMP
+#if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
