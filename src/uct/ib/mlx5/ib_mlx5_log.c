@@ -30,8 +30,6 @@ static const char *uct_ib_mlx5_cqe_err_opcode(struct mlx5_err_cqe *ecqe)
             return "COMPARE_SWAP";
         case MLX5_OPCODE_ATOMIC_FA:
             return "FETCH_ADD";
-        case MLX5_OPCODE_BIND_MW:
-            return "BIND_MW";
         case MLX5_OPCODE_ATOMIC_MASKED_CS:
             return "MASKED_COMPARE_SWAP";
         case MLX5_OPCODE_ATOMIC_MASKED_FA:
