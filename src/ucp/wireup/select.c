@@ -534,8 +534,10 @@ static double ucp_wireup_rndv_score_func(const uct_md_attr_t *md_attr,
                                          const uct_iface_attr_t *iface_attr,
                                          const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    /* highest bandwidth with lowest overhead */
-    return (iface_attr->bandwidth) * (1 / iface_attr->overhead);
+    /* highest bandwidth with lowest overhead - test a message size of 256KB,
+     * a size which is likely to be used with the Rendezvous protocol, for
+     * how long it would take to transfer it with a certain transport. */
+    return 1 / ((262144 / iface_attr->bandwidth) + iface_attr->overhead);
 }
 
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
