@@ -15,6 +15,8 @@
 #include <ucs/stats/stats.h>
 #include <limits.h>
 
+#define UCP_MAX_IOV                16UL
+
 
 /**
  * Endpoint flags
@@ -104,10 +106,12 @@ typedef struct ucp_ep_config {
         ssize_t                max_short;        /* Maximal payload of am short */
         size_t                 max_bcopy;        /* Maximal total size of am_bcopy */
         size_t                 max_zcopy;        /* Maximal total size of am_zcopy */
+        size_t                 max_iovcnt;       /* Maximal size of iovcnt */
         /* zero-copy threshold for operations which do not have to wait for remote side */
-        size_t                 zcopy_thresh;
+        size_t                 zcopy_thresh[UCP_MAX_IOV];
         /* zero-copy threshold for operations which anyways have to wait for remote side */
-        size_t                 sync_zcopy_thresh;
+        size_t                 sync_zcopy_thresh[UCP_MAX_IOV];
+        uint8_t                zcopy_auto_thresh; /* if != 0 the zcopy enabled */
     } am;
 
     /* Configuration for each lane that provides RMA */
@@ -171,5 +175,10 @@ ucp_md_map_t ucp_ep_config_get_rma_md_map(const ucp_ep_config_key_t *key,
 
 ucp_md_map_t ucp_ep_config_get_amo_md_map(const ucp_ep_config_key_t *key,
                                           ucp_lane_index_t lane);
+
+size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
+                                           const uct_linear_growth_t *reg_cost,
+                                           const ucp_context_h context,
+                                           double bandwidth);
 
 #endif

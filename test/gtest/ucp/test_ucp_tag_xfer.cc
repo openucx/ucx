@@ -53,6 +53,31 @@ private:
 
 };
 
+int check_buffers(const std::vector<char> &sendbuf, const std::vector<char> &recvbuf,
+                  size_t recvd, size_t send_iovcnt, size_t recv_iovcnt,
+                  size_t size, bool expected, bool sync, const std::string datatype)
+{
+    int buffers_equal = memcmp(sendbuf.data(), recvbuf.data(), recvd);
+    if (buffers_equal) {
+        std::cout << "\n";
+        ucs::detail::message_stream ms("INFO");
+        for (size_t it = 0; it < recvd; ++it) {
+            if (sendbuf[it] != recvbuf[it]) {
+                ms << datatype << ':'
+                   << " send_iovcnt=" << std::dec << send_iovcnt
+                   << " recv_iovcnt=" << recv_iovcnt << " size=" << size
+                   << " expected=" << expected << " sync=" << sync
+                   << " Sendbuf[" << std::dec << it << "]=0x"
+                   << std::hex << (static_cast<int>(sendbuf[it]) & 0xff) << ','
+                   << " Recvbuf[" << std::dec << it << "]=0x"
+                   << std::hex << (static_cast<int>(recvbuf[it]) & 0xff) << std::endl;
+                break;
+            }
+        }
+    }
+    return buffers_equal;
+}
+
 void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync,
                                   bool truncated)
 {
@@ -240,7 +265,8 @@ void test_ucp_tag_xfer::test_xfer_contig(size_t size, bool expected, bool sync,
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
     }
-    EXPECT_TRUE(!memcmp(&sendbuf[0], &recvbuf[0], recvd));
+    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, 1, 1,
+                               size, expected, sync, "contig"));
 }
 
 void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
@@ -289,7 +315,8 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
     }
-    EXPECT_TRUE(!memcmp(sendbuf.data(), recvbuf.data(), recvd));
+    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, send_iovcnt, recv_iovcnt,
+                               size, expected, sync, "IOV"));
 }
 
 void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,

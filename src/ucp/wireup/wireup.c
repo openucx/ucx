@@ -99,6 +99,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     req->send.ep                 = ep;
     req->send.wireup.type        = type;
     req->send.uct.func           = ucp_wireup_msg_progress;
+    req->send.datatype           = ucp_dt_make_contig(1);
 
     /* pack all addresses */
     status = ucp_address_pack(ep->worker, ep, tl_bitmap, order,

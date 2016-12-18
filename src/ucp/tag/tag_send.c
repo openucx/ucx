@@ -16,24 +16,56 @@
 #include <ucs/debug/instrument.h>
 #include <string.h>
 
-static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
-                                             ssize_t max_short, size_t zcopy_thresh,
-                                             size_t rndv_thresh,
-                                             const ucp_proto_t *proto)
+static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
+                                      ssize_t max_short, size_t *zcopy_thresh_arr,
+                                      size_t rndv_thresh,
+                                      const ucp_proto_t *proto)
 {
-    ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
-    size_t only_hdr_size = proto->only_hdr_size;
+    ucp_ep_config_t *config   = ucp_ep_config(req->send.ep);
+    ucp_lane_index_t lane     = ucp_ep_get_am_lane(req->send.ep);
+    ucp_rsc_index_t rsc_index = config->key.lanes[lane];
+    ucp_worker_h worker       = req->send.ep->worker;
+    size_t only_hdr_size      = proto->only_hdr_size;
+    unsigned flag_iov_single  = 1;
+    unsigned is_iov;
+    size_t zcopy_thresh;
     ucs_status_t status;
-    size_t max_zcopy;
     ssize_t length;
 
-    length           = ucp_contig_dt_length(req->send.datatype, count);
+    is_iov = UCP_DT_IS_IOV(req->send.datatype);
+    if (ucs_unlikely(is_iov)) {
+        length = ucp_dt_length(req->send.datatype, count, req->send.buffer,
+                               &req->send.state);
+        req->send.state.dt.iov.iovcnt_offset = 0;
+        req->send.state.dt.iov.iov_offset    = 0;
+        req->send.state.dt.iov.iovcnt        = count;
+        flag_iov_single                      = (count <= config->am.max_iovcnt);
+        if (0 == count) {
+            /* disable zcopy */
+            zcopy_thresh = SIZE_MAX;
+        } else if (!config->am.zcopy_auto_thresh) {
+            /* The user defined threshold or no zcopy enabled */
+            zcopy_thresh = zcopy_thresh_arr[0];
+        } else if (count <= UCP_MAX_IOV) {
+            /* Using pre-calculated thresholds */
+            zcopy_thresh = zcopy_thresh_arr[count - 1];
+        } else {
+            /* Calculate threshold */
+            zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
+                               &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
+                               worker->context,
+                               worker->iface_attrs[rsc_index].bandwidth);
+        }
+    } else {
+        length       = ucp_contig_dt_length(req->send.datatype, count);
+        zcopy_thresh = count ? SIZE_MAX : zcopy_thresh_arr[0];
+    }
     req->send.length = length;
 
-    if (length <= max_short) {
+    if ((length <= max_short) && !is_iov) {
         /* short */
-        req->send.uct.func = proto->contig_short;
-    } else if (length >= rndv_thresh) {
+        req->send.uct.func       = proto->contig_short;
+    } else if ((length >= rndv_thresh) && !is_iov) {
         /* rendezvous */
         status = ucp_tag_send_start_rndv(req);
         if (status != UCS_OK) {
@@ -41,52 +73,27 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
         }
     } else if (length < zcopy_thresh) {
         /* bcopy */
-        if (req->send.length <= config->am.max_bcopy - only_hdr_size) {
-            req->send.uct.func = proto->bcopy_single;
+        if (length <= (config->am.max_bcopy - only_hdr_size)) {
+            req->send.uct.func   = proto->bcopy_single;
         } else {
-            req->send.uct.func = proto->bcopy_multi;
+            req->send.uct.func   = proto->bcopy_multi;
         }
     } else {
         /* eager zcopy */
-        status = ucp_request_send_buffer_reg(req, ucp_ep_get_am_lane(req->send.ep));
+        status = ucp_request_send_buffer_reg(req, lane);
         if (status != UCS_OK) {
             return status;
         }
 
-        req->send.uct_comp.func = proto->contig_zcopy_completion;
+        req->send.uct_comp.func  = proto->zcopy_completion;
+        req->send.uct_comp.count = 1;
 
-        max_zcopy = config->am.max_zcopy;
-        if (req->send.length <= max_zcopy - only_hdr_size) {
-            req->send.uct_comp.count = 1;
-            req->send.uct.func = proto->contig_zcopy_single;
+        if ((length <= (config->am.max_zcopy - only_hdr_size)) &&
+            flag_iov_single) {
+            req->send.uct.func   = proto->zcopy_single;
         } else {
-            /* calculate number of zcopy fragments */
-            req->send.uct_comp.count = 1 +
-                    (length + proto->first_hdr_size - proto->mid_hdr_size - 1) /
-                    (max_zcopy - proto->mid_hdr_size);
-            req->send.uct.func = proto->contig_zcopy_multi;
+            req->send.uct.func   = proto->zcopy_multi;
         }
-    }
-    return UCS_OK;
-}
-
-static ucs_status_t ucp_tag_req_start_iov(ucp_request_t *req, size_t count,
-                                          ssize_t max_short, size_t zcopy_thresh,
-                                          size_t rndv_thresh,
-                                          const ucp_proto_t *proto)
-{
-    ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
-    size_t only_hdr_size = proto->only_hdr_size;
-
-    req->send.length = ucp_dt_iov_length(req->send.buffer, count);
-    req->send.state.dt.iov.iovcnt_offset = 0;
-    req->send.state.dt.iov.iov_offset    = 0;
-
-    /* bcopy */
-    if (req->send.length <= config->am.max_bcopy - only_hdr_size) {
-        req->send.uct.func = proto->bcopy_single;
-    } else {
-        req->send.uct.func = proto->bcopy_multi;
     }
     return UCS_OK;
 }
@@ -126,23 +133,16 @@ static void ucp_send_req_stat(ucp_request_t *req)
 
 static inline ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
-                 size_t zcopy_thresh, size_t rndv_thresh, ucp_send_callback_t cb,
+                 size_t *zcopy_thresh, size_t rndv_thresh, ucp_send_callback_t cb,
                  const ucp_proto_t *proto)
 {
     ucs_status_t status;
 
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        status = ucp_tag_req_start_contig(req, count, max_short, zcopy_thresh,
-                                          rndv_thresh, proto);
-        if (status != UCS_OK) {
-            return UCS_STATUS_PTR(status);
-        }
-        break;
-
     case UCP_DATATYPE_IOV:
-        status = ucp_tag_req_start_iov(req, count, max_short, zcopy_thresh,
-                                       rndv_thresh, proto);
+        status = ucp_tag_req_start(req, count, max_short, zcopy_thresh,
+                                   rndv_thresh, proto);
         if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
