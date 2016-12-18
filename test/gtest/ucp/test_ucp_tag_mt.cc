@@ -57,7 +57,7 @@ UCS_TEST_P(test_ucp_tag_mt, send_recv) {
         recv_data[i] = 0;
     }
 
-#if _OPENMP
+#if _OPENMP && ENABLE_MT
 #pragma omp parallel for
     for (i = 0; i < MT_TEST_NUM_THREADS; i++) {
         ucs_status_t status;
