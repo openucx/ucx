@@ -11,11 +11,10 @@
 UCS_CLASS_INIT_FUNC(uct_dc_ep_t, uct_dc_iface_t *iface, const uct_dc_iface_addr_t *if_addr)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super);
-    ucs_arbiter_group_init(&self->arb_group);
-    self->dci              = UCT_DC_EP_NO_DCI;
-    self->state            = UCT_DC_EP_TX_OK;
+
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
-    return UCS_OK;
+
+    return uct_dc_ep_basic_init(iface, self);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
@@ -24,6 +23,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
 
     uct_dc_ep_pending_purge(&self->super.super, NULL, NULL);
     ucs_arbiter_group_cleanup(&self->arb_group);
+    uct_rc_fc_cleanup(&self->fc);
 
     if (self->dci == UCT_DC_EP_NO_DCI) {
         return;
@@ -60,7 +60,7 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
      */
     if (uct_rc_iface_has_tx_resources(&iface->super)) {
         if (ep->dci == UCT_DC_EP_NO_DCI) {
-            if (uct_dc_iface_dci_can_alloc(iface)) {
+            if (uct_dc_iface_dci_can_alloc(iface) && (ep->fc.fc_wnd > 0)) {
                 return UCS_ERR_BUSY;
             }
         } else {
@@ -149,7 +149,11 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     }
-    if (!uct_dc_iface_dci_has_tx_resources(iface, ep->dci)) {
+    if (!uct_dc_iface_dci_has_tx_resources(iface, ep->dci) ||
+        (ep->fc.fc_wnd <= 0)) {
+        /* Deschedule the group even if FC is the only resource, which
+         * is missing. It will be scheduled again when credits arrive. */
+
         /* TODO: only good for dcs policy */
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
@@ -170,8 +174,21 @@ static ucs_arbiter_cb_result_t uct_dc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     uct_purge_cb_args_t  *cb_args   = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_dc_ep_t *ep                 = ucs_container_of(ucs_arbiter_elem_group(elem),
+                                                       uct_dc_ep_t, arb_group);
 
-    cb(req, cb_args->arg);
+    if (ucs_likely(req->func != uct_dc_iface_fc_grant)){
+        if (cb != NULL) {
+            cb(req, cb_args->arg);
+        } else {
+            ucs_warn("ep=%p cancelling user pending request %p", ep, req);
+        }
+    } else {
+        /* User callback should not be called for FC messages.
+         * Just return pending request memory to the pool */
+        uct_dc_iface_cleanup_pending_req(req);
+    }
+
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
@@ -205,24 +222,29 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
         if (!uct_dc_iface_dci_can_alloc(iface)) {
             return UCS_ERR_NO_RESOURCE; /* waiting for dci */
         } else {
-            UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
-            return UCS_OK;
+            status = UCS_OK; /* no sends */
         }
+    } else {
+        if (!uct_dc_iface_dci_ep_can_send(ep)) {
+            return UCS_ERR_NO_RESOURCE; /* cannot send */
+        }
+
+        status = uct_dc_iface_flush_dci(iface, ep->dci);
     }
 
-    if (!uct_dc_iface_dci_ep_can_send(ep)) {
-        return UCS_ERR_NO_RESOURCE; /* cannot send */
-    }
-
-    status = uct_dc_iface_flush_dci(iface, ep->dci);
-    if (status == UCS_OK) {
+    /* If waiting for FC grant, do not return OK to prevent ep destruction.
+     * Otherwise grant for destroyed ep will arrive and there will be
+     * a segfault when we will try to access the ep by address from
+     * the grant message. */
+    if ((status == UCS_INPROGRESS) ||
+        ((status == UCS_OK) && (ep->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT))) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
+        return UCS_INPROGRESS;
+    } else {
+        ucs_assert(status == UCS_OK);
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK; /* all sends completed */
     }
-
-    ucs_assert(status == UCS_INPROGRESS);
-    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
-    return UCS_INPROGRESS;
 }
 
 UCS_CLASS_DEFINE(uct_dc_ep_t, uct_base_ep_t);

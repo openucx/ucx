@@ -37,7 +37,6 @@ enum {
  * Auxillary AM ID bits used by FC protocol.
  */
 enum {
-
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
      * UCT_RC_EP_FC_FLAG_GRANT  */
