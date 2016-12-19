@@ -12,6 +12,7 @@ extern "C" {
 }
 #include <common/test.h>
 #include "uct_test.h"
+#include "test_rc.h"
 
 class test_dc : public uct_test {
 public:
@@ -195,7 +196,7 @@ UCS_TEST_P(test_dc, dcs_multi) {
     flush();
 
     /* after the flush dci must be released */
-    
+
     EXPECT_EQ(0, iface->tx.stack_top);
     for (i = 0; i < iface->tx.ndci; i++) {
         ep = dc_ep(m_e1, i);
@@ -359,3 +360,150 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
 
 _UCT_INSTANTIATE_TEST_CASE(test_dc, dc)
 _UCT_INSTANTIATE_TEST_CASE(test_dc, dc_mlx5)
+
+
+class test_dc_flow_control : public test_rc_flow_control {
+
+public:
+
+    void init() {
+        if (UCS_OK != uct_config_modify(m_iface_config, "RC_FC_ENABLE", "y")) {
+            UCS_TEST_ABORT("Error: cannot enable flow control");
+        }
+        test_rc_flow_control::init();
+    }
+
+    /* virtual */
+    uct_rc_fc_t* get_fc_ptr(entity *e) {
+        return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;
+    }
+};
+
+UCS_TEST_P(test_dc_flow_control, general_enabled)
+{
+    test_general(8, true);
+}
+
+UCS_TEST_P(test_dc_flow_control, general_disabled)
+{
+    test_general(8, false);
+}
+
+/* Check that user callback passed to uct_ep_pending_purge is not
+ * invoked for FC grant message */
+UCS_TEST_P(test_dc_flow_control, pending_purge)
+{
+    test_pending_purge(2, 5);
+}
+
+UCS_TEST_P(test_dc_flow_control, pending_grant)
+{
+    test_pending_grant(5);
+}
+
+/* Check that soft request is not handled by DC */
+UCS_TEST_P(test_dc_flow_control, soft_request)
+{
+    int wnd = 8;
+    int s_thresh = 4;
+    int h_thresh = 1;
+
+    set_fc_attributes(m_e1, true, wnd, s_thresh, h_thresh);
+
+    send_am_messages(m_e1, wnd - (s_thresh - 1), UCS_OK);
+    progress_loop();
+
+    set_tx_moderation(m_e2, 1);
+    send_am_messages(m_e2, 1, UCS_OK);
+    progress_loop();
+
+    /* Check that window is not updated */
+    EXPECT_EQ(get_fc_ptr(m_e1)->fc_wnd, s_thresh - 1);
+}
+
+/* Check that flush returns UCS_INPROGRESS if there is
+ * an outgoing grant request */
+UCS_TEST_P(test_dc_flow_control, flush)
+{
+    int wnd = 5;
+
+    disable_entity(m_e2);
+
+    set_fc_attributes(m_e1, true, wnd,
+                      ucs_max((int)(wnd*0.5), 1),
+                      ucs_max((int)(wnd*0.25), 1));
+
+    send_am_messages(m_e1, wnd, UCS_OK);
+    progress_loop();
+
+    EXPECT_EQ(uct_ep_flush(m_e1->ep(0), 0, NULL), UCS_INPROGRESS);
+
+    /* Enable send capabilities of m_e2 and send AM message
+     * to force pending queue dispatch */
+    enable_entity(m_e2);
+    set_tx_moderation(m_e2, 1);
+    send_am_messages(m_e2, 1, UCS_OK);
+    progress_loop();
+
+    /* Grant should be received by now. Flush should return ok */
+    EXPECT_UCS_OK(uct_ep_flush(m_e1->ep(0), 0, NULL));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control, dc)
+
+
+#if ENABLE_STATS
+
+class test_dc_flow_control_stats : public test_rc_flow_control_stats {
+public:
+    /* virtual */
+    void init() {
+        if (UCS_OK != uct_config_modify(m_iface_config, "RC_FC_ENABLE", "y")) {
+            UCS_TEST_ABORT("Error: cannot enable flow control");
+        }
+        test_rc_flow_control_stats::init();
+    }
+
+    uct_rc_fc_t* get_fc_ptr(entity *e) {
+        return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;
+    }
+
+    uct_rc_fc_t* fake_ep_fc_ptr(entity *e) {
+        return &ucs_derived_of(e->iface(), uct_dc_iface_t)->tx.fake_fc_ep->fc;
+    }
+};
+
+UCS_TEST_P(test_dc_flow_control_stats, general)
+{
+    test_general(5);
+}
+
+UCS_TEST_P(test_dc_flow_control_stats, fake_fc_ep)
+{
+    uint64_t v;
+    int wnd = 5;
+
+    set_fc_attributes(m_e1, true, wnd,
+                      ucs_max((int)(wnd*0.5), 1),
+                      ucs_max((int)(wnd*0.25), 1));
+
+    send_am_messages(m_e1, wnd, UCS_OK);
+
+    progress_loop();
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_TX_HARD_REQ);
+    EXPECT_EQ(1ul, v);
+    v = UCS_STATS_GET_COUNTER(fake_ep_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_RX_HARD_REQ);
+    EXPECT_EQ(1ul, v);
+
+    progress_loop();
+
+    v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_RX_PURE_GRANT);
+    EXPECT_EQ(1ul, v);
+    v = UCS_STATS_GET_COUNTER(fake_ep_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_TX_PURE_GRANT);
+    EXPECT_EQ(1ul, v);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control_stats, dc)
+
+#endif
+
