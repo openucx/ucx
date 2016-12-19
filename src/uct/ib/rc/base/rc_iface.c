@@ -55,14 +55,9 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
    "which can be sent w/o acknowledgment.",
    ucs_offsetof(uct_rc_iface_config_t, fc.wnd_size), UCS_CONFIG_TYPE_UINT},
 
-  {"FC_SOFT_THRESH", "0.5",
-   "Threshold for sending soft request for FC credits to the peer. This value\n"
-   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
-   ucs_offsetof(uct_rc_iface_config_t, fc.soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
-
   {"FC_HARD_THRESH", "0.25",
    "Threshold for sending hard request for FC credits to the peer. This value\n"
-   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < SOFT_THRESH)",
+   "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
    ucs_offsetof(uct_rc_iface_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
   {NULL}
@@ -80,6 +75,15 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
     }
 };
 #endif
+
+
+static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_hugetlb_malloc,
+    .chunk_release = ucs_mpool_hugetlb_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
+};
+
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
@@ -213,13 +217,32 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
-                                    uct_rc_hdr_t *hdr, unsigned length,
-                                    void *desc)
+ucs_status_t uct_rc_init_fc_thresh(double soft_thresh, uct_rc_iface_config_t *cfg,
+                                   uct_rc_iface_t *iface)
+{
+    /* Check FC parameters correctness */
+    if ((soft_thresh <= cfg->fc.hard_thresh) || (soft_thresh >= 1)) {
+        ucs_error("The factor for soft FC threshold should be bigger"
+                  " than FC_HARD_THRESH value and less than 1");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (cfg->fc.enable) {
+        iface->config.fc_soft_thresh = ucs_max((int)(iface->config.fc_wnd_size *
+                                               soft_thresh), 1);
+    } else {
+        iface->config.fc_soft_thresh  = 0;
+    }
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
+                                     uct_rc_hdr_t *hdr, unsigned length,
+                                     uint32_t imm_data, uint16_t lid, void *desc)
 {
     ucs_status_t status;
     int16_t      cur_wnd;
-    ucs_arbiter_elem_t* elem;
+    uct_rc_fc_request_t *fc_req;
     uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, qp_num);
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(hdr->am_id);
 
@@ -260,16 +283,22 @@ ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
 
     } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
+        fc_req = ucs_mpool_get(&iface->tx.fc_mp);
+        if (ucs_unlikely(fc_req == NULL)) {
+            ucs_fatal("Failed to allocated FC request.");
+            return UCS_ERR_NO_MEMORY;
+        }
+        fc_req->ep       = &ep->super.super;
+        fc_req->req.func = uct_rc_ep_fc_grant;
 
         /* Got hard credit request. Send grant to the peer immediately */
-        status = uct_rc_ep_fc_grant(&ep->fc.fc_grant_req);
+        status = uct_rc_ep_fc_grant(&fc_req->req);
 
         if (status == UCS_ERR_NO_RESOURCE){
-            elem =(ucs_arbiter_elem_t*) ep->fc.fc_grant_req.priv;
-            ucs_arbiter_group_push_elem(&ep->arb_group, elem);
-        } else {
-            ucs_assert_always(status == UCS_OK);
+            status = uct_ep_pending_add(&ep->super.super, &fc_req->req);
         }
+        ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
+                           ucs_status_string(status));
     }
 
     return uct_iface_invoke_am(&iface->super.super,
@@ -314,20 +343,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     ucs_list_head_init(&self->ep_list);
 
     /* Check FC parameters correctness */
-    if ((config->fc.soft_thresh <= 0) || (config->fc.soft_thresh >= 1)) {
-        ucs_error("The factor for soft FC threshold must be in the range (0..1)");
+    if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
+        ucs_error("The factor for hard FC threshold should be > 0 and < 1");
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
-
-    if ((config->fc.hard_thresh <= 0) ||
-        (config->fc.hard_thresh >= config->fc.soft_thresh)) {
-        ucs_error("The factor for hard FC threshold should be positive and less"
-                  " than FC_SOFT_THRESH value");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-
 
     /* Create RX buffers mempool */
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
@@ -370,24 +390,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     self->rx.available           = srq_init_attr.attr.max_wr;
-    self->config.fc_enabled      = config->fc.enable;
-
-    if (self->config.fc_enabled) {
-        /* Assume that number of recv buffers is the same on all peers.
-         * Then FC window size is the same for all endpoints as well.
-         * TODO: Make wnd size to be a property of the particular interface.
-         * We could distribute it via rc address then.*/
-        self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
-                                               srq_init_attr.attr.max_wr);
-        self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
-                                               config->fc.hard_thresh), 1);
-        self->config.fc_soft_thresh  = ucs_max((int)(self->config.fc_wnd_size *
-                                               config->fc.soft_thresh), 1);
-    } else {
-        self->config.fc_wnd_size     = INT16_MAX;
-        self->config.fc_hard_thresh  = 0;
-        self->config.fc_soft_thresh  = 0;
-    }
 
     /* Set atomic handlers according to atomic reply endianness */
     dev = uct_ib_iface_device(&self->super);
@@ -407,8 +409,40 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_srq;
     }
 
+    self->config.fc_enabled      = config->fc.enable;
+
+    if (self->config.fc_enabled) {
+        /* Assume that number of recv buffers is the same on all peers.
+         * Then FC window size is the same for all endpoints as well.
+         * TODO: Make wnd size to be a property of the particular interface.
+         * We could distribute it via rc address then.*/
+        self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
+                                               srq_init_attr.attr.max_wr);
+        self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
+                                               config->fc.hard_thresh), 1);
+
+        /* Create mempool for pending requests for FC grant */
+        status = ucs_mpool_init(&self->tx.fc_mp,
+                                0,
+                                sizeof(uct_rc_fc_request_t),
+                                0,
+                                UCS_SYS_CACHE_LINE_SIZE,
+                                128,
+                                UINT_MAX,
+                                &uct_rc_fc_pending_mpool_ops,
+                                "pending-fc-grants-only");
+        if (status != UCS_OK) {
+            goto err_destroy_stats;
+        }
+    } else {
+        self->config.fc_wnd_size     = INT16_MAX;
+        self->config.fc_hard_thresh  = 0;
+    }
+
     return UCS_OK;
 
+err_destroy_stats:
+    UCS_STATS_NODE_FREE(self->stats);
 err_destroy_srq:
     ibv_destroy_srq(self->rx.srq);
 err_free_tx_ops:
@@ -448,6 +482,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     ucs_free(self->tx.ops);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
+    if (self->config.fc_enabled) {
+        ucs_mpool_cleanup(&self->tx.fc_mp, 1);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);

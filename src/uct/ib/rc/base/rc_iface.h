@@ -22,6 +22,7 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
+#define UCT_RC_FC_TL_PRIV_LEN       24
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
@@ -90,6 +91,14 @@ enum {
 typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op);
 
 
+/**
+ * RC network header.
+ */
+typedef struct uct_rc_hdr {
+    uint8_t           am_id;  /* Active message ID */
+} UCS_S_PACKED uct_rc_hdr_t;
+
+
 struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
     uct_ib_mtu_t             path_mtu;
@@ -105,7 +114,6 @@ struct uct_rc_iface_config {
 
     struct {
         int                  enable;
-        double               soft_thresh;
         double               hard_thresh;
         unsigned             wnd_size;
     } fc;
@@ -114,7 +122,11 @@ struct uct_rc_iface_config {
 
 typedef struct uct_rc_iface_ops {
     uct_ib_iface_ops_t   super;
-    ucs_status_t         (*fc_ctrl)(uct_rc_ep_t *ep);
+    ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op, void *arg);
+    ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
+                                       uct_rc_hdr_t *hdr, unsigned length,
+                                       uint32_t imm_data, uint16_t lid,
+                                       void *desc);
 } uct_rc_iface_ops_t;
 
 
@@ -123,6 +135,7 @@ struct uct_rc_iface {
 
     struct {
         ucs_mpool_t          mp;
+        ucs_mpool_t          fc_mp; /* pool for FC grant pending reguests */
         uct_rc_iface_send_op_t *ops;
         unsigned             cq_available;
         unsigned             next_op;
@@ -197,14 +210,6 @@ struct uct_rc_iface_send_desc {
 };
 
 
-/**
- * RC network header.
- */
-typedef struct uct_rc_hdr {
-    uint8_t           am_id;  /* Active message ID */
-} UCS_S_PACKED uct_rc_hdr_t;
-
-
 /*
  * Short active message header (active message header is always 64 bit).
  */
@@ -232,9 +237,12 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap);
 
-ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
-                                    uct_rc_hdr_t *hdr, unsigned length,
-                                    void *desc);
+ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
+                                     uct_rc_hdr_t *hdr, unsigned length,
+                                     uint32_t imm_data, uint16_t lid, void *desc);
+
+ucs_status_t uct_rc_init_fc_thresh(double soft_thresh, uct_rc_iface_config_t *cfg,
+                                   uct_rc_iface_t *iface);
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
                                                   unsigned qp_num)

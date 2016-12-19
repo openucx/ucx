@@ -92,6 +92,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 {
     uct_ib_mlx5_srq_seg_t *seg;
     uct_ib_iface_recv_desc_t *desc;
+    uct_rc_iface_ops_t *rc_ops;
     uct_rc_hdr_t *hdr;
     struct mlx5_cqe64 *cqe;
     unsigned byte_len;
@@ -143,8 +144,10 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
         qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-        status = uct_rc_iface_handle_fc(rc_iface, qp_num, hdr,
-                                        byte_len - sizeof(*hdr), udesc);
+        rc_ops = ucs_derived_of(rc_iface->super.ops, uct_rc_iface_ops_t);
+
+        status = rc_ops->fc_handler(rc_iface, qp_num, hdr, byte_len - sizeof(*hdr),
+                                    cqe->imm_inval_pkey, cqe->slid, udesc);
     } else {
         status = uct_iface_invoke_am(&rc_iface->super.super, hdr->am_id,
                                      hdr + 1, byte_len - sizeof(*hdr), udesc);

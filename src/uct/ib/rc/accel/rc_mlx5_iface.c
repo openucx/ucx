@@ -24,6 +24,11 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
    "-1 means no limit.",
    ucs_offsetof(uct_rc_mlx5_iface_config_t, tx_max_bb), UCS_CONFIG_TYPE_UINT},
 
+  {"FC_SOFT_THRESH", "0.5",
+   "Threshold for sending soft request for FC credits to the peer. This value\n"
+   "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, fc_soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+
   {NULL}
 };
 
@@ -133,6 +138,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
 
+    status = uct_rc_init_fc_thresh(config->fc_soft_thresh, &config->super, &self->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super, &config->super);
     /* Set max_iov for put_zcopy and get_zcopy */
     uct_ib_iface_set_max_iov(&self->super.super,
@@ -198,7 +208,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .arm_rx_cq                = uct_rc_mlx5_iface_arm_rx_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure
     },
-    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl
+    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
+    .fc_handler               = uct_rc_iface_fc_handler
 };
 
 
