@@ -56,12 +56,16 @@ EXTRA_DIST += contrib/ucx_perftest_config/README
 EXTRA_DIST += contrib/ucx_perftest_config/test_types
 EXTRA_DIST += contrib/ucx_perftest_config/transports
 EXTRA_DIST += debian
+EXTRA_DIST += ucx.pc.in
 endif #!DOCS_ONLY
 EXTRA_DIST += doc/uml/uct.dot
 
 include $(srcdir)/doc/doxygen/doxygen.am
 
 .PHONY: docs docs-clean
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = ucx.pc
 
 DOCLIST = doc/doxygen/doxygen-doc/ucx.tag
 
