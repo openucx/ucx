@@ -124,6 +124,8 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
     ucs_status_t status;
     size_t offset, length;
     uct_iov_t iov[1];
+    ucp_rsc_index_t rsc_index;
+    uint16_t align;
 
     if (ucp_ep_is_stub(rndv_req->send.ep)) {
         return UCS_ERR_NO_RESOURCE;
@@ -131,6 +133,8 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
 
     /* reset the lane to rndv since it might have been set to 0 since it was stub on RTS receive */
     rndv_req->send.lane = ucp_ep_get_rndv_get_lane(rndv_req->send.ep);
+    rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
+    align     = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.align;
 
     ucs_trace_data("ep: %p try to progress get_zcopy for rndv get. rndv_req: %p. lane: %d",
                    rndv_req->send.ep, rndv_req, rndv_req->send.lane);
@@ -143,7 +147,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
 
         {
             size_t max_get_zcopy = ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy;
-            size_t remainder = (uintptr_t) rndv_req->send.buffer % UCP_ALIGN; /* TODO make UCP_ALIGN come from the transport */
+            size_t remainder = (uintptr_t) rndv_req->send.buffer % align;
 
             if (remainder && (rndv_req->send.length > UCP_MTU_SIZE )) {
                 rndv_req->send.uct_comp.count = 1 +
@@ -157,16 +161,16 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
 
     offset = rndv_req->send.state.offset;
 
-    if ((offset == 0) && ((uintptr_t)rndv_req->send.buffer % UCP_ALIGN) &&
+    if ((offset == 0) && ((uintptr_t)rndv_req->send.buffer % align) &&
         (rndv_req->send.length > UCP_MTU_SIZE )) {
-        length = UCP_MTU_SIZE - ((uintptr_t)rndv_req->send.buffer % UCP_ALIGN);
+        length = UCP_MTU_SIZE - ((uintptr_t)rndv_req->send.buffer % align);
     } else {
         length = ucs_min(rndv_req->send.length - offset,
                          ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy);
     }
 
     ucs_trace_data("offset %zu remainder %zu. read to %p len %zu",
-                   offset, (uintptr_t)rndv_req->send.buffer % UCP_ALIGN,
+                   offset, (uintptr_t)rndv_req->send.buffer % align,
                    (void*)rndv_req->send.buffer + offset, length);
 
     iov[0].buffer = (void*)rndv_req->send.buffer + offset;

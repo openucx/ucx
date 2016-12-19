@@ -50,6 +50,7 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.flags              = UCT_IFACE_FLAG_GET_ZCOPY |
                                          UCT_IFACE_FLAG_PUT_ZCOPY |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->cap.align              = 1;
 
     iface_attr->latency                = 80e-9; /* 80 ns */
     iface_attr->bandwidth              = 6911 * 1024.0 * 1024.0;

@@ -48,6 +48,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
                                    UCT_IFACE_FLAG_ATOMIC_CPU       |
                                    UCT_IFACE_FLAG_PENDING          |
                                    UCT_IFACE_FLAG_AM_CB_SYNC;
+    attr->cap.align              = UCS_SYS_CACHE_LINE_SIZE;
 
     attr->cap.put.max_short      = UINT_MAX;
     attr->cap.put.max_bcopy      = SIZE_MAX;
