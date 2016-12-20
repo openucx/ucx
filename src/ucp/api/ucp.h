@@ -10,6 +10,7 @@
 #include <ucp/api/ucp_def.h>
 #include <ucp/api/ucp_version.h>
 #include <ucs/type/thread_mode.h>
+#include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/math.h>
 #include <stdio.h>
@@ -149,6 +150,7 @@ enum ucp_feature {
  */
 enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
 };
 
 
@@ -541,6 +543,16 @@ typedef struct ucp_worker_params {
      * will be used.
      */
     ucs_thread_mode_t       thread_mode;
+
+    /**
+     * Mask of which CPUs worker resources should preferably be allocated on.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * UCP_WORKER_PARAM_FIELD_CPU_MASK), resources are allocated according to
+     * system's default policy.
+     */
+    ucs_cpu_set_t           cpu_mask;
+
 } ucp_worker_params_t;
 
 

@@ -74,7 +74,8 @@ nobase_dist_libucs_la_HEADERS = \
 	type/component.h \
 	type/spinlock.h \
 	type/status.h \
-	type/thread_mode.h
+	type/thread_mode.h \
+	type/cpu_set.h
 
 noinst_HEADERS = \
 	async/async_int.h

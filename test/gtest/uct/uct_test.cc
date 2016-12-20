@@ -224,6 +224,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     iface_params.tl_name     = const_cast<char*>(resource.tl_name.c_str());
     iface_params.dev_name    = const_cast<char*>(resource.dev_name.c_str());
     iface_params.rx_headroom = rx_headroom;
+    UCS_CPU_ZERO(&iface_params.cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);

@@ -12,7 +12,7 @@
 #include <ucp/wireup/stub_ep.h>
 #include <ucp/tag/eager.h>
 #include <ucs/datastruct/mpool.inl>
-
+#include <ucs/type/cpu_set.h>
 
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
@@ -171,7 +171,8 @@ static void ucp_worker_wakeup_context_cleanup(ucp_worker_wakeup_t *wakeup)
 }
 
 static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
-                                         ucp_rsc_index_t tl_id)
+                                         ucp_rsc_index_t tl_id,
+                                         ucs_cpu_set_t const * cpu_mask_param)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
@@ -193,6 +194,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     iface_params.tl_name     = resource->tl_rsc.tl_name;
     iface_params.dev_name    = resource->tl_rsc.dev_name;
     iface_params.rx_headroom = sizeof(ucp_recv_desc_t);
+    iface_params.cpu_mask    = *cpu_mask_param;
 
     /* Open UCT interface */
     status = uct_iface_open(context->mds[resource->md_index], worker->uct,
@@ -444,6 +446,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_status_t status;
     unsigned config_count;
     unsigned name_length;
+    ucs_cpu_set_t empty_cpu_mask;
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -526,7 +529,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Open all resources as interfaces on this worker */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
-        status = ucp_worker_add_iface(worker, tl_id);
+        if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
+            status = ucp_worker_add_iface(worker, tl_id, &params->cpu_mask);
+        } else {
+            UCS_CPU_ZERO(&empty_cpu_mask);
+            status = ucp_worker_add_iface(worker, tl_id, &empty_cpu_mask);
+        }
         if (status != UCS_OK) {
             goto err_close_ifaces;
         }

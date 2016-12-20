@@ -953,6 +953,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         .dev_name    = params->uct.dev_name,
         .rx_headroom = 0
     };
+    UCS_CPU_ZERO(&iface_params.cpu_mask);
 
     status = ucs_async_context_init(&perf->uct.async, params->async_mode);
     if (status != UCS_OK) {
