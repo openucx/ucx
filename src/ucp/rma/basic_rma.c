@@ -33,21 +33,13 @@ typedef ucs_status_t
 static UCS_F_ALWAYS_INLINE int 
 ucp_rma_put_is_zcopy(ucp_ep_rma_config_t *rma_config, size_t length)
 {
-    /* todo: enable once full zcopy is working */
-    //return 0;
-    /* at the moment ucp tests use up to 8k messages */
     return length > rma_config->put_zcopy_thresh;
-    return length > 8192;
 }
 
 static UCS_F_ALWAYS_INLINE int 
 ucp_rma_get_is_zcopy(ucp_ep_rma_config_t *rma_config, size_t length)
 {
-    /* todo: enable once full zcopy is working */
-    //return 0;
-    /* at the moment ucp tests use up to 4k messages */
     return length > rma_config->get_zcopy_thresh;
-    return length > 16384;
 }
 
 /* request can be released if 
@@ -84,20 +76,31 @@ ucp_rma_request_advance(ucp_request_t *req, size_t frag_length,
     }
 }
 
+/**
+ * we must check req length during the completion to avoid the following
+ * scenario:
+ *  partial_send;no_resos;progress;
+ *  send_completed;cb called;req free(ooops);
+ *  next_partial_send; (oops req already freed)
+ */
 static void
 ucp_rma_request_bcopy_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
 
-    ucp_request_put(req, UCS_OK);
+    if (req->send.length == 0) {
+        ucp_request_put(req, UCS_OK);
+    }
 }
 
 static void ucp_rma_request_zcopy_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
 
-    ucp_request_send_buffer_dereg(req, req->send.lane);
-    ucp_request_put(req, UCS_OK);
+    if (req->send.length == 0) {
+        ucp_request_send_buffer_dereg(req, req->send.lane);
+        ucp_request_put(req, UCS_OK);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -120,13 +123,38 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
 #endif
     if (zcopy) {
         req->send.uct_comp.func = ucp_rma_request_zcopy_completion;
-        /* TODO: check 4 double reg, cache */
         return ucp_request_send_buffer_reg(req, lane);
     } 
 
     req->send.uct_comp.func        = ucp_rma_request_bcopy_completion;
     req->send.state.dt.contig.memh = NULL;
 
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_rma_lane_switch(ucp_request_t *req, ucp_lane_index_t lane,
+                            int is_zcopy)
+{
+    ucs_status_t status;
+
+    /* lane switch is only relevant for zcopy because 
+     * it need to reregister input buffer
+     */
+    if (ucs_unlikely((req->send.lane != lane) && is_zcopy)) {
+        if (req->send.uct_comp.count > 0) {
+            /* if some fragments are in flight we
+             * must wait for completion and resolve 
+             * the lane again
+             */
+            ucp_request_wait_uct_comp(req);
+            return UCS_ERR_BUSY;
+        }
+        ucp_request_send_buffer_dereg(req, req->send.lane);
+        status = ucp_request_send_buffer_reg(req, lane);
+        ucs_assert_always(status == UCS_OK);
+    }
+    req->send.lane = lane;
     return UCS_OK;
 }
 
@@ -160,6 +188,7 @@ ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey,
     } else {
         uct_iov_t iov;
 
+        /* TODO: leave last fragment for bcopy */
         packed_len = ucs_min(req->send.length, rma_config->max_put_zcopy);
         iov.buffer = (void *)req->send.buffer;
         iov.length = packed_len;
@@ -228,13 +257,16 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
     ucp_rkey_h rkey    = req->send.rma.rkey;
     ucp_ep_t *ep       = req->send.ep;
 
+    ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
     ucp_ep_rma_config_t *rma_config;
     int is_zcopy;
 
-    /* TODO: check for the lane switch */
-    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req->send.lane, uct_rkey, rma_config);
-    is_zcopy = ucp_rma_get_is_zcopy(rma_config, req->send.length);
+    do {
+        UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+        is_zcopy = ucp_rma_get_is_zcopy(rma_config, req->send.length);
+    } while (ucp_request_rma_lane_switch(req, lane, is_zcopy) == UCS_ERR_BUSY);
+
     return ucp_progress_get_inner(req, uct_rkey, rma_config, is_zcopy);
 }
 
@@ -244,12 +276,16 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     ucp_rkey_h rkey    = req->send.rma.rkey;
     ucp_ep_t *ep       = req->send.ep;
 
+    ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
     ucp_ep_rma_config_t *rma_config;
     int is_zcopy;
 
-    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req->send.lane, uct_rkey, rma_config);
-    is_zcopy = ucp_rma_put_is_zcopy(rma_config, req->send.length);
+    do {
+        UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+        is_zcopy = ucp_rma_put_is_zcopy(rma_config, req->send.length);
+    } while (ucp_request_rma_lane_switch(req, lane, is_zcopy) == UCS_ERR_BUSY);
+
     return ucp_progress_put_inner(req, uct_rkey, rma_config, is_zcopy);
 }
 
@@ -285,9 +321,9 @@ ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote
             break;
         } else {
             ucp_worker_progress(ep->worker);
-            if (!zcopy) {
-                UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req.send.lane, uct_rkey, rma_config);
-            }
+            do {
+                UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+            } while (ucp_request_rma_lane_switch(&req, lane, zcopy) == UCS_ERR_BUSY);
         }
     }
 
