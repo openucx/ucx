@@ -52,6 +52,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name, struct iface_info 
     uct_iface_params_t params = {
         .tl_name     = tl_name,
         .dev_name    = dev_name,
+        .stats_root  = NULL,
         .rx_headroom = 0
     };
 

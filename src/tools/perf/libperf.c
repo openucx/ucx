@@ -951,6 +951,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
     uct_iface_params_t iface_params = {
         .tl_name     = params->uct.tl_name,
         .dev_name    = params->uct.dev_name,
+        .stats_root  = NULL,
         .rx_headroom = 0
     };
     UCS_CPU_ZERO(&iface_params.cpu_mask);

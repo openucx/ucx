@@ -176,7 +176,8 @@ typedef struct uct_base_iface {
 
 } uct_base_iface_t;
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
-                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
+                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*)
+                  UCS_STATS_ARG(const char*));
 
 
 /**

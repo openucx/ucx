@@ -436,7 +436,8 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     unsigned i;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_mm_iface_ops, md, worker,
-                              tl_config UCS_STATS_ARG(NULL));
+                              tl_config UCS_STATS_ARG(params->stats_root)
+                              UCS_STATS_ARG(UCT_MM_TL_NAME));
 
     ucs_trace_func("Creating an MM iface=%p worker=%p", self, worker);
 

@@ -96,6 +96,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     uct_iface_params_t iface_params = {
         .tl_name     = resource->tl_name,
         .dev_name    = resource->dev_name,
+        .stats_root  = NULL,
         .rx_headroom = 0
     };
 

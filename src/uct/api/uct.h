@@ -18,6 +18,7 @@
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
+#include <ucs/stats/libstats.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -331,6 +332,10 @@ struct uct_iface_params {
     ucs_cpu_set_t            cpu_mask;    /**< Mask of CPUs to use for resources */
     const char               *tl_name;    /**< Transport name */
     const char               *dev_name;   /**< Device Name */
+    ucs_stats_node_t         *stats_root; /**< Root in the statistics tree.
+                                               Can be NULL. If non NULL, it will be
+                                               a root of @a uct_iface object in the
+                                               statistics tree. */
     size_t                   rx_headroom; /**< How much bytes to reserve before
                                                the receive segment.*/
 };
