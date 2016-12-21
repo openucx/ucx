@@ -19,7 +19,7 @@
 
 typedef ucs_status_t 
 (*ucp_rma_send_func_t)(ucp_request_t *req, uct_rkey_t uct_rkey, 
-                       const ucp_ep_rma_config_t *rma_config);
+                       const ucp_ep_rma_config_t *rma_config, int zcopy);
 
 
 #define UCP_RMA_CHECK_PARAMS(_buffer, _length) \
@@ -29,6 +29,26 @@ typedef ucs_status_t
     if (ENABLE_PARAMS_CHECK && ((_buffer) == NULL)) { \
         return UCS_ERR_INVALID_PARAM; \
     }
+
+static UCS_F_ALWAYS_INLINE int 
+ucp_rma_put_is_zcopy(ucp_ep_rma_config_t *rma_config, size_t length)
+{
+    /* todo: enable once full zcopy is working */
+    //return 0;
+    /* at the moment ucp tests use up to 8k messages */
+    return length > rma_config->put_zcopy_thresh;
+    return length > 8192;
+}
+
+static UCS_F_ALWAYS_INLINE int 
+ucp_rma_get_is_zcopy(ucp_ep_rma_config_t *rma_config, size_t length)
+{
+    /* todo: enable once full zcopy is working */
+    //return 0;
+    /* at the moment ucp tests use up to 4k messages */
+    return length > rma_config->get_zcopy_thresh;
+    return length > 16384;
+}
 
 /* request can be released if 
  *  - all fragments were sent (length == 0) (bcopy & zcopy mix)
@@ -47,7 +67,11 @@ ucp_rma_request_advance(ucp_request_t *req, size_t frag_length,
     if (ucs_likely((status == UCS_OK) || (status == UCS_INPROGRESS))) {
         req->send.length -= frag_length;
         if (req->send.length == 0) {
-            if (req->send.uct_comp.count == 0) {
+            /* bcopy is the fast path */
+            if (ucs_likely(req->send.uct_comp.count == 0)) {
+                if (ucs_unlikely(req->send.state.dt.contig.memh != NULL)) {
+                    ucp_request_send_buffer_dereg(req, req->send.lane);
+                }
                 ucp_request_put(req, UCS_OK);
             }
             return UCS_OK;
@@ -68,11 +92,19 @@ ucp_rma_request_bcopy_completion(uct_completion_t *self, ucs_status_t status)
     ucp_request_put(req, UCS_OK);
 }
 
-static UCS_F_ALWAYS_INLINE void
+static void ucp_rma_request_zcopy_completion(uct_completion_t *self, ucs_status_t status)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
+
+    ucp_request_send_buffer_dereg(req, req->send.lane);
+    ucp_request_put(req, UCS_OK);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer, 
                      size_t length, uint64_t remote_addr, ucp_rkey_h rkey,
                      uct_pending_callback_t cb, ucp_lane_index_t lane,
-                     int flags)
+                     int flags, int zcopy)
 {
     req->flags                = flags; /* Implicit release */
     req->send.ep              = ep;
@@ -83,16 +115,24 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.uct.func        = cb;
     req->send.lane            = lane;
     req->send.uct_comp.count  = 0; 
-    req->send.uct_comp.func   = ucp_rma_request_bcopy_completion;
-
 #if ENABLE_ASSERT
     req->send.cb              = NULL;
 #endif
+    if (zcopy) {
+        req->send.uct_comp.func = ucp_rma_request_zcopy_completion;
+        /* TODO: check 4 double reg, cache */
+        return ucp_request_send_buffer_reg(req, lane);
+    } 
+
+    req->send.uct_comp.func        = ucp_rma_request_bcopy_completion;
+    req->send.state.dt.contig.memh = NULL;
+
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t 
 ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey, 
-                       const ucp_ep_rma_config_t *rma_config)
+                       const ucp_ep_rma_config_t *rma_config, int zcopy)
 {
     ucp_ep_t *ep = req->send.ep;
     ucs_status_t status;
@@ -106,7 +146,7 @@ ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey,
                                   packed_len,
                                   req->send.rma.remote_addr,
                                   uct_rkey);
-    } else {
+    } else if (!zcopy) {
         ucp_memcpy_pack_context_t pack_ctx;
         pack_ctx.src    = req->send.buffer;
         pack_ctx.length = ucs_min(req->send.length, rma_config->max_put_bcopy);
@@ -117,6 +157,25 @@ ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey,
                                       req->send.rma.remote_addr,
                                       uct_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
+    } else {
+        uct_iov_t iov;
+
+        packed_len = ucs_min(req->send.length, rma_config->max_put_zcopy);
+        iov.buffer = (void *)req->send.buffer;
+        iov.length = packed_len;
+        iov.count  = 1;
+        iov.memh   = req->send.state.dt.contig.memh;
+        ++req->send.uct_comp.count;
+
+        status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
+                                  ep->uct_eps[req->send.lane], 
+                                  &iov, 1, 
+                                  req->send.rma.remote_addr,
+                                  uct_rkey,
+                                  &req->send.uct_comp);
+        if (status <= 0) {
+            --req->send.uct_comp.count;
+        }
     }
 
     return ucp_rma_request_advance(req, packed_len, status);    
@@ -124,22 +183,38 @@ ucp_progress_put_inner(ucp_request_t *req, uct_rkey_t uct_rkey,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t 
 ucp_progress_get_inner(ucp_request_t *req, uct_rkey_t uct_rkey, 
-                       const ucp_ep_rma_config_t *rma_config)
+                       const ucp_ep_rma_config_t *rma_config, int zcopy)
 {
     ucp_ep_t *ep = req->send.ep;
     ucs_status_t status;
     size_t frag_length;
 
     ++req->send.uct_comp.count;
-    frag_length = ucs_min(rma_config->max_get_bcopy, req->send.length);
-    status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
-                              ep->uct_eps[req->send.lane],
-                              (uct_unpack_callback_t)memcpy,
-                              (void*)req->send.buffer,
-                              frag_length,
-                              req->send.rma.remote_addr,
-                              uct_rkey,
-                              &req->send.uct_comp);
+    if (zcopy) {
+        uct_iov_t iov;
+        frag_length = ucs_min(req->send.length, rma_config->max_get_zcopy);
+        iov.buffer  = (void *)req->send.buffer;
+        iov.length  = frag_length;
+        iov.count   = 1;
+        iov.memh    = req->send.state.dt.contig.memh;
+
+        status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
+                                  ep->uct_eps[req->send.lane], 
+                                  &iov, 1, 
+                                  req->send.rma.remote_addr,
+                                  uct_rkey,
+                                  &req->send.uct_comp);
+    } else {
+        frag_length = ucs_min(rma_config->max_get_bcopy, req->send.length);
+        status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
+                                  ep->uct_eps[req->send.lane],
+                                  (uct_unpack_callback_t)memcpy,
+                                  (void*)req->send.buffer,
+                                  frag_length,
+                                  req->send.rma.remote_addr,
+                                  uct_rkey,
+                                  &req->send.uct_comp);
+    }
     if (status <= 0) {
         --req->send.uct_comp.count;
     }
@@ -155,10 +230,12 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
 
     uct_rkey_t uct_rkey;
     ucp_ep_rma_config_t *rma_config;
+    int is_zcopy;
 
-
+    /* TODO: check for the lane switch */
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req->send.lane, uct_rkey, rma_config);
-    return ucp_progress_get_inner(req, uct_rkey, rma_config);
+    is_zcopy = ucp_rma_get_is_zcopy(rma_config, req->send.length);
+    return ucp_progress_get_inner(req, uct_rkey, rma_config, is_zcopy);
 }
 
 static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
@@ -169,17 +246,18 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
 
     uct_rkey_t uct_rkey;
     ucp_ep_rma_config_t *rma_config;
-
+    int is_zcopy;
 
     UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req->send.lane, uct_rkey, rma_config);
-    return ucp_progress_put_inner(req, uct_rkey, rma_config);
+    is_zcopy = ucp_rma_put_is_zcopy(rma_config, req->send.length);
+    return ucp_progress_put_inner(req, uct_rkey, rma_config, is_zcopy);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote_addr, 
                  ucp_rkey_h rkey, ucp_ep_rma_config_t *rma_config, 
                  ucp_lane_index_t lane, uct_rkey_t uct_rkey,
-                 ucp_rma_send_func_t send_func)
+                 ucp_rma_send_func_t send_func, int zcopy)
 {
     ucs_status_t status;
     ucp_request_t req;
@@ -187,15 +265,18 @@ ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote
     ucs_assert((send_func == ucp_progress_put_inner) ||
                (send_func == ucp_progress_get_inner));
 
-    ucp_rma_request_init(&req, ep, buffer, length, remote_addr, rkey, NULL,
-                         lane, 0);
+    status = ucp_rma_request_init(&req, ep, buffer, length, remote_addr, rkey, NULL,
+                                  lane, 0, zcopy);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
 
     /* Loop until all message has been sent.
      * We re-check the configuration on every iteration except for zcopy, 
      * because it can be * changed by transport switch.
      */
     for (;;) {
-        status = send_func(&req, uct_rkey, rma_config);
+        status = send_func(&req, uct_rkey, rma_config, zcopy);
         if (ucs_likely(status == UCS_OK)) {
             break;
         } else if (status == UCS_INPROGRESS) {
@@ -204,7 +285,9 @@ ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote
             break;
         } else {
             ucp_worker_progress(ep->worker);
-            UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req.send.lane, uct_rkey, rma_config);
+            if (!zcopy) {
+                UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, req.send.lane, uct_rkey, rma_config);
+            }
         }
     }
 
@@ -216,7 +299,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_rma_nbi(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote_addr, 
             ucp_rkey_h rkey, ucp_ep_rma_config_t *rma_config,
             ucp_lane_index_t lane, uct_rkey_t uct_rkey,
-            ucp_rma_send_func_t send_func)
+            ucp_rma_send_func_t send_func, int zcopy)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -229,15 +312,18 @@ ucp_rma_nbi(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote_addr
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucp_rma_request_init(req, ep, buffer, length, remote_addr, rkey, 
-                         send_func == ucp_progress_put_inner ? 
-                          ucp_progress_put_nbi : ucp_progress_get_nbi, 
-                         lane, UCP_REQUEST_FLAG_RELEASED);
+    status = ucp_rma_request_init(req, ep, buffer, length, remote_addr, rkey, 
+                                  send_func == ucp_progress_put_inner ? 
+                                  ucp_progress_put_nbi : ucp_progress_get_nbi, 
+                                  lane, UCP_REQUEST_FLAG_RELEASED, zcopy);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
     /* Start send using inner progress function in order to avoid
      * extra RKEY lookup
      */
     do {
-        status = send_func(req, uct_rkey, rma_config);
+        status = send_func(req, uct_rkey, rma_config, zcopy);
         if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
             if (ucp_request_pending_add(req, &status)) {
                 return status;
@@ -275,7 +361,8 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
 
     status = ucp_rma_nbi(ep, buffer, length, remote_addr, rkey, 
                          rma_config, lane, uct_rkey, 
-                         ucp_progress_put_inner);
+                         ucp_progress_put_inner,
+                         ucp_rma_put_is_zcopy(rma_config, length));
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
@@ -312,7 +399,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
 
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
                               rma_config, lane, uct_rkey, 
-                              ucp_progress_put_inner);
+                              ucp_progress_put_inner,
+                              ucp_rma_put_is_zcopy(rma_config, length));
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
@@ -333,7 +421,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
 
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
                               rma_config, lane, uct_rkey, 
-                              ucp_progress_get_inner);
+                              ucp_progress_get_inner,
+                              ucp_rma_get_is_zcopy(rma_config, length));
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
@@ -353,7 +442,8 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
 
     status = ucp_rma_nbi(ep, buffer, length, remote_addr, rkey, 
                          rma_config, lane, uct_rkey, 
-                         ucp_progress_get_inner);
+                         ucp_progress_get_inner,
+                         ucp_rma_get_is_zcopy(rma_config, length));
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
