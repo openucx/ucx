@@ -92,14 +92,22 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
 {
     ucs_status_t status;
     unsigned flags;
+    size_t buffer_size;
+
+    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) && params->iov_stride) {
+        buffer_size = params->msg_size_cnt * params->iov_stride;
+    } else {
+        buffer_size = ucx_perf_get_message_size(params);
+    }
 
     /* TODO use params->alignment  */
 
     flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
                     UCT_MD_MEM_FLAG_NONBLOCK : 0;
 
+    /* Allocate send buffer memory */
     status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 params->message_size * params->thread_count,
+                                 buffer_size * params->thread_count,
                                  flags, "perftest", &perf->uct.send_mem);
     if (status != UCS_OK) {
         ucs_error("Failed allocate send buffer: %s", ucs_status_string(status));
@@ -109,8 +117,9 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
     ucs_assert(perf->uct.send_mem.md == perf->uct.md);
     perf->send_buffer = perf->uct.send_mem.address;
 
+    /* Allocate receive buffer memory */
     status = uct_iface_mem_alloc(perf->uct.iface, 
-                                 params->message_size * params->thread_count,
+                                 buffer_size * params->thread_count,
                                  flags, "perftest", &perf->uct.recv_mem);
     if (status != UCS_OK) {
         ucs_error("Failed allocate receive buffer: %s", ucs_status_string(status));
@@ -119,6 +128,18 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf,
 
     ucs_assert(perf->uct.recv_mem.md == perf->uct.md);
     perf->recv_buffer = perf->uct.recv_mem.address;
+
+    /* Allocate IOV datatype memory */
+    perf->params.msg_size_cnt = params->msg_size_cnt;
+    perf->uct.iov             = malloc(sizeof(*perf->uct.iov) *
+                                       perf->params.msg_size_cnt *
+                                       params->thread_count);
+    if (NULL == perf->uct.iov) {
+        status = UCS_ERR_NO_MEMORY;
+        ucs_error("Failed allocate send IOV(%lu) buffer: %s",
+                  perf->params.msg_size_cnt, ucs_status_string(status));
+        goto err_free_send;
+    }
 
     perf->offset = 0;
 
@@ -136,6 +157,7 @@ static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 {
     uct_iface_mem_free(&perf->uct.send_mem);
     uct_iface_mem_free(&perf->uct.recv_mem);
+    free(perf->uct.iov);
 }
 
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
@@ -170,12 +192,6 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
     }
-}
-
-void ucx_perf_test_cleanup(ucx_perf_context_t *perf)
-{
-    free(perf->send_buffer);
-    free(perf->recv_buffer);
 }
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
@@ -243,7 +259,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
 {
-    if (params->message_size < 1) {
+    if (ucx_perf_get_message_size(params) < 1) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too small, need to be at least 1");
         }
@@ -301,7 +317,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     uct_iface_attr_t attr;
     ucs_status_t status;
     uint64_t required_flags;
-    size_t min_size, max_size;
+    size_t min_size, max_size, max_iov, message_size, it;
 
     status = uct_iface_query(iface, &attr);
     if (status != UCS_OK) {
@@ -309,6 +325,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     }
 
     min_size = 0;
+    max_iov  = 1;
+    message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
     case UCX_PERF_CMD_AM:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_AM_SHORT,
@@ -318,6 +336,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                                   attr.cap.am.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, attr.cap.am.max_short,
                                   attr.cap.am.max_bcopy, attr.cap.am.max_zcopy);
+        max_iov  = attr.cap.am.max_iov;
         break;
     case UCX_PERF_CMD_PUT:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_PUT_SHORT,
@@ -326,6 +345,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                                   attr.cap.put.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, attr.cap.put.max_short,
                                   attr.cap.put.max_bcopy, attr.cap.put.max_zcopy);
+        max_iov  = attr.cap.put.max_iov;
         break;
     case UCX_PERF_CMD_GET:
         required_flags = __get_flag(params->uct.data_layout, 0,
@@ -334,24 +354,25 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                                   attr.cap.get.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, 0,
                                   attr.cap.get.max_bcopy, attr.cap.get.max_zcopy);
+        max_iov  = attr.cap.get.max_iov;
         break;
     case UCX_PERF_CMD_ADD:
-        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_ADD32,
+        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_ADD32,
                                            UCT_IFACE_FLAG_ATOMIC_ADD64);
         max_size = 8;
         break;
     case UCX_PERF_CMD_FADD:
-        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_FADD32,
+        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_FADD32,
                                            UCT_IFACE_FLAG_ATOMIC_FADD64);
         max_size = 8;
         break;
     case UCX_PERF_CMD_SWAP:
-        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_SWAP32,
+        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_SWAP32,
                                            UCT_IFACE_FLAG_ATOMIC_SWAP64);
         max_size = 8;
         break;
     case UCX_PERF_CMD_CSWAP:
-        required_flags = __get_atomic_flag(params->message_size, UCT_IFACE_FLAG_ATOMIC_CSWAP32,
+        required_flags = __get_atomic_flag(message_size, UCT_IFACE_FLAG_ATOMIC_CSWAP32,
                                            UCT_IFACE_FLAG_ATOMIC_CSWAP64);
         max_size = 8;
         break;
@@ -374,14 +395,14 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (params->message_size < min_size) {
+    if (message_size < min_size) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too small");
         }
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (params->message_size > max_size) {
+    if (message_size > max_size) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too big");
         }
@@ -407,7 +428,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
             return UCS_ERR_UNSUPPORTED;
         }
 
-        if (params->am_hdr_size > params->message_size) {
+        if (params->am_hdr_size > message_size) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("AM header size larger than message size");
             }
@@ -426,6 +447,40 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
             (params->flags & UCX_PERF_TEST_FLAG_VERBOSE))
         {
             ucs_warn("Running active-message test with on-sided progress");
+        }
+    }
+
+    if (UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) {
+        if (params->msg_size_cnt > max_iov) {
+            if ((params->flags & UCX_PERF_TEST_FLAG_VERBOSE) ||
+                !params->msg_size_cnt) {
+                ucs_error("Wrong number of IOV entries. Requested is %lu, "
+                          "should be in the range 1...%lu", params->msg_size_cnt,
+                          max_iov);
+            }
+            return UCS_ERR_UNSUPPORTED;
+        }
+        /* if msg_size_cnt == 1 the message size checked above */
+        if ((UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
+            if (params->am_hdr_size > params->msg_size_list[0]) {
+                if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                    ucs_error("AM header size (%lu) larger than the first IOV "
+                              "message size (%lu)", params->am_hdr_size,
+                              params->msg_size_list[0]);
+                }
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+        /* check if particular message size fit into stride size */
+        if (params->iov_stride) {
+            for (it = 0; it < params->msg_size_cnt; ++it) {
+                if (params->msg_size_list[it] > params->iov_stride) {
+                    ucs_error("Buffer size %lu bigger than stride %lu",
+                              params->msg_size_list[it], params->iov_stride);
+                    status = UCS_ERR_NO_MEMORY;
+                    return UCS_ERR_INVALID_PARAM;
+                }
+            }
         }
     }
 
@@ -630,8 +685,9 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
                                                uint64_t *features)
 {
-    ucs_status_t status;
+    ucs_status_t status, message_size;
 
+    message_size = ucx_perf_get_message_size(params);
     switch (params->command) {
     case UCX_PERF_CMD_PUT:
     case UCX_PERF_CMD_GET:
@@ -641,9 +697,9 @@ static ucs_status_t ucp_perf_test_check_params(ucx_perf_params_t *params,
     case UCX_PERF_CMD_FADD:
     case UCX_PERF_CMD_SWAP:
     case UCX_PERF_CMD_CSWAP:
-        if (params->message_size == sizeof(uint32_t)) {
+        if (message_size == sizeof(uint32_t)) {
             *features = UCP_FEATURE_AMO32;
-        } else if (params->message_size == sizeof(uint64_t)) {
+        } else if (message_size == sizeof(uint64_t)) {
             *features = UCP_FEATURE_AMO64;
         } else {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -675,14 +731,16 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
 {
     ucs_status_t status;
     ucp_mem_map_params_t mem_map_params;
+    size_t message_size;
 
     perf->send_buffer         = NULL;
+    message_size              = ucx_perf_get_message_size(params);
 
     mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                                 UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     mem_map_params.address    = perf->send_buffer;
-    mem_map_params.length     = params->message_size * params->thread_count;
+    mem_map_params.length     = message_size * params->thread_count;
     mem_map_params.flags      = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
                                  UCP_MEM_MAP_NONBLOCK : 0;
 
@@ -699,7 +757,7 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                                 UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     mem_map_params.address    = perf->recv_buffer;
-    mem_map_params.length     = params->message_size * params->thread_count;
+    mem_map_params.length     = message_size * params->thread_count;
     mem_map_params.flags      = 0;
 
     status = ucp_mem_map(perf->ucp.context, &mem_map_params, &perf->ucp.recv_memh);
@@ -1242,8 +1300,10 @@ static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
                                  ucx_perf_result_t* result) {
     ucx_perf_context_t perf;
     ucs_status_t status = UCS_OK;
+    size_t message_size;
     int ti, nti;
 
+    message_size = ucx_perf_get_message_size(params);
     omp_set_num_threads(params->thread_count);
     nti = params->thread_count;
 
@@ -1267,9 +1327,9 @@ static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
     tctx[ti].params = *params;
     tctx[ti].perf = perf;
     /* Doctor the src and dst buffers to make them thread specific */
-    tctx[ti].perf.send_buffer += ti * params->message_size;
-    tctx[ti].perf.recv_buffer += ti * params->message_size;
-    tctx[ti].perf.offset = ti * params->message_size;
+    tctx[ti].perf.send_buffer += ti * message_size;
+    tctx[ti].perf.recv_buffer += ti * message_size;
+    tctx[ti].perf.offset = ti * message_size;
     ucx_perf_thread_run_test((void*)&tctx[ti]);
 }
     for (ti = 0; ti < nti; ti++) {

@@ -164,9 +164,10 @@ public:
         ucp_rkey_h rkey;
         size_t length;
 
-        ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
+        length = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
 
-        *((volatile uint8_t*)m_perf.recv_buffer + m_perf.params.message_size - 1) = -1;
+        *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
 
         rte_call(&m_perf, barrier);
 
@@ -176,7 +177,6 @@ public:
 
         send_buffer = m_perf.send_buffer;
         recv_buffer = m_perf.recv_buffer;
-        length      = m_perf.params.message_size;
         worker      = m_perf.ucp.worker;
         ep          = m_perf.ucp.peers[1 - my_index].ep;
         remote_addr = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
@@ -215,7 +215,8 @@ public:
         size_t length;
         uint8_t sn;
 
-        ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
+        length = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
 
         rte_call(&m_perf, barrier);
 
@@ -225,7 +226,6 @@ public:
 
         send_buffer = m_perf.send_buffer;
         recv_buffer = m_perf.recv_buffer;
-        length      = m_perf.params.message_size;
         worker      = m_perf.ucp.worker;
         ep          = m_perf.ucp.peers[1 - my_index].ep;
         remote_addr = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;

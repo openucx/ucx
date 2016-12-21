@@ -21,7 +21,9 @@ protected:
         ucx_perf_cmd_t         command;
         ucx_perf_test_type_t   test_type;
         uct_perf_data_layout_t data_layout;
-        size_t                 msglen;
+        size_t                 msg_stride;
+        size_t                 msglencnt;
+        size_t                 msglen[3];
         unsigned               max_outstanding;
         size_t                 iters;
         size_t                 field_offset;

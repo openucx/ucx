@@ -141,7 +141,13 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
-    size_t                 message_size;    /* Test message size */
+    size_t                 *msg_size_list;  /* Test message sizes list. The size
+                                               of the array is in msg_size_cnt */
+    size_t                 msg_size_cnt;    /* Number of message sizes in
+                                               message sizes list */
+    size_t                 iov_stride;      /* Distance between starting address
+                                               of consecutive IOV entries. It is
+                                               similar to UCT uct_iov_t type stride */
     size_t                 am_hdr_size;     /* Active message header size (included in message size) */
     size_t                 alignment;       /* Message buffer alignment */
     unsigned               max_outstanding; /* Maximal number of outstanding sends */

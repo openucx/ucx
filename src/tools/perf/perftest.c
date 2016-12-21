@@ -13,6 +13,7 @@
 #endif
 
 #include "libperf.h"
+#include "libperf_int.h"
 
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
@@ -76,7 +77,7 @@ struct perftest_context {
     sock_rte_group_t             sock_rte_group;
 };
 
-#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:H:oqM:T:d:x:A:B"
+#define TEST_PARAMS_ARGS   "t:n:s:W:O:w:D:i:H:oqM:T:d:x:A:B"
 
 
 test_type_t tests[] = {
@@ -248,7 +249,7 @@ static void print_header(struct perftest_context *ctx)
             printf("| API:          %-60s               |\n", test_api_str);
             printf("| Test:         %-60s               |\n", test->desc);
             printf("| Data layout:  %-60s               |\n", test_data_str);
-            printf("| Message size: %-60zu               |\n", ctx->params.message_size);
+            printf("| Message size: %-60zu               |\n", ucx_perf_get_message_size(&ctx->params));
         }
     }
 
@@ -323,24 +324,36 @@ static void usage(struct perftest_context *ctx, const char *program)
     printf("     -d <device>    Device to use for testing.\n");
     printf("     -x <tl>        Transport to use for testing.\n");
     printf("     -c <cpu>       Set affinity to this CPU. (off)\n");
-    printf("     -n <iters>     Number of iterations to run. (%ld)\n", ctx->params.max_iter);
-    printf("     -s <size>      Message size. (%zu)\n", ctx->params.message_size);
+    printf("     -n <iters>     Number of iterations to run. (%ld)\n",
+                                ctx->params.max_iter);
+    printf("     -s <size>      List of buffer sizes separated by comma, which "
+                                "make up a single message. Default is (%zu). "
+                                "For example, \"-s 16,48,8192,8192,14\"\n",
+                                ctx->params.msg_size_list[0]);
     printf("     -H <size>      AM Header size. (%zu)\n", ctx->params.am_hdr_size);
-    printf("     -w <iters>     Number of warm-up iterations. (%zu)\n", ctx->params.warmup_iter);
-    printf("     -W <count>     Flow control window size, for active messages. (%u)\n", ctx->params.uct.fc_window);
-    printf("     -O <count>     Maximal number of uncompleted outstanding sends. (%u)\n", ctx->params.max_outstanding);
+    printf("     -w <iters>     Number of warm-up iterations. (%zu)\n",
+                                ctx->params.warmup_iter);
+    printf("     -W <count>     Flow control window size, for active messages. (%u)\n",
+                                ctx->params.uct.fc_window);
+    printf("     -O <count>     Maximal number of uncompleted outstanding sends. (%u)\n",
+                                ctx->params.max_outstanding);
+    printf("     -i <count>     Distance between starting address of consecutive "
+                                "IOV entries. The same as UCT uct_iov_t stride.\n");
     printf("     -N             Use numeric formatting - thousands separator.\n");
     printf("     -f             Print only final numbers.\n");
     printf("     -v             Print CSV-formatted output.\n");
     printf("     -p <port>      TCP port to use for data exchange. (%d)\n", ctx->port);
     printf("     -b <batchfile> Batch mode. Read and execute tests from a file.\n");
-    printf("                       Every line of the file is a test to run. The first word is the\n");
-    printf("                       test name, and the rest are command-line arguments for the test.\n");
+    printf("                       Every line of the file is a test to run. "
+                                   "The first word is the\n");
+    printf("                       test name, and the rest are command-line "
+                                   "arguments for the test.\n");
     printf("     -M <thread>    Thread support level for progress engine (single).\n");
     printf("                        single     : Only the master thread can access.\n");
     printf("                        serialized : One thread can access at a time.\n");
     printf("                        multi      : Multiple threads can access.\n");
-    printf("     -T <threads>   Number of threads in the test (1); also implies \"-M multi\".\n");
+    printf("     -T <threads>   Number of threads in the test (1); "
+                                "also implies \"-M multi\".\n");
     printf("     -A <mode>      Async progress mode. (thread)\n");
     printf("                        thread     : Use separate progress thread.\n");
     printf("                        signal     : Use signal based timer.\n"); 
@@ -361,6 +374,46 @@ static const char *__basename(const char *path)
     return (p == NULL) ? path : p;
 }
 
+static ucs_status_t parse_message_sizes_params(const char *optarg,
+                                               ucx_perf_params_t *params)
+{
+    char *optarg_ptr, *optarg_ptr2;
+    size_t token_num, token_it;
+    const char delim = ',';
+
+    optarg_ptr = (char *)optarg;
+    token_num  = 0;
+    /* count the number of given message sizes */
+    while ((optarg_ptr = strchr(optarg_ptr, delim)) != NULL) {
+        ++optarg_ptr;
+        ++token_num;
+    }
+    ++token_num;
+
+    free(params->msg_size_list); /* free previously allocated buffer */
+    params->msg_size_list = malloc(sizeof(*params->msg_size_list) * token_num);
+    if (NULL == params->msg_size_list) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    optarg_ptr = (char *)optarg;
+    errno = 0;
+    for (token_it = 0; token_it < token_num; ++token_it) {
+        params->msg_size_list[token_it] = strtoul(optarg_ptr, &optarg_ptr2, 10);
+        if (((ERANGE == errno) && (ULONG_MAX == params->msg_size_list[token_it])) ||
+            ((errno != 0) && (params->msg_size_list[token_it] == 0)) ||
+            (optarg_ptr == optarg_ptr2)) {
+            free(params->msg_size_list);
+            params->msg_size_list = NULL; /* prevent double free */
+            return UCS_ERR_INVALID_PARAM;
+        }
+        optarg_ptr = optarg_ptr2 + 1;
+    }
+
+    params->msg_size_cnt = token_num;
+    return UCS_OK;
+}
+
 static void init_test_params(ucx_perf_params_t *params)
 {
     params->api             = UCX_PERF_API_LAST;
@@ -372,7 +425,6 @@ static void init_test_params(ucx_perf_params_t *params)
     params->wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params->max_outstanding = 1;
     params->warmup_iter     = 10000;
-    params->message_size    = 8;
     params->am_hdr_size     = 8;
     params->alignment       = ucs_get_page_size();
     params->max_iter        = 1000000l;
@@ -381,8 +433,14 @@ static void init_test_params(ucx_perf_params_t *params)
     params->flags           = UCX_PERF_TEST_FLAG_VERBOSE;
     params->uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
-    strcpy(params->uct.dev_name, "");
-    strcpy(params->uct.tl_name, "");
+    params->msg_size_cnt    = 1;
+    params->iov_stride      = 0;
+    strcpy(params->uct.dev_name, "<none>");
+    strcpy(params->uct.tl_name, "<none>");
+
+    params->msg_size_list    = malloc(sizeof(*params->msg_size_list) *
+                                      params->msg_size_cnt);
+    params->msg_size_list[0] = 8;
 }
 
 static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
@@ -424,12 +482,14 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             return -1;
         }
         return UCS_OK;
+    case 'i':
+        params->iov_stride = atol(optarg);
+        return UCS_OK;
     case 'n':
         params->max_iter = atol(optarg);
         return UCS_OK;
     case 's':
-        params->message_size = atol(optarg);
-        return UCS_OK;
+        return parse_message_sizes_params(optarg, params);
     case 'H':
         params->am_hdr_size = atol(optarg);
         return UCS_OK;
@@ -728,6 +788,16 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
         close(sockfd);
         safe_recv(connfd, &ctx->params, sizeof(ctx->params));
+        if (ctx->params.msg_size_cnt) {
+            ctx->params.msg_size_list = malloc(sizeof(*ctx->params.msg_size_list) *
+                                               ctx->params.msg_size_cnt);
+            if (NULL == ctx->params.msg_size_list) {
+                status = UCS_ERR_NO_MEMORY;
+                goto err_close_connfd;
+            }
+            safe_recv(connfd, ctx->params.msg_size_list,
+                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt);
+        }
 
         ctx->sock_rte_group.connfd    = connfd;
         ctx->sock_rte_group.is_server = 1;
@@ -754,6 +824,10 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         }
 
         safe_send(sockfd, &ctx->params, sizeof(ctx->params));
+        if (ctx->params.msg_size_cnt) {
+            safe_send(sockfd, ctx->params.msg_size_list,
+                      sizeof(*ctx->params.msg_size_list) * ctx->params.msg_size_cnt);
+        }
 
         ctx->sock_rte_group.connfd    = sockfd;
         ctx->sock_rte_group.is_server = 0;
@@ -770,6 +844,9 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
     ctx->params.report_arg        = ctx;
     return UCS_OK;
 
+err_close_connfd:
+    close(connfd);
+    goto err;
 err_close_sockfd:
     close(sockfd);
 err:
@@ -1094,7 +1171,7 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
     ucs_status_t status;
     FILE *batch_file;
 
-    ucs_trace_func("depth=%u", depth);
+    ucs_trace_func("depth=%u, num_files=%u", depth, ctx->num_batch_files);
 
     if (depth >= ctx->num_batch_files) {
         print_test_name(ctx);
@@ -1111,6 +1188,11 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
     while ((status = read_batch_file(batch_file, &params, &ctx->test_names[depth])) == UCS_OK) {
         status = run_test_recurs(ctx, &params, depth + 1);
         free(ctx->test_names[depth]);
+        if ((NULL == parent_params->msg_size_list) &&
+            (NULL != params.msg_size_list)) {
+            free(params.msg_size_list);
+            params.msg_size_list = NULL;
+        }
     }
 
     fclose(batch_file);
@@ -1186,5 +1268,8 @@ int main(int argc, char **argv)
 out_cleanup_rte:
     (rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
 out:
+    if (ctx.params.msg_size_list) {
+        free(ctx.params.msg_size_list);
+    }
     return ret;
 }

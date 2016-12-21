@@ -59,6 +59,7 @@ struct ucx_perf_context {
             uct_peer_t           *peers;
             uct_allocated_memory_t send_mem;
             uct_allocated_memory_t recv_mem;
+            uct_iov_t            *iov;
         } uct;
 
         struct {
@@ -135,6 +136,26 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf, ucx_perf_counter_t 
         perf->prev = perf->current;
     }
 }
+
+
+/**
+ * Get the total length of the message size given by parameters
+ */
+static inline
+size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
+{
+    size_t length, it;
+
+    ucs_assert(params->msg_size_list != NULL);
+
+    length = 0;
+    for (it = 0; it < params->msg_size_cnt; ++it) {
+        length += params->msg_size_list[it];
+    }
+
+    return length;
+}
+
 
 END_C_DECLS
 

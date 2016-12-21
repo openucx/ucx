@@ -47,6 +47,73 @@ public:
         uct_iface_set_am_handler(m_perf.uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, UCT_AM_CB_FLAG_SYNC);
     }
 
+    /**
+     * Make uct_iov_t iov[msg_size_cnt] array with pointer elements to
+     * original buffer
+     */
+    static void ucx_perf_get_buffer_iov(uct_iov_t *iov, void *buffer,
+                                        unsigned header_size, uct_mem_h memh,
+                                        const ucx_perf_context_t *perf)
+    {
+        const size_t iovcnt    = perf->params.msg_size_cnt;
+        size_t iov_length_it, iov_it;
+
+        ucs_assert(UCT_PERF_DATA_LAYOUT_ZCOPY == DATA);
+        ucs_assert(NULL != perf->params.msg_size_list);
+        ucs_assert(iovcnt > 0);
+        ucs_assert(perf->params.msg_size_list[0] >= header_size);
+
+        iov_length_it = 0;
+        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+            iov[iov_it].buffer = (char *)buffer + iov_length_it + header_size;
+            iov[iov_it].length = perf->params.msg_size_list[iov_it] - header_size;
+            iov[iov_it].memh   = memh;
+            iov[iov_it].stride = 0;
+            iov[iov_it].count  = 1;
+
+            if (perf->params.iov_stride) {
+                iov_length_it += perf->params.iov_stride - header_size;
+            } else {
+                iov_length_it += iov[iov_it].length;
+            }
+
+            header_size        = 0; /* should be zero for next iterations */
+        }
+
+        ucs_debug("IOV buffer filled by %lu slices with total length %lu",
+                  iovcnt, iov_length_it);
+    }
+
+    void ucx_perf_test_prepare_iov_buffer() {
+        if (UCT_PERF_DATA_LAYOUT_ZCOPY == DATA) {
+            size_t start_iov_buffer_size = 0;
+            if (UCX_PERF_CMD_AM == CMD) {
+                start_iov_buffer_size = m_perf.params.am_hdr_size;
+            }
+            ucx_perf_get_buffer_iov(m_perf.uct.iov, m_perf.send_buffer,
+                                    start_iov_buffer_size, m_perf.uct.send_mem.memh,
+                                    &m_perf);
+        }
+    }
+
+    /**
+     * Get the length between beginning of the IOV first buffer and the latest byte
+     * in the latest IOV buffer.
+     */
+    size_t ucx_perf_get_buffer_extent(const ucx_perf_params_t *params)
+    {
+        size_t length;
+
+        if ((UCT_PERF_DATA_LAYOUT_ZCOPY == DATA) && params->iov_stride) {
+            length = ((params->msg_size_cnt - 1) * params->iov_stride) +
+                     params->msg_size_list[params->msg_size_cnt - 1];
+        } else {
+            length = ucx_perf_get_message_size(params);
+        }
+
+        return length;
+    }
+
     void UCS_F_ALWAYS_INLINE progress_responder() {
         if (!ONESIDED) {
             uct_worker_progress(m_perf.uct.worker);
@@ -67,7 +134,7 @@ public:
     static size_t pack_cb(void *dest, void *arg)
     {
         uct_perf_test_runner *self = (uct_perf_test_runner *)arg;
-        size_t length = self->m_perf.params.message_size;
+        size_t length = ucx_perf_get_message_size(&self->m_perf.params);
 
         memcpy(dest, self->m_perf.send_buffer, length);
         return length;
@@ -80,7 +147,6 @@ public:
         uint64_t am_short_hdr;
         size_t header_size;
         ssize_t packed_len;
-        uct_iov_t iov[1];
 
         switch (CMD) {
         case UCX_PERF_CMD_AM:
@@ -97,19 +163,16 @@ public:
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 *(psn_t*)buffer = sn;
                 header_size = m_perf.params.am_hdr_size;
-                iov[0].buffer = (char*)buffer + header_size;
-                iov[0].length = length - header_size;
-                iov[0].memh   = m_perf.uct.send_mem.memh;
-                iov[0].count  = 1;
-                iov[0].stride = 0;
-                return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID,
-                                       buffer, header_size, iov, 1,comp);
+                return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID, buffer, header_size,
+                                       m_perf.uct.iov, m_perf.params.msg_size_cnt,
+                                       comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_PUT:
             if (TYPE == UCX_PERF_TEST_TYPE_PINGPONG) {
-                *((psn_t*)buffer + length - 1) = sn;
+                /* Put the control word at the latest byte of the IOV message */
+                *((psn_t*)buffer + ucx_perf_get_buffer_extent(&m_perf.params) - 1) = sn;
             }
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_SHORT:
@@ -118,12 +181,8 @@ public:
                 packed_len = uct_ep_put_bcopy(ep, pack_cb, (void*)this, remote_addr, rkey);
                 return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                iov[0].buffer = buffer;
-                iov[0].length = length;
-                iov[0].memh   = m_perf.uct.send_mem.memh;
-                iov[0].count  = 1;
-                iov[0].stride = 0;
-                return uct_ep_put_zcopy(ep, iov, 1, remote_addr, rkey, comp);
+                return uct_ep_put_zcopy(ep, m_perf.uct.iov, m_perf.params.msg_size_cnt,
+                                        remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -133,12 +192,8 @@ public:
                 return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy,
                                         buffer, length, remote_addr, rkey, comp);
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                iov[0].buffer = buffer;
-                iov[0].length = length;
-                iov[0].memh   = m_perf.uct.send_mem.memh;
-                iov[0].count  = 1;
-                iov[0].stride = 0;
-                return uct_ep_get_zcopy(ep, iov, 1, remote_addr, rkey, comp);
+                return uct_ep_get_zcopy(ep, m_perf.uct.iov, m_perf.params.msg_size_cnt,
+                                        remote_addr, rkey, comp);
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -222,7 +277,8 @@ public:
         void *buffer;
         size_t length;
 
-        ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
+        length = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
 
         switch (CMD) {
         case UCX_PERF_CMD_AM:
@@ -231,13 +287,14 @@ public:
             break;
         case UCX_PERF_CMD_PUT:
             /* since polling on data, must be end of the buffer */
-            recv_sn = (psn_t*)m_perf.recv_buffer +
-                            m_perf.params.message_size - 1;
+            recv_sn = (psn_t*)m_perf.recv_buffer + length - 1;
             break;
         default:
             ucs_error("Cannot run this test in ping-pong mode");
             return UCS_ERR_INVALID_PARAM;
         }
+
+        ucx_perf_test_prepare_iov_buffer();
 
         *recv_sn  = -1;
         rte_call(&m_perf, barrier);
@@ -247,7 +304,6 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         buffer      = m_perf.send_buffer;
-        length      = m_perf.params.message_size;
         remote_addr = m_perf.uct.peers[1 - my_index].remote_addr + m_perf.offset;
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         ep          = m_perf.uct.peers[1 - my_index].ep;
@@ -292,11 +348,14 @@ public:
         unsigned length;
         uct_ep_h ep;
 
-        ucs_assert(m_perf.params.message_size >= sizeof(psn_t));
+        length = ucx_perf_get_message_size(&m_perf.params);
+        ucs_assert(length >= sizeof(psn_t));
         ucs_assert(m_perf.params.uct.fc_window <= ((psn_t)-1) / 2);
 
-        memset(m_perf.send_buffer, 0, m_perf.params.message_size);
-        memset(m_perf.recv_buffer, 0, m_perf.params.message_size);
+        memset(m_perf.send_buffer, 0, length);
+        memset(m_perf.recv_buffer, 0, length);
+
+        ucx_perf_test_prepare_iov_buffer();
 
         recv_sn  = direction_to_responder ? (psn_t*)m_perf.recv_buffer :
                                             (psn_t*)m_perf.send_buffer;
@@ -308,7 +367,6 @@ public:
 
         ep          = m_perf.uct.peers[1 - my_index].ep;
         buffer      = m_perf.send_buffer;
-        length      = m_perf.params.message_size;
         remote_addr = m_perf.uct.peers[1 - my_index].remote_addr + m_perf.offset;
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         fc_window   = m_perf.params.uct.fc_window;
