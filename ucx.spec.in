@@ -13,6 +13,7 @@
 %global lt_release @LT_RELEASE@
 %global lt_version @LT_CURRENT@.@LT_REVISION@.@LT_AGE@
 
+%{!?configure_options: %define configure_options %{nil}}
 
 Name: %{pkgname}
 Summary: Unified Communication X
@@ -49,7 +50,7 @@ rm -rf $RPM_BUILD_ROOT
 %setup -q
 
 %build
-./contrib/configure-release
+./contrib/configure-release %{?configure_options}
 make %{?_smp_mflags}
 
 %install

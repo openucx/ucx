@@ -12,21 +12,24 @@ rpmopts="--nodeps --buildroot='${WS}/_rpm'"
 opt_tarball=0
 opt_srcrpm=0
 opt_binrpm=0
+defines=""
 
 while test "$1" != ""; do
     case $1 in
         --tarball|-t) opt_tarball=1 ;;
         --srcrpm|-s)  opt_srcrpm=1 ;;
         --binrpm|-b)  opt_binrpm=1 ;;
+        --define|-d)  defines="$defines --define '$2'"; shift ;;
         *)
             cat <<EOF
 Unrecognized argument: $1
 
 Valid arguments:
 
---tarball|-t    Create tarball
---srcrpm|-s     Create src.rpm
---binrpm|-b     Create bin.rpm
+--tarball|-t        Create tarball
+--srcrpm|-s         Create src.rpm
+--binrpm|-b         Create bin.rpm
+--define|-d <arg>   Add a define to rpmbuild
 
 
 EOF
@@ -44,10 +47,10 @@ if [ $opt_tarball -eq 1 ]; then
 fi
 
 if [ $opt_srcrpm -eq 1 ]; then
-    echo rpmbuild -bs $rpmmacros $rpmopts $rpmspec | bash -eEx
+    echo rpmbuild -bs $rpmmacros $rpmopts $rpmspec $defines | bash -eEx
 fi
 
 if [ $opt_binrpm -eq 1 ]; then
-    echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec | bash -eEx
+    echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines | bash -eEx
 fi
 
