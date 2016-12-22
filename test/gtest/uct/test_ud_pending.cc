@@ -40,9 +40,12 @@ public:
         }
     }
 
-    void check_pending_reqs(void) 
+    void check_pending_reqs(bool wait)
     {
-        /* all work should be complete */
+        /* wait for all work to be complete */
+        while (wait && (req_count < N)) {
+            progress();
+        }
         EXPECT_EQ(N, req_count);
         uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
     }
@@ -150,8 +153,7 @@ UCS_TEST_P(test_ud_pending, connect)
     disable_async(m_e1);
     disable_async(m_e2);
     post_pending_reqs();
-    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
-    check_pending_reqs();
+    check_pending_reqs(true);
 }
 
 UCS_TEST_P(test_ud_pending, flush)
@@ -160,7 +162,7 @@ UCS_TEST_P(test_ud_pending, flush)
     disable_async(m_e2);
     post_pending_reqs();
     flush();
-    check_pending_reqs();
+    check_pending_reqs(false);
 }
 
 UCS_TEST_P(test_ud_pending, window)
