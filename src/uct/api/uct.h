@@ -18,7 +18,7 @@
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
-#include <ucs/stats/libstats.h>
+#include <ucs/stats/stats_fd.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
