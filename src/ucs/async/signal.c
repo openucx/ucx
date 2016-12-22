@@ -168,7 +168,7 @@ static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
         return UCS_OK;
     }
 
-    return ucs_async_dispatch_timerq(&timer->timerq, ucs_get_time(), 1);
+    return ucs_async_dispatch_timerq(&timer->timerq, ucs_get_time());
 }
 
 static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
@@ -188,7 +188,7 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
     case POLL_MSG:
     case POLL_PRI:
         ucs_trace_async("async signal handler called for fd %d", siginfo->si_fd);
-        ucs_async_dispatch_handlers(&siginfo->si_fd, 1, 1);
+        ucs_async_dispatch_handlers(&siginfo->si_fd, 1);
         return;
     default:
         ucs_warn("signal handler called with unexpected event code %d, ignoring",
@@ -340,9 +340,9 @@ static ucs_status_t ucs_async_signal_remove_event_fd(ucs_async_context_t *async,
     return status;
 }
 
-static int ucs_async_signal_try_block(ucs_async_context_t *async, int from_async)
+static int ucs_async_signal_try_block(ucs_async_context_t *async)
 {
-    if (from_async && (async->signal.block_count > 0)) {
+    if (async->signal.block_count > 0) {
         return 0;
     }
 

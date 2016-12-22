@@ -76,7 +76,7 @@ static void *ucs_async_thread_func(void *arg)
                     continue;
                 }
 
-                status = ucs_async_dispatch_handlers(&fd, 1, 1);
+                status = ucs_async_dispatch_handlers(&fd, 1);
                 if (status == UCS_ERR_NO_PROGRESS) {
                     is_missed = 1;
                 }
@@ -87,7 +87,7 @@ static void *ucs_async_thread_func(void *arg)
         curr_time = ucs_get_time();
         if (curr_time - last_time > timer_interval) {
             status = ucs_async_dispatch_timerq(&ucs_async_thread_global_context.timerq,
-                                               curr_time, 1);
+                                               curr_time);
             if (status == UCS_ERR_NO_PROGRESS) {
                  is_missed = 1;
             }
@@ -256,7 +256,7 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
     return UCS_OK;
 }
 
-static int ucs_async_thread_try_block(ucs_async_context_t *async, int from_async)
+static int ucs_async_thread_try_block(ucs_async_context_t *async)
 {
     return
 #if !(NVALGRIND)

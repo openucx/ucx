@@ -31,9 +31,8 @@ struct ucs_async_handler {
  *
  * @param id         Array of event IDs to dispatch.
  * @param count      Number of events
- * @param from_async Whether the handler is called from async context or main context.
  */
-ucs_status_t ucs_async_dispatch_handlers(int *events, size_t count, int from_async);
+ucs_status_t ucs_async_dispatch_handlers(int *events, size_t count);
 
 
 /**
@@ -41,10 +40,9 @@ ucs_status_t ucs_async_dispatch_handlers(int *events, size_t count, int from_asy
  *
  * @param timerq        Timer queue whose timers to dispatch.
  * @param current_time  Current time for checking timer expiration.
- * @param from_async    Whether the handler is called from async context or main context.
  */
 ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
-                                       ucs_time_t current_time, int from_async);
+                                       ucs_time_t current_time);
 
 
 /**
@@ -58,7 +56,7 @@ typedef struct ucs_async_ops {
     void         (*unblock)();
 
     ucs_status_t (*context_init)(ucs_async_context_t *async);
-    int          (*context_try_block)(ucs_async_context_t *async, int from_async);
+    int          (*context_try_block)(ucs_async_context_t *async);
     void         (*context_unblock)(ucs_async_context_t *async);
 
     ucs_status_t (*add_event_fd)(ucs_async_context_t *async, int event_fd,
