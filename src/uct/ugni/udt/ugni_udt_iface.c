@@ -170,6 +170,8 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
                                          sizeof(uct_ugni_udt_header_t);
     iface_attr->cap.am.max_bcopy       = iface->config.udt_seg_size -
                                          sizeof(uct_ugni_udt_header_t);
+    iface_attr->cap.am.opt_zcopy_align = 1;
+    iface_attr->cap.am.align_mtu       = iface_attr->cap.am.opt_zcopy_align;
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = 0;
@@ -177,7 +179,6 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
                                          UCT_IFACE_FLAG_AM_BCOPY |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING;
-    iface_attr->cap.align              = 1;
 
     iface_attr->overhead               = 1e-6;  /* 1 usec */
     iface_attr->latency                = 40e-6; /* 40 usec */

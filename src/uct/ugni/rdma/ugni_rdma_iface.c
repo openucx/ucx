@@ -41,18 +41,24 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
     uct_ugni_rdma_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_rdma_iface_t);
 
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
-    iface_attr->cap.put.max_short      = iface->config.fma_seg_size;
-    iface_attr->cap.put.max_bcopy      = iface->config.fma_seg_size;
-    iface_attr->cap.put.min_zcopy      = 0;
-    iface_attr->cap.put.max_zcopy      = iface->config.rdma_max_size;
-    iface_attr->cap.put.max_iov        = 1;
+    iface_attr->cap.put.max_short       = iface->config.fma_seg_size;
+    iface_attr->cap.put.max_bcopy       = iface->config.fma_seg_size;
+    iface_attr->cap.put.min_zcopy       = 0;
+    iface_attr->cap.put.max_zcopy       = iface->config.rdma_max_size;
+    iface_attr->cap.put.opt_zcopy_align = 1;
+    iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
+    iface_attr->cap.put.max_iov         = 1;
 
-    iface_attr->cap.get.max_bcopy      = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
-    iface_attr->cap.get.min_zcopy      = 0;
-    iface_attr->cap.get.max_zcopy      = iface->config.rdma_max_size;
-    iface_attr->cap.get.max_iov        = 1;
+    iface_attr->cap.get.max_bcopy       = iface->config.fma_seg_size - 8; /* alignment offset 4 (addr)+ 4 (len)*/
+    iface_attr->cap.get.min_zcopy       = 0;
+    iface_attr->cap.get.max_zcopy       = iface->config.rdma_max_size;
+    iface_attr->cap.get.opt_zcopy_align = 1;
+    iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
+    iface_attr->cap.get.max_iov         = 1;
 
     iface_attr->cap.am.max_iov         = 1;
+    iface_attr->cap.am.opt_zcopy_align = 1;
+    iface_attr->cap.am.align_mtu       = iface_attr->cap.am.opt_zcopy_align;
 
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
@@ -68,7 +74,6 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_GET_ZCOPY      |
                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                          UCT_IFACE_FLAG_PENDING;
-    iface_attr->cap.align              = 1;
 
     if(GNI_DEVICE_ARIES == iface->super.dev->type) {
         iface_attr->cap.flags         |= UCT_IFACE_FLAG_PUT_SHORT |

@@ -529,30 +529,31 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
                        iface_attr);
 
-    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT         |
-                                        UCT_IFACE_FLAG_AM_BCOPY         |
-                                        UCT_IFACE_FLAG_AM_ZCOPY         |
-                                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                                        UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_PENDING          |
-                                        UCT_IFACE_FLAG_AM_CB_SYNC       |
-                                        UCT_IFACE_FLAG_AM_CB_ASYNC      |
-                                        UCT_IFACE_FLAG_WAKEUP;
-    iface_attr->cap.align             = 256;
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT         |
+                                         UCT_IFACE_FLAG_AM_BCOPY         |
+                                         UCT_IFACE_FLAG_AM_ZCOPY         |
+                                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
+                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                         UCT_IFACE_FLAG_PENDING          |
+                                         UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                         UCT_IFACE_FLAG_AM_CB_ASYNC      |
+                                         UCT_IFACE_FLAG_WAKEUP;
 
-    iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.min_zcopy      = 0;
-    iface_attr->cap.am.max_zcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_hdr        = iface->config.max_inline - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_short       = iface->config.max_inline - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.min_zcopy       = 0;
+    iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
+    iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.am.max_hdr         = iface->config.max_inline - sizeof(uct_ud_neth_t);
     /* The first iov is reserved for the header */
-    iface_attr->cap.am.max_iov        = uct_ib_iface_get_max_iov(&iface->super) - 1;
+    iface_attr->cap.am.max_iov         = uct_ib_iface_get_max_iov(&iface->super) - 1;
 
-    iface_attr->cap.put.max_short     = iface->config.max_inline -
-                                        sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
+    iface_attr->cap.put.max_short      = iface->config.max_inline -
+                                         sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
 
-    iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
-    iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
+    iface_attr->iface_addr_len         = sizeof(uct_ud_iface_addr_t);
+    iface_attr->ep_addr_len            = sizeof(uct_ud_ep_addr_t);
 
     /* Software overhead */
     iface_attr->overhead = 80e-9;

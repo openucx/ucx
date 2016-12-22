@@ -9,9 +9,6 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/queue.h>
 
-#define UCP_ALIGN 256
-#define UCP_MTU_SIZE 4096
-
 static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
     ucp_request_t *sreq = arg;   /* the sender's request */
@@ -122,7 +119,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
-    size_t offset, length;
+    size_t offset, length, ucp_mtu;
     uct_iov_t iov[1];
     ucp_rsc_index_t rsc_index;
     uint16_t align;
@@ -134,7 +131,8 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
     /* reset the lane to rndv since it might have been set to 0 since it was stub on RTS receive */
     rndv_req->send.lane = ucp_ep_get_rndv_get_lane(rndv_req->send.ep);
     rsc_index = ucp_ep_get_rsc_index(rndv_req->send.ep, rndv_req->send.lane);
-    align     = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.align;
+    align     = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.get.opt_zcopy_align;
+    ucp_mtu   = rndv_req->send.ep->worker->iface_attrs[rsc_index].cap.get.align_mtu;
 
     ucs_trace_data("ep: %p try to progress get_zcopy for rndv get. rndv_req: %p. lane: %d",
                    rndv_req->send.ep, rndv_req, rndv_req->send.lane);
@@ -149,9 +147,9 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
             size_t max_get_zcopy = ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy;
             size_t remainder = (uintptr_t) rndv_req->send.buffer % align;
 
-            if (remainder && (rndv_req->send.length > UCP_MTU_SIZE )) {
+            if (remainder && (rndv_req->send.length > ucp_mtu )) {
                 rndv_req->send.uct_comp.count = 1 +
-                                               (rndv_req->send.length - (UCP_MTU_SIZE - remainder) +
+                                               (rndv_req->send.length - (ucp_mtu - remainder) +
                                                max_get_zcopy - 1) / max_get_zcopy;
             } else {
                 rndv_req->send.uct_comp.count = (rndv_req->send.length + max_get_zcopy - 1) / max_get_zcopy;
@@ -162,8 +160,8 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
     offset = rndv_req->send.state.offset;
 
     if ((offset == 0) && ((uintptr_t)rndv_req->send.buffer % align) &&
-        (rndv_req->send.length > UCP_MTU_SIZE )) {
-        length = UCP_MTU_SIZE - ((uintptr_t)rndv_req->send.buffer % align);
+        (rndv_req->send.length > ucp_mtu )) {
+        length = ucp_mtu - ((uintptr_t)rndv_req->send.buffer % align);
     } else {
         length = ucs_min(rndv_req->send.length - offset,
                          ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy);
