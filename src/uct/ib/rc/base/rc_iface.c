@@ -64,6 +64,16 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 };
 
 
+ucs_config_field_t uct_rc_fc_config_table[] = {
+  {"FC_SOFT_THRESH", "0.5",
+   "Threshold for sending soft request for FC credits to the peer. This value\n"
+   "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
+   ucs_offsetof(uct_rc_fc_config_t, soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+
+  {NULL}
+};
+
+
 #if ENABLE_STATS
 static ucs_stats_class_t uct_rc_iface_stats_class = {
     .name = "rc_iface",
@@ -78,8 +88,8 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
 
 
 static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
-    .chunk_alloc   = ucs_mpool_hugetlb_malloc,
-    .chunk_release = ucs_mpool_hugetlb_free,
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
     .obj_cleanup   = NULL
 };
@@ -217,19 +227,22 @@ static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
     }
 }
 
-ucs_status_t uct_rc_init_fc_thresh(double soft_thresh, uct_rc_iface_config_t *cfg,
+ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
+                                   uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface)
 {
     /* Check FC parameters correctness */
-    if ((soft_thresh <= cfg->fc.hard_thresh) || (soft_thresh >= 1)) {
+    if ((fc_cfg->soft_thresh <= rc_cfg->fc.hard_thresh) ||
+        (fc_cfg->soft_thresh >= 1)) {
         ucs_error("The factor for soft FC threshold should be bigger"
-                  " than FC_HARD_THRESH value and less than 1");
+                  " than FC_HARD_THRESH value and less than 1 (s=%f, h=%f)",
+                  fc_cfg->soft_thresh, rc_cfg->fc.hard_thresh);
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (cfg->fc.enable) {
+    if (rc_cfg->fc.enable) {
         iface->config.fc_soft_thresh = ucs_max((int)(iface->config.fc_wnd_size *
-                                               soft_thresh), 1);
+                                               fc_cfg->soft_thresh), 1);
     } else {
         iface->config.fc_soft_thresh  = 0;
     }
@@ -285,7 +298,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
         fc_req = ucs_mpool_get(&iface->tx.fc_mp);
         if (ucs_unlikely(fc_req == NULL)) {
-            ucs_fatal("Failed to allocated FC request.");
+            ucs_error("Failed to allocate FC request. "
+                      "Grant will not be sent on ep %p", ep);
             return UCS_ERR_NO_MEMORY;
         }
         fc_req->ep       = &ep->super.super;
@@ -308,7 +322,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned rx_priv_len, const uct_rc_iface_config_t *config)
+                    unsigned rx_priv_len, const uct_rc_iface_config_t *config,
+                    unsigned fc_req_size)
 {
     struct ibv_srq_init_attr srq_init_attr;
     uct_ib_device_t *dev;
@@ -344,7 +359,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     /* Check FC parameters correctness */
     if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
-        ucs_error("The factor for hard FC threshold should be > 0 and < 1");
+        ucs_error("The factor for hard FC threshold should be > 0 and < 1 (%f)",
+                  config->fc.hard_thresh);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
@@ -424,9 +440,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         /* Create mempool for pending requests for FC grant */
         status = ucs_mpool_init(&self->tx.fc_mp,
                                 0,
-                                sizeof(uct_rc_fc_request_t),
+                                fc_req_size,
                                 0,
-                                UCS_SYS_CACHE_LINE_SIZE,
+                                1,
                                 128,
                                 UINT_MAX,
                                 &uct_rc_fc_pending_mpool_ops,

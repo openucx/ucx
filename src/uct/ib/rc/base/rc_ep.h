@@ -93,8 +93,8 @@ enum {
  * check for FC credits and add FC protocol bits (if any)
  */
 #define UCT_RC_CHECK_FC_WND(_fc, _stats)\
-    if (_fc.fc_wnd <= 0) { \
-        UCS_STATS_UPDATE_COUNTER(_fc.stats, UCT_RC_FC_STAT_NO_CRED, 1); \
+    if ((_fc)->fc_wnd <= 0) { \
+        UCS_STATS_UPDATE_COUNTER((_fc)->stats, UCT_RC_FC_STAT_NO_CRED, 1); \
         UCS_STATS_UPDATE_COUNTER(_stats, UCT_EP_STAT_NO_RES, 1); \
         return UCS_ERR_NO_RESOURCE; \
     } \
@@ -102,11 +102,11 @@ enum {
 
 #define UCT_RC_UPDATE_FC_WND(_iface, _fc) \
     { \
-        _fc.fc_wnd--; \
+        (_fc)->fc_wnd--; \
         \
         if ((_iface)->config.fc_enabled) { \
-            UCS_STATS_SET_COUNTER(_fc.stats, UCT_RC_FC_STAT_FC_WND, \
-                                  _fc.fc_wnd); \
+            UCS_STATS_SET_COUNTER((_fc)->stats, UCT_RC_FC_STAT_FC_WND, \
+                                  (_fc)->fc_wnd); \
         } \
     }
 
@@ -114,7 +114,7 @@ enum {
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= (_iface)->config.fc_soft_thresh)) { \
             if ((_iface)->config.fc_enabled) { \
-                UCT_RC_CHECK_FC_WND((_ep)->fc, (_ep)->super.stats); \
+                UCT_RC_CHECK_FC_WND(&(_ep)->fc, (_ep)->super.stats); \
                 (_am_id) |= uct_rc_fc_req_moderation(&(_ep)->fc, _iface); \
             } else { \
                 /* Set fc_wnd to max, to send as much as possible without checks */ \
@@ -137,7 +137,7 @@ enum {
         \
         (_ep)->fc.flags = 0; \
         \
-        UCT_RC_UPDATE_FC_WND(_iface, (_ep)->fc) \
+        UCT_RC_UPDATE_FC_WND(_iface, &(_ep)->fc) \
     }
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
@@ -171,12 +171,6 @@ struct uct_rc_ep {
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
 };
-
-typedef struct uct_rc_fc_request {
-    uct_pending_req_t req;
-    uct_ep_t          *ep;
-    char              priv[UCT_RC_FC_TL_PRIV_LEN];
-} uct_rc_fc_request_t;
 
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*);
 

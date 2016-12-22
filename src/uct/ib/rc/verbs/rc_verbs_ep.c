@@ -523,7 +523,8 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op, void *arg)
+ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
+                                     uct_rc_fc_request_t *req)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rc_verbs_iface_t);

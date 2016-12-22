@@ -22,7 +22,6 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_MAX_ATOMIC_SIZE      sizeof(uint64_t)
 #define UCR_RC_QP_MAX_RETRY_COUNT   7
-#define UCT_RC_FC_TL_PRIV_LEN       24
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
@@ -99,6 +98,17 @@ typedef struct uct_rc_hdr {
 } UCS_S_PACKED uct_rc_hdr_t;
 
 
+typedef struct uct_rc_fc_request {
+    uct_pending_req_t req;
+    uct_ep_t          *ep;
+} uct_rc_fc_request_t;
+
+
+typedef struct uct_rc_fc_config {
+    double            soft_thresh;
+} uct_rc_fc_config_t;
+
+
 struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
     uct_ib_mtu_t             path_mtu;
@@ -122,7 +132,8 @@ struct uct_rc_iface_config {
 
 typedef struct uct_rc_iface_ops {
     uct_ib_iface_ops_t   super;
-    ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op, void *arg);
+    ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
+                                    uct_rc_fc_request_t *req);
     ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
@@ -186,8 +197,8 @@ struct uct_rc_iface {
     ucs_list_link_t          ep_list;
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
-                  uct_worker_h, const uct_iface_params_t*,
-                  unsigned, const uct_rc_iface_config_t*)
+                  uct_worker_h, const uct_iface_params_t*, unsigned,
+                  const uct_rc_iface_config_t*, unsigned)
 
 
 struct uct_rc_iface_send_op {
@@ -220,6 +231,7 @@ typedef struct uct_rc_am_short_hdr {
 
 
 extern ucs_config_field_t uct_rc_iface_config_table[];
+extern ucs_config_field_t uct_rc_fc_config_table[];
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
 
@@ -241,7 +253,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
                                      uint32_t imm_data, uint16_t lid, void *desc);
 
-ucs_status_t uct_rc_init_fc_thresh(double soft_thresh, uct_rc_iface_config_t *cfg,
+ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
+                                   uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface);
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,

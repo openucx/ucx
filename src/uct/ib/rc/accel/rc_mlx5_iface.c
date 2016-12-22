@@ -16,18 +16,18 @@
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, fc),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
    "a minimum between this value and the number of building blocks in the TX QP.\n"
    "-1 means no limit.",
    ucs_offsetof(uct_rc_mlx5_iface_config_t, tx_max_bb), UCS_CONFIG_TYPE_UINT},
-
-  {"FC_SOFT_THRESH", "0.5",
-   "Threshold for sending soft request for FC credits to the peer. This value\n"
-   "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, fc_soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
   {NULL}
 };
@@ -132,13 +132,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, md, worker,
-                              params, 0, &config->super);
+                              params, 0, &config->super, sizeof(uct_rc_fc_request_t));
 
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
 
-    status = uct_rc_init_fc_thresh(config->fc_soft_thresh, &config->super, &self->super);
+    status = uct_rc_init_fc_thresh(&config->fc, &config->super, &self->super);
     if (status != UCS_OK) {
         return status;
     }

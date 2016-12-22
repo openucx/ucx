@@ -8,6 +8,7 @@
 #include "rc_verbs_common.h"
 
 #include <uct/api/uct.h>
+#include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/base/uct_md.h>
@@ -27,10 +28,9 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_config_t, verbs_common),
    UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
 
-  {"FC_SOFT_THRESH", "0.5",
-   "Threshold for sending soft request for FC credits to the peer. This value\n"
-   "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
-   ucs_offsetof(uct_rc_verbs_iface_config_t, fc_soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_verbs_iface_config_t, fc),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
   {NULL}
 };
@@ -135,7 +135,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
-                              worker, params, 0, &config->super);
+                              worker, params, 0, &config->super,
+                              sizeof(uct_rc_fc_request_t));
 
     /* Initialize inline work request */
     /* TODO: move to common macro */
@@ -156,8 +157,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->super.config.tx_moderation        = ucs_min(self->super.config.tx_moderation,
                                                       self->config.tx_max_wr / 4);
     /* Check FC parameters correctness */
-    status = uct_rc_init_fc_thresh(config->fc_soft_thresh, &config->super,
-                                   &self->super);
+    status = uct_rc_init_fc_thresh(&config->fc, &config->super, &self->super);
     if (status != UCS_OK) {
         return status;
     }

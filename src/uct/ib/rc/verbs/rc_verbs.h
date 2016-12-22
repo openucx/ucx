@@ -29,7 +29,7 @@ typedef struct uct_rc_verbs_ep {
 typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     uct_rc_verbs_iface_common_config_t verbs_common;
-    double                             fc_soft_thresh;
+    uct_rc_fc_config_t                 fc;
 } uct_rc_verbs_iface_config_t;
 
 
@@ -119,6 +119,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
 void uct_rc_verbs_iface_progress(void *arg);
 
-ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op, void *arg);
+ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
+                                     uct_rc_fc_request_t *req);
 
 #endif
