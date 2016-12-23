@@ -7,6 +7,7 @@
 #ifndef UCS_LIBSTATS_H_
 #define UCS_LIBSTATS_H_
 
+#include <ucs/stats/stats_fd.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/math.h>
@@ -35,9 +36,6 @@ enum {
     (_node)->cls->name, (_node)->name
 
 
-typedef uint64_t                   ucs_stats_counter_t; /* Stats counter*/
-typedef struct ucs_stats_class     ucs_stats_class_t;   /* Stats class */
-typedef struct ucs_stats_node      ucs_stats_node_t;    /* Stats node */
 typedef struct ucs_stats_server    *ucs_stats_server_h; /* Handle to server */
 typedef struct ucs_stats_client    *ucs_stats_client_h; /* Handle to client */
 

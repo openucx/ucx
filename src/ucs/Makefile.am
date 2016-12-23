@@ -60,6 +60,7 @@ nobase_dist_libucs_la_HEADERS = \
 	debug/log.h \
 	debug/memtrack.h \
 	debug/profile.h \
+	stats/stats_fd.h \
 	stats/libstats.h \
 	stats/stats.h \
 	sys/compiler.h \

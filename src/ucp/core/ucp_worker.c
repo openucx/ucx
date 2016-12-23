@@ -193,6 +193,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
 
     iface_params.tl_name     = resource->tl_rsc.tl_name;
     iface_params.dev_name    = resource->tl_rsc.dev_name;
+    iface_params.stats_root  = NULL;
     iface_params.rx_headroom = sizeof(ucp_recv_desc_t);
     iface_params.cpu_mask    = *cpu_mask_param;
 

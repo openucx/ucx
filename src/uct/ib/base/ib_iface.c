@@ -477,8 +477,15 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     uint8_t port_num;
     int preferred_cpu;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                              &config->super UCS_STATS_ARG(dev->stats));
+    if (params->stats_root == NULL) {
+        UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
+                                  &config->super UCS_STATS_ARG(dev->stats)
+                                  UCS_STATS_ARG(params->dev_name));
+    } else {
+        UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
+                                  &config->super UCS_STATS_ARG(params->stats_root)
+                                  UCS_STATS_ARG(params->dev_name));
+    }
 
     status = uct_ib_device_find_port(dev, params->dev_name, &port_num);
     if (status != UCS_OK) {
