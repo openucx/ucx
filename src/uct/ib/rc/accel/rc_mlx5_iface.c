@@ -16,7 +16,12 @@
 
 ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
   {"RC_", "", NULL,
-   ucs_offsetof(uct_rc_mlx5_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, super),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_mlx5_iface_config_t, fc),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
   {"TX_MAX_BB", "-1",
    "Limits the number of outstanding WQE building blocks. The actual limit is\n"
@@ -127,11 +132,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, md, worker,
-                              params, 0, &config->super);
+                              params, 0, &config->super, sizeof(uct_rc_fc_request_t));
 
     self->tx.bb_max                  = ucs_min(config->tx_max_bb, UINT16_MAX);
     self->super.config.tx_moderation = ucs_min(self->super.config.tx_moderation,
                                                self->tx.bb_max / 4);
+
+    status = uct_rc_init_fc_thresh(&config->fc, &config->super, &self->super);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = uct_rc_mlx5_iface_common_init(&self->mlx5_common, &self->super, &config->super);
     /* Set max_iov for put_zcopy and get_zcopy */
@@ -198,7 +208,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .arm_rx_cq                = uct_rc_mlx5_iface_arm_rx_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure
     },
-    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl
+    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
+    .fc_handler               = uct_rc_iface_fc_handler
 };
 
 

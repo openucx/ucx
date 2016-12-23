@@ -92,15 +92,29 @@ enum {
 /*
  * check for FC credits and add FC protocol bits (if any)
  */
-#define UCT_RC_CHECK_FC_WND(_iface, _ep, _am_id) \
-    do { \
+#define UCT_RC_CHECK_FC_WND(_fc, _stats)\
+    if ((_fc)->fc_wnd <= 0) { \
+        UCS_STATS_UPDATE_COUNTER((_fc)->stats, UCT_RC_FC_STAT_NO_CRED, 1); \
+        UCS_STATS_UPDATE_COUNTER(_stats, UCT_EP_STAT_NO_RES, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    } \
+
+
+#define UCT_RC_UPDATE_FC_WND(_iface, _fc) \
+    { \
+        (_fc)->fc_wnd--; \
+        \
+        if ((_iface)->config.fc_enabled) { \
+            UCS_STATS_SET_COUNTER((_fc)->stats, UCT_RC_FC_STAT_FC_WND, \
+                                  (_fc)->fc_wnd); \
+        } \
+    }
+
+#define UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
+    { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= (_iface)->config.fc_soft_thresh)) { \
             if ((_iface)->config.fc_enabled) { \
-                if ((_ep)->fc.fc_wnd <= 0) { \
-                    UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_NO_CRED, 1); \
-                    UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
-                    return UCS_ERR_NO_RESOURCE; \
-                } \
+                UCT_RC_CHECK_FC_WND(&(_ep)->fc, (_ep)->super.stats); \
                 (_am_id) |= uct_rc_fc_req_moderation(&(_ep)->fc, _iface); \
             } else { \
                 /* Set fc_wnd to max, to send as much as possible without checks */ \
@@ -108,10 +122,10 @@ enum {
             } \
         } \
         (_am_id) |= uct_rc_fc_get_fc_hdr((_ep)->fc.flags); /* take grant bit */ \
-    } while (0)
+    }
 
-#define UCT_RC_UPDATE_FC_WND(_iface, _ep, _fc_hdr) \
-    do { \
+#define UCT_RC_UPDATE_FC(_iface, _ep, _fc_hdr) \
+    { \
         if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_GRANT) { \
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_GRANT, 1); \
         } \
@@ -121,14 +135,10 @@ enum {
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1); \
         } \
         \
-        (_ep)->fc.fc_wnd--; \
         (_ep)->fc.flags = 0; \
         \
-        if ((_iface)->config.fc_enabled) { \
-            UCS_STATS_SET_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_FC_WND, \
-                                  (_ep)->fc.fc_wnd); \
-        } \
-    } while (0)
+        UCT_RC_UPDATE_FC_WND(_iface, &(_ep)->fc) \
+    }
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
     UCT_RC_CHECK_CQE(_iface, (_ep)) \
@@ -148,7 +158,6 @@ typedef struct uct_rc_fc {
     int16_t             fc_wnd;
     /* used only for FC protocol at this point (3 higher bits) */
     uint8_t             flags;
-    uct_pending_req_t   fc_grant_req;
     UCS_STATS_NODE_DECLARE(stats);
 } uct_rc_fc_t;
 

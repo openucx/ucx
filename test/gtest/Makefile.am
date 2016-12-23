@@ -158,6 +158,7 @@ noinst_HEADERS = \
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
+	uct/test_rc.h \
 	uct/ud_base.h \
 	\
 	ucp/test_ucp_atomic.h \

@@ -90,6 +90,25 @@ enum {
 typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op);
 
 
+/**
+ * RC network header.
+ */
+typedef struct uct_rc_hdr {
+    uint8_t           am_id;  /* Active message ID */
+} UCS_S_PACKED uct_rc_hdr_t;
+
+
+typedef struct uct_rc_fc_request {
+    uct_pending_req_t req;
+    uct_ep_t          *ep;
+} uct_rc_fc_request_t;
+
+
+typedef struct uct_rc_fc_config {
+    double            soft_thresh;
+} uct_rc_fc_config_t;
+
+
 struct uct_rc_iface_config {
     uct_ib_iface_config_t    super;
     uct_ib_mtu_t             path_mtu;
@@ -105,7 +124,6 @@ struct uct_rc_iface_config {
 
     struct {
         int                  enable;
-        double               soft_thresh;
         double               hard_thresh;
         unsigned             wnd_size;
     } fc;
@@ -114,7 +132,12 @@ struct uct_rc_iface_config {
 
 typedef struct uct_rc_iface_ops {
     uct_ib_iface_ops_t   super;
-    ucs_status_t         (*fc_ctrl)(uct_rc_ep_t *ep);
+    ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
+                                    uct_rc_fc_request_t *req);
+    ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
+                                       uct_rc_hdr_t *hdr, unsigned length,
+                                       uint32_t imm_data, uint16_t lid,
+                                       void *desc);
 } uct_rc_iface_ops_t;
 
 
@@ -123,6 +146,7 @@ struct uct_rc_iface {
 
     struct {
         ucs_mpool_t          mp;
+        ucs_mpool_t          fc_mp; /* pool for FC grant pending reguests */
         uct_rc_iface_send_op_t *ops;
         unsigned             cq_available;
         unsigned             next_op;
@@ -173,8 +197,8 @@ struct uct_rc_iface {
     ucs_list_link_t          ep_list;
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
-                  uct_worker_h, const uct_iface_params_t*,
-                  unsigned, const uct_rc_iface_config_t*)
+                  uct_worker_h, const uct_iface_params_t*, unsigned,
+                  const uct_rc_iface_config_t*, unsigned)
 
 
 struct uct_rc_iface_send_op {
@@ -197,14 +221,6 @@ struct uct_rc_iface_send_desc {
 };
 
 
-/**
- * RC network header.
- */
-typedef struct uct_rc_hdr {
-    uint8_t           am_id;  /* Active message ID */
-} UCS_S_PACKED uct_rc_hdr_t;
-
-
 /*
  * Short active message header (active message header is always 64 bit).
  */
@@ -215,6 +231,7 @@ typedef struct uct_rc_am_short_hdr {
 
 
 extern ucs_config_field_t uct_rc_iface_config_table[];
+extern ucs_config_field_t uct_rc_fc_config_table[];
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
 
@@ -232,9 +249,13 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct ibv_qp **qp_p,
                                     struct ibv_qp_cap *cap);
 
-ucs_status_t uct_rc_iface_handle_fc(uct_rc_iface_t *iface, unsigned qp_num,
-                                    uct_rc_hdr_t *hdr, unsigned length,
-                                    void *desc);
+ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
+                                     uct_rc_hdr_t *hdr, unsigned length,
+                                     uint32_t imm_data, uint16_t lid, void *desc);
+
+ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
+                                   uct_rc_iface_config_t *rc_cfg,
+                                   uct_rc_iface_t *iface);
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
                                                   unsigned qp_num)

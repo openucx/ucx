@@ -8,6 +8,7 @@
 #include "rc_verbs_common.h"
 
 #include <uct/api/uct.h>
+#include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/base/uct_md.h>
@@ -26,6 +27,10 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, verbs_common),
    UCS_CONFIG_TYPE_TABLE(uct_rc_verbs_iface_common_config_table)},
+
+  {"", "", NULL,
+   ucs_offsetof(uct_rc_verbs_iface_config_t, fc),
+   UCS_CONFIG_TYPE_TABLE(uct_rc_fc_config_table)},
 
   {NULL}
 };
@@ -130,7 +135,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
-                              worker, params, 0, &config->super);
+                              worker, params, 0, &config->super,
+                              sizeof(uct_rc_fc_request_t));
 
     /* Initialize inline work request */
     /* TODO: move to common macro */
@@ -150,6 +156,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                       self->super.config.tx_qp_len);
     self->super.config.tx_moderation        = ucs_min(self->super.config.tx_moderation,
                                                       self->config.tx_max_wr / 4);
+    /* Check FC parameters correctness */
+    status = uct_rc_init_fc_thresh(&config->fc, &config->super, &self->super);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super,
                                             &config->verbs_common, &config->super);
@@ -233,7 +244,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
     .handle_failure           = uct_rc_verbs_handle_failure
     },
-    .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl
+    .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
+    .fc_handler               = uct_rc_iface_fc_handler
 };
 
 static ucs_status_t uct_rc_verbs_query_resources(uct_md_h md,
