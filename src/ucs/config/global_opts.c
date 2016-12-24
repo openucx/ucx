@@ -157,7 +157,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, instrument_types),
   UCS_CONFIG_TYPE_BITMAP(ucs_instrumentation_type_names)},
 
- {"INSTRUMENT_SIZE", "1048576",
+ {"INSTRUMENT_SIZE", "1m",
   "Maximal size of instrumentation data. New records will replace old records.",
   ucs_offsetof(ucs_global_opts_t, instrument_max_size),
   UCS_CONFIG_TYPE_MEMUNITS},
@@ -176,7 +176,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.\n",
    ucs_offsetof(ucs_global_opts_t, profile_file), UCS_CONFIG_TYPE_STRING},
 
-  {"PROFILE_LOG_SIZE", "4mb",
+  {"PROFILE_LOG_SIZE", "4m",
    "Maximal size of profiling log. New records will replace old records.",
    ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
 #endif
