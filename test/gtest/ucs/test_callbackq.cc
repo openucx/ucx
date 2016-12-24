@@ -350,7 +350,7 @@ protected:
     }
 
     void remove_timer(int timer_id) {
-        ucs_async_remove_timer(timer_id);
+        ucs_async_remove_handler(timer_id, 1);
     }
 
     void timer() {

@@ -339,7 +339,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cm_iface_t)
 
     ucs_trace_func("");
 
-    ucs_async_unset_event_handler(self->cmdev->fd);
+    ucs_async_remove_handler(self->cmdev->fd, 1);
 
     uct_cm_enter(self);
     uct_cm_iface_outstanding_purge(self);

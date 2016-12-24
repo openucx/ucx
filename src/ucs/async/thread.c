@@ -12,8 +12,6 @@
 #include "async_int.h"
 #include "pipe.h"
 
-#include <ucs/time/timerq.h>
-
 
 #define UCS_ASYNC_EPOLL_MAX_EVENTS      16
 #define UCS_ASYNC_EPOLL_MIN_TIMEOUT_MS  2.0
@@ -39,7 +37,6 @@ static void *ucs_async_thread_func(void *arg)
     struct epoll_event events[UCS_ASYNC_EPOLL_MAX_EVENTS];
     ucs_time_t last_time, curr_time, timer_interval, time_spent;
     int i, nready, is_missed, timeout_ms;
-    ucs_timer_t *timer;
     ucs_status_t status;
     int fd;
 
@@ -79,7 +76,7 @@ static void *ucs_async_thread_func(void *arg)
                     continue;
                 }
 
-                status = ucs_async_dispatch_handler(fd, 1);
+                status = ucs_async_dispatch_handlers(&fd, 1);
                 if (status == UCS_ERR_NO_PROGRESS) {
                     is_missed = 1;
                 }
@@ -89,13 +86,12 @@ static void *ucs_async_thread_func(void *arg)
         /* Check timers */
         curr_time = ucs_get_time();
         if (curr_time - last_time > timer_interval) {
-            /*
-             * This will not deadlock with main thread trying to add/remove
-             * timers, because dispatch_timers uses trylock.
-             */
-            ucs_timerq_for_each_expired(timer, &ucs_async_thread_global_context.timerq, curr_time) {
-                ucs_async_dispatch_handler(timer->id, 1);
+            status = ucs_async_dispatch_timerq(&ucs_async_thread_global_context.timerq,
+                                               curr_time);
+            if (status == UCS_ERR_NO_PROGRESS) {
+                 is_missed = 1;
             }
+
             last_time = curr_time;
         }
     }
@@ -260,7 +256,7 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
     return UCS_OK;
 }
 
-static int ucs_async_thread_try_block(ucs_async_context_t *async, int from_async)
+static int ucs_async_thread_try_block(ucs_async_context_t *async)
 {
     return
 #if !(NVALGRIND)
