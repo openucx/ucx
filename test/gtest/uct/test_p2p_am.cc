@@ -274,8 +274,7 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
         am_sync_finish();
     }
 
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL,
-                                      UCT_AM_CB_FLAG_SYNC);
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
     ASSERT_UCS_OK(status);
 }
 
@@ -456,7 +455,8 @@ UCS_TEST_P(uct_p2p_am_misc, no_rx_buffs) {
     if (m_rx_buf_limit_failed) {
         UCS_TEST_SKIP_R("Current transport doesn't have rx memory pool");
     }
-    check_caps(UCT_IFACE_FLAG_AM_SHORT);
+
+    check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_CB_SYNC);
 
     /* set a callback for the uct to invoke for receiving the data */
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
