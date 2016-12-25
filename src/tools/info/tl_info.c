@@ -163,6 +163,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         }
         printf("#           connection:%s\n", buf);
 
+        printf("#             priority: %d\n", iface_attr.priority);
+
         printf("#       device address: %zu bytes\n", iface_attr.device_addr_len);
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
             printf("#        iface address: %zu bytes\n", iface_attr.iface_addr_len);
