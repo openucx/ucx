@@ -34,7 +34,6 @@ public:
     }
 
     void unset_handler(bool sync = true) {
-        ucs_info("m_handler_set=%d", m_handler_set);
         if (ucs_atomic_cswap32(&m_handler_set, 1, 0)) {
             ucs_status_t status = ucs_async_remove_handler(event_id(), sync);
             ASSERT_UCS_OK(status);
@@ -534,6 +533,56 @@ UCS_TEST_P(test_async, event_unset_from_handler) {
     le.push_event();
     suspend_and_poll(&le, COUNT);
     EXPECT_EQ(1, le.count());
+}
+
+class local_event_add_handler : public local_event {
+public:
+    local_event_add_handler(ucs_async_mode_t mode) :
+        local_event(mode), m_event_set(false)
+    {
+         int ret = pipe(m_pipefd);
+         ucs_assertv(0 == ret, "%m");
+    }
+
+    ~local_event_add_handler() {
+        close(m_pipefd[0]);
+        close(m_pipefd[1]);
+    }
+
+    void unset_handler(int sync) {
+        local_event::unset_handler(sync);
+        if (m_event_set) {
+            ucs_status_t status = ucs_async_remove_handler(m_pipefd[0], sync);
+            ASSERT_UCS_OK(status);
+            m_event_set = false;
+        }
+    }
+
+protected:
+    static void dummy_cb(int id, void *arg) {
+    }
+
+    virtual void handler() {
+         base::handler();
+         if (!m_event_set) {
+             ucs_status_t status = ucs_async_set_event_handler(mode(), m_pipefd[0],
+                                                               POLLIN, dummy_cb,
+                                                               this, &m_async);
+             ASSERT_UCS_OK(status);
+             m_event_set = true;
+         }
+    }
+
+    int m_pipefd[2];
+    bool m_event_set;
+};
+
+UCS_TEST_P(test_async, event_add_from_handler) {
+    local_event_add_handler le(GetParam());
+
+    le.push_event();
+    sched_yield(); /* let the async handler run, to provoke the race */
+    le.unset_handler(1);
 }
 
 typedef test_async_mt<local_event> test_async_event_mt;
