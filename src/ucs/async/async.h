@@ -34,8 +34,13 @@ struct ucs_async_context {
 };
 
 
-/* Async event callback */
-typedef void (*ucs_async_event_cb_t)(void *arg);
+/**
+ * Async event callback.
+ *
+ * @param id           Event id (timer or file descriptor).
+ * @param arg          User-defined argument.
+ */
+typedef void (*ucs_async_event_cb_t)(int id, void *arg);
 
 
 /**
