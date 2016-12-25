@@ -295,10 +295,22 @@ err:
 
 void ucs_async_context_cleanup(ucs_async_context_t *async)
 {
+    ucs_async_handler_t *handler;
+    char name[200];
+
     ucs_trace_func("async=%p", async);
 
     if (async->num_handlers > 0) {
+        pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
+        kh_foreach_value(&ucs_async_global_context.handlers, handler, {
+            if (async == handler->async) {
+                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" %s() not released",
+                         async, UCS_ASYNC_HANDLER_ARG(handler),
+                         ucs_debug_get_symbol_name(handler->cb, name, sizeof(name)));
+            }
+        });
         ucs_warn("releasing async context with %d handlers", async->num_handlers);
+        pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
     }
     ucs_mpmc_queue_cleanup(&async->missed);
 }
@@ -329,7 +341,7 @@ static ucs_status_t ucs_async_alloc_handler(ucs_async_mode_t mode, int id,
     handler = ucs_malloc(sizeof *handler, "async handler");
     if (handler == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_dec_num_handlers;
     }
 
     handler->id       = id;
