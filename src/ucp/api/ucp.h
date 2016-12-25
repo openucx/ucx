@@ -116,7 +116,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_REQUEST_INIT      = UCS_BIT(2), /**< request_init */
     UCP_PARAM_FIELD_REQUEST_CLEANUP   = UCS_BIT(3), /**< request_cleanup */
     UCP_PARAM_FIELD_TAG_SENDER_MASK   = UCS_BIT(4), /**< tag_sender_mask */
-    UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5)  /**< context thread flag */
+    UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
+    UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6)  /**< estimated_num_eps */
 };
 
 
@@ -470,6 +471,14 @@ typedef struct ucp_params {
      * then this context needs thread safety.
      */
     int                                mt_workers_shared;
+
+    /**
+     * An optimization hint of how many endpoints would be created on this context.
+     * Does not affect semantics, but only transport selection criteria and the
+     * resulting performance.
+     */
+    size_t                             estimated_num_eps;
+
 } ucp_params_t;
 
 
