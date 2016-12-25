@@ -119,10 +119,9 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
-    size_t offset, length, ucp_mtu;
+    size_t offset, length, ucp_mtu, align;
     uct_iov_t iov[1];
     ucp_rsc_index_t rsc_index;
-    uint16_t align;
 
     if (ucp_ep_is_stub(rndv_req->send.ep)) {
         return UCS_ERR_NO_RESOURCE;

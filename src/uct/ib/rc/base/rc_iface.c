@@ -137,6 +137,13 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                                  UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
                                  UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
+
+    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
+    iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
+    iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
 }
 
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)

@@ -34,16 +34,12 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.get.min_zcopy = 0;
     iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
     iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
 
     /* AM */
@@ -51,8 +47,6 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
     iface_attr->cap.am.min_zcopy  = 0;
     iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - sizeof(uct_rc_hdr_t);
-    iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
     /* The first IOV is reserved for the header */
     iface_attr->cap.am.max_iov    = uct_ib_iface_get_max_iov(&iface->super) - 1;
 
