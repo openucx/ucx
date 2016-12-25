@@ -263,9 +263,12 @@ ucs_log_func_rc_t ucp_test::empty_log_handler(const char *file, unsigned line,
                                               va_list ap)
 {
     if (level == UCS_LOG_LEVEL_ERROR) {
+        va_list ap2;
         std::string msg;
         msg.resize(256);
-        vsnprintf(&msg[0], msg.size() - 1, message, ap);
+        va_copy(ap2, ap);
+        vsnprintf(&msg[0], msg.size() - 1, message, ap2);
+        va_end(ap2);
         msg.resize(strlen(&msg[0]));
         m_last_err_msg = msg;
         level = UCS_LOG_LEVEL_DEBUG;
