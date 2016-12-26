@@ -94,12 +94,16 @@ protected:
     static ucs_status_t dt_unpack(void *state, size_t offset, const void *src,
                                   size_t length);
 
+    static ucs_status_t dt_err_unpack(void *state, size_t offset, const void *src,
+                                      size_t length);
+
     static void dt_common_finish(void *state);
 
     static const uint32_t MAGIC = 0xd7d7d7d7U;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
     static ucp_generic_dt_ops test_dt_uint32_ops;
+    static ucp_generic_dt_ops test_dt_uint32_err_ops;
     static ucp_generic_dt_ops test_dt_uint8_ops;
     static int dt_gen_start_count;
     static int dt_gen_finish_count;
