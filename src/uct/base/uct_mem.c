@@ -210,20 +210,18 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
         }
 
         /* If MD does not support registration, allow only the MD method */
-        if (!(md_attr.cap.flags & UCT_MD_FLAG_REG)) {
-            ucs_error("%s md does not support registration, so cannot use any allocation "
-                      "method except 'md'", iface->md->component->name);
-            status = UCS_ERR_NO_MEMORY;
-            goto err_free;
+        if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
+            status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
+                                    &mem->memh);
+            if (status != UCS_OK) {
+                goto err_free;
+            }
+
+            ucs_assert(mem->memh != UCT_INVALID_MEM_HANDLE);
+        } else {
+            mem->memh = UCT_INVALID_MEM_HANDLE;
         }
 
-        status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
-                                &mem->memh);
-        if (status != UCS_OK) {
-            goto err_free;
-        }
-
-        ucs_assert(mem->memh != UCT_INVALID_MEM_HANDLE);
         mem->md = iface->md;
     }
 
@@ -237,7 +235,9 @@ err:
 
 void uct_iface_mem_free(const uct_allocated_memory_t *mem)
 {
-    if (mem->method != UCT_ALLOC_METHOD_MD) {
+    if ((mem->method != UCT_ALLOC_METHOD_MD) &&
+        (mem->memh != UCT_INVALID_MEM_HANDLE))
+    {
         uct_md_mem_dereg(mem->md, mem->memh);
     }
     uct_mem_free(mem);

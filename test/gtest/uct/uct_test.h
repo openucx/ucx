@@ -58,7 +58,9 @@ protected:
 
         void progress() const;
 
-        uct_md_h pd() const;
+        uct_md_h md() const;
+
+        const uct_md_attr& md_attr() const;
 
         uct_worker_h worker() const;
 
@@ -96,7 +98,8 @@ protected:
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
 
-        ucs::handle<uct_md_h>      m_pd;
+        ucs::handle<uct_md_h>      m_md;
+        uct_md_attr_t              m_md_attr;
         mutable async_wrapper      m_async;
         ucs::handle<uct_worker_h>  m_worker;
         ucs::handle<uct_iface_h>   m_iface;

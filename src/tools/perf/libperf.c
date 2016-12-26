@@ -467,7 +467,11 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    info.rkey_size          = md_attr.rkey_packed_size;
+    if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+        info.rkey_size      = md_attr.rkey_packed_size;
+    } else {
+        info.rkey_size      = 0;
+    }
     info.uct.dev_addr_len   = iface_attr.device_addr_len;
     info.uct.iface_addr_len = iface_attr.iface_addr_len;
     info.uct.ep_addr_len    = iface_attr.ep_addr_len;
@@ -494,10 +498,12 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
     }
 
-    status = uct_md_mkey_pack(perf->uct.md, perf->uct.recv_mem.memh, rkey_buffer);
-    if (status != UCS_OK) {
-        ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
-        goto err_free;
+    if (info.rkey_size > 0) {
+        status = uct_md_mkey_pack(perf->uct.md, perf->uct.recv_mem.memh, rkey_buffer);
+        if (status != UCS_OK) {
+            ucs_error("Failed to uct_rkey_pack: %s", ucs_status_string(status));
+            goto err_free;
+        }
     }
 
     group_size  = rte_call(perf, group_size);
@@ -550,10 +556,16 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         ep_addr     = (void*)iface_addr  + remote_info->uct.iface_addr_len;
         perf->uct.peers[i].remote_addr = remote_info->recv_buffer;
 
-        status = uct_rkey_unpack(rkey_buffer, &perf->uct.peers[i].rkey);
-        if (status != UCS_OK) {
-            ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
-            goto err_destroy_eps;
+        if (remote_info->rkey_size > 0) {
+            status = uct_rkey_unpack(rkey_buffer, &perf->uct.peers[i].rkey);
+            if (status != UCS_OK) {
+                ucs_error("Failed to uct_rkey_unpack: %s", ucs_status_string(status));
+                goto err_destroy_eps;
+            }
+        } else {
+            perf->uct.peers[i].rkey.handle = NULL;
+            perf->uct.peers[i].rkey.type   = NULL;
+            perf->uct.peers[i].rkey.rkey   = UCT_INVALID_RKEY;
         }
 
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
@@ -604,7 +616,9 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
-            uct_rkey_release(&perf->uct.peers[i].rkey);
+            if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
+                uct_rkey_release(&perf->uct.peers[i].rkey);
+            }
             if (perf->uct.peers[i].ep) {
                 uct_ep_destroy(perf->uct.peers[i].ep);
             }
