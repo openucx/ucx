@@ -60,3 +60,4 @@ test/mpi/run_mpi.sh
 *.tap
 valgrind.xml
 tags
+.pydevproject
