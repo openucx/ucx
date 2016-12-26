@@ -20,6 +20,7 @@ public:
     void test_xfer_contig(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_generic(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_iov(size_t size, bool expected, bool sync, bool truncated);
+    void test_xfer_generic_err(size_t size, bool expected, bool sync, bool truncated);
 
 protected:
     typedef void (test_ucp_tag_xfer::* xfer_func_t)(size_t size, bool expected,
@@ -296,6 +297,47 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
     EXPECT_TRUE(!memcmp(sendbuf.data(), recvbuf.data(), recvd));
 }
 
+void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
+                                              bool sync, bool truncated)
+{
+    size_t count = size / sizeof(uint32_t);
+    ucp_datatype_t dt;
+    ucs_status_t status;
+    request *rreq, *sreq;
+
+    dt_gen_start_count  = 0;
+    dt_gen_finish_count = 0;
+
+    status = ucp_dt_create_generic(&test_dt_uint32_err_ops, this, &dt);
+    ASSERT_UCS_OK(status);
+
+    if (expected) {
+        rreq = recv_nb(NULL, count, dt, RECV_TAG, RECV_MASK);
+        sreq = do_send(NULL, count, dt, sync);
+    } else {
+        sreq = do_send(NULL, count, dt, sync);
+        short_progress_loop();
+        if (sync) {
+            EXPECT_FALSE(sreq->completed);
+        }
+        rreq = recv_nb(NULL, count, dt, RECV_TAG, RECV_MASK);
+    }
+
+    /* progress both sender and receiver */
+    wait(rreq);
+    if (sreq != NULL) {
+        wait(sreq);
+        request_release(sreq);
+    }
+
+    /* the generic unpack function is expected to fail */
+    EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
+    request_release(rreq);
+    EXPECT_EQ(2, dt_gen_start_count);
+    EXPECT_EQ(2, dt_gen_finish_count);
+    ucp_dt_destroy(dt);
+}
+
 test_ucp_tag_xfer::request*
 test_ucp_tag_xfer::do_send(const void *sendbuf, size_t count, ucp_datatype_t dt,
                            bool sync)
@@ -385,6 +427,27 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_exp_truncated) {
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_unexp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp_sync) {
+    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
+                                       (instead request) if send operation
+                                       completed immediately */
+        UCS_TEST_SKIP_R("loop-back unsupported");
+    }
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp_sync) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, false, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync) {
