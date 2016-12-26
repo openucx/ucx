@@ -40,7 +40,7 @@ static ucs_status_t ucp_memh_dereg_mds(ucp_context_h context, ucp_mem_h memh,
             continue;
         }
 
-        if (memh->alloc_md == context->mds[md_index]) {
+        if (memh->alloc_md == context->tl_mds[md_index].md) {
             /* If we used a md to register the memory, remember the memh - for
              * releasing the memory later. We cannot release the memory at this
              * point because we have to unregister it from other MDs first.
@@ -48,11 +48,11 @@ static ucs_status_t ucp_memh_dereg_mds(ucp_context_h context, ucp_mem_h memh,
             ucs_assert(memh->alloc_method == UCT_ALLOC_METHOD_MD);
             *alloc_md_memh_p = memh->uct[uct_index];
         } else {
-            status = uct_md_mem_dereg(context->mds[md_index],
+            status = uct_md_mem_dereg(context->tl_mds[md_index].md,
                                       memh->uct[uct_index]);
             if (status != UCS_OK) {
                 ucs_error("Failed to dereg address %p with md %s", memh->address,
-                         context->md_rscs[md_index].md_name);
+                         context->tl_mds[md_index].rsc.md_name);
                 return status;
             }
         }
@@ -81,14 +81,14 @@ static ucs_status_t ucp_memh_reg_mds(ucp_context_h context, ucp_mem_h memh,
 
     /* Register on all transports (except the one we used to allocate) */
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        if (context->mds[md_index] == memh->alloc_md) {
+        if (context->tl_mds[md_index].md == memh->alloc_md) {
             /* Add the memory handle we got from allocation */
             ucs_assert(memh->alloc_method == UCT_ALLOC_METHOD_MD);
             memh->md_map |= UCS_BIT(md_index);
             memh->uct[uct_memh_count++] = alloc_md_memh;
-        } else if (context->md_attrs[md_index].cap.flags & UCT_MD_FLAG_REG) {
+        } else if (context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG) {
             /* If the MD supports registration, register on it as well */
-            status = uct_md_mem_reg(context->mds[md_index], memh->address,
+            status = uct_md_mem_reg(context->tl_mds[md_index].md, memh->address,
                                     memh->length, uct_flags,
                                     &memh->uct[uct_memh_count]);
             if (status != UCS_OK) {
@@ -112,7 +112,7 @@ static int ucp_is_md_selected_by_config(ucp_context_h context,
                                         unsigned md_index)
 {
     const char *config_mdc_name = context->config.alloc_methods[config_method_index].mdc_name;
-    const char *mdc_name        = context->md_attrs[md_index].component_name;
+    const char *mdc_name        = context->tl_mds[md_index].attr.component_name;
 
     return !strncmp(config_mdc_name, "*",      UCT_MD_COMPONENT_NAME_MAX) ||
            !strncmp(config_mdc_name, mdc_name, UCT_MD_COMPONENT_NAME_MAX);
@@ -144,7 +144,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
         if (method == UCT_ALLOC_METHOD_MD) {
             for (md_index = 0; md_index < context->num_mds; ++md_index) {
                 if (ucp_is_md_selected_by_config(context, method_index, md_index)) {
-                    mds[num_mds++] = context->mds[md_index];
+                    mds[num_mds++] = context->tl_mds[md_index].md;
                 }
             }
         }

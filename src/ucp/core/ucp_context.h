@@ -253,13 +253,22 @@ typedef struct ucp_tl_alias {
 
 
 /**
+ * Memory domain.
+ */
+typedef struct ucp_tl_md {
+    uct_md_h                      md;       /* Memory domain handle */
+    uct_md_resource_desc_t        rsc;      /* Memory domain resource */
+    uct_md_attr_t                 attr;     /* Memory domain attributes */
+} ucp_tl_md_t;
+
+
+/**
  * UCP context
  */
 typedef struct ucp_context {
-    uct_md_resource_desc_t        *md_rscs;   /* Memory domain resources */
-    uct_md_h                      *mds;       /* Memory domain handles */
-    uct_md_attr_t                 *md_attrs;  /* Memory domain attributes */
+    ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
+    ucp_rsc_index_t               max_rkey_md;/* Maximal MD index with rkey */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
@@ -329,5 +338,6 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
 
 uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
+
 
 #endif
