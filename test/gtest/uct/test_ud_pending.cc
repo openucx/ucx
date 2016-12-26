@@ -43,7 +43,10 @@ public:
     void check_pending_reqs(bool wait)
     {
         /* wait for all work to be complete */
-        while (wait && (req_count < N)) {
+        ucs_time_t start_time = ucs_get_time();
+        while (wait && (req_count < N) &&
+               (ucs_get_time() < start_time + ucs_time_from_sec(10.0)))
+        {
             progress();
         }
         EXPECT_EQ(N, req_count);
