@@ -23,15 +23,6 @@ Release: %{rel}
 License: BSDv3
 Group: Applications
 Source: %{pkgname}-%{version}.tar.gz
-Requires: libibverbs
-%if 0%{?suse_version} < 1100
-BuildRequires: gcc-c++ libstdc++-devel libibverbs-devel binutils
-%else
-BuildRequires: gcc-c++ libstdc++-devel libibverbs-devel binutils-devel
-%endif
-%if %{with valgrind}
-BuildRequires: valgrind-devel
-%endif
 
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 URL: http://www.openucx.org
