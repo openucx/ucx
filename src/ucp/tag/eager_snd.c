@@ -53,7 +53,7 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
-    length               = ucp_ep_config(req->send.ep)->max_am_bcopy -
+    length               = ucp_ep_config(req->send.ep)->am.max_bcopy -
                                          sizeof(*hdr);
     hdr->super.super.tag = req->send.tag;
     hdr->total_len       = req->send.length;
@@ -72,7 +72,7 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
-    length                     = ucp_ep_config(req->send.ep)->max_am_bcopy -
+    length                     = ucp_ep_config(req->send.ep)->am.max_bcopy -
                                  sizeof(*hdr);
     hdr->super.super.super.tag = req->send.tag;
     hdr->super.total_len       = req->send.length;
@@ -93,7 +93,7 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
     ucp_request_t *req = arg;
     size_t length;
 
-    length         = ucp_ep_config(req->send.ep)->max_am_bcopy - sizeof(*hdr);
+    length         = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
     ucs_debug("pack eager_middle paylen %zu offset %zu", length,
               req->send.state.offset);
     hdr->super.tag = req->send.tag;

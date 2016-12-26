@@ -6,6 +6,7 @@
 */
 
 #include "test_ucp_memheap.h"
+#include <ucs/sys/sys.h>
 
 
 class test_ucp_rma : public test_ucp_memheap {
@@ -45,7 +46,7 @@ public:
     {
         ucs_status_t status;
 
-        ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + max_size);
+        ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + ucs_min(max_size, 16384U));
         status = ucp_get_nbi(e->ep(), (void *)&expected_data[0], expected_data.length(),
                              (uintptr_t)memheap_addr, rkey);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -58,84 +59,183 @@ public:
     {
         ucs_status_t status;
 
-        ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + max_size);
+        //ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + max_size);
+        ucs::fill_random((char*)memheap_addr, (char*)memheap_addr + ucs_min(max_size, 16384U));
         status = ucp_get(e->ep(), (void *)&expected_data[0], expected_data.length(),
                          (uintptr_t)memheap_addr, rkey);
         ASSERT_UCS_OK(status);
     }
+
+    void test_message_sizes(blocking_send_func_t func, size_t *msizes, int iters, int is_nbi);
 };
 
+void test_ucp_rma::test_message_sizes(blocking_send_func_t func, size_t *msizes, int iters, int is_nbi)
+{
+   int i;
+
+   for (i = 0; msizes[i] > 0; i++) {
+       if (is_nbi) {
+           test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(func),
+                                                 msizes[i], i, 1, false, false);
+       } else {
+           test_blocking_xfer(func, msizes[i], iters, 1, false, false);
+       }
+   }
+}
+
+UCS_TEST_P(test_ucp_rma, blocking_small) {
+    size_t sizes[] = { 8, 24, 96, 120, 250, 0};
+
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       sizes, 1000, 0);
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get), 
+                       sizes, 1000, 0);
+}
+
+UCS_TEST_P(test_ucp_rma, blocking_med) {
+    size_t sizes[] = { 1000, 3000, 9000, 17300, 31000, 99000, 130000, 0};
+
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       sizes, 100, 0);
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get), 
+                       sizes, 100, 0);
+}
+
+static const size_t MEG = 1024 * 1024ULL;
+
+UCS_TEST_P(test_ucp_rma, blocking_large) {
+    size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       sizes, 3, 0);
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get), 
+                       sizes, 3, 0);
+}
+
+UCS_TEST_P(test_ucp_rma, nbi_small) {
+    size_t sizes[] = { 8, 24, 96, 120, 250, 0};
+
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       sizes, 1000, 1);
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi), 
+                       sizes, 1000, 1);
+}
+
+UCS_TEST_P(test_ucp_rma, nbi_med) {
+    size_t sizes[] = { 1000, 3000, 9000, 17300, 31000, 99000, 130000, 0};
+
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       sizes, 100, 1);
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi), 
+                       sizes, 100, 1);
+}
+
+UCS_TEST_P(test_ucp_rma, nbi_large) {
+    size_t sizes[] = { 1 * MEG, 3 * MEG, 9 * MEG, 17 * MEG, 32 * MEG, 0};
+
+    if (RUNNING_ON_VALGRIND) {
+        UCS_TEST_SKIP_R("skipping on valgrind");
+    }
+
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       sizes, 3, 1);
+    test_message_sizes(static_cast<blocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi), 
+                       sizes, 3, 1);
+}
 
 UCS_TEST_P(test_ucp_rma, blocking_put_allocated) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
 }
 
 UCS_TEST_P(test_ucp_rma, blocking_put_registered) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_put),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_put_nbi_flush_worker) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_put_nbi_flush_ep) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, true);
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_worker) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_put_nbi_flush_ep) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, true);
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_put_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma, blocking_get) {
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
     test_blocking_xfer(static_cast<blocking_send_func_t>(&test_ucp_rma::blocking_get),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_get_nbi_flush_worker) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_get_nbi_flush_ep) {
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, true);
     test_blocking_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_get_nbi_flush_worker) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, false);
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, false);
 }
 
 UCS_TEST_P(test_ucp_rma, nonblocking_stream_get_nbi_flush_ep) {
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, false, true);
     test_nonblocking_implicit_stream_xfer(static_cast<nonblocking_send_func_t>(&test_ucp_rma::nonblocking_get_nbi),
+                       DEFAULT_SIZE, DEFAULT_ITERS,
                        1, true, true);
 }
 

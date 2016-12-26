@@ -38,7 +38,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
-    size_t max_middle  = ucp_ep_config(ep)->max_am_bcopy - hdr_size_middle;
+    size_t max_middle  = ucp_ep_config(ep)->am.max_bcopy - hdr_size_middle;
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;
@@ -122,7 +122,7 @@ ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep = req->send.ep;
-    size_t max_middle = ucp_ep_config(ep)->max_am_zcopy - hdr_size_middle;
+    size_t max_middle = ucp_ep_config(ep)->am.max_zcopy - hdr_size_middle;
     ucs_status_t status;
     size_t offset;
     uct_ep_h uct_ep;

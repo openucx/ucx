@@ -142,7 +142,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
         ucs_assert_always(status == UCS_OK);
 
         {
-            size_t max_get_zcopy = ucp_ep_config(rndv_req->send.ep)->max_rndv_get_zcopy;
+            size_t max_get_zcopy = ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy;
             size_t remainder = (uintptr_t) rndv_req->send.buffer % UCP_ALIGN; /* TODO make UCP_ALIGN come from the transport */
 
             if (remainder && (rndv_req->send.length > UCP_MTU_SIZE )) {
@@ -162,7 +162,7 @@ ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self)
         length = UCP_MTU_SIZE - ((uintptr_t)rndv_req->send.buffer % UCP_ALIGN);
     } else {
         length = ucs_min(rndv_req->send.length - offset,
-                         ucp_ep_config(rndv_req->send.ep)->max_rndv_get_zcopy);
+                         ucp_ep_config(rndv_req->send.ep)->rndv.max_get_zcopy);
     }
 
     ucs_trace_data("offset %zu remainder %zu. read to %p len %zu",
@@ -409,7 +409,7 @@ static size_t ucp_rndv_pack_multi_data(void *dest, void *arg)
     size_t length;
 
     hdr->rreq_ptr = sreq->send.proto.rreq_ptr;
-    length        = ucp_ep_config(sreq->send.ep)->max_am_bcopy - sizeof(*hdr);
+    length        = ucp_ep_config(sreq->send.ep)->am.max_bcopy - sizeof(*hdr);
 
     return sizeof(*hdr) + ucp_tag_pack_dt_copy(hdr + 1, sreq->send.buffer,
                                                &sreq->send.state, length,
@@ -438,7 +438,7 @@ static ucs_status_t ucp_rndv_progress_bcopy_send(uct_pending_req_t *self)
 
     sreq->send.lane = ucp_ep_get_am_lane(ep);
 
-    if (sreq->send.length <= ucp_ep_config(ep)->max_am_bcopy - sizeof(ucp_rndv_data_hdr_t)) {
+    if (sreq->send.length <= ucp_ep_config(ep)->am.max_bcopy - sizeof(ucp_rndv_data_hdr_t)) {
         /* send a single bcopy message */
         ucs_trace_data("send on sreq %p, am lane: %d, datatype: %zu. single message "
                        "(bcopy), size: %zu", sreq, sreq->send.lane,
@@ -525,7 +525,7 @@ static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
 
     sreq->send.uct_comp.func = ucp_rndv_contig_zcopy_completion;
 
-    max_zcopy = ucp_ep_config(ep)->max_am_zcopy;
+    max_zcopy = ucp_ep_config(ep)->am.max_zcopy;
     if (sreq->send.length <= max_zcopy - sizeof(ucp_rndv_data_hdr_t)) {
         sreq->send.uct_comp.count = 1;
         sreq->send.uct.func = ucp_rndv_zcopy_single;
@@ -548,7 +548,7 @@ ucp_rndv_rtr_handler(void *arg, void *data, size_t length, void *desc)
     ucs_assert_always(!ucp_ep_is_stub(ep));
     ucs_trace_req("RTR received. start sending on sreq %p", sreq);
 
-    if (sreq->send.length >= ucp_ep_config(ep)->zcopy_thresh) {
+    if (sreq->send.length >= ucp_ep_config(ep)->am.zcopy_thresh) {
         /* send with zcopy */
         ucp_rndv_prepare_zcopy(sreq, ep);
     } else {
