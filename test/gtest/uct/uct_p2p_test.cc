@@ -221,23 +221,29 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
     ucs_status_t status;
     do {
         status = (this->*send)(ep, sendbuf, recvbuf);
-    } while (status == UCS_ERR_NO_RESOURCE);
-    if (status == UCS_OK) {
-        return;
-    } else if (status == UCS_INPROGRESS) {
-        if (comp() == NULL) {
-            /* implicit non-blocking mode */
-            sender().flush();
+        if (status == UCS_OK) {
+            return;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            progress();
+        } else if (status == UCS_INPROGRESS) {
+            break;
         } else {
-            /* explicit non-blocking mode */
-            ++m_completion.uct.count;
-            while (m_completion_count <= prev_comp_count) {
-                progress();
-            }
-            EXPECT_EQ(0, m_completion.uct.count);
+            UCS_TEST_ABORT(ucs_status_string(status));
         }
+    } while (status == UCS_ERR_NO_RESOURCE);
+
+    /* Operation in progress, wait for completion */
+    ucs_assert(status == UCS_INPROGRESS);
+    if (comp() == NULL) {
+        /* implicit non-blocking mode */
+        sender().flush();
     } else {
-        UCS_TEST_ABORT(ucs_status_string(status));
+        /* explicit non-blocking mode */
+        ++m_completion.uct.count;
+        while (m_completion_count <= prev_comp_count) {
+            progress();
+        }
+        EXPECT_EQ(0, m_completion.uct.count);
     }
 }
 
