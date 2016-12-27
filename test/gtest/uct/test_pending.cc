@@ -333,6 +333,8 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
        progress();
     }
 
+    flush();
+
     for (i = 0; i < N; i++) {
         delete reqs[i];
     }
