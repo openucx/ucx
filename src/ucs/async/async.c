@@ -448,7 +448,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     }
     if (status != UCS_OK) {
         ucs_warn("failed to remove async handler " UCS_ASYNC_HANDLER_FMT " : %s",
-                  UCS_ASYNC_HANDLER_ARG(handler), ucs_status_string(status));
+                 UCS_ASYNC_HANDLER_ARG(handler), ucs_status_string(status));
     }
 
     if (handler->async != NULL) {
@@ -489,8 +489,14 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
         if (handler != NULL) {
             ucs_trace_async("calling missed async handler " UCS_ASYNC_HANDLER_FMT,
                             UCS_ASYNC_HANDLER_ARG(handler));
+            if (handler->async) {
+                UCS_ASYNC_BLOCK(handler->async);
+            }
             handler->missed = 0;
             handler->cb(handler->id, handler->arg);
+            if (handler->async) {
+                UCS_ASYNC_UNBLOCK(handler->async);
+            }
             ucs_async_handler_put(handler);
         }
         ucs_async_method_call_all(unblock);
