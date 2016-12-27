@@ -296,7 +296,7 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Total max. size (incl. the header
                                               and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */
-            size_t           max_hdr;    /**< Max. header size for bcopy/zcopy */
+            size_t           max_hdr;    /**< Max. header size for zcopy */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref ::uct_ep_am_zcopy
                                               @anchor uct_iface_attr_cap_am_max_iov */
