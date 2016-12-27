@@ -109,6 +109,18 @@ public:
         return UCS_OK;
     }
 
+    void validate_connect(uct_ud_ep_t *ep, unsigned value,
+                          double timeout_sec=10.0) {
+        ucs_time_t start_time = ucs_get_time();
+        while ((ep->dest_ep_id != value) &&
+               (ucs_get_time() < start_time + ucs_time_from_sec(timeout_sec))) {
+            progress();
+        }
+        EXPECT_EQ(value, ep->dest_ep_id);
+        EXPECT_EQ(value, ep->conn_id);
+        EXPECT_EQ(value, ep->ep_id);
+    }
+
     void validate_flush() {
         /* 1 packets transmitted, 1 packets received */
         EXPECT_EQ(2, ep(m_e1)->tx.psn);
@@ -318,8 +330,7 @@ UCS_TEST_P(test_ud, crep_drop1) {
     twait(500);
 
     /* CREQ resend and connection shall be fully functional */
-    EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
+    validate_connect(ep(m_e1), 0U);
 
     EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
@@ -369,11 +380,19 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     twait(500);
     short_progress_loop();
 
+    ucs_time_t start_time = ucs_get_time() + ucs_time_from_sec(10.0);
+    while (ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts) < 3U) {
+        progress();
+        if (ucs_get_time() > start_time) {
+             break;
+        }
+    }
+    EXPECT_EQ(3u, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+
     ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
     ep(m_e2, 0)->rx.rx_hook = uct_ud_ep_null_hook;
 
     /* Should receive both CREP and the active message */
-    EXPECT_EQ(3u, ep(m_e2, 0)->rx.ooo_pkts.head_sn);
 
     short_progress_loop();
     twait(500);
@@ -551,8 +570,7 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
-    EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
+    validate_connect(ep(m_e1), 0U);
 
     EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
     EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
@@ -567,13 +585,11 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     m_e1->connect_to_iface(1, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
-    EXPECT_EQ(0U, ep(m_e1,0)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1,0)->conn_id);
+    validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1,0)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 
-    EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
+    validate_connect(ep(m_e1, 1), 1U);
     EXPECT_EQ(2, ep(m_e1,1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
 }
@@ -582,8 +598,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
-    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
+    validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     /* one becase of crep */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
@@ -591,9 +606,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop(50);
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
+    validate_connect(ep(m_e2), 0U);
     EXPECT_EQ(2, ep(m_e2)->tx.psn);
     /* one becase creq sets initial psn */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
@@ -607,13 +620,8 @@ UCS_TEST_P(test_ud, connect_iface_sim) {
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop();
 
-    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
-    EXPECT_EQ(0U, ep(m_e1)->ep_id);
-
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
+    validate_connect(ep(m_e1), 0U);
+    validate_connect(ep(m_e2), 0U);
 
     /* psns are not checked because it really depends on scheduling */
 }
@@ -626,25 +634,10 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     m_e2->connect_to_iface(1, *m_e1);
     short_progress_loop(50);
 
-    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
-    EXPECT_EQ(0U, ep(m_e1)->ep_id);
-
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
-
-    EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
-    EXPECT_EQ(1U, ep(m_e1,1)->ep_id);
-
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
-
-    EXPECT_EQ(1U, ep(m_e2,1)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e2,1)->ep_id);
-    EXPECT_EQ(1U, ep(m_e2,1)->conn_id);
+    validate_connect(ep(m_e1),    0U);
+    validate_connect(ep(m_e2),    0U);
+    validate_connect(ep(m_e1, 1), 1U);
+    validate_connect(ep(m_e2, 1), 1U);
     /* psns are not checked because it really depends on scheduling */
 }
 
