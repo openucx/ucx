@@ -586,15 +586,17 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         dci = uct_dc_iface_dci_find(&iface->super, wc[i].qp_num);
         uct_rc_verbs_txqp_completed(&iface->super.tx.dcis[dci].txqp, &iface->dcis_txcnt[dci], count);
         ucs_trace_poll("dc tx completion on dc %d count %d", dci, count);
-        uct_rc_txqp_completion(&iface->super.tx.dcis[dci].txqp, iface->dcis_txcnt[dci].ci);
         uct_dc_iface_dci_put(&iface->super, dci);
+        uct_rc_txqp_completion(&iface->super.tx.dcis[dci].txqp, iface->dcis_txcnt[dci].ci);
     }
 
     iface->super.super.tx.cq_available += num_wcs;
     if (uct_dc_iface_dci_can_alloc(&iface->super)) {
-        ucs_arbiter_dispatch(&iface->super.super.tx.arbiter, 1, uct_dc_iface_dci_do_pending_wait, NULL);
+        ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(&iface->super), 1,
+                             uct_dc_iface_dci_do_pending_wait, NULL);
     }
-    ucs_arbiter_dispatch(&iface->super.tx.dci_arbiter, 1, uct_dc_iface_dci_do_pending_tx, NULL);
+    ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
+                         uct_dc_iface_dci_do_pending_tx, NULL);
 }
 
 /* TODO: make a macro that defines progress func */
