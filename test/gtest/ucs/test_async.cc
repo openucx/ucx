@@ -50,7 +50,7 @@ protected:
     virtual void ack_event() = 0;
     virtual int event_id() = 0;
 
-    static void cb(void *arg) {
+    static void cb(int id, void *arg) {
         base *self = reinterpret_cast<base*>(arg);
         self->handler();
     }

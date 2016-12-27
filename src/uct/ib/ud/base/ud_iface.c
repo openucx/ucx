@@ -23,12 +23,12 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
 
 static void uct_ud_iface_reserve_skbs(uct_ud_iface_t *iface, int count);
 static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface);
-static void uct_ud_iface_timer(void *arg);
+static void uct_ud_iface_timer(int timer_id, void *arg);
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
-static void uct_ud_iface_event(void *arg);
+static void uct_ud_iface_event(int fd, void *arg);
 
 
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
@@ -735,7 +735,7 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
 }
 
-static void uct_ud_iface_event(void *arg)
+static void uct_ud_iface_event(int fd, void *arg)
 {
     uct_ud_enter(arg);
     ucs_trace_async("iface(%p) uct_ud_iface_event", arg);
@@ -743,7 +743,7 @@ static void uct_ud_iface_event(void *arg)
     uct_ud_leave(arg);
 }
 
-static void uct_ud_iface_timer(void *arg)
+static void uct_ud_iface_timer(int timer_id, void *arg)
 {
     uct_ud_iface_t *iface = arg;
     ucs_time_t now;

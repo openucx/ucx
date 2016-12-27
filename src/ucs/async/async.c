@@ -209,11 +209,11 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
     if (async == NULL) {
         ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
                         UCS_ASYNC_HANDLER_ARG(handler));
-        handler->cb(handler->arg);
+        handler->cb(handler->id, handler->arg);
     } else if (ucs_async_method_call(mode, context_try_block, async)) {
         ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
                         UCS_ASYNC_HANDLER_ARG(handler));
-        handler->cb(handler->arg);
+        handler->cb(handler->id, handler->arg);
         ucs_async_method_call(mode, context_unblock, async);
     } else /* async != NULL */ {
         ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %llu",
@@ -490,7 +490,7 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
             ucs_trace_async("calling missed async handler " UCS_ASYNC_HANDLER_FMT,
                             UCS_ASYNC_HANDLER_ARG(handler));
             handler->missed = 0;
-            handler->cb(handler->arg);
+            handler->cb(handler->id, handler->arg);
             ucs_async_handler_put(handler);
         }
         ucs_async_method_call_all(unblock);

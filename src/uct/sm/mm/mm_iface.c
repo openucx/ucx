@@ -415,7 +415,7 @@ static void uct_mm_iface_recv_messages(uct_mm_iface_t *iface)
     }
 }
 
-static void uct_mm_iface_singal_handler(void *arg)
+static void uct_mm_iface_singal_handler(int fd, void *arg)
 {
     uct_mm_iface_recv_messages(arg);
 }

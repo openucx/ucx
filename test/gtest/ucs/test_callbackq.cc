@@ -372,7 +372,7 @@ protected:
     }
 
 
-    static void timer_callback(void *arg) {
+    static void timer_callback(int timer_id, void *arg) {
         test_callbackq_async *self = reinterpret_cast<test_callbackq_async*>(arg);
         self->timer();
     }

@@ -181,7 +181,7 @@ static void uct_cm_iface_outstanding_purge(uct_cm_iface_t *iface)
     iface->num_outstanding = 0;
 }
 
-static void uct_cm_iface_event_handler(void *arg)
+static void uct_cm_iface_event_handler(int fd, void *arg)
 {
     uct_cm_iface_t *iface = arg;
     struct ib_cm_event *event;
