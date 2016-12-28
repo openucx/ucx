@@ -525,7 +525,7 @@ static void ucs_async_signal_global_init()
 static void ucs_async_signal_global_cleanup()
 {
     if (ucs_async_signal_global_context.event_count != 0) {
-        ucs_warn("signal handler not removed (%d events remaining)",
+        ucs_info("signal handler not removed (%d events remaining)",
                  ucs_async_signal_global_context.event_count);
     }
     pthread_mutex_destroy(&ucs_async_signal_global_context.timers_lock);

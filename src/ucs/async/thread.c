@@ -370,7 +370,7 @@ static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
 static void ucs_async_signal_global_cleanup()
 {
     if (ucs_async_thread_global_context.thread != NULL) {
-        ucs_warn("async thread still running (use count %d)",
+        ucs_info("async thread still running (use count %d)",
                  ucs_async_thread_global_context.use_count);
     }
 }
