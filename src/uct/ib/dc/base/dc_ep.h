@@ -171,12 +171,10 @@ static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t
 
 static inline void uct_dc_iface_dci_free_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
-    uint8_t dci;
+    uint8_t dci = ep->dci;
 
-    ucs_assert(ep->dci != UCT_DC_EP_NO_DCI);
+    ucs_assert(dci != UCT_DC_EP_NO_DCI);
     ucs_assert(iface->tx.stack_top > 0);
-
-    dci = ep->dci;
 
     if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
         return;

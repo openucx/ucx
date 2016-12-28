@@ -49,15 +49,17 @@ public:
     static int n_warnings;
 
     static ucs_log_func_rc_t
-    log_handler_func(const char *file, unsigned line, const char *function,
-                     ucs_log_level_t level, const char *prefix, const char *message,
-                     va_list ap)
+    log_ep_destroy(const char *file, unsigned line, const char *function,
+                   ucs_log_level_t level, const char *prefix, const char *message,
+                   va_list ap)
     {
         if (level != UCS_LOG_LEVEL_WARN) {
             /* debug messages are ignored */
             return UCS_LOG_FUNC_RC_CONTINUE;
         }
-        n_warnings++;
+        if (strcmp("ep (%p) is destroyed with %d outstanding ops", message) == 0) {
+            n_warnings++;
+        }
         return UCS_LOG_FUNC_RC_STOP;
     }
 
@@ -213,7 +215,7 @@ UCS_TEST_P(test_dc, dcs_ep_destroy) {
     uct_dc_iface_t *iface;
 
 
-    ucs_log_push_handler(log_handler_func);
+    ucs_log_push_handler(log_ep_destroy);
     UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
 
     m_e1->connect_to_iface(0, *m_e2);

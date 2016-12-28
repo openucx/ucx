@@ -308,4 +308,13 @@ static inline ucs_arbiter_group_t* ucs_arbiter_elem_group(ucs_arbiter_elem_t *el
     return elem->group;
 }
 
+/**
+ * @return true if element is the last one in the group
+ */
+static inline int 
+ucs_arbiter_elem_is_last(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+{
+    return group->tail == elem;
+}
+
 #endif

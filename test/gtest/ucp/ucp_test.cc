@@ -385,7 +385,6 @@ void* ucp_test_base::entity::disconnect_nb(int ep_index) const {
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
-    flush_worker(worker_index);
     m_eps.at(worker_index).revoke();
     m_workers.at(worker_index).reset();
 }
