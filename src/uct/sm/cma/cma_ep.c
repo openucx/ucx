@@ -46,7 +46,6 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                      const uct_iov_t *iov,
                                      size_t iovcnt,
                                      uint64_t remote_addr,
-                                     uct_rkey_t rkey,
                                      uct_completion_t *comp,
                                      ssize_t (*fn_p)(pid_t,
                                                      const struct iovec *,
@@ -131,7 +130,6 @@ ucs_status_t uct_cma_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
                                       iov,
                                       iovcnt,
                                       remote_addr,
-                                      rkey,
                                       comp,
                                       process_vm_writev,
                                       "process_vm_writev");
@@ -153,7 +151,6 @@ ucs_status_t uct_cma_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t i
                                       iov,
                                       iovcnt,
                                       remote_addr,
-                                      rkey,
                                       comp,
                                       process_vm_readv,
                                       "process_vm_readv");
