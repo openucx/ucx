@@ -31,13 +31,11 @@ public:
     void set_handler() {
         ASSERT_FALSE(m_handler_set);
         m_handler_set = 1;
-        ucs_info("m_handler_set=%d", m_handler_set);
     }
 
     void unset_handler(bool sync = true) {
         ucs_info("m_handler_set=%d", m_handler_set);
         if (ucs_atomic_cswap32(&m_handler_set, 1, 0)) {
-            ucs_info("remove %d", event_id());
             ucs_status_t status = ucs_async_remove_handler(event_id(), sync);
             ASSERT_UCS_OK(status);
         }
