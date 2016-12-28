@@ -558,6 +558,8 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     EXPECT_TRUE(my_recv_req->completed);
     EXPECT_EQ(sendbuf, recvbuf);
 
+    /* sender - get the ATS and set send request to completed */
+    wait(my_send_req);
     EXPECT_TRUE(my_send_req->completed);
     EXPECT_EQ(UCS_OK, my_send_req->status);
 
