@@ -47,11 +47,13 @@ static const char *handle_error_modes[] = {
 };
 
 const char *ucs_instrumentation_type_names[] = {
-    [UCS_INSTRUMENT_TYPE_UCP_TX] = "ucp-tx",
-    [UCS_INSTRUMENT_TYPE_UCP_RX] = "ucp-rx",
-    [UCS_INSTRUMENT_TYPE_IB_TX] = "ib-tx",
-    [UCS_INSTRUMENT_TYPE_IB_RX] = "ib-rx",
-    [UCS_INSTRUMENT_TYPE_LAST]  = NULL
+    [UCS_INSTRUMENT_TYPE_UCP_TX]          = "ucp-tx",
+    [UCS_INSTRUMENT_TYPE_UCP_RX]          = "ucp-rx",
+    [UCS_INSTRUMENT_TYPE_IB_TX]           = "ib-tx",
+    [UCS_INSTRUMENT_TYPE_IB_RX]           = "ib-rx",
+    [UCS_INSTRUMENT_TYPE_UCP_TAG_ENQUEUE] = "ucp-tag-enqueue",
+    [UCS_INSTRUMENT_TYPE_UCP_TAG_MATCH]   = "ucp-tag-match",
+    [UCS_INSTRUMENT_TYPE_LAST]            = NULL
 };
 
 static UCS_CONFIG_DEFINE_ARRAY(signo,

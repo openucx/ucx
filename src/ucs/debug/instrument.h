@@ -24,6 +24,9 @@ typedef enum ucs_instrumentation_types {
     UCS_INSTRUMENT_TYPE_IB_TX,
     UCS_INSTRUMENT_TYPE_IB_RX,
 
+    UCS_INSTRUMENT_TYPE_UCP_TAG_ENQUEUE,
+    UCS_INSTRUMENT_TYPE_UCP_TAG_MATCH,
+
     UCS_INSTRUMENT_TYPE_LAST
 } ucs_instrumentation_types_t;
 
