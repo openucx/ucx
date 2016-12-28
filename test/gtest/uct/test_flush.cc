@@ -146,7 +146,8 @@ public:
 
     void wait_am(unsigned count) {
         while (am_rx_count < count) {
-            short_progress_loop();
+            progress();
+            sched_yield();
         }
     }
 
@@ -313,7 +314,11 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      for (;;) {
          packed_len = uct_ep_am_bcopy(sender().ep(0), AM_ID, pack_cb,
                                       (void*)&sendbuf);
-         if ((packed_len == UCS_ERR_NO_RESOURCE) || (ucs_get_time() > loop_end_limit)) {
+         if (packed_len == UCS_ERR_NO_RESOURCE) {
+             break;
+         }
+         if (ucs_get_time() > loop_end_limit) {
+             ++count;
              break;
          }
 

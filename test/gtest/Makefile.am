@@ -7,8 +7,12 @@
 #
 
 
+# Set default configuration for running tests
 UCX_HANDLE_ERRORS ?= freeze
 export UCX_HANDLE_ERRORS
+UCX_LOG_LEVEL ?= info
+export UCX_LOG_LEVEL
+
 
 GTEST_FILTER        ?= *
 GTEST_EXTRA_ARGS    =

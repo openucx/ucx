@@ -313,6 +313,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     case UCX_PERF_CMD_AM:
         required_flags = __get_flag(params->uct.data_layout, UCT_IFACE_FLAG_AM_SHORT,
                                     UCT_IFACE_FLAG_AM_BCOPY, UCT_IFACE_FLAG_AM_ZCOPY);
+        required_flags |= UCT_IFACE_FLAG_AM_CB_SYNC;
         min_size = __get_max_size(params->uct.data_layout, 0, 0,
                                   attr.cap.am.min_zcopy);
         max_size = __get_max_size(params->uct.data_layout, attr.cap.am.max_short,
@@ -366,7 +367,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         return status;
     }
 
-    if ((attr.cap.flags & required_flags) == 0) {
+    if (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Device does not support required operation");
         }

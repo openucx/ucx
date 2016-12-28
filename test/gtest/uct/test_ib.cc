@@ -321,12 +321,14 @@ public:
         m_buf1            = NULL;
         m_buf2            = NULL;
     }
+
     void initialize() {
         ucs_status_t status;
 
         test_uct_ib::initialize();
 
-        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_WAKEUP);
+        check_caps(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_WAKEUP |
+                   UCT_IFACE_FLAG_AM_CB_SYNC);
 
         /* create receiver wakeup */
         status = uct_wakeup_open(m_e1->iface(),
