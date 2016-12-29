@@ -610,9 +610,9 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
     criteria.title              = "rendezvous";
     criteria.local_md_flags     = UCT_MD_FLAG_REG;
     criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY;
-    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY |
+    criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
                                   UCT_IFACE_FLAG_PENDING;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
     criteria.calc_score         = ucp_wireup_rndv_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
