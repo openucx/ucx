@@ -148,7 +148,6 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
-    EXPECT_FALSE(my_send_req->completed);
 
     /* receiver - get the RTS and put it into unexpected */
     short_progress_loop();
@@ -178,10 +177,12 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
-    EXPECT_TRUE(my_send_req->completed);
-    EXPECT_EQ(UCS_OK, my_send_req->status);
+    if (my_send_req != NULL) {
+        EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
+        request_release(my_send_req);
+    }
 
-    request_release(my_send_req);
     request_release(my_recv_req);
 }
 

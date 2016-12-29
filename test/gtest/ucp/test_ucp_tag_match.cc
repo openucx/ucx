@@ -431,7 +431,6 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
-    EXPECT_FALSE(my_send_req->completed);
 
     /* receiver - match the rts, perform rndv get and send an ack upon finishing */
     short_progress_loop();
@@ -443,10 +442,12 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
     EXPECT_TRUE(my_recv_req->completed);
     EXPECT_EQ(sendbuf, recvbuf);
 
-    EXPECT_TRUE(my_send_req->completed);
-    EXPECT_EQ(UCS_OK, my_send_req->status);
+    if (my_send_req != NULL) {
+        EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
+        request_release(my_send_req);
+    }
 
-    request_release(my_send_req);
     request_release(my_recv_req);
 }
 
@@ -468,7 +469,6 @@ UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
-    EXPECT_FALSE(my_send_req->completed);
 
     /* receiver - get the RTS and put it into unexpected */
     short_progress_loop();
@@ -477,17 +477,18 @@ UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
     status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    /* sender - get the ATS and set send request to completed */
-    wait(my_send_req);
-
     EXPECT_EQ(sendbuf.size()     , info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
-    EXPECT_TRUE(my_send_req->completed);
-    EXPECT_EQ(UCS_OK, my_send_req->status);
-    request_release(my_send_req);
+    if (my_send_req != NULL) {
+        /* sender - get the ATS and set send request to completed */
+        wait(my_send_req);
 
+        EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
+        request_release(my_send_req);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
@@ -508,7 +509,6 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
-    EXPECT_FALSE(my_send_req->completed);
 
     /* receiver - get the RTS and put it into unexpected */
     short_progress_loop();
@@ -517,12 +517,14 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     status = recv_b(&recvbuf[0], (recvbuf.size())/2, DATATYPE, 0x1337, 0xffff, &info);
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
 
-    /* sender - get the ATS and set send request to completed */
-    wait(my_send_req);
+    if (my_send_req != NULL) {
+        /* sender - get the ATS and set send request to completed */
+        wait(my_send_req);
 
-    EXPECT_TRUE(my_send_req->completed);
-    EXPECT_EQ(UCS_OK, my_send_req->status);
-    request_release(my_send_req);
+        EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
+        request_release(my_send_req);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
@@ -546,7 +548,6 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     /* sender - send the RTS */
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
-    EXPECT_FALSE(my_send_req->completed);
 
     /* receiver - match the rts, perform rndv get and send an ack upon finishing */
     short_progress_loop();
@@ -559,11 +560,13 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     EXPECT_EQ(sendbuf, recvbuf);
 
     /* sender - get the ATS and set send request to completed */
-    wait(my_send_req);
-    EXPECT_TRUE(my_send_req->completed);
-    EXPECT_EQ(UCS_OK, my_send_req->status);
+    if (my_send_req != NULL) {
+        wait(my_send_req);
+        EXPECT_TRUE(my_send_req->completed);
+        EXPECT_EQ(UCS_OK, my_send_req->status);
+        request_release(my_send_req);
+    }
 
-    request_release(my_send_req);
     request_release(my_recv_req);
 }
 
