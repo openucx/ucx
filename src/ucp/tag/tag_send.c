@@ -205,7 +205,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
         UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                               "ucp_tag_send_nb (eager - start)",
                               buffer, length);
-        if (ucs_likely(length <= ucp_ep_config(ep)->am.max_eager_short)) {
+        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_eager_short)) {
             status = ucp_tag_send_eager_short(ep, tag, buffer, length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
