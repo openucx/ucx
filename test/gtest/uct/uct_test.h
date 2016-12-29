@@ -193,6 +193,7 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     ugni_rdma,               \
     ugni_udt,                \
     ugni_smsg,               \
+    tcp,                     \
     mm,                      \
     cma,                     \
     knem,                    \
