@@ -181,6 +181,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
     while (counter != iters) {
         progress();
     }
+    flush();
 
     ASSERT_EQ(counter, iters);
 }
