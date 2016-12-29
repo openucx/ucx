@@ -32,7 +32,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     /* TODO: this is good for dcs policy only.
      * Need to change if eps share dci
      */
-    ucs_assertv_always(uct_dc_iface_dci_has_outstanding(iface, self->dci) > 0,
+    ucs_assertv_always(uct_dc_iface_dci_has_outstanding(iface, self->dci),
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);       
 
