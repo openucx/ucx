@@ -49,6 +49,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
 
             /* First fragment fills the receive information */
             if (flags & UCP_RECV_DESC_FLAG_FIRST) {
+                UCP_WORKER_STAT_EAGER_MSG(worker, flags);
                 req->recv.info.sender_tag = recv_tag;
                 if (flags & UCP_RECV_DESC_FLAG_LAST) {
                     req->recv.info.length = recv_len;
@@ -64,6 +65,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
             } else {
                 req->recv.state.offset += recv_len;
             }
+            UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
             status = UCS_OK;
             goto out;
         }

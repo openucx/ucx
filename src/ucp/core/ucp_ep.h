@@ -12,6 +12,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
+#include <ucs/stats/stats.h>
 #include <limits.h>
 
 
@@ -24,6 +25,21 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_SENT = UCS_BIT(2), /* Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT = UCS_BIT(3), /* Debug: Connection reply was sent */
 };
+
+
+/**
+ * UCP endpoint statistics counters
+ */
+enum {
+    UCP_EP_STAT_TAG_TX_EAGER,
+    UCP_EP_STAT_TAG_TX_EAGER_SYNC,
+    UCP_EP_STAT_TAG_TX_RNDV,
+    UCP_EP_STAT_LAST
+};
+
+
+#define UCP_EP_STAT_TAG_OP(_ep, _op) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
 
 /* Lanes configuration.
@@ -121,6 +137,8 @@ typedef struct ucp_ep {
     uint8_t                       flags;         /* Endpoint flags */
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
+
+    UCS_STATS_NODE_DECLARE(stats);
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_NAME_MAX];
