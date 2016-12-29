@@ -99,11 +99,19 @@ protected:
             ucs_callbackq_remove_slow_path(&m_cbq, &ctx->slow_elem);
         }
     }
+
     void dispatch(unsigned count = 1)
     {
         for (unsigned i = 0; i < count; ++i) {
             ucs_callbackq_dispatch(&m_cbq);
         }
+    }
+
+    void purge_slow(size_t exp_count)
+    {
+        UCS_LIST_HEAD(list);
+        ucs_callbackq_purge_slow_path(&m_cbq, callback_slow_proxy, &list);
+        EXPECT_EQ(exp_count, ucs_list_length(&list));
     }
 
     ucs_callbackq_t     m_cbq;
@@ -216,6 +224,27 @@ UCS_TEST_P(test_callbackq, add_another) {
     remove(&ctx2);
     dispatch();
     EXPECT_EQ(count + 2, ctx2.count);
+}
+
+UCS_TEST_P(test_callbackq, purge_slow) {
+    is_fast_path = false;
+
+    callback_ctx ctx;
+    init_ctx(&ctx);
+
+    ctx.command = COMMAND_NONE;
+    add(&ctx);
+
+    dispatch(10);
+
+    EXPECT_GE(ctx.count, 0);
+    unsigned prev_count = ctx.count;
+
+    purge_slow(1);
+
+    dispatch(10);
+
+    EXPECT_EQ(prev_count, ctx.count);
 }
 
 INSTANTIATE_TEST_CASE_P(fast_path, test_callbackq, ::testing::Values(true));

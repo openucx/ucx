@@ -295,18 +295,38 @@ void ucs_callbackq_add_slow_path(ucs_callbackq_t *cbq,
     ucs_callbackq_leave(cbq);
 }
 
-void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
-                                    ucs_callbackq_slow_elem_t* elem)
+static void ucs_callbackq_slow_path_remove_elem(ucs_callbackq_t *cbq,
+                                                ucs_callbackq_slow_elem_t* elem)
 {
     ucs_status_t status;
-
-    ucs_callbackq_enter(cbq);
 
     /* Note: The element should have been added previously */
     ucs_list_del(&elem->list);
     status = ucs_callbackq_remove(cbq, ucs_callbackq_slow_path_cb, cbq);
     ucs_assert_always(status == UCS_OK);
+}
 
+void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
+                                    ucs_callbackq_slow_elem_t* elem)
+{
+    ucs_callbackq_enter(cbq);
+    ucs_callbackq_slow_path_remove_elem(cbq, elem);
     ucs_callbackq_leave(cbq);
 }
 
+void ucs_callbackq_purge_slow_path(ucs_callbackq_t *cbq, ucs_callback_slow_t cb,
+                                   ucs_list_link_t *list)
+{
+    ucs_callbackq_slow_elem_t *elem, *tmp_elem;
+
+    ucs_callbackq_enter(cbq);
+
+    ucs_list_for_each_safe(elem, tmp_elem, &cbq->slow_path, list) {
+        if (elem->cb == cb) {
+            ucs_callbackq_slow_path_remove_elem(cbq, elem);
+            ucs_list_add_tail(list, &elem->list);
+        }
+    }
+
+    ucs_callbackq_leave(cbq);
+}
