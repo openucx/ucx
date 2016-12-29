@@ -116,6 +116,7 @@ void ucp_test::wait_for_flag(volatile size_t *flag, double timeout)
 
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
+        entity.flush_worker(i);
         void *dreq = entity.disconnect_nb(i);
         if (!UCS_PTR_IS_PTR(dreq)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
@@ -356,6 +357,9 @@ void ucp_test_base::entity::connect(const entity* other) {
 }
 
 void ucp_test_base::entity::flush_worker(int worker_index) const {
+    if (worker(worker_index) == NULL) {
+        return;
+    }
     ucs_status_t status = ucp_worker_flush(worker(worker_index));
     ASSERT_UCS_OK(status);
 }
@@ -371,6 +375,7 @@ void ucp_test_base::entity::fence(int worker_index) const {
 }
 
 void ucp_test_base::entity::disconnect(int ep_index) {
+    flush_ep(ep_index);
     m_eps.at(ep_index).reset();
 }
 

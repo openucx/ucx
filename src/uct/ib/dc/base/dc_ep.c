@@ -32,6 +32,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     /* TODO: this is good for dcs policy only.
      * Need to change if eps share dci
      */
+    ucs_assertv_always(uct_dc_iface_dci_has_outstanding(iface, self->dci),
+                       "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
+                       self, self->dci);       
+
+    /* we can handle it but well behaving app should not do this */
+    ucs_warn("ep (%p) is destroyed with %d outstanding ops",
+             self, (int16_t)iface->super.config.tx_qp_len - 
+             uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
     iface->tx.dcis[self->dci].ep = NULL;
 }
@@ -129,6 +137,13 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     ucs_trace_data("progress pending request %p returned: %s", req,
                    ucs_status_string(status));
     if (status == UCS_OK) {
+        /* Release dci if this is the last elem in the group and the dci has no
+         * outstanding operations. For example pending callback did not send
+         * anything. (uct_ep_flush or just return ok) 
+         */ 
+        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
+            uct_dc_iface_dci_free(iface, ep);
+        }
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
     if (status == UCS_INPROGRESS) {
@@ -172,6 +187,7 @@ void uct_dc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, vo
     } else {
         ucs_arbiter_group_purge(uct_dc_iface_tx_waitq(iface), &ep->arb_group,
                                 uct_dc_ep_abriter_purge_cb, &args);
+        uct_dc_iface_dci_free(iface, ep);
     }
 }
 

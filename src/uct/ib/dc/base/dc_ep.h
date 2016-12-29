@@ -89,6 +89,7 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
 #define uct_dc_iface_dci_get       uct_dc_iface_dci_get_dcs
 #define uct_dc_iface_dci_can_alloc uct_dc_iface_dci_can_alloc_dcs
 #define uct_dc_iface_dci_alloc     uct_dc_iface_dci_alloc_dcs
+#define uct_dc_iface_dci_free      uct_dc_iface_dci_free_dcs
 
 static inline int uct_dc_iface_dci_can_alloc_dcs(uct_dc_iface_t *iface)
 {
@@ -108,7 +109,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
 
     ucs_assert(iface->tx.stack_top > 0);
 
-    if (uct_rc_txqp_available(&iface->tx.dcis[dci].txqp) < (int16_t)iface->super.config.tx_qp_len) {
+    if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
         if (ucs_unlikely(ep == NULL)) {
             /* ep was destroyed while holding dci */
             return;
@@ -166,6 +167,25 @@ static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t
     ucs_assert(iface->tx.dcis[ep->dci].ep == NULL);
     iface->tx.dcis[ep->dci].ep = ep;
     iface->tx.stack_top++;
+}
+
+static inline void uct_dc_iface_dci_free_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
+{
+    uint8_t dci = ep->dci;
+
+    ucs_assert(dci != UCT_DC_EP_NO_DCI);
+    ucs_assert(iface->tx.stack_top > 0);
+
+    if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
+        return;
+    }
+
+    iface->tx.stack_top--;
+    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
+    iface->tx.dcis[dci].ep                    = NULL;
+
+    ep->dci   = UCT_DC_EP_NO_DCI;
+    ep->state = UCT_DC_EP_TX_OK;
 }
 
 static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)

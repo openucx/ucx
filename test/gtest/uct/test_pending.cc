@@ -181,6 +181,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
     while (counter != iters) {
         progress();
     }
+    flush();
 
     ASSERT_EQ(counter, iters);
 }
@@ -332,6 +333,8 @@ UCS_TEST_P(test_uct_pending, pending_fairness)
     while(n_pending > 0) {
        progress();
     }
+
+    flush();
 
     for (i = 0; i < N; i++) {
         delete reqs[i];

@@ -30,6 +30,7 @@ protected:
     }
 
     void disconnect() {
+        flush();
         m_sender->destroy_ep(0);
     }
 
