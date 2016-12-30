@@ -138,7 +138,6 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
  */
 static int ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status)
 {
-    char UCS_V_UNUSED func_name[128];
     ucs_status_t status;
 
     status = req->send.uct.func(&req->send.uct);
@@ -157,8 +156,7 @@ static int ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status)
 
     ucs_assert(status == UCS_ERR_NO_RESOURCE);
     ucs_assertv(req->send.lane != UCP_NULL_LANE, "%s() did not set req->send.lane",
-                ucs_debug_get_symbol_name(req->send.uct.func, func_name,
-                                          sizeof(func_name)));
+                ucs_debug_get_symbol_name(req->send.uct.func));
 
     /* No send resources, try to add to pending queue */
     return ucp_request_pending_add(req, req_status);

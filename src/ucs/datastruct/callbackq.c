@@ -68,11 +68,9 @@ static ucs_callbackq_elem_t* ucs_callbackq_find(ucs_callbackq_t *cbq,
 /* called with lock held */
 static void ucs_callbackq_remove_elem(ucs_callbackq_t *cbq, ucs_callbackq_elem_t *elem)
 {
-    char func_name[200];
-
     ucs_trace("cbq %p: remove %p %s(arg=%p) [start:%p end:%p]", cbq, elem,
-              ucs_debug_get_symbol_name(elem->cb, func_name, sizeof(func_name)),
-              elem->arg, cbq->start, cbq->end);
+              ucs_debug_get_symbol_name(elem->cb), elem->arg, cbq->start,
+              cbq->end);
 
     ucs_assert(cbq->start < cbq->end);
 
@@ -143,7 +141,6 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq, size_t size,
 void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
 {
     ucs_callbackq_elem_t *elem;
-    char func_name[200];
 
     /* to execute pending remove requests */
     ucs_callbackq_invoke_service_cb(cbq);
@@ -152,9 +149,7 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
                  cbq->end - cbq->start);
         ucs_callbackq_for_each(elem, cbq) {
             ucs_warn("cbq %p: remain %p %s(arg=%p)", cbq, elem,
-                     ucs_debug_get_symbol_name(elem->cb, func_name,
-                                               sizeof(func_name)),
-                     elem->arg);
+                     ucs_debug_get_symbol_name(elem->cb), elem->arg);
         }
     }
     ucs_free(cbq->ptr);
@@ -163,7 +158,6 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
 void ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg)
 {
     ucs_callbackq_elem_t *elem;
-    char func_name[200];
 
     ucs_callbackq_enter(cbq);
 
@@ -177,14 +171,13 @@ void ucs_callbackq_add(ucs_callbackq_t *cbq, ucs_callback_t cb, void *arg)
     if (cbq->end >= cbq->ptr + cbq->size) {
         /* TODO support expanding the callback queue */
         ucs_fatal("callback queue %p is full, cannot add %s()", cbq,
-                  ucs_debug_get_symbol_name(cb, func_name, sizeof(func_name)));
+                  ucs_debug_get_symbol_name(cb));
     }
 
     elem = cbq->end;
 
     ucs_trace("cbq %p: adding %p %s(arg=%p) [start:%p end:%p]", cbq, elem,
-              ucs_debug_get_symbol_name(cb, func_name, sizeof(func_name)),
-              arg, cbq->start, cbq->end);
+              ucs_debug_get_symbol_name(cb), arg, cbq->start, cbq->end);
 
     elem->cb       = cb;
     elem->arg      = arg;

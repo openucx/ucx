@@ -67,17 +67,6 @@ unsigned long ucs_debug_get_lib_base_addr();
 
 
 /**
- * Get debug information.
- *
- * @param filename  Object file to get information from.
- * @param base      Load address of the file.
- * @param info      Filled with debug information.
- */
-void ucs_debug_get_line_info(const char *filename, unsigned long base,
-                             unsigned long address, ucs_debug_address_info_t *info);
-
-
-/**
  * Print backtrace to an output stream.
  *
  * @param stream         Stream to print to.
@@ -97,7 +86,7 @@ void ucs_handle_error();
  * @return Name of a symbol which begins in the given address, or NULL if
  * not found.
  */
-const char *ucs_debug_get_symbol_name(void *address, char *buffer, size_t max);
+const char *ucs_debug_get_symbol_name(void *address);
 
 
 #endif

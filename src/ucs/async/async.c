@@ -14,8 +14,8 @@
 #define UCS_ASYNC_TIMER_ID_MIN      1000000u
 #define UCS_ASYNC_TIMER_ID_MAX      2000000u
 
-#define UCS_ASYNC_HANDLER_FMT       "%p [id=%d]"
-#define UCS_ASYNC_HANDLER_ARG(_h)   (_h), (_h)->id
+#define UCS_ASYNC_HANDLER_FMT       "%p [id=%d] %s()"
+#define UCS_ASYNC_HANDLER_ARG(_h)   (_h), (_h)->id, ucs_debug_get_symbol_name((_h)->cb)
 
 /* Hash table for all event and timer handlers */
 KHASH_MAP_INIT_INT(ucs_async_handler, ucs_async_handler_t *);
@@ -296,7 +296,6 @@ err:
 void ucs_async_context_cleanup(ucs_async_context_t *async)
 {
     ucs_async_handler_t *handler;
-    char name[200];
 
     ucs_trace_func("async=%p", async);
 
@@ -306,7 +305,7 @@ void ucs_async_context_cleanup(ucs_async_context_t *async)
             if (async == handler->async) {
                 ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" %s() not released",
                          async, UCS_ASYNC_HANDLER_ARG(handler),
-                         ucs_debug_get_symbol_name(handler->cb, name, sizeof(name)));
+                         ucs_debug_get_symbol_name(handler->cb));
             }
         });
         ucs_warn("releasing async context with %d handlers", async->num_handlers);
