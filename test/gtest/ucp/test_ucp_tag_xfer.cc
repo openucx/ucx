@@ -7,7 +7,10 @@
 
 #include "test_ucp_tag.h"
 
+extern "C" {
 #include <ucp/dt/dt.h>
+#include <ucp/core/ucp_ep.inl>
+}
 
 #include <common/test_helpers.h>
 #include <iostream>
@@ -662,3 +665,107 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_xfer)
+
+
+#if ENABLE_STATS
+
+class test_ucp_tag_stats : public test_ucp_tag_xfer {
+public:
+    void init() {
+        stats_activate();
+        test_ucp_tag_xfer::init();
+    }
+
+    void cleanup() {
+        test_ucp_tag_xfer::cleanup();
+        stats_restore();
+    }
+
+    ucs_stats_node_t* ep_stats(entity &e) {
+        return e.ep()->stats;
+    }
+
+    ucs_stats_node_t* worker_stats(entity &e) {
+        return e.worker()->stats;
+    }
+
+    void skip_if_no_rndv() {
+        if (ucp_ep_config(sender().ep())->key.rndv_lane == UCP_NULL_RESOURCE) {
+            UCS_TEST_SKIP_R("No RNDV support on TL");
+        }
+    }
+
+    void validate_counters(uint64_t tx_cntr, uint64_t rx_cntr) {
+        uint64_t cnt;
+        cnt = UCS_STATS_GET_COUNTER(ep_stats(sender()), tx_cntr);
+        EXPECT_EQ(1ul, cnt);
+        cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()), rx_cntr);
+        EXPECT_EQ(1ul, cnt);
+    }
+
+};
+
+
+UCS_TEST_P(test_ucp_tag_stats, eager_expected, "RNDV_THRESH=1248576") {
+    test_run_xfer(true, true, true, false, false);
+    validate_counters(UCP_EP_STAT_TAG_TX_EAGER,
+                      UCP_WORKER_STAT_TAG_RX_EAGER_MSG);
+
+     uint64_t cnt;
+     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+     EXPECT_EQ(cnt, 0ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, eager_unexpected, "RNDV_THRESH=1248576") {
+    test_run_xfer(true, true, false, false, false);
+    validate_counters(UCP_EP_STAT_TAG_TX_EAGER,
+                      UCP_WORKER_STAT_TAG_RX_EAGER_MSG);
+     uint64_t cnt;
+     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+     EXPECT_GT(cnt, 0ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, sync_expected, "RNDV_THRESH=1248576") {
+    skip_loopback();
+    test_run_xfer(true, true, true, true, false);
+    validate_counters(UCP_EP_STAT_TAG_TX_EAGER_SYNC,
+                      UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG);
+
+     uint64_t cnt;
+     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+     EXPECT_EQ(cnt, 0ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576") {
+    skip_loopback();
+    test_run_xfer(true, true, false, true, false);
+    validate_counters(UCP_EP_STAT_TAG_TX_EAGER_SYNC,
+                      UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG);
+     uint64_t cnt;
+     cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()),
+                                 UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP);
+     EXPECT_GT(cnt, 0ul);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000") {
+    skip_if_no_rndv();
+    test_run_xfer(true, true, true, false, false);
+    validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
+                      UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
+}
+
+UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
+    skip_if_no_rndv();
+    test_run_xfer(true, true, false, false, false);
+    validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
+                      UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
+
+#endif
+
+
