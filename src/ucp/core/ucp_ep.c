@@ -588,10 +588,13 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             md_attr     = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-                config->am.max_eager_short  = iface_attr->cap.am.max_short -
-                                              sizeof(ucp_eager_hdr_t);
-                config->am.max_short        = iface_attr->cap.am.max_short -
-                                              sizeof(uint64_t);
+                config->am.max_eager_short = iface_attr->cap.am.max_short -
+                                             sizeof(ucp_eager_hdr_t);
+                config->am.max_short       = iface_attr->cap.am.max_short -
+                                             sizeof(uint64_t);
+            } else {
+                config->am.max_eager_short = -1;
+                config->am.max_short       = -1;
             }
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {

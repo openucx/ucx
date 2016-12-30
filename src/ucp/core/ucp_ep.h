@@ -84,8 +84,8 @@ typedef struct ucp_ep_config {
 
     /* Limits for active-message based protocols */
     struct {
-        size_t                 max_eager_short;  /* Maximal payload of eager short */
-        size_t                 max_short;        /* Maximal payload of am short */
+        ssize_t                max_eager_short;  /* Maximal payload of eager short */
+        ssize_t                max_short;        /* Maximal payload of am short */
         size_t                 max_bcopy;        /* Maximal total size of am_bcopy */
         size_t                 max_zcopy;        /* Maximal total size of am_zcopy */
         /* zero-copy threshold for operations which do not have to wait for remote side */
