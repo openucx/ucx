@@ -585,7 +585,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane];
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr  = &worker->iface_attrs[rsc_index];
-            md_attr     = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
+            md_attr     = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
                 config->am.max_eager_short  = iface_attr->cap.am.max_short -
@@ -685,7 +685,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane];
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->iface_attrs[rsc_index];
-            md_attr    = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
+            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
             ucs_assert_always(iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY);
 
             if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {

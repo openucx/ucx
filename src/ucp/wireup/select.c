@@ -196,7 +196,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     for (rsc_index = 0; addr_index_map && (rsc_index < context->num_tls); ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
         iface_attr   = &worker->iface_attrs[rsc_index];
-        md_attr      = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
+        md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->cap.flags,

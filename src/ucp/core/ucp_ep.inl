@@ -72,7 +72,7 @@ static inline ucp_rsc_index_t ucp_ep_md_index(ucp_ep_h ep, ucp_lane_index_t lane
 static inline uct_md_h ucp_ep_md(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_context_h context = ep->worker->context;
-    return context->mds[ucp_ep_md_index(ep, lane)];
+    return context->tl_mds[ucp_ep_md_index(ep, lane)].md;
 }
 
 static inline ucp_md_map_t ucp_lane_map_get_lane(ucp_md_lane_map_t lane_map,
@@ -84,7 +84,7 @@ static inline ucp_md_map_t ucp_lane_map_get_lane(ucp_md_lane_map_t lane_map,
 static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_context_h context = ep->worker->context;
-    return &context->md_attrs[ucp_ep_md_index(ep, lane)];
+    return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
