@@ -237,7 +237,7 @@ UCS_TEST_P(test_callbackq, purge_slow) {
 
     dispatch(10);
 
-    EXPECT_GE(ctx.count, 0);
+    EXPECT_GE(ctx.count, 0u);
     unsigned prev_count = ctx.count;
 
     purge_slow(1);
