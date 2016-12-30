@@ -295,10 +295,22 @@ err:
 
 void ucs_async_context_cleanup(ucs_async_context_t *async)
 {
+    ucs_async_handler_t *handler;
+    char name[200];
+
     ucs_trace_func("async=%p", async);
 
     if (async->num_handlers > 0) {
+        pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
+        kh_foreach_value(&ucs_async_global_context.handlers, handler, {
+            if (async == handler->async) {
+                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" %s() not released",
+                         async, UCS_ASYNC_HANDLER_ARG(handler),
+                         ucs_debug_get_symbol_name(handler->cb, name, sizeof(name)));
+            }
+        });
         ucs_warn("releasing async context with %d handlers", async->num_handlers);
+        pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
     }
     ucs_mpmc_queue_cleanup(&async->missed);
 }
@@ -329,7 +341,7 @@ static ucs_status_t ucs_async_alloc_handler(ucs_async_mode_t mode, int id,
     handler = ucs_malloc(sizeof *handler, "async handler");
     if (handler == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_dec_num_handlers;
     }
 
     handler->id       = id;
@@ -448,7 +460,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
     }
     if (status != UCS_OK) {
         ucs_warn("failed to remove async handler " UCS_ASYNC_HANDLER_FMT " : %s",
-                  UCS_ASYNC_HANDLER_ARG(handler), ucs_status_string(status));
+                 UCS_ASYNC_HANDLER_ARG(handler), ucs_status_string(status));
     }
 
     if (handler->async != NULL) {
@@ -489,8 +501,14 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
         if (handler != NULL) {
             ucs_trace_async("calling missed async handler " UCS_ASYNC_HANDLER_FMT,
                             UCS_ASYNC_HANDLER_ARG(handler));
+            if (handler->async) {
+                UCS_ASYNC_BLOCK(handler->async);
+            }
             handler->missed = 0;
             handler->cb(handler->id, handler->arg);
+            if (handler->async) {
+                UCS_ASYNC_UNBLOCK(handler->async);
+            }
             ucs_async_handler_put(handler);
         }
         ucs_async_method_call_all(unblock);
@@ -534,7 +552,7 @@ void ucs_async_global_cleanup()
 {
     int num_elems = kh_size(&ucs_async_global_context.handlers);
     if (num_elems != 0) {
-        ucs_warn("async handler table is not empty during exit (contains %d elems)",
+        ucs_info("async handler table is not empty during exit (contains %d elems)",
                  num_elems);
     }
     ucs_async_method_call_all(cleanup);
