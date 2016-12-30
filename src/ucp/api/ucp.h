@@ -474,6 +474,8 @@ typedef struct ucp_params {
 
     /**
      * An optimization hint of how many endpoints would be created on this context.
+     * For example, when used from MPI or SHMEM libraries, this number would specify
+     * the number of ranks (or processing elements) in the job.
      * Does not affect semantics, but only transport selection criteria and the
      * resulting performance.
      */
