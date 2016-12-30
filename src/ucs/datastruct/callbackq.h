@@ -253,7 +253,8 @@ void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
  *
  * @param [in]  cbq      Callback queue to remove the callbacks from.
  * @param [in]  cb       Callback function to search for.
- * @param [out] list     Head of a list to which the removed elements are added.
+ * @param [out] list     If != NULL, head of a list to which the removed
+ *                       elements are added.
  *
  */
 void ucs_callbackq_purge_slow_path(ucs_callbackq_t *cbq, ucs_callback_slow_t cb,

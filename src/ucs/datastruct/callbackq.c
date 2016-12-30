@@ -324,7 +324,9 @@ void ucs_callbackq_purge_slow_path(ucs_callbackq_t *cbq, ucs_callback_slow_t cb,
     ucs_list_for_each_safe(elem, tmp_elem, &cbq->slow_path, list) {
         if (elem->cb == cb) {
             ucs_callbackq_slow_path_remove_elem(cbq, elem);
-            ucs_list_add_tail(list, &elem->list);
+            if (list != NULL) {
+                ucs_list_add_tail(list, &elem->list);
+            }
         }
     }
 
