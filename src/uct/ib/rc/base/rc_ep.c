@@ -388,7 +388,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
             ucs_warn("ep=%p cancelling user pending request %p", ep, req);
         }
     } else {
-        freq = ucs_container_of(req, uct_rc_fc_request_t, req);
+        freq = ucs_derived_of(req, uct_rc_fc_request_t);
         ucs_mpool_put(freq);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -408,15 +408,13 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 {
     ucs_status_t status;
-    uct_rc_fc_request_t *freq = ucs_container_of(self, uct_rc_fc_request_t, req);
+    uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
     uct_rc_ep_t *ep           = ucs_derived_of(freq->ep, uct_rc_ep_t);
     uct_rc_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
                                                uct_rc_iface_t);
-    uct_rc_iface_ops_t *ops   = ucs_derived_of(iface->super.ops,
-                                               uct_rc_iface_ops_t);
 
-    ucs_assert(iface->config.fc_enabled);
-    status = ops->fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, NULL);
+    ucs_assert_always(iface->config.fc_enabled);
+    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, NULL);
     if (status == UCS_OK) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
         ucs_mpool_put(freq);

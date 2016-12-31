@@ -47,9 +47,9 @@ typedef struct uct_dc_dci {
 
 typedef struct uct_dc_fc_request {
     uct_rc_fc_request_t           super;
-    struct ibv_ah                 *ibv_ah;
     uintptr_t                     sender_ep;
     uint32_t                      dct_num;
+    uint16_t                      lid;
 } uct_dc_fc_request_t;
 
 
@@ -68,9 +68,8 @@ typedef struct uct_dc_iface {
 
         ucs_arbiter_t             dci_arbiter;
 
-        /* Used to send grant messages for all peers,
-         * AV and DCT num are updated every time before to send grant. */
-        uct_dc_ep_t               *fake_fc_ep;
+        /* Used to send grant messages for all peers */
+        uct_dc_ep_t               *fc_ep;
     } tx;
     struct {
         struct ibv_exp_dct        *dct;
@@ -97,11 +96,9 @@ ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_comple
 
 void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config);
 
-ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface, int ep_size);
+ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface);
 
-void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *ep);
-
-void uct_dc_iface_cleanup_pending_req(uct_pending_req_t *req);
+void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface);
 
 ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self);
 

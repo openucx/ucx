@@ -389,13 +389,6 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
     test_general(8, false);
 }
 
-/* Check that user callback passed to uct_ep_pending_purge is not
- * invoked for FC grant message */
-UCS_TEST_P(test_dc_flow_control, pending_purge)
-{
-    test_pending_purge(2, 5);
-}
-
 UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
     test_pending_grant(5);
@@ -469,7 +462,7 @@ public:
     }
 
     uct_rc_fc_t* fake_ep_fc_ptr(entity *e) {
-        return &ucs_derived_of(e->iface(), uct_dc_iface_t)->tx.fake_fc_ep->fc;
+        return &ucs_derived_of(e->iface(), uct_dc_iface_t)->tx.fc_ep->fc;
     }
 };
 
@@ -478,7 +471,7 @@ UCS_TEST_P(test_dc_flow_control_stats, general)
     test_general(5);
 }
 
-UCS_TEST_P(test_dc_flow_control_stats, fake_fc_ep)
+UCS_TEST_P(test_dc_flow_control_stats, fc_ep)
 {
     uint64_t v;
     int wnd = 5;
@@ -501,6 +494,7 @@ UCS_TEST_P(test_dc_flow_control_stats, fake_fc_ep)
     EXPECT_EQ(1ul, v);
     v = UCS_STATS_GET_COUNTER(fake_ep_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_TX_PURE_GRANT);
     EXPECT_EQ(1ul, v);
+    flush();
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control_stats, dc)

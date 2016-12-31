@@ -254,6 +254,8 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
     return UCS_ERR_NO_RESOURCE;
 }
 
+ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep);
+
 
 #define UCT_DC_CHECK_RES(_iface, _ep) \
     { \
@@ -274,23 +276,10 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
                          (_iface)->super.config.fc_hard_thresh)) { \
-             if ((_iface)->super.config.fc_enabled) { \
-                 UCT_RC_CHECK_FC_WND(&(_ep)->fc, (_ep)->super.stats); \
-                 if ((_ep)->fc.fc_wnd == (_iface)->super.config.fc_hard_thresh) { \
-                     uct_rc_iface_ops_t *ops = ucs_derived_of((_iface)->super.super.ops, \
-                                                              uct_rc_iface_ops_t); \
-                     ucs_status_t status = ops->fc_ctrl(&(_ep)->super.super, \
-                                                        UCT_RC_EP_FC_FLAG_HARD_REQ, \
-                                                        NULL); \
-                     if (status != UCS_OK) { \
-                         return status; \
-                     }\
-                     (_ep)->fc.flags |= UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT; \
-                 }\
-             } else { \
-                 /* Set fc_wnd to max, to send as much as possible without checks */ \
-                 (_ep)->fc.fc_wnd = INT16_MAX; \
-             } \
+            ucs_status_t status = uct_dc_ep_check_fc(_iface, _ep); \
+            if (ucs_unlikely(status != UCS_OK)) { \
+                return status; \
+            } \
         } \
         UCT_DC_CHECK_RES(_iface, _ep) \
     }

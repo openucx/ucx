@@ -25,6 +25,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     ucs_arbiter_group_cleanup(&self->arb_group);
     uct_rc_fc_cleanup(&self->fc);
 
+    ucs_assertv(!(self->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT),
+                "ep %p is being destroyed while awaiting FC grant", self);
+
     if (self->dci == UCT_DC_EP_NO_DCI) {
         return;
     }
@@ -34,11 +37,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
      */
     ucs_assertv_always(uct_dc_iface_dci_has_outstanding(iface, self->dci),
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
-                       self, self->dci);       
+                       self, self->dci);
 
     /* we can handle it but well behaving app should not do this */
     ucs_warn("ep (%p) is destroyed with %d outstanding ops",
-             self, (int16_t)iface->super.config.tx_qp_len - 
+             self, (int16_t)iface->super.config.tx_qp_len -
              uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
     iface->tx.dcis[self->dci].ep = NULL;
@@ -174,6 +177,7 @@ static ucs_arbiter_cb_result_t uct_dc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     uct_purge_cb_args_t  *cb_args   = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_rc_fc_request_t *freq       = ucs_derived_of(req, uct_rc_fc_request_t);
     uct_dc_ep_t *ep                 = ucs_container_of(ucs_arbiter_elem_group(elem),
                                                        uct_dc_ep_t, arb_group);
 
@@ -186,7 +190,7 @@ static ucs_arbiter_cb_result_t uct_dc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     } else {
         /* User callback should not be called for FC messages.
          * Just return pending request memory to the pool */
-        uct_dc_iface_cleanup_pending_req(req);
+        ucs_mpool_put(freq);
     }
 
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -245,6 +249,27 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK; /* all sends completed */
     }
+}
+
+ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
+{
+    ucs_status_t status;
+
+    if (iface->super.config.fc_enabled) {
+        UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
+        if (ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) {
+            status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_FLAG_HARD_REQ,
+                                    NULL);
+            if (status != UCS_OK) {
+                return status;
+            }
+            ep->fc.flags |= UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
+        }
+    } else {
+        /* Set fc_wnd to max, to send as much as possible without checks */
+        ep->fc.fc_wnd = INT16_MAX;
+    }
+    return UCS_OK;
 }
 
 UCS_CLASS_DEFINE(uct_dc_ep_t, uct_base_ep_t);

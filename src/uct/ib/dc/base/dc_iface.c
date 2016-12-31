@@ -224,6 +224,9 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_dct;
     }
 
+    /* Create fake endpoint which will be used for sending FC grants */
+    uct_dc_iface_init_fc_ep(self);
+
     ucs_arbiter_init(&self->tx.dci_arbiter);
     return UCS_OK;
 
@@ -239,6 +242,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     ibv_exp_destroy_dct(self->rx.dct);
     uct_dc_iface_dcis_destroy(self, self->tx.ndci);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
+    uct_dc_iface_cleanup_fc_ep(self);
 }
 
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
@@ -307,14 +311,14 @@ ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_comple
     return status;
 }
 
-ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface, int ep_size)
+ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface)
 {
     ucs_status_t status;
     uct_dc_ep_t *ep;
 
-    ep = ucs_malloc(ep_size, "fake_fc_ep");
+    ep = ucs_malloc(sizeof(uct_dc_ep_t), "fc_ep");
     if (ep == NULL) {
-        ucs_error("Failed to allocate fake FC ep");
+        ucs_error("Failed to allocate FC ep");
         status =  UCS_ERR_NO_MEMORY;
         goto err;
     }
@@ -334,7 +338,7 @@ ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface, int ep_size)
         goto err_cleanup;
     }
 
-    iface->tx.fake_fc_ep = ep;
+    iface->tx.fc_ep = ep;
     return UCS_OK;
 
 err_cleanup:
@@ -347,63 +351,26 @@ err:
 
 void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface)
 {
-    uct_dc_ep_pending_purge(&iface->tx.fake_fc_ep->super.super, NULL, NULL);
-    ucs_arbiter_group_cleanup(&iface->tx.fake_fc_ep->arb_group);
-    uct_rc_fc_cleanup(&iface->tx.fake_fc_ep->fc);
-    UCS_CLASS_CLEANUP(uct_base_ep_t, iface->tx.fake_fc_ep);
-    ucs_free(iface->tx.fake_fc_ep);
-}
-
-void uct_dc_iface_cleanup_pending_req(uct_pending_req_t *req)
-{
-    uct_rc_fc_request_t *freq = ucs_container_of(req, uct_rc_fc_request_t,
-                                                 req);
-    uct_dc_fc_request_t *dreq = ucs_derived_of(freq, uct_dc_fc_request_t);
-    ibv_destroy_ah(dreq->ibv_ah);
-    ucs_mpool_put(freq);
-}
-
-ucs_status_t uct_dc_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid,
-                                    struct ibv_ah **ah_p)
-{
-    struct ibv_ah_attr ah_attr;
-    struct ibv_ah *ah;
-    uct_ib_iface_t *iface = &dc_iface->super.super;
-
-    /* TODO: GRH, path_bits, etc */
-    ah_attr.sl            = iface->config.sl;
-    ah_attr.src_path_bits = iface->path_bits[0];
-    ah_attr.dlid          = lid | ah_attr.src_path_bits;
-    ah_attr.port_num      = iface->config.port_num;
-    ah_attr.is_global     = 0;
-    ah_attr.static_rate   = 0;
-
-    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
-    if (ucs_unlikely(ah == NULL)) {
-        ucs_error("Failed to create ah on "UCT_IB_IFACE_FMT,
-                  UCT_IB_IFACE_ARG(iface));
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    *ah_p = ah;
-    return UCS_OK;
+    uct_dc_ep_pending_purge(&iface->tx.fc_ep->super.super, NULL, NULL);
+    ucs_arbiter_group_cleanup(&iface->tx.fc_ep->arb_group);
+    uct_rc_fc_cleanup(&iface->tx.fc_ep->fc);
+    UCS_CLASS_CLEANUP(uct_base_ep_t, iface->tx.fc_ep);
+    ucs_free(iface->tx.fc_ep);
 }
 
 ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self)
 {
-    uct_rc_fc_request_t *freq = ucs_container_of(self, uct_rc_fc_request_t, req);
+    ucs_status_t status;
+    uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
     uct_dc_ep_t *ep           = ucs_derived_of(freq->ep, uct_dc_ep_t);
     uct_rc_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
                                                uct_rc_iface_t);
-    uct_rc_iface_ops_t  *ops  = ucs_derived_of(iface->super.ops,
-                                               uct_rc_iface_ops_t);
-    ucs_status_t status;
 
-    ucs_assert(iface->config.fc_enabled);
+    ucs_assert_always(iface->config.fc_enabled);
 
-    status = ops->fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, freq);
+    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, freq);
     if (status == UCS_OK) {
-        uct_dc_iface_cleanup_pending_req(self);
+        ucs_mpool_put(freq);
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
     }
     return status;
@@ -423,7 +390,7 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
     ucs_assert(rc_iface->config.fc_enabled);
 
     if (fc_hdr == UCT_RC_EP_FC_FLAG_HARD_REQ) {
-        ep = iface->tx.fake_fc_ep;
+        ep = iface->tx.fc_ep;
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
 
         dc_req = ucs_mpool_get(&iface->super.tx.fc_mp);
@@ -431,19 +398,15 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_error("Failed to allocate FC request");
             return UCS_ERR_NO_MEMORY;
         }
-        dc_req->super.req.func = uct_dc_iface_fc_grant;
-        dc_req->super.ep       = &ep->super.super;
-        dc_req->dct_num        = imm_data;
-        dc_req->sender_ep      = *((uintptr_t*)(hdr + 1));
+        dc_req->super.super.func = uct_dc_iface_fc_grant;
+        dc_req->super.ep         = &ep->super.super;
+        dc_req->dct_num          = imm_data;
+        dc_req->lid              = lid;
+        dc_req->sender_ep        = *((uintptr_t*)(hdr + 1));
 
-        status = uct_dc_iface_create_ah(iface, lid, &dc_req->ibv_ah);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = uct_dc_iface_fc_grant(&dc_req->super.req);
+        status = uct_dc_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &dc_req->super.req);
+            status = uct_ep_pending_add(&ep->super.super, &dc_req->super.super);
         }
         ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
                            ucs_status_string(status));

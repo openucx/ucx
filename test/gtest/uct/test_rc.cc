@@ -86,20 +86,21 @@ ucs_status_t test_rc_flow_control::am_send(uct_pending_req_t *self)
  * - If FC is disabled 'wnd' does not limit senders flow  */
 void test_rc_flow_control::test_general(int wnd, bool is_fc_enabled)
 {
-     set_fc_attributes(m_e1, is_fc_enabled, wnd,
-                       ucs_max((int)(wnd*0.5), 1),
-                       ucs_max((int)(wnd*0.25), 1));
+    set_fc_attributes(m_e1, is_fc_enabled, wnd,
+                      ucs_max((int)(wnd*0.5), 1),
+                      ucs_max((int)(wnd*0.25), 1));
 
-     send_am_messages(m_e1, wnd, UCS_OK);
-     send_am_messages(m_e1, 1, is_fc_enabled ?  UCS_ERR_NO_RESOURCE : UCS_OK);
+    send_am_messages(m_e1, wnd, UCS_OK);
+    send_am_messages(m_e1, 1, is_fc_enabled ?  UCS_ERR_NO_RESOURCE : UCS_OK);
 
-     progress_loop();
-     send_am_messages(m_e1, 1, UCS_OK);
+    progress_loop();
+    send_am_messages(m_e1, 1, UCS_OK);
 
-     if (!is_fc_enabled) {
-         /* Make valgrind happy, need to enable FC for proper cleanup */
-         set_fc_attributes(m_e1, true, wnd, wnd, 1);
-     }
+    if (!is_fc_enabled) {
+        /* Make valgrind happy, need to enable FC for proper cleanup */
+        set_fc_attributes(m_e1, true, wnd, wnd, 1);
+    }
+    flush();
 }
 
 void test_rc_flow_control::test_pending_grant(int wnd)
@@ -126,6 +127,7 @@ void test_rc_flow_control::test_pending_grant(int wnd)
 
     /* Check that m_e1 got grant */
     send_am_messages(m_e1, 1, UCS_OK);
+    flush();
 }
 
 void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
@@ -217,6 +219,7 @@ void test_rc_flow_control_stats::test_general(int wnd)
 
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_RX_PURE_GRANT);
     EXPECT_EQ(1ul, v);
+    flush();
 }
 
 

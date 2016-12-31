@@ -99,23 +99,23 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
-                             struct ibv_exp_send_wr *wr, uint64_t send_flags)
+uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
+                                    struct ibv_exp_send_wr *wr,
+                                    uint8_t dci, struct ibv_ah *ah,
+                                    uint32_t dct_num, uint64_t send_flags)
 {
     struct ibv_exp_send_wr *bad_wr;
     int ret;
-    uint8_t dci;
     uct_rc_txqp_t *txqp;
 
-    dci  = ep->super.dci;
     txqp = &iface->super.tx.dcis[dci].txqp;
     /* TODO: check tx moderation */
     send_flags |= IBV_SEND_SIGNALED;
 
     wr->exp_send_flags    = send_flags;
     wr->wr_id             = txqp->unsignaled;
-    wr->dc.ah             = ep->ah;
-    wr->dc.dct_number     = ep->dest_qpn;
+    wr->dc.ah             = ah;
+    wr->dc.dct_number     = dct_num;
     wr->dc.dct_access_key = UCT_IB_KEY;
 
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
@@ -130,6 +130,14 @@ uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
 
     uct_rc_verbs_txqp_posted(txqp, &iface->dcis_txcnt[dci],
                              &iface->super.super, send_flags & IBV_SEND_SIGNALED);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
+                             struct ibv_exp_send_wr *wr, uint64_t send_flags)
+{
+    uct_dc_verbs_iface_post_send_to_dci(iface, wr, ep->super.dci, ep->ah,
+                                        ep->dest_qpn, send_flags);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -567,6 +575,33 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
     return status;
 }
 
+ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid,
+                                          struct ibv_ah **ah_p)
+{
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+    uct_ib_iface_t *iface = &dc_iface->super.super;
+
+    /* TODO: GRH, path_bits, etc */
+    ah_attr.sl            = iface->config.sl;
+    ah_attr.src_path_bits = iface->path_bits[0];
+    ah_attr.dlid          = lid | ah_attr.src_path_bits;
+    ah_attr.port_num      = iface->config.port_num;
+    ah_attr.is_global     = 0;
+    ah_attr.static_rate   = 0;
+
+    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
+    if (ucs_unlikely(ah == NULL)) {
+        ucs_error("Failed to create ah on "UCT_IB_IFACE_FMT,
+                  UCT_IB_IFACE_ARG(iface));
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    *ah_p = ah;
+    return UCS_OK;
+}
+
+
 /* Send either request for grants or grant message. Request includes ep
  * structure address, which will be received back in a grant message.
  * This will help to determine the particular ep targeted by the grant.
@@ -575,17 +610,19 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req)
 {
     uct_rc_hdr_t hdr;
-    uct_dc_ep_t *dc_ep;
     struct ibv_exp_send_wr wr;
+    struct ibv_ah *ah;
+    ucs_status_t status;
     uct_dc_fc_request_t *dc_req;
-    uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
+    uct_dc_verbs_ep_t *dc_verbs_ep;
+    uct_dc_ep_t *dc_ep          = ucs_derived_of(tl_ep, uct_dc_ep_t);
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_dc_verbs_iface_t);
 
     ucs_assert((sizeof(hdr) + sizeof(dc_ep)) <=
                iface->verbs_common.config.max_inline);
 
-    UCT_DC_CHECK_RES(&iface->super, &ep->super);
+    UCT_DC_CHECK_RES(&iface->super, dc_ep);
 
     hdr.am_id                                 = op;
     wr.sg_list                                = iface->verbs_common.inl_sge;
@@ -599,14 +636,20 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
     if (op == UCT_RC_EP_FC_PURE_GRANT) {
         ucs_assert(req != NULL);
         dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
-        ep->ah                                = dc_req->ibv_ah;
-        ep->dest_qpn                          = dc_req->dct_num;
+
+        status = uct_dc_verbs_iface_create_ah(&iface->super, dc_req->lid, &ah);
+        if (status != UCS_OK) {
+            return status;
+        }
         wr.exp_opcode                         = IBV_WR_SEND;
         iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_req->sender_ep;
         iface->verbs_common.inl_sge[1].length = sizeof(dc_req->sender_ep);
+        uct_dc_verbs_iface_post_send_to_dci(iface, &wr, dc_ep->dci, ah,
+                                            dc_req->dct_num,
+                                            IBV_SEND_INLINE | IBV_SEND_SIGNALED);
+        ibv_destroy_ah(ah);
     } else {
         ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
-        dc_ep                                 = &ep->super;
         iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_ep;
         iface->verbs_common.inl_sge[1].length = sizeof(dc_ep);
         wr.exp_opcode                         = IBV_WR_SEND_WITH_IMM;
@@ -614,10 +657,13 @@ ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
         /* Send out DCT number to the peer, so it will be able
          * to send grants back */
         wr.ex.imm_data                        = iface->super.rx.dct->dct_num;
+
+        dc_verbs_ep = ucs_derived_of(dc_ep, uct_dc_verbs_ep_t);
+        uct_dc_verbs_iface_post_send(iface, dc_verbs_ep, &wr, IBV_SEND_INLINE |
+                                     IBV_SEND_SIGNALED);
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
     }
-    uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_INLINE);
     return UCS_OK;
 }
 
@@ -780,9 +826,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
         goto err_common_cleanup;
     }
 
-    /* Create fake endpoint which will be used for sending FC grants */
-    uct_dc_iface_init_fc_ep(&self->super, sizeof(uct_dc_verbs_ep_t));
-
     /* TODO: only register progress when we have a connection */
     uct_worker_progress_register(worker, uct_dc_verbs_iface_progress, self);
     ucs_debug("created dc iface %p", self);
@@ -800,7 +843,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_iface_t)
     uct_worker_progress_unregister(self->super.super.super.super.worker,
                                    uct_dc_verbs_iface_progress, self);
     uct_rc_verbs_iface_common_cleanup(&self->verbs_common);
-    uct_dc_iface_cleanup_fc_ep(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_dc_verbs_iface_t, uct_dc_iface_t);
