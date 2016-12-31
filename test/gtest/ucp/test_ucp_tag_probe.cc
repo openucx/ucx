@@ -177,12 +177,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
-    if (my_send_req != NULL) {
-        EXPECT_TRUE(my_send_req->completed);
-        EXPECT_EQ(UCS_OK, my_send_req->status);
-        request_release(my_send_req);
-    }
-
+    wait_and_validate(my_send_req);
     request_release(my_recv_req);
 }
 

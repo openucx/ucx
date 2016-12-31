@@ -112,6 +112,18 @@ void test_ucp_tag::wait(request *req, int buf_index)
     }
 }
 
+void test_ucp_tag::wait_and_validate(request *req)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    wait(req);
+    EXPECT_TRUE(req->completed);
+    EXPECT_EQ(UCS_OK, req->status);
+    request_release(req);
+}
+
 test_ucp_tag::request *
 test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, int buf_index)
