@@ -323,7 +323,9 @@ static void print_md_info(const char *md_name, int print_opts,
             }
             printf(" nsec\n");
         }
-        printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
+        if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+            printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
+        }
     }
 
     if (num_resources == 0) {
