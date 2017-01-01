@@ -249,6 +249,19 @@ void ucs_callbackq_remove_slow_path(ucs_callbackq_t *cbq,
 
 
 /**
+ * Remove all slow path elements with a given callback function from the list.
+ *
+ * @param [in]  cbq      Callback queue to remove the callbacks from.
+ * @param [in]  cb       Callback function to search for.
+ * @param [out] list     If != NULL, head of a list to which the removed
+ *                       elements are added.
+ *
+ */
+void ucs_callbackq_purge_slow_path(ucs_callbackq_t *cbq, ucs_callback_slow_t cb,
+                                   ucs_list_link_t *list);
+
+
+/**
  * Call all callbacks on the queue.
  * This should be done only from one thread at a time.
  *
