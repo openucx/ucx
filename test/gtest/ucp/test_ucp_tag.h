@@ -78,6 +78,8 @@ protected:
 
     void wait(request *req, int buf_index = 0);
 
+    void wait_and_validate(request *req);
+
     static void* dt_common_start(size_t count);
 
     static void* dt_common_start_pack(void *context, const void *buffer, size_t count);
