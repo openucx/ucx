@@ -675,40 +675,42 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     switch (active_speed) {
     case 1: /* SDR */
-        iface_attr->latency = 5000e-9;
-        signal_rate         = 2.5e9;
-        encoding            = 8.0/10.0;
+        iface_attr->latency.overhead = 5000e-9;
+        signal_rate                  = 2.5e9;
+        encoding                     = 8.0/10.0;
         break;
     case 2: /* DDR */
-        iface_attr->latency = 2500e-9;
-        signal_rate         = 5.0e9;
-        encoding            = 8.0/10.0;
+        iface_attr->latency.overhead = 2500e-9;
+        signal_rate                  = 5.0e9;
+        encoding                     = 8.0/10.0;
         break;
     case 4: /* QDR */
-        iface_attr->latency = 1300e-9;
-        signal_rate         = 10.0e9;
-        encoding            = 8.0/10.0;
+        iface_attr->latency.overhead = 1300e-9;
+        signal_rate                  = 10.0e9;
+        encoding                     = 8.0/10.0;
         break;
     case 8: /* FDR10 */
-        iface_attr->latency = 700e-9;
-        signal_rate         = 10.3125e9;
-        encoding            = 64.0/66.0;
+        iface_attr->latency.overhead = 700e-9;
+        signal_rate                  = 10.3125e9;
+        encoding                     = 64.0/66.0;
         break;
     case 16: /* FDR */
-        iface_attr->latency = 700e-9;
-        signal_rate         = 14.0625e9;
-        encoding            = 64.0/66.0;
+        iface_attr->latency.overhead = 700e-9;
+        signal_rate                  = 14.0625e9;
+        encoding                     = 64.0/66.0;
         break;
     case 32: /* EDR */
-        iface_attr->latency = 600e-9;
-        signal_rate         = 25.78125e9;
-        encoding            = 64.0/66.0;
+        iface_attr->latency.overhead = 600e-9;
+        signal_rate                  = 25.78125e9;
+        encoding                     = 64.0/66.0;
         break;
     default:
         ucs_error("Invalid active_speed on %s:%d: %d",
                   UCT_IB_IFACE_ARG(iface), active_speed);
         return UCS_ERR_IO_ERROR;
     }
+
+    iface_attr->latency.growth = 0;
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
     width                 = ib_port_widths[ucs_ilog2(active_width)];

@@ -541,7 +541,7 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->ep_addr_len            = sizeof(uct_ud_ep_addr_t);
 
     /* Software overhead */
-    iface_attr->overhead = 80e-9;
+    iface_attr->overhead              = 80e-9;
 }
 
 ucs_status_t

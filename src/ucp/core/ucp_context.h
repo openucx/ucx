@@ -284,6 +284,9 @@ typedef struct ucp_context {
         uint64_t                  features;
         uint64_t                  tag_sender_mask;
 
+        /* How many endpoints are expected to be created */
+        int                       est_num_eps;
+
         struct {
             size_t                         size;    /* Request size for user */
             ucp_request_init_callback_t    init;    /* Initialization user callback */
@@ -339,5 +342,12 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
 
 uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
+
+static inline double ucp_tl_iface_latency(ucp_context_h context,
+                                          const uct_iface_attr_t *iface_attr)
+{
+    return iface_attr->latency.overhead +
+           (iface_attr->latency.growth * context->config.est_num_eps);
+}
 
 #endif

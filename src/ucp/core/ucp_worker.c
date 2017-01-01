@@ -349,7 +349,8 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
         supp_tls |= UCS_BIT(rsc_index);
         priority  = iface_attr->priority;
 
-        score = ucp_wireup_amo_score_func(md_attr, iface_attr, &dummy_iface_attr);
+        score = ucp_wireup_amo_score_func(context, md_attr, iface_attr,
+                                          &dummy_iface_attr);
         if ((score > best_score) ||
             ((score == best_score) && (priority > best_priority)))
         {

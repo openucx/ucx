@@ -70,11 +70,13 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_PENDING;
     attr->cap.am.max_bcopy = iface->config.max_bcopy;
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency, &attr->bandwidth);
+    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
+                                &attr->bandwidth);
     if (status != UCS_OK) {
         return status;
     }
 
+    attr->latency.growth   = 0;
     attr->overhead         = 50e-6;  /* 50 usec */
 
     if (iface->config.prefer_default) {

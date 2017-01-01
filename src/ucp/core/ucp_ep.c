@@ -730,8 +730,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                  * Isolating the 'size' yields the rndv_thresh.
                  * The used latency functions for eager_zcopy and rndv are also specified in
                  * the UCX wiki */
-                numerator = ((2 * iface_attr->overhead) + (4 * iface_attr->latency) +
-                             md_attr->reg_cost.overhead);
+                numerator = (2 * iface_attr->overhead) +
+                            (4 * ucp_tl_iface_latency(context, iface_attr)) +
+                            md_attr->reg_cost.overhead;
                 denumerator = (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
                                md_attr->reg_cost.growth - (1.0 / iface_attr->bandwidth));
 

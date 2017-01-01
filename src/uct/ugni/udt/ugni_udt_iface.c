@@ -192,7 +192,8 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
                                          UCT_IFACE_FLAG_AM_CB_ASYNC;
 
     iface_attr->overhead               = 1e-6;  /* 1 usec */
-    iface_attr->latency                = 40e-6; /* 40 usec */
+    iface_attr->latency.overhead       = 40e-6; /* 40 usec */
+    iface_attr->latency.growth         = 0;
     iface_attr->bandwidth              = pow(1024, 2); /* bytes */
     iface_attr->priority               = 0;
     return UCS_OK;
