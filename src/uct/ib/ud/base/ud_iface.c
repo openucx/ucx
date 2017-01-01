@@ -228,18 +228,6 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
     uct_ud_iface_cep_remove(ep);
 }
 
-static void uct_ud_iface_async_handler_remove(ucs_callbackq_slow_elem_t *self)
-{
-    uct_ud_iface_t *iface = ucs_container_of(self, uct_ud_iface_t, async.cbq_elem);
-
-    ucs_trace_func("iface=%p remove async fd=%d and unregister. slow-path %d",
-                   iface, iface->super.comp_channel->fd, iface->async.cbq_elem_on);
-    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
-
-    /* need to call this callback only once. unregistering... */
-    uct_ud_iface_async_remove_cb_enable(iface, 0);
-}
-
 static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
                                        uct_mem_h memh)
 {
@@ -442,9 +430,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     UCT_UD_IFACE_HOOK_INIT(self);
-
-    self->async.cbq_elem.cb      = uct_ud_iface_async_handler_remove;
-    self->async.cbq_elem_on      = 0;
 
     if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
