@@ -12,6 +12,7 @@
 #include "log.h"
 #include "profile.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/sys/sys.h>
 #include <sys/wait.h>
 #include <execinfo.h>
@@ -28,8 +29,11 @@
 #endif /* HAVE_DETAILED_BACKTRACE */
 
 
-#define UCS_GDB_MAX_ARGS  32
-#define BACKTRACE_MAX 64
+KHASH_MAP_INIT_INT64(ucs_debug_symbol, char*);
+
+#define UCS_GDB_MAX_ARGS         32
+#define BACKTRACE_MAX            64
+#define UCS_DEBUG_UNKNOWN_SYM    "???"
 
 struct dl_address_search {
     unsigned long            address;
@@ -108,6 +112,9 @@ const char *ucs_signal_names[] = {
 };
 
 static void *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+
+khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
+
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
@@ -242,8 +249,11 @@ static void find_address_in_section(bfd *abfd, asection *section, void *data)
                                   &filename, &function, &lineno);
     do {
         search->lines[search->count].address  = address;
-        search->lines[search->count].file     = strdup(filename ? filename : "??");
-        search->lines[search->count].function = ucs_debug_demangle(function ? function : "??");
+        search->lines[search->count].file     = strdup(filename ? filename :
+                                                       UCS_DEBUG_UNKNOWN_SYM);
+        search->lines[search->count].function = function ?
+                                                ucs_debug_demangle(function) :
+                                                UCS_DEBUG_UNKNOWN_SYM;
         search->lines[search->count].lineno   = lineno;
         if (search->count == 0) {
             /* To get the inliner info, search at the original address */
@@ -319,8 +329,9 @@ static void ucs_debug_backtrace_destroy(backtrace_h bckt)
     free(bckt);
 }
 
-void ucs_debug_get_line_info(const char *filename, unsigned long base,
-                             unsigned long address, ucs_debug_address_info_t *info)
+static ucs_status_t
+ucs_debug_get_line_info(const char *filename, unsigned long base,
+                        unsigned long address, ucs_debug_address_info_t *info)
 {
     struct backtrace_file file;
     struct backtrace_line line;
@@ -342,26 +353,42 @@ void ucs_debug_get_line_info(const char *filename, unsigned long base,
     if (line.function) {
         strncpy(info->function, line.function, sizeof(info->function));
     } else {
-        strcpy(info->function, "???");
+        strcpy(info->function, UCS_DEBUG_UNKNOWN_SYM);
     }
     if (line.file) {
         strncpy(info->source_file, line.file, sizeof(info->source_file));
     } else {
-        strcpy(info->function, "???");
+        strcpy(info->function, UCS_DEBUG_UNKNOWN_SYM);
     }
     info->line_number = line.lineno;
 
     free(line.function);
     free(line.file);
     unload_file(&file);
-    return;
+    return UCS_OK;
 
 err_unload:
     unload_file(&file);
 err:
-    strcpy(info->function, "");
-    strcpy(info->source_file, "");
+    strcpy(info->function,    UCS_DEBUG_UNKNOWN_SYM);
+    strcpy(info->source_file, UCS_DEBUG_UNKNOWN_SYM);
     info->line_number = 0;
+    return UCS_ERR_NO_ELEM;
+}
+
+ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *info)
+{
+    struct dl_address_search dl;
+
+    dl.address = (unsigned long)address;
+    if (!dl_lookup_address(&dl)) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    memset(info, 0, sizeof(*info));
+    info->file.base = dl.base;
+    ucs_expand_path(dl.filename, info->file.path, sizeof(info->file.path));
+    return ucs_debug_get_line_info(dl.filename, dl.base, dl.address, info);
 }
 
 /**
@@ -427,13 +454,6 @@ void ucs_debug_print_backtrace(FILE *stream, int strip)
     ucs_debug_backtrace_destroy(bckt);
 }
 
-const char *ucs_debug_get_symbol_name(void *address, char *buffer, size_t max)
-{
-    ucs_debug_address_info_t info;
-    ucs_debug_lookup_address(address, &info);
-    return strncpy(buffer, info.function, max);
-}
-
 static void ucs_debug_print_source_file(const char *file, unsigned line,
                                         const char *function, FILE *stream)
 {
@@ -484,12 +504,25 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 #else /* HAVE_DETAILED_BACKTRACE */
 
-void ucs_debug_get_line_info(const char *filename, unsigned long base, unsigned long address,
-                             ucs_debug_address_info_t *info)
+ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *info)
 {
-    strcpy(info->function, "");
-    strcpy(info->source_file, "");
+    Dl_info dlinfo;
+    int ret;
+
+    ret = dladdr(address, &dlinfo);
+    if (!ret) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    strncpy(info->file.path, dlinfo.dli_fname, sizeof(info->file.path));
+    info->file.base = (uintptr_t)dlinfo.dli_fbase;
+    strncpy(info->function,
+            (dlinfo.dli_sname != NULL) ? dlinfo.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
+            sizeof(info->function));
+    strncpy(info->source_file, UCS_DEBUG_UNKNOWN_SYM, sizeof(info->source_file));
     info->line_number = 0;
+
+    return UCS_OK;
 }
 
 void ucs_debug_print_backtrace(FILE *stream, int strip)
@@ -514,24 +547,55 @@ void ucs_debug_print_backtrace(FILE *stream, int strip)
     fprintf(stream, "===================\n");
 }
 
-const char *ucs_debug_get_symbol_name(void *address, char *buffer, size_t max)
-{
-    Dl_info info;
-    int ret;
-
-    ret = dladdr(address, &info);
-    if (ret != 0) {
-        return NULL;
-    }
-
-    return strncpy(buffer, info.dli_sname, max);
-}
-
 static void ucs_debug_show_innermost_source_file(FILE *stream)
 {
 }
 
 #endif /* HAVE_DETAILED_BACKTRACE */
+
+
+const char *ucs_debug_get_symbol_name(void *address)
+{
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    static ucs_debug_address_info_t info;
+    int hash_extra_status;
+    ucs_status_t status;
+    khiter_t hash_it;
+    size_t length;
+    char *sym;
+
+    pthread_mutex_lock(&lock);
+    hash_it = kh_put(ucs_debug_symbol, &ucs_debug_symbols_cache,
+                     (uintptr_t)address, &hash_extra_status);
+    if (hash_extra_status == 0) {
+         sym = kh_value(&ucs_debug_symbols_cache, hash_it);
+    } else {
+        status = ucs_debug_lookup_address(address, &info);
+        if (status == UCS_OK) {
+            if (hash_extra_status == -1) {
+                /* could not add to hash, return pointer to the static buffer */
+                sym = info.function;
+                goto out;
+            }
+
+            /* add new symbol to hash */
+            ucs_assert_always(hash_it != kh_end(&ucs_debug_symbols_cache));
+            length = strlen(info.function);
+            sym = ucs_malloc(length + 1, "debug_symbol");
+            if (sym != NULL) {
+                strncpy(sym, info.function, length + 1);
+            }
+        } else {
+            /* could not resolve symbol */
+            sym = NULL;
+        }
+        kh_value(&ucs_debug_symbols_cache, hash_it) = sym;
+    }
+
+out:
+    pthread_mutex_unlock(&lock);
+    return sym ? sym : UCS_DEBUG_UNKNOWN_SYM;
+}
 
 static void *ucs_debug_alloc_mem(size_t length)
 {
@@ -947,23 +1011,6 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            (address == ucs_debug_signal_restorer);
 }
 
-ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *info)
-{
-    struct dl_address_search dl;
-
-    dl.address = (unsigned long)address;
-    if (!dl_lookup_address(&dl)) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    memset(info, 0, sizeof(*info));
-    info->file.base = dl.base;
-    ucs_expand_path(dl.filename, info->file.path, sizeof(info->file.path));
-
-    ucs_debug_get_line_info(dl.filename, dl.base, (unsigned long)address, info);
-    return UCS_OK;
-}
-
 static struct dl_address_search *ucs_debug_get_lib_info()
 {
     static struct dl_address_search dl = {0, NULL, 0};
@@ -1003,6 +1050,7 @@ unsigned long ucs_debug_get_lib_base_addr()
 
 void ucs_debug_init()
 {
+    kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     if (ucs_global_opts.handle_errors > UCS_HANDLE_ERROR_NONE) {
         ucs_set_signal_handler(ucs_error_signal_handler);
     }
@@ -1017,10 +1065,14 @@ void ucs_debug_init()
 
 void ucs_debug_cleanup()
 {
+    char *sym;
+
     if (ucs_global_opts.handle_errors > UCS_HANDLE_ERROR_NONE) {
         ucs_set_signal_handler(NULL);
     }
     if (ucs_global_opts.debug_signo > 0) {
         signal(ucs_global_opts.debug_signo, SIG_DFL);
     }
+    kh_foreach_value(&ucs_debug_symbols_cache, sym, ucs_free(sym));
+    kh_destroy_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
 }

@@ -283,7 +283,7 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
     return device_enabled && tl_enabled;
 }
 
-static ucs_status_t ucp_add_tl_resources(ucp_context_h context, uct_md_h md,
+static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
                                          ucp_rsc_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
@@ -298,15 +298,14 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context, uct_md_h md,
     *num_resources_p = 0;
 
     /* check what are the available uct resources */
-    status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
+    status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto err;
     }
 
     if (num_tl_resources == 0) {
-        ucs_debug("No tl resources found for md %s",
-                  context->tl_mds[md_index].rsc.md_name);
+        ucs_debug("No tl resources found for md %s", md->rsc.md_name);
         goto out_free_resources;
     }
 
@@ -561,7 +560,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     for (i = 0; i < num_tmp_mds; ++i) {
 
         /* Add communication resources of each MD */
-        status = ucp_add_tl_resources(context, tmp_mds[i].md, md_index, config,
+        status = ucp_add_tl_resources(context, &tmp_mds[i], md_index, config,
                                       &num_tl_resources, masks);
         if (status != UCS_OK) {
             goto err_free_tmp_mds;
