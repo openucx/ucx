@@ -135,8 +135,6 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
                     sync, truncated);
     if (!truncated) {
         EXPECT_EQ(count * sizeof(uint8_t), recvd);
-    } else {
-        EXPECT_LE(recvd, count * sizeof(uint8_t));
     }
 
     if (send_contig) {
@@ -237,8 +235,6 @@ void test_ucp_tag_xfer::test_xfer_contig(size_t size, bool expected, bool sync,
                            expected, sync, truncated);
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
-    } else {
-        EXPECT_LE(recvd, size);
     }
     EXPECT_TRUE(!memcmp(&sendbuf[0], &recvbuf[0], recvd));
 }
@@ -265,10 +261,7 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
     recvd = do_xfer(NULL, NULL, count, dt, dt, expected, sync, truncated);
     if (!truncated) {
         EXPECT_EQ(count * sizeof(uint32_t), recvd);
-    } else {
-        EXPECT_LE(recvd, count * sizeof(uint32_t));
     }
-
     EXPECT_EQ(2, dt_gen_start_count);
     EXPECT_EQ(2, dt_gen_finish_count);
 
@@ -291,8 +284,6 @@ void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
                            expected, sync, truncated);
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
-    } else {
-        EXPECT_LE(recvd, size);
     }
     EXPECT_TRUE(!memcmp(sendbuf.data(), recvbuf.data(), recvd));
 }
