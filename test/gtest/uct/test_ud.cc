@@ -480,7 +480,7 @@ UCS_TEST_P(test_ud, ca_ai) {
     }
 }
 
-UCS_TEST_P(test_ud, ca_md) {
+UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
     ucs_status_t status;
     int new_cwnd;
@@ -493,11 +493,11 @@ UCS_TEST_P(test_ud, ca_md) {
 
     connect();
 
-    short_progress_loop(100);
+    validate_connect(ep(m_e1), 0U);
 
     /* assume we are at the max window
      * on receive drop all packets. After several retransmission
-     * attempts the window will be reduced to the minumum
+     * attempts the window will be reduced to the minimum
      */
     set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
