@@ -16,6 +16,18 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
+#if ENABLE_STATS
+static ucs_stats_class_t ucp_ep_stats_class = {
+    .name           = "ucp_ep",
+    .num_counters   = UCP_EP_STAT_LAST,
+    .counter_names  = {
+        [UCP_EP_STAT_TAG_TX_EAGER]      = "tx_eager",
+        [UCP_EP_STAT_TAG_TX_EAGER_SYNC] = "tx_eager_sync",
+        [UCP_EP_STAT_TAG_TX_RNDV]       = "tx_rndv"
+    }
+};
+#endif
+
 
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
@@ -54,6 +66,13 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
 
+    /* Create statistics */
+    status = UCS_STATS_NODE_ALLOC(&ep->stats, &ucp_ep_stats_class,
+                                  worker->stats, "-%p", ep);
+    if (status != UCS_OK) {
+        goto err_free_ep;
+    }
+
     hash_it = kh_put(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid,
                      &hash_extra_status);
     if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
@@ -61,7 +80,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                   "with status %d", ep, peer_name, worker->uuid, ep->dest_uuid,
                   message, hash_extra_status);
         status = UCS_ERR_NO_RESOURCE;
-        goto err_free_ep;
+        goto err_free_stats;
     }
     kh_value(&worker->ep_hash, hash_it) = ep;
 
@@ -70,6 +89,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
               worker->uuid, ep->dest_uuid, message);
     return UCS_OK;
 
+err_free_stats:
+    UCS_STATS_NODE_FREE(ep->stats);
 err_free_ep:
     ucs_free(ep);
 err:
@@ -89,6 +110,7 @@ static void ucp_ep_delete_from_hash(ucp_ep_h ep)
 static void ucp_ep_delete(ucp_ep_h ep)
 {
     ucp_ep_delete_from_hash(ep);
+    UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep);
 }
 
@@ -407,6 +429,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
         uct_ep_destroy(uct_ep);
     }
 
+    UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep);
 }
 

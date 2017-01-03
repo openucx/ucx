@@ -36,6 +36,8 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 
 #define UCS_STATS_ARG(_arg) , _arg
 
+#define UCS_STATS_RVAL(_rval) _rval
+
 #define UCS_STATS_NODE_DECLARE(_node) \
     ucs_stats_node_t* _node
 
@@ -57,7 +59,7 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 
 #define UCS_STATS_GET_COUNTER(_node, _index) \
     (((_node) != NULL) ?  \
-    (_node)->counters[(_index)] : 0) 
+    (_node)->counters[(_index)] : 0)
 
 #define UCS_STATS_UPDATE_MAX(_node, _index, _value) \
     if ((_node) != NULL) { \
@@ -89,6 +91,7 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 #else
 
 #define UCS_STATS_ARG(_arg)
+#define UCS_STATS_RVAL(_rval) NULL
 #define UCS_STATS_NODE_DECLARE(_node)
 #define UCS_STATS_NODE_ALLOC(_p_node, _class, _parent, ...) UCS_OK
 #define UCS_STATS_NODE_FREE(_node)

@@ -77,6 +77,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 
     ucs_trace_req("starting rndv. sreq: %p. buffer: %p, length: %zu",
                   sreq, sreq->send.buffer, sreq->send.length);
+    sreq->flags |= UCP_REQUEST_FLAG_RNDV;
 
     ucp_ep_connect_remote(sreq->send.ep);
 
@@ -352,6 +353,7 @@ ucp_rndv_rts_handler(void *arg, void *data, size_t length, void *desc)
             ucs_queue_del_iter(&context->tag.expected, iter);
             ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
             status = UCS_OK;
+            UCP_WORKER_STAT_RNDV(worker, EXP);
             goto out;
         }
     }

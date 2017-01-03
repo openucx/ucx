@@ -29,7 +29,9 @@ enum {
     UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
     UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
     UCP_REQUEST_FLAG_EXTERNAL             = UCS_BIT(6),
-    UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7)
+    UCP_REQUEST_FLAG_RECV                 = UCS_BIT(7),
+    UCP_REQUEST_FLAG_SYNC                 = UCS_BIT(8),
+    UCP_REQUEST_FLAG_RNDV                 = UCS_BIT(9)
 };
 
 

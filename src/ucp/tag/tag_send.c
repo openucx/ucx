@@ -113,6 +113,17 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     }
 }
 
+static void ucp_send_req_stat(ucp_request_t *req)
+{
+    if (req->flags & UCP_REQUEST_FLAG_RNDV) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
+    } else if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
+    } else {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+    }
+}
+
 static inline ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
                  size_t zcopy_thresh, size_t rndv_thresh, ucp_send_callback_t cb,
@@ -146,6 +157,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
+    ucp_send_req_stat(req);
+
     /*
      * Start the request.
      * If it is completed immediately, release the request and return the status.
@@ -172,9 +185,9 @@ static void ucp_tag_stub_send_completion(void *request, ucs_status_t status)
 
 static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                   const void* buffer, uintptr_t datatype,
-                                  ucp_tag_t tag)
+                                  ucp_tag_t tag, uint16_t flags)
 {
-    req->flags             = 0;
+    req->flags             = flags;
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
@@ -211,6 +224,8 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
                 UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                                       "ucp_tag_send_nb (eager - finish)",
                                       buffer, length);
+
+                UCP_EP_STAT_TAG_OP(ep, EAGER);
                 ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
                 goto out;
             }
@@ -226,7 +241,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb", req,
                           ucp_dt_length(datatype, count, buffer, &req->send.state));
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, 0);
 
     ret = ucp_tag_send_req(req, count,
                            ucp_ep_config(ep)->am.max_eager_short,
@@ -262,7 +277,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, UCP_REQUEST_FLAG_SYNC);
 
     ret = ucp_tag_send_req(req, count,
                            -1, /* disable short method */

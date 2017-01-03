@@ -115,6 +115,8 @@ public:
                                  int thread_type = SINGLE_THREAD);
 
     virtual void modify_config(const std::string& name, const std::string& value);
+    void stats_activate();
+    void stats_restore();
 
 protected:
     virtual void init();
