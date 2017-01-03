@@ -123,11 +123,13 @@ void test_rc_flow_control::test_pending_grant(int wnd)
     enable_entity(m_e2);
     set_tx_moderation(m_e2, 1);
     send_am_messages(m_e2, 1, UCS_OK);
-    progress_loop();
 
     /* Check that m_e1 got grant */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
+    while ((ucs_get_time() < timeout) && (!get_fc_ptr(m_e1)->fc_wnd)) {
+        short_progress_loop();
+    }
     send_am_messages(m_e1, 1, UCS_OK);
-    flush();
 }
 
 void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)

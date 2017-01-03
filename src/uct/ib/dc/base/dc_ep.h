@@ -100,7 +100,7 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
 #define uct_dc_iface_dci_alloc     uct_dc_iface_dci_alloc_dcs
 #define uct_dc_iface_dci_free      uct_dc_iface_dci_free_dcs
 
-static UCS_F_ALWAYS_INLINE ucs_status_t uct_dc_ep_basic_init(uct_dc_iface_t *iface, 
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_dc_ep_basic_init(uct_dc_iface_t *iface,
                                                              uct_dc_ep_t *ep)
 {
     ucs_arbiter_group_init(&ep->arb_group);
@@ -278,6 +278,11 @@ ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep);
                          (_iface)->super.config.fc_hard_thresh)) { \
             ucs_status_t status = uct_dc_ep_check_fc(_iface, _ep); \
             if (ucs_unlikely(status != UCS_OK)) { \
+                if ((_ep)->dci != UCT_DC_EP_NO_DCI) { \
+                    ucs_assertv_always(uct_dc_iface_dci_has_outstanding(_iface, (_ep)->dci), \
+                                       "iface (%p) ep (%p) dci leak detected: dci=%d", \
+                                       _iface, _ep, (_ep)->dci); \
+                } \
                 return status; \
             } \
         } \

@@ -264,7 +264,6 @@ uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)
     uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops,
                                              uct_rc_iface_ops_t);
     return ops->fc_ctrl(ep, op, req);
-
 }
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,

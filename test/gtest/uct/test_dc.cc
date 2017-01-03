@@ -363,7 +363,6 @@ _UCT_INSTANTIATE_TEST_CASE(test_dc, dc_mlx5)
 
 
 class test_dc_flow_control : public test_rc_flow_control {
-
 public:
 
     void init() {
@@ -392,6 +391,7 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
 UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
     test_pending_grant(5);
+    flush();
 }
 
 /* Check that soft request is not handled by DC */
