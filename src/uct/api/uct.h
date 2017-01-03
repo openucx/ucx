@@ -269,6 +269,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref ::uct_ep_put_zcopy
                                               @anchor uct_iface_attr_cap_put_max_iov */
@@ -282,6 +285,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref uct_ep_get_zcopy
                                               @anchor uct_iface_attr_cap_get_max_iov */
@@ -296,6 +302,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Total max. size (incl. the header
                                               and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
             size_t           max_hdr;    /**< Max. header size for zcopy */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref ::uct_ep_am_zcopy

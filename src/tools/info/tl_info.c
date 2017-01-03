@@ -130,6 +130,26 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
         PRINT_ZCAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.min_zcopy,
                    iface_attr.cap.put.max_zcopy, iface_attr.cap.put.max_iov);
+
+        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            printf("#  put_opt_zcopy_align: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.put.opt_zcopy_align));
+            printf("#        put_align_mtu: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.put.align_mtu));
+        }
+        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_GET_ZCOPY)) {
+           printf("#  get_opt_zcopy_align: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.get.opt_zcopy_align));
+           printf("#        get_align_mtu: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.get.align_mtu));
+        }
+        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_AM_ZCOPY)) {
+           printf("#   am_opt_zcopy_align: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.am.opt_zcopy_align));
+           printf("#         am_align_mtu: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.am.align_mtu));
+        }
+
         PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
         PRINT_ZCAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.min_zcopy,
                    iface_attr.cap.get.max_zcopy, iface_attr.cap.get.max_iov);
