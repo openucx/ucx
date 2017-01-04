@@ -157,4 +157,85 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, alloc_advise) {
+    ucs_status_t status;
+    bool is_dummy;
+
+    sender().connect(&sender());
+
+    size_t size = 128 * (1024 * 1024);
+
+    ucp_mem_h memh;
+    ucp_mem_map_params_t params;
+    ucp_mem_advise_params_t advise_params;
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = NULL;
+    params.length     = size;
+    params.flags      = UCP_MEM_MAP_NONBLOCK;
+
+    status = ucp_mem_map(sender().ucph(), &params, &memh);
+    ASSERT_UCS_OK(status);
+
+    
+    advise_params.field_mask = UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS |
+                               UCP_MEM_ADVISE_PARAM_FIELD_LENGTH |
+                               UCP_MEM_ADVISE_PARAM_FIELD_ADVICE;
+    advise_params.address    = params.address;
+    advise_params.length     = size;
+    advise_params.advice     = UCP_MADV_WILLNEED;
+    status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
+    ASSERT_UCS_OK(status);
+
+    is_dummy = (size == 0);
+    test_rkey_management(&sender(), memh, is_dummy);
+
+    status = ucp_mem_unmap(sender().ucph(), memh);
+    ASSERT_UCS_OK(status);
+}
+
+UCS_TEST_P(test_ucp_mmap, reg_advise) {
+
+    ucs_status_t status;
+    bool is_dummy;
+
+    sender().connect(&sender());
+
+    size_t size = 128 * 1024 * 1024;
+
+    void *ptr = malloc(size);
+
+    ucp_mem_h memh;
+    ucp_mem_map_params_t params;
+    ucp_mem_advise_params_t advise_params;
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = ptr;
+    params.length     = size;
+    params.flags      = UCP_MEM_MAP_NONBLOCK;
+
+    status = ucp_mem_map(sender().ucph(), &params, &memh);
+    ASSERT_UCS_OK(status);
+
+    advise_params.field_mask = UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS |
+                               UCP_MEM_ADVISE_PARAM_FIELD_LENGTH |
+                               UCP_MEM_ADVISE_PARAM_FIELD_ADVICE;
+    advise_params.address    = params.address;
+    advise_params.length     = size;
+    advise_params.advice     = UCP_MADV_WILLNEED;
+    status = ucp_mem_advise(sender().ucph(), memh, &advise_params); 
+    ASSERT_UCS_OK(status);
+    is_dummy = (size == 0);
+    test_rkey_management(&sender(), memh, is_dummy);
+
+    status = ucp_mem_unmap(sender().ucph(), memh);
+    ASSERT_UCS_OK(status);
+
+    free(ptr);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_mmap)

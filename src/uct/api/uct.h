@@ -362,6 +362,7 @@ enum {
     UCT_MD_FLAG_NEED_RKEY = UCS_BIT(3),  /**< The transport needs a valid
                                               remote memory key for remote memory
                                               operations */
+    UCT_MD_FLAG_ADVISE    = UCS_BIT(4),  /**< MD support memory advice */
 };
 
 
@@ -1066,6 +1067,39 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
  */
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
+
+/**
+ * @ingroup UCT_MD
+ * @brief list of UCT memory use advice
+ *
+ */
+typedef enum uct_mem_advice {
+    UCT_MADV_NORMAL  = 0,  /**< No special treatment */
+    UCT_MADV_WILLNEED      /**< can be used on the memory mapped with the
+                                @ref UCT_MD_MEM_FLAG_NONBLOCK to speed up 
+                                memory mapping and to avoid page faults when
+                                the memory is accessed for the first time. */
+} uct_mem_advice_t;
+
+/**
+ * @ingroup UCT_MD
+ * @brief Give advice about the use of memory 
+ *
+ * This routine advises the UCT about how to handle memory range beginning at
+ * address and size of length bytes. This call does not influence the semantics
+ * of the application, but may influence its performance. The advice may be 
+ * ignored. 
+ *
+ * @param [in]     md          Memory domain memory was allocated or registered on.
+ * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc
+ * @param [in]     address     Memory base address. Memory range must belong to the
+ *                             @ref memh
+ * @param [in]     length      Length of memory to advise. Must be >0.
+ * @param [in]     advice      Memory use advice as defined in the
+ *                             @ref uct_mem_advice_t list
+ */
+ucs_status_t uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr,
+                               size_t length, uct_mem_advice_t advice);
 
 
 /**
