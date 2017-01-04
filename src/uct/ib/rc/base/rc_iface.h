@@ -99,7 +99,7 @@ typedef struct uct_rc_hdr {
 
 
 typedef struct uct_rc_fc_request {
-    uct_pending_req_t req;
+    uct_pending_req_t super;
     uct_ep_t          *ep;
 } uct_rc_fc_request_t;
 
@@ -256,6 +256,15 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 ucs_status_t uct_rc_init_fc_thresh(uct_rc_fc_config_t *fc_cfg,
                                    uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface);
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)
+{
+    uct_rc_iface_t *iface   = ucs_derived_of(ep->iface, uct_rc_iface_t);
+    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops,
+                                             uct_rc_iface_ops_t);
+    return ops->fc_ctrl(ep, op, req);
+}
 
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
                                                   unsigned qp_num)

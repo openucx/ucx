@@ -98,25 +98,24 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-
 static UCS_F_ALWAYS_INLINE void
-uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
-                             struct ibv_exp_send_wr *wr, uint64_t send_flags)
+uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
+                                    struct ibv_exp_send_wr *wr,
+                                    uint8_t dci, struct ibv_ah *ah,
+                                    uint32_t dct_num, uint64_t send_flags)
 {
     struct ibv_exp_send_wr *bad_wr;
     int ret;
-    uint8_t dci;
     uct_rc_txqp_t *txqp;
 
-    dci  = ep->super.dci;
     txqp = &iface->super.tx.dcis[dci].txqp;
     /* TODO: check tx moderation */
     send_flags |= IBV_SEND_SIGNALED;
 
     wr->exp_send_flags    = send_flags;
     wr->wr_id             = txqp->unsignaled;
-    wr->dc.ah             = ep->ah;
-    wr->dc.dct_number     = ep->dest_qpn;
+    wr->dc.ah             = ah;
+    wr->dc.dct_number     = dct_num;
     wr->dc.dct_access_key = UCT_IB_KEY;
 
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
@@ -131,6 +130,14 @@ uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
 
     uct_rc_verbs_txqp_posted(txqp, &iface->dcis_txcnt[dci],
                              &iface->super.super, send_flags & IBV_SEND_SIGNALED);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_verbs_iface_post_send(uct_dc_verbs_iface_t* iface, uct_dc_verbs_ep_t *ep,
+                             struct ibv_exp_send_wr *wr, uint64_t send_flags)
+{
+    uct_dc_verbs_iface_post_send_to_dci(iface, wr, ep->super.dci, ep->ah,
+                                        ep->dest_qpn, send_flags);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -293,10 +300,11 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     UCT_RC_CHECK_AM_SHORT(id, length, iface->verbs_common.config.max_inline);
 
-    UCT_DC_CHECK_RES(&iface->super, &ep->super);
+    UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
     uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, &am, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
+    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return UCS_OK;
 }
@@ -313,12 +321,13 @@ ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_CHECK_AM_ID(id);
 
-    UCT_DC_CHECK_RES(&iface->super, &ep->super);
+    UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp, desc,
                                       id, pack_cb, arg, &length);
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.exp_opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, 0);
+    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return length;
 }
@@ -342,7 +351,7 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
                           iface->verbs_common.config.short_desc_size,
                           iface->super.super.super.config.seg_size);
-    UCT_DC_CHECK_RES(&iface->super, &ep->super);
+    UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super.super, &iface->verbs_common.short_desc_mp,
                                       desc, id, header, header_length, comp, &send_flags);
 
@@ -352,6 +361,7 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                       header_length + uct_iov_total_length(iov, iovcnt));
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, send_flags);
+    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return UCS_INPROGRESS;
 }
@@ -565,6 +575,98 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
     return status;
 }
 
+ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid,
+                                          struct ibv_ah **ah_p)
+{
+    struct ibv_ah_attr ah_attr;
+    struct ibv_ah *ah;
+    uct_ib_iface_t *iface = &dc_iface->super.super;
+
+    /* TODO: GRH, path_bits, etc */
+    ah_attr.sl            = iface->config.sl;
+    ah_attr.src_path_bits = iface->path_bits[0];
+    ah_attr.dlid          = lid | ah_attr.src_path_bits;
+    ah_attr.port_num      = iface->config.port_num;
+    ah_attr.is_global     = 0;
+    ah_attr.static_rate   = 0;
+
+    ah = ibv_create_ah(uct_ib_iface_md(iface)->pd, &ah_attr);
+    if (ucs_unlikely(ah == NULL)) {
+        ucs_error("Failed to create ah on "UCT_IB_IFACE_FMT,
+                  UCT_IB_IFACE_ARG(iface));
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    *ah_p = ah;
+    return UCS_OK;
+}
+
+
+/* Send either request for grants or grant message. Request includes ep
+ * structure address, which will be received back in a grant message.
+ * This will help to determine the particular ep targeted by the grant.
+ */
+ucs_status_t uct_dc_verbs_ep_fc_ctrl(uct_ep_h tl_ep, unsigned op,
+                                     uct_rc_fc_request_t *req)
+{
+    uct_rc_hdr_t hdr;
+    struct ibv_exp_send_wr wr;
+    struct ibv_ah *ah;
+    ucs_status_t status;
+    uct_dc_fc_request_t *dc_req;
+    uct_dc_verbs_ep_t *dc_verbs_ep;
+    uct_dc_ep_t *dc_ep          = ucs_derived_of(tl_ep, uct_dc_ep_t);
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_dc_verbs_iface_t);
+
+    ucs_assert((sizeof(hdr) + sizeof(dc_ep)) <=
+               iface->verbs_common.config.max_inline);
+
+    UCT_DC_CHECK_RES(&iface->super, dc_ep);
+
+    hdr.am_id                                 = op;
+    wr.sg_list                                = iface->verbs_common.inl_sge;
+    wr.num_sge                                = 2;
+    wr.dc.dct_access_key                      = UCT_IB_KEY;
+    wr.next                                   = NULL;
+
+    iface->verbs_common.inl_sge[0].addr       = (uintptr_t)&hdr;
+    iface->verbs_common.inl_sge[0].length     = sizeof(hdr);
+
+    if (op == UCT_RC_EP_FC_PURE_GRANT) {
+        ucs_assert(req != NULL);
+        dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
+
+        status = uct_dc_verbs_iface_create_ah(&iface->super, dc_req->lid, &ah);
+        if (status != UCS_OK) {
+            return status;
+        }
+        wr.exp_opcode                         = IBV_WR_SEND;
+        iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_req->sender_ep;
+        iface->verbs_common.inl_sge[1].length = sizeof(dc_req->sender_ep);
+        uct_dc_verbs_iface_post_send_to_dci(iface, &wr, dc_ep->dci, ah,
+                                            dc_req->dct_num,
+                                            IBV_SEND_INLINE | IBV_SEND_SIGNALED);
+        ibv_destroy_ah(ah);
+    } else {
+        ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
+        iface->verbs_common.inl_sge[1].addr   = (uintptr_t)&dc_ep;
+        iface->verbs_common.inl_sge[1].length = sizeof(dc_ep);
+        wr.exp_opcode                         = IBV_WR_SEND_WITH_IMM;
+
+        /* Send out DCT number to the peer, so it will be able
+         * to send grants back */
+        wr.ex.imm_data                        = iface->super.rx.dct->dct_num;
+
+        dc_verbs_ep = ucs_derived_of(dc_ep, uct_dc_verbs_ep_t);
+        uct_dc_verbs_iface_post_send(iface, dc_verbs_ep, &wr, IBV_SEND_INLINE |
+                                     IBV_SEND_SIGNALED);
+        UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
+                                 UCT_RC_FC_STAT_TX_HARD_REQ, 1);
+    }
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
 {
@@ -652,12 +754,13 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
             .ep_flush                 = uct_dc_verbs_ep_flush,
 
             .ep_pending_add           = uct_dc_ep_pending_add,
-            .ep_pending_purge         = uct_dc_ep_pending_purge,
+            .ep_pending_purge         = uct_dc_ep_pending_purge
         },
         .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-        .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+        .arm_rx_cq                = uct_ib_iface_arm_rx_cq
     },
-    .fc_ctrl                  = NULL /* TODO: */
+    .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
+    .fc_handler               = uct_dc_iface_fc_handler
 };
 
 void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)
