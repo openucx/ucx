@@ -231,7 +231,13 @@ UCS_TEST_P(test_ud, tx_window1) {
         EXPECT_UCS_OK(tx(m_e1));
     }
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
-    short_progress_loop();
+
+    /* wait for ack */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    while ((ucs_get_time() < timeout) &&
+            uct_ud_ep_no_window(ep(m_e1))) {
+        short_progress_loop();
+    }
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(tx(m_e1));
@@ -362,18 +368,35 @@ UCS_TEST_P(test_ud, crep_drop2) {
     m_e1->connect_to_iface(0, *m_e2);
     m_e2->connect_to_iface(0, *m_e1);
 
-    ep(m_e1, 0)->rx.rx_hook = drop_ctl;
-    ep(m_e2, 0)->rx.rx_hook = drop_ctl;
+    ep(m_e1)->rx.rx_hook = drop_ctl;
+    ep(m_e2)->rx.rx_hook = drop_ctl;
     short_progress_loop();
 
     validate_connect(ep(m_e1), 0U);
     validate_connect(ep(m_e2), 0U);
 
-    /* Expect that creq and crep are sent and window is empty */
-    EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
-    EXPECT_EQ(3, ep(m_e1, 0)->tx.psn);
-    EXPECT_EQ(1, ep(m_e2, 0)->tx.acked_psn);
-    EXPECT_EQ(3, ep(m_e2, 0)->tx.psn);
+    /* Remove filter for CREP to be handled and TX win to be freed. */
+    ep(m_e1)->rx.rx_hook = uct_ud_ep_null_hook;
+    ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
+
+    /* Expect that creq (and maybe crep already) are sent */
+    EXPECT_EQ(ep(m_e1)->tx.acked_psn, 1);
+    EXPECT_EQ(ep(m_e2)->tx.acked_psn, 1);
+    EXPECT_GE(ep(m_e1)->tx.psn,       2);
+    EXPECT_GE(ep(m_e2)->tx.psn,       2);
+
+    /* Wait for TX win to be empty (which means that all
+     * CONN packets are handled) */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    while (ucs_get_time() < timeout) {
+        if(ucs_queue_is_empty(&ep(m_e1)->tx.window) &&
+           ucs_queue_is_empty(&ep(m_e2)->tx.window)) {
+            break;
+        }
+        short_progress_loop();
+    }
+    EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
+    EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e2)->tx.window));
 }
 
 UCS_TEST_P(test_ud, crep_ack_drop) {
