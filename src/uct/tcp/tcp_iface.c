@@ -15,6 +15,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
      ucs_offsetof(uct_tcp_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+    {"PREFER_DEFAULT", "y",
+     "Give higher priority to the default network interface on the host",
+     ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
+
     {"BACKLOG", "100",
      "Backlog size of incoming connections",
      ucs_offsetof(uct_tcp_iface_config_t, backlog), UCS_CONFIG_TYPE_UINT},
@@ -41,26 +45,79 @@ static ucs_status_t uct_tcp_iface_get_address(uct_iface_h tl_iface, uct_iface_ad
     return UCS_OK;
 }
 
+static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
+                                      const uct_device_addr_t *dev_addr,
+                                      const uct_iface_addr_t *iface_addr)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    const in_addr_t *remote_inaddr = (const in_addr_t*)dev_addr;
+    in_addr_t netmask = iface->config.netmask.sin_addr.s_addr;
+
+    return (*remote_inaddr & netmask) ==
+           (iface->config.ifaddr.sin_addr.s_addr & netmask);
+}
+
 static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    ucs_status_t status;
+    int is_default;
+
     memset(attr, 0, sizeof(*attr));
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
     attr->ep_addr_len      = 0;
-    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-    attr->latency          = 50e-6;       /* 50 usec */
-    attr->bandwidth        = 100e6 / 8.0; /* 100 Mbit/s */
-    attr->overhead         = 50e-6;       /* 50 usec */
-    attr->priority         = 0;
+    attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                             UCT_IFACE_FLAG_PENDING;
+
+    attr->cap.am.max_short = 0;
+    attr->cap.am.max_bcopy = iface->config.max_bcopy;
+    attr->cap.am.max_zcopy = 0;
+    attr->cap.am.max_hdr   = 0;
+    attr->cap.am.max_iov   = 1;
+
+    status = uct_tcp_netif_caps(iface->if_name, &attr->latency, &attr->bandwidth);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    attr->overhead         = 50e-6;  /* 50 usec */
+
+    if (iface->config.prefer_default) {
+        status = uct_tcp_netif_is_default(iface->if_name, &is_default);
+        if (status != UCS_OK) {
+             return status;
+        }
+
+        attr->priority = is_default ? 0 : 1;
+    } else {
+        attr->priority = 0;
+    }
+
     return UCS_OK;
+}
+
+static void uct_tcp_iface_recv_handler(int fd, void *arg)
+{
 }
 
 static void uct_tcp_iface_connect_handler(int fd, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
+    uct_worker_h worker = iface->super.worker;
+    struct sockaddr_in client_addr;
+    socklen_t client_addrlen;
+    ucs_status_t status;
+    int hash_extra_status;
+    khiter_t hash_it;
     int sockfd;
 
-    sockfd = accept(iface->listen_fd, NULL, NULL);
+    ucs_assert(fd == iface->listen_fd);
+
+    memset(&client_addr, 0, sizeof(client_addr));
+    client_addrlen = sizeof(client_addr);
+    sockfd = accept(iface->listen_fd, (struct sockaddr*)&client_addr,
+                    &client_addrlen);
     if (sockfd < 0) {
         if (errno != EAGAIN) {
             ucs_error("accept() failed: %m");
@@ -68,7 +125,26 @@ static void uct_tcp_iface_connect_handler(int fd, void *arg)
         return;
     }
 
-    close(sockfd); /* TODO accept data from the connection */
+    ucs_trace("accepted connection from %s:%d", inet_ntoa(client_addr.sin_addr),
+              ntohs(client_addr.sin_port));
+
+    status = ucs_sys_fcntl_modfl(sockfd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        close(sockfd);
+        return;
+    }
+
+    hash_it = kh_put(uct_tcp_fd_hash, &iface->fd_hash, sockfd, &hash_extra_status);
+    if (hash_extra_status == -1) {
+        ucs_fatal("failed to add fd to hash");
+        return;
+    } else if (hash_extra_status == 0) {
+        ucs_fatal("fd already exists in hash");
+    }
+    kh_value(&iface->fd_hash, hash_it) = NULL;
+
+    ucs_async_set_event_handler(worker->async->mode, sockfd, POLLIN,
+                                uct_tcp_iface_recv_handler, iface, worker->async);
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
@@ -76,11 +152,18 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_get_device_address = uct_tcp_iface_get_device_address,
     .iface_get_address        = uct_tcp_iface_get_address,
     .iface_query              = uct_tcp_iface_query,
-    .iface_is_reachable       = (void*)ucs_empty_function_return_inprogress, /* TODO */
+    .iface_is_reachable       = uct_tcp_iface_is_reachable,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_tcp_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_ep_t),
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
+};
+
+static ucs_mpool_ops_t uct_tcp_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_mmap,
+    .chunk_release = ucs_mpool_chunk_munmap,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -97,7 +180,26 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(params->dev_name));
 
-    status = uct_tcp_netif_inaddr(params->dev_name, &self->config.ifaddr);
+    strncpy(self->if_name, params->dev_name, sizeof(self->if_name));
+    self->config.max_bcopy       = config->super.max_bcopy;
+    self->config.prefer_default  = config->prefer_default;
+
+    kh_init_inplace(uct_tcp_fd_hash, &self->fd_hash);
+
+    status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
+                                  &self->config.netmask);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucs_mpool_init(&self->mp, 0,
+                            self->config.max_bcopy,
+                            0,                        /* alignment offset */
+                            UCS_SYS_CACHE_LINE_SIZE,  /* alignment */
+                            32,                       /* grow */
+                            -1,                       /* max buffers */
+                            &uct_tcp_mpool_ops,
+                            "tcp_desc");
     if (status != UCS_OK) {
         goto err;
     }
@@ -105,7 +207,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     /* Create the server socket for accepting incoming connections */
     status = uct_tcp_socket_create(&self->listen_fd);
     if (status != UCS_OK) {
-        goto err;
+        goto err_mpool_cleanup;
     }
 
     /* Set the server socket to non-blocking mode */
@@ -140,6 +242,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_close_sock;
     }
 
+    ucs_debug("listening for connections on %s:%d", inet_ntoa(bind_addr.sin_addr),
+              ntohs(bind_addr.sin_port));
+
     /* Register event handler for incoming connections */
     status = ucs_async_set_event_handler(worker->async->mode, self->listen_fd,
                                          POLLIN|POLLERR,
@@ -153,6 +258,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 
 err_close_sock:
     close(self->listen_fd);
+err_mpool_cleanup:
+    ucs_mpool_cleanup(&self->mp, 0);
 err:
     return status;
 }
@@ -160,12 +267,21 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
 {
     ucs_status_t status;
+    uct_tcp_ep_t UCS_V_UNUSED *ep;
+    int fd;
 
     status = ucs_async_remove_handler(self->listen_fd, 1);
     if (status != UCS_OK) {
         ucs_warn("failed to remove handler for server socket fd=%d", self->listen_fd);
     }
+
+    kh_foreach(&self->fd_hash, fd, ep, {
+        ucs_async_remove_handler(fd, 1);
+        close(fd);
+    });
     close(self->listen_fd);
+    ucs_mpool_cleanup(&self->mp, 1);
+    kh_destroy_inplace(uct_tcp_fd_hash, &self->fd_hash);
 }
 
 UCS_CLASS_DEFINE(uct_tcp_iface_t, uct_base_iface_t);
