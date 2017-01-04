@@ -540,7 +540,8 @@ public:
     local_event_add_handler(ucs_async_mode_t mode) :
         local_event(mode), m_event_set(false)
     {
-         ucs_assertv(0 == pipe(m_pipefd), "%m");
+        int ret = pipe(m_pipefd);
+        ucs_assertv_always(0 == ret, "%m");
     }
 
     ~local_event_add_handler() {
