@@ -8,6 +8,7 @@
 #include <common/test_helpers.h>
 extern "C" {
 #include <ucs/arch/atomic.h>
+#include <ucs/stats/stats.h>
 }
 
 
@@ -116,6 +117,7 @@ void ucp_test::wait_for_flag(volatile size_t *flag, double timeout)
 
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
+        entity.flush_worker(i);
         void *dreq = entity.disconnect_nb(i);
         if (!UCS_PTR_IS_PTR(dreq)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
@@ -212,6 +214,24 @@ void ucp_test::modify_config(const std::string& name, const std::string& value)
     }
 }
 
+void ucp_test::stats_activate()
+{
+    ucs_stats_cleanup();
+    push_config();
+    modify_config("STATS_DEST",    "file:/dev/null");
+    modify_config("STATS_TRIGGER", "exit");
+    ucs_stats_init();
+    ASSERT_TRUE(ucs_stats_is_active());
+}
+
+void ucp_test::stats_restore()
+{
+    ucs_stats_cleanup();
+    pop_config();
+    ucs_stats_init();
+}
+
+
 bool ucp_test::check_test_param(const std::string& name,
                                 const std::string& test_case_name,
                                 const ucp_test_param& test_param)
@@ -263,9 +283,12 @@ ucs_log_func_rc_t ucp_test::empty_log_handler(const char *file, unsigned line,
                                               va_list ap)
 {
     if (level == UCS_LOG_LEVEL_ERROR) {
+        va_list ap2;
         std::string msg;
         msg.resize(256);
-        vsnprintf(&msg[0], msg.size() - 1, message, ap);
+        va_copy(ap2, ap);
+        vsnprintf(&msg[0], msg.size() - 1, message, ap2);
+        va_end(ap2);
         msg.resize(strlen(&msg[0]));
         m_last_err_msg = msg;
         level = UCS_LOG_LEVEL_DEBUG;
@@ -353,6 +376,9 @@ void ucp_test_base::entity::connect(const entity* other) {
 }
 
 void ucp_test_base::entity::flush_worker(int worker_index) const {
+    if (worker(worker_index) == NULL) {
+        return;
+    }
     ucs_status_t status = ucp_worker_flush(worker(worker_index));
     ASSERT_UCS_OK(status);
 }
@@ -368,6 +394,7 @@ void ucp_test_base::entity::fence(int worker_index) const {
 }
 
 void ucp_test_base::entity::disconnect(int ep_index) {
+    flush_ep(ep_index);
     m_eps.at(ep_index).reset();
 }
 

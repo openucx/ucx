@@ -16,6 +16,18 @@
 #include <ucs/debug/log.h>
 #include <string.h>
 
+#if ENABLE_STATS
+static ucs_stats_class_t ucp_ep_stats_class = {
+    .name           = "ucp_ep",
+    .num_counters   = UCP_EP_STAT_LAST,
+    .counter_names  = {
+        [UCP_EP_STAT_TAG_TX_EAGER]      = "tx_eager",
+        [UCP_EP_STAT_TAG_TX_EAGER_SYNC] = "tx_eager_sync",
+        [UCP_EP_STAT_TAG_TX_RNDV]       = "tx_rndv"
+    }
+};
+#endif
+
 
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
@@ -54,6 +66,13 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
 #endif
 
+    /* Create statistics */
+    status = UCS_STATS_NODE_ALLOC(&ep->stats, &ucp_ep_stats_class,
+                                  worker->stats, "-%p", ep);
+    if (status != UCS_OK) {
+        goto err_free_ep;
+    }
+
     hash_it = kh_put(ucp_worker_ep_hash, &worker->ep_hash, dest_uuid,
                      &hash_extra_status);
     if (ucs_unlikely(hash_it == kh_end(&worker->ep_hash))) {
@@ -61,7 +80,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                   "with status %d", ep, peer_name, worker->uuid, ep->dest_uuid,
                   message, hash_extra_status);
         status = UCS_ERR_NO_RESOURCE;
-        goto err_free_ep;
+        goto err_free_stats;
     }
     kh_value(&worker->ep_hash, hash_it) = ep;
 
@@ -70,6 +89,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
               worker->uuid, ep->dest_uuid, message);
     return UCS_OK;
 
+err_free_stats:
+    UCS_STATS_NODE_FREE(ep->stats);
 err_free_ep:
     ucs_free(ep);
 err:
@@ -89,6 +110,7 @@ static void ucp_ep_delete_from_hash(ucp_ep_h ep)
 static void ucp_ep_delete(ucp_ep_h ep)
 {
     ucp_ep_delete_from_hash(ep);
+    UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep);
 }
 
@@ -407,6 +429,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message)
         uct_ep_destroy(uct_ep);
     }
 
+    UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep);
 }
 
@@ -561,12 +584,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     size_t rndv_thresh;
 
     /* Default settings */
-    config->zcopy_thresh          = SIZE_MAX;
-    config->sync_zcopy_thresh     = -1;
+    config->am.zcopy_thresh       = SIZE_MAX;
+    config->am.sync_zcopy_thresh  = -1;
     config->bcopy_thresh          = context->config.ext.bcopy_thresh;
-    config->rndv_thresh           = SIZE_MAX;
-    config->sync_rndv_thresh      = SIZE_MAX;
-    config->max_rndv_get_zcopy    = SIZE_MAX;
+    config->rndv.thresh           = SIZE_MAX;
+    config->rndv.sync_thresh      = SIZE_MAX;
+    config->rndv.max_get_zcopy    = SIZE_MAX;
     config->p2p_lanes             = 0;
 
     /* Collect p2p lanes */
@@ -585,23 +608,26 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane];
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr  = &worker->iface_attrs[rsc_index];
-            md_attr     = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
+            md_attr     = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-                config->max_eager_short  = iface_attr->cap.am.max_short -
-                                           sizeof(ucp_eager_hdr_t);
-                config->max_am_short     = iface_attr->cap.am.max_short -
-                                           sizeof(uint64_t);
+                config->am.max_eager_short = iface_attr->cap.am.max_short -
+                                             sizeof(ucp_eager_hdr_t);
+                config->am.max_short       = iface_attr->cap.am.max_short -
+                                             sizeof(uint64_t);
+            } else {
+                config->am.max_eager_short = -1;
+                config->am.max_short       = -1;
             }
 
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-                config->max_am_bcopy     = iface_attr->cap.am.max_bcopy;
+                config->am.max_bcopy = iface_attr->cap.am.max_bcopy;
             }
 
             if ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) &&
                 (md_attr->cap.flags & UCT_MD_FLAG_REG))
             {
-                config->max_am_zcopy  = iface_attr->cap.am.max_zcopy;
+                config->am.max_zcopy = iface_attr->cap.am.max_zcopy;
 
                 if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
                     /* auto */
@@ -610,22 +636,22 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                             (1.0 / iface_attr->bandwidth) -
                                             md_attr->reg_cost.growth);
                     if (zcopy_thresh < 0) {
-                        config->zcopy_thresh      = SIZE_MAX;
-                        config->sync_zcopy_thresh = -1;
+                        config->am.zcopy_thresh      = SIZE_MAX;
+                        config->am.sync_zcopy_thresh = -1;
                     } else {
-                        config->zcopy_thresh      = zcopy_thresh;
-                        config->sync_zcopy_thresh = zcopy_thresh;
+                        config->am.zcopy_thresh      = zcopy_thresh;
+                        config->am.sync_zcopy_thresh = zcopy_thresh;
                     }
                 } else {
-                    config->zcopy_thresh      = context->config.ext.zcopy_thresh;
-                    config->sync_zcopy_thresh = context->config.ext.zcopy_thresh;
+                    config->am.zcopy_thresh      = context->config.ext.zcopy_thresh;
+                    config->am.sync_zcopy_thresh = context->config.ext.zcopy_thresh;
                 }
 
-                config->zcopy_thresh = ucs_max(config->zcopy_thresh,
-                                               iface_attr->cap.am.min_zcopy);
+                config->am.zcopy_thresh = ucs_max(config->am.zcopy_thresh,
+                                                  iface_attr->cap.am.min_zcopy);
             }
         } else {
-            config->max_am_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
+            config->am.max_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
     }
 
@@ -638,6 +664,10 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rma_config = &config->rma[lane];
         rsc_index  = config->key.lanes[lane];
         iface_attr = &worker->iface_attrs[rsc_index];
+
+        rma_config->put_zcopy_thresh = SIZE_MAX;
+        rma_config->get_zcopy_thresh = SIZE_MAX;
+
         if (rsc_index != UCP_NULL_RESOURCE) {
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
                 rma_config->max_put_short = iface_attr->cap.put.max_short;
@@ -645,8 +675,30 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
                 rma_config->max_put_bcopy = iface_attr->cap.put.max_bcopy;
             }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+                rma_config->max_put_zcopy    = iface_attr->cap.put.max_zcopy;
+                /* TODO: formula */
+                if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                    rma_config->put_zcopy_thresh = 16384; 
+                } else {
+                    rma_config->put_zcopy_thresh = context->config.ext.zcopy_thresh; 
+                }
+                rma_config->put_zcopy_thresh = ucs_max(rma_config->put_zcopy_thresh,
+                                                       iface_attr->cap.put.min_zcopy);
+            }
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
                 rma_config->max_get_bcopy = iface_attr->cap.get.max_bcopy;
+            }
+            if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+                /* TODO: formula */
+                rma_config->max_get_zcopy = iface_attr->cap.get.max_zcopy;
+                if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+                    rma_config->get_zcopy_thresh = 16384; 
+                } else {
+                    rma_config->get_zcopy_thresh = context->config.ext.zcopy_thresh; 
+                }
+                rma_config->get_zcopy_thresh = ucs_max(rma_config->get_zcopy_thresh,
+                                                       iface_attr->cap.get.min_zcopy);
             }
         } else {
             rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
@@ -659,7 +711,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
         rsc_index   = config->key.lanes[lane];
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->iface_attrs[rsc_index];
-            md_attr    = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
+            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
             ucs_assert_always(iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY);
 
             if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
@@ -703,11 +755,11 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             rndv_thresh                = ucs_max(rndv_thresh,
                                                  iface_attr->cap.get.min_zcopy);
 
-            config->max_rndv_get_zcopy = iface_attr->cap.get.max_zcopy;
-            config->rndv_thresh        = rndv_thresh;
-            config->sync_rndv_thresh   = rndv_thresh;
+            config->rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
+            config->rndv.thresh        = rndv_thresh;
+            config->rndv.sync_thresh   = rndv_thresh;
 
-            ucs_trace("rendezvous threshold is %zu", config->rndv_thresh);
+            ucs_trace("rendezvous threshold is %zu", config->rndv.thresh);
         } else {
             ucs_debug("rendezvous protocol is not supported ");
         }
@@ -849,13 +901,13 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
     if (context->config.features & UCP_FEATURE_TAG) {
          ucp_ep_config_print_tag_proto(stream, "tag_send",
-                                       config->max_eager_short,
-                                       config->zcopy_thresh,
-                                       config->rndv_thresh);
+                                       config->am.max_eager_short,
+                                       config->am.zcopy_thresh,
+                                       config->rndv.thresh);
          ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
-                                       config->max_eager_short,
-                                       config->sync_zcopy_thresh,
-                                       config->sync_rndv_thresh);
+                                       config->am.max_eager_short,
+                                       config->am.sync_zcopy_thresh,
+                                       config->rndv.sync_thresh);
      }
 
      if (context->config.features & UCP_FEATURE_RMA) {

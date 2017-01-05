@@ -42,8 +42,12 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 
     size = sizeof(ucp_md_map_t);
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        if (!(memh->md_map & UCS_BIT(md_index))) {
+            continue;
+        }
+
         size += sizeof(uint8_t);
-        md_size = context->md_attrs[md_index].rkey_packed_size;
+        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         ucs_assert_always(md_size < UINT8_MAX);
         size += md_size;
     }
@@ -67,13 +71,13 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
             continue;
         }
 
-        md_size = context->md_attrs[md_index].rkey_packed_size;
+        md_size = context->tl_mds[md_index].attr.rkey_packed_size;
         *((uint8_t*)p++) = md_size;
-        uct_md_mkey_pack(context->mds[md_index], memh->uct[uct_memh_index], p);
+        uct_md_mkey_pack(context->tl_mds[md_index].md, memh->uct[uct_memh_index], p);
 
         ucs_trace("rkey[%d]=%s for md[%d]=%s", uct_memh_index,
                   ucs_log_dump_hex(p, md_size, buf, sizeof(buf)), md_index,
-                  context->md_rscs[md_index].md_name);
+                  context->tl_mds[md_index].rsc.md_name);
 
         ++uct_memh_index;
         p += md_size;
@@ -165,6 +169,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
         /* Unpack only reachable rkeys */
         if (UCS_BIT(remote_md_index) & ucp_ep_config(ep)->key.reachable_md_map) {
             ucs_assert(rkey_index < md_count);
+
             status = uct_rkey_unpack(p, &rkey->uct[rkey_index]);
             if (status != UCS_OK) {
                 ucs_error("Failed to unpack remote key from remote md[%d]: %s",

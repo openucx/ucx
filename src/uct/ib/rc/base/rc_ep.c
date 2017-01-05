@@ -30,7 +30,7 @@ static ucs_stats_class_t uct_rc_fc_stats_class = {
         [UCT_RC_FC_STAT_RX_PURE_GRANT]      = "rx_pure_grant",
         [UCT_RC_FC_STAT_RX_SOFT_REQ]        = "rx_soft_req",
         [UCT_RC_FC_STAT_RX_HARD_REQ]        = "rx_hard_req",
-        [UCT_RC_FC_STAT_FC_WND]             = "fc_wnd",
+        [UCT_RC_FC_STAT_FC_WND]             = "fc_wnd"
     }
 };
 
@@ -102,8 +102,6 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
 
     UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
 
-    fc->fc_grant_req.func = uct_rc_ep_fc_grant;
-    ucs_arbiter_elem_init((ucs_arbiter_elem_t *)fc->fc_grant_req.priv);
     return UCS_OK;
 }
 
@@ -377,6 +375,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg)
 {
+    uct_rc_fc_request_t *freq;
     uct_purge_cb_args_t  *cb_args   = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req    = ucs_container_of(elem, uct_pending_req_t, priv);
@@ -384,12 +383,15 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                  uct_rc_ep_t, arb_group);
 
     /* Invoke user's callback only if it is not internal FC message */
-    if (ucs_likely(req != &ep->fc.fc_grant_req)){
+    if (ucs_likely(req->func != uct_rc_ep_fc_grant)){
         if (cb != NULL) {
             cb(req, cb_args->arg);
         } else {
             ucs_warn("ep=%p cancelling user pending request %p", ep, req);
         }
+    } else {
+        freq = ucs_derived_of(req, uct_rc_fc_request_t);
+        ucs_mpool_put(freq);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
@@ -407,14 +409,17 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 {
-    uct_rc_ep_t *ep = ucs_container_of(self, uct_rc_ep_t, fc.fc_grant_req);
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     ucs_status_t status;
+    uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
+    uct_rc_ep_t *ep           = ucs_derived_of(freq->ep, uct_rc_ep_t);
+    uct_rc_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
+                                               uct_rc_iface_t);
 
-    ucs_assert(iface->config.fc_enabled);
-    status = (ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t))->fc_ctrl(ep);
+    ucs_assert_always(iface->config.fc_enabled);
+    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, NULL);
     if (status == UCS_OK) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
+        ucs_mpool_put(freq);
     }
     return status;
 }

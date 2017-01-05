@@ -41,7 +41,7 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
         }
     } else if (length < zcopy_thresh) {
         /* bcopy */
-        if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
+        if (req->send.length <= config->am.max_bcopy - only_hdr_size) {
             req->send.uct.func = proto->bcopy_single;
         } else {
             req->send.uct.func = proto->bcopy_multi;
@@ -55,7 +55,7 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
 
         req->send.uct_comp.func = proto->contig_zcopy_completion;
 
-        max_zcopy = config->max_am_zcopy;
+        max_zcopy = config->am.max_zcopy;
         if (req->send.length <= max_zcopy - only_hdr_size) {
             req->send.uct_comp.count = 1;
             req->send.uct.func = proto->contig_zcopy_single;
@@ -83,7 +83,7 @@ static ucs_status_t ucp_tag_req_start_iov(ucp_request_t *req, size_t count,
     req->send.state.dt.iov.iov_offset    = 0;
 
     /* bcopy */
-    if (req->send.length <= config->max_am_bcopy - only_hdr_size) {
+    if (req->send.length <= config->am.max_bcopy - only_hdr_size) {
         req->send.uct.func = proto->bcopy_single;
     } else {
         req->send.uct.func = proto->bcopy_multi;
@@ -106,10 +106,21 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     req->send.state.dt.generic.state = state;
     req->send.length = length = dt_gen->ops.packed_size(state);
 
-    if (length <= config->max_am_bcopy - proto->only_hdr_size) {
+    if (length <= config->am.max_bcopy - proto->only_hdr_size) {
         req->send.uct.func = proto->bcopy_single;
     } else {
         req->send.uct.func = proto->bcopy_multi;
+    }
+}
+
+static void ucp_send_req_stat(ucp_request_t *req)
+{
+    if (req->flags & UCP_REQUEST_FLAG_RNDV) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
+    } else if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
+    } else {
+        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
     }
 }
 
@@ -146,6 +157,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
+    ucp_send_req_stat(req);
+
     /*
      * Start the request.
      * If it is completed immediately, release the request and return the status.
@@ -172,9 +185,9 @@ static void ucp_tag_stub_send_completion(void *request, ucs_status_t status)
 
 static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                   const void* buffer, uintptr_t datatype,
-                                  ucp_tag_t tag)
+                                  ucp_tag_t tag, uint16_t flags)
 {
-    req->flags             = 0;
+    req->flags             = flags;
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
@@ -205,12 +218,14 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
         UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                               "ucp_tag_send_nb (eager - start)",
                               buffer, length);
-        if (ucs_likely(length <= ucp_ep_config(ep)->max_eager_short)) {
+        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_eager_short)) {
             status = ucp_tag_send_eager_short(ep, tag, buffer, length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                                       "ucp_tag_send_nb (eager - finish)",
                                       buffer, length);
+
+                UCP_EP_STAT_TAG_OP(ep, EAGER);
                 ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
                 goto out;
             }
@@ -226,12 +241,12 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb", req,
                           ucp_dt_length(datatype, count, buffer, &req->send.state));
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, 0);
 
     ret = ucp_tag_send_req(req, count,
-                           ucp_ep_config(ep)->max_eager_short,
-                           ucp_ep_config(ep)->zcopy_thresh,
-                           ucp_ep_config(ep)->rndv_thresh,
+                           ucp_ep_config(ep)->am.max_eager_short,
+                           ucp_ep_config(ep)->am.zcopy_thresh,
+                           ucp_ep_config(ep)->rndv.thresh,
                            cb, &ucp_tag_eager_proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
@@ -262,12 +277,12 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, tag);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, tag, UCP_REQUEST_FLAG_SYNC);
 
     ret = ucp_tag_send_req(req, count,
                            -1, /* disable short method */
-                           ucp_ep_config(ep)->sync_zcopy_thresh,
-                           ucp_ep_config(ep)->sync_rndv_thresh,
+                           ucp_ep_config(ep)->am.sync_zcopy_thresh,
+                           ucp_ep_config(ep)->rndv.sync_thresh,
                            cb, &ucp_tag_eager_sync_proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);

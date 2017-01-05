@@ -346,7 +346,8 @@ UCS_CLASS_DEFINE(uct_iface_t, void);
 
 UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_config_t *config
-                    UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
+                    UCS_STATS_ARG(ucs_stats_node_t *stats_parent)
+                    UCS_STATS_ARG(const char *iface_name))
 {
     uint64_t alloc_methods_bitmap;
     uct_alloc_method_t method;
@@ -382,7 +383,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     self->config.failure_level = config->failure;
 
     return UCS_STATS_NODE_ALLOC(&self->stats, &uct_iface_stats_class,
-                                stats_parent);
+                                stats_parent, "-%s-%p", iface_name, self);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_iface_t)
@@ -438,7 +439,8 @@ UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
 
-    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats);
+    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats,
+                                "-%p", self);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)

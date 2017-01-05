@@ -496,7 +496,7 @@ static void ucm_malloc_test(int events)
 {
     static const size_t small_alloc_count = 128;
     static const size_t small_alloc_size  = 4096;
-    static const size_t large_alloc_size  = 4 * 1024 * 1024;
+    static const size_t large_alloc_size  = 4 * UCS_MBYTE;
     ucm_event_handler_t handler;
     void *p[small_alloc_count];
     int out_events;

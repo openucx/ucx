@@ -106,13 +106,18 @@ AS_IF([test "x$with_valgrind" == xno],
 #
 AC_ARG_ENABLE([numa],
     AC_HELP_STRING([--disable-numa], [Disable NUMA support]),
-    [AC_DEFINE([UCT_MD_DISABLE_NUMA], 1, [Undefine to enable NUMA support])],
     [
+        AC_MSG_NOTICE([NUMA support is disabled])
+        AC_DEFINE([UCT_MD_DISABLE_NUMA], 1, [Undefine to enable NUMA support])
+    ],
+    [
+        AC_DEFUN([NUMA_W1], [not found. Please reconfigure with --disable-numa. ])
+        AC_DEFUN([NUMA_W2], [Warning: this may have negative impact on library performance. It is better to install])
         AC_CHECK_HEADERS([numa.h numaif.h], [],
-                         [AC_MSG_ERROR([NUMA headers not found])])
+                         [AC_MSG_ERROR([NUMA headers NUMA_W1 NUMA_W2 libnuma-devel package])])
         AC_CHECK_LIB(numa, mbind,
                      [AC_SUBST(NUMA_LIBS, [-lnuma])],
-                     [AC_MSG_ERROR([NUMA library not found])])
+                     [AC_MSG_ERROR([NUMA library NUMA_W1 NUMA_W2 libnuma package])])
         AC_CHECK_TYPES([struct bitmask], [], [], [[#include <numa.h>]])
     ]
 )

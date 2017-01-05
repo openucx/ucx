@@ -96,9 +96,11 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     uct_iface_params_t iface_params = {
         .tl_name     = resource->tl_name,
         .dev_name    = resource->dev_name,
+        .stats_root  = NULL,
         .rx_headroom = 0
     };
 
+    UCS_CPU_ZERO(&iface_params.cpu_mask);
     status = uct_iface_config_read(resource->tl_name, NULL, NULL, &iface_config);
     if (status != UCS_OK) {
         return;
@@ -120,7 +122,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     if (status != UCS_OK) {
         printf("#   < failed to query interface >\n");
     } else {
-        printf("#            bandwidth: %-.2f MB/sec\n", iface_attr.bandwidth / (1024 * 1024));
+        printf("#            bandwidth: %-.2f MB/sec\n", iface_attr.bandwidth / UCS_MBYTE);
         printf("#              latency: %-.0f nsec\n", iface_attr.latency * 1e9);
         printf("#             overhead: %-.0f nsec\n", iface_attr.overhead * 1e9);
 
@@ -128,6 +130,26 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         PRINT_CAP(PUT_BCOPY, iface_attr.cap.flags, iface_attr.cap.put.max_bcopy);
         PRINT_ZCAP(PUT_ZCOPY, iface_attr.cap.flags, iface_attr.cap.put.min_zcopy,
                    iface_attr.cap.put.max_zcopy, iface_attr.cap.put.max_iov);
+
+        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            printf("#  put_opt_zcopy_align: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.put.opt_zcopy_align));
+            printf("#        put_align_mtu: %s\n",
+                   size_limit_to_str(0, iface_attr.cap.put.align_mtu));
+        }
+        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_GET_ZCOPY)) {
+           printf("#  get_opt_zcopy_align: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.get.opt_zcopy_align));
+           printf("#        get_align_mtu: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.get.align_mtu));
+        }
+        if((iface_attr.cap.flags) & (UCT_IFACE_FLAG_AM_ZCOPY)) {
+           printf("#   am_opt_zcopy_align: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.am.opt_zcopy_align));
+           printf("#         am_align_mtu: %s\n",
+                  size_limit_to_str(0, iface_attr.cap.am.align_mtu));
+        }
+
         PRINT_CAP(GET_BCOPY, iface_attr.cap.flags, iface_attr.cap.get.max_bcopy);
         PRINT_ZCAP(GET_ZCOPY, iface_attr.cap.flags, iface_attr.cap.get.min_zcopy,
                    iface_attr.cap.get.max_zcopy, iface_attr.cap.get.max_iov);
@@ -135,7 +157,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         PRINT_CAP(AM_BCOPY,  iface_attr.cap.flags, iface_attr.cap.am.max_bcopy);
         PRINT_ZCAP(AM_ZCOPY,  iface_attr.cap.flags, iface_attr.cap.am.min_zcopy,
                    iface_attr.cap.am.max_zcopy, iface_attr.cap.am.max_iov);
-        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_AM_BCOPY|UCT_IFACE_FLAG_AM_ZCOPY)) {
+        if (iface_attr.cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
             printf("#            am header: %s\n",
                    size_limit_to_str(0, iface_attr.cap.am.max_hdr));
         }
@@ -160,6 +182,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             strncat(buf, " none", sizeof(buf) - 1);
         }
         printf("#           connection:%s\n", buf);
+
+        printf("#             priority: %d\n", iface_attr.priority);
 
         printf("#       device address: %zu bytes\n", iface_attr.device_addr_len);
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
@@ -319,7 +343,9 @@ static void print_md_info(const char *md_name, int print_opts,
             }
             printf(" nsec\n");
         }
-        printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
+        if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+            printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
+        }
     }
 
     if (num_resources == 0) {

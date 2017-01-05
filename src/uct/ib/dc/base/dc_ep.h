@@ -12,12 +12,21 @@
 
 #include "dc_iface.h"
 
+enum {
+    /* Indicates that FC grant has been requested, but is not received yet.
+     * Flush will not complete until an outgoing grant request is acked.
+     * It is needed to avoid the case when grant arrives for the recently
+     * deleted ep. */
+    UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT = UCS_BIT(0)
+};
+
 struct uct_dc_ep {
     uct_base_ep_t         super;
     ucs_arbiter_group_t   arb_group;
     uint8_t               dci;
     uint8_t               state;
     uint16_t              atomic_mr_offset;
+    uct_rc_fc_t           fc;
 };
 
 UCS_CLASS_DECLARE(uct_dc_ep_t, uct_dc_iface_t *, const uct_dc_iface_addr_t *);
@@ -89,6 +98,17 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
 #define uct_dc_iface_dci_get       uct_dc_iface_dci_get_dcs
 #define uct_dc_iface_dci_can_alloc uct_dc_iface_dci_can_alloc_dcs
 #define uct_dc_iface_dci_alloc     uct_dc_iface_dci_alloc_dcs
+#define uct_dc_iface_dci_free      uct_dc_iface_dci_free_dcs
+
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_dc_ep_basic_init(uct_dc_iface_t *iface,
+                                                             uct_dc_ep_t *ep)
+{
+    ucs_arbiter_group_init(&ep->arb_group);
+    ep->dci   = UCT_DC_EP_NO_DCI;
+    ep->state = UCT_DC_EP_TX_OK;
+    return uct_rc_fc_init(&ep->fc, iface->super.config.fc_wnd_size
+                          UCS_STATS_ARG(ep->super.stats));
+}
 
 static inline int uct_dc_iface_dci_can_alloc_dcs(uct_dc_iface_t *iface)
 {
@@ -99,6 +119,7 @@ static inline int uct_dc_iface_dci_ep_can_send(uct_dc_ep_t *ep)
 {
     uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
     return (ep->state != UCT_DC_EP_TX_WAIT) &&
+           (ep->fc.fc_wnd > 0) &&
            uct_dc_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
@@ -108,7 +129,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
 
     ucs_assert(iface->tx.stack_top > 0);
 
-    if (uct_rc_txqp_available(&iface->tx.dcis[dci].txqp) < (int16_t)iface->super.config.tx_qp_len) {
+    if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
         if (ucs_unlikely(ep == NULL)) {
             /* ep was destroyed while holding dci */
             return;
@@ -168,6 +189,25 @@ static inline void uct_dc_iface_dci_alloc_dcs(uct_dc_iface_t *iface, uct_dc_ep_t
     iface->tx.stack_top++;
 }
 
+static inline void uct_dc_iface_dci_free_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
+{
+    uint8_t dci = ep->dci;
+
+    ucs_assert(dci != UCT_DC_EP_NO_DCI);
+    ucs_assert(iface->tx.stack_top > 0);
+
+    if (uct_dc_iface_dci_has_outstanding(iface, dci)) {
+        return;
+    }
+
+    iface->tx.stack_top--;
+    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
+    iface->tx.dcis[dci].ep                    = NULL;
+
+    ep->dci   = UCT_DC_EP_NO_DCI;
+    ep->state = UCT_DC_EP_TX_OK;
+}
+
 static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
     uct_rc_txqp_t *txqp;
@@ -214,6 +254,8 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
     return UCS_ERR_NO_RESOURCE;
 }
 
+ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep);
+
 
 #define UCT_DC_CHECK_RES(_iface, _ep) \
     { \
@@ -224,4 +266,28 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
             return status; \
         } \
     }
+
+
+/* First, check whether we have FC window. If hard threshold is reached, credit
+ * request will be sent by "fc_ctrl" as a separate message. TX resources
+ * are checked after FC, because fc credits request may consume latest
+ * available TX resources. */
+#define UCT_DC_CHECK_RES_AND_FC(_iface, _ep) \
+    { \
+        if (ucs_unlikely((_ep)->fc.fc_wnd <= \
+                         (_iface)->super.config.fc_hard_thresh)) { \
+            ucs_status_t status = uct_dc_ep_check_fc(_iface, _ep); \
+            if (ucs_unlikely(status != UCS_OK)) { \
+                if ((_ep)->dci != UCT_DC_EP_NO_DCI) { \
+                    ucs_assertv_always(uct_dc_iface_dci_has_outstanding(_iface, (_ep)->dci), \
+                                       "iface (%p) ep (%p) dci leak detected: dci=%d", \
+                                       _iface, _ep, (_ep)->dci); \
+                } \
+                return status; \
+            } \
+        } \
+        UCT_DC_CHECK_RES(_iface, _ep) \
+    }
+
+
 #endif

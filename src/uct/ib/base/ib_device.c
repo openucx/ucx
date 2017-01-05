@@ -64,7 +64,7 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
     }
 }
 
-static void uct_ib_async_event_handler(void *arg)
+static void uct_ib_async_event_handler(int fd, void *arg)
 {
     uct_ib_device_t *dev = arg;
     struct ibv_async_event event;
@@ -212,8 +212,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
      * TODO have option to set async mode as signal/thread.
      */
     status = ucs_async_set_event_handler(UCS_ASYNC_MODE_THREAD,
-                                         dev->ibv_context->async_fd,
-                                         POLLIN, uct_ib_async_event_handler, dev, NULL);
+                                         dev->ibv_context->async_fd, POLLIN,
+                                         uct_ib_async_event_handler, dev, NULL);
     if (status != UCS_OK) {
         goto err_release_stats;
     }
@@ -235,7 +235,7 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
-    ucs_async_unset_event_handler(dev->ibv_context->async_fd);
+    ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
     UCS_STATS_NODE_FREE(dev->stats);
     ibv_close_device(dev->ibv_context);
 }

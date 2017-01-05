@@ -116,6 +116,7 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     uct_rc_hdr_t *hdr;
     unsigned i;
     ucs_status_t status;
+    uct_rc_iface_ops_t *rc_ops;
     unsigned num_wcs = iface->super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
     uct_ib_iface_recv_desc_t *desc;
@@ -133,10 +134,11 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
         desc = (uct_ib_iface_recv_desc_t *)wc[i].wr_id;
         if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
             void *udesc;
-            udesc = (char*)desc + iface->super.config.rx_headroom_offset;
-            status = uct_rc_iface_handle_fc(iface, wc[i].qp_num, hdr,
-                                            wc[i].byte_len - sizeof(*hdr),
-                                            udesc);
+            udesc  = (char*)desc + iface->super.config.rx_headroom_offset;
+            rc_ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+            status = rc_ops->fc_handler(iface, wc[i].qp_num, hdr,
+                                        wc[i].byte_len - sizeof(*hdr),
+                                        wc[i].imm_data, wc[i].slid, udesc);
             if (status == UCS_OK) {
                 ucs_mpool_put_inline(desc);
             } else {

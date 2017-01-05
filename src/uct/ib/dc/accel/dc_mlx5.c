@@ -519,15 +519,17 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 
     hw_ci = ntohs(cqe->wqe_counter);
     uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
-    iface->super.super.tx.cq_available++;
-
+    uct_dc_iface_dci_put(&iface->super, dci);
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
 
-    uct_dc_iface_dci_put(&iface->super, dci);
+    iface->super.super.tx.cq_available++;
+
     if (uct_dc_iface_dci_can_alloc(&iface->super)) {
-        ucs_arbiter_dispatch(&iface->super.super.tx.arbiter, 1, uct_dc_iface_dci_do_pending_wait, NULL);
+        ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(&iface->super), 1,
+                             uct_dc_iface_dci_do_pending_wait, NULL);
     }
-    ucs_arbiter_dispatch(&iface->super.tx.dci_arbiter, 1, uct_dc_iface_dci_do_pending_tx, NULL);
+    ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(&iface->super), 1, 
+                         uct_dc_iface_dci_do_pending_tx, NULL);
 }
 
 /* TODO: make a macro that defines progress func */

@@ -308,7 +308,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
         /* MD index */
         md_index       = context->tl_rscs[dev->rsc_index].md_index;
-        md_flags       = context->md_attrs[md_index].cap.flags;
+        md_flags       = context->tl_mds[md_index].attr.cap.flags;
         ucs_assert_always(!(md_index & ~UCP_ADDRESS_FLAG_MD_MASK));
 
         *(uint8_t*)ptr = md_index |

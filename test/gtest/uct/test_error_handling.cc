@@ -55,9 +55,9 @@ public:
         m_e2->connect(0, *m_e1, 0);
 
         uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler,
-                                 NULL, UCT_AM_CB_FLAG_SYNC);
+                                 NULL, UCT_AM_CB_FLAG_ASYNC);
         uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler,
-                                 NULL, UCT_AM_CB_FLAG_SYNC);
+                                 NULL, UCT_AM_CB_FLAG_ASYNC);
     }
 
 protected:

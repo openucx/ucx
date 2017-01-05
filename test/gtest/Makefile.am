@@ -7,8 +7,12 @@
 #
 
 
+# Set default configuration for running tests
 UCX_HANDLE_ERRORS ?= freeze
 export UCX_HANDLE_ERRORS
+UCX_LOG_LEVEL ?= info
+export UCX_LOG_LEVEL
+
 
 GTEST_FILTER        ?= *
 GTEST_EXTRA_ARGS    =
@@ -87,6 +91,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_rma.cc \
+	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \
 	ucp/test_ucp_tag_mt.cc \
@@ -121,7 +126,8 @@ gtest_SOURCES = \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
-	ucs/test_hash_perf.cc
+	ucs/test_hash_perf.cc \
+	ucs/test_type.cc
 
 if HAVE_IB
 gtest_SOURCES += \
@@ -156,6 +162,7 @@ noinst_HEADERS = \
 	uct/test_amo.h \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
+	uct/test_rc.h \
 	uct/ud_base.h \
 	\
 	ucp/test_ucp_atomic.h \

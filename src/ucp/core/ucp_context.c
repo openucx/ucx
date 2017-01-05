@@ -283,8 +283,8 @@ static int ucp_is_resource_enabled(uct_tl_resource_desc_t *resource,
     return device_enabled && tl_enabled;
 }
 
-static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
-                                         uct_md_h md, ucp_rsc_index_t md_index,
+static ucs_status_t ucp_add_tl_resources(ucp_context_h context, ucp_tl_md_t *md,
+                                         ucp_rsc_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
                                          uint64_t *masks)
@@ -298,14 +298,14 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     *num_resources_p = 0;
 
     /* check what are the available uct resources */
-    status = uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
+    status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto err;
     }
 
     if (num_tl_resources == 0) {
-        ucs_debug("No tl resources found for md %s", context->md_rscs[md_index].md_name);
+        ucs_debug("No tl resources found for md %s", md->rsc.md_name);
         goto out_free_resources;
     }
 
@@ -387,20 +387,109 @@ static void ucp_free_resources(ucp_context_t *context)
 
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
-        if (context->mds[i] != NULL) {
-            uct_md_close(context->mds[i]);
-        }
+        uct_md_close(context->tl_mds[i].md);
     }
-    ucs_free(context->md_attrs);
-    ucs_free(context->mds);
-    ucs_free(context->md_rscs);
+    ucs_free(context->tl_mds);
 }
 
-static int ucp_md_rsc_compare_name(const void *a, const void *b)
+static inline int ucp_tl_md_has_rkey(const ucp_tl_md_t *tl_md)
 {
-    const uct_md_resource_desc_t *md1 = a;
-    const uct_md_resource_desc_t *md2 = b;
-    return strcmp(md1->md_name, md2->md_name);
+    return tl_md->attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG);
+}
+
+static int ucp_tl_md_compare(const void *a, const void *b)
+{
+    /* give lower score to MDs with a remote key, so they will come first */
+    const ucp_tl_md_t *tl_md1 = a;
+    const ucp_tl_md_t *tl_md2 = b;
+    int score1 = ucp_tl_md_has_rkey(tl_md1) ? 0 : 1;
+    int score2 = ucp_tl_md_has_rkey(tl_md2) ? 0 : 1;
+    if (score1 != score2) {
+        return score1 - score2;
+    } else {
+        return strcmp(tl_md1->rsc.md_name, tl_md2->rsc.md_name);
+    }
+}
+
+static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
+{
+    /* if we got here then num_resources > 0.
+      * if the user's device list is empty, there is no match */
+     if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
+         (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
+         (0 == config->devices[UCT_DEVICE_TYPE_ACC].count) &&
+         (0 == config->devices[UCT_DEVICE_TYPE_SELF].count)) {
+         ucs_error("The device lists are empty. Please specify the devices you would like to use "
+                   "or omit the UCX_*_DEVICES so that the default will be used.");
+         return UCS_ERR_NO_ELEM;
+     }
+
+     /* if we got here then num_resources > 0.
+      * if the user's tls list is empty, there is no match */
+     if (0 == config->tls.count) {
+         ucs_error("The TLs list is empty. Please specify the transports you would like to use "
+                   "or omit the UCX_TLS so that the default will be used.");
+         return UCS_ERR_NO_ELEM;
+     }
+
+     return UCS_OK;
+}
+
+static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
+                                   ucp_tl_md_t *tl_md)
+{
+
+    uct_md_config_t *md_config;
+    ucs_status_t status;
+
+    /* Save MD resource */
+    tl_md->rsc = *md_rsc;
+
+    /* Read MD configuration */
+    status = uct_md_config_read(md_rsc->md_name, NULL, NULL, &md_config);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Open MD */
+    status = uct_md_open(md_rsc->md_name, md_config, &tl_md->md);
+    uct_config_release(md_config);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Save MD attributes */
+    status = uct_md_query(tl_md->md, &tl_md->attr);
+    if (status != UCS_OK) {
+        uct_md_close(tl_md->md);
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_check_resources(ucp_context_h context)
+{
+    /* Error check: Make sure there is at least one transport */
+    if (0 == context->num_tls) {
+        ucs_error("There are no available resources matching the configured criteria");
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (context->max_rkey_md >= UCP_MD_INDEX_BITS) {
+        ucs_error("Only up to %d memory domains with rkeys are supported (have: %d)",
+                  UCP_MD_INDEX_BITS, context->max_rkey_md + 1);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    /* Error check: Make sure there are not too many transports */
+    if (context->num_tls >= UCP_MAX_RESOURCES) {
+        ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
+                  context->num_tls, UCP_MAX_RESOURCES);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    return ucp_check_tl_names(context);
 }
 
 static ucs_status_t ucp_fill_resources(ucp_context_h context,
@@ -411,29 +500,18 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     uct_md_resource_desc_t *md_rscs;
     ucs_status_t status;
     ucp_rsc_index_t i;
-    unsigned md_index;
-    uct_md_h md;
-    uct_md_config_t *md_config;
+    ucp_tl_md_t *tmp_mds;
+    unsigned md_index, num_tmp_mds;
     uint64_t masks[UCT_DEVICE_TYPE_LAST] = {0};
 
-    /* if we got here then num_resources > 0.
-     * if the user's device list is empty, there is no match */
-    if ((0 == config->devices[UCT_DEVICE_TYPE_NET].count) &&
-        (0 == config->devices[UCT_DEVICE_TYPE_SHM].count) &&
-        (0 == config->devices[UCT_DEVICE_TYPE_ACC].count) &&
-        (0 == config->devices[UCT_DEVICE_TYPE_SELF].count)) {
-        ucs_error("The device lists are empty. Please specify the devices you would like to use "
-                  "or omit the UCX_*_DEVICES so that the default will be used.");
-        status = UCS_ERR_NO_ELEM;
-        goto err;
-    }
+    context->tl_mds      = NULL;
+    context->num_mds     = 0;
+    context->max_rkey_md = 0;
+    context->tl_rscs     = NULL;
+    context->num_tls     = 0;
 
-    /* if we got here then num_resources > 0.
-     * if the user's tls list is empty, there is no match */
-    if (0 == config->tls.count) {
-        ucs_error("The TLs list is empty. Please specify the transports you would like to use "
-                  "or omit the UCX_TLS so that the default will be used.");
-        status = UCS_ERR_NO_ELEM;
+    status = ucp_check_resource_config(config);
+    if (status != UCS_OK) {
         goto err;
     }
 
@@ -443,124 +521,89 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err;
     }
 
-    /* Sort md's by name, to increase the likelihood of reusing the same ep
-     * configuration (since remote md map is part of the key).
-     */
-    qsort(md_rscs, num_md_resources, sizeof(*md_rscs), ucp_md_rsc_compare_name);
-
     /* Error check: Make sure there is at least one MD */
     if (num_md_resources == 0) {
-        ucs_error("No md resources found");
+        ucs_error("No memory domain resources found");
         status = UCS_ERR_NO_DEVICE;
         goto err_release_md_resources;
     }
 
-    context->num_mds  = 0;
-    context->md_rscs  = NULL;
-    context->mds      = NULL;
-    context->md_attrs = NULL;
-    context->num_tls  = 0;
-    context->tl_rscs  = NULL;
-
-    /* Allocate array of MD resources we would actually use */
-    context->md_rscs = ucs_calloc(num_md_resources, sizeof(*context->md_rscs),
-                                  "ucp_md_resources");
-    if (context->md_rscs == NULL) {
+    /* Allocate actual array of MDs */
+    context->tl_mds = ucs_malloc(num_md_resources * sizeof(*context->tl_mds),
+                                 "ucp_tl_mds");
+    if (context->tl_mds == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_context_resources;
+        goto err_release_md_resources;
     }
 
-    /* Allocate array of memory domains */
-    context->mds = ucs_calloc(num_md_resources, sizeof(*context->mds), "ucp_mds");
-    if (context->mds == NULL) {
+    /* Allocate temporary array of MDs */
+    tmp_mds = ucs_calloc(num_md_resources, sizeof(*tmp_mds), "ucp_tmp_mds");
+    if (tmp_mds == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_context_resources;
+        goto err_release_md_resources;
     }
 
-    /* Allocate array of memory domains attributes */
-    context->md_attrs = ucs_calloc(num_md_resources, sizeof(*context->md_attrs),
-                                   "ucp_md_attrs");
-    if (context->md_attrs == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free_context_resources;
-    }
-
-    /* Open all memory domains, keep only those which have at least one TL
-     * resources selected on them.
-     */
-    md_index = 0;
+    /* Open all memory domains */
+    num_tmp_mds = 0;
     for (i = 0; i < num_md_resources; ++i) {
-        status = uct_md_config_read(md_rscs[i].md_name, NULL, NULL, &md_config);
+        status = ucp_fill_tl_md(&md_rscs[i], &tmp_mds[num_tmp_mds]);
         if (status != UCS_OK) {
-            goto err_free_context_resources;
+            goto err_free_tmp_mds;
         }
+        ++num_tmp_mds;
+    }
 
-        status = uct_md_open(md_rscs[i].md_name, md_config, &md);
-        uct_config_release(md_config);
-        if (status != UCS_OK) {
-            goto err_free_context_resources;
-        }
+    /* Sort memory domains */
+    qsort(tmp_mds, num_tmp_mds, sizeof(*tmp_mds), ucp_tl_md_compare);
 
-        context->md_rscs[md_index] = md_rscs[i];
-        context->mds[md_index]     = md;
-
-        /* Save MD attributes */
-        status = uct_md_query(md, &context->md_attrs[md_index]);
-        if (status != UCS_OK) {
-            goto err_free_context_resources;
-        }
+    md_index = 0;
+    for (i = 0; i < num_tmp_mds; ++i) {
 
         /* Add communication resources of each MD */
-        status = ucp_add_tl_resources(context, md, md_index, config,
+        status = ucp_add_tl_resources(context, &tmp_mds[i], md_index, config,
                                       &num_tl_resources, masks);
         if (status != UCS_OK) {
-            goto err_free_context_resources;
+            goto err_free_tmp_mds;
         }
 
         /* If the MD does not have transport resources, don't use it */
         if (num_tl_resources > 0) {
+            context->tl_mds[md_index] = tmp_mds[i];
+            if (ucp_tl_md_has_rkey(&context->tl_mds[md_index])) {
+                context->max_rkey_md = md_index;
+            }
             ++md_index;
             ++context->num_mds;
         } else {
             ucs_debug("closing md %s because it has no selected transport resources",
-                      md_rscs[i].md_name);
-            uct_md_close(md);
+                      tmp_mds[i].rsc.md_name);
+            uct_md_close(tmp_mds[i].md);
+            tmp_mds[i].md = NULL;
         }
     }
 
-    /* Error check: Make sure there is at least one transport */
-    if (0 == context->num_tls) {
-        ucs_error("There are no available resources matching the configured criteria");
-        status = UCS_ERR_NO_DEVICE;
-        goto err_free_context_resources;
-    }
+    ucs_free(tmp_mds);
 
-    if (context->num_mds > UCP_MD_INDEX_BITS) {
-        ucs_error("Only up to %d memory domains are supported (have: %d)",
-                  UCP_MD_INDEX_BITS, context->num_mds);
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        goto err_release_md_resources;
-    }
-
-    /* Notify the user if there are devices from the command line that are not available */
-    ucp_check_unavailable_devices(config->devices, masks);
-
-    /* Error check: Make sure there are not too many transports */
-    if (context->num_tls >= UCP_MAX_RESOURCES) {
-        ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
-                  context->num_tls, UCP_MAX_RESOURCES);
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        goto err_free_context_resources;
-    }
-
-    status = ucp_check_tl_names(context);
+    /* Validate context resources */
+    status = ucp_check_resources(context);
     if (status != UCS_OK) {
         goto err_free_context_resources;
     }
 
     uct_release_md_resource_list(md_rscs);
+
+    /* Notify the user if there are devices from the command line that are not available */
+    ucp_check_unavailable_devices(config->devices, masks);
+
     return UCS_OK;
 
+err_free_tmp_mds:
+    for (i = 0; i < num_tmp_mds; ++i) {
+        if (tmp_mds[i].md != NULL) {
+            uct_md_close(tmp_mds[i].md);
+        }
+    }
+    ucs_free(tmp_mds);
 err_free_context_resources:
     ucp_free_resources(context);
 err_release_md_resources:
@@ -788,8 +831,9 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        fprintf(stream, "#                md[%d]:  %s\n", md_index,
-                context->md_rscs[md_index].md_name);
+        fprintf(stream, "#             %s  md[%d]:  %s\n",
+                (md_index <= context->max_rkey_md) ? "*" : " ",
+                md_index, context->tl_mds[md_index].rsc.md_name);
     }
 
     fprintf(stream, "#\n");

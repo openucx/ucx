@@ -25,15 +25,25 @@ test_ucp_memheap::enum_test_params(const ucp_params_t& ctx_params,
 }
 
 void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send,
+                                                             size_t size, int max_iter,
                                                              size_t alignment,
                                                              bool malloc_allocate,
                                                              bool is_ep_flush)
 {
-    static const int max_iter = 300 / ucs::test_time_multiplier();
-    static const size_t size = ucs_max((size_t)rand() % (12*1024), alignment);
-    static const size_t memheap_size = max_iter * size + alignment;
+    size_t memheap_size;
     ucp_mem_map_params_t params;
     ucs_status_t status;
+
+    memheap_size = max_iter * size + alignment;
+
+    if (max_iter == DEFAULT_ITERS) {
+        max_iter = 300 / ucs::test_time_multiplier();
+    }
+
+    if (size == DEFAULT_SIZE) {
+        size = ucs_max((size_t)rand() % (12*1024), alignment);
+    }
+    memheap_size = max_iter * size + alignment;
 
     sender().connect(&receiver());
     if (&sender() != &receiver()) {
@@ -114,13 +124,26 @@ void test_ucp_memheap::test_nonblocking_implicit_stream_xfer(nonblocking_send_fu
     }
 }
 
-void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alignment,
-                                          bool malloc_allocate, bool is_ep_flush)
+/* NOTE: alignment is ignored if memheap_size is not default */
+void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send,
+                                          size_t memheap_size, int max_iter,
+                                          size_t alignment,
+                                          bool malloc_allocate, 
+                                          bool is_ep_flush)
 {
-    static const size_t memheap_size = 3 * 1024;
     ucp_mem_map_params_t params;
     ucs_status_t status;
     size_t size;
+    int zero_offset = 0;
+
+    if (max_iter == DEFAULT_ITERS) {
+        max_iter = 300 / ucs::test_time_multiplier();
+    }
+
+    if (memheap_size == DEFAULT_SIZE) {
+        memheap_size = 3 * 1024;
+        zero_offset = 1;
+    }
 
     sender().connect(&receiver());
     if (&sender() != &receiver()) {
@@ -160,11 +183,17 @@ void test_ucp_memheap::test_blocking_xfer(blocking_send_func_t send, size_t alig
 
     ucp_rkey_buffer_release(rkey_buffer);
 
-    for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
+    for (int i = 0; i < max_iter; ++i) {
+        size_t offset;
 
-        size = ucs_max(rand() % (memheap_size - alignment - 1), alignment);
+        if (!zero_offset) {
+            size = ucs_max(rand() % (memheap_size - alignment - 1), alignment);
+            offset = rand() % (memheap_size - size - alignment);
+        } else {
+            size = memheap_size;
+            offset = 0;
+        }
 
-        size_t offset = rand() % (memheap_size - size - alignment);
         offset = ucs_align_up(offset, alignment);
 
         ucs_assert(((((uintptr_t)memheap + offset)) % alignment) == 0);

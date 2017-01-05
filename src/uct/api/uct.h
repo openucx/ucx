@@ -17,6 +17,8 @@
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
+#include <ucs/type/cpu_set.h>
+#include <ucs/stats/stats_fd.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -267,6 +269,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref ::uct_ep_put_zcopy
                                               @anchor uct_iface_attr_cap_put_max_iov */
@@ -280,6 +285,9 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
                                               of @ref uct_iov_t::length of the
                                               @a iov parameter) */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref uct_ep_get_zcopy
                                               @anchor uct_iface_attr_cap_get_max_iov */
@@ -294,7 +302,10 @@ struct uct_iface_attr {
             size_t           max_zcopy;  /**< Total max. size (incl. the header
                                               and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */
-            size_t           max_hdr;    /**< Max. header size for bcopy/zcopy */
+            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                              buffer address */
+            size_t           align_mtu;       /**< MTU used for alignment */
+            size_t           max_hdr;    /**< Max. header size for zcopy */
             size_t           max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref ::uct_ep_am_zcopy
                                               @anchor uct_iface_attr_cap_am_max_iov */
@@ -327,8 +338,13 @@ struct uct_iface_attr {
  * @ref uct_iface_open. User has to initialize all fields of this structure.
  */
 struct uct_iface_params {
+    ucs_cpu_set_t            cpu_mask;    /**< Mask of CPUs to use for resources */
     const char               *tl_name;    /**< Transport name */
     const char               *dev_name;   /**< Device Name */
+    ucs_stats_node_t         *stats_root; /**< Root in the statistics tree.
+                                               Can be NULL. If non NULL, it will be
+                                               a root of @a uct_iface object in the
+                                               statistics tree. */
     size_t                   rx_headroom; /**< How much bytes to reserve before
                                                the receive segment.*/
 };

@@ -181,7 +181,6 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.thread_count    = 1;
     params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
     params.flags           = flags;
-    params.message_size    = test.msglen;
     params.am_hdr_size     = 8;
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
@@ -196,6 +195,9 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
     params.uct.data_layout = test.data_layout;
     params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
+    params.msg_size_cnt    = test.msglencnt;
+    params.msg_size_list   = (size_t *)test.msglen;
+    params.iov_stride      = test.msg_stride;
 
     thread_arg arg0;
     arg0.params   = params;

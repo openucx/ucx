@@ -77,13 +77,14 @@ UCS_TEST_P(test_uct_mm, open_for_posix) {
         }
 
         initialize();
-        check_caps(UCT_IFACE_FLAG_AM_SHORT);
+        check_caps(UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_CB_SYNC);
 
         recv_buffer = (recv_desc_t *) malloc(sizeof(*recv_buffer) + sizeof(uint64_t));
         recv_buffer->length = 0; /* Initialize length to 0 */
 
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer, UCT_AM_CB_FLAG_SYNC);
+        uct_iface_set_am_handler(m_e2->iface(), 0, mm_am_handler , recv_buffer,
+                                 UCT_AM_CB_FLAG_SYNC);
 
         /* send the data */
         uct_ep_am_short(m_e1->ep(0), 0, test_mm_hdr, &send_data, sizeof(send_data));

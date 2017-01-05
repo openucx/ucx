@@ -49,28 +49,34 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
                                    UCT_IFACE_FLAG_PENDING          |
                                    UCT_IFACE_FLAG_AM_CB_SYNC;
 
-    attr->cap.put.max_short      = UINT_MAX;
-    attr->cap.put.max_bcopy      = SIZE_MAX;
-    attr->cap.put.min_zcopy      = 0;
-    attr->cap.put.max_zcopy      = 0;
-    attr->cap.put.max_iov        = 1;
+    attr->cap.put.max_short       = UINT_MAX;
+    attr->cap.put.max_bcopy       = SIZE_MAX;
+    attr->cap.put.min_zcopy       = 0;
+    attr->cap.put.max_zcopy       = 0;
+    attr->cap.put.opt_zcopy_align = UCS_SYS_CACHE_LINE_SIZE;
+    attr->cap.put.align_mtu       = attr->cap.put.opt_zcopy_align;
+    attr->cap.put.max_iov         = 1;
 
-    attr->cap.get.max_bcopy      = SIZE_MAX;
-    attr->cap.get.min_zcopy      = 0;
-    attr->cap.get.max_zcopy      = 0;
-    attr->cap.get.max_iov        = 1;
+    attr->cap.get.max_bcopy       = SIZE_MAX;
+    attr->cap.get.min_zcopy       = 0;
+    attr->cap.get.max_zcopy       = 0;
+    attr->cap.get.opt_zcopy_align = UCS_SYS_CACHE_LINE_SIZE;
+    attr->cap.get.align_mtu       = attr->cap.get.opt_zcopy_align;
+    attr->cap.get.max_iov         = 1;
 
-    attr->cap.am.max_short       = self_iface->data_length;
-    attr->cap.am.max_bcopy       = self_iface->data_length;
-    attr->cap.am.min_zcopy       = 0;
-    attr->cap.am.max_zcopy       = 0;
-    attr->cap.am.max_hdr         = 0;
-    attr->cap.am.max_iov         = 1;
+    attr->cap.am.max_short        = self_iface->data_length;
+    attr->cap.am.max_bcopy        = self_iface->data_length;
+    attr->cap.am.min_zcopy        = 0;
+    attr->cap.am.max_zcopy        = 0;
+    attr->cap.am.opt_zcopy_align  = UCS_SYS_CACHE_LINE_SIZE;
+    attr->cap.am.align_mtu        = attr->cap.am.opt_zcopy_align;
+    attr->cap.am.max_hdr          = 0;
+    attr->cap.am.max_iov          = 1;
 
-    attr->latency                = 0;
-    attr->bandwidth              = 6911 * 1024.0 * 1024.0;
-    attr->overhead               = 0;
-    attr->priority               = 0;
+    attr->latency                 = 0;
+    attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    attr->overhead                = 0;
+    attr->priority                = 0;
 
     return UCS_OK;
 }
@@ -154,7 +160,8 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_self_iface_ops, md, worker,
-                              tl_config UCS_STATS_ARG(NULL));
+                              tl_config UCS_STATS_ARG(params->stats_root)
+                              UCS_STATS_ARG(UCT_SELF_NAME));
 
     self_config = ucs_derived_of(tl_config, uct_self_iface_config_t);
 

@@ -10,6 +10,7 @@
 #include "ib_device.h"
 
 #include <ucs/arch/atomic.h>
+#include <ucs/debug/profile.h>
 #include <pthread.h>
 
 #ifndef UCT_MD_DISABLE_NUMA
@@ -313,7 +314,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         in.length       = length;
         in.exp_access   = UCT_IB_MEM_ACCESS_FLAGS | exp_access;
 
-        mr = ibv_exp_reg_mr(&in);
+        mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
         if (mr == NULL) {
             ucs_error("ibv_exp_reg_mr(address=%p, length=%Zu, exp_access=0x%lx) failed: %m",
                       in.addr, in.length, in.exp_access);
@@ -323,7 +324,8 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
         return UCS_ERR_UNSUPPORTED;
 #endif
     } else {
-        mr = ibv_reg_mr(md->pd, address, length, UCT_IB_MEM_ACCESS_FLAGS);
+        mr = UCS_PROFILE_CALL(ibv_reg_mr, md->pd, address, length,
+                              UCT_IB_MEM_ACCESS_FLAGS);
         if (mr == NULL) {
             ucs_error("ibv_reg_mr(address=%p, length=%Zu, access=0x%x) failed: %m",
                       address, length, UCT_IB_MEM_ACCESS_FLAGS);
@@ -562,8 +564,9 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
                   "nodemask[0]=0x%lx", start, end, old_policy, new_policy,
                   numa_nodemask_p(nodemask)[0]);
 
-        ret = mbind((void*)start, end - start, new_policy,
-                    numa_nodemask_p(nodemask), numa_nodemask_size(nodemask), 0);
+        ret = UCS_PROFILE_CALL(mbind, (void*)start, end - start, new_policy,
+                               numa_nodemask_p(nodemask),
+                               numa_nodemask_size(nodemask), 0);
         if (ret < 0) {
             ucs_warn("mbind(addr=0x%lx length=%ld policy=%d) failed: %m",
                      start, end - start, new_policy);
@@ -598,7 +601,7 @@ static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh)
         attr.length    = memh->mr->length;
         attr.comp_mask = 0;
 
-        ret = ibv_exp_prefetch_mr(memh->mr, &attr);
+        ret = UCS_PROFILE_CALL(ibv_exp_prefetch_mr, memh->mr, &attr);
         if (ret) {
             ucs_error("ibv_exp_prefetch_mr(addr=%p length=%zu) returned %d: %m",
                       attr.addr, attr.length, ret);
@@ -675,7 +678,7 @@ static ucs_status_t uct_ib_mem_free(uct_md_h md, uct_mem_h memh)
 
     ucs_memtrack_releasing_adjusted(ib_memh->mr->addr);
 
-    status = uct_ib_memh_dereg(memh);
+    status = UCS_PROFILE_CALL(uct_ib_memh_dereg, memh);
     if (status != UCS_OK) {
         return status;
     }
@@ -762,7 +765,8 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
         umr_offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
-        status = uct_ib_md_post_umr(md, memh->mr, umr_offset, &memh->atomic_mr);
+        status = UCS_PROFILE_CALL(uct_ib_md_post_umr, md, memh->mr,
+                                  umr_offset, &memh->atomic_mr);
         if (status == UCS_OK) {
             memh->flags |= UCT_IB_MEM_FLAG_ATOMIC_MR;
         } else if (status != UCS_ERR_UNSUPPORTED) {

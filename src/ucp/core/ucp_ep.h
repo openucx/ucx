@@ -12,6 +12,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
+#include <ucs/stats/stats.h>
 #include <limits.h>
 
 
@@ -24,6 +25,21 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_SENT = UCS_BIT(2), /* Connection request was sent */
     UCP_EP_FLAG_CONNECT_REP_SENT = UCS_BIT(3), /* Debug: Connection reply was sent */
 };
+
+
+/**
+ * UCP endpoint statistics counters
+ */
+enum {
+    UCP_EP_STAT_TAG_TX_EAGER,
+    UCP_EP_STAT_TAG_TX_EAGER_SYNC,
+    UCP_EP_STAT_TAG_TX_RNDV,
+    UCP_EP_STAT_LAST
+};
+
+
+#define UCP_EP_STAT_TAG_OP(_ep, _op) \
+    UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
 
 /* Lanes configuration.
@@ -62,7 +78,11 @@ typedef struct ucp_ep_config_key {
 typedef struct ucp_ep_rma_config {
     size_t                 max_put_short;    /* Maximal payload of put short */
     size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
+    size_t                 max_put_zcopy;
     size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
+    size_t                 max_get_zcopy;
+    size_t                 put_zcopy_thresh;
+    size_t                 get_zcopy_thresh;
 } ucp_ep_rma_config_t;
 
 
@@ -79,32 +99,30 @@ typedef struct ucp_ep_config {
     ucp_lane_map_t         p2p_lanes;
 
     /* Limits for active-message based protocols */
-    size_t                 max_eager_short;  /* Maximal payload of eager short */
-    size_t                 max_am_short;     /* Maximal payload of am short */
-    size_t                 max_am_bcopy;     /* Maximal total size of am_bcopy */
-    size_t                 max_am_zcopy;     /* Maximal total size of am_zcopy */
+    struct {
+        ssize_t                max_eager_short;  /* Maximal payload of eager short */
+        ssize_t                max_short;        /* Maximal payload of am short */
+        size_t                 max_bcopy;        /* Maximal total size of am_bcopy */
+        size_t                 max_zcopy;        /* Maximal total size of am_zcopy */
+        /* zero-copy threshold for operations which do not have to wait for remote side */
+        size_t                 zcopy_thresh;
+        /* zero-copy threshold for operations which anyways have to wait for remote side */
+        size_t                 sync_zcopy_thresh;
+    } am;
 
     /* Configuration for each lane that provides RMA */
     ucp_ep_rma_config_t    rma[UCP_MAX_LANES];
-
-    /* Maximal total size of rndv_get_zcopy */
-    size_t                 max_rndv_get_zcopy;
-
     /* Threshold for switching from put_short to put_bcopy */
     size_t                 bcopy_thresh;
 
-    /* Threshold for switching from eager to rendezvous */
-    size_t                 rndv_thresh;
-
-    /* threshold for switching from eager-sync to rendezvous */
-    size_t                 sync_rndv_thresh;
-
-    /* zero-copy threshold for operations which do not have to wait for remote side */
-    size_t                 zcopy_thresh;
-
-    /* zero-copy threshold for operations which anyways have to wait for remote side */
-    size_t                 sync_zcopy_thresh;
-
+    struct {
+        /* Maximal total size of rndv_get_zcopy */
+        size_t                 max_get_zcopy;
+        /* Threshold for switching from eager to rendezvous */
+        size_t                 thresh;
+        /* threshold for switching from eager-sync to rendezvous */
+        size_t                 sync_thresh;
+    } rndv;
 } ucp_ep_config_t;
 
 
@@ -119,6 +137,8 @@ typedef struct ucp_ep {
     uint8_t                       flags;         /* Endpoint flags */
 
     uint64_t                      dest_uuid;     /* Destination worker uuid */
+
+    UCS_STATS_NODE_DECLARE(stats);
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_NAME_MAX];

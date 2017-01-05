@@ -112,6 +112,18 @@ void test_ucp_tag::wait(request *req, int buf_index)
     }
 }
 
+void test_ucp_tag::wait_and_validate(request *req)
+{
+    if (req == NULL) {
+        return;
+    }
+
+    wait(req);
+    EXPECT_TRUE(req->completed);
+    EXPECT_EQ(UCS_OK, req->status);
+    request_release(req);
+}
+
 test_ucp_tag::request *
 test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, int buf_index)
@@ -357,6 +369,18 @@ ucs_status_t test_ucp_tag::dt_unpack(void *state, size_t offset, const void *src
     return UCS_OK;
 }
 
+ucs_status_t test_ucp_tag::dt_err_unpack(void *state, size_t offset, const void *src,
+                                         size_t length)
+{
+    dt_gen_state *dt_state = (dt_gen_state*)state;
+
+    EXPECT_GT(dt_gen_start_count, dt_gen_finish_count);
+    EXPECT_EQ(1, dt_state->started);
+    EXPECT_EQ(uint32_t(MAGIC), dt_state->magic);
+
+    return UCS_ERR_NO_MEMORY;
+}
+
 void test_ucp_tag::dt_common_finish(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
@@ -384,6 +408,15 @@ ucp_generic_dt_ops test_ucp_tag::test_dt_uint8_ops = {
     test_ucp_tag::dt_packed_size<uint8_t>,
     test_ucp_tag::dt_pack<uint8_t>,
     test_ucp_tag::dt_unpack<uint8_t>,
+    test_ucp_tag::dt_common_finish
+};
+
+ucp_generic_dt_ops test_ucp_tag::test_dt_uint32_err_ops = {
+    test_ucp_tag::dt_common_start_pack,
+    test_ucp_tag::dt_common_start_unpack,
+    test_ucp_tag::dt_packed_size<uint32_t>,
+    test_ucp_tag::dt_pack<uint32_t>,
+    test_ucp_tag::dt_err_unpack,
     test_ucp_tag::dt_common_finish
 };
 

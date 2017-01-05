@@ -49,10 +49,15 @@ public:
 
 
 protected:
-    void test_blocking_xfer(blocking_send_func_t send, size_t alignment,
-                            bool malloc_allocate, bool is_ep_flush);
-    void test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send, size_t alignment,
-                                               bool malloc_allocate, bool is_ep_flush);
+    const static size_t DEFAULT_SIZE  = 0;
+    const static int    DEFAULT_ITERS = 0;
+    void test_blocking_xfer(blocking_send_func_t send, size_t len, int max_iters,
+                            size_t alignment, bool malloc_allocate, bool is_ep_flush);
+
+    void test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send, 
+                                               size_t len, int max_iters, 
+                                               size_t alignment, bool malloc_allocate, 
+                                               bool is_ep_flush);
 };
 
 

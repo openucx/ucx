@@ -176,7 +176,8 @@ typedef struct uct_base_iface {
 
 } uct_base_iface_t;
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
-                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*));
+                  const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*)
+                  UCS_STATS_ARG(const char*));
 
 
 /**
@@ -474,6 +475,7 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
                     unsigned length, void *desc)
 {
     uct_am_handler_t *handler = &iface->am[id];
+    ucs_assert(id < UCT_AM_ID_MAX);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
     return handler->cb(handler->arg, data, length, desc);

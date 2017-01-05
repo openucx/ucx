@@ -45,6 +45,14 @@ typedef struct uct_dc_dci {
 } uct_dc_dci_t;
 
 
+typedef struct uct_dc_fc_request {
+    uct_rc_fc_request_t           super;
+    uintptr_t                     sender_ep;
+    uint32_t                      dct_num;
+    uint16_t                      lid;
+} uct_dc_fc_request_t;
+
+
 typedef struct uct_dc_iface {
     uct_rc_iface_t                super;
     struct {
@@ -59,6 +67,9 @@ typedef struct uct_dc_iface {
         uint8_t                   dcis_stack[UCT_DC_IFACE_MAX_DCIS];  /* LIFO of indexes of available dcis */
 
         ucs_arbiter_t             dci_arbiter;
+
+        /* Used to send grant messages for all peers */
+        uct_dc_ep_t               *fc_ep;
     } tx;
     struct {
         struct ibv_exp_dct        *dct;
@@ -84,6 +95,16 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 
 void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config);
+
+ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface);
+
+void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface);
+
+ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self);
+
+ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
+                                     uct_rc_hdr_t *hdr, unsigned length,
+                                     uint32_t imm_data, uint16_t lid, void *desc);
 
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
@@ -120,18 +141,25 @@ static inline ucs_arbiter_t *uct_dc_iface_dci_waitq(uct_dc_iface_t *iface)
     return &iface->super.tx.arbiter;
 }
 
-static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci)
+static inline int
+uct_dc_iface_dci_has_outstanding(uct_dc_iface_t *iface, int dci)
 {
     uct_rc_txqp_t *txqp;
 
     txqp = &iface->tx.dcis[dci].txqp;
+    return uct_rc_txqp_available(txqp) < (int16_t)iface->super.config.tx_qp_len;
+}
 
-    if (uct_rc_txqp_available(txqp) == (int16_t)iface->super.config.tx_qp_len) {
+static inline ucs_status_t uct_dc_iface_flush_dci(uct_dc_iface_t *iface, int dci)
+{
+
+    if (!uct_dc_iface_dci_has_outstanding(iface, dci)) {
         return UCS_OK;
     }
     ucs_trace_data("dci %d is not flushed %d/%d", dci,
-                    txqp->available, iface->super.config.tx_qp_len);
-    ucs_assertv(uct_rc_txqp_unsignaled(txqp) == 0,
+                   iface->tx.dcis[dci].txqp.available,
+                   iface->super.config.tx_qp_len);
+    ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
 }

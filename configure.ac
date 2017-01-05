@@ -3,7 +3,7 @@
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University 
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
-# Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 AC_PREREQ([2.63])
@@ -44,6 +44,9 @@ AC_CONFIG_MACRO_DIR([config/m4])
 
 define([ucx_prefix], [/opt/ucx])
 AC_PREFIX_DEFAULT([ucx_prefix])
+
+top_top_srcdir=$srcdir
+AC_SUBST(top_top_srcdir)
 
 RPM_RELEASE=1
 BUILD_TS=ts
@@ -121,6 +124,9 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_MPI], [false])
      AM_CONDITIONAL([HAVE_MPIRUN], [false])
      AM_CONDITIONAL([HAVE_MPICC], [false])
+     AM_CONDITIONAL([HAVE_PROFILING], [false])
+     AM_CONDITIONAL([HAVE_UCM_PTMALLOC283], [false])
+     AM_CONDITIONAL([HAVE_UCM_PTMALLOC286], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])

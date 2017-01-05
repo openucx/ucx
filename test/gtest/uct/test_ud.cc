@@ -109,6 +109,28 @@ public:
         return UCS_OK;
     }
 
+    void validate_connect(uct_ud_ep_t *ep, unsigned value,
+                          double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
+        ucs_time_t start_time = ucs_get_time();
+        while ((ep->dest_ep_id != value) &&
+               (ucs_get_time() < start_time + ucs_time_from_sec(timeout_sec))) {
+            progress();
+        }
+        EXPECT_EQ(value, ep->dest_ep_id);
+        EXPECT_EQ(value, ep->conn_id);
+        EXPECT_EQ(value, ep->ep_id);
+    }
+
+    void validate_recv(uct_ud_ep_t *ep, unsigned value,
+                       double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
+        ucs_time_t start_time = ucs_get_time() + ucs_time_from_sec(10.0);
+        while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value) &&
+               (ucs_get_time() < start_time + ucs_time_from_sec(timeout_sec))) {
+            progress();
+        }
+        EXPECT_EQ(value, ucs_frag_list_sn(&ep->rx.ooo_pkts));
+    }
+
     void validate_flush() {
         /* 1 packets transmitted, 1 packets received */
         EXPECT_EQ(2, ep(m_e1)->tx.psn);
@@ -155,7 +177,7 @@ UCS_TEST_P(test_ud, basic_tx) {
 
     /* N packets transmitted, N packets received */
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    validate_recv(ep(m_e2), N);
 
     /* no data transmitted back */
     EXPECT_EQ(1, ep(m_e2)->tx.psn);
@@ -183,9 +205,10 @@ UCS_TEST_P(test_ud, duplex_tx) {
 
     /* N packets transmitted, N packets received */
     EXPECT_EQ(N+1, ep(m_e1)->tx.psn);
-    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+    validate_recv(ep(m_e2), N);
+
     EXPECT_EQ(N+1, ep(m_e2)->tx.psn);
-    EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
+    validate_recv(ep(m_e1), N);
 
     /* everything but last packet from e2 is acked */
     EXPECT_EQ(N, ep(m_e1)->tx.acked_psn);
@@ -208,7 +231,13 @@ UCS_TEST_P(test_ud, tx_window1) {
         EXPECT_UCS_OK(tx(m_e1));
     }
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
-    short_progress_loop();
+
+    /* wait for ack */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    while ((ucs_get_time() < timeout) &&
+            uct_ud_ep_no_window(ep(m_e1))) {
+        short_progress_loop();
+    }
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(tx(m_e1));
@@ -271,13 +300,16 @@ UCS_TEST_P(test_ud, ack_req_single) {
     set_tx_win(m_e1, 2);
     ack_req_tx_cnt = 0;
     tx_ack_psn = 0;
+    rx_ack_count = 0;
     ep(m_e1)->tx.tx_hook = ack_req_count_tx;
+    ep(m_e1)->rx.rx_hook = count_rx_acks;
     ep(m_e2)->rx.rx_hook = ack_req_count_tx;
 
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_EQ(1, ack_req_tx_cnt);
     EXPECT_EQ(1, tx_ack_psn);
-    short_progress_loop();
+
+    wait_for_flag(reinterpret_cast<unsigned*>(&rx_ack_count));
     EXPECT_EQ(2, ack_req_tx_cnt);
     EXPECT_EQ(1, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
@@ -293,7 +325,9 @@ UCS_TEST_P(test_ud, ack_req_window) {
     set_tx_win(m_e1, N);
     ack_req_tx_cnt = 0;
     tx_ack_psn = 0;
+    rx_ack_count = 0;
     ep(m_e1)->tx.tx_hook = ack_req_count_tx;
+    ep(m_e1)->rx.rx_hook = count_rx_acks;
     ep(m_e2)->rx.rx_hook = ack_req_count_tx;
 
     for (i = 0; i < N/4; i++) {
@@ -301,7 +335,8 @@ UCS_TEST_P(test_ud, ack_req_window) {
     }
     EXPECT_EQ(1, ack_req_tx_cnt);
     EXPECT_EQ(N/4, tx_ack_psn);
-    short_progress_loop(100);
+
+    wait_for_flag(reinterpret_cast<unsigned*>(&rx_ack_count));
     EXPECT_EQ(2, ack_req_tx_cnt);
     EXPECT_EQ(N/4, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
@@ -318,8 +353,7 @@ UCS_TEST_P(test_ud, crep_drop1) {
     twait(500);
 
     /* CREQ resend and connection shall be fully functional */
-    EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
+    validate_connect(ep(m_e1), 0U);
 
     EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
@@ -334,15 +368,35 @@ UCS_TEST_P(test_ud, crep_drop2) {
     m_e1->connect_to_iface(0, *m_e2);
     m_e2->connect_to_iface(0, *m_e1);
 
-    ep(m_e1, 0)->rx.rx_hook = drop_ctl;
-    ep(m_e2, 0)->rx.rx_hook = drop_ctl;
-    short_progress_loop(100);
+    ep(m_e1)->rx.rx_hook = drop_ctl;
+    ep(m_e2)->rx.rx_hook = drop_ctl;
+    short_progress_loop();
 
-    /* Expect that creq and crep are sent and window is empty */
-    EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
-    EXPECT_EQ(3, ep(m_e1, 0)->tx.psn);
-    EXPECT_EQ(1, ep(m_e2, 0)->tx.acked_psn);
-    EXPECT_EQ(3, ep(m_e2, 0)->tx.psn);
+    validate_connect(ep(m_e1), 0U);
+    validate_connect(ep(m_e2), 0U);
+
+    /* Remove filter for CREP to be handled and TX win to be freed. */
+    ep(m_e1)->rx.rx_hook = uct_ud_ep_null_hook;
+    ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
+
+    /* Expect that creq (and maybe crep already) are sent */
+    EXPECT_EQ(ep(m_e1)->tx.acked_psn, 1);
+    EXPECT_EQ(ep(m_e2)->tx.acked_psn, 1);
+    EXPECT_GE(ep(m_e1)->tx.psn,       2);
+    EXPECT_GE(ep(m_e2)->tx.psn,       2);
+
+    /* Wait for TX win to be empty (which means that all
+     * CONN packets are handled) */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    while (ucs_get_time() < timeout) {
+        if(ucs_queue_is_empty(&ep(m_e1)->tx.window) &&
+           ucs_queue_is_empty(&ep(m_e2)->tx.window)) {
+            break;
+        }
+        short_progress_loop();
+    }
+    EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
+    EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e2)->tx.window));
 }
 
 UCS_TEST_P(test_ud, crep_ack_drop) {
@@ -369,11 +423,12 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     twait(500);
     short_progress_loop();
 
+    validate_recv(ep(m_e2), 3U);
+
     ep(m_e1, 0)->rx.rx_hook = uct_ud_ep_null_hook;
     ep(m_e2, 0)->rx.rx_hook = uct_ud_ep_null_hook;
 
     /* Should receive both CREP and the active message */
-    EXPECT_EQ(3u, ep(m_e2, 0)->rx.ooo_pkts.head_sn);
 
     short_progress_loop();
     twait(500);
@@ -395,7 +450,7 @@ UCS_TEST_P(test_ud, creq_flush) {
     /* Setup filter to drop all packets. We have to drop CREP
      * and ACK_REQ packets. */
     ep(m_e1, 0)->rx.rx_hook = drop_rx;
-    short_progress_loop(50);
+    short_progress_loop();
     /* do flush while ep is being connected it must return in progress */
     status = uct_iface_flush(m_e1->iface(), 0, NULL);
     EXPECT_EQ(UCS_INPROGRESS, status);
@@ -448,7 +503,7 @@ UCS_TEST_P(test_ud, ca_ai) {
     }
 }
 
-UCS_TEST_P(test_ud, ca_md) {
+UCS_TEST_P(test_ud, ca_md, "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
     ucs_status_t status;
     int new_cwnd;
@@ -461,11 +516,11 @@ UCS_TEST_P(test_ud, ca_md) {
 
     connect();
 
-    short_progress_loop(100);
+    validate_connect(ep(m_e1), 0U);
 
     /* assume we are at the max window
      * on receive drop all packets. After several retransmission
-     * attempts the window will be reduced to the minumum
+     * attempts the window will be reduced to the minimum
      */
     set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
@@ -538,12 +593,11 @@ UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
 
     m_e1->connect_to_iface(0, *m_e2);
     m_e2->connect_to_iface(0, *m_e1);
-
     short_progress_loop(50);
 
     iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
 
-    short_progress_loop(100);
+    validate_connect(ep(m_e2), 0U);
 }
 #endif
 
@@ -551,8 +605,7 @@ UCS_TEST_P(test_ud, connect_iface_single) {
     /* single connect */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
-    EXPECT_EQ(0U, ep(m_e1, 0)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1, 0)->conn_id);
+    validate_connect(ep(m_e1), 0U);
 
     EXPECT_EQ(2, ep(m_e1, 0)->tx.psn);
     EXPECT_EQ(1, ep(m_e1, 0)->tx.acked_psn);
@@ -567,13 +620,11 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     m_e1->connect_to_iface(1, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
-    EXPECT_EQ(0U, ep(m_e1,0)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1,0)->conn_id);
+    validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1,0)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 0)->rx.ooo_pkts));
 
-    EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
+    validate_connect(ep(m_e1, 1), 1U);
     EXPECT_EQ(2, ep(m_e1,1)->tx.psn);
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1, 1)->rx.ooo_pkts));
 }
@@ -582,8 +633,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
-    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
+    validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     /* one becase of crep */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
@@ -591,9 +641,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop(50);
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
+    validate_connect(ep(m_e2), 0U);
     EXPECT_EQ(2, ep(m_e2)->tx.psn);
     /* one becase creq sets initial psn */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
@@ -607,13 +655,8 @@ UCS_TEST_P(test_ud, connect_iface_sim) {
     m_e2->connect_to_iface(0, *m_e1);
     short_progress_loop();
 
-    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
-    EXPECT_EQ(0U, ep(m_e1)->ep_id);
-
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
+    validate_connect(ep(m_e1), 0U);
+    validate_connect(ep(m_e2), 0U);
 
     /* psns are not checked because it really depends on scheduling */
 }
@@ -626,25 +669,10 @@ UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     m_e2->connect_to_iface(1, *m_e1);
     short_progress_loop(50);
 
-    EXPECT_EQ(0U, ep(m_e1)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e1)->conn_id);
-    EXPECT_EQ(0U, ep(m_e1)->ep_id);
-
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
-
-    EXPECT_EQ(1U, ep(m_e1,1)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e1,1)->conn_id);
-    EXPECT_EQ(1U, ep(m_e1,1)->ep_id);
-
-    EXPECT_EQ(0U, ep(m_e2)->dest_ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->ep_id);
-    EXPECT_EQ(0U, ep(m_e2)->conn_id);
-
-    EXPECT_EQ(1U, ep(m_e2,1)->dest_ep_id);
-    EXPECT_EQ(1U, ep(m_e2,1)->ep_id);
-    EXPECT_EQ(1U, ep(m_e2,1)->conn_id);
+    validate_connect(ep(m_e1),    0U);
+    validate_connect(ep(m_e2),    0U);
+    validate_connect(ep(m_e1, 1), 1U);
+    validate_connect(ep(m_e2, 1), 1U);
     /* psns are not checked because it really depends on scheduling */
 }
 
@@ -857,8 +885,8 @@ UCS_TEST_P(test_ud, ctls_loss) {
     ep(m_e1)->rx.rx_hook = uct_ud_ep_null_hook;
     twait(500);
 
-    EXPECT_TRUE(uct_ud_ep_is_connected(ep(m_e1)));
-    EXPECT_TRUE(uct_ud_ep_is_connected(ep(m_e2)));
+    validate_connect(ep(m_e1), 0U);
+    validate_connect(ep(m_e2), 0U);
 }
 #endif
 

@@ -32,6 +32,42 @@ enum {
 
 
 /**
+ * UCP worker statistics counters
+ */
+enum {
+    /* Total number of received eager messages */
+    UCP_WORKER_STAT_TAG_RX_EAGER_MSG,
+    UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG,
+
+    /* Total number of  received eager chunks (every message
+     * can be split into a bunch of chunks). It is possible that
+     * some chunks  of the message arrived unexpectedly and then
+     * receive had been posted and the rest arrived expectedly */
+    UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP,
+    UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP,
+
+    UCP_WORKER_STAT_TAG_RX_RNDV_EXP,
+    UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP,
+    UCP_WORKER_STAT_LAST
+};
+
+
+#define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
+    UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
+                             (_flags & UCP_RECV_DESC_FLAG_SYNC) ? \
+                             UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG : \
+                             UCP_WORKER_STAT_TAG_RX_EAGER_MSG, 1);
+
+#define UCP_WORKER_STAT_EAGER_CHUNK(_worker, _is_exp) \
+    UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
+                             UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_##_is_exp, 1);
+
+#define UCP_WORKER_STAT_RNDV(_worker, _is_exp) \
+    UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
+                             UCP_WORKER_STAT_TAG_RX_RNDV_##_is_exp, 1);
+
+
+/**
  * UCP worker wake-up context.
  */
 typedef struct ucp_worker_wakeup {
@@ -62,6 +98,7 @@ typedef struct ucp_worker {
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
+    UCS_STATS_NODE_DECLARE(stats);
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count; /* Current number of configurations */
     ucp_mt_lock_t                 mt_lock; /* All configurations about multithreading support */

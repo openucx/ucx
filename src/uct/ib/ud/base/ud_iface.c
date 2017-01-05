@@ -23,12 +23,12 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
 
 static void uct_ud_iface_reserve_skbs(uct_ud_iface_t *iface, int count);
 static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface);
-static void uct_ud_iface_timer(void *arg);
+static void uct_ud_iface_timer(int timer_id, void *arg);
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
-static void uct_ud_iface_event(void *arg);
+static void uct_ud_iface_event(int fd, void *arg);
 
 
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
@@ -228,18 +228,6 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
     uct_ud_iface_cep_remove(ep);
 }
 
-static void uct_ud_iface_async_handler_remove(ucs_callbackq_slow_elem_t *self)
-{
-    uct_ud_iface_t *iface = ucs_container_of(self, uct_ud_iface_t, async.cbq_elem);
-
-    ucs_trace_func("iface=%p remove async fd=%d and unregister. slow-path %d",
-                   iface, iface->super.comp_channel->fd, iface->async.cbq_elem_on);
-    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
-
-    /* need to call this callback only once. unregistering... */
-    uct_ud_iface_async_remove_cb_enable(iface, 0);
-}
-
 static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
                                        uct_mem_h memh)
 {
@@ -381,9 +369,9 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
     return UCS_OK;
 
 err_unset_event_handler:
-    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
+    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
 err_remove_timer:
-    ucs_async_remove_timer(iface->async.timer_id);
+    ucs_async_remove_handler(iface->async.timer_id, 1);
 err_twheel_cleanup:
     ucs_twheel_cleanup(&iface->async.slow_timer);
 err:
@@ -392,8 +380,8 @@ err:
 
 void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface)
 {
-    ucs_async_unset_event_handler(iface->super.comp_channel->fd);
-    ucs_async_remove_timer(iface->async.timer_id);
+    ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
+    ucs_async_remove_handler(iface->async.timer_id, 1);
     ucs_twheel_cleanup(&iface->async.slow_timer);
 }
 
@@ -442,9 +430,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
     UCT_UD_IFACE_HOOK_INIT(self);
-
-    self->async.cbq_elem.cb      = uct_ud_iface_async_handler_remove;
-    self->async.cbq_elem_on      = 0;
 
     if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
@@ -529,29 +514,31 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
     uct_ib_iface_query(&iface->super, UCT_IB_DETH_LEN + sizeof(uct_ud_neth_t),
                        iface_attr);
 
-    iface_attr->cap.flags             = UCT_IFACE_FLAG_AM_SHORT         |
-                                        UCT_IFACE_FLAG_AM_BCOPY         |
-                                        UCT_IFACE_FLAG_AM_ZCOPY         |
-                                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                                        UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_PENDING          |
-                                        UCT_IFACE_FLAG_AM_CB_SYNC       |
-                                        UCT_IFACE_FLAG_AM_CB_ASYNC      |
-                                        UCT_IFACE_FLAG_WAKEUP;
+    iface_attr->cap.flags              = UCT_IFACE_FLAG_AM_SHORT         |
+                                         UCT_IFACE_FLAG_AM_BCOPY         |
+                                         UCT_IFACE_FLAG_AM_ZCOPY         |
+                                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
+                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                         UCT_IFACE_FLAG_PENDING          |
+                                         UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                         UCT_IFACE_FLAG_AM_CB_ASYNC      |
+                                         UCT_IFACE_FLAG_WAKEUP;
 
-    iface_attr->cap.am.max_short      = iface->config.max_inline - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_bcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.min_zcopy      = 0;
-    iface_attr->cap.am.max_zcopy      = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
-    iface_attr->cap.am.max_hdr        = iface->config.max_inline - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_short       = iface->config.max_inline - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.min_zcopy       = 0;
+    iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
+    iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
+    iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.am.max_hdr         = iface->config.max_inline - sizeof(uct_ud_neth_t);
     /* The first iov is reserved for the header */
-    iface_attr->cap.am.max_iov        = uct_ib_iface_get_max_iov(&iface->super) - 1;
+    iface_attr->cap.am.max_iov         = uct_ib_iface_get_max_iov(&iface->super) - 1;
 
-    iface_attr->cap.put.max_short     = iface->config.max_inline -
-                                        sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
+    iface_attr->cap.put.max_short      = iface->config.max_inline -
+                                         sizeof(uct_ud_neth_t) - sizeof(uct_ud_put_hdr_t);
 
-    iface_attr->iface_addr_len        = sizeof(uct_ud_iface_addr_t);
-    iface_attr->ep_addr_len           = sizeof(uct_ud_ep_addr_t);
+    iface_attr->iface_addr_len         = sizeof(uct_ud_iface_addr_t);
+    iface_attr->ep_addr_len            = sizeof(uct_ud_ep_addr_t);
 
     /* Software overhead */
     iface_attr->overhead = 80e-9;
@@ -735,7 +722,7 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
 }
 
-static void uct_ud_iface_event(void *arg)
+static void uct_ud_iface_event(int fd, void *arg)
 {
     uct_ud_enter(arg);
     ucs_trace_async("iface(%p) uct_ud_iface_event", arg);
@@ -743,7 +730,7 @@ static void uct_ud_iface_event(void *arg)
     uct_ud_leave(arg);
 }
 
-static void uct_ud_iface_timer(void *arg)
+static void uct_ud_iface_timer(int timer_id, void *arg)
 {
     uct_ud_iface_t *iface = arg;
     ucs_time_t now;

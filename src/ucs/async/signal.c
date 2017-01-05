@@ -13,49 +13,34 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/list.h>
-#include <ucs/datastruct/hash.h>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
-#include <ucs/time/timerq.h>
 #include <signal.h>
 
+#define UCS_SIGNAL_MAX_TIMERQS  64
 
 /*
- * Per-thread system timer and software timer queue.
+ * Per-thread system timer and software timer queue. We can dispatch timers only
+ * on the same thread which added them.
  */
-typedef struct ucs_async_signal_timerq ucs_async_signal_timerq_t;
-struct ucs_async_signal_timerq {
+typedef struct ucs_async_signal_timer {
     pid_t                      tid;          /* Thread ID */
     timer_t                    sys_timer_id; /* System timer ID */
     ucs_timer_queue_t          timerq;       /* Queue of timers for the thread */
-    ucs_async_signal_timerq_t  *next;
-};
-
-
-/*
- * Hash table of per-thread timer queues.
- */
-#define UCS_ASYNC_SIGNAL_TIMERQ_COMPARE(_t1, _t2)  ((int)(_t1)->tid - (int)(_t2)->tid)
-#define UCS_ASYNC_SIGNAL_TIMERQ_HASH(_t)           ((int)(_t)->tid)
-UCS_DEFINE_THREAD_SAFE_HASH(ucs_async_signal_timerq_t, next, 37,
-                            UCS_ASYNC_SIGNAL_TIMERQ_COMPARE,
-                            UCS_ASYNC_SIGNAL_TIMERQ_HASH)
-
-
-typedef struct ucs_async_signal_timer_info {
-    int                        timer_id;
-    ucs_time_t                 interval;
-} ucs_async_signal_timer_info_t;
+} ucs_async_signal_timer_t;
 
 
 static struct {
-    struct sigaction                     prev_sighandler; /* Previous signal handler */
-    volatile uint32_t                    event_count;     /* Number of events in use */
-    ucs_hashed_ucs_async_signal_timerq_t timers;          /* Hash of all threads */
+    struct sigaction            prev_sighandler;       /* Previous signal handler */
+    volatile uint32_t           event_count;           /* Number of events in use */
+    pthread_mutex_t             timers_lock;           /* Lock for timers array */
+    ucs_async_signal_timer_t    timers[UCS_SIGNAL_MAX_TIMERQS];/* Array of all threads */
 } ucs_async_signal_global_context = {
     .event_count = 0,
+    .timers_lock = PTHREAD_MUTEX_INITIALIZER,
+    .timers      = {{ .tid = 0 }}
 };
 
 
@@ -64,7 +49,7 @@ static struct {
  * Otherwise, we'd get into big synchronization issues.
  */
 #define UCS_ASYNC_SIGNAL_CHECK_THREAD(_async) \
-    if (ucs_get_tid() != __ucs_async_signal_context_tid(_async)) { \
+    if (ucs_get_tid() != ucs_async_signal_context_tid(_async)) { \
         ucs_error("cannot manipulate signal async from different thread"); \
         return UCS_ERR_UNREACHABLE; \
     }
@@ -73,7 +58,7 @@ static struct {
 /**
  * @return To which thread the async context should deliver events to.
  */
-static pid_t __ucs_async_signal_context_tid(ucs_async_context_t *async)
+static pid_t ucs_async_signal_context_tid(ucs_async_context_t *async)
 {
     static pid_t pid = -1;
 
@@ -92,7 +77,7 @@ ucs_async_signal_set_fd_owner(pid_t dest_tid, int fd)
     owner.type = F_OWNER_TID;
     owner.pid  = dest_tid;
 
-    ucs_trace_async("fcntl(F_SETOWN, fd=%d, tid=%d)", fd, dest_tid);
+    ucs_trace_async("fcntl(F_SETOWN_EX, fd=%d, tid=%d)", fd, dest_tid);
     if (0 > fcntl(fd, F_SETOWN_EX, &owner)) {
         ucs_error("fcntl F_SETOWN_EX failed: %m");
         return UCS_ERR_IO_ERROR;
@@ -115,7 +100,7 @@ ucs_async_signal_set_fd_owner(pid_t dest_tid, int fd)
 }
 
 static ucs_status_t
-ucs_async_signal_sys_timer_create(pid_t tid, timer_t *sys_timer_id)
+ucs_async_signal_sys_timer_create(int uid, pid_t tid, timer_t *sys_timer_id)
 {
     struct sigevent ev;
     timer_t timer;
@@ -125,9 +110,9 @@ ucs_async_signal_sys_timer_create(pid_t tid, timer_t *sys_timer_id)
 
     /* Create timer signal */
     memset(&ev, 0, sizeof(ev));
-    ev.sigev_notify           = SIGEV_THREAD_ID;
-    ev.sigev_signo            = ucs_global_opts.async_signo;
-    ev.sigev_value.sival_int = tid; /* parameter to timer */
+    ev.sigev_notify          = SIGEV_THREAD_ID;
+    ev.sigev_signo           = ucs_global_opts.async_signo;
+    ev.sigev_value.sival_int = uid; /* user parameter to timer */
     ev._sigev_un._tid        = tid; /* target thread */
     ret = timer_create(CLOCK_REALTIME, &ev, &timer);
     if (ret < 0) {
@@ -172,36 +157,29 @@ static void ucs_async_signal_sys_timer_delete(timer_t sys_timer_id)
     }
 }
 
-static ucs_status_t
-ucs_async_signal_dispatch_timerq(ucs_async_signal_timerq_t *timerq, void *arg)
+static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
 {
-    ucs_time_t current_time = ucs_get_time();
-    ucs_timer_t *timer;
+    ucs_async_signal_timer_t *timer = &ucs_async_signal_global_context.timers[uid];
 
-    ucs_trace_func("");
+    ucs_assertv_always((uid >= 0) && (uid < UCS_SIGNAL_MAX_TIMERQS), "uid=%d", uid);
 
-    ucs_timerq_for_each_expired(timer, &timerq->timerq, current_time) {
-        ucs_async_dispatch_handler(timer->id, 1);
+    /* No need to take lock - remove operation blocks signals on the same thread */
+    if (timer->tid != ucs_get_tid()) {
+        return UCS_OK;
     }
-    return UCS_OK;
+
+    return ucs_async_dispatch_timerq(&timer->timerq, ucs_get_time());
 }
 
 static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
 {
-    ucs_async_signal_timerq_t search;
-
     ucs_assert(signo == ucs_global_opts.async_signo);
 
     /* Check event code */
     switch (siginfo->si_code) {
     case SI_TIMER:
-        search.tid = siginfo->si_int;
-        ucs_assert(siginfo->si_int == ucs_get_tid());
-        ucs_trace_async("timer signal on thread %d", search.tid);
-        ucs_hashed_ucs_async_signal_timerq_t_find(&ucs_async_signal_global_context.timers,
-                                                  &search,
-                                                  ucs_async_signal_dispatch_timerq,
-                                                  NULL);
+        ucs_trace_async("timer signal uid=%d", siginfo->si_int);
+        ucs_async_signal_dispatch_timer(siginfo->si_int);
         return;
     case POLL_IN:
     case POLL_OUT:
@@ -210,7 +188,7 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
     case POLL_MSG:
     case POLL_PRI:
         ucs_trace_async("async signal handler called for fd %d", siginfo->si_fd);
-        ucs_async_dispatch_handler(siginfo->si_fd, 1);
+        ucs_async_dispatch_handlers(&siginfo->si_fd, 1);
         return;
     default:
         ucs_warn("signal handler called with unexpected event code %d, ignoring",
@@ -323,7 +301,7 @@ static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
     }
 
     /* Send the signal to the desired thread */
-    tid = __ucs_async_signal_context_tid(async);
+    tid = ucs_async_signal_context_tid(async);
     status = ucs_async_signal_set_fd_owner(tid, event_fd);
     if (status != UCS_OK) {
         goto err_remove_handler;
@@ -362,9 +340,9 @@ static ucs_status_t ucs_async_signal_remove_event_fd(ucs_async_context_t *async,
     return status;
 }
 
-static int ucs_async_signal_try_block(ucs_async_context_t *async, int from_async)
+static int ucs_async_signal_try_block(ucs_async_context_t *async)
 {
-    if (from_async && (async->signal.block_count > 0)) {
+    if (async->signal.block_count > 0) {
         return 0;
     }
 
@@ -377,18 +355,45 @@ static void ucs_async_signal_unblock(ucs_async_context_t *async)
     UCS_ASYNC_SIGNAL_UNBLOCK(async);
 }
 
-static ucs_status_t ucs_async_signal_timerq_add_timer(ucs_async_signal_timerq_t *timerq,
-                                                      ucs_async_signal_timer_info_t *timer_info)
+static void ucs_timer_reset_if_empty(ucs_async_signal_timer_t *timer)
 {
-    ucs_status_t status;
+    if (ucs_timerq_is_empty(&timer->timerq)) {
+        ucs_async_signal_sys_timer_delete(timer->sys_timer_id);
+        ucs_timerq_cleanup(&timer->timerq);
+        timer->tid = 0;
+    }
+}
 
-    status = ucs_timerq_add(&timerq->timerq, timer_info->timer_id, timer_info->interval);
+/* Add a timer, possible initializing the timerq */
+static ucs_status_t
+ucs_async_signal_timerq_add_timer(ucs_async_signal_timer_t *timer, int tid,
+                                  int timer_id, ucs_time_t interval)
+{
+    ucs_time_t sys_interval;
+    ucs_status_t status;
+    int uid;
+
+    if (timer->tid == 0) {
+        timer->tid = tid;
+        ucs_timerq_init(&timer->timerq);
+
+        uid = (timer - ucs_async_signal_global_context.timers);
+        status = ucs_async_signal_sys_timer_create(uid, timer->tid,
+                                                   &timer->sys_timer_id);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+    }
+
+    status = ucs_timerq_add(&timer->timerq, timer_id, interval);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = ucs_async_signal_sys_timer_set_interval(timerq->sys_timer_id,
-                                                 ucs_timerq_min_interval(&timerq->timerq));
+    sys_interval = ucs_timerq_min_interval(&timer->timerq);
+    status = ucs_async_signal_sys_timer_set_interval(timer->sys_timer_id,
+                                                     sys_interval);
     if (status != UCS_OK) {
         goto err_remove;
     }
@@ -396,76 +401,50 @@ static ucs_status_t ucs_async_signal_timerq_add_timer(ucs_async_signal_timerq_t 
     return UCS_OK;
 
 err_remove:
-    ucs_timerq_remove(&timerq->timerq, timer_info->timer_id);
+    ucs_timerq_remove(&timer->timerq, timer_id);
 err:
+    ucs_timer_reset_if_empty(timer);
     return status;
 }
 
+/* Remove a timer, possible resetting the timerq */
 static ucs_status_t
-ucs_async_signal_alloc_timerq_cb(ucs_async_signal_timerq_t *search, void *arg,
-                                 ucs_async_signal_timerq_t **elem)
+ucs_async_signal_timerq_remove_timer(ucs_async_signal_timer_t *timer,
+                                     int timer_id)
 {
-    ucs_async_signal_timerq_t *timerq;
     ucs_status_t status;
 
-    timerq = ucs_malloc(sizeof *timerq, "async signal timer");
-    if (timerq == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    status = ucs_async_signal_sys_timer_create(search->tid, &timerq->sys_timer_id);
+    status = ucs_timerq_remove(&timer->timerq, timer_id);
     if (status != UCS_OK) {
-        goto err_free;
+        return status;
     }
 
-    timerq->tid = search->tid;
-    ucs_timerq_init(&timerq->timerq);
-
-    status = ucs_async_signal_timerq_add_timer(timerq, arg);
-    if (status != UCS_OK) {
-        goto err_timer_delete;
-    }
-
-    *elem = timerq;
+    ucs_timer_reset_if_empty(timer);
     return UCS_OK;
-
-err_timer_delete:
-    ucs_async_signal_sys_timer_delete(timerq->sys_timer_id);
-err_free:
-    ucs_free(timerq);
-err:
-    return status;
 }
 
-static ucs_status_t
-ucs_async_signal_timerq_exists_cb(ucs_async_signal_timerq_t *timerq, void *arg)
+static ucs_async_signal_timer_t *ucs_async_signal_find_timer(pid_t tid)
 {
-    return ucs_async_signal_timerq_add_timer(timerq, arg);
-}
+    ucs_async_signal_timer_t *timer;
 
-static ucs_status_t
-ucs_async_signal_remove_timer_cb(ucs_async_signal_timerq_t *timerq, void *arg)
-{
-    ucs_async_signal_timer_info_t *timer_info = arg;
-
-    ucs_timerq_remove(&timerq->timerq, timer_info->timer_id);
-    if (ucs_timerq_is_empty(&timerq->timerq)) {
-        /* Remove the timer queue because it became empty */
-        ucs_async_signal_sys_timer_delete(timerq->sys_timer_id);
-        ucs_timerq_cleanup(&timerq->timerq);
-        return UCS_OK;
+    for (timer = ucs_async_signal_global_context.timers;
+         timer < &ucs_async_signal_global_context.timers[UCS_SIGNAL_MAX_TIMERQS];
+         ++timer)
+    {
+        if (timer->tid == tid) {
+            return timer;
+        }
     }
 
-    return UCS_ERR_NO_PROGRESS; /* Do not remove yet */
+    return NULL;
 }
 
 static ucs_status_t ucs_async_signal_add_timer(ucs_async_context_t *async,
                                                int timer_id, ucs_time_t interval)
 {
-    ucs_async_signal_timer_info_t timer_info;
-    ucs_async_signal_timerq_t search;
+    ucs_async_signal_timer_t *timer;
     ucs_status_t status;
+    pid_t tid;
 
     ucs_trace_func("async=%p interval=%.2fus timer_id=%d",
                    async, ucs_time_to_usec(interval), timer_id);
@@ -479,15 +458,24 @@ static ucs_status_t ucs_async_signal_add_timer(ucs_async_context_t *async,
     }
 
     ucs_async_signal_allow(0);
-    search.tid          = __ucs_async_signal_context_tid(async);
-    timer_info.timer_id = timer_id;
-    timer_info.interval = interval;
-    status = ucs_hashed_ucs_async_signal_timerq_t_add_if(&ucs_async_signal_global_context.timers,
-                                                         &search,
-                                                         ucs_async_signal_alloc_timerq_cb,
-                                                         ucs_async_signal_timerq_exists_cb,
-                                                         &timer_info);
+    pthread_mutex_lock(&ucs_async_signal_global_context.timers_lock);
+
+    /* Find existing or available timer queue for the current thread */
+    tid    = ucs_async_signal_context_tid(async);
+    timer  = ucs_async_signal_find_timer(tid);
+    if (timer == NULL) {
+        timer = ucs_async_signal_find_timer(0); /* Search for free slot */
+    }
+
+    if (timer == NULL) {
+        status = UCS_ERR_EXCEEDS_LIMIT;
+    } else {
+        status = ucs_async_signal_timerq_add_timer(timer, tid, timer_id, interval);
+    }
+
+    pthread_mutex_unlock(&ucs_async_signal_global_context.timers_lock);
     ucs_async_signal_allow(1);
+
     if (status != UCS_OK) {
         goto err_uninstall_handler;
     }
@@ -503,47 +491,44 @@ err:
 static ucs_status_t ucs_async_signal_remove_timer(ucs_async_context_t *async,
                                                   int timer_id)
 {
-    ucs_async_signal_timer_info_t timer_info;
-    ucs_async_signal_timerq_t search;
-    ucs_async_signal_timerq_t *timerq;
+    ucs_async_signal_timer_t *timer;
     ucs_status_t status;
 
     ucs_trace_func("async=%p timer_id=%d", async, timer_id);
 
     UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
 
-    search.tid          = __ucs_async_signal_context_tid(async);
-    timer_info.timer_id = timer_id;
     ucs_async_signal_allow(0);
-    status = ucs_hashed_ucs_async_signal_timerq_t_remove_if(&ucs_async_signal_global_context.timers,
-                                                            &search,
-                                                            ucs_async_signal_remove_timer_cb,
-                                                            &timer_info,
-                                                            &timerq);
+    pthread_mutex_lock(&ucs_async_signal_global_context.timers_lock);
+
+    timer = ucs_async_signal_find_timer(ucs_async_signal_context_tid(async));
+    if (timer == NULL) {
+        status = UCS_ERR_NO_ELEM;
+    } else {
+        status = ucs_async_signal_timerq_remove_timer(timer, timer_id);
+    }
+
+    pthread_mutex_unlock(&ucs_async_signal_global_context.timers_lock);
     ucs_async_signal_allow(1);
 
     if (status == UCS_OK) {
-        free(timerq);
-    } else if (status != UCS_ERR_NO_PROGRESS) {
-        return status; /* Timer not found */
+        ucs_async_signal_uninstall_handler();
     }
-
-    /* Maybe timer queue was not removed, but it's still OK */
-    ucs_async_signal_uninstall_handler();
-    return UCS_OK;
+    return status;
 }
 
 static void ucs_async_signal_global_init()
 {
-    ucs_hashed_ucs_async_signal_timerq_t_init(&ucs_async_signal_global_context.timers);
+    pthread_mutex_init(&ucs_async_signal_global_context.timers_lock, NULL);
 }
 
 static void ucs_async_signal_global_cleanup()
 {
     if (ucs_async_signal_global_context.event_count != 0) {
-        ucs_warn("signal handler not removed (%d events remaining)",
+        ucs_info("signal handler not removed (%d events remaining)",
                  ucs_async_signal_global_context.event_count);
     }
+    pthread_mutex_destroy(&ucs_async_signal_global_context.timers_lock);
 }
 
 ucs_async_ops_t ucs_async_signal_ops = {

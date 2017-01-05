@@ -12,6 +12,7 @@
 #include <string.h>
 #include <inttypes.h>
 
+#define UCP_WIREUP_RNDV_TEST_MSG_SIZE       262144
 
 enum {
     UCP_WIREUP_LANE_USAGE_AM   = UCS_BIT(0),
@@ -196,7 +197,7 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
     for (rsc_index = 0; addr_index_map && (rsc_index < context->num_tls); ++rsc_index) {
         resource     = &context->tl_rscs[rsc_index].tl_rsc;
         iface_attr   = &worker->iface_attrs[rsc_index];
-        md_attr      = &context->md_attrs[context->tl_rscs[rsc_index].md_index];
+        md_attr      = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->cap.flags,
@@ -534,8 +535,12 @@ static double ucp_wireup_rndv_score_func(const uct_md_attr_t *md_attr,
                                          const uct_iface_attr_t *iface_attr,
                                          const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    /* highest bandwidth */
-    return iface_attr->bandwidth;
+    /* highest bandwidth with lowest overhead - test a message size of 256KB,
+     * a size which is likely to be used with the Rendezvous protocol, for
+     * how long it would take to transfer it with a certain transport. */
+    return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE / iface_attr->bandwidth) +
+                iface_attr->overhead + md_attr->reg_cost.overhead +
+                (UCP_WIREUP_RNDV_TEST_MSG_SIZE * md_attr->reg_cost.growth));
 }
 
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
@@ -604,13 +609,13 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
         return UCS_OK;
     }
 
-    /* Select one lane for the Rendezvous protocol (for the actual data. not for rts) */
+    /* Select one lane for the Rendezvous protocol (for the actual data. not for rts/rtr) */
     criteria.title              = "rendezvous";
     criteria.local_md_flags     = UCT_MD_FLAG_REG;
     criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
-    criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY;
-    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY |
+    criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
                                   UCT_IFACE_FLAG_PENDING;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
     criteria.calc_score         = ucp_wireup_rndv_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {

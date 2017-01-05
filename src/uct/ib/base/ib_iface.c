@@ -11,6 +11,7 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/type/component.h>
 #include <ucs/type/class.h>
+#include <ucs/type/cpu_set.h>
 #include <ucs/debug/log.h>
 #include <string.h>
 #include <stdlib.h>
@@ -397,7 +398,8 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
-                                           size_t *inl, struct ibv_cq **cq_p)
+                                           size_t *inl, int preferred_cpu,
+                                           struct ibv_cq **cq_p)
 {
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
@@ -441,7 +443,8 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         env_var_added = 1;
     }
 
-    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel, 0);
+    cq = ibv_create_cq(dev->ibv_context, cq_length, NULL, iface->comp_channel,
+                       preferred_cpu);
     if (cq == NULL) {
         ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_length);
         status = UCS_ERR_IO_ERROR;
@@ -476,12 +479,20 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     size_t mss, const uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    int preferred_cpu = ucs_cpu_set_find_lcs(&params->cpu_mask);
     ucs_status_t status;
     uint8_t port_num;
     size_t inl;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                              &config->super UCS_STATS_ARG(dev->stats));
+    if (params->stats_root == NULL) {
+        UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
+                                  &config->super UCS_STATS_ARG(dev->stats)
+                                  UCS_STATS_ARG(params->dev_name));
+    } else {
+        UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
+                                  &config->super UCS_STATS_ARG(params->stats_root)
+                                  UCS_STATS_ARG(params->dev_name));
+    }
 
     status = uct_ib_device_find_port(dev, params->dev_name, &port_num);
     if (status != UCS_OK) {
@@ -535,7 +546,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     }
 
     inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, tx_cq_len, &inl, &self->send_cq);
+    status = uct_ib_iface_create_cq(self, tx_cq_len, &inl, preferred_cpu,
+                                    &self->send_cq);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
@@ -544,7 +556,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     inl = config->rx.inl;
     status = uct_ib_iface_create_cq(self, config->rx.queue_len, &inl,
-                                    &self->recv_cq);
+                                    preferred_cpu, &self->recv_cq);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }

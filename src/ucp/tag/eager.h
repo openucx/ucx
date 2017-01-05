@@ -92,6 +92,7 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
     ucp_request_hdr_t *req_hdr;
     void *data = rdesc + 1;
 
+    UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
     hdr_len  = rdesc->hdr_len;
     recv_len = rdesc->length - hdr_len;
     status   = ucp_tag_process_recv(buffer, count, datatype, state,
@@ -110,6 +111,7 @@ ucp_eager_unexp_match(ucp_worker_h worker, ucp_recv_desc_t *rdesc, ucp_tag_t tag
             ucp_tag_eager_sync_send_ack(worker, req_hdr->sender_uuid,
                                         req_hdr->reqptr);
         }
+        UCP_WORKER_STAT_EAGER_MSG(worker, flags);
     }
 
     if (flags & UCP_RECV_DESC_FLAG_LAST) {

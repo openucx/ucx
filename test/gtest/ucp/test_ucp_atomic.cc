@@ -165,7 +165,9 @@ void test_ucp_atomic::blocking_cswap(entity *e,  size_t max_size, void *memheap_
 
 template <typename T, typename F>
 void test_ucp_atomic::test(F f, bool malloc_allocate) {
-    test_blocking_xfer(static_cast<blocking_send_func_t>(f), sizeof(T),
+    test_blocking_xfer(static_cast<blocking_send_func_t>(f), 
+                       DEFAULT_SIZE, DEFAULT_ITERS,
+                       sizeof(T),
                        malloc_allocate, false);
 }
 

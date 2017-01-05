@@ -20,6 +20,7 @@
  */
 typedef struct uct_rc_mlx5_iface_config {
     uct_rc_iface_config_t  super;
+    uct_rc_fc_config_t     fc;
     unsigned               tx_max_bb;
     /* TODO wc_mode, UAR mode SnB W/A... */
 } uct_rc_mlx5_iface_config_t;
@@ -116,7 +117,8 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uin
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
-ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_rc_ep_t *rc_ep);
+ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
+                                    uct_rc_fc_request_t *req);
 
 void uct_rc_mlx5_iface_progress(void *arg);
 

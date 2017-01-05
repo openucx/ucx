@@ -144,7 +144,6 @@ static ucs_status_t ucp_wireup_connect_local(ucp_ep_h ep, const uint8_t *tli,
         }
 
         address = &address_list[tli[lane]];
-        ucs_assert(address->tl_addr_len > 0);
 
         /* Check that if the lane is used for RMA/AMO, destination md index matches */
         md_map = ucp_ep_config_get_rma_md_map(&ucp_ep_config(ep)->key, lane);
@@ -365,7 +364,6 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
         ((ep->uct_eps[lane] == NULL) || ucp_stub_ep_test(ep->uct_eps[lane])))
     {
         /* create an endpoint connected to the remote interface */
-        ucs_assert(address_list[addr_index].tl_addr_len > 0);
         status = uct_ep_create_connected(worker->ifaces[rsc_index],
                                          address_list[addr_index].dev_addr,
                                          address_list[addr_index].iface_addr,

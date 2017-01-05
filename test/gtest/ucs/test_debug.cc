@@ -42,17 +42,6 @@ std::string __basename(const std::string& path) {
     return bn;
 }
 
-UCS_TEST_F(test_debug, lookup_func) {
-    ucs_debug_address_info info;
-    ucs_status_t status = ucs_debug_lookup_address((void*)my_cool_function, &info);
-    ASSERT_UCS_OK(status);
-
-    EXPECT_NE(std::string::npos, std::string(info.file.path).find("gtest"));
-#ifdef HAVE_DETAILED_BACKTRACE
-    EXPECT_EQ("my_cool_function", std::string(info.function)) << (void*)my_cool_function;
-#endif
-}
-
 UCS_TEST_F(test_debug, lookup_ucs_func) {
     const char sym[] = "ucs_log_flush";
 
@@ -94,7 +83,7 @@ UCS_TEST_F(test_debug, lookup_address) {
     EXPECT_EQ(__basename(__FILE__), __basename(info.source_file));
 #else
     EXPECT_EQ(0u, info.line_number);
-    EXPECT_EQ("", std::string(info.source_file));
+    EXPECT_EQ("???", std::string(info.source_file));
 #endif
 }
 

@@ -34,8 +34,13 @@ struct ucs_async_context {
 };
 
 
-/* Async event callback */
-typedef void (*ucs_async_event_cb_t)(void *arg);
+/**
+ * Async event callback.
+ *
+ * @param id           Event id (timer or file descriptor).
+ * @param arg          User-defined argument.
+ */
+typedef void (*ucs_async_event_cb_t)(int id, void *arg);
 
 
 /**
@@ -63,14 +68,6 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
 
 
 /**
- * Unregister a given file descriptor from monitoring.
- *
- * @param event_fd        File descriptor to remove handler for.
- */
-ucs_status_t ucs_async_unset_event_handler(int event_fd);
-
-
-/**
  * Add timer handler.
  *
  * @param mode            Thread or signal.
@@ -87,11 +84,14 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
 
 
 /**
- * Remove a timer previously added.
+ * Remove an event handler (Timer or event file).
  *
- * @param timer_id        Timer to remove.
+ * @param id        Timer/FD to remove.
+ * @param sync      If nonzero, wait until the handler for this event is not
+ *                  running anymore. Cannot be used in the context of the event
+ *                  handler itself because it would deadlock.
  */
-ucs_status_t ucs_async_remove_timer(int timer_id);
+ucs_status_t ucs_async_remove_handler(int id, int sync);
 
 
 /**

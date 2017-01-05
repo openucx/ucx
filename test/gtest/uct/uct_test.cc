@@ -223,16 +223,21 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
     iface_params.tl_name     = const_cast<char*>(resource.tl_name.c_str());
     iface_params.dev_name    = const_cast<char*>(resource.dev_name.c_str());
+    iface_params.stats_root  = NULL;
     iface_params.rx_headroom = rx_headroom;
+    UCS_CPU_ZERO(&iface_params.cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
 
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_pd, uct_md_close,
+    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
                            uct_md_open, resource.md_name.c_str(), md_config);
 
+    status = uct_md_query(m_md, &m_md_attr);
+    ASSERT_UCS_OK(status);
+
     UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
-                           uct_iface_open, m_pd, m_worker, &iface_params, iface_config);
+                           uct_iface_open, m_md, m_worker, &iface_params, iface_config);
 
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
@@ -241,35 +246,47 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
 
 void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                  uct_rkey_bundle *rkey_bundle) const {
+    static const char *alloc_name = "uct_test";
     ucs_status_t status;
     void *rkey_buffer;
-    uct_md_attr_t md_attr;
 
-    status = uct_md_query(m_pd, &md_attr);
-    ASSERT_UCS_OK(status);
+    if (md_attr().cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
+        status = uct_iface_mem_alloc(m_iface, length, 0, alloc_name, mem);
+        ASSERT_UCS_OK(status);
 
-    status = uct_iface_mem_alloc(m_iface, length, 0, "test", mem);
-    ASSERT_UCS_OK(status);
+        rkey_buffer = malloc(md_attr().rkey_packed_size);
 
-    rkey_buffer = malloc(md_attr.rkey_packed_size);
+        status = uct_md_mkey_pack(m_md, mem->memh, rkey_buffer);
+        ASSERT_UCS_OK(status);
 
-    status = uct_md_mkey_pack(m_pd, mem->memh, rkey_buffer);
-    ASSERT_UCS_OK(status);
+        status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
+        ASSERT_UCS_OK(status);
 
-    status = uct_rkey_unpack(rkey_buffer, rkey_bundle);
-    ASSERT_UCS_OK(status);
+        free(rkey_buffer);
+    } else {
+        uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
+        status = uct_mem_alloc(length, 0, &method, 1, NULL, 0, alloc_name, mem);
+        ASSERT_UCS_OK(status);
 
-    free(rkey_buffer);
+        ucs_assert(mem->memh == UCT_INVALID_MEM_HANDLE);
+
+        rkey_bundle->rkey   = UCT_INVALID_RKEY;
+        rkey_bundle->handle = NULL;
+        rkey_bundle->type   = NULL;
+    }
 }
 
 void uct_test::entity::mem_free(const uct_allocated_memory_t *mem,
                                 const uct_rkey_bundle_t& rkey) const {
-    ucs_status_t status;
 
-    status = uct_rkey_release(&rkey);
-    ASSERT_UCS_OK(status);
+    if (rkey.rkey != UCT_INVALID_RKEY) {
+        ucs_status_t status = uct_rkey_release(&rkey);
+        ASSERT_UCS_OK(status);
+    }
 
-    uct_iface_mem_free(mem);
+    if (mem->method != UCT_ALLOC_METHOD_LAST) {
+        uct_iface_mem_free(mem);
+    }
 }
 
 void uct_test::entity::progress() const {
@@ -277,8 +294,12 @@ void uct_test::entity::progress() const {
     m_async.check_miss();
 }
 
-uct_md_h uct_test::entity::pd() const {
-    return m_pd;
+uct_md_h uct_test::entity::md() const {
+    return m_md;
+}
+
+const uct_md_attr& uct_test::entity::md_attr() const {
+    return m_md_attr;
 }
 
 uct_worker_h uct_test::entity::worker() const {
@@ -469,9 +490,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
 }
 
 uct_test::mapped_buffer::~mapped_buffer() {
-    if (m_mem.method != UCT_ALLOC_METHOD_LAST) {
-        m_entity.mem_free(&m_mem, m_rkey);
-    }
+    m_entity.mem_free(&m_mem, m_rkey);
 }
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {

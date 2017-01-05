@@ -90,6 +90,7 @@
 #define BULLSEYE_EXCLUDE_BLOCK_END
 #endif
 
+#define UCS_SYS_PCI_MAX_PAYLOAD             512
 
 /**
  * @return Host name.
