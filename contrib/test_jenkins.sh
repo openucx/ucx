@@ -34,6 +34,10 @@ rm -rf build-test
 mkdir -p build-test
 cd build-test
 
+echo "Build docs only"
+../configure --with-docs-only
+make $make_opt docs
+
 echo "Build release"
 ../contrib/configure-release
 make $make_opt

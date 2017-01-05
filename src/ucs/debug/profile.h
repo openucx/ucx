@@ -338,19 +338,31 @@ retry:
 
 
 /*
+ * Profile a function call, and specify explicit name string for the profile.
+ * Useful when calling a function by a pointer.
+ *
+ * @param _name   Name string for the profile.
+ * @param _func   Function name.
+ * @param ...     Function call arguments.
+ */
+#define UCS_PROFILE_NAMED_CALL(_name, _func, ...) \
+    ({ \
+        typeof(_func(__VA_ARGS__)) retval; \
+        UCS_PROFILE_SCOPE_BEGIN(); \
+        retval = _func(__VA_ARGS__); \
+        UCS_PROFILE_SCOPE_END(_name); \
+        retval; \
+    })
+
+
+/*
  * Profile a function call.
  *
  * @param _func   Function name.
  * @param ...     Function call arguments.
  */
 #define UCS_PROFILE_CALL(_func, ...) \
-    ({ \
-        typeof(_func(__VA_ARGS__)) retval; \
-        UCS_PROFILE_SCOPE_BEGIN(); \
-        retval = _func(__VA_ARGS__); \
-        UCS_PROFILE_SCOPE_END(#_func); \
-        retval; \
-    })
+    UCS_PROFILE_NAMED_CALL(#_func, _func, ## __VA_ARGS__)
 
 
 /*
@@ -407,6 +419,7 @@ retry:
 #define UCS_PROFILE_CODE(_name)
 #define UCS_PROFILE_FUNC(_ret_type, _name, _arglist, ...)   _ret_type _name(__VA_ARGS__)
 #define UCS_PROFILE_FUNC_VOID(_name, _arglist, ...)         void _name(__VA_ARGS__)
+#define UCS_PROFILE_NAMED_CALL(_name, _func, ...)           _func(__VA_ARGS__)
 #define UCS_PROFILE_CALL(_func, ...)                        _func(__VA_ARGS__)
 #define UCS_PROFILE_CALL_VOID(_func, ...)                   _func(__VA_ARGS__)
 #define UCS_PROFILE_REQUEST_NEW(...)                        UCS_EMPTY_STATEMENT

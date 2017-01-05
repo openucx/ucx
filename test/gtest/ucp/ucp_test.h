@@ -115,6 +115,8 @@ public:
                                  int thread_type = SINGLE_THREAD);
 
     virtual void modify_config(const std::string& name, const std::string& value);
+    void stats_activate();
+    void stats_restore();
 
 protected:
     virtual void init();
@@ -178,7 +180,8 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm,   "\\mm,\\knem,\\cma,\\xpmem,ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udrcx, "\\ud_mlx5,\\rc_mlx5")                   \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,  "\\ugni_smsg,\\ugni_udt,\\ugni_rdma") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self")
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,  "\\self") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,  "\\tcp")
 
 
 #endif

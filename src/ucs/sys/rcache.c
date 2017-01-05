@@ -9,6 +9,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/profile.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
@@ -155,7 +156,9 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 {
     ucs_rcache_region_trace(rcache, region, "destroy");
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
-        rcache->params.ops->mem_dereg(rcache->params.context, rcache, region);
+        UCS_PROFILE_CODE("mem_dereg") {
+            rcache->params.ops->mem_dereg(rcache->params.context, rcache, region);
+        }
     }
     ucs_free(region);
 }
@@ -325,7 +328,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
          * the way we want. If somebody will want to use them, it will be
          * by another region (with appropriate permissions).
          */
-        mem_prot = ucs_get_mem_prot(region->super.start, region->super.end);
+        mem_prot = UCS_PROFILE_CALL(ucs_get_mem_prot, region->super.start,
+                                    region->super.end);
         if (!ucs_test_all_flags(mem_prot, *prot)) {
             ucs_rcache_region_trace(rcache, region,
                                     "do not merge "UCS_RCACHE_PROT_FMT
@@ -344,7 +348,7 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
          * the next time.
          */
         if (!ucs_test_all_flags(*prot, region->prot)) {
-            mem_prot = ucs_get_mem_prot(*start, *end);
+            mem_prot = UCS_PROFILE_CALL(ucs_get_mem_prot, *start, *end);
             ucs_assert(ucs_test_all_flags(mem_prot, *prot));
             if (ucs_test_all_flags(mem_prot, region->prot)) {
                 *prot |= region->prot;
@@ -377,7 +381,7 @@ static ucs_status_t
 ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
                          int prot, void *arg, ucs_rcache_region_t **region_p)
 {
-    ucs_rcache_region_t *region;
+    ucs_rcache_region_t *region = NULL;
     ucs_pgt_addr_t start, end;
     ucs_status_t status;
 
@@ -393,7 +397,8 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
                                 rcache->params.alignment);
 
     /* Check overlap with existing regions */
-    status = ucs_rcache_check_overlap(rcache, &start, &end, &prot, &region);
+    status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, &start, &end,
+                              &prot, &region);
     if (status == UCS_ERR_ALREADY_EXISTS) {
         /* Found a matching region (it could have been added after we released
          * the lock)
@@ -419,7 +424,7 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
 
     region->super.start = start;
     region->super.end   = end;
-    status = ucs_pgtable_insert(&rcache->pgtable, &region->super);
+    status = UCS_PROFILE_CALL(ucs_pgtable_insert, &rcache->pgtable, &region->super);
     if (status != UCS_OK) {
         ucs_error("failed to insert region " UCS_PGT_REGION_FMT ": %s",
                   UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
@@ -433,8 +438,9 @@ ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
     region->prot     = prot;
     region->flags    = UCS_RCACHE_REGION_FLAG_PGTABLE;
     region->refcount = 0;
-    region->status   = status = rcache->params.ops->mem_reg(rcache->params.context,
-                                                            rcache, arg, region);
+    region->status = status =
+        UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
+                               rcache->params.context, rcache, arg, region);
     if (status != UCS_OK) {
         /* In case region is not registered, we don't return it to the user,
          * so no need to increment reference count.
@@ -494,7 +500,8 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
      * - could not find cached region
      * - found unregistered region
      */
-    return ucs_rcache_create_region(rcache, address, length, prot, arg, region_p);
+    return UCS_PROFILE_CALL(ucs_rcache_create_region, rcache, address, length,
+                            prot, arg, region_p);
 }
 
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)

@@ -82,7 +82,7 @@ ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.flags         = UCT_MD_FLAG_REG;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->reg_cost.overhead = 5e-9;
+    md_attr->reg_cost.overhead = 9e-9;
     md_attr->reg_cost.growth   = 0;
 
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));

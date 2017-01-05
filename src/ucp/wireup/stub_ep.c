@@ -275,7 +275,6 @@ ucp_stub_ep_connect_aux(ucp_stub_ep_t *stub_ep, unsigned address_count,
     aux_addr = &address_list[aux_addr_index];
 
     /* create auxiliary endpoint connected to the remote iface. */
-    ucs_assert(aux_addr->tl_addr_len > 0);
     status = uct_ep_create_connected(worker->ifaces[stub_ep->aux_rsc_index],
                                      aux_addr->dev_addr, aux_addr->iface_addr,
                                      &stub_ep->aux_ep);

@@ -5,6 +5,7 @@
 */
 
 #include "dc_iface.h"
+#include "dc_ep.h"
 
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
@@ -13,7 +14,7 @@ const static char *uct_dc_tx_policy_names[] = {
 };
 
 ucs_config_field_t uct_dc_iface_config_table[] = {
-    {"RC_", "IB_TX_QUEUE_LEN=128", NULL,
+    {"RC_", "IB_TX_QUEUE_LEN=128;FC_ENABLE=n", NULL,
      ucs_offsetof(uct_dc_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -189,7 +190,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
                               rx_priv_len, &config->super,
-                              sizeof(uct_rc_fc_request_t));
+                              sizeof(uct_dc_fc_request_t));
 
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
@@ -223,6 +224,9 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_dct;
     }
 
+    /* Create fake endpoint which will be used for sending FC grants */
+    uct_dc_iface_init_fc_ep(self);
+
     ucs_arbiter_init(&self->tx.dci_arbiter);
     return UCS_OK;
 
@@ -238,6 +242,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
     ibv_exp_destroy_dct(self->rx.dct);
     uct_dc_iface_dcis_destroy(self, self->tx.ndci);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
+    uct_dc_iface_cleanup_fc_ep(self);
 }
 
 UCS_CLASS_DEFINE(uct_dc_iface_t, uct_rc_iface_t);
@@ -275,7 +280,6 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
                                             resources_p, num_resources_p);
 }
 
-
 static inline ucs_status_t uct_dc_iface_flush_dcis(uct_dc_iface_t *iface)
 {
     int i;
@@ -305,5 +309,141 @@ ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_comple
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super.super);
     }
     return status;
+}
+
+ucs_status_t uct_dc_iface_init_fc_ep(uct_dc_iface_t *iface)
+{
+    ucs_status_t status;
+    uct_dc_ep_t *ep;
+
+    ep = ucs_malloc(sizeof(uct_dc_ep_t), "fc_ep");
+    if (ep == NULL) {
+        ucs_error("Failed to allocate FC ep");
+        status =  UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+    /* We do not have any peer address at this point, so init basic subclasses
+     * only (for statistics, iface, etc) */
+    status = UCS_CLASS_INIT(uct_base_ep_t, (void*)(&ep->super),
+                            &iface->super.super.super);
+    if (status != UCS_OK) {
+        ucs_error("Failed to initialize fake FC ep, status: %s",
+                  ucs_status_string(status));
+        goto err_free;
+    }
+
+    status = uct_dc_ep_basic_init(iface, ep);
+    if (status != UCS_OK) {
+        ucs_error("FC ep init failed %s", ucs_status_string(status));
+        goto err_cleanup;
+    }
+
+    iface->tx.fc_ep = ep;
+    return UCS_OK;
+
+err_cleanup:
+    UCS_CLASS_CLEANUP(uct_base_ep_t, &ep->super);
+err_free:
+    ucs_free(ep);
+err:
+    return status;
+}
+
+void uct_dc_iface_cleanup_fc_ep(uct_dc_iface_t *iface)
+{
+    uct_dc_ep_pending_purge(&iface->tx.fc_ep->super.super, NULL, NULL);
+    ucs_arbiter_group_cleanup(&iface->tx.fc_ep->arb_group);
+    uct_rc_fc_cleanup(&iface->tx.fc_ep->fc);
+    UCS_CLASS_CLEANUP(uct_base_ep_t, iface->tx.fc_ep);
+    ucs_free(iface->tx.fc_ep);
+}
+
+ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self)
+{
+    ucs_status_t status;
+    uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
+    uct_dc_ep_t *ep           = ucs_derived_of(freq->ep, uct_dc_ep_t);
+    uct_rc_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
+                                               uct_rc_iface_t);
+
+    ucs_assert_always(iface->config.fc_enabled);
+
+    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, freq);
+    if (status == UCS_OK) {
+        ucs_mpool_put(freq);
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
+    }
+    return status;
+}
+
+ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
+                                     uct_rc_hdr_t *hdr, unsigned length,
+                                     uint32_t imm_data, uint16_t lid, void *desc)
+{
+    uct_dc_ep_t *ep;
+    ucs_status_t status;
+    int16_t      cur_wnd;
+    uct_dc_fc_request_t *dc_req;
+    uint8_t fc_hdr        = uct_rc_fc_get_fc_hdr(hdr->am_id);
+    uct_dc_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_iface_t);
+
+    ucs_assert(rc_iface->config.fc_enabled);
+
+    if (fc_hdr == UCT_RC_EP_FC_FLAG_HARD_REQ) {
+        ep = iface->tx.fc_ep;
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
+
+        dc_req = ucs_mpool_get(&iface->super.tx.fc_mp);
+        if (ucs_unlikely(dc_req == NULL)) {
+            ucs_error("Failed to allocate FC request");
+            return UCS_ERR_NO_MEMORY;
+        }
+        dc_req->super.super.func = uct_dc_iface_fc_grant;
+        dc_req->super.ep         = &ep->super.super;
+        dc_req->dct_num          = imm_data;
+        dc_req->lid              = lid;
+        dc_req->sender_ep        = *((uintptr_t*)(hdr + 1));
+
+        status = uct_dc_iface_fc_grant(&dc_req->super.super);
+        if (status == UCS_ERR_NO_RESOURCE){
+            status = uct_ep_pending_add(&ep->super.super, &dc_req->super.super);
+        }
+        ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
+                           ucs_status_string(status));
+    } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
+        ep = *((uct_dc_ep_t**)(hdr + 1));
+
+        cur_wnd = ep->fc.fc_wnd;
+
+        /* Peer granted resources, so update wnd */
+        ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
+
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
+        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
+
+        /* To preserve ordering we have to dispatch all pending
+         * operations if current fc_wnd is <= 0 */
+        if (cur_wnd <= 0) {
+            if (ep->dci == UCT_DC_EP_NO_DCI) {
+                ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface),
+                                           &ep->arb_group);
+                ucs_arbiter_dispatch(uct_dc_iface_dci_waitq(iface), 1,
+                                     uct_dc_iface_dci_do_pending_wait, NULL);
+            } else {
+                /* Need to schedule fake ep in TX arbiter, because it
+                 * might have been descheduled due to lack of FC window. */
+                ucs_arbiter_group_schedule(uct_dc_iface_tx_waitq(iface),
+                                           &ep->arb_group);
+            }
+
+            ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(iface), 1,
+                                 uct_dc_iface_dci_do_pending_tx, NULL);
+        }
+
+        /* Grant is received, clear the flag for flush to complete  */
+        ep->fc.flags &= ~UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
+    }
+
+    return UCS_OK;
 }
 

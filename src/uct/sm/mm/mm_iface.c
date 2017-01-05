@@ -29,7 +29,7 @@ static ucs_config_field_t uct_mm_iface_config_table[] = {
      "This value refers to the percentage of the FIFO size. (must be >= 0 and < 1)",
      ucs_offsetof(uct_mm_iface_config_t, release_fifo_factor), UCS_CONFIG_TYPE_DOUBLE},
 
-    UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", 16384, 256, "receive",
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 256, "receive",
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
     {"FIFO_HUGETLB", "no",
@@ -81,49 +81,55 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
 
     /* default values for all shared memory transports */
-    iface_attr->cap.put.max_short      = UINT_MAX;
-    iface_attr->cap.put.max_bcopy      = SIZE_MAX;
-    iface_attr->cap.put.min_zcopy      = 0;
-    iface_attr->cap.put.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.put.max_iov        = 1;
+    iface_attr->cap.put.max_short       = UINT_MAX;
+    iface_attr->cap.put.max_bcopy       = SIZE_MAX;
+    iface_attr->cap.put.min_zcopy       = 0;
+    iface_attr->cap.put.max_zcopy       = SIZE_MAX;
+    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_CACHE_LINE_SIZE;
+    iface_attr->cap.put.align_mtu       = iface_attr->cap.put.opt_zcopy_align;
+    iface_attr->cap.put.max_iov         = 1;
 
-    iface_attr->cap.get.max_bcopy      = SIZE_MAX;
-    iface_attr->cap.get.min_zcopy      = 0;
-    iface_attr->cap.get.max_zcopy      = SIZE_MAX;
-    iface_attr->cap.get.max_iov        = 1;
+    iface_attr->cap.get.max_bcopy       = SIZE_MAX;
+    iface_attr->cap.get.min_zcopy       = 0;
+    iface_attr->cap.get.max_zcopy       = SIZE_MAX;
+    iface_attr->cap.get.opt_zcopy_align = UCS_SYS_CACHE_LINE_SIZE;
+    iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
+    iface_attr->cap.get.max_iov         = 1;
 
-    iface_attr->cap.am.max_short       = iface->config.fifo_elem_size -
-                                         sizeof(uct_mm_fifo_element_t);
-    iface_attr->cap.am.max_bcopy       = iface->config.seg_size;
-    iface_attr->cap.am.min_zcopy       = 0;
-    iface_attr->cap.am.max_zcopy       = 0;
-    iface_attr->cap.am.max_iov         = 1;
+    iface_attr->cap.am.max_short        = iface->config.fifo_elem_size -
+                                          sizeof(uct_mm_fifo_element_t);
+    iface_attr->cap.am.max_bcopy        = iface->config.seg_size;
+    iface_attr->cap.am.min_zcopy        = 0;
+    iface_attr->cap.am.max_zcopy        = 0;
+    iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_CACHE_LINE_SIZE;
+    iface_attr->cap.am.align_mtu        = iface_attr->cap.am.opt_zcopy_align;
+    iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->iface_addr_len         = sizeof(uct_mm_iface_addr_t);
-    iface_attr->device_addr_len        = UCT_SM_IFACE_DEVICE_ADDR_LEN;
-    iface_attr->ep_addr_len            = 0;
-    iface_attr->cap.flags              = UCT_IFACE_FLAG_PUT_SHORT        |
-                                         UCT_IFACE_FLAG_PUT_BCOPY        |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD32     |
-                                         UCT_IFACE_FLAG_ATOMIC_ADD64     |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD64    |
-                                         UCT_IFACE_FLAG_ATOMIC_FADD32    |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP64    |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP32    |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
-                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
-                                         UCT_IFACE_FLAG_ATOMIC_CPU       |
-                                         UCT_IFACE_FLAG_GET_BCOPY        |
-                                         UCT_IFACE_FLAG_AM_SHORT         |
-                                         UCT_IFACE_FLAG_AM_BCOPY         |
-                                         UCT_IFACE_FLAG_PENDING          |
-                                         UCT_IFACE_FLAG_AM_CB_SYNC       |
-                                         UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t);
+    iface_attr->device_addr_len         = UCT_SM_IFACE_DEVICE_ADDR_LEN;
+    iface_attr->ep_addr_len             = 0;
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_PUT_SHORT        |
+                                          UCT_IFACE_FLAG_PUT_BCOPY        |
+                                          UCT_IFACE_FLAG_ATOMIC_ADD32     |
+                                          UCT_IFACE_FLAG_ATOMIC_ADD64     |
+                                          UCT_IFACE_FLAG_ATOMIC_FADD64    |
+                                          UCT_IFACE_FLAG_ATOMIC_FADD32    |
+                                          UCT_IFACE_FLAG_ATOMIC_SWAP64    |
+                                          UCT_IFACE_FLAG_ATOMIC_SWAP32    |
+                                          UCT_IFACE_FLAG_ATOMIC_CSWAP64   |
+                                          UCT_IFACE_FLAG_ATOMIC_CSWAP32   |
+                                          UCT_IFACE_FLAG_ATOMIC_CPU       |
+                                          UCT_IFACE_FLAG_GET_BCOPY        |
+                                          UCT_IFACE_FLAG_AM_SHORT         |
+                                          UCT_IFACE_FLAG_AM_BCOPY         |
+                                          UCT_IFACE_FLAG_PENDING          |
+                                          UCT_IFACE_FLAG_AM_CB_SYNC       |
+                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
-    iface_attr->latency                = 80e-9; /* 80 ns */
-    iface_attr->bandwidth              = 6911 * 1024.0 * 1024.0;
-    iface_attr->overhead               = 10e-9; /* 10 ns */
-    iface_attr->priority               = uct_mm_md_mapper_ops(iface->super.md)->get_priority();
+    iface_attr->latency                 = 80e-9; /* 80 ns */
+    iface_attr->bandwidth               = 6911 * 1024.0 * 1024.0;
+    iface_attr->overhead                = 10e-9; /* 10 ns */
+    iface_attr->priority                = uct_mm_md_mapper_ops(iface->super.md)->get_priority();
     return UCS_OK;
 }
 

@@ -177,9 +177,11 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
 
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
     iface_attr->cap.am.max_short       = iface->config.udt_seg_size -
-        sizeof(uct_ugni_udt_header_t);
+                                         sizeof(uct_ugni_udt_header_t);
     iface_attr->cap.am.max_bcopy       = iface->config.udt_seg_size -
-        sizeof(uct_ugni_udt_header_t);
+                                         sizeof(uct_ugni_udt_header_t);
+    iface_attr->cap.am.opt_zcopy_align = 1;
+    iface_attr->cap.am.align_mtu       = iface_attr->cap.am.opt_zcopy_align;
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = 0;

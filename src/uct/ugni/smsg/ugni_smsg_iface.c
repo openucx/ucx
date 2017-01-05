@@ -210,6 +210,8 @@ static ucs_status_t uct_ugni_smsg_iface_query(uct_iface_h tl_iface, uct_iface_at
     memset(iface_attr, 0, sizeof(uct_iface_attr_t));
     iface_attr->cap.am.max_short       = iface->config.smsg_seg_size-sizeof(uint64_t);
     iface_attr->cap.am.max_bcopy       = iface->config.smsg_seg_size;
+    iface_attr->cap.am.opt_zcopy_align = 1;
+    iface_attr->cap.am.align_mtu       = iface_attr->cap.am.opt_zcopy_align;
     iface_attr->device_addr_len        = sizeof(uct_devaddr_ugni_t);
     iface_attr->iface_addr_len         = sizeof(uct_sockaddr_ugni_t);
     iface_attr->ep_addr_len            = sizeof(uct_sockaddr_smsg_ugni_t);

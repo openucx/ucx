@@ -137,6 +137,13 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
                                  UCT_IFACE_FLAG_ATOMIC_CSWAP32 |
                                  UCT_IFACE_FLAG_ATOMIC_DEVICE;
     }
+
+    iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
+    iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
+    iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
+    iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
 }
 
 void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
@@ -302,14 +309,14 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                       "Grant will not be sent on ep %p", ep);
             return UCS_ERR_NO_MEMORY;
         }
-        fc_req->ep       = &ep->super.super;
-        fc_req->req.func = uct_rc_ep_fc_grant;
+        fc_req->ep         = &ep->super.super;
+        fc_req->super.func = uct_rc_ep_fc_grant;
 
         /* Got hard credit request. Send grant to the peer immediately */
-        status = uct_rc_ep_fc_grant(&fc_req->req);
+        status = uct_rc_ep_fc_grant(&fc_req->super);
 
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &fc_req->req);
+            status = uct_ep_pending_add(&ep->super.super, &fc_req->super);
         }
         ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
                            ucs_status_string(status));

@@ -14,7 +14,7 @@ ucs_status_t uct_knem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.flags         = UCT_MD_FLAG_REG;
     md_attr->cap.max_alloc     = 0;
     md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->reg_cost.overhead = 1000.0e-9;
+    md_attr->reg_cost.overhead = 1200.0e-9;
     md_attr->reg_cost.growth   = 0.007e-9;
 
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));

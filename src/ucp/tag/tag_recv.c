@@ -63,6 +63,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
                 req->recv.datatype = datatype;
                 ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
                 uct_iface_release_am_desc(rdesc);
+                UCP_WORKER_STAT_RNDV(worker, UNEXP);
                 return UCS_INPROGRESS;
             }
         }
@@ -280,6 +281,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         uct_iface_release_am_desc(rdesc);
         status = UCS_INPROGRESS;
         save_rreq = 0;
+        UCP_WORKER_STAT_RNDV(worker, UNEXP);
     } else {
         ucs_mpool_put(req);
         ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
