@@ -69,14 +69,17 @@ UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_cswap64, UCP_AMO_TWO_PARAM)
         UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
         for (;;) { \
             UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
-            status = _uct_func((_ep)->uct_eps[lane], _param, _remote_addr, \
-                               uct_rkey); \
+            status = UCS_PROFILE_CALL(_uct_func, \
+                                      (_ep)->uct_eps[lane], _param, _remote_addr, \
+                                      uct_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
+                UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
                 return status; \
             } \
             ucp_worker_progress((_ep)->worker); \
         } \
         UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
+        return UCS_OK; \
     }
 
 #define UCP_RMA_CHECK_ATOMIC_PTR(_addr, _op_size) \

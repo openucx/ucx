@@ -9,6 +9,7 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/debug/profile.h>
 #include <ucs/debug/log.h>
 #include <inttypes.h>
 
