@@ -66,15 +66,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     memset(attr, 0, sizeof(*attr));
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct in_addr);
-    attr->ep_addr_len      = 0;
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                              UCT_IFACE_FLAG_PENDING;
-
-    attr->cap.am.max_short = 0;
     attr->cap.am.max_bcopy = iface->config.max_bcopy;
-    attr->cap.am.max_zcopy = 0;
-    attr->cap.am.max_hdr   = 0;
-    attr->cap.am.max_iov   = 1;
 
     status = uct_tcp_netif_caps(iface->if_name, &attr->latency, &attr->bandwidth);
     if (status != UCS_OK) {

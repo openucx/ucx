@@ -55,7 +55,7 @@ static ucs_status_t uct_tcp_netif_ioctl(const char *if_name, unsigned long reque
 
     ret = ioctl(fd, request, if_req);
     if (ret < 0) {
-        ucs_error("ioctl(req=%lu, ifr_name=%s) failed: %m", request, if_name);
+        ucs_debug("ioctl(req=%lu, ifr_name=%s) failed: %m", request, if_name);
         status = UCS_ERR_IO_ERROR;
         goto out_close_fd;
     }
@@ -97,27 +97,29 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
     edata.cmd    = ETHTOOL_GSET;
     ifr.ifr_data = (void*)&edata;
     status = uct_tcp_netif_ioctl(if_name, SIOCETHTOOL, &ifr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    speed_mbps = ethtool_cmd_speed(&edata);
-    if (speed_mbps == SPEED_UNKNOWN) {
-        ucs_error("speed of %s is UNKNOWN", if_name);
-        return UCS_ERR_NO_DEVICE;
+    if (status == UCS_OK) {
+        speed_mbps = ethtool_cmd_speed(&edata);
+        if (speed_mbps == SPEED_UNKNOWN) {
+            ucs_error("speed of %s is UNKNOWN", if_name);
+            return UCS_ERR_NO_DEVICE;
+        }
+    } else {
+        speed_mbps = 100; /* Default value if SIOCETHTOOL is not supported */
     }
 
     status = uct_tcp_netif_ioctl(if_name, SIOCGIFHWADDR, &ifr);
-    if (status != UCS_OK) {
-        return status;
+    if (status == UCS_OK) {
+        ether_type = ifr.ifr_addr.sa_family;
+    } else {
+        ether_type = ARPHRD_ETHER;
     }
-    ether_type = ifr.ifr_addr.sa_family;
 
     status = uct_tcp_netif_ioctl(if_name, SIOCGIFMTU, &ifr);
-    if (status != UCS_OK) {
-        return status;
+    if (status == UCS_OK) {
+        mtu = ifr.ifr_mtu;
+    } else {
+        mtu = 1500;
     }
-    mtu = ifr.ifr_mtu;
 
     switch (ether_type) {
     case ARPHRD_ETHER:
