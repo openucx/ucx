@@ -71,14 +71,16 @@ typedef struct uct_ugni_iface_config {
     uct_iface_mpool_config_t mpool;
 } uct_ugni_iface_config_t;
 
-#define uct_ugni_enter_async(x) do {\
+#define uct_ugni_enter_async(x) \
+do {\
     ucs_trace_async("Taking lock on worker %p", (x)->super.worker); \
     UCS_ASYNC_BLOCK((x)->super.worker->async);                      \
-    }while(0)
+} while(0)
 
-#define uct_ugni_leave_async(x) do {\
-    ucs_trace_async("Releasing lock on worker %p",    (x)->super.worker); \
+#define uct_ugni_leave_async(x) \
+do {\
+    ucs_trace_async("Releasing lock on worker %p", (x)->super.worker);  \
     UCS_ASYNC_UNBLOCK((x)->super.worker->async);                        \
-    }while(0)
+} while(0)
 
 #endif

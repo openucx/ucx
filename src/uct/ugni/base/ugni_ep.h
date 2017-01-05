@@ -67,7 +67,7 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
 
 static inline void uct_ugni_ep_check_flush(uct_ugni_ep_t *ep)
 {
-    if(!ep->outstanding && ep->flush_flag && !ep->arb_flush){
+    if (!ep->outstanding && ep->flush_flag && !ep->arb_flush) {
         ep->flush_flag = 0;
     }
 }
