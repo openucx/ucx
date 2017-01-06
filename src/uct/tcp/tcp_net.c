@@ -202,6 +202,7 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
         while ((strchr(str, '\n') == NULL) && (fgets(str, sizeof(str), f) != NULL));
     }
 
+    *result_p = 0;
     fclose(f);
     return UCS_OK;
 }

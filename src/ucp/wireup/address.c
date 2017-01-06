@@ -330,6 +330,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             return status;
         }
 
+        ucp_address_memchek(ptr, dev->dev_addr_len,
+                            &context->tl_rscs[dev->rsc_index].tl_rsc);
         ptr += dev->dev_addr_len;
 
         for (i = 0; i < context->num_tls; ++i) {
@@ -345,6 +347,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
             /* Transport information */
             ucp_address_pack_iface_attr(ptr, &worker->iface_attrs[i],
                                         worker->atomic_tls & UCS_BIT(i));
+            ucp_address_memchek(ptr, sizeof(ucp_address_packed_iface_attr_t),
+                                &context->tl_rscs[dev->rsc_index].tl_rsc);
             ptr += sizeof(ucp_address_packed_iface_attr_t);
 
             /* Transport address length */
