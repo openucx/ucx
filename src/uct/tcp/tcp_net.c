@@ -6,7 +6,12 @@
 
 #include "tcp.h"
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <linux/sockios.h>
+#include <linux/types.h>
 #include <linux/ethtool.h>
 #include <linux/if_ether.h>
 #include <sys/ioctl.h>
@@ -98,8 +103,16 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
     ifr.ifr_data = (void*)&edata;
     status = uct_tcp_netif_ioctl(if_name, SIOCETHTOOL, &ifr);
     if (status == UCS_OK) {
+#if HAVE_DECL_ETHTOOL_CMD_SPEED
         speed_mbps = ethtool_cmd_speed(&edata);
+#else
+        speed_mbps = edata.speed;
+#endif
+#if HAVE_DECL_SPEED_UNKNOWN
         if (speed_mbps == SPEED_UNKNOWN) {
+#else
+        if ((speed_mbps == 0) || ((uint16_t)speed_mbps == (uint16_t)-1)) {
+#endif
             ucs_error("speed of %s is UNKNOWN", if_name);
             return UCS_ERR_NO_DEVICE;
         }
