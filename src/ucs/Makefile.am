@@ -1,7 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) 2014 Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
-# Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -41,6 +41,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/types.h \
 	datastruct/arbiter.h \
 	datastruct/callbackq.h \
+	datastruct/callbackq.inl \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
 	datastruct/list.h \

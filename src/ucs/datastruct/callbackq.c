@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -12,6 +13,7 @@
 #include <ucs/sys/sys.h>
 
 #include "callbackq.h"
+#include "callbackq.inl"
 
 
 typedef struct ucs_callbackq_priv {

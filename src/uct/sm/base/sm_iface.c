@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -9,6 +10,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <ucs/sys/sys.h>
+#include <ucs/arch/cpu.h>
 
 
 static uint64_t uct_sm_iface_node_guid(uct_base_iface_t *iface)

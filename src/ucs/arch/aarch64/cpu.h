@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -8,6 +8,7 @@
 #ifndef UCS_AARCH64_CPU_H_
 #define UCS_AARCH64_CPU_H_
 
+#include "config.h"
 #include <time.h>
 #include <sys/times.h>
 #include <ucs/arch/generic/cpu.h>
