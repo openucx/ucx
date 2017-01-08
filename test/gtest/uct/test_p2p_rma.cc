@@ -118,3 +118,22 @@ UCS_TEST_P(uct_p2p_rma_test, get_zcopy) {
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
+
+class uct_p2p_rma_test_inlresp : public uct_p2p_rma_test {};
+
+UCS_TEST_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp0, "IB_TX_INLINE_RESP=0") {
+    check_caps(UCT_IFACE_FLAG_GET_BCOPY);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_bcopy),
+                    1ul, sender().iface_attr().cap.get.max_bcopy,
+                    DIRECTION_RECV_TO_SEND);
+}
+
+UCS_TEST_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp64, "IB_TX_INLINE_RESP=64") {
+    check_caps(UCT_IFACE_FLAG_GET_BCOPY);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_bcopy),
+                    1ul, sender().iface_attr().cap.get.max_bcopy,
+                    DIRECTION_RECV_TO_SEND);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_inlresp)
+
