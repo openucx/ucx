@@ -346,7 +346,7 @@ static void print_md_info(const char *md_name, int print_opts,
         if (md_attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
             printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
         }
-        if (md_attr.cap.flags & UCT_MD_FLAG_NEED_LKEY) {
+        if (md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) {
             printf("#           local memory handle is required for zcopy\n");
         }
     }

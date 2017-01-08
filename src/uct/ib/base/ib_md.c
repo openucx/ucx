@@ -135,7 +135,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
     md_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
     md_attr->cap.flags     = UCT_MD_FLAG_REG       |
-                             UCT_MD_FLAG_NEED_LKEY |
+                             UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
