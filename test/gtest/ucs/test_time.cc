@@ -92,10 +92,10 @@ UCS_TEST_F(test_time, timerq) {
         counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_for_each_expired(timer, &timerq, current_time) {
+            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
                 if (timer->id == TIMER_ID_1) ++counter1;
                 if (timer->id == TIMER_ID_2) ++counter2;
-            }
+            })
         }
         EXPECT_NEAR(test_time / interval1, counter1, 1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);
@@ -109,10 +109,10 @@ UCS_TEST_F(test_time, timerq) {
         ASSERT_UCS_OK(status);
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_for_each_expired(timer, &timerq, current_time) {
+            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
                 if (timer->id == TIMER_ID_1) ++counter1;
                 if (timer->id == TIMER_ID_2) ++counter2;
-            }
+            })
         }
         EXPECT_EQ(0u, counter1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);
@@ -126,10 +126,10 @@ UCS_TEST_F(test_time, timerq) {
         counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_for_each_expired(timer, &timerq, current_time) {
+            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
                 if (timer->id == TIMER_ID_1) ++counter1;
                 if (timer->id == TIMER_ID_2) ++counter2;
-            }
+            })
         }
         EXPECT_NEAR(test_time / interval1, counter1, 1);
         EXPECT_NEAR(test_time / interval2, counter2, 1);

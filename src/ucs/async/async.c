@@ -255,14 +255,20 @@ ucs_status_t ucs_async_dispatch_handlers(int *events, size_t count)
 ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
                                        ucs_time_t current_time)
 {
-    size_t num_timers = 0;
+    size_t max_timers, num_timers = 0;
     int *expired_timers;
     ucs_timer_t *timer;
 
-    expired_timers = ucs_alloca(ucs_timerq_size(timerq) * sizeof(*expired_timers));
-    ucs_timerq_for_each_expired(timer, timerq, current_time) {
+    max_timers     = ucs_max(1, ucs_timerq_size(timerq));
+    expired_timers = ucs_alloca(max_timers * sizeof(*expired_timers));
+
+    ucs_timerq_for_each_expired(timer, timerq, current_time, {
         expired_timers[num_timers++] = timer->id;
-    }
+        if (num_timers >= max_timers) {
+            break; /* Keep timers which we don't have room for in the queue */
+        }
+    })
+
     return ucs_async_dispatch_handlers(expired_timers, num_timers);
 }
 
