@@ -51,6 +51,9 @@ static void ucs_async_thread_hold(ucs_async_thread_t *thread)
 static void ucs_async_thread_put(ucs_async_thread_t *thread)
 {
     if (ucs_atomic_fadd32(&thread->refcnt, -1) == 1) {
+        close(thread->epfd);
+        ucs_async_pipe_destroy(&thread->wakeup);
+        ucs_timerq_cleanup(&thread->timerq);
         ucs_free(thread);
     }
 }
@@ -120,9 +123,6 @@ static void *ucs_async_thread_func(void *arg)
         }
     }
 
-    close(thread->epfd);
-    ucs_async_pipe_destroy(&thread->wakeup);
-    ucs_timerq_cleanup(&thread->timerq);
     ucs_async_thread_put(thread);
     return NULL;
 }
