@@ -130,7 +130,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     mpicc -o ./active_message $ucx_inst/share/ucx/examples/active_message.c -luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
     for dev in $(ibstat -l); do
-        hca="${dev}:1"
+        port=1
+        hca="${dev}:${port}"
+
+        # skip non-active ports
+        (ibstat ${dev} ${port} | grep "State: Active") || continue
 
         if [[ $dev =~ .*mlx5.* ]]; then
             opt_perftest="$opt_perftest_common -b $ucx_inst_ptest/transports"
