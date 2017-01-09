@@ -46,6 +46,13 @@ AC_CHECK_DECLS([F_SETOWN_EX], [], [], [#define _GNU_SOURCE 1
 
 
 #
+# Ethtool definitions
+#
+AC_CHECK_DECLS([ethtool_cmd_speed, SPEED_UNKNOWN], [], [],
+               [#include <linux/ethtool.h>])
+
+
+#
 # PowerPC query for TB frequency
 #
 AC_CHECK_DECLS([__ppc_get_timebase_freq], [], [], [#include <sys/platform/ppc.h>])
