@@ -68,3 +68,22 @@ UCS_TEST_P(uct_amo_fadd_test, fadd64) {
 
 UCT_INSTANTIATE_TEST_CASE(uct_amo_fadd_test)
 
+class uct_amo_fadd_test_inlresp : public uct_amo_fadd_test {};
+
+UCS_TEST_P(uct_amo_fadd_test_inlresp, fadd64_inlresp0, "IB_TX_INLINE_RESP=0") {
+    check_caps(UCT_IFACE_FLAG_ATOMIC_FADD64);
+    test_fadd<uint64_t>(static_cast<send_func_t>(&uct_amo_fadd_test::fadd64));
+}
+
+UCS_TEST_P(uct_amo_fadd_test_inlresp, fadd64_inlresp32, "IB_TX_INLINE_RESP=32") {
+    check_caps(UCT_IFACE_FLAG_ATOMIC_FADD64);
+    test_fadd<uint64_t>(static_cast<send_func_t>(&uct_amo_fadd_test::fadd64));
+}
+
+UCS_TEST_P(uct_amo_fadd_test_inlresp, fadd64_inlresp64, "IB_TX_INLINE_RESP=64") {
+    check_caps(UCT_IFACE_FLAG_ATOMIC_FADD64);
+    test_fadd<uint64_t>(static_cast<send_func_t>(&uct_amo_fadd_test::fadd64));
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(uct_amo_fadd_test_inlresp)
+

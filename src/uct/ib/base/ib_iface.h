@@ -45,7 +45,8 @@ struct uct_ib_iface_config {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many fragments can be batched to one post send */
         unsigned            max_poll;        /* How many wcs can be picked when polling tx cq */
-        size_t              min_inline;      /* Inline space to reserve */
+        size_t              min_inline;      /* Inline space to reserve for sends */
+        size_t              inl_resp;        /* Inline space to reserve for responses */
         unsigned            min_sge;         /* How many SG entries to support */
         unsigned            cq_moderation;   /* How many TX messages are batched to one CQE */
         uct_iface_mpool_config_t mp;
@@ -115,6 +116,7 @@ struct uct_ib_iface {
         unsigned            rx_max_poll;
         unsigned            tx_max_poll;
         unsigned            seg_size;
+        uint8_t             max_inl_resp;
         uint8_t             port_num;
         uint8_t             sl;
         uint8_t             gid_index;

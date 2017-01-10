@@ -689,7 +689,7 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         uct_rc_verbs_txqp_completed(&iface->super.tx.dcis[dci].txqp, &iface->dcis_txcnt[dci], count);
         ucs_trace_poll("dc tx completion on dc %d count %d", dci, count);
         uct_dc_iface_dci_put(&iface->super, dci);
-        uct_rc_txqp_completion(&iface->super.tx.dcis[dci].txqp, iface->dcis_txcnt[dci].ci);
+        uct_rc_txqp_completion_desc(&iface->super.tx.dcis[dci].txqp, iface->dcis_txcnt[dci].ci);
     }
 
     iface->super.super.tx.cq_available += num_wcs;

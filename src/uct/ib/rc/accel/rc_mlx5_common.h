@@ -75,7 +75,20 @@ void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
                                     uct_iface_attr_t *iface_attr, size_t av_size);
 
-static inline void
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe,
+                                uint16_t hw_ci)
+{
+    if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+        uct_rc_txqp_completion_inl_resp(txqp, cqe, hw_ci);
+    } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
+        uct_rc_txqp_completion_inl_resp(txqp, cqe - 1, hw_ci);
+    } else {
+        uct_rc_txqp_completion_desc(txqp, hw_ci);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *mlx5_iface,
                                    uct_rc_iface_t *rc_iface,
                                    uct_ib_iface_recv_desc_t *desc,
