@@ -108,6 +108,9 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # compile and run UCP hello world example
     gcc -o ./ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
+    export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE
+    export UCX_HANDLE_ERRORS=bt
+
     UCP_TEST_HELLO_WORLD_PORT=$(( 10000 + ${BASHPID} ))
     for test_mode in -w -f -b ; do
         echo Running UCP hello world server with mode ${test_mode}
@@ -139,10 +142,10 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         fi
 
         echo Running ucx_perf kit on $hca
-        mpirun -np 2 -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
+        mpirun -np 2 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
 
         echo Running active_message example on $hca with rc
-        UCX_IB_ETH_PAUSE_ON=y mpirun -np 2 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll ./active_message $hca "rc"
+         mpirun -np 2 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self -mca coll ^hcoll -x UCX_IB_ETH_PAUSE_ON=y ./active_message $hca "rc"
 
         # todo: add csv generation
 
@@ -150,20 +153,20 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
 
     for mm_device in sysv posix; do
         echo Running ucx_perf kit with shared memory
-        mpirun -np 2 -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $mm_device $opt_perftest_common -x mm
+        mpirun -np 2 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $mm_device $opt_perftest_common -x mm
     done
 
     rm -f ./active_message
 
     for tname in malloc_hooks external_events flag_no_install; do
         echo "Running memory hook (${tname}) on MPI"
-        mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks -t $tname
+        mpirun -np 1 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml $AFFINITY ./test/mpi/test_memhooks -t $tname
     done
 
     echo "Running memory hook (malloc_hooks) on MPI with LD_PRELOAD"
     ucm_lib=$PWD/src/ucm/.libs/libucm.so
     ls -l $ucm_lib
-    mpirun -np 1 -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
+    mpirun -np 1 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self -mca coll ^hcoll,ml -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
 
 
     echo "Check --disable-numa compilation option"
@@ -205,7 +208,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     mkdir -p $GTEST_REPORT_DIR
 
     echo "Running unit tests"
-    $AFFINITY $TIMEOUT make -C test/gtest test UCS_HANDLE_ERRORS=bt
+    $AFFINITY $TIMEOUT make -C test/gtest test UCX_HANDLE_ERRORS=bt
     (cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
     echo "Running valgrind tests"
@@ -213,7 +216,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     then
         module load tools/valgrind-latest
     fi
-    $AFFINITY $TIMEOUT_VALGRIND make -C test/gtest UCS_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
+    $AFFINITY $TIMEOUT_VALGRIND make -C test/gtest UCX_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
     (cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
     module unload tools/valgrind-latest
 
