@@ -83,7 +83,11 @@ ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r)
      */
     if (ep->dci == UCT_DC_EP_NO_DCI) {
         ucs_arbiter_group_push_elem(&ep->arb_group, (ucs_arbiter_elem_t*)r->priv);
-        ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
+        if (ep->fc.fc_wnd > 0) {
+            /* If FC window is empty the group will be scheduled when
+             * grant is received */
+            ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
+        }
         return UCS_OK;
     }
 
