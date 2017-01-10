@@ -98,21 +98,21 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
  * @note Timers which expired between calls to this function will also be dispatched.
  * @note There is no guarantee on the order of dispatching.
  */
-#define ucs_timerq_for_each_expired(_timer, _timerq, _current_time) \
-    for ( \
-         /* Initialization */ \
-         pthread_spin_lock(&(_timerq)->lock), /* Grab lock */ \
-         _timer = (_timerq)->timers; /* Set iterator */ \
-         \
-         /* Condition */ \
-         (_timer != (_timerq)->timers + (_timerq)->num_timers) || /* Reached the end */ \
-         pthread_spin_unlock(&(_timerq)->lock); /* Release lock - should return 0 */ \
-         \
-         /* Step: advance iterator */ \
-         ++_timer) \
-        \
-        if ((_current_time >= (_timer)->expiration) /* Check if this timer has expirted */ && \
-            ((_timer)->expiration = _current_time + (_timer)->interval) /* Update expiration time */ \
-           )
+#define ucs_timerq_for_each_expired(_timer, _timerq, _current_time, _code) \
+    { \
+        ucs_time_t __current_time = _current_time; \
+        pthread_spin_lock(&(_timerq)->lock); /* Grab lock */ \
+        for (_timer = (_timerq)->timers; \
+             _timer != (_timerq)->timers + (_timerq)->num_timers; \
+             ++_timer) \
+        { \
+            if (__current_time >= (_timer)->expiration) { \
+                /* Update expiration time */ \
+                (_timer)->expiration = __current_time + (_timer)->interval; \
+                _code; \
+            } \
+        } \
+        pthread_spin_unlock(&(_timerq)->lock); /* Release lock  */ \
+    }
 
 #endif
