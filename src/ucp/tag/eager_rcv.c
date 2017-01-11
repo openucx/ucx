@@ -41,6 +41,8 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
         {
             ucp_tag_log_match(recv_tag, req, req->recv.tag, req->recv.tag_mask,
                               req->recv.state.offset, "expected");
+            UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TAG_MATCH,
+                                  "ucp_eager_handler", rdesc, recv_tag);
             recv_len = length - hdr_len;
             status = ucp_tag_process_recv(req->recv.buffer, req->recv.count,
                                           req->recv.datatype, &req->recv.state,
@@ -85,6 +87,8 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     rdesc->hdr_len = hdr_len;
     rdesc->flags   = flags;
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TAG_ENQUEUE,
+                          "ucp_eager_handler", rdesc, recv_tag);
 
     status = UCS_INPROGRESS;
 out:

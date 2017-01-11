@@ -46,6 +46,8 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
         {
             ucp_tag_log_match(recv_tag, req, tag, tag_mask,
                               req->recv.state.offset, "unexpected");
+            UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TAG_MATCH,
+                                  "ucp_tag_search_unexp", rdesc, recv_tag);
             ucs_queue_del_iter(&context->tag.unexpected, iter);
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
