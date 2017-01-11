@@ -357,6 +357,11 @@ struct uct_iface_params {
 enum {
     UCT_MD_FLAG_ALLOC     = UCS_BIT(0),  /**< MD support memory allocation */
     UCT_MD_FLAG_REG       = UCS_BIT(1),  /**< MD support memory registration */
+    UCT_MD_FLAG_NEED_MEMH = UCS_BIT(2),  /**< The transport needs a valid local
+                                              memory handle for zero-copy operations */
+    UCT_MD_FLAG_NEED_RKEY = UCS_BIT(3),  /**< The transport needs a valid
+                                              remote memory key for remote memory
+                                              operations */
 };
 
 
