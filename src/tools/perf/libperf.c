@@ -766,8 +766,24 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
     }
     perf->recv_buffer = mem_map_params.address;
 
+    /* Allocate IOV datatype memory */
+    if(UCP_PERF_DATATYPE_IOV == params->ucp.datatype) {
+        perf->params.msg_size_cnt = params->msg_size_cnt;
+        perf->ucp.iov             = malloc(sizeof(*perf->ucp.iov) *
+                                           perf->params.msg_size_cnt *
+                                           params->thread_count);
+        if (NULL == perf->ucp.iov) {
+            status = UCS_ERR_NO_MEMORY;
+            ucs_error("Failed allocate send IOV(%lu) buffer: %s",
+                      perf->params.msg_size_cnt, ucs_status_string(status));
+            goto err_free_buffers;
+        }
+    }
+
     return UCS_OK;
 
+err_free_buffers:
+    ucp_mem_unmap(perf->ucp.context, perf->ucp.recv_memh);
 err_free_send_buffer:
     ucp_mem_unmap(perf->ucp.context, perf->ucp.send_memh);
 err:
@@ -776,6 +792,7 @@ err:
 
 static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
+    free(perf->ucp.iov);
     ucp_mem_unmap(perf->ucp.context, perf->ucp.recv_memh);
     ucp_mem_unmap(perf->ucp.context, perf->ucp.send_memh);
 }

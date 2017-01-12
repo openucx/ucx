@@ -21,3 +21,6 @@ add_mr        -t add_mr
 fadd          -t fadd
 swap          -t swap
 cswap         -t cswap
+# UCP
+ucp_tag_lat   -t tag_lat -D iov
+ucp_tag_bw    -t tag_bw  -D iov

@@ -198,6 +198,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.msg_size_cnt    = test.msglencnt;
     params.msg_size_list   = (size_t *)test.msglen;
     params.iov_stride      = test.msg_stride;
+    params.ucp.datatype    = UCP_PERF_DATATYPE_CONTIG;
 
     thread_arg arg0;
     arg0.params   = params;
