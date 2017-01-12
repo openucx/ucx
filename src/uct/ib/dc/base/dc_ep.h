@@ -123,6 +123,16 @@ static inline int uct_dc_iface_dci_ep_can_send(uct_dc_ep_t *ep)
            uct_dc_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
+static UCS_F_ALWAYS_INLINE
+void uct_dc_iface_schedule_dci_alloc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
+{
+    /* If FC window is empty the group will be scheduled when
+     * grant is received */
+    if (ep->fc.fc_wnd > 0) {
+        ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
+    }
+}
+
 static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
 {
     uct_dc_ep_t *ep = iface->tx.dcis[dci].ep;
@@ -166,11 +176,7 @@ static inline void uct_dc_iface_dci_put_dcs(uct_dc_iface_t *iface, uint8_t dci)
      * move the group to the 'wait for dci alloc' state
      */
     ucs_arbiter_group_desched(uct_dc_iface_tx_waitq(iface), &ep->arb_group);
-    if (ep->fc.fc_wnd > 0) {
-        /* If FC window is empty the group will be scheduled when
-         * grant is received */
-        ucs_arbiter_group_schedule(uct_dc_iface_dci_waitq(iface), &ep->arb_group);
-    }
+    uct_dc_iface_schedule_dci_alloc(iface, ep);
 }
 
 static inline ucs_status_t

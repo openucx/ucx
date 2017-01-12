@@ -442,6 +442,50 @@ UCS_TEST_P(test_dc_flow_control, flush)
     EXPECT_UCS_OK(uct_ep_flush(m_e1->ep(0), 0, NULL));
 }
 
+/* Check that there is no dci leak when just one (out of several) ep gets
+ * grant. The leak can happen if some other ep has not got grant yet, but
+ * is scheduled for dci allocation. */
+UCS_TEST_P(test_dc_flow_control, dci_leak)
+{
+    m_e2->connect_to_iface(1, *m_e1);
+
+    disable_entity(m_e1);
+
+    int wnd = 5;
+    set_fc_attributes(m_e2, true, wnd,
+                      ucs_max((int)(wnd*0.5), 1),
+                      ucs_max((int)(wnd*0.25), 1));
+    send_am_messages(m_e2, wnd, UCS_OK);
+    send_am_messages(m_e2, 1, UCS_ERR_NO_RESOURCE);
+
+    uct_dc_ep_t *dc_ep = ucs_derived_of(m_e2->ep(1), uct_dc_ep_t);
+    /* Pretend that FC win of the second m_e2 ep is exhausted, but make
+     * sure FC grant request is not sent. */
+    send_am_messages(m_e2, wnd, UCS_OK, 1);
+    dc_ep->fc.fc_wnd = 0;
+    send_am_messages(m_e2, wnd, UCS_ERR_NO_RESOURCE, 1);
+
+    /* Add pending for group to be dispatched when grant arrives.*/
+    uct_pending_req_t req;
+    req.func = reinterpret_cast<ucs_status_t (*)(uct_pending_req*)>
+                               (ucs_empty_function_return_no_resource);
+    EXPECT_UCS_OK(uct_ep_pending_add(m_e2->ep(1), &req));
+
+    enable_entity(m_e1, 1);
+    set_tx_moderation(m_e1, 0);
+    send_am_messages(m_e1, 1, UCS_OK);
+
+    /* Check that m_e2 got grant */
+    validate_grant(m_e2);
+
+    /* Make sure DCI was not allocated for the seconds ep,
+     * because it lacks FC window. */
+    EXPECT_EQ(UCT_DC_EP_NO_DCI, dc_ep->dci);
+    uct_ep_pending_purge(m_e2->ep(1),
+           reinterpret_cast<void (*)(uct_pending_req*, void*)> (ucs_empty_function),
+           NULL);
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control, dc)
 
 
@@ -481,8 +525,8 @@ UCS_TEST_P(test_dc_flow_control_stats, fc_ep)
                       ucs_max((int)(wnd*0.25), 1));
 
     send_am_messages(m_e1, wnd, UCS_OK);
+    validate_grant(m_e1);
 
-    progress_loop();
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_TX_HARD_REQ);
     EXPECT_EQ(1ul, v);
     v = UCS_STATS_GET_COUNTER(fake_ep_fc_ptr(m_e2)->stats, UCT_RC_FC_STAT_RX_HARD_REQ);
