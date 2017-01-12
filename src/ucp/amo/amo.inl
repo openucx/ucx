@@ -14,6 +14,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/profile.h>
 
 static inline
 ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);
@@ -55,6 +56,29 @@ UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_swap64, UCP_AMO_ONE_PARAM)
 UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_fadd64, UCP_AMO_ONE_PARAM)
 
 UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_cswap64, UCP_AMO_TWO_PARAM)
+
+#define UCP_POST_AMO_DECL(_type, _function) \
+static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
+    { \
+        ucp_request_t *req = ucs_container_of(_self, ucp_request_t, send.uct); \
+        ucp_rkey_h rkey    = req->send.amo.rkey; \
+        ucp_ep_t *ep       = req->send.ep; \
+        _type value = (_type)req->send.amo.value;         \
+        uint64_t remote_addr = req->send.amo.remote_addr; \
+        ucs_status_t status; \
+        uct_rkey_t uct_rkey; \
+        uint32_t lane; \
+        \
+        UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, req->send.lane, uct_rkey); \
+        lane = req->send.lane; \
+        status = UCS_PROFILE_CALL(_function, ep->uct_eps[lane], value,\
+                                  remote_addr, uct_rkey); \
+        return ucp_amo_check_send_status(req, status); \
+    }
+
+UCP_POST_AMO_DECL(uint64_t, uct_ep_atomic_add64)
+
+UCP_POST_AMO_DECL(uint32_t, uct_ep_atomic_add32)
 
 #define UCP_AMO_WITHOUT_RESULT(_ep, _param, _remote_addr, _rkey, _uct_func, _size) \
     { \
@@ -170,11 +194,33 @@ uct_pending_callback_t ucp_amo_select_uct_func(ucp_atomic_fetch_op_t opcode, siz
             break;
         case UCP_ATOMIC_FETCH_OP_FADD:
             progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_fadd32);
-        break;
+            break;
         default:
             progress_func = NULL;
         }
     }
+    return progress_func;
+}
+
+static inline
+uct_pending_callback_t ucp_amo_post_select_uct_func(ucp_atomic_post_op_t opcode, size_t op_size)
+{
+    uct_pending_callback_t progress_func;
+
+    if (opcode != UCP_ATOMIC_POST_OP_ADD) {
+        return NULL;
+    }
+    switch (op_size) {
+    case sizeof(uint32_t):
+        progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_add32);
+        break;
+    case sizeof(uint64_t):
+        progress_func = _UCP_PROGRESS_AMO_NAME(uct_ep_atomic_add64);
+        break;
+    default:
+        progress_func = NULL;
+    }
+
     return progress_func;
 }
 
@@ -184,24 +230,36 @@ static void ucp_amo_stub_send_completion(void *request, ucs_status_t status)
     ucs_assertv(status != UCS_INPROGRESS, "status=%s", ucs_status_string(status));
 }
 
-static inline void init_amo_req(ucp_request_t *req, ucp_ep_h ep, void *buffer,
-                                ucp_atomic_fetch_op_t op, size_t op_size, uint64_t remote_addr,
-                                ucp_rkey_h rkey, uint64_t value)
+static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uint64_t remote_addr,
+                                   ucp_rkey_h rkey, uint64_t value)
 {
-    req->send.uct_comp.count  = 1;
-    req->send.uct_comp.func   = ucp_amo_completed_single;
     req->flags                = 0;
     req->send.ep              = ep;
     req->send.cb              = ucp_amo_stub_send_completion;
-    req->send.amo.op          = op;
     req->send.amo.remote_addr = remote_addr;
     req->send.amo.rkey        = rkey;
     req->send.amo.value       = value;
-    req->send.amo.result      = buffer;
-    req->send.uct.func        = ucp_amo_select_uct_func(op, op_size);
 #if ENABLE_ASSERT
     req->send.lane            = UCP_NULL_LANE;
 #endif
 }
 
+static inline void init_amo_req(ucp_request_t *req, ucp_ep_h ep, void *buffer,
+                                ucp_atomic_fetch_op_t op, size_t op_size, uint64_t remote_addr,
+                                ucp_rkey_h rkey, uint64_t value)
+{
+    init_amo_common(req, ep, remote_addr, rkey, value);
+    req->send.uct_comp.count  = 1;
+    req->send.uct_comp.func   = ucp_amo_completed_single;
+    req->send.amo.result = buffer;
+    req->send.uct.func   = ucp_amo_select_uct_func(op, op_size);
+}
+
+static inline void init_amo_post(ucp_request_t *req, ucp_ep_h ep, ucp_atomic_post_op_t op,
+                                 size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey,
+                                 uint64_t value)
+{
+    init_amo_common(req, ep, remote_addr, rkey, value);
+    req->send.uct.func = ucp_amo_post_select_uct_func(op, op_size);
+}
 #endif

@@ -36,17 +36,43 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
                              size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)    
 {
+    ucs_status_t status;
+    uct_rkey_t uct_rkey;
+    ucp_lane_index_t lane;
+    ucs_status_ptr_t status_p;
+    ucp_request_t *req;
+
     if (ucs_unlikely(opcode != UCP_ATOMIC_POST_OP_ADD)) {
         return UCS_ERR_INVALID_PARAM;
     }
-
-    if (op_size == sizeof(uint32_t)) {
-        UCP_AMO_WITHOUT_RESULT(ep, (uint32_t)value, remote_addr, rkey,
-                               uct_ep_atomic_add32, op_size);
-    } else if (op_size == sizeof(uint64_t)) {
-        UCP_AMO_WITHOUT_RESULT(ep, value, remote_addr, rkey,
-                               uct_ep_atomic_add64, op_size);
+    status = ucp_rma_check_atomic(remote_addr, op_size);
+    if (status != UCS_OK) {
+        return status;
     }
-
-    return UCS_ERR_INVALID_PARAM;
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
+    UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, lane, uct_rkey);
+    if (op_size == sizeof(uint32_t)) {
+        status = UCS_PROFILE_CALL(uct_ep_atomic_add32, ep->uct_eps[lane],
+                                  (uint32_t)value, remote_addr, uct_rkey);
+    } else if (op_size == sizeof(uint64_t)) {
+        status = UCS_PROFILE_CALL(uct_ep_atomic_add64, ep->uct_eps[lane],
+                                  (uint64_t)value, remote_addr, uct_rkey);
+    }
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        req = ucp_request_get(ep->worker);
+        if (ucs_unlikely(NULL == req)) {
+            UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+            return UCS_ERR_NO_MEMORY;
+        }
+        init_amo_post(req, ep, opcode, op_size, remote_addr, rkey, value);
+        status_p = ucp_amo_send_request(req, (ucp_send_callback_t)ucs_empty_function);
+        if (UCS_PTR_IS_PTR(status_p)) {
+            ucp_request_release(status_p);
+            status = UCS_INPROGRESS;
+        } else {
+            status = UCS_PTR_STATUS(status_p);
+        }
+    }
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+    return status;
 }

@@ -185,8 +185,11 @@ void test_ucp_atomic::nb_add(entity *e,  size_t max_size, void *memheap_addr,
     status = test_ucp_atomic::ucp_atomic_post_nbi<T>(e->ep(), UCP_ATOMIC_POST_OP_ADD, add,
                                                  memheap_addr, rkey);
 
-    ASSERT_UCS_OK(status);
-
+    if (status == UCS_INPROGRESS) {
+        e->flush_worker();
+    } else {
+        ASSERT_UCS_OK(status);
+    }
     expected_data.resize(sizeof(T));
     *(T*)&expected_data[0] = add + prev;
 }
