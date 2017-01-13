@@ -51,7 +51,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     uct_ib_mlx5_set_ctrl_seg(ctrl, iface->tx.wq.sw_pi, MLX5_OPCODE_SEND, 0,
                              iface->super.qp->qp_num,
-                             uct_ud_mlx5_tx_moderation(iface) | se, wqe_size);
+                             uct_ud_mlx5_tx_moderation(iface) | se, wqe_size, 0);
     uct_ib_mlx5_set_dgram_seg(dgram, &ep->av, ep->is_global ? &ep->grh_av : NULL,
                               IBV_QPT_UD);
 
@@ -681,7 +681,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    status = uct_ud_mlx5_iface_common_init(&self->mlx5_common, &config->mlx5_common);
+    status = uct_ud_mlx5_iface_common_init(&self->super.super,
+                                           &self->mlx5_common, &config->mlx5_common);
     if (status != UCS_OK) {
         return status;
     }

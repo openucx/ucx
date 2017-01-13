@@ -200,6 +200,36 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
     memcpy(av, &ucs_container_of(ah, struct mlx5_ah, ibv_ah)->av, sizeof(*av));
 }
 
+ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
+{
+    struct mlx5_wqe_av mlx5_av;
+    struct ibv_ah *ah;
+    uct_ib_address_t ib_addr;
+    ucs_status_t status;
+    int is_global;
+
+    status = uct_ib_iface_get_device_address(&iface->super.super,
+                                             (uct_device_addr_t*)&ib_addr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_iface_create_ah(iface, &ib_addr, iface->path_bits[0],
+                                    &ah, &is_global);
+    if (status != UCS_OK) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    uct_ib_mlx5_get_av(ah, &mlx5_av);
+    ibv_destroy_ah(ah);
+
+    /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
+     * the device supports compact address vector. */
+    *compact_av = !(mlx5_av_base(&mlx5_av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
+    return UCS_OK;
+}
+
+
 struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
                                                 uct_ib_mlx5_cq_t *cq,
                                                 struct mlx5_cqe64 *cqe)

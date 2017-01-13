@@ -135,7 +135,7 @@ ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsign
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_RDMA_WRITE,
-                                 buffer, length, 0, 0,
+                                 buffer, length, 0, 0, 0,
                                  remote_addr, uct_ib_md_direct_rkey(rkey),
                                  NULL, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
@@ -240,7 +240,7 @@ ucs_status_t uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_SEND,
                                  payload, length,
-                                 id, hdr,
+                                 id, hdr, 0,
                                  0, 0,
                                  NULL, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
@@ -391,7 +391,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         uct_rc_mlx5_txqp_inline_post(&iface->super, IBV_QPT_RC,
                                      &ep->super.txqp, &ep->tx.wq,
                                      MLX5_OPCODE_NOP, NULL, 0,
-                                     0, 0,
+                                     0, 0, 0,
                                      0, 0,
                                      NULL, 0);
     } else if (!uct_rc_ep_has_tx_resources(&ep->super)) {
@@ -420,7 +420,7 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_RAW,
                                  NULL, 0,
-                                 UCT_RC_EP_FC_PURE_GRANT, 0 ,
+                                 UCT_RC_EP_FC_PURE_GRANT, 0, 0,
                                  0, 0,
                                  NULL, 0);
     return UCS_OK;

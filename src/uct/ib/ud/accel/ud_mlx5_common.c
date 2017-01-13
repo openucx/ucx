@@ -15,10 +15,21 @@ ucs_config_field_t uct_ud_mlx5_iface_common_config_table[] = {
   {NULL}
 };
 
-ucs_status_t uct_ud_mlx5_iface_common_init(uct_ud_mlx5_iface_common_t *iface,
+ucs_status_t uct_ud_mlx5_iface_common_init(uct_ib_iface_t *ib_iface,
+                                           uct_ud_mlx5_iface_common_t *iface,
                                            uct_ud_mlx5_iface_common_config_t *config)
 {
+    ucs_status_t status;
+
     iface->config.compact_av = config->enable_compact_av;
+
+    if (iface->config.compact_av) {
+        /* Check that compact AV supported by device */
+        status = uct_ib_mlx5_get_compact_av(ib_iface, &iface->config.compact_av);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
     return UCS_OK;
 }
 
@@ -46,12 +57,7 @@ ucs_status_t uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;
     base_av->rlid         = mlx5_av_base(&mlx5_av)->rlid;
 
-    /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
-     * the device supports compact address vector.
-     */
-    if (ud_common_iface->config.compact_av) {
-        base_av->dqp_dct  = mlx5_av_base(&mlx5_av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV;
-    } else {
+    if (!ud_common_iface->config.compact_av) {
         base_av->dqp_dct  = UCT_IB_MLX5_EXTENDED_UD_AV;
     }
 
