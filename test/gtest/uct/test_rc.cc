@@ -81,6 +81,15 @@ ucs_status_t test_rc_flow_control::am_send(uct_pending_req_t *self)
     return status;
 }
 
+void test_rc_flow_control::validate_grant(entity *e)
+{
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
+    while ((ucs_get_time() < timeout) && (!get_fc_ptr(e)->fc_wnd)) {
+        short_progress_loop();
+    }
+    EXPECT_GT(get_fc_ptr(e)->fc_wnd, 0);
+}
+
 /* Check that FC window works as expected:
  * - If FC enabled, only 'wnd' messages can be sent in a row
  * - If FC is disabled 'wnd' does not limit senders flow  */
@@ -93,7 +102,7 @@ void test_rc_flow_control::test_general(int wnd, bool is_fc_enabled)
     send_am_messages(m_e1, wnd, UCS_OK);
     send_am_messages(m_e1, 1, is_fc_enabled ?  UCS_ERR_NO_RESOURCE : UCS_OK);
 
-    progress_loop();
+    validate_grant(m_e1);
     send_am_messages(m_e1, 1, UCS_OK);
 
     if (!is_fc_enabled) {
@@ -125,10 +134,7 @@ void test_rc_flow_control::test_pending_grant(int wnd)
     send_am_messages(m_e2, 1, UCS_OK);
 
     /* Check that m_e1 got grant */
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
-    while ((ucs_get_time() < timeout) && (!get_fc_ptr(m_e1)->fc_wnd)) {
-        short_progress_loop();
-    }
+    validate_grant(m_e1);
     send_am_messages(m_e1, 1, UCS_OK);
 }
 
@@ -214,6 +220,7 @@ void test_rc_flow_control_stats::test_general(int wnd)
     EXPECT_EQ(1ul, v);
 
     progress_loop();
+    validate_grant(m_e1);
     send_am_messages(m_e1, 1, UCS_OK);
 
     v = UCS_STATS_GET_COUNTER(get_fc_ptr(m_e1)->stats, UCT_RC_FC_STAT_TX_HARD_REQ);

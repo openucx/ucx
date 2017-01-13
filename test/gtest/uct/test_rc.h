@@ -28,9 +28,9 @@ public:
         return ucs_derived_of(e->ep(0), uct_rc_ep_t);
     }
 
-    void send_am_messages(entity *e, int wnd, ucs_status_t expected) {
+    void send_am_messages(entity *e, int wnd, ucs_status_t expected, int ep_idx = 0) {
         for (int i = 0; i < wnd; i++) {
-            EXPECT_EQ(expected, uct_ep_am_short(e->ep(0), 0, 0, NULL, 0));
+            EXPECT_EQ(expected, uct_ep_am_short(e->ep(ep_idx), 0, 0, NULL, 0));
         }
     }
 
@@ -63,8 +63,8 @@ public:
         rc_iface(e)->tx.cq_available = 0;
     }
 
-    virtual void enable_entity(entity *e) {
-        rc_iface(e)->tx.cq_available = 128;
+    virtual void enable_entity(entity *e, unsigned cq_num = 128) {
+        rc_iface(e)->tx.cq_available = cq_num;
     }
 
     virtual void set_tx_moderation(entity *e, int val) {
@@ -92,6 +92,8 @@ public:
     }
 
     static ucs_status_t am_send(uct_pending_req_t *self);
+
+    void validate_grant(entity *e);
 
     void test_general(int wnd, bool is_fc_enabled);
 
