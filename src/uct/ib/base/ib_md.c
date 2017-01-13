@@ -761,9 +761,7 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     uint16_t umr_offset;
     ucs_status_t status;
 
-    if (!(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
-        !(memh->flags & UCT_IB_MEM_FLAG_ODP))
-    {
+    if (!(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR)) {
         /* create UMR on-demand */
         ucs_assert(memh->atomic_mr == NULL);
         umr_offset = uct_ib_md_atomic_offset(uct_ib_md_get_atomic_mr_id(md));
