@@ -3,6 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -189,6 +190,7 @@ static void ucx_perf_test_reset(ucx_perf_context_t *perf,
     perf->prev.bytes        = 0;
     perf->prev.iters        = 0;
     perf->timing_queue_head = 0;
+    perf->offset            = 0;
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
     }
