@@ -731,16 +731,20 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
 {
     ucs_status_t status;
     ucp_mem_map_params_t mem_map_params;
-    size_t message_size;
+    size_t buffer_size;
 
     perf->send_buffer         = NULL;
-    message_size              = ucx_perf_get_message_size(params);
+    if ((UCP_PERF_DATATYPE_IOV == params->ucp.datatype) && params->iov_stride) {
+        buffer_size           = params->msg_size_cnt * params->iov_stride;
+    } else {
+        buffer_size           = ucx_perf_get_message_size(params);
+    }
 
     mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                                 UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     mem_map_params.address    = perf->send_buffer;
-    mem_map_params.length     = message_size * params->thread_count;
+    mem_map_params.length     = buffer_size * params->thread_count;
     mem_map_params.flags      = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
                                  UCP_MEM_MAP_NONBLOCK : 0;
 
@@ -757,7 +761,7 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                                 UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     mem_map_params.address    = perf->recv_buffer;
-    mem_map_params.length     = message_size * params->thread_count;
+    mem_map_params.length     = buffer_size * params->thread_count;
     mem_map_params.flags      = 0;
 
     status = ucp_mem_map(perf->ucp.context, &mem_map_params, &perf->ucp.recv_memh);
@@ -767,7 +771,7 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
     perf->recv_buffer = mem_map_params.address;
 
     /* Allocate IOV datatype memory */
-    if(UCP_PERF_DATATYPE_IOV == params->ucp.datatype) {
+    if (UCP_PERF_DATATYPE_IOV == params->ucp.datatype) {
         perf->params.msg_size_cnt = params->msg_size_cnt;
         perf->ucp.iov             = malloc(sizeof(*perf->ucp.iov) *
                                            perf->params.msg_size_cnt *
