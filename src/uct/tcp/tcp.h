@@ -23,7 +23,7 @@ KHASH_MAP_INIT_INT64(uct_tcp_fd_hash, uct_tcp_recv_sock_t*);
  */
 typedef struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    int                           fd;        /* Socked filed descriptor */
+    int                           fd;             /* Socket file descriptor */
 } uct_tcp_ep_t;
 
 
