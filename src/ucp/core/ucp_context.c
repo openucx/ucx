@@ -360,22 +360,31 @@ static void ucp_check_unavailable_devices(const str_names_array_t *devices, uint
     }
 }
 
+const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum)
+{
+    ucp_tl_resource_desc_t *rsc;
+
+    for (rsc = context->tl_rscs; rsc < context->tl_rscs + context->num_tls; ++rsc) {
+         if (rsc->tl_name_csum == tl_name_csum) {
+             return rsc->tl_rsc.tl_name;
+         }
+    }
+    return NULL;
+}
+
 static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
 {
-    ucp_tl_resource_desc_t *rsc1, *rsc2;
+    ucp_tl_resource_desc_t *rsc;
+    const char *tl_name;
 
     /* Make there we don't have two different transports with same checksum. */
-    for (rsc1 = context->tl_rscs; rsc1 < context->tl_rscs + context->num_tls; ++rsc1) {
-        for (rsc2 = context->tl_rscs; rsc2 < rsc1; ++rsc2) {
-            if ((rsc1->tl_name_csum == rsc2->tl_name_csum) &&
-                strcmp(rsc1->tl_rsc.tl_name, rsc2->tl_rsc.tl_name))
-            {
-                ucs_error("Transports '%s' and '%s' have same checksum (0x%x), "
-                          "please rename one of them to avoid collision",
-                          rsc1->tl_rsc.tl_name, rsc2->tl_rsc.tl_name,
-                          rsc1->tl_name_csum);
-                return UCS_ERR_ALREADY_EXISTS;
-            }
+    for (rsc = context->tl_rscs; rsc < context->tl_rscs + context->num_tls; ++rsc) {
+        tl_name = ucp_find_tl_name_by_csum(context, rsc->tl_name_csum);
+        if ((tl_name != NULL) && strcmp(rsc->tl_rsc.tl_name, tl_name)) {
+            ucs_error("Transports '%s' and '%s' have same checksum (0x%x), "
+                            "please rename one of them to avoid collision",
+                            rsc->tl_rsc.tl_name, tl_name, rsc->tl_name_csum);
+            return UCS_ERR_ALREADY_EXISTS;
         }
     }
     return UCS_OK;

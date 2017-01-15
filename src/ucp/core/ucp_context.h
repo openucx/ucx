@@ -339,5 +339,7 @@ void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
 
 uint64_t ucp_context_uct_atomic_iface_flags(ucp_context_h context);
 
+const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
+
 
 #endif

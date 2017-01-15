@@ -163,7 +163,8 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
             continue;
         }
         if (!ucs_test_all_flags(ae->md_flags, criteria->remote_md_flags)) {
-            ucs_trace("addr[%d]: no %s", addr_index,
+            ucs_trace("addr[%d] %s: no %s", addr_index,
+                      ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->md_flags,
                                                        criteria->remote_md_flags,
                                                        ucp_wireup_md_flags));
@@ -175,7 +176,8 @@ ucp_wireup_select_transport(ucp_ep_h ep, const ucp_address_entry_t *address_list
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS, criteria->remote_iface_flags));
 
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
-            ucs_trace("addr[%d]: no %s", addr_index,
+            ucs_trace("addr[%d] %s: no %s", addr_index,
+                      ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
                                                        ucp_wireup_iface_flags));
