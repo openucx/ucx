@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -7,6 +8,7 @@
 #define UCT_SELF_IFACE_H
 
 #include <uct/base/uct_iface.h>
+#include <ucs/arch/cpu.h>
 
 typedef uint64_t uct_self_iface_addr_t;
 

@@ -1,7 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017. ALL RIGHTS RESERVED.
+*
 * See file LICENSE for terms.
 */
 
@@ -12,6 +13,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/datastruct/callbackq.inl>
 #include <malloc.h>
 
 UCS_LIST_HEAD(uct_md_components_list);

@@ -9,6 +9,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/callbackq.h>
+#include <ucs/datastruct/callbackq.inl>
 }
 
 class test_callbackq_base : public ucs::test_base {
