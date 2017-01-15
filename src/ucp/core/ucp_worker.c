@@ -917,24 +917,26 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     status = ucp_worker_get_address(worker, &address, &address_length);
     if (status == UCS_OK) {
         ucp_worker_release_address(worker, address);
-        fprintf(stream, "#              address: %zu bytes\n", address_length);
+        fprintf(stream, "#                 address: %zu bytes\n", address_length);
     } else {
         fprintf(stream, "# <failed to get address>\n");
     }
 
-    fprintf(stream, "#              atomics: ");
-    first = 1;
-    for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-        if (worker->atomic_tls & UCS_BIT(rsc_index)) {
-            if (!first) {
-                fprintf(stream, ", ");
+    if (context->config.features & (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+        fprintf(stream, "#                 atomics: ");
+        first = 1;
+        for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
+            if (worker->atomic_tls & UCS_BIT(rsc_index)) {
+                if (!first) {
+                    fprintf(stream, ", ");
+                }
+                fprintf(stream, "%d:"UCT_TL_RESOURCE_DESC_FMT, rsc_index,
+                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
+                first = 0;
             }
-            fprintf(stream, "%d:"UCT_TL_RESOURCE_DESC_FMT, rsc_index,
-                    UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
-            first = 0;
         }
+        fprintf(stream, "\n");
     }
-    fprintf(stream, "\n");
 
     fprintf(stream, "#\n");
 

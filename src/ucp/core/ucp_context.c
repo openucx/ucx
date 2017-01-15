@@ -840,7 +840,7 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        fprintf(stream, "#             %s  md[%d]:  %s\n",
+        fprintf(stream, "#                %s  md[%d]:  %s\n",
                 (md_index <= context->max_rkey_md) ? "*" : " ",
                 md_index, context->tl_mds[md_index].rsc.md_name);
     }
@@ -848,7 +848,7 @@ void ucp_context_print_info(ucp_context_h context, FILE *stream)
     fprintf(stream, "#\n");
 
     for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-        fprintf(stream, "#      rsc[%2d] / md[%d]:  "UCT_TL_RESOURCE_DESC_FMT"\n",
+        fprintf(stream, "#    resource[%2d] / md[%d]:  "UCT_TL_RESOURCE_DESC_FMT"\n",
                 rsc_index, context->tl_rscs[rsc_index].md_index,
                 UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc)
                 );

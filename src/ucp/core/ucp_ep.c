@@ -821,13 +821,16 @@ static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
 {
     size_t max_bcopy;
 
-    fprintf(stream, "# %18s: 0", name);
+    fprintf(stream, "# %23s: 0", name);
     if (max_eager_short > 0) {
         fprintf(stream, "..<egr/short>..%zu" , max_eager_short + 1);
     }
     max_bcopy = ucs_min(zcopy_thresh, rndv_thresh);
     if (max_eager_short < max_bcopy) {
-        fprintf(stream, "..<egr/bcopy>..%zu", max_bcopy);
+        fprintf(stream, "..<egr/bcopy>..");
+        if (max_bcopy < SIZE_MAX) {
+            fprintf(stream, "%zu", max_bcopy);
+        }
     }
     if (zcopy_thresh < rndv_thresh) {
         fprintf(stream, "..<egr/zcopy>..");
@@ -841,25 +844,30 @@ static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
     fprintf(stream, "(inf)\n");
 }
 
-static void ucp_ep_config_print_rma_proto(FILE *stream,
-                                          const ucp_ep_rma_config_t* rma_config,
-                                          size_t bcopy_thresh)
+static void ucp_ep_config_print_rma_proto(FILE *stream, const char *name,
+                                          size_t bcopy_thresh, size_t zcopy_thresh)
 {
-    size_t max_short;
 
-    max_short = ucs_max(rma_config->max_put_short + 1, bcopy_thresh);
-
-    fprintf(stream, "#                put: 0");
-    if (max_short > 0) {
-        fprintf(stream, "..<short>..%zu" , max_short);
+    fprintf(stream, "# %23s: 0", name);
+    if (bcopy_thresh > 0) {
+        fprintf(stream, "..<short>");
     }
-    fprintf(stream, "..<bcopy>..(inf)\n");
-    fprintf(stream, "#                get: 0..<bcopy>..(inf)\n");
+    if (bcopy_thresh < zcopy_thresh) {
+        if (bcopy_thresh > 0) {
+            fprintf(stream, "..%zu", bcopy_thresh);
+        }
+        fprintf(stream, "..<bcopy>");
+    }
+    if (zcopy_thresh < SIZE_MAX) {
+        fprintf(stream, "..%zu..<zcopy>", zcopy_thresh);
+    }
+    fprintf(stream, "..(inf)\n");
 }
 
 static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                 const ucp_ep_config_t *config,
-                                const uint8_t *addr_indices)
+                                const uint8_t *addr_indices,
+                                ucp_rsc_index_t aux_rsc_index)
 {
     ucp_context_h context   = worker->context;
     ucp_tl_resource_desc_t *rsc;
@@ -870,7 +878,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
         rsc_index   = config->key.lanes[lane];
         rsc         = &context->tl_rscs[rsc_index];
-        fprintf(stream, "#            lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT,
+        fprintf(stream, "#                 lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT,
                 lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
 
         if (addr_indices != NULL) {
@@ -893,6 +901,10 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
         }
         if (lane == config->key.wireup_msg_lane) {
             fprintf(stream, " wireup");
+            if (aux_rsc_index != UCP_NULL_RESOURCE) {
+                fprintf(stream, "{" UCT_TL_RESOURCE_DESC_FMT "}",
+                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[aux_rsc_index].tl_rsc));
+            }
         }
         fprintf(stream, "\n");
     }
@@ -915,8 +927,12 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
              if (!ucp_ep_config_get_rma_md_map(&config->key, lane)) {
                  continue;
              }
-             ucp_ep_config_print_rma_proto(stream, &config->rma[lane],
-                                           config->bcopy_thresh);
+             ucp_ep_config_print_rma_proto(stream, "put",
+                                           ucs_max(config->rma[lane].max_put_short + 1,
+                                                   config->bcopy_thresh),
+                                           config->rma[lane].put_zcopy_thresh);
+             ucp_ep_config_print_rma_proto(stream, "get", 0,
+                                           config->rma[lane].get_zcopy_thresh);
          }
      }
 
@@ -924,6 +940,9 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
+    ucp_rsc_index_t aux_rsc_index;
+    uct_ep_h wireup_ep;
+
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
     fprintf(stream, "#\n");
@@ -938,7 +957,15 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 #endif
             ep->dest_uuid);
 
-    ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL);
+    wireup_ep = ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)];
+    if (ucp_stub_ep_test(wireup_ep)) {
+        aux_rsc_index = ucp_stub_ep_get_aux_rsc_index(wireup_ep);
+    } else {
+        aux_rsc_index = UCP_NULL_RESOURCE;
+    }
+
+    ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL,
+                        aux_rsc_index);
 
     fprintf(stream, "#\n");
 
