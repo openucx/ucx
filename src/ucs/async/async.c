@@ -178,8 +178,9 @@ static ucs_status_t ucs_async_handler_add(ucs_async_handler_t *handler)
         status = UCS_ERR_NO_MEMORY;
         goto out_unlock;
     } else if (hash_extra_status == 0) {
-        ucs_error("Async handler " UCS_ASYNC_HANDLER_FMT " already exists",
-                  UCS_ASYNC_HANDLER_ARG(handler));
+        ucs_error("Async handler " UCS_ASYNC_HANDLER_FMT " exists - cannot add %s()",
+                  UCS_ASYNC_HANDLER_ARG(kh_value(&ucs_async_global_context.handlers, hash_it)),
+                  ucs_debug_get_symbol_name(handler->cb));
         status = UCS_ERR_ALREADY_EXISTS;
         goto out_unlock;
     }
