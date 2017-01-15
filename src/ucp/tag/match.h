@@ -16,6 +16,13 @@
 #include <inttypes.h>
 
 
+#define ucp_tag_log_match(_recv_tag, _recv_len,_req, _exp_tag, _exp_tag_mask, \
+                          _offset, _title) \
+    ucs_trace_req("matched tag %"PRIx64" len %zu to %s request %p offset %zu " \
+                  "with tag %"PRIx64"/%"PRIx64, (_recv_tag), (size_t)(_recv_len), \
+                  (_title), (_req), (size_t)(_offset), (_exp_tag), (_exp_tag_mask))
+
+
 /**
  * Tag-match header
  */
@@ -53,16 +60,6 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
               ucp_tag_is_match(recv_tag, exp_tag, tag_mask)) ||
             (!(offset == 0) && !(recv_flags & UCP_RECV_DESC_FLAG_FIRST) &&
               (recv_tag == curr_tag)));
-}
-
-
-static inline void ucp_tag_log_match(ucp_tag_t recv_tag, ucp_request_t *req,
-                                     ucp_tag_t exp_tag, ucp_tag_t exp_tag_mask,
-                                     size_t offset, const char *title)
-{
-    ucs_trace_req("matched tag %"PRIx64" to %s request %p offset %zu "
-                  "with tag %"PRIx64"/%"PRIx64, recv_tag, title, req,
-                  offset, exp_tag, exp_tag_mask);
 }
 
 

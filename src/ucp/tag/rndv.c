@@ -348,8 +348,9 @@ ucp_rndv_rts_handler(void *arg, void *data, size_t length, void *desc)
                                   rreq->recv.tag_mask, rreq->recv.state.offset,
                                   rreq->recv.info.sender_tag))
         {
-            ucp_tag_log_match(recv_tag, rreq, rreq->recv.tag, rreq->recv.tag_mask,
-                              rreq->recv.state.offset, "expected-rndv");
+            ucp_tag_log_match(recv_tag, rndv_rts_hdr->size, rreq, rreq->recv.tag,
+                              rreq->recv.tag_mask, rreq->recv.state.offset,
+                              "expected-rndv");
             ucs_queue_del_iter(&context->tag.expected, iter);
             ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
             status = UCS_OK;

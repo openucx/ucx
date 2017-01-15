@@ -32,7 +32,8 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
         if ((flags & UCP_RECV_DESC_FLAG_FIRST) &&
             ucp_tag_is_match(recv_tag, tag, tag_mask))
         {
-            ucp_tag_log_match(recv_tag, NULL, tag, tag_mask, 0, "probe");
+            ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, NULL,
+                              tag, tag_mask, 0, "probe");
 
             info->sender_tag = hdr->tag;
             if (flags & UCP_RECV_DESC_FLAG_EAGER) {
