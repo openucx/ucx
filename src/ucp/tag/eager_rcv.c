@@ -39,9 +39,9 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
         if (ucp_tag_recv_is_match(recv_tag, flags, req->recv.tag, req->recv.tag_mask,
                                   req->recv.state.offset, req->recv.info.sender_tag))
         {
-            ucp_tag_log_match(recv_tag, req, req->recv.tag, req->recv.tag_mask,
-                              req->recv.state.offset, "expected");
             recv_len = length - hdr_len;
+            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
+                              req->recv.tag_mask, req->recv.state.offset, "expected");
             status = ucp_tag_process_recv(req->recv.buffer, req->recv.count,
                                           req->recv.datatype, &req->recv.state,
                                           data + hdr_len, recv_len,
