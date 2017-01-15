@@ -200,7 +200,7 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
 }
 
 ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
-                                 uintptr_t datatype, ucp_tag_t tag,
+                                 ucp_datatype_t datatype, ucp_tag_t tag,
                                  ucp_send_callback_t cb)
 {
     ucs_status_t status;

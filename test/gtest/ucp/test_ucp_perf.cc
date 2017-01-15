@@ -30,6 +30,11 @@ test_perf::test_spec test_ucp_perf::tests[] =
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 8 }, 1, 100000l,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
 
+  { "tag latency iov", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_ZCOPY, 8192, 3, { 1024, 1024, 1024 }, 1, 100000l,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0 },
+
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 8 }, 1, 100000l,

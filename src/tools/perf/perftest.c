@@ -405,6 +405,7 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
             (optarg_ptr == optarg_ptr2)) {
             free(params->msg_size_list);
             params->msg_size_list = NULL; /* prevent double free */
+            ucs_error("Invalid option substring argument at position %lu", token_it);
             return UCS_ERR_INVALID_PARAM;
         }
         optarg_ptr = optarg_ptr2 + 1;
@@ -435,6 +436,7 @@ static void init_test_params(ucx_perf_params_t *params)
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
     params->msg_size_cnt    = 1;
     params->iov_stride      = 0;
+    params->ucp.datatype    = UCP_PERF_DATATYPE_CONTIG;
     strcpy(params->uct.dev_name, "<none>");
     strcpy(params->uct.tl_name, "<none>");
 
@@ -477,6 +479,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
         } else if (0 == strcmp(optarg, "zcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
+        } else if (0 == strcmp(optarg, "iov")) {
+            params->ucp.datatype      = UCP_PERF_DATATYPE_IOV;
         } else {
             ucs_error("Invalid option argument for -D");
             return -1;
@@ -549,8 +553,9 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
                                     char** test_name_p)
 {
 #define MAX_SIZE 256
+#define MAX_ARG_SIZE 2048
     ucs_status_t status;
-    char buf[MAX_SIZE];
+    char buf[MAX_ARG_SIZE];
     int argc;
     char *argv[MAX_SIZE + 1];
     int c;
@@ -575,7 +580,8 @@ static ucs_status_t read_batch_file(FILE *batch_file, ucx_perf_params_t *params,
     while ((c = getopt (argc, argv, TEST_PARAMS_ARGS)) != -1) {
         status = parse_test_params(params, c, optarg);
         if (status != UCS_OK) {
-            ucs_error("Invalid argument in batch file: -%c", c);
+            ucs_error("Invalid argument in batch file: -%c, status(%d):\"%s\"",
+                      c, status, ucs_status_string(status));
             return status;
         }
     }

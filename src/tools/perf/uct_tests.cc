@@ -51,7 +51,7 @@ public:
      * Make uct_iov_t iov[msg_size_cnt] array with pointer elements to
      * original buffer
      */
-    static void ucx_perf_get_buffer_iov(uct_iov_t *iov, void *buffer,
+    static void uct_perf_get_buffer_iov(uct_iov_t *iov, void *buffer,
                                         unsigned header_size, uct_mem_h memh,
                                         const ucx_perf_context_t *perf)
     {
@@ -84,13 +84,13 @@ public:
                   iovcnt, iov_length_it);
     }
 
-    void ucx_perf_test_prepare_iov_buffer() {
+    void uct_perf_test_prepare_iov_buffer() {
         if (UCT_PERF_DATA_LAYOUT_ZCOPY == DATA) {
             size_t start_iov_buffer_size = 0;
             if (UCX_PERF_CMD_AM == CMD) {
                 start_iov_buffer_size = m_perf.params.am_hdr_size;
             }
-            ucx_perf_get_buffer_iov(m_perf.uct.iov, m_perf.send_buffer,
+            uct_perf_get_buffer_iov(m_perf.uct.iov, m_perf.send_buffer,
                                     start_iov_buffer_size, m_perf.uct.send_mem.memh,
                                     &m_perf);
         }
@@ -100,7 +100,7 @@ public:
      * Get the length between beginning of the IOV first buffer and the latest byte
      * in the latest IOV buffer.
      */
-    size_t ucx_perf_get_buffer_extent(const ucx_perf_params_t *params)
+    size_t uct_perf_get_buffer_extent(const ucx_perf_params_t *params)
     {
         size_t length;
 
@@ -172,7 +172,7 @@ public:
         case UCX_PERF_CMD_PUT:
             if (TYPE == UCX_PERF_TEST_TYPE_PINGPONG) {
                 /* Put the control word at the latest byte of the IOV message */
-                *((psn_t*)buffer + ucx_perf_get_buffer_extent(&m_perf.params) - 1) = sn;
+                *((psn_t*)buffer + uct_perf_get_buffer_extent(&m_perf.params) - 1) = sn;
             }
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_SHORT:
@@ -294,7 +294,7 @@ public:
             return UCS_ERR_INVALID_PARAM;
         }
 
-        ucx_perf_test_prepare_iov_buffer();
+        uct_perf_test_prepare_iov_buffer();
 
         *recv_sn  = -1;
         rte_call(&m_perf, barrier);
@@ -355,7 +355,7 @@ public:
         memset(m_perf.send_buffer, 0, length);
         memset(m_perf.recv_buffer, 0, length);
 
-        ucx_perf_test_prepare_iov_buffer();
+        uct_perf_test_prepare_iov_buffer();
 
         recv_sn  = direction_to_responder ? (psn_t*)m_perf.recv_buffer :
                                             (psn_t*)m_perf.send_buffer;

@@ -68,6 +68,7 @@ struct ucx_perf_context {
             ucp_peer_t           *peers;
             ucp_mem_h            send_memh;
             ucp_mem_h            recv_memh;
+            ucp_dt_iov_t         *iov;
         } ucp;
     };
 };

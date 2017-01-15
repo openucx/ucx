@@ -49,6 +49,12 @@ typedef enum {
 
 
 typedef enum {
+    UCP_PERF_DATATYPE_CONTIG,
+    UCP_PERF_DATATYPE_IOV,
+} ucp_perf_datatype_t;
+
+
+typedef enum {
     UCT_PERF_DATA_LAYOUT_SHORT,
     UCT_PERF_DATA_LAYOUT_BCOPY,
     UCT_PERF_DATA_LAYOUT_ZCOPY,
@@ -169,6 +175,7 @@ typedef struct ucx_perf_params {
 
     struct {
         unsigned               nonblocking_mode; /* TBD */
+        ucp_perf_datatype_t    datatype;
     } ucp;
 
 } ucx_perf_params_t;
