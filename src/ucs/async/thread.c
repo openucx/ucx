@@ -81,9 +81,13 @@ static void *ucs_async_thread_func(void *arg)
 
         /* Wait until the remainder of current period */
         timer_interval = ucs_timerq_min_interval(&thread->timerq);
-        time_spent     = curr_time - last_time;
-        timeout_ms     = ucs_time_to_msec(timer_interval - ucs_min(time_spent,
-                                                                   timer_interval));
+        if (timer_interval == UCS_TIME_INFINITY) {
+            timeout_ms = -1;
+        } else {
+            time_spent = curr_time - last_time;
+            timeout_ms = ucs_time_to_msec(timer_interval -
+                                          ucs_min(time_spent, timer_interval));
+        }
         nready = epoll_wait(thread->epfd, events, UCS_ASYNC_EPOLL_MAX_EVENTS,
                             timeout_ms);
         if ((nready < 0) && (errno != EINTR)) {
