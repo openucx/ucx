@@ -49,6 +49,9 @@ typedef struct uct_dc_fc_request {
     uct_rc_fc_request_t           super;
     uintptr_t                     sender_ep;
     uint32_t                      dct_num;
+
+    /* Lid can be stored either in BE or in LE order. The endianess depends
+     * on the transport (BE for mlx5 and LE for dc verbs) */
     uint16_t                      lid;
 } uct_dc_fc_request_t;
 

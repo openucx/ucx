@@ -18,7 +18,7 @@
 
 
 static ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
-  {"DC_", "", NULL,
+  {"DC_", "RC_FC_ENABLE=y", NULL,
    ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_dc_iface_config_table)},
 

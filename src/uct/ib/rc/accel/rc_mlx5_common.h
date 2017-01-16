@@ -214,8 +214,14 @@ uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     uint16_t posted;
 
     ctrl = txwq->curr;
-    uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod, txqp->qp->qp_num,
-                             sig_flag, wqe_size, imm);
+
+    if (opcode == MLX5_OPCODE_SEND_IMM) {
+        uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
+                                          txqp->qp->qp_num, sig_flag, wqe_size, imm);
+    } else {
+        uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod, txqp->qp->qp_num,
+                                 sig_flag, wqe_size);
+    }
 
     if (qp_type == IBV_EXP_QPT_DC_INI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, NULL, qp_type);

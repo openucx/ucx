@@ -204,17 +204,19 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av mlx5_av;
     struct ibv_ah *ah;
-    uct_ib_address_t ib_addr;
+    uct_ib_address_t *ib_addr;
     ucs_status_t status;
     int is_global;
 
+    ib_addr = ucs_alloca(iface->addr_size);
+
     status = uct_ib_iface_get_device_address(&iface->super.super,
-                                             (uct_device_addr_t*)&ib_addr);
+                                             (uct_device_addr_t*)ib_addr);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_ib_iface_create_ah(iface, &ib_addr, iface->path_bits[0],
+    status = uct_ib_iface_create_ah(iface, ib_addr, iface->path_bits[0],
                                     &ah, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;

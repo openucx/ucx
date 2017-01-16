@@ -19,17 +19,12 @@ ucs_status_t uct_ud_mlx5_iface_common_init(uct_ib_iface_t *ib_iface,
                                            uct_ud_mlx5_iface_common_t *iface,
                                            uct_ud_mlx5_iface_common_config_t *config)
 {
-    ucs_status_t status;
-
-    iface->config.compact_av = config->enable_compact_av;
-
-    if (iface->config.compact_av) {
+    if (config->enable_compact_av) {
         /* Check that compact AV supported by device */
-        status = uct_ib_mlx5_get_compact_av(ib_iface, &iface->config.compact_av);
-        if (status != UCS_OK) {
-            return status;
-        }
+        return uct_ib_mlx5_get_compact_av(ib_iface, &iface->config.compact_av);
     }
+
+    iface->config.compact_av = 0;
     return UCS_OK;
 }
 
