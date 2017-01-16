@@ -28,7 +28,7 @@ static void usage() {
     printf("                'r' : remote memory access\n");
     printf("                't' : tag matching \n");
     printf("                'w' : wakeup\n");
-    printf("  -n         Estimated UCP endpoint count (for ucp_init).\n");
+    printf("  -n         Estimated UCP endpoint count (for ucp_init)\n");
     printf("  -a         Show also hidden configuration\n");
     printf("  -b         Build configuration\n");
     printf("  -y         Type information\n");
