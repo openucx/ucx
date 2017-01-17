@@ -366,6 +366,7 @@ ucs_status_t ucp_stub_ep_connect(uct_ep_h uct_ep, ucp_rsc_index_t rsc_index,
 
 err_destroy_next_ep:
     uct_ep_destroy(stub_ep->next_ep);
+    stub_ep->next_ep = NULL;
 err:
     return status;
 }
