@@ -29,10 +29,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_iface_t *tl_iface,
     }
 
     memset(&dest_addr, 0, sizeof(dest_addr));
-    dest_addr.sin_addr.s_addr = INADDR_ANY;
-    dest_addr.sin_port  = iface->config.ifaddr.sin_port;
-
-    memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port   = *(in_port_t*)iface_addr;
     dest_addr.sin_addr   = *(struct in_addr*)dev_addr;
