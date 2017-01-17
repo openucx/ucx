@@ -208,6 +208,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     ucs_status_t status;
     int is_global;
 
+    /* coverity[result_independent_of_operands] */
     ib_addr = ucs_alloca(iface->addr_size);
 
     status = uct_ib_iface_get_device_address(&iface->super.super,
