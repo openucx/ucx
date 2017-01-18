@@ -10,6 +10,7 @@
 extern "C" {
 #include <ucp/dt/dt.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/datastruct/queue.h>
 }
 
 #include <common/test_helpers.h>
@@ -361,7 +362,14 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
         sreq = do_send(sendbuf, count, send_dt, sync);
     } else {
         sreq = do_send(sendbuf, count, send_dt, sync);
-        short_progress_loop();
+
+        /* Wait for some message to be added to unexpected queue */
+        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
+        do {
+            short_progress_loop();
+        } while (ucs_queue_is_empty(&receiver().ucph()->tag.unexpected) &&
+                 (ucs_get_time() < timeout));
+
         if (sync) {
             EXPECT_FALSE(sreq->completed);
         }
