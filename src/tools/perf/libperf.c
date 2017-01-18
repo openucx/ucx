@@ -261,6 +261,8 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
 static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
 {
+    size_t it;
+
     if (ucx_perf_get_message_size(params) < 1) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Message size too small, need to be at least 1");
@@ -273,6 +275,19 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
             ucs_error("max_outstanding, need to be at least 1");
         }
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* check if particular message size fit into stride size */
+    if (params->iov_stride) {
+        for (it = 0; it < params->msg_size_cnt; ++it) {
+            if (params->msg_size_list[it] > params->iov_stride) {
+                if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                    ucs_error("Buffer size %lu bigger than stride %lu",
+                              params->msg_size_list[it], params->iov_stride);
+                }
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
     }
 
     return UCS_OK;
@@ -319,7 +334,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     uct_iface_attr_t attr;
     ucs_status_t status;
     uint64_t required_flags;
-    size_t min_size, max_size, max_iov, message_size, it;
+    size_t min_size, max_size, max_iov, message_size;
 
     status = uct_iface_query(iface, &attr);
     if (status != UCS_OK) {
@@ -471,17 +486,6 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
                               params->msg_size_list[0]);
                 }
                 return UCS_ERR_INVALID_PARAM;
-            }
-        }
-        /* check if particular message size fit into stride size */
-        if (params->iov_stride) {
-            for (it = 0; it < params->msg_size_cnt; ++it) {
-                if (params->msg_size_list[it] > params->iov_stride) {
-                    ucs_error("Buffer size %lu bigger than stride %lu",
-                              params->msg_size_list[it], params->iov_stride);
-                    status = UCS_ERR_NO_MEMORY;
-                    return UCS_ERR_INVALID_PARAM;
-                }
             }
         }
     }

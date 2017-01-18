@@ -112,10 +112,10 @@ test_type_t tests[] = {
      "atomic add message rate"},
 
     {"tag_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
-     "tag match latency"},
+     "UCP tag match latency"},
 
     {"tag_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "tag match bandwidth"},
+     "UCP tag match bandwidth"},
 
     {"ucp_put_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
      "UCP put latency"},
@@ -316,10 +316,13 @@ static void usage(struct perftest_context *ctx, const char *program)
         printf("                   %11s : %s.\n", test->name, test->desc);
     }
     printf("\n");
-    printf("     -D <layout>    Data layout.\n");
+    printf("     -D <layout>    Data layout. Default is \"short\" in UCT, \"contig\""
+                                    " in UCP and previous one in batch mode.\n");
     printf("                        short : Use short messages API (cannot used for get).\n");
     printf("                        bcopy : Use copy-out API (cannot used for atomics).\n");
     printf("                        zcopy : Use zero-copy API (cannot used for atomics).\n");
+    printf("                       contig : Use continuous datatype in UCP tests.\n");
+    printf("                          iov : Use IOV datatype in UCP tests.\n");
     printf("\n");
     printf("     -d <device>    Device to use for testing.\n");
     printf("     -x <tl>        Transport to use for testing.\n");
@@ -481,6 +484,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
         } else if (0 == strcmp(optarg, "iov")) {
             params->ucp.datatype      = UCP_PERF_DATATYPE_IOV;
+        } else if (0 == strcmp(optarg, "contig")) {
+            params->ucp.datatype      = UCP_PERF_DATATYPE_CONTIG;
         } else {
             ucs_error("Invalid option argument for -D");
             return -1;
