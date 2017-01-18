@@ -121,7 +121,7 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
 
     uct_rc_iface_query(&iface->super, iface_attr);
     uct_rc_verbs_iface_common_query(&iface->verbs_common, &iface->super, iface_attr);
-
+    iface_attr->latency.growth += 3e-9; /* 3ns per each extra QP */
     return UCS_OK;
 }
 

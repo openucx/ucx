@@ -83,7 +83,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_iface_query(iface, iface_attr);
     uct_rc_mlx5_iface_common_query(iface, iface_attr, 0);
-
+    iface_attr->latency.growth += 3e-9; /* 3ns per each extra QP */
     return UCS_OK;
 }
 

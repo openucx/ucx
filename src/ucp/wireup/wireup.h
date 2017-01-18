@@ -38,13 +38,15 @@ typedef struct {
     /**
      * Calculates score of a potential transport.
      *
+     * @param [in]  context      UCP context.
      * @param [in]  md_attr      Local MD attributes.
      * @param [in]  iface_attr   Local interface attributes.
      * @param [in]  remote_info  Remote peer attributes.
      *
      * @return Transport score, the higher the better.
      */
-    double      (*calc_score)(const uct_md_attr_t *md_attr,
+    double      (*calc_score)(ucp_context_h context,
+                              const uct_md_attr_t *md_attr,
                               const uct_iface_attr_t *iface_attr,
                               const ucp_address_iface_attr_t *remote_iface_attr);
 
@@ -71,7 +73,8 @@ ucs_status_t ucp_wireup_select_aux_transport(ucp_ep_h ep,
                                              ucp_rsc_index_t *rsc_index_p,
                                              unsigned *addr_index_p);
 
-double ucp_wireup_amo_score_func(const uct_md_attr_t *md_attr,
+double ucp_wireup_amo_score_func(ucp_context_h context,
+                                 const uct_md_attr_t *md_attr,
                                  const uct_iface_attr_t *iface_attr,
                                  const ucp_address_iface_attr_t *remote_iface_attr);
 

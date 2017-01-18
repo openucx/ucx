@@ -73,7 +73,8 @@ static ucs_status_t uct_self_iface_query(uct_iface_h iface, uct_iface_attr_t *at
     attr->cap.am.max_hdr          = 0;
     attr->cap.am.max_iov          = 1;
 
-    attr->latency                 = 0;
+    attr->latency.overhead        = 0;
+    attr->latency.growth          = 0;
     attr->bandwidth               = 6911 * 1024.0 * 1024.0;
     attr->overhead                = 0;
     attr->priority                = 0;

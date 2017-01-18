@@ -653,6 +653,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.request.cleanup = params->request_cleanup;
     context->config.ext             = config->ctx;
 
+    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
+        context->config.est_num_eps = params->estimated_num_eps;
+    } else {
+        context->config.est_num_eps = 1;
+    }
+
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
         ucs_error("No allocation methods specified - aborting");

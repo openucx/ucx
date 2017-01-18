@@ -40,7 +40,7 @@ void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
 void print_type_info(const char * tl_name);
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
-                    uint64_t features);
+                    uint64_t features, size_t estimated_num_eps);
 
 /**
  * @ingroup RESOURCE

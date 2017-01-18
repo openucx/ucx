@@ -10,6 +10,7 @@
 #include <ucs/config/global_opts.h>
 #include <ucm/api/ucm.h>
 #include <getopt.h>
+#include <stdlib.h>
 
 
 static void usage() {
@@ -27,6 +28,7 @@ static void usage() {
     printf("                'r' : remote memory access\n");
     printf("                't' : tag matching \n");
     printf("                'w' : wakeup\n");
+    printf("  -n         Estimated UCP endpoint count (for ucp_init)\n");
     printf("  -a         Show also hidden configuration\n");
     printf("  -b         Build configuration\n");
     printf("  -y         Type information\n");
@@ -39,6 +41,7 @@ int main(int argc, char **argv)
 {
     ucs_config_print_flags_t print_flags;
     uint64_t ucp_features;
+    size_t ucp_num_eps;
     unsigned print_opts;
     char *tl_name;
     const char *f;
@@ -48,7 +51,8 @@ int main(int argc, char **argv)
     print_flags  = 0;
     tl_name      = NULL;
     ucp_features = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:u:")) != -1) {
+    ucp_num_eps  = 1;
+    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -85,6 +89,9 @@ int main(int argc, char **argv)
             break;
         case 't':
             tl_name = optarg;
+            break;
+        case 'n':
+            ucp_num_eps = atol(optarg);
             break;
         case 'u':
             for (f = optarg; *f; ++f) {
@@ -151,7 +158,7 @@ int main(int argc, char **argv)
             printf("Please select UCP features using -u switch\n");
             return -1;
         }
-        print_ucp_info(print_opts, print_flags, ucp_features);
+        print_ucp_info(print_opts, print_flags, ucp_features, ucp_num_eps);
     }
 
     return 0;

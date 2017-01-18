@@ -11,7 +11,7 @@
 
 
 void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
-                    uint64_t features)
+                    uint64_t features, size_t estimated_num_eps)
 {
     ucp_config_t *config;
     ucs_status_t status;
@@ -30,7 +30,11 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     }
 
     memset(&params, 0, sizeof(params));
-    params.features = features;
+    params.field_mask        = UCP_PARAM_FIELD_FEATURES |
+                               UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
+    params.features          = features;
+    params.estimated_num_eps = estimated_num_eps;
+
     status = ucp_init(&params, config, &context);
     if (status != UCS_OK) {
         printf("<Failed to create UCP context>\n");

@@ -123,7 +123,12 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         printf("#   < failed to query interface >\n");
     } else {
         printf("#            bandwidth: %-.2f MB/sec\n", iface_attr.bandwidth / UCS_MBYTE);
-        printf("#              latency: %-.0f nsec\n", iface_attr.latency * 1e9);
+        printf("#              latency: %-.0f nsec", iface_attr.latency.overhead * 1e9);
+        if (iface_attr.latency.growth > 0) {
+            printf(" + %.0f * N\n", iface_attr.latency.growth * 1e9);
+        } else {
+            printf("\n");
+        }
         printf("#             overhead: %-.0f nsec\n", iface_attr.overhead * 1e9);
 
         PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
