@@ -572,6 +572,74 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     return 1;
 }
 
+void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
+                                      uct_md_attr_t *md_attr, ucp_ep_config_t *config)
+{
+    size_t rndv_thresh;
+    double md_reg_overhead, md_reg_growth, numerator, denumerator;
+    double diff_percent = (100 - context->config.ext.rndv_perf_diff) / 100;
+
+    ucs_assert(config->key.am_lane != UCP_NULL_LANE);
+    ucs_assert(config->key.lanes[config->key.am_lane] != UCP_NULL_RESOURCE);
+
+    if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
+
+        /* auto */
+        /* Make UCX calculate the active message rndv threshold on its own.
+         * We do it by finding the message size at which AM rndv's latency is worse
+         * than the eager_zcopy latency by a small percentage (that is set by the
+         * user). Starting this message size (rndv_thresh), AM rndv may be used.
+         * The latency function for eager_zcopy is:
+         * [ reg_cost.overhead + size * md_attr->reg_cost.growth +
+         * max(size/bw , size/bcopy_bw) + overhead ]
+         * The latency function for Active message Rendezvous is:
+         * [ latency + overhead + reg_cost.overhead +
+         * size * md_attr->reg_cost.growth + overhead + latency +
+         * max(size/bw , size/bcopy_bw) + latency + overhead + latency ]
+         * Isolating the 'size' yields the rndv_thresh.
+         * The used latency functions for eager_zcopy and rndv are also specified in
+         * the UCX wiki */
+
+        /* If the md doesn't require a memory handle for a zcopy operation
+         * (that may be performed in rndv), then no need to consider the
+         * registration cost since the sender won't register its buffer */
+        md_reg_growth = md_attr->reg_cost.growth;
+        md_reg_overhead = md_attr->reg_cost.overhead;
+        if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+            md_reg_growth = 0;
+            md_reg_overhead = 0;
+        }
+
+        numerator = (4 * (diff_percent) * ucp_tl_iface_latency(context, iface_attr)) +
+                    (((3 * diff_percent) - 1) * iface_attr->overhead) +
+                    ((diff_percent - 1) * md_reg_overhead);
+
+        denumerator = ((1 - diff_percent) * md_reg_growth) +
+                      ((1 - diff_percent) *
+                       ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)));
+
+        if ((numerator != 0) && (denumerator > 0)) {
+            rndv_thresh = numerator / denumerator;
+            ucs_trace("Active Message rendezvous threshold is %zu ( = %f / %f)",
+                      rndv_thresh, numerator, denumerator);
+        } else {
+            rndv_thresh = context->config.ext.rndv_thresh_fallback;
+            ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
+        }
+
+    } else {
+        rndv_thresh = context->config.ext.rndv_thresh;
+    }
+
+    ucs_assert(iface_attr->cap.am.min_zcopy <= iface_attr->cap.am.max_zcopy);
+    /* use rendezvous only starting from minimal zero-copy am size */
+    rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.am.min_zcopy);
+
+    config->rndv.am_thresh      = rndv_thresh;
+    config->rndv.sync_am_thresh = rndv_thresh;
+    ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
+}
+
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 {
     ucp_context_h context = worker->context;
@@ -580,16 +648,18 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_rsc_index_t rsc_index;
     uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
-    double zcopy_thresh, numerator, denumerator;
+    double zcopy_thresh, numerator, denumerator, md_reg_overhead, md_reg_growth;
     size_t rndv_thresh;
 
     /* Default settings */
     config->am.zcopy_thresh       = SIZE_MAX;
     config->am.sync_zcopy_thresh  = -1;
     config->bcopy_thresh          = context->config.ext.bcopy_thresh;
-    config->rndv.thresh           = SIZE_MAX;
-    config->rndv.sync_thresh      = SIZE_MAX;
+    config->rndv.rma_thresh       = SIZE_MAX;
+    config->rndv.sync_rma_thresh  = SIZE_MAX;
     config->rndv.max_get_zcopy    = SIZE_MAX;
+    config->rndv.am_thresh        = SIZE_MAX;
+    config->rndv.sync_am_thresh   = SIZE_MAX;
     config->p2p_lanes             = 0;
 
     /* Collect p2p lanes */
@@ -650,6 +720,9 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 config->am.zcopy_thresh = ucs_max(config->am.zcopy_thresh,
                                                   iface_attr->cap.am.min_zcopy);
             }
+
+            /* calculate an rndv threshold for AM Rendezvous */
+            ucp_ep_config_set_am_rndv_thresh(context, iface_attr, md_attr, config);
         } else {
             config->am.max_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
@@ -716,7 +789,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
                 /* auto */
-                /* Make UCX calculate the rndv threshold on its own.
+                /* Make UCX calculate the rma rndv threshold on its own.
                  * We do it by finding the message size at which rndv and eager_zcopy get
                  * the same latency. Starting this message size (rndv_thresh), rndv's latency
                  * would be lower and the reached bandwidth would be higher.
@@ -730,19 +803,31 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                  * Isolating the 'size' yields the rndv_thresh.
                  * The used latency functions for eager_zcopy and rndv are also specified in
                  * the UCX wiki */
+
+                /* If the md doesn't require a memory handle for a zcopy operation
+                 * (that may be performed in rndv), then no need to consider the
+                 * registration cost since the sender won't register its buffer */
+                md_reg_growth   = md_attr->reg_cost.growth;
+                md_reg_overhead = md_attr->reg_cost.overhead;
+                if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+                    md_reg_growth   = 0;
+                    md_reg_overhead = 0;
+                }
+
                 numerator = (2 * iface_attr->overhead) +
                             (4 * ucp_tl_iface_latency(context, iface_attr)) +
-                            md_attr->reg_cost.overhead;
-                denumerator = (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
-                               md_attr->reg_cost.growth - (1.0 / iface_attr->bandwidth));
+                            md_reg_overhead;
 
-                if (denumerator > 0) {
+                denumerator = (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
+                              md_reg_growth - (1.0 / iface_attr->bandwidth));
+
+                if ((numerator != 0) && (denumerator > 0)) {
                     rndv_thresh = numerator / denumerator;
-                    ucs_trace("rendezvous threshold is %zu ( = %f / %f)",
+                    ucs_trace("zcopy rendezvous threshold is %zu ( = %f / %f)",
                               rndv_thresh, numerator, denumerator);
                 } else {
                     rndv_thresh = context->config.ext.rndv_thresh_fallback;
-                    ucs_trace("rendezvous threshold is %zu", rndv_thresh);
+                    ucs_trace("zcopy rendezvous threshold is %zu", rndv_thresh);
                 }
             } else {
                 /* In order to disable rendezvous, need to set the threshold to
@@ -757,12 +842,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                                                  iface_attr->cap.get.min_zcopy);
 
             config->rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
-            config->rndv.thresh        = rndv_thresh;
-            config->rndv.sync_thresh   = rndv_thresh;
+            config->rndv.rma_thresh    = rndv_thresh;
+            config->rndv.sync_rma_thresh = rndv_thresh;
 
-            ucs_trace("rendezvous threshold is %zu", config->rndv.thresh);
+            ucs_trace("rendezvous (get_zcopy) threshold is %zu", config->rndv.rma_thresh);
         } else {
-            ucs_debug("rendezvous protocol is not supported ");
+            ucs_debug("rendezvous (get_zcopy) protocol is not supported ");
         }
     }
 }
@@ -818,28 +903,33 @@ static void ucp_ep_config_print_md_map(FILE *stream, const char *name,
 
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
                                           size_t max_eager_short,
-                                          size_t zcopy_thresh, size_t rndv_thresh)
+                                          size_t zcopy_thresh,
+                                          size_t rndv_rma_thresh,
+                                          size_t rndv_am_thresh)
 {
-    size_t max_bcopy;
+    size_t max_bcopy, min_rndv;
 
     fprintf(stream, "# %23s: 0", name);
     if (max_eager_short > 0) {
         fprintf(stream, "..<egr/short>..%zu" , max_eager_short + 1);
     }
-    max_bcopy = ucs_min(zcopy_thresh, rndv_thresh);
+
+    min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
+    max_bcopy = ucs_min(zcopy_thresh, min_rndv);
     if (max_eager_short < max_bcopy) {
         fprintf(stream, "..<egr/bcopy>..");
         if (max_bcopy < SIZE_MAX) {
             fprintf(stream, "%zu", max_bcopy);
         }
     }
-    if (zcopy_thresh < rndv_thresh) {
+    if (zcopy_thresh < min_rndv) {
         fprintf(stream, "..<egr/zcopy>..");
-        if (rndv_thresh < SIZE_MAX) {
-            fprintf(stream, "%zu", rndv_thresh);
+        if (min_rndv < SIZE_MAX) {
+            fprintf(stream, "%zu", min_rndv);
         }
     }
-    if (rndv_thresh < SIZE_MAX) {
+
+    if (min_rndv < SIZE_MAX) {
         fprintf(stream, "..<rndv>..");
     }
     fprintf(stream, "(inf)\n");
@@ -898,7 +988,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
             ucp_ep_config_print_md_map(stream, " amo", md_map);
         }
         if (lane == config->key.rndv_lane) {
-            fprintf(stream, " rndv");
+            fprintf(stream, " zcopy_rndv");
         }
         if (lane == config->key.wireup_msg_lane) {
             fprintf(stream, " wireup");
@@ -916,11 +1006,13 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
          ucp_ep_config_print_tag_proto(stream, "tag_send",
                                        config->am.max_eager_short,
                                        config->am.zcopy_thresh,
-                                       config->rndv.thresh);
+                                       config->rndv.rma_thresh,
+                                       config->rndv.am_thresh);
          ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
                                        config->am.max_eager_short,
                                        config->am.sync_zcopy_thresh,
-                                       config->rndv.sync_thresh);
+                                       config->rndv.sync_rma_thresh,
+                                       config->rndv.am_thresh);
      }
 
      if (context->config.features & UCP_FEATURE_RMA) {

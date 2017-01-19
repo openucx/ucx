@@ -84,6 +84,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "is zero or negative",
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh_fallback), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RNDV_PERF_DIFF", "3",
+   "The percentage allowed for performance difference between AM rendezvous and "
+   "the eager_zcopy protocol",
+   ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
+
   {"ZCOPY_THRESH", "auto",
    "Threshold for switching from buffer copy to zero copy protocol",
    ucs_offsetof(ucp_config_t, ctx.zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},

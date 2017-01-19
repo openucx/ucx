@@ -544,13 +544,22 @@ static double ucp_wireup_rndv_score_func(ucp_context_h context,
                                          const uct_iface_attr_t *iface_attr,
                                          const ucp_address_iface_attr_t *remote_iface_attr)
 {
+    double md_reg_growth, md_reg_overhead;
+
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used with the Rendezvous protocol, for
      * how long it would take to transfer it with a certain transport. */
+    md_reg_growth   = md_attr->reg_cost.growth;
+    md_reg_overhead = md_attr->reg_cost.overhead;
+    if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+        md_reg_growth   = 0;
+        md_reg_overhead = 0;
+    }
+
     return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE / iface_attr->bandwidth) +
                 ucp_tl_iface_latency(context, iface_attr) +
-                iface_attr->overhead + md_attr->reg_cost.overhead +
-                (UCP_WIREUP_RNDV_TEST_MSG_SIZE * md_attr->reg_cost.growth));
+                iface_attr->overhead + md_reg_overhead +
+                (UCP_WIREUP_RNDV_TEST_MSG_SIZE * md_reg_growth));
 }
 
 static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
@@ -607,7 +616,8 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
 static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
-                                             ucp_lane_index_t *num_lanes_p)
+                                             ucp_lane_index_t *num_lanes_p,
+                                             int usage)
 {
     ucp_wireup_criteria_t criteria;
     ucp_rsc_index_t rsc_index;
@@ -622,10 +632,12 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
     /* Select one lane for the Rendezvous protocol (for the actual data. not for rts/rtr) */
     criteria.title              = "rendezvous";
     criteria.local_md_flags     = UCT_MD_FLAG_REG;
-    criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
+    criteria.remote_md_flags    = UCT_MD_FLAG_REG;
     criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
+                                  UCT_IFACE_FLAG_PUT_ZCOPY |
                                   UCT_IFACE_FLAG_PENDING;
-    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY |
+                                  UCT_IFACE_FLAG_PUT_ZCOPY ;
     criteria.calc_score         = ucp_wireup_rndv_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {
@@ -639,7 +651,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
         (strstr(ep->worker->context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni") == NULL)) {
          ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  address_list[addr_index].md_index, score,
-                                 UCP_WIREUP_LANE_USAGE_RNDV);
+                                 usage);
     }
 
     return UCS_OK;
@@ -739,7 +751,8 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
     }
 
     status = ucp_wireup_add_rndv_lane(ep, address_count, address_list,
-                                      lane_descs, &key->num_lanes);
+                                      lane_descs, &key->num_lanes,
+                                      UCP_WIREUP_LANE_USAGE_RNDV);
     if (status != UCS_OK) {
         return status;
     }
