@@ -1,6 +1,6 @@
 /*
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (C) UT-Battelle, LLC. 2014-2016. ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -2181,12 +2181,12 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  * @ingroup UCP_COMM
  * @brief Atomic operation requested for ucp_atomic_post
  *
- * This enumeration defines which atomic memory operation should be performed
- * by the ucp_atomic_post family of fuctions. All of these are send only
- * and will not give back a request handle.
+ * This enumeration defines the type of atomic memory operation should be 
+ * performed by the ucp_atomic_post family of fuctions. All of these are
+ * non-fetching atomics and will not result in a request handle.
  */
 typedef enum {
-    UCP_ATOMIC_POST_OP_ADD, /* Atomic add */
+    UCP_ATOMIC_POST_OP_ADD, /**< Atomic add */
     UCP_ATOMIC_POST_OP_LAST,
 } ucp_atomic_post_op_t;
 
@@ -2199,9 +2199,9 @@ typedef enum {
  * will fetch data from the remote node
  */
 typedef enum {
-    UCP_ATOMIC_FETCH_OP_FADD, /* Atomic Fetch and add */
-    UCP_ATOMIC_FETCH_OP_SWAP, /* Atomic swap */
-    UCP_ATOMIC_FETCH_OP_CSWAP, /* Atomic conditional swap */
+    UCP_ATOMIC_FETCH_OP_FADD, /**< Atomic Fetch and add */
+    UCP_ATOMIC_FETCH_OP_SWAP, /**< Atomic swap */
+    UCP_ATOMIC_FETCH_OP_CSWAP, /**< Atomic conditional swap */
     UCP_ATOMIC_FETCH_OP_LAST,
 } ucp_atomic_fetch_op_t;
 
@@ -2209,13 +2209,17 @@ typedef enum {
  * @ingroup UCP_COMM
  * @brief Post an atomic memory operation.
  *
- * This routine will post an atomic memory operation to remote memory.
- * Return from the function does not guarantee any completion. A user must
- * call @ref ucp_ep_flush to guarantee local and remote completion.
+ * This routine posts an atomic memory operation to a remote value.
+ * The remote value is described by the combination of the remote
+ * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
+ * @a rkey.
+ * Return from the function does not guarantee completion. A user must
+ * call @ref ucp_ep_flush or @ref ucp_worker_flush to guarentee that the remote
+ * value has been updated.
  *
  * @param [in] ep          UCP endpoint.
  * @param [in] opcode      One of @ref ucp_atomic_post_op_t.
- * @param [in] value       Source operand for AMO.
+ * @param [in] value       Source operand for the atomic operation.
  * @param [in] op_size     Size of value in bytes
  * @param [in] remote_addr Remote address to operate on.
  * @param [in] rkey        Remote key handle for the remote address.
@@ -2230,14 +2234,17 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  * @brief Post an atomic fetch operation.
  *
  * This routine will post an atomic fetch operation to remote memory.
- * The routine is non-blocking and therefore returns immediately, however the 
- * actual send operation may be delayed. The AMO is not considered complete
- * until the values in remote and local memory are completed. If the AMO 
+ * The remote value is described by the combination of the remote
+ * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
+ * @a rkey.
+ * The routine is non-blocking and therefore returns immediately. However the 
+ * actual atomic operation may be delayed. The atomic operation is not considered complete
+ * until the values in remote and local memory are completed. If the atomic operation 
  * operation is completed immediately the routine returns UCS_OK and the 
- * call-back function @a cb is @b not invoked. If the operation is @b not 
+ * call-back reoutine @a cb is @b not invoked. If the operation is @b not 
  * completed immediately and no error reported then the UCP library will 
- * schedule to invoke the call-back @a cb whenever the AMO operation will be
- * completed. In other words, the completion of a message can be signaled by 
+ * schedule to invoke the call-back routine @a cb whenever the atomic operation will be
+ * completed. In other words, the completion of an atomic operation can be signaled by 
  * the return code or the call-back.
  *
  * @note The user should not modify any part of the @a result after this
@@ -2245,8 +2252,8 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  *
  * @param [in] ep          UCP endpoint.
  * @param [in] opcode      One of @ref ucp_atomic_fetch_op_t.
- * @param [in] value       Source operand for AMO. In the case of CSWAP this
- *                         is the conditional for the swap. For SWAP this is
+ * @param [in] value       Source operand for atomic operation. In the case of CSWAP
+ *                         this is the conditional for the swap. For SWAP this is
  *                         the value to be placed in remote memory.
  * @param [inout] result   Local memory address to store resulting fetch to.
  *                         In the case of CSWAP the value in result will be
@@ -2255,20 +2262,20 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  * @param [in] op_size     Size of value in bytes and pointer type for result
  * @param [in] remote_addr Remote address to operate on.
  * @param [in] rkey        Remote key handle for the remote address.
- * @param [in] cb          Callback function that is invoked whenever the
+ * @param [in] cb          Call-back function that is invoked whenever the
  *                         send operation is completed. It is important to note
- *                         that the call-back is only invoked in a case when
+ *                         that the call-back function is only invoked in a case when
  *                         the operation cannot be completed in place.
  *
- * @return UCS_OK           - The AMO operation was completed immediately.
- * @return UCS_PTR_IS_ERR(_ptr) - The AMO operation failed.
- * @return otherwise        - Operation was scheduled and can be
- *                          completed at any point in time. The request handle
- *                          is returned to the application in order to track
- *                          progress of the message. The application is
- *                          responsible to released the handle using
- *                          @ref ucp_request_release "ucp_request_release()"
- *                          routine.
+ * @return UCS_OK               - The operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
+ * @return otherwise            - Operation was scheduled and can be
+ *                              completed at any point in time. The request handle
+ *                              is returned to the application in order to track
+ *                              progress of the operation. The application is
+ *                              responsible to released the handle using
+ *                              @ref ucp_request_release "ucp_request_release()"
+ *                              routine.
  */
 ucs_status_ptr_t
 ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
