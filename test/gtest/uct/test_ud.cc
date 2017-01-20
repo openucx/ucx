@@ -111,9 +111,8 @@ public:
 
     void validate_connect(uct_ud_ep_t *ep, unsigned value,
                           double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
-        ucs_time_t start_time = ucs_get_time();
-        while ((ep->dest_ep_id != value) &&
-               (ucs_get_time() < start_time + ucs_time_from_sec(timeout_sec))) {
+        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
+        while ((ep->dest_ep_id != value) && (ucs_get_time() < timeout)) {
             progress();
         }
         EXPECT_EQ(value, ep->dest_ep_id);
@@ -123,9 +122,9 @@ public:
 
     void validate_recv(uct_ud_ep_t *ep, unsigned value,
                        double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
-        ucs_time_t start_time = ucs_get_time() + ucs_time_from_sec(10.0);
+        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
         while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value) &&
-               (ucs_get_time() < start_time + ucs_time_from_sec(timeout_sec))) {
+               (ucs_get_time() < timeout)) {
             progress();
         }
         EXPECT_EQ(value, ucs_frag_list_sn(&ep->rx.ooo_pkts));
