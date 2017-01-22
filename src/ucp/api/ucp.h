@@ -1313,11 +1313,10 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  */
 typedef enum ucp_mem_advice {
     UCP_MADV_NORMAL   = 0,  /**< No special treatment */
-    UCP_MADV_WILLNEED,      /**< This advice be used on the memory that was 
-                                 mapped with the @ref UCP_MEM_MAP_NONBLOCK 
-                                 flag in order to speed up memory mapping and
-                                 to avoid page faults when the memory is
-                                 accessed for the first time. */
+    UCP_MADV_WILLNEED,      /**< can be used on the memory mapped with 
+                                 @ref UCP_MEM_MAP_NONBLOCK to speed up memory
+                                 mapping and to avoid page faults when 
+                                 the memory is accessed for the first time. */
 } ucp_mem_advice_t;
 
 

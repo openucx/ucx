@@ -1075,7 +1075,7 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  */
 typedef enum uct_mem_advice {
     UCT_MADV_NORMAL  = 0,  /**< No special treatment */
-    UCT_MADV_WILLNEED      /**< can be used on the memory mapped with the
+    UCT_MADV_WILLNEED      /**< can be used on the memory mapped with 
                                 @ref UCT_MD_MEM_FLAG_NONBLOCK to speed up 
                                 memory mapping and to avoid page faults when
                                 the memory is accessed for the first time. */
