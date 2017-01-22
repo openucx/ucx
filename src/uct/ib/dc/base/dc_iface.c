@@ -287,6 +287,10 @@ static inline ucs_status_t uct_dc_iface_flush_dcis(uct_dc_iface_t *iface)
     int is_flush_done = 1;
 
     for (i = 0; i < iface->tx.ndci; i++) {
+        if ((iface->tx.dcis[i].ep != NULL) &&
+             uct_dc_ep_fc_wait_for_grant(iface->tx.dcis[i].ep)) {
+            return UCS_ERR_NO_RESOURCE;
+        }
         if (uct_dc_iface_flush_dci(iface, i) != UCS_OK) {
             is_flush_done = 0;
         }
@@ -419,6 +423,9 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
         /* Peer granted resources, so update wnd */
         ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
 
+        /* Clear the flag for flush to complete  */
+        ep->fc.flags &= ~UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
+
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
         UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
 
@@ -440,9 +447,6 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
             ucs_arbiter_dispatch(uct_dc_iface_tx_waitq(iface), 1,
                                  uct_dc_iface_dci_do_pending_tx, NULL);
         }
-
-        /* Grant is received, clear the flag for flush to complete  */
-        ep->fc.flags &= ~UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
     }
 
     return UCS_OK;

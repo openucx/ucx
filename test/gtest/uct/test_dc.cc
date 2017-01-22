@@ -437,7 +437,7 @@ UCS_TEST_P(test_dc_flow_control, flush)
     send_am_messages(m_e1, wnd, UCS_OK);
     progress_loop();
 
-    EXPECT_EQ(uct_ep_flush(m_e1->ep(0), 0, NULL), UCS_INPROGRESS);
+    EXPECT_EQ(uct_ep_flush(m_e1->ep(0), 0, NULL), UCS_ERR_NO_RESOURCE);
 
     /* Enable send capabilities of m_e2 and send AM message
      * to force pending queue dispatch */

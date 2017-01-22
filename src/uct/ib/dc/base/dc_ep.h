@@ -264,6 +264,11 @@ static inline ucs_status_t uct_dc_iface_dci_get_dcs(uct_dc_iface_t *iface, uct_d
     return UCS_ERR_NO_RESOURCE;
 }
 
+static UCS_F_ALWAYS_INLINE int uct_dc_ep_fc_wait_for_grant(uct_dc_ep_t *ep)
+{
+    return ep->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
+}
+
 ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep);
 
 

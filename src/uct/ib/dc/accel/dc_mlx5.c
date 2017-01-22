@@ -491,8 +491,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
     }
 
     if (status == UCS_INPROGRESS) {
-        ucs_assert((ep->super.dci != UCT_DC_EP_NO_DCI) ||
-                   (ep->super.fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT));
+        ucs_assert(ep->super.dci != UCT_DC_EP_NO_DCI);
         uct_dc_mlx5_iface_add_send_comp(iface, ep, comp);
     }
     return status;
