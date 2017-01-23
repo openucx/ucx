@@ -802,7 +802,9 @@ err:
 
 static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
-    free(perf->ucp.iov);
+    if (UCP_PERF_DATATYPE_IOV == perf->params.ucp.datatype) {
+        free(perf->ucp.iov);
+    }
     ucp_mem_unmap(perf->ucp.context, perf->ucp.recv_memh);
     ucp_mem_unmap(perf->ucp.context, perf->ucp.send_memh);
 }
