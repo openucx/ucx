@@ -20,7 +20,7 @@ static int ucp_tag_rndv_is_get_op_possible(ucp_rndv_rts_hdr_t *rndv_rts_hdr, ucp
         iface_attr = ucp_ep_get_iface_attr(ep, rndv_lane);
         md_flags = ucp_ep_md_rndv_flags(ep);
 
-        return ((((rndv_rts_hdr->flags & UCP_TAG_RNDV_PACKED_RKEY) &&
+        return ((((rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) &&
                   (md_flags & UCT_MD_FLAG_REG)) ||
                 (!(md_flags & UCT_MD_FLAG_NEED_RKEY))) &&
                 (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY));
@@ -48,7 +48,7 @@ static size_t ucp_tag_rndv_pack_rkey(ucp_request_t *sreq,
         /* if the send buffer was registered, send the rkey */
         uct_md_mkey_pack(ucp_ep_md(ep, ucp_ep_get_rndv_get_lane(ep)),
                                    sreq->send.state.dt.contig.memh, rndv_rts_hdr + 1);
-        rndv_rts_hdr->flags |= UCP_TAG_RNDV_PACKED_RKEY;
+        rndv_rts_hdr->flags |= UCP_RNDV_RTS_FLAG_PACKED_RKEY;
         packed_rkey = ucp_ep_md_attr(ep, ucp_ep_get_rndv_get_lane(ep))->rkey_packed_size;
     }
 
@@ -310,7 +310,7 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
         rndv_req->send.proto.remote_request = rndv_rts_hdr->sreq.reqptr;
         rndv_req->send.proto.rreq_ptr       = (uintptr_t) rreq;
     } else {
-        if (rndv_rts_hdr->flags & UCP_TAG_RNDV_PACKED_RKEY) {
+        if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_PACKED_RKEY) {
             uct_rkey_unpack(rndv_rts_hdr + 1, &rndv_req->send.rndv_get.rkey_bundle);
         }
         rndv_req->send.length         = rndv_rts_hdr->size;
@@ -706,9 +706,17 @@ ucp_rndv_data_handler(void *arg, void *data, size_t length, void *desc)
     status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.count,
                                   rreq->recv.datatype, &rreq->recv.state,
                                   data + hdr_len, recv_len, 0);
-    rreq->recv.state.offset += recv_len;
+    if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
+        rreq->recv.state.offset += recv_len;
+        return status;
+    } else {
+        /* in case of an error, return an ok status so that the transport
+         * would release the descriptor */
 
-    return status;
+        /* TODO In case an error status is returned from ucp_tag_process_recv,
+         * need to discard the rest of the messages */
+        return UCS_OK;
+    }
 }
 
 static ucs_status_t
@@ -730,7 +738,7 @@ ucp_rndv_data_last_handler(void *arg, void *data, size_t length, void *desc)
 
     ucp_request_complete_recv(rreq, status, &rreq->recv.info);
 
-    return status;
+    return UCS_OK;
 }
 
 static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,

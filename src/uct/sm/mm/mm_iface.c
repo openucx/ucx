@@ -227,9 +227,6 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
         if (status != UCS_OK) {
             /* assign a new receive descriptor to this FIFO element.*/
             uct_mm_assign_desc_to_fifo_elem(iface, elem, 0);
-            if (status != UCS_INPROGRESS) {
-                ucs_mpool_put(desc);
-            }
         }
     }
     return status;

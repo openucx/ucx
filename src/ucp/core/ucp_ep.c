@@ -600,15 +600,7 @@ void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *i
          * The used latency functions for eager_zcopy and rndv are also specified in
          * the UCX wiki */
 
-        /* If the md doesn't require a memory handle for a zcopy operation
-         * (that may be performed in rndv), then no need to consider the
-         * registration cost since the sender won't register its buffer */
-        md_reg_growth = md_attr->reg_cost.growth;
-        md_reg_overhead = md_attr->reg_cost.overhead;
-        if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
-            md_reg_growth = 0;
-            md_reg_overhead = 0;
-        }
+        ucp_ep_set_reg_params(md_attr, &md_reg_overhead, &md_reg_growth);
 
         numerator = (4 * (diff_percent) * ucp_tl_iface_latency(context, iface_attr)) +
                     (((3 * diff_percent) - 1) * iface_attr->overhead) +
@@ -637,7 +629,6 @@ void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *i
 
     config->rndv.am_thresh      = rndv_thresh;
     config->rndv.sync_am_thresh = rndv_thresh;
-    ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
 }
 
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
@@ -804,15 +795,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                  * The used latency functions for eager_zcopy and rndv are also specified in
                  * the UCX wiki */
 
-                /* If the md doesn't require a memory handle for a zcopy operation
-                 * (that may be performed in rndv), then no need to consider the
-                 * registration cost since the sender won't register its buffer */
-                md_reg_growth   = md_attr->reg_cost.growth;
-                md_reg_overhead = md_attr->reg_cost.overhead;
-                if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
-                    md_reg_growth   = 0;
-                    md_reg_overhead = 0;
-                }
+                ucp_ep_set_reg_params(md_attr, &md_reg_overhead, &md_reg_growth);
 
                 numerator = (2 * iface_attr->overhead) +
                             (4 * ucp_tl_iface_latency(context, iface_attr)) +

@@ -549,12 +549,8 @@ static double ucp_wireup_rndv_score_func(ucp_context_h context,
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used with the Rendezvous protocol, for
      * how long it would take to transfer it with a certain transport. */
-    md_reg_growth   = md_attr->reg_cost.growth;
-    md_reg_overhead = md_attr->reg_cost.overhead;
-    if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
-        md_reg_growth   = 0;
-        md_reg_overhead = 0;
-    }
+
+    ucp_ep_set_reg_params(md_attr, &md_reg_overhead, &md_reg_growth);
 
     return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE / iface_attr->bandwidth) +
                 ucp_tl_iface_latency(context, iface_attr) +
@@ -632,12 +628,10 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
     /* Select one lane for the Rendezvous protocol (for the actual data. not for rts/rtr) */
     criteria.title              = "rendezvous";
     criteria.local_md_flags     = UCT_MD_FLAG_REG;
-    criteria.remote_md_flags    = UCT_MD_FLAG_REG;
+    criteria.remote_md_flags    = UCT_MD_FLAG_REG;  /* TODO not all ucts need reg on remote side */
     criteria.remote_iface_flags = UCT_IFACE_FLAG_GET_ZCOPY |
-                                  UCT_IFACE_FLAG_PUT_ZCOPY |
                                   UCT_IFACE_FLAG_PENDING;
-    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY |
-                                  UCT_IFACE_FLAG_PUT_ZCOPY ;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_GET_ZCOPY;
     criteria.calc_score         = ucp_wireup_rndv_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep), UCP_FEATURE_WAKEUP)) {

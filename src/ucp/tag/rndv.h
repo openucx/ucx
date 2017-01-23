@@ -14,7 +14,7 @@
 #include <ucp/proto/proto.h>
 
 enum {
-    UCP_TAG_RNDV_PACKED_RKEY  = UCS_BIT(0)
+    UCP_RNDV_RTS_FLAG_PACKED_RKEY  = UCS_BIT(0)
 };
 
 /*

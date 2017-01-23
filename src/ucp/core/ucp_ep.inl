@@ -111,6 +111,22 @@ static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 #endif
 }
 
+static inline void ucp_ep_set_reg_params(const uct_md_attr_t *md_attr,
+                                                double *md_reg_overhead,
+                                                double *md_reg_growth)
+{
+    /* If the md doesn't require a memory handle for a zcopy operation
+     * (that may be performed in rndv), then no need to consider the
+     * registration cost since the sender won't register its buffer */
+    if (md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) {
+        *md_reg_overhead = md_attr->reg_cost.overhead;
+        *md_reg_growth   = md_attr->reg_cost.growth;
+    } else {
+        *md_reg_overhead = 0;
+        *md_reg_growth   = 0;
+    }
+}
+
 static inline ucp_md_lane_map_t ucp_ep_md_map_expand(ucp_md_map_t md_map)
 {
     /* "Broadcast" md_map to all bit groups in ucp_md_lane_map_t, so that

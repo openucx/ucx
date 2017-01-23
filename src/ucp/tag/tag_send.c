@@ -38,8 +38,7 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
                (length >= rndv_rma_thresh)) {
         /* RMA rendezvous */
         ucp_tag_send_start_rndv(req);
-    } else if ((config->key.rndv_lane == UCP_NULL_RESOURCE) &&
-               (length >= rndv_am_thresh)) {
+    } else if (length >= rndv_am_thresh) {
         /* AM rendezvous */
         ucp_tag_send_start_rndv(req);
     } else if (length < zcopy_thresh) {
