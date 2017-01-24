@@ -124,6 +124,18 @@ void test_ucp_tag::wait_and_validate(request *req)
     request_release(req);
 }
 
+void test_ucp_tag::wait_for_unexpected_msg(ucs_queue_head_t unexpected_q,
+                                           double sec)
+{
+    /* Wait for some message to be added to unexpected queue */
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(sec);
+
+    do {
+        short_progress_loop();
+    } while (ucs_queue_is_empty(&unexpected_q) &&
+            (ucs_get_time() < timeout));
+}
+
 test_ucp_tag::request *
 test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, int buf_index)

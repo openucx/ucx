@@ -150,7 +150,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     /* receiver - get the RTS and put it into unexpected */
-    short_progress_loop();
+    wait_for_unexpected_msg(receiver().ucph()->tag.unexpected, 10.0);
 
     /* receiver - match the rts, remove it from unexpected and return it */
     message = ucp_tag_probe_nb(receiver().worker(), 0x1337, 0xffff, 1, &info);

@@ -363,12 +363,7 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
     } else {
         sreq = do_send(sendbuf, count, send_dt, sync);
 
-        /* Wait for some message to be added to unexpected queue */
-        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
-        do {
-            short_progress_loop();
-        } while (ucs_queue_is_empty(&receiver().ucph()->tag.unexpected) &&
-                 (ucs_get_time() < timeout));
+        wait_for_unexpected_msg(receiver().ucph()->tag.unexpected, 10.0);
 
         if (sync) {
             EXPECT_FALSE(sreq->completed);
