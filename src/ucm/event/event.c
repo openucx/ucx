@@ -23,6 +23,7 @@
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 static pthread_rwlock_t ucm_event_lock = PTHREAD_RWLOCK_INITIALIZER;
@@ -122,7 +123,18 @@ static void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
 
 static void ucm_event_enter()
 {
-    pthread_rwlock_rdlock(&ucm_event_lock);
+    int ret = pthread_rwlock_rdlock(&ucm_event_lock);
+    if (ret != 0) {
+        ucm_fatal("pthread_rwlock_rdlock() failed: %s", strerror(ret));
+    }
+}
+
+static void ucm_event_enter_exclusive()
+{
+    int ret = pthread_rwlock_wrlock(&ucm_event_lock);
+    if (ret != 0) {
+        ucm_fatal("pthread_rwlock_wrlock() failed: %s", strerror(ret));
+    }
 }
 
 static void ucm_event_leave()
@@ -320,24 +332,24 @@ void ucm_event_handler_add(ucm_event_handler_t *handler)
 {
     ucm_event_handler_t *elem;
 
-    pthread_rwlock_wrlock(&ucm_event_lock);
+    ucm_event_enter_exclusive();
     ucs_list_for_each(elem, &ucm_event_handlers, list) {
         if (handler->priority < elem->priority) {
             ucs_list_insert_before(&elem->list, &handler->list);
-            pthread_rwlock_unlock(&ucm_event_lock);
+            ucm_event_leave();
             return;
         }
     }
 
     ucs_list_add_tail(&ucm_event_handlers, &handler->list);
-    pthread_rwlock_unlock(&ucm_event_lock);
+    ucm_event_leave();
 }
 
 void ucm_event_handler_remove(ucm_event_handler_t *handler)
 {
-    pthread_rwlock_wrlock(&ucm_event_lock);
+    ucm_event_enter_exclusive();
     ucs_list_del(&handler->list);
-    pthread_rwlock_unlock(&ucm_event_lock);
+    ucm_event_leave();
 }
 
 static ucs_status_t ucm_event_install(int events)
@@ -415,16 +427,16 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
 
 void ucm_set_external_event(int events)
 {
-    pthread_rwlock_wrlock(&ucm_event_lock);
+    ucm_event_enter_exclusive();
     ucm_external_events |= events;
-    pthread_rwlock_unlock(&ucm_event_lock);
+    ucm_event_leave();
 }
 
 void ucm_unset_external_event(int events)
 {
-    pthread_rwlock_wrlock(&ucm_event_lock);
+    ucm_event_enter_exclusive();
     ucm_external_events &= ~events;
-    pthread_rwlock_unlock(&ucm_event_lock);
+    ucm_event_leave();
 }
 
 void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
@@ -432,7 +444,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
     ucm_event_handler_t *elem, *tmp;
     UCS_LIST_HEAD(gc_list);
 
-    pthread_rwlock_wrlock(&ucm_event_lock);
+    ucm_event_enter_exclusive();
     ucs_list_for_each_safe(elem, tmp, &ucm_event_handlers, list) {
         if ((cb == elem->cb) && (arg == elem->arg)) {
             elem->events &= ~events;
@@ -442,7 +454,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
             }
         }
     }
-    pthread_rwlock_unlock(&ucm_event_lock);
+    ucm_event_leave();
 
     /* Do not release memory while we hold event lock - may deadlock */
     while (!ucs_list_is_empty(&gc_list)) {
