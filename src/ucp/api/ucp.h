@@ -1310,6 +1310,8 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  * @ingroup UCP_MEM
  * @brief list of UCP memory use advice.
  *
+ * The enumeration list describes memory advice supported by @ref
+ * ucp_mem_advise() function.
  */
 typedef enum ucp_mem_advice {
     UCP_MADV_NORMAL   = 0,  /**< No special treatment */
