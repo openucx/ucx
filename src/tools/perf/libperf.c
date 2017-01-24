@@ -1149,10 +1149,6 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
 
     ucp_params.field_mask      = UCP_PARAM_FIELD_FEATURES;
     ucp_params.features        = features;
-    ucp_params.request_size    = 0;
-    ucp_params.request_init    = NULL;
-    ucp_params.request_cleanup = NULL;
-    ucp_params.mt_workers_shared = 0; /* TODO remove when ucp_init is fixed */
 
     status = ucp_init(&ucp_params, config, &perf->ucp.context);
     ucp_config_release(config);

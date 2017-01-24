@@ -621,6 +621,56 @@ err:
     return status;
 }
 
+static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
+                             ucp_mt_type_t mt_type)
+{
+    if (params->field_mask & UCP_PARAM_FIELD_FEATURES) {
+        context->config.features = params->features;
+    } else {
+        context->config.features = 0;
+    }
+    if (!context->config.features) {
+        ucs_warn("empty features set passed to ucp context create");
+    }
+
+    if (params->field_mask & UCP_PARAM_FIELD_TAG_SENDER_MASK) {
+        context->config.tag_sender_mask = params->tag_sender_mask;
+    } else {
+        context->config.tag_sender_mask = 0;
+    }
+
+    if (params->field_mask & UCP_PARAM_FIELD_REQUEST_SIZE) {
+        context->config.request.size = params->request_size;
+    } else {
+        context->config.request.size = 0;
+    }
+
+    if (params->field_mask & UCP_PARAM_FIELD_REQUEST_INIT) {
+        context->config.request.init = params->request_init;
+    } else {
+        context->config.request.init = NULL;
+    }
+
+    if (params->field_mask & UCP_PARAM_FIELD_REQUEST_CLEANUP) {
+        context->config.request.cleanup = params->request_cleanup;
+    } else {
+        context->config.request.cleanup = NULL;
+    }
+
+    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
+        context->config.est_num_eps = params->estimated_num_eps;
+    } else {
+        context->config.est_num_eps = 1;
+    }
+
+    if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
+        params->mt_workers_shared) {
+        context->mt_lock.mt_type = mt_type;
+    } else {
+        context->mt_lock.mt_type = UCP_MT_TYPE_NONE;
+    }
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -629,35 +679,15 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     const char *method_name;
     ucs_status_t status;
 
-    if (0 == params->features) {
-        ucs_warn("empty features set passed to ucp context create");
-    }
-
-    if (params->mt_workers_shared == 0) {
-        context->mt_lock.mt_type = UCP_MT_TYPE_NONE;
-    } else if (config->ctx.use_mt_mutex) {
-        context->mt_lock.mt_type = UCP_MT_TYPE_MUTEX;
-    } else {
-        context->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
-    }
+    ucp_apply_params(context, params,
+                     config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
+                                              : UCP_MT_TYPE_SPINLOCK);
+    context->config.ext = config->ctx;
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
      * routines */
     UCP_THREAD_LOCK_INIT(&context->mt_lock);
-
-    context->config.features        = params->features;
-    context->config.tag_sender_mask = params->tag_sender_mask;
-    context->config.request.size    = params->request_size;
-    context->config.request.init    = params->request_init;
-    context->config.request.cleanup = params->request_cleanup;
-    context->config.ext             = config->ctx;
-
-    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
-        context->config.est_num_eps = params->estimated_num_eps;
-    } else {
-        context->config.est_num_eps = 1;
-    }
 
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
