@@ -254,17 +254,15 @@ ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 
     if (iface->super.config.fc_enabled) {
         UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
-        if (ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) {
-            status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_FLAG_HARD_REQ,
+        if ((ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) &&
+            !(ep->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT)) {
+            status = uct_rc_fc_ctrl(&ep->super.super,
+                                    UCT_RC_EP_FC_FLAG_HARD_REQ,
                                     NULL);
             if (status != UCS_OK) {
                 return status;
             }
             ep->fc.flags |= UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT;
-            /* Update win to avoid sending another fc request if the message,
-             * which invoked this check had not been sent (and therefore FC win
-             * was not decreased)*/
-            UCT_RC_UPDATE_FC_WND(&iface->super, &ep->fc);
         }
     } else {
         /* Set fc_wnd to max, to send as much as possible without checks */

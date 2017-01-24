@@ -288,7 +288,7 @@ static inline ucs_status_t uct_dc_iface_flush_dcis(uct_dc_iface_t *iface)
 
     for (i = 0; i < iface->tx.ndci; i++) {
         if ((iface->tx.dcis[i].ep != NULL) &&
-             uct_dc_ep_fc_wait_for_grant(iface->tx.dcis[i].ep)) {
+            uct_dc_ep_fc_wait_for_grant(iface->tx.dcis[i].ep)) {
             return UCS_ERR_NO_RESOURCE;
         }
         if (uct_dc_iface_flush_dci(iface, i) != UCS_OK) {
