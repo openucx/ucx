@@ -1147,6 +1147,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf, ucx_perf_params_t *
         goto err;
     }
 
+    ucp_params.field_mask      = UCP_PARAM_FIELD_FEATURES;
     ucp_params.features        = features;
     ucp_params.request_size    = 0;
     ucp_params.request_init    = NULL;
