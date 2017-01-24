@@ -2241,7 +2241,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  * actual atomic operation may be delayed. The atomic operation is not considered complete
  * until the values in remote and local memory are completed. If the atomic operation 
  * operation is completed immediately the routine returns UCS_OK and the 
- * call-back reoutine @a cb is @b not invoked. If the operation is @b not 
+ * call-back routine @a cb is @b not invoked. If the operation is @b not 
  * completed immediately and no error reported then the UCP library will 
  * schedule to invoke the call-back routine @a cb whenever the atomic operation will be
  * completed. In other words, the completion of an atomic operation can be signaled by 
