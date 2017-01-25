@@ -24,6 +24,7 @@
 #include <sys/ipc.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 
 static pthread_rwlock_t ucm_event_lock = PTHREAD_RWLOCK_INITIALIZER;
@@ -121,20 +122,25 @@ static void ucm_event_dispatch(ucm_event_type_t event_type, ucm_event_t *event)
     }
 }
 
+#define ucm_event_lock(_lock_func) \
+    { \
+        int ret; \
+        do { \
+            ret = _lock_func(&ucm_event_lock); \
+        } while (ret == EAGAIN); \
+        if (ret != 0) { \
+            ucm_fatal("%s() failed: %s", #_lock_func, strerror(ret)); \
+        } \
+    }
+
 static void ucm_event_enter()
 {
-    int ret = pthread_rwlock_rdlock(&ucm_event_lock);
-    if (ret != 0) {
-        ucm_fatal("pthread_rwlock_rdlock() failed: %s", strerror(ret));
-    }
+    ucm_event_lock(pthread_rwlock_rdlock);
 }
 
 static void ucm_event_enter_exclusive()
 {
-    int ret = pthread_rwlock_wrlock(&ucm_event_lock);
-    if (ret != 0) {
-        ucm_fatal("pthread_rwlock_wrlock() failed: %s", strerror(ret));
-    }
+    ucm_event_lock(pthread_rwlock_wrlock);
 }
 
 static void ucm_event_leave()
