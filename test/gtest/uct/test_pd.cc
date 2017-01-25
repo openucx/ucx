@@ -202,6 +202,52 @@ UCS_TEST_P(test_pd, reg_perf) {
     }
 }
 
+UCS_TEST_P(test_pd, reg_advise) {
+    size_t size;
+    ucs_status_t status;
+    void *address;
+    uct_mem_h memh;
+
+    check_caps(UCT_MD_FLAG_REG|UCT_MD_FLAG_ADVISE, "registration&advise");
+
+    size = 128 * 1024 * 1024;
+    address = malloc(size);
+    ASSERT_TRUE(address != NULL);
+
+    status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+
+    status = uct_md_mem_advise(pd(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    EXPECT_UCS_OK(status);
+
+    status = uct_md_mem_dereg(pd(), memh);
+    EXPECT_UCS_OK(status);
+    free(address);
+}
+
+UCS_TEST_P(test_pd, alloc_advise) {
+    size_t size, orig_size;
+    ucs_status_t status;
+    void *address;
+    uct_mem_h memh;
+
+    check_caps(UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_ADVISE, "allocation&advise");
+
+    orig_size = size = 128 * 1024 * 1024;
+
+    status = uct_md_mem_alloc(pd(), &size, &address, UCT_MD_MEM_FLAG_NONBLOCK, "test", &memh);
+    ASSERT_UCS_OK(status);
+    EXPECT_GE(size, orig_size);
+    EXPECT_TRUE(address != NULL);
+    EXPECT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+
+    status = uct_md_mem_advise(pd(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
+    EXPECT_UCS_OK(status);
+
+    memset(address, 0xBB, size);
+    uct_md_mem_free(pd(), memh);
+}
 
 #define UCT_PD_INSTANTIATE_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_PD_INSTANTIATE_TEST_CASE, _test_case, \

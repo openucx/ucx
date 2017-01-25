@@ -238,7 +238,7 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem)
     if ((mem->method != UCT_ALLOC_METHOD_MD) &&
         (mem->memh != UCT_INVALID_MEM_HANDLE))
     {
-        uct_md_mem_dereg(mem->md, mem->memh);
+        (void)uct_md_mem_dereg(mem->md, mem->memh);
     }
     uct_mem_free(mem);
 }

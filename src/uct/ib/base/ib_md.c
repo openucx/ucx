@@ -106,8 +106,8 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    ucs_offsetof(uct_ib_md_config_t, odp.numa_policy),
    UCS_CONFIG_TYPE_ENUM(uct_ib_numa_policy_names)},
 
-  {"ODP_PREFETCH", "y",
-   "Prefetch memory regions created with ODP.\n",
+  {"ODP_PREFETCH", "n",
+   "Force prefetch of memory regions created with ODP.\n",
    ucs_offsetof(uct_ib_md_config_t, odp.prefetch), UCS_CONFIG_TYPE_BOOL},
 
   {"ODP_MAX_SIZE", "auto",
@@ -136,7 +136,8 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
     md_attr->cap.flags     = UCT_MD_FLAG_REG       |
                              UCT_MD_FLAG_NEED_MEMH |
-                             UCT_MD_FLAG_NEED_RKEY;
+                             UCT_MD_FLAG_NEED_RKEY |
+                             UCT_MD_FLAG_ADVISE;
     md_attr->rkey_packed_size = sizeof(uint64_t);
 
     if (IBV_EXP_HAVE_CONTIG_PAGES(&md->dev.dev_attr)) {
@@ -492,11 +493,9 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
     uint64_t exp_access = 0;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
-        (length <= md->odp.max_size))
-    {
+        (length <= md->odp.max_size)) {
         exp_access |= IBV_EXP_ACCESS_ON_DEMAND;
     }
-
     return exp_access;
 }
 
@@ -591,16 +590,23 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, uct_ib_mem_t *me
 }
 #endif /* UCT_MD_DISABLE_NUMA */
 
-static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh)
+static ucs_status_t 
+uct_ib_mem_prefetch_internal(uct_ib_md_t *md, uct_ib_mem_t *memh, void *addr, size_t length)
 {
 #if HAVE_DECL_IBV_EXP_PREFETCH_MR
     struct ibv_exp_prefetch_attr attr;
     int ret;
 
-    if ((memh->flags & UCT_IB_MEM_FLAG_ODP) && md->odp.prefetch) {
+    if ((memh->flags & UCT_IB_MEM_FLAG_ODP)) {
+        if ((addr < memh->mr->addr) ||
+            (addr + length > memh->mr->addr + memh->mr->length)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+        ucs_debug("memh %p prefetch %p length %llu", memh, addr, 
+                  (unsigned long long)length);
         attr.flags     = IBV_EXP_PREFETCH_WRITE_ACCESS;
-        attr.addr      = memh->mr->addr;
-        attr.length    = memh->mr->length;
+        attr.addr      = addr;
+        attr.length    = length;
         attr.comp_mask = 0;
 
         ret = UCS_PROFILE_CALL(ibv_exp_prefetch_mr, memh->mr, &attr);
@@ -611,7 +617,6 @@ static ucs_status_t uct_ib_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *memh)
         }
     }
 #endif
-
     return UCS_OK;
 }
 
@@ -655,7 +660,10 @@ static ucs_status_t uct_ib_mem_alloc(uct_md_h uct_md, size_t *length_p,
 
     uct_ib_mem_init(memh, exp_access);
     uct_ib_mem_set_numa_policy(md, memh);
-    uct_ib_mem_prefetch(md, memh);
+
+    if (md->odp.prefetch) {
+        uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
+    }
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_ALLOC, +1);
     *address_p = memh->mr->addr;
@@ -703,13 +711,15 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
         return status;
     }
 
-    ucs_trace("registered memory %p..%p on %s lkey 0x%x rkey 0x%x",
+    ucs_debug("registered memory %p..%p on %s lkey 0x%x rkey 0x%x",
               address, address + length, uct_ib_device_name(&md->dev),
               memh->mr->lkey, memh->mr->rkey);
 
     uct_ib_mem_init(memh, exp_access);
     uct_ib_mem_set_numa_policy(md, memh);
-    uct_ib_mem_prefetch(md, memh);
+    if (md->odp.prefetch) {
+        uct_ib_mem_prefetch_internal(md, memh, memh->mr->addr, memh->mr->length);
+    }
 
     UCS_STATS_UPDATE_COUNTER(md->stats, UCT_IB_MD_STAT_MEM_REG, +1);
     return UCS_OK;
@@ -749,6 +759,19 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
     status = uct_ib_mem_dereg_internal(ib_memh);
     uct_ib_memh_free(ib_memh);
     return status;
+}
+
+static ucs_status_t 
+uct_ib_mem_advise(uct_md_h uct_md, uct_mem_h memh, void *addr, size_t length,
+                  unsigned advice)
+{
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+
+    ucs_debug("memh %p advice %d", memh, advice);
+    if ((advice == UCT_MADV_WILLNEED) && !md->odp.prefetch) {
+        return uct_ib_mem_prefetch_internal(md, memh, addr, length);
+    }
+    return UCS_OK;
 }
 
 static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
@@ -810,6 +833,7 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mem_free     = uct_ib_mem_free,
     .mem_reg      = uct_ib_mem_reg,
     .mem_dereg    = uct_ib_mem_dereg,
+    .mem_advise   = uct_ib_mem_advise,
     .mkey_pack    = uct_ib_mkey_pack,
 };
 
@@ -853,6 +877,7 @@ static uct_md_ops_t uct_ib_md_rcache_ops = {
     .mem_free     = uct_ib_mem_free,
     .mem_reg      = uct_ib_mem_rcache_reg,
     .mem_dereg    = uct_ib_mem_rcache_dereg,
+    .mem_advise   = uct_ib_mem_advise,
     .mkey_pack    = uct_ib_mkey_pack,
 };
 

@@ -183,6 +183,19 @@ enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /**< Allocation flags */
 };
 
+/**
+ * @ingroup UCP_MEM
+ * @brief UCP memory advice parameters field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_mem_advise_params_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_mem_advise_params_field {
+    UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory */
+    UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */ 
+    UCP_MEM_ADVISE_PARAM_FIELD_ADVICE  = UCS_BIT(2), /**< Advice on memory usage */
+};
+
 
 /**
  * @ingroup UCP_CONTEXT
@@ -1291,6 +1304,78 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief list of UCP memory use advice.
+ *
+ * The enumeration list describes memory advice supported by @ref
+ * ucp_mem_advise() function.
+ */
+typedef enum ucp_mem_advice {
+    UCP_MADV_NORMAL   = 0,  /**< No special treatment */
+    UCP_MADV_WILLNEED,      /**< can be used on the memory mapped with 
+                                 @ref UCP_MEM_MAP_NONBLOCK to speed up memory
+                                 mapping and to avoid page faults when 
+                                 the memory is accessed for the first time. */
+} ucp_mem_advice_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Tuning parameters for the UCP memory advice.
+ *
+ * This structure defines the parameters that are used for the
+ * UCP memory advice tuning during the @ref ucp_mem_advise "ucp_mem_advise" 
+ * routine.
+ */
+typedef struct ucp_mem_advise_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_mem_advise_params_field. All fields are mandatory.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Memory base address. 
+     */
+     void                   *address;
+
+     /**
+      * Length (in bytes) to allocate or map (register).
+      */
+     size_t                 length;
+
+     /**
+      * Memory use advice @ref ucp_mem_advice
+      */
+     ucp_mem_advice_t       advice;
+} ucp_mem_advise_params_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief give advice about the use of memory
+ *
+ * This routine advises the UCP about how to handle memory range beginning at
+ * address and size of length bytes. This call does not influence the semantics
+ * of the application, but may influence its performance. The UCP may ignore 
+ * the advice.
+ *
+ * @param [in]  context     Application @ref ucp_context_h "context" which was
+ *                          used to allocate/map the memory.
+ * @param [in]  memh        @ref ucp_mem_h "Handle" to memory region.
+ * @param [in]  params      Memory base address and length. The advice field 
+ *                          is used to pass memory use advice as defined in 
+ *                          the @ref ucp_mem_advice list
+ *                          The memory range must belong to the @ref memh
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,  
+                            ucp_mem_advise_params_t *params);
 
 
 /**

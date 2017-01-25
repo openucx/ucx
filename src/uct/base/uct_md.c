@@ -515,6 +515,17 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_free(md, memh);
 }
 
+ucs_status_t 
+uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
+                  unsigned advice)
+{
+    if ((length == 0) || (addr == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return md->ops->mem_advise(md, memh, addr, length, advice);
+}
+
 ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
                             unsigned flags, uct_mem_h *memh_p)
 {
