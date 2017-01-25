@@ -435,11 +435,9 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, true, false);
 }
 
@@ -448,11 +446,9 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp_sync) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, true, false);
 }
 
@@ -461,11 +457,9 @@ UCS_TEST_P(test_ucp_tag_xfer, contig_unexp_sync) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, true, false);
 }
 
@@ -474,11 +468,9 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_sync) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, true, true, false);
 }
 
@@ -509,11 +501,9 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync, "RNDV_THRESH=
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync, "RNDV_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
@@ -532,11 +522,9 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync, "RNDV_THRESH=
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync, "RNDV_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(false, true, true, true, false);
 }
 
@@ -560,21 +548,17 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv_truncated, "RNDV_
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_sync_rndv, "RNDV_THRESH=1000",
                                                                      "ZCOPY_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, true, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_sync_rndv_truncated,
                                     "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, true, true, false, false);
 }
 
@@ -614,21 +598,17 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_truncated, "RND
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv, "RNDV_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(false, false, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv_truncated,
            "RNDV_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(false, false, true, false, false);
 }
 
@@ -664,21 +644,17 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_truncated, "RNDV
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv, "RNDV_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(false, true, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv_truncated,
            "RNDV_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(false, true, true, false, false);
 }
 
@@ -717,21 +693,17 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_truncated,
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_truncated,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, true);
 }
 
@@ -774,21 +746,17 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_truncated_zcopy,
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_zcopy,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_truncated_zcopy,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, true);
 }
 

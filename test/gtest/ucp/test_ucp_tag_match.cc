@@ -314,9 +314,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
 
     std::vector<request*> send_reqs(num_requests);
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     for (unsigned i = 0; i < num_requests; ++i) {
         send_reqs[i] = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337);
@@ -417,9 +415,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     ucs::fill_random(sendbuf);
 
@@ -455,9 +451,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     ucs::fill_random(sendbuf);
 
@@ -489,9 +483,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     ucs::fill_random(sendbuf);
 
@@ -517,9 +509,7 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     ucs::fill_random(sendbuf);
 

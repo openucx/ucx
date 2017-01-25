@@ -572,53 +572,72 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     return 1;
 }
 
+size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
+                                    uct_iface_attr_t *iface_attr,
+                                    uct_md_attr_t *md_attr,
+                                    size_t bcopy_bw, int recv_reg_cost)
+{
+    size_t rndv_thresh;
+    double numerator, denumerator;
+    double diff_percent = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
+
+    /* We calculate the Rendezvous threshold by finding the message size at which:
+     * AM/RMA rndv's latency is worse than the eager_zcopy
+     * latency by a small percentage (that is set by the user).
+     * Starting this message size (rndv_thresh), rndv may be used.
+     *
+     * The latency function for eager_zcopy is:
+     * [ reg_cost.overhead + size * md_attr->reg_cost.growth +
+     * max(size/bw , size/bcopy_bw) + overhead ]
+     *
+     * The latency function for Active message Rendezvous is:
+     * [ latency + overhead + reg_cost.overhead +
+     * size * md_attr->reg_cost.growth + overhead + latency +
+     * max(size/bw , size/bcopy_bw) + latency + overhead + latency ]
+     *
+     * The latency function for RMA (get_zcopy) Rendezvous is:
+     * [ reg_cost.overhead + size * md_attr->reg_cost.growth + latency + overhead +
+     *   reg_cost.overhead + size * md_attr->reg_cost.growth + overhead + latency +
+     *   size/bw + latency + overhead + latency ]
+     *
+     * Isolating the 'size' yields the rndv_thresh.
+     * The used latency functions for eager_zcopy and rndv are also specified in
+     * the UCX wiki */
+
+    numerator = diff_percent * ((4 * ucp_tl_iface_latency(context, iface_attr)) +
+                (3 * iface_attr->overhead) +
+                (md_attr->reg_cost.overhead * (1 + recv_reg_cost))) -
+                md_attr->reg_cost.overhead - iface_attr->overhead;
+
+    denumerator = md_attr->reg_cost.growth +
+                  ucs_max((1.0 / iface_attr->bandwidth), (1.0 / context->config.ext.bcopy_bw)) -
+                  (diff_percent * (ucs_max((1.0 / iface_attr->bandwidth), (1.0 / bcopy_bw)) +
+                  md_attr->reg_cost.growth * (1 + recv_reg_cost)));
+
+    if ((numerator != 0) && (denumerator > 0)) {
+        rndv_thresh = numerator / denumerator;
+    } else {
+        rndv_thresh = context->config.ext.rndv_thresh_fallback;
+    }
+
+    return rndv_thresh;
+}
+
 void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
                                       uct_md_attr_t *md_attr, ucp_ep_config_t *config)
 {
     size_t rndv_thresh;
-    double md_reg_overhead, md_reg_growth, numerator, denumerator;
-    double diff_percent = (100 - context->config.ext.rndv_perf_diff) / 100;
+
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane] != UCP_NULL_RESOURCE);
 
     if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-
-        /* auto */
-        /* Make UCX calculate the active message rndv threshold on its own.
-         * We do it by finding the message size at which AM rndv's latency is worse
-         * than the eager_zcopy latency by a small percentage (that is set by the
-         * user). Starting this message size (rndv_thresh), AM rndv may be used.
-         * The latency function for eager_zcopy is:
-         * [ reg_cost.overhead + size * md_attr->reg_cost.growth +
-         * max(size/bw , size/bcopy_bw) + overhead ]
-         * The latency function for Active message Rendezvous is:
-         * [ latency + overhead + reg_cost.overhead +
-         * size * md_attr->reg_cost.growth + overhead + latency +
-         * max(size/bw , size/bcopy_bw) + latency + overhead + latency ]
-         * Isolating the 'size' yields the rndv_thresh.
-         * The used latency functions for eager_zcopy and rndv are also specified in
-         * the UCX wiki */
-
-        ucp_ep_set_reg_params(md_attr, &md_reg_overhead, &md_reg_growth);
-
-        numerator = (4 * (diff_percent) * ucp_tl_iface_latency(context, iface_attr)) +
-                    (((3 * diff_percent) - 1) * iface_attr->overhead) +
-                    ((diff_percent - 1) * md_reg_overhead);
-
-        denumerator = ((1 - diff_percent) * md_reg_growth) +
-                      ((1 - diff_percent) *
-                       ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)));
-
-        if ((numerator != 0) && (denumerator > 0)) {
-            rndv_thresh = numerator / denumerator;
-            ucs_trace("Active Message rendezvous threshold is %zu ( = %f / %f)",
-                      rndv_thresh, numerator, denumerator);
-        } else {
-            rndv_thresh = context->config.ext.rndv_thresh_fallback;
-            ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
-        }
-
+        /* auto - Make UCX calculate the AM rndv threshold on its own.*/
+        rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
+                                                     context->config.ext.bcopy_bw,
+                                                     0);
+        ucs_trace("Active Message rendezvous threshold is %zu", rndv_thresh);
     } else {
         rndv_thresh = context->config.ext.rndv_thresh;
     }
@@ -639,7 +658,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_rsc_index_t rsc_index;
     uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
-    double zcopy_thresh, numerator, denumerator, md_reg_overhead, md_reg_growth;
+    double zcopy_thresh;
     size_t rndv_thresh;
 
     /* Default settings */
@@ -779,39 +798,11 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             ucs_assert_always(iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY);
 
             if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
-                /* auto */
-                /* Make UCX calculate the rma rndv threshold on its own.
-                 * We do it by finding the message size at which rndv and eager_zcopy get
-                 * the same latency. Starting this message size (rndv_thresh), rndv's latency
-                 * would be lower and the reached bandwidth would be higher.
-                 * The latency function for eager_zcopy is:
-                 * [ reg_cost.overhead + size * md_attr->reg_cost.growth +
-                 * max(size/bw , size/bcopy_bw) + overhead ]
-                 * The latency function for Rendezvous is:
-                 * [ reg_cost.overhead + size * md_attr->reg_cost.growth + latency + overhead +
-                 *   reg_cost.overhead + size * md_attr->reg_cost.growth + overhead + latency +
-                 *   size/bw + latency + overhead + latency ]
-                 * Isolating the 'size' yields the rndv_thresh.
-                 * The used latency functions for eager_zcopy and rndv are also specified in
-                 * the UCX wiki */
-
-                ucp_ep_set_reg_params(md_attr, &md_reg_overhead, &md_reg_growth);
-
-                numerator = (2 * iface_attr->overhead) +
-                            (4 * ucp_tl_iface_latency(context, iface_attr)) +
-                            md_reg_overhead;
-
-                denumerator = (ucs_max((1.0 / iface_attr->bandwidth),(1.0 / context->config.ext.bcopy_bw)) -
-                              md_reg_growth - (1.0 / iface_attr->bandwidth));
-
-                if ((numerator != 0) && (denumerator > 0)) {
-                    rndv_thresh = numerator / denumerator;
-                    ucs_trace("zcopy rendezvous threshold is %zu ( = %f / %f)",
-                              rndv_thresh, numerator, denumerator);
-                } else {
-                    rndv_thresh = context->config.ext.rndv_thresh_fallback;
-                    ucs_trace("zcopy rendezvous threshold is %zu", rndv_thresh);
-                }
+                /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
+                rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
+                                                             SIZE_MAX,
+                                                             1);
+                ucs_trace("RMA (get_zcopy) rendezvous threshold is %zu", rndv_thresh);
             } else {
                 /* In order to disable rendezvous, need to set the threshold to
                  * infinite (-1).
