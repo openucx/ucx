@@ -106,12 +106,14 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     length = strlen(buf);
     vsnprintf(buf + length, buffer_size - length, message, ap);
 
-    gettimeofday(&tv, NULL);
-
     short_file = strrchr(file, '/');
     short_file = (short_file == NULL) ? file : short_file + 1;
+    gettimeofday(&tv, NULL);
 
-    if (RUNNING_ON_VALGRIND) {
+    if (level <= UCS_LOG_LEVEL_FATAL) {
+        ucs_handle_error("fatal error", "%13s:%-4u Fatal: %s", short_file, line,
+                         buf);
+    } else if (RUNNING_ON_VALGRIND) {
         valg_buf = ucs_alloca(buffer_size + 1);
         snprintf(valg_buf, buffer_size,
                  "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv.tv_sec, tv.tv_usec,
@@ -133,9 +135,6 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     /* flush the log file if the log_level of this message is fatal or error */
     if (level <= UCS_LOG_LEVEL_ERROR) {
         ucs_log_flush();
-        if (level <= UCS_LOG_LEVEL_FATAL) {
-            ucs_handle_error();
-        }
     }
 
     return UCS_LOG_FUNC_RC_CONTINUE;
@@ -206,8 +205,8 @@ void ucs_log_fatal_error(const char *fmt, ...)
     (void)ret;
 }
 
-void __ucs_abort(const char *file, unsigned line, const char *function,
-                 const char *message, ...)
+void __ucs_abort(const char *error_type, const char *file, unsigned line,
+                 const char *function, const char *message, ...)
 {
     size_t buffer_size = ucs_global_opts.log_buffer_size;
     const char *short_file;
@@ -219,13 +218,13 @@ void __ucs_abort(const char *file, unsigned line, const char *function,
     vsnprintf(buffer, buffer_size, message, ap);
     va_end(ap);
 
+    ucs_debug_cleanup();
+    ucs_log_flush();
+
     short_file = strrchr(file, '/');
     short_file = (short_file == NULL) ? file : short_file + 1;
-    ucs_log_fatal_error("%13s:%-4u %s", short_file, line, buffer);
+    ucs_handle_error(error_type, "%13s:%-4u %s", short_file, line, buffer);
 
-    ucs_log_flush();
-    ucs_debug_cleanup();
-    ucs_handle_error();
     abort();
 }
 
