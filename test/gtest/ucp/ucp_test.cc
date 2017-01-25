@@ -78,6 +78,7 @@ ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
 ucp_params_t ucp_test::get_ctx_params() {
     ucp_params_t params;
     memset(&params, 0, sizeof(params));
+    params.field_mask |= UCP_PARAM_FIELD_FEATURES;
     return params;
 }
 
@@ -311,10 +312,6 @@ void ucp_test::restore_errors()
 ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_config) {
     ucp_test_param entity_param = test_param;
 
-    num_workers = 1;
-    entity_param.ctx_params.mt_workers_shared = 0;
-    entity_param.worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
-
     if (test_param.thread_type == MULTI_THREAD_CONTEXT) {
         num_workers = MT_TEST_NUM_THREADS;
         entity_param.ctx_params.mt_workers_shared = 1;
@@ -323,7 +320,14 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* uc
         num_workers = 1;
         entity_param.ctx_params.mt_workers_shared = 0;
         entity_param.worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+    } else {
+        num_workers = 1;
+        entity_param.ctx_params.mt_workers_shared = 0;
+        entity_param.worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
     }
+
+    entity_param.ctx_params.field_mask    |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+    entity_param.worker_params.field_mask |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
 
     ucp_test::set_ucp_config(ucp_config, entity_param);
 
