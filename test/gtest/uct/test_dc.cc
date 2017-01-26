@@ -447,43 +447,34 @@ UCS_TEST_P(test_dc_flow_control, flush)
  * is scheduled for dci allocation. */
 UCS_TEST_P(test_dc_flow_control, dci_leak)
 {
-    m_e2->connect_to_iface(1, *m_e1);
-
-    disable_entity(m_e1);
-
+    disable_entity(m_e2);
     int wnd = 5;
-    set_fc_attributes(m_e2, true, wnd,
+    set_fc_attributes(m_e1, true, wnd,
                       ucs_max((int)(wnd*0.5), 1),
                       ucs_max((int)(wnd*0.25), 1));
-    send_am_messages(m_e2, wnd, UCS_OK);
-    send_am_messages(m_e2, 1, UCS_ERR_NO_RESOURCE);
-
-    uct_dc_ep_t *dc_ep = ucs_derived_of(m_e2->ep(1), uct_dc_ep_t);
-    /* Pretend that FC win of the second m_e2 ep is exhausted, but make
-     * sure FC grant request is not sent. */
-    send_am_messages(m_e2, wnd, UCS_OK, 1);
-    dc_ep->fc.fc_wnd = 0;
-    send_am_messages(m_e2, wnd, UCS_ERR_NO_RESOURCE, 1);
-
-    /* Add pending for group to be dispatched when grant arrives.*/
+    send_am_messages(m_e1, wnd, UCS_OK);
+    send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
     uct_pending_req_t req;
     req.func = reinterpret_cast<ucs_status_t (*)(uct_pending_req*)>
                                (ucs_empty_function_return_no_resource);
-    EXPECT_UCS_OK(uct_ep_pending_add(m_e2->ep(1), &req));
+    EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req));
 
-    enable_entity(m_e1, 1);
-    set_tx_moderation(m_e1, 0);
-    send_am_messages(m_e1, 1, UCS_OK);
+    /* Make sure that ep does not hold dci when sends completed */
+    ucs_time_t timeout    = ucs_get_time() + ucs_time_from_sec(10);
+    uct_dc_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_iface_t);
+    while (iface->tx.stack_top && (ucs_get_time() < timeout)) {
+        progress();
+    }
+    EXPECT_EQ(0, iface->tx.stack_top);
 
-    /* Check that m_e2 got grant */
-    validate_grant(m_e2);
-
-    /* Make sure DCI was not allocated for the seconds ep,
-     * because it lacks FC window. */
-    EXPECT_EQ(UCT_DC_EP_NO_DCI, dc_ep->dci);
-    uct_ep_pending_purge(m_e2->ep(1),
+    /* Clean up FC and pending to avoid assetions during tear down */
+    uct_ep_pending_purge(m_e1->ep(0),
            reinterpret_cast<void (*)(uct_pending_req*, void*)> (ucs_empty_function),
            NULL);
+    enable_entity(m_e2);
+    set_tx_moderation(m_e2, 0);
+    send_am_messages(m_e2, 1, UCS_OK);
+    validate_grant(m_e1);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control, dc)

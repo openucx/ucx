@@ -292,3 +292,67 @@ out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
+
+static ucs_status_t ucp_advice2uct(unsigned ucp_advice, unsigned *uct_advice) 
+{
+    switch(ucp_advice) {
+    case UCP_MADV_NORMAL:
+        *uct_advice = UCT_MADV_NORMAL;
+        return UCS_OK;
+    case UCP_MADV_WILLNEED:
+        *uct_advice = UCT_MADV_WILLNEED;
+        return UCS_OK;
+    }
+    return UCS_ERR_INVALID_PARAM;
+}
+
+ucs_status_t 
+ucp_mem_advise(ucp_context_h context, ucp_mem_h memh, 
+               ucp_mem_advise_params_t *params)
+{
+    ucs_status_t status, tmp_status;
+    int md_index;
+    unsigned uct_advice;
+
+    if (!ucs_test_all_flags(params->field_mask,
+                            UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS|
+                            UCP_MEM_ADVISE_PARAM_FIELD_LENGTH|
+                            UCP_MEM_ADVISE_PARAM_FIELD_ADVICE)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->address < memh->address) ||
+        (params->address + params->length > memh->address + memh->length)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucp_advice2uct(params->advice, &uct_advice);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_debug("advice buffer %p length %llu memh %p flags %x",
+               params->address, (unsigned long long)params->length, memh,
+               params->advice);
+
+    if (memh == &ucp_mem_dummy_handle) {
+        return UCS_OK;
+    }
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
+    status = UCS_OK;
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        if (!(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_ADVISE)) {
+            continue;
+        }
+        tmp_status = uct_md_mem_advise(context->tl_mds[md_index].md, memh->uct[md_index],
+                                       params->address, params->length, uct_advice);
+        if (tmp_status != UCS_OK) {
+            status = tmp_status;
+        }
+    }
+
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+    return status;
+}

@@ -130,15 +130,7 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     /* Run all tests */
     for (test_spec *test = tests; test->title != NULL; ++test) {
-        double min, max;
-        if (check_perf) {
-            min = test->min;
-            max = test->max;
-        } else {
-            min = 0;
-            max = INT_MAX;
-        }
-        run_test(*test, 0, min, max, GetParam()->tl_name, GetParam()->dev_name);
+        run_test(*test, 0, check_perf, GetParam()->tl_name, GetParam()->dev_name);
     }
 }
 

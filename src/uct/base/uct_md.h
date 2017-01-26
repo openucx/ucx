@@ -119,6 +119,8 @@ struct uct_md_ops {
                               unsigned flags, uct_mem_h *memh_p UCS_MEMTRACK_ARG);
 
     ucs_status_t (*mem_free)(uct_md_h md, uct_mem_h memh);
+    ucs_status_t (*mem_advise)(uct_md_h md, uct_mem_h memh, void *addr,
+                               size_t length, unsigned advice);
 
     ucs_status_t (*mem_reg)(uct_md_h md, void *address, size_t length,
                             unsigned flags, uct_mem_h *memh_p);

@@ -92,7 +92,7 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     for (test_spec *test = tests; test->title != NULL; ++test) {
         unsigned flags = (test->command == UCX_PERF_CMD_TAG) ? 0 :
                                  UCX_PERF_TEST_FLAG_ONE_SIDED;
-        run_test(*test, flags, test->min, test->max, "", "");
+        run_test(*test, flags, true, "", "");
     }
 }
 
