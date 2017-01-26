@@ -17,6 +17,9 @@ extern "C" {
 #include <vector>
 
 
+#define UCT_TEST_TIMEOUT_IN_SEC   10.0
+
+
 /* Testing resource */
 struct resource {
     virtual ~resource() {};

@@ -468,8 +468,9 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req));
 
     /* Make sure that ep does not hold dci when sends completed */
-    ucs_time_t timeout    = ucs_get_time() + ucs_time_from_sec(10);
     uct_dc_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_iface_t);
+    ucs_time_t timeout    = ucs_get_time() +
+                            ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
     while (iface->tx.stack_top && (ucs_get_time() < timeout)) {
         progress();
     }
