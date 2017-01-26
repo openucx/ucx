@@ -626,9 +626,10 @@ static char *ucs_debug_strdup(const char *str)
 
 static void ucs_debugger_attach()
 {
-    static const char *gdb_vg_commands = "file %s\n"
-                                         "target remote | vgdb\n";
-    static const char *gdb_bt_command  = "bt\nlist\n";
+    static const char *vg_cmds_fmt = "file %s\n"
+                                     "target remote | vgdb\n";
+    static const char *bt_cmds     = "bt\n"
+                                     "list\n";
     static char pid_str[16];
     char *vg_cmds;
     char *gdb_cmdline;
@@ -678,15 +679,17 @@ static void ucs_debugger_attach()
         fd = open(gdb_commands_file, O_WRONLY|O_TRUNC|O_CREAT, 0600);
         if (fd >= 0) {
             if (RUNNING_ON_VALGRIND) {
-                vg_cmds = ucs_debug_alloc_mem(strlen(gdb_vg_commands) + strlen(self_exe));
-                sprintf(vg_cmds, gdb_vg_commands, self_exe);
-                if (write(fd, vg_cmds, strlen(vg_cmds)) == strlen(vg_cmds)) {
+                vg_cmds = ucs_debug_alloc_mem(strlen(vg_cmds_fmt) + strlen(self_exe));
+                sprintf(vg_cmds, vg_cmds_fmt, self_exe);
+                if (write(fd, vg_cmds, strlen(vg_cmds)) != strlen(vg_cmds)) {
                     ucs_log_fatal_error("Unable to write to command file: %m");
                 }
             }
 
             if (ucs_global_opts.handle_errors & UCS_BIT(UCS_HANDLE_ERROR_BACKTRACE)) {
-                write(fd, gdb_bt_command, strlen(gdb_bt_command));
+                if (write(fd, bt_cmds, strlen(bt_cmds)) != strlen(bt_cmds)) {
+                    ucs_log_fatal_error("Unable to write to command file: %m");
+                }
             }
             close(fd);
 
