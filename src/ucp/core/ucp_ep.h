@@ -122,10 +122,6 @@ typedef struct ucp_ep_config {
         size_t                 rma_thresh;
         /* Threshold for switching from eager to AM based rendezvous */
         size_t                 am_thresh;
-        /* threshold for switching from eager-sync to rendezvous */
-        size_t                 sync_rma_thresh;
-        /* threshold for switching from eager-sync to rendezvous */
-        size_t                 sync_am_thresh;
     } rndv;
 } ucp_ep_config_t;
 
@@ -164,14 +160,6 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
 void ucp_ep_destroy_internal(ucp_ep_h ep, const char *message);
 
 int ucp_ep_is_stub(ucp_ep_h ep);
-
-size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
-                                      uct_iface_attr_t *iface_attr,
-                                      uct_md_attr_t *md_attr,
-                                      size_t bcopy_bw, int recv_reg_cost);
-
-void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
-                                      uct_md_attr_t *md_attr, ucp_ep_config_t *config);
 
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 

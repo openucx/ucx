@@ -97,7 +97,7 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
 }
 
-static inline uint64_t ucp_ep_md_rndv_flags(ucp_ep_h ep)
+static inline uint64_t ucp_ep_rndv_md_flags(ucp_ep_h ep)
 {
     return ucp_ep_md_attr(ep, ucp_ep_get_rndv_get_lane(ep))->cap.flags;
 }

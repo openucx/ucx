@@ -34,12 +34,10 @@ static ucs_status_t ucp_tag_req_start_contig(ucp_request_t *req, size_t count,
     if (length <= max_short) {
         /* short */
         req->send.uct.func = proto->contig_short;
-    } else if ((config->key.rndv_lane != UCP_NULL_RESOURCE) &&
-               (length >= rndv_rma_thresh)) {
-        /* RMA rendezvous */
-        ucp_tag_send_start_rndv(req);
-    } else if (length >= rndv_am_thresh) {
-        /* AM rendezvous */
+    } else if (((config->key.rndv_lane != UCP_NULL_RESOURCE) &&
+               (length >= rndv_rma_thresh)) ||
+               (length >= rndv_am_thresh)) {
+        /* RMA/AM rendezvous */
         ucp_tag_send_start_rndv(req);
     } else if (length < zcopy_thresh) {
         /* bcopy */
@@ -296,8 +294,8 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
     ret = ucp_tag_send_req(req, count,
                            -1, /* disable short method */
                            ucp_ep_config(ep)->am.sync_zcopy_thresh,
-                           ucp_ep_config(ep)->rndv.sync_rma_thresh,
-                           ucp_ep_config(ep)->rndv.sync_am_thresh,
+                           ucp_ep_config(ep)->rndv.rma_thresh,
+                           ucp_ep_config(ep)->rndv.am_thresh,
                            cb, &ucp_tag_eager_sync_proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);

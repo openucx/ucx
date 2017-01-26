@@ -572,12 +572,11 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     return 1;
 }
 
-size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
-                                      uct_iface_attr_t *iface_attr,
-                                      uct_md_attr_t *md_attr,
-                                      size_t bcopy_bw, int recv_reg_cost)
+static size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
+                                             uct_iface_attr_t *iface_attr,
+                                             uct_md_attr_t *md_attr,
+                                             size_t bcopy_bw, int recv_reg_cost)
 {
-    size_t rndv_thresh;
     double numerator, denumerator;
     double diff_percent = 1.0 - context->config.ext.rndv_perf_diff / 100.0;
 
@@ -615,16 +614,14 @@ size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
                   md_attr->reg_cost.growth * (1 + recv_reg_cost)));
 
     if ((numerator > 0) && (denumerator > 0)) {
-        rndv_thresh = numerator / denumerator;
+        return (numerator / denumerator);
     } else {
-        rndv_thresh = context->config.ext.rndv_thresh_fallback;
+        return context->config.ext.rndv_thresh_fallback;
     }
-
-    return rndv_thresh;
 }
 
-void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
-                                      uct_md_attr_t *md_attr, ucp_ep_config_t *config)
+static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *iface_attr,
+                                             uct_md_attr_t *md_attr, ucp_ep_config_t *config)
 {
     size_t rndv_thresh;
 
@@ -645,9 +642,7 @@ void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_attr_t *i
     ucs_assert(iface_attr->cap.am.min_zcopy <= iface_attr->cap.am.max_zcopy);
     /* use rendezvous only starting from minimal zero-copy am size */
     rndv_thresh = ucs_max(rndv_thresh, iface_attr->cap.am.min_zcopy);
-
-    config->rndv.am_thresh      = rndv_thresh;
-    config->rndv.sync_am_thresh = rndv_thresh;
+    config->rndv.am_thresh = rndv_thresh;
 }
 
 void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
@@ -666,10 +661,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     config->am.sync_zcopy_thresh  = -1;
     config->bcopy_thresh          = context->config.ext.bcopy_thresh;
     config->rndv.rma_thresh       = SIZE_MAX;
-    config->rndv.sync_rma_thresh  = SIZE_MAX;
     config->rndv.max_get_zcopy    = SIZE_MAX;
     config->rndv.am_thresh        = SIZE_MAX;
-    config->rndv.sync_am_thresh   = SIZE_MAX;
     config->p2p_lanes             = 0;
 
     /* Collect p2p lanes */
@@ -802,7 +795,6 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
                 rndv_thresh = ucp_ep_config_calc_rndv_thresh(context, iface_attr, md_attr,
                                                              SIZE_MAX,
                                                              1);
-                ucs_trace("RMA (get_zcopy) rendezvous threshold is %zu", rndv_thresh);
             } else {
                 /* In order to disable rendezvous, need to set the threshold to
                  * infinite (-1).
@@ -817,9 +809,6 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
             config->rndv.max_get_zcopy = iface_attr->cap.get.max_zcopy;
             config->rndv.rma_thresh    = rndv_thresh;
-            config->rndv.sync_rma_thresh = rndv_thresh;
-
-            ucs_trace("rendezvous (get_zcopy) threshold is %zu", config->rndv.rma_thresh);
         } else {
             ucs_debug("rendezvous (get_zcopy) protocol is not supported ");
         }
@@ -985,7 +974,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
          ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
                                        config->am.max_eager_short,
                                        config->am.sync_zcopy_thresh,
-                                       config->rndv.sync_rma_thresh,
+                                       config->rndv.rma_thresh,
                                        config->rndv.am_thresh);
      }
 

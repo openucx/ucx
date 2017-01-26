@@ -196,7 +196,7 @@ typedef struct ucp_context_config {
     /** Threshold for switching UCP to rendezvous protocol in case the calculated
      *  threshold is zero or negative */
     size_t                                 rndv_thresh_fallback;
-    /** The percentage allowed for performance difference between AM rendezvous
+    /** The percentage allowed for performance difference between rendezvous
      *  and the eager_zcopy protocol */
     double                                 rndv_perf_diff;
     /** Threshold for switching UCP to zero copy protocol */
