@@ -573,9 +573,9 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
 }
 
 size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
-                                    uct_iface_attr_t *iface_attr,
-                                    uct_md_attr_t *md_attr,
-                                    size_t bcopy_bw, int recv_reg_cost)
+                                      uct_iface_attr_t *iface_attr,
+                                      uct_md_attr_t *md_attr,
+                                      size_t bcopy_bw, int recv_reg_cost)
 {
     size_t rndv_thresh;
     double numerator, denumerator;
@@ -614,7 +614,7 @@ size_t ucp_ep_config_calc_rndv_thresh(ucp_context_h context,
                   (diff_percent * (ucs_max((1.0 / iface_attr->bandwidth), (1.0 / bcopy_bw)) +
                   md_attr->reg_cost.growth * (1 + recv_reg_cost)));
 
-    if ((numerator != 0) && (denumerator > 0)) {
+    if ((numerator > 0) && (denumerator > 0)) {
         rndv_thresh = numerator / denumerator;
     } else {
         rndv_thresh = context->config.ext.rndv_thresh_fallback;

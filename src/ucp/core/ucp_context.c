@@ -85,7 +85,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh_fallback), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_PERF_DIFF", "1",
-   "The percentage allowed for performance difference between AM rendezvous and "
+   "The percentage allowed for performance difference between rendezvous and "
    "the eager_zcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
