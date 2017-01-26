@@ -66,8 +66,8 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # Set CPU affinity to 2 cores, for performance tests
     if [ -n "$EXECUTOR_NUMBER" ]; then
         AFFINITY="taskset -c $(( 2 * EXECUTOR_NUMBER ))","$(( 2 * EXECUTOR_NUMBER + 1))"
-        TIMEOUT="timeout 80m"
-        TIMEOUT_VALGRIND="timeout 100m"
+        TIMEOUT="timeout 160m"
+        TIMEOUT_VALGRIND="timeout 200m"
     else
         AFFINITY=""
         TIMEOUT=""
@@ -108,9 +108,13 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # compile and run UCP hello world example
     gcc -o ./ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c -lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
+	# debug settings
+    export UCX_HANDLE_ERRORS=freeze,bt
     export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE
-    export UCX_HANDLE_ERRORS=bt
+    export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
+    export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
+	# hello-world example
     UCP_TEST_HELLO_WORLD_PORT=$(( 10000 + ${BASHPID} ))
     for test_mode in -w -f -b ; do
         echo Running UCP hello world server with mode ${test_mode}
@@ -208,7 +212,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     mkdir -p $GTEST_REPORT_DIR
 
     echo "Running unit tests"
-    $AFFINITY $TIMEOUT make -C test/gtest test UCX_HANDLE_ERRORS=bt
+    $AFFINITY $TIMEOUT make -C test/gtest test
     (cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
     echo "Running valgrind tests"
@@ -216,7 +220,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     then
         module load tools/valgrind-latest
     fi
-    $AFFINITY $TIMEOUT_VALGRIND make -C test/gtest UCX_HANDLE_ERRORS=bt VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
+    $AFFINITY $TIMEOUT_VALGRIND make -C test/gtest VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes" test_valgrind
     (cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
     module unload tools/valgrind-latest
 
