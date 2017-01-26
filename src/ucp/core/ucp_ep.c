@@ -580,8 +580,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_rsc_index_t rsc_index;
     uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
-    double zcopy_thresh, numerator, denumerator;
-    size_t rndv_thresh, it;
+    double numerator, denumerator;
+    size_t zcopy_thresh, rndv_thresh, it;
 
     /* Default settings */
     for (it = 0; it < UCP_MAX_IOV; ++it) {
@@ -984,8 +984,9 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     zcopy_thresh = (iovcnt * reg_cost->overhead) /
                    ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->growth));
 
-    if (zcopy_thresh < 0.0) {
+    if ((zcopy_thresh < 0.0) || (zcopy_thresh > SIZE_MAX)) {
         return SIZE_MAX;
     }
+
     return zcopy_thresh;
 }

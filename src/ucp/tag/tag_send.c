@@ -30,7 +30,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     unsigned is_iov;
     size_t zcopy_thresh;
     ucs_status_t status;
-    ssize_t length;
+    size_t length;
 
     is_iov = UCP_DT_IS_IOV(req->send.datatype);
     if (ucs_unlikely(is_iov)) {
@@ -58,11 +58,16 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         }
     } else {
         length       = ucp_contig_dt_length(req->send.datatype, count);
-        zcopy_thresh = count ? SIZE_MAX : zcopy_thresh_arr[0];
+        zcopy_thresh = count ? zcopy_thresh_arr[0] : SIZE_MAX;
     }
     req->send.length = length;
 
-    if ((length <= max_short) && !is_iov) {
+    ucs_trace_req("select request(%p) progress algorithm datatype=%lx buffer=%p "
+                  " length=%zu max_short=%zd rndv_thresh=%zu zcopy_thresh=%zu",
+                  req, req->send.datatype, req->send.buffer, length, max_short,
+                  rndv_thresh, zcopy_thresh);
+
+    if (((ssize_t)length <= max_short) && !is_iov) {
         /* short */
         req->send.uct.func       = proto->contig_short;
     } else if ((length >= rndv_thresh) && !is_iov) {
