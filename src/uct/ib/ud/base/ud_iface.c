@@ -378,11 +378,10 @@ err:
     return status;
 }
 
-void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface)
+void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
 {
     ucs_async_remove_handler(iface->super.comp_channel->fd, 1);
     ucs_async_remove_handler(iface->async.timer_id, 1);
-    ucs_twheel_cleanup(&iface->async.slow_timer);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
