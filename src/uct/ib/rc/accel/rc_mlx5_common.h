@@ -207,14 +207,21 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_post_send(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              uint8_t opcode, uint8_t opmod, unsigned sig_flag,
-                             size_t wqe_size, uct_ib_mlx5_base_av_t *av)
+                             size_t wqe_size, uct_ib_mlx5_base_av_t *av,
+                             uint32_t imm)
 {
     struct mlx5_wqe_ctrl_seg *ctrl;
     uint16_t posted;
 
     ctrl = txwq->curr;
-    uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod, txqp->qp->qp_num,
-                             sig_flag, wqe_size);
+
+    if (opcode == MLX5_OPCODE_SEND_IMM) {
+        uct_ib_mlx5_set_ctrl_seg_with_imm(ctrl, txwq->sw_pi, opcode, opmod,
+                                          txqp->qp->qp_num, sig_flag, wqe_size, imm);
+    } else {
+        uct_ib_mlx5_set_ctrl_seg(ctrl, txwq->sw_pi, opcode, opmod, txqp->qp->qp_num,
+                                 sig_flag, wqe_size);
+    }
 
     if (qp_type == IBV_EXP_QPT_DC_INI) {
         uct_ib_mlx5_set_dgram_seg((void*)(ctrl + 1), av, NULL, qp_type);
@@ -252,9 +259,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              unsigned opcode, const void *buffer, unsigned length,
-                             /* SEND */ uint8_t am_id, uint64_t am_hdr,
-                             /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
-                             /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size
+                  /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
+                  /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
+                  /* AV   */ uct_ib_mlx5_base_av_t *av, size_t av_size
                              )
 {
     struct mlx5_wqe_ctrl_seg     *ctrl;
@@ -271,6 +278,8 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     next_seg     = uct_ib_mlx5_txwq_wrap_exact(txwq, (void*)ctrl + ctrl_av_size);
 
     switch (opcode) {
+    case MLX5_OPCODE_SEND_IMM:
+        /* Fall through to MLX5_OPCODE_SEND handler */
     case MLX5_OPCODE_SEND:
         /* Set inline segment which has AM id, AM header, and AM payload */
         wqe_size         = ctrl_av_size + sizeof(*inl) + sizeof(*am) + length;
@@ -321,7 +330,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
     }
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, opcode, 0, sig_flag,
-                                 wqe_size, av);
+                                 wqe_size, av, imm_val_be);
 }
 
 
@@ -512,7 +521,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_iface_t *iface, enum ibv_qp_type qp_type,
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 opmod, signal, wqe_size, av);
+                                 opmod, signal, wqe_size, av, 0);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -587,7 +596,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_iface_t *iface, enum ibv_qp_type qp_t
 
     uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK),
-                                 0, signal, wqe_size, av);
+                                 0, signal, wqe_size, av, 0);
 }
 
 #endif

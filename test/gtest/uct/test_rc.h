@@ -95,7 +95,7 @@ public:
 
     void validate_grant(entity *e);
 
-    void test_general(int wnd, bool is_fc_enabled);
+    void test_general(int wnd, int s_thresh, int h_thresh, bool is_fc_enabled);
 
     void test_pending_grant(int wnd);
 
@@ -119,7 +119,7 @@ public:
         stats_restore();
     }
 
-    void test_general(int wnd);
+    void test_general(int wnd, int s_thresh, int h_thresh);
 };
 #endif
 

@@ -34,7 +34,8 @@ uct_ib_mlx5_wqe_av_size(uct_ib_mlx5_base_av_t *av)
 }
 
 
-ucs_status_t uct_ud_mlx5_iface_common_init(uct_ud_mlx5_iface_common_t *iface,
+ucs_status_t uct_ud_mlx5_iface_common_init(uct_ib_iface_t *ib_iface,
+                                           uct_ud_mlx5_iface_common_t *iface,
                                            uct_ud_mlx5_iface_common_config_t *config);
 
 

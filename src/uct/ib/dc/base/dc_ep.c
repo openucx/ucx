@@ -25,7 +25,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     ucs_arbiter_group_cleanup(&self->arb_group);
     uct_rc_fc_cleanup(&self->fc);
 
-    ucs_assertv(!(self->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT),
+    ucs_assertv(!uct_dc_ep_fc_wait_for_grant(self),
                 "ep %p is being destroyed while awaiting FC grant", self);
 
     if (self->dci == UCT_DC_EP_NO_DCI) {
@@ -142,8 +142,8 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     if (status == UCS_OK) {
         /* Release dci if this is the last elem in the group and the dci has no
          * outstanding operations. For example pending callback did not send
-         * anything. (uct_ep_flush or just return ok) 
-         */ 
+         * anything. (uct_ep_flush or just return ok)
+         */
         if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
             uct_dc_iface_dci_free(iface, ep);
         }
@@ -152,15 +152,12 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
     if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     }
-    if (!uct_dc_iface_dci_has_tx_resources(iface, ep->dci) ||
-        (ep->fc.fc_wnd <= 0)) {
+    if (!uct_dc_iface_dci_ep_can_send(ep) ||
+        uct_dc_ep_fc_wait_for_grant(ep)) {
         /* Deschedule the group even if FC is the only resource, which
          * is missing. It will be scheduled again when credits arrive. */
 
         /* TODO: only good for dcs policy */
-        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-    }
-    if (ep->state == UCT_DC_EP_TX_WAIT) {
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
@@ -218,7 +215,12 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
     uct_dc_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_ep_t);
     ucs_status_t status;
 
-    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+    /* If waiting for FC grant, return NO_RESOURCE to prevent ep destruction.
+     * Otherwise grant for destroyed ep will arrive and there will be a
+     * segfault when we will try to access the ep by address from the grant
+     * message. */
+    if (!uct_rc_iface_has_tx_resources(&iface->super) ||
+        uct_dc_ep_fc_wait_for_grant(ep)) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -226,29 +228,24 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
         if (!uct_dc_iface_dci_can_alloc(iface)) {
             return UCS_ERR_NO_RESOURCE; /* waiting for dci */
         } else {
-            status = UCS_OK; /* no sends */
+            UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
+            return UCS_OK;
         }
-    } else {
-        if (!uct_dc_iface_dci_ep_can_send(ep)) {
-            return UCS_ERR_NO_RESOURCE; /* cannot send */
-        }
-
-        status = uct_dc_iface_flush_dci(iface, ep->dci);
     }
 
-    /* If waiting for FC grant, do not return OK to prevent ep destruction.
-     * Otherwise grant for destroyed ep will arrive and there will be
-     * a segfault when we will try to access the ep by address from
-     * the grant message. */
-    if ((status == UCS_INPROGRESS) ||
-        ((status == UCS_OK) && (ep->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT))) {
-        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
-        return UCS_INPROGRESS;
-    } else {
-        ucs_assert(status == UCS_OK);
+    if (!uct_dc_iface_dci_ep_can_send(ep)) {
+        return UCS_ERR_NO_RESOURCE; /* cannot send */
+    }
+
+    status = uct_dc_iface_flush_dci(iface, ep->dci);
+    if (status == UCS_OK) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK; /* all sends completed */
     }
+
+    ucs_assert(status == UCS_INPROGRESS);
+    UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
@@ -257,8 +254,10 @@ ucs_status_t uct_dc_ep_check_fc(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 
     if (iface->super.config.fc_enabled) {
         UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
-        if (ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) {
-            status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_FLAG_HARD_REQ,
+        if ((ep->fc.fc_wnd == iface->super.config.fc_hard_thresh) &&
+            !(ep->fc.flags & UCT_DC_EP_FC_FLAG_WAIT_FOR_GRANT)) {
+            status = uct_rc_fc_ctrl(&ep->super.super,
+                                    UCT_RC_EP_FC_FLAG_HARD_REQ,
                                     NULL);
             if (status != UCS_OK) {
                 return status;

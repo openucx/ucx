@@ -681,7 +681,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    status = uct_ud_mlx5_iface_common_init(&self->mlx5_common, &config->mlx5_common);
+    status = uct_ud_mlx5_iface_common_init(&self->super.super,
+                                           &self->mlx5_common, &config->mlx5_common);
     if (status != UCS_OK) {
         return status;
     }

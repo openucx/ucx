@@ -214,6 +214,11 @@ unsigned uct_ib_mlx5_get_cq_ci(struct ibv_cq *cq);
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av);
 
 /**
+ * Get flag indicating compact AV support.
+ */
+ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av);
+
+/**
  * Check for completion with error.
  */
 struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
