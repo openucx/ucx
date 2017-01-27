@@ -1000,6 +1000,16 @@ static void uct_ib_fork_warn_enable()
     }
 }
 
+static void uct_ib_md_release_device_config(uct_ib_md_t *md)
+{
+    unsigned i;
+
+    for (i = 0; i < md->custom_devices.count; ++i) {
+        free((char*)md->custom_devices.specs[i].name);
+    }
+    ucs_free(md->custom_devices.specs);
+}
+
 static ucs_status_t
 uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
@@ -1062,19 +1072,9 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
     return UCS_OK;
 
 err_free:
-    ucs_free(md->custom_devices.specs);
+    uct_ib_md_release_device_config(md);
 err:
     return status;
-}
-
-static void uct_ib_md_release_device_config(uct_ib_md_t *md)
-{
-    unsigned i;
-
-    for (i = 0; i < md->custom_devices.count; ++i) {
-        free((char*)md->custom_devices.specs[i].name);
-    }
-    ucs_free(md->custom_devices.specs);
 }
 
 static ucs_status_t
