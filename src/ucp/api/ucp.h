@@ -151,7 +151,8 @@ enum ucp_feature {
  */
 enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1)  /**< Worker's CPU bitmap */
+    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
+    UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2)  /**< Worker's events bitmap */
 };
 
 
@@ -613,6 +614,14 @@ typedef struct ucp_worker_params {
      */
     ucs_cpu_set_t           cpu_mask;
 
+    /**
+     * Mask of events (@ref ucp_wakeup_event_t) which are expected on wakeup.
+     * This value is optional.
+     * If it's not set (along with its corresponding bit in the field_mask -
+     * UCP_WORKER_PARAM_FIELD_EVENTS), all types of events will trigger on
+     * wakeup.
+     */
+    unsigned                events;
 } ucp_worker_params_t;
 
 
