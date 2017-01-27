@@ -97,6 +97,18 @@ typedef struct uct_ib_address {
 
 
 /**
+ * IB device generic information.
+ */
+typedef struct uct_ib_device_info {
+    uint16_t                    vendor_id;
+    uint16_t                    part_id;
+    const char                  *name;
+    unsigned                    flags;
+    uint8_t                     priority;
+} uct_ib_device_info_t;
+
+
+/**
  * IB device (corresponds to HCA)
  */
 typedef struct uct_ib_device {
@@ -136,6 +148,12 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev);
+
+
+/**
+ * @return device generic information.
+ */
+const uct_ib_device_info_t* uct_ib_device_info(uct_ib_device_t *dev);
 
 
 /**

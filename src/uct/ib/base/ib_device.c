@@ -27,6 +27,16 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 };
 #endif
 
+static uct_ib_device_info_t uct_ib_device_info_table[] = {
+  {0x02c9, 4099, "ConnectX-3",     UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
+  {0x02c9, 4103, "ConnectX-3 Pro", UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
+  {0x02c9, 4113, "Connect-IB",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
+  {0x02c9, 4115, "ConnectX-4",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 30},
+  {0x02c9, 4117, "ConnectX-4 LX",  UCT_IB_DEVICE_FLAG_MLX5_PRM, 28},
+  {0x02c9, 4121, "ConnectX-5",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 40},
+  {0,      0,    "Generic HCA",    0,                           0}
+};
+
 static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask)
 {
     char *p, buf[CPU_SETSIZE];
@@ -240,9 +250,26 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
     ibv_close_device(dev->ibv_context);
 }
 
+const uct_ib_device_info_t* uct_ib_device_info(uct_ib_device_t *dev)
+{
+    uct_ib_device_info_t *info;
+
+    info = uct_ib_device_info_table;
+    while ((info->vendor_id != 0) && (info->part_id != 0) &&
+           ((info->vendor_id != dev->dev_attr.vendor_id) ||
+            (info->part_id != dev->dev_attr.vendor_part_id))) {
+        ++info;
+    }
+    return info; /* if no match is found, return the last entry, which contains
+                    default settings for unknown devices */
+}
+
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
+    const uct_ib_device_info_t *dev_info;
+    uint8_t required_dev_flags;
+
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
     }
@@ -266,20 +293,14 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         }
     }
 
-    if (flags & UCT_IB_DEVICE_FLAG_MLX4_PRM) {
-        ucs_trace("%s:%d does not support mlx4 PRM", uct_ib_device_name(dev), port_num);
-        return UCS_ERR_UNSUPPORTED; /* Unsupported yet */
-    }
-
-    if (flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
-        /* TODO list all devices with their flags */
-        if (dev->dev_attr.vendor_id != 0x02c9 ||
-            (dev->dev_attr.vendor_part_id != 4113 && dev->dev_attr.vendor_part_id != 4115 &&
-             dev->dev_attr.vendor_part_id != 4117))
-        {
-            ucs_trace("%s:%d does not support mlx5 PRM", uct_ib_device_name(dev), port_num);
-            return UCS_ERR_UNSUPPORTED;
-        }
+    /* check generic device flags */
+    dev_info           = uct_ib_device_info(dev);
+    required_dev_flags = flags & (UCT_IB_DEVICE_FLAG_MLX4_PRM |
+                                  UCT_IB_DEVICE_FLAG_MLX5_PRM);
+    if (!ucs_test_all_flags(dev_info->flags, required_dev_flags)) {
+        ucs_trace("%s:%d (%s) does not support flags 0x%x", uct_ib_device_name(dev),
+                  port_num, dev_info->name, required_dev_flags);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
