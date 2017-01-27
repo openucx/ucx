@@ -27,7 +27,7 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 };
 #endif
 
-static uct_ib_device_info_t uct_ib_device_info_table[] = {
+static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {0x02c9, 4099, "ConnectX-3",     UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
   {0x02c9, 4103, "ConnectX-3 Pro", UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
   {0x02c9, 4113, "Connect-IB",     UCT_IB_DEVICE_FLAG_MLX5_PRM, 20},
@@ -250,24 +250,39 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
     ibv_close_device(dev->ibv_context);
 }
 
-const uct_ib_device_info_t* uct_ib_device_info(uct_ib_device_t *dev)
+static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
+                                           const uct_ib_device_spec_t *spec)
 {
-    uct_ib_device_info_t *info;
+    return (spec->vendor_id == dev->dev_attr.vendor_id) &&
+           (spec->part_id   == dev->dev_attr.vendor_part_id);
+}
 
-    info = uct_ib_device_info_table;
-    while ((info->vendor_id != 0) && (info->part_id != 0) &&
-           ((info->vendor_id != dev->dev_attr.vendor_id) ||
-            (info->part_id != dev->dev_attr.vendor_part_id))) {
-        ++info;
+const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
+{
+    uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
+    uct_ib_device_spec_t *spec;
+
+    /* search through devices specified in the configuration */
+    for (spec = md->custom_devices.specs;
+         spec < md->custom_devices.specs + md->custom_devices.count; ++spec) {
+        if (uct_ib_device_spec_match(dev, spec)) {
+            return spec;
+        }
     }
-    return info; /* if no match is found, return the last entry, which contains
+
+    /* search through built-in list of device specifications */
+    spec = uct_ib_builtin_device_specs;
+    while ((spec->vendor_id != 0) && !uct_ib_device_spec_match(dev, spec)) {
+        ++spec;
+    }
+    return spec; /* if no match is found, return the last entry, which contains
                     default settings for unknown devices */
 }
 
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags)
 {
-    const uct_ib_device_info_t *dev_info;
+    const uct_ib_device_spec_t *dev_info;
     uint8_t required_dev_flags;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
@@ -294,7 +309,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     /* check generic device flags */
-    dev_info           = uct_ib_device_info(dev);
+    dev_info           = uct_ib_device_spec(dev);
     required_dev_flags = flags & (UCT_IB_DEVICE_FLAG_MLX4_PRM |
                                   UCT_IB_DEVICE_FLAG_MLX5_PRM);
     if (!ucs_test_all_flags(dev_info->flags, required_dev_flags)) {

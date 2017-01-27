@@ -720,7 +720,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     }
 
     iface_attr->bandwidth = (wire_speed * mtu) / (mtu + extra_pkt_len);
-    iface_attr->priority  = uct_ib_device_info(dev)->priority;
+    iface_attr->priority  = uct_ib_device_spec(dev)->priority;
 
     return UCS_OK;
 }

@@ -97,15 +97,15 @@ typedef struct uct_ib_address {
 
 
 /**
- * IB device generic information.
+ * IB device specification.
  */
-typedef struct uct_ib_device_info {
+typedef struct uct_ib_device_spec {
     uint16_t                    vendor_id;
     uint16_t                    part_id;
     const char                  *name;
     unsigned                    flags;
     uint8_t                     priority;
-} uct_ib_device_info_t;
+} uct_ib_device_spec_t;
 
 
 /**
@@ -151,9 +151,9 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev);
 
 
 /**
- * @return device generic information.
+ * @return device specification.
  */
-const uct_ib_device_info_t* uct_ib_device_info(uct_ib_device_t *dev);
+const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev);
 
 
 /**
