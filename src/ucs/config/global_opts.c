@@ -19,8 +19,10 @@ ucs_global_opts_t ucs_global_opts = {
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
     .mpool_fifo            = 0,
-    .handle_errors         = UCS_HANDLE_ERROR_BACKTRACE,
+    .handle_errors         = UCS_BIT(UCS_HANDLE_ERROR_BACKTRACE),
     .error_signals         = { NULL, 0 },
+    .error_mail_to         = "",
+    .error_mail_footer     = "",
     .gdb_command           = "gdb",
     .debug_signo           = SIGHUP,
     .async_max_events      = 64,
@@ -38,8 +40,7 @@ ucs_global_opts_t ucs_global_opts = {
     .profile_file          = ""
 };
 
-static const char *handle_error_modes[] = {
-    [UCS_HANDLE_ERROR_NONE]      = "none",
+static const char *ucs_handle_error_modes[] = {
     [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
@@ -88,16 +89,25 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, mpool_fifo), UCS_CONFIG_TYPE_BOOL},
 #endif
 
- {"HANDLE_ERRORS", "bt",
-  "Error handling mode. Possible values are: 'none' (no error handling), 'bt' (print\n"
-  "backtrace), 'freeze' (freeze and wait for a debugger), 'debug' (attach debugger)",
-  ucs_offsetof(ucs_global_opts_t, handle_errors), UCS_CONFIG_TYPE_ENUM(handle_error_modes)},
+ {"HANDLE_ERRORS", "bt,freeze",
+  "Error handling mode. A combination of: 'bt' (print backtrace),\n"
+  "'freeze' (freeze and wait for a debugger), 'debug' (attach debugger)",
+  ucs_offsetof(ucs_global_opts_t, handle_errors),
+  UCS_CONFIG_TYPE_BITMAP(ucs_handle_error_modes)},
 
  {"ERROR_SIGNALS", "SIGILL,SIGSEGV,SIGBUS,SIGFPE",
   "Signals which are considered an error indication and trigger error handling.",
   ucs_offsetof(ucs_global_opts_t, error_signals), UCS_CONFIG_TYPE_ARRAY(signo)},
 
- {"GDB_COMMAND", "gdb",
+ {"ERROR_MAIL_TO", "",
+  "If non-empty, send mail notification for fatal errors.",
+  ucs_offsetof(ucs_global_opts_t, error_mail_to), UCS_CONFIG_TYPE_STRING},
+
+ {"ERROR_MAIL_FOOTER", "",
+  "Footer for error report email",
+  ucs_offsetof(ucs_global_opts_t, error_mail_footer), UCS_CONFIG_TYPE_STRING},
+
+ {"GDB_COMMAND", "gdb -quiet",
   "If non-empty, attaches a gdb to the process in case of error, using the provided command.",
   ucs_offsetof(ucs_global_opts_t, gdb_command), UCS_CONFIG_TYPE_STRING},
 
