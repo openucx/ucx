@@ -26,7 +26,7 @@ public:
     }
 
     static ucs_status_t am_callback(void *arg, void *data, size_t length,
-                                    void *desc)
+                                    unsigned flags)
     {
         ucs_atomic_add32(&am_pending, -1);
         return UCS_OK;

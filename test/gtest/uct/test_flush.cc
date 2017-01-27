@@ -86,7 +86,7 @@ public:
     }
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   void *desc)
+                                   unsigned flags)
     {
         const mapped_buffer *recvbuf = (const mapped_buffer *)arg;
         memcpy(recvbuf->ptr(), data, ucs_min(length, recvbuf->length()));

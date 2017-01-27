@@ -37,7 +37,7 @@ public:
     } recv_desc_t;
 
     static ucs_status_t mm_am_handler(void *arg, void *data, size_t length,
-            void *desc) {
+                                      unsigned flags) {
         recv_desc_t *my_desc = (recv_desc_t *) arg;
         uint64_t *test_mm_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_mm_hdr + 1;

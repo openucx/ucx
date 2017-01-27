@@ -64,11 +64,11 @@
 
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
-ucp_recv_desc_get(ucp_worker_t *worker, void *data, void *desc, size_t length,
-                  uint16_t hdr_len, uint16_t flags)
+ucp_recv_desc_get(ucp_worker_t *worker, void *data, size_t length,
+                  uint16_t hdr_len, unsigned am_flags, uint16_t flags)
 {
     ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
-    if (rdesc == desc) {
+    if (am_flags & UCT_AM_FLAG_DESC) {
         rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
     } else {
         rdesc = ucs_mpool_get_inline(&worker->am_mp);
@@ -203,4 +203,3 @@ ucp_request_wait_uct_comp(ucp_request_t *req)
         ucp_worker_progress(req->send.ep->worker);
     }
 }
-

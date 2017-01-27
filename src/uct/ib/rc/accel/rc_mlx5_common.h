@@ -123,6 +123,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
     uint16_t max_batch;
     ucs_status_t status;
     void *udesc;
+    unsigned flags;
 
     ucs_assert(uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq,
                                        mlx5_common_iface->rx.srq.mask)->srq.next_wqe_index == 0);
@@ -149,29 +150,31 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
         hdr = (uct_rc_hdr_t*)(cqe);
         uct_rc_mlx5_iface_common_rx_inline(mlx5_common_iface, rc_iface, desc,
                                            UCT_RC_MLX5_IFACE_STAT_RX_INL_32, byte_len);
+        flags = 0;
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
         hdr = (uct_rc_hdr_t*)(cqe - 1);
         uct_rc_mlx5_iface_common_rx_inline(mlx5_common_iface, rc_iface, desc,
                                            UCT_RC_MLX5_IFACE_STAT_RX_INL_64, byte_len);
+        flags = 0;
     } else {
         hdr = uct_ib_iface_recv_desc_hdr(&rc_iface->super, desc);
         VALGRIND_MAKE_MEM_DEFINED(hdr, byte_len);
+        flags = UCT_AM_FLAG_DESC;
     }
 
     uct_ib_mlx5_log_rx(&rc_iface->super, IBV_QPT_RC, cqe, hdr,
                        uct_rc_ep_am_packet_dump);
-
-    udesc  = (char*)desc + rc_iface->super.config.rx_headroom_offset;
 
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
         qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
         rc_ops = ucs_derived_of(rc_iface->super.ops, uct_rc_iface_ops_t);
 
         status = rc_ops->fc_handler(rc_iface, qp_num, hdr, byte_len - sizeof(*hdr),
-                                    cqe->imm_inval_pkey, cqe->slid, udesc);
+                                    cqe->imm_inval_pkey, cqe->slid, flags);
     } else {
         status = uct_iface_invoke_am(&rc_iface->super.super, hdr->am_id,
-                                     hdr + 1, byte_len - sizeof(*hdr), udesc);
+                                     hdr + 1, byte_len - sizeof(*hdr),
+                                     flags);
     }
 
     if ((status == UCS_OK) &&
@@ -188,6 +191,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
         ++mlx5_common_iface->rx.srq.free_idx;
    } else {
         if (status != UCS_OK) {
+            udesc = (char*)desc + rc_iface->super.config.rx_headroom_offset;
             uct_recv_desc_iface(udesc) = &rc_iface->super.super.super;
             seg->srq.desc              = NULL;
         }

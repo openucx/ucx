@@ -36,7 +36,7 @@ public:
     } pending_send_request_t;
 
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
-                                   void *desc) {
+                                   unsigned flags) {
 
         unsigned *counter = (unsigned *) arg;
         uint64_t test_hdr = *(uint64_t *) data;
@@ -52,7 +52,7 @@ public:
     }
 
     static ucs_status_t am_handler_simple(void *arg, void *data, size_t length,
-                                          void *desc) {
+                                          unsigned flags) {
         return UCS_OK;
     }
 

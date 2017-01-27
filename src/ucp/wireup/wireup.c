@@ -296,7 +296,7 @@ static void ucp_wireup_process_ack(ucp_worker_h worker, uint64_t uuid)
 }
 
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
-                                           size_t length, void *desc)
+                                           size_t length, unsigned flags)
 {
     ucp_worker_h worker   = arg;
     ucp_wireup_msg_t *msg = data;
@@ -598,4 +598,3 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
 UCP_DEFINE_AM(-1, UCP_AM_ID_WIREUP, ucp_wireup_msg_handler, 
               ucp_wireup_msg_dump, UCT_AM_CB_FLAG_ASYNC);
-

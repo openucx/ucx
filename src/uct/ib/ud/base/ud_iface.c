@@ -695,11 +695,11 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
         neth =  (uct_ud_neth_t *)((char *)uct_ib_iface_recv_desc_hdr(&iface->super,
                                                                      (uct_ib_iface_recv_desc_t *)skb) +
                                   UCT_IB_GRH_LEN);
-        uct_ib_iface_invoke_am(&iface->super,
-                               uct_ud_neth_get_am_id(neth),
-                               neth + 1,
-                               skb->u.am.len,
-                               &skb->super);
+        uct_ib_iface_invoke_am_desc(&iface->super,
+                                    uct_ud_neth_get_am_id(neth),
+                                    neth + 1,
+                                    skb->u.am.len,
+                                    &skb->super);
         count++;
         if (count >= max_poll) {
             return UCS_ERR_NO_RESOURCE;
@@ -753,4 +753,3 @@ void uct_ud_iface_release_desc(uct_iface_t *tl_iface, void *desc)
     uct_ib_iface_release_desc(tl_iface, desc);
     uct_ud_leave(iface);
 }
-

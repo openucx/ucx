@@ -410,8 +410,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
-                 (arg, data, length, desc),
-                 void *arg, void *data, size_t length, void *desc)
+                 (arg, data, length, am_flags),
+                 void *arg, void *data, size_t length, unsigned am_flags)
 {
     ucp_worker_h worker = arg;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
@@ -442,9 +442,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
         }
     }
 
-    rdesc = ucp_recv_desc_get(worker, data, desc, length, sizeof(*rndv_rts_hdr),
-                              (UCP_RECV_DESC_FLAG_FIRST | UCP_RECV_DESC_FLAG_LAST |
-                               UCP_RECV_DESC_FLAG_RNDV));
+    rdesc = ucp_recv_desc_get(worker, data, length, sizeof(*rndv_rts_hdr), am_flags,
+                              UCP_RECV_DESC_FLAG_FIRST|UCP_RECV_DESC_FLAG_LAST|
+                              UCP_RECV_DESC_FLAG_RNDV);
     if (!rdesc) {
         status = UCS_ERR_NO_MEMORY;
         goto out;
@@ -455,15 +455,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
 
-    status = (data == rdesc + 1) ? UCS_INPROGRESS : UCS_OK;
+    status = (am_flags & UCT_AM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
+
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
-                 (arg, data, length, desc),
-                 void *arg, void *data, size_t length, void *desc)
+                 (arg, data, length, flags),
+                 void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *sreq = (ucp_request_t*) rep_hdr->reqptr;
@@ -635,8 +636,8 @@ static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
-                 (arg, data, length, desc),
-                 void *arg, void *data, size_t length, void *desc)
+                 (arg, data, length, flags),
+                 void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     ucp_request_t *sreq = (ucp_request_t*) rndv_rtr_hdr->sreq_ptr;
@@ -665,8 +666,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
-                 (arg, data, length, desc),
-                 void *arg, void *data, size_t length, void *desc)
+                 (arg, data, length, flags),
+                 void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_rndv_data_hdr_t *rndv_data_hdr = data;
     ucp_request_t *rreq = (ucp_request_t*) rndv_data_hdr->rreq_ptr;
@@ -697,8 +698,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_last_handler,
-                 (arg, data, length, desc),
-                 void *arg, void *data, size_t length, void *desc)
+                 (arg, data, length, flags),
+                 void *arg, void *data, size_t length, unsigned flags)
 
 {
     ucp_rndv_data_hdr_t *rndv_data_hdr = data;

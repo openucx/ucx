@@ -626,8 +626,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         skb->u.am.len = byte_len - sizeof(*neth);
         ucs_queue_push(&iface->rx.pending_q, &skb->u.am.queue);
     } else {
-        uct_ib_iface_invoke_am(&iface->super, am_id, neth + 1,
-                               byte_len - sizeof(*neth), &skb->super);
+        uct_ib_iface_invoke_am_desc(&iface->super, am_id, neth + 1,
+                                    byte_len - sizeof(*neth), &skb->super);
     }
     return;
 

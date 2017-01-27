@@ -38,7 +38,7 @@ ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
+ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
                   uint16_t flags, uint16_t hdr_len)
 {
     ucp_worker_h worker = arg;
@@ -103,7 +103,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
         }
     }
 
-    rdesc = ucp_recv_desc_get(worker, data, desc, length, hdr_len, flags);
+    rdesc = ucp_recv_desc_get(worker, data, length, hdr_len, am_flags, flags);
     if (!rdesc) {
         status = UCS_ERR_NO_MEMORY;
         goto out;
@@ -117,7 +117,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
 
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
 
-    status = (data == rdesc + 1) ? UCS_INPROGRESS : UCS_OK;
+    status = (am_flags & UCT_AM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
@@ -125,9 +125,9 @@ out:
 }
 
 static ucs_status_t ucp_eager_only_handler(void *arg, void *data, size_t length,
-                                           void *desc)
+                                           unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, desc,
+    return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER|
                              UCP_RECV_DESC_FLAG_FIRST|
                              UCP_RECV_DESC_FLAG_LAST,
@@ -135,35 +135,35 @@ static ucs_status_t ucp_eager_only_handler(void *arg, void *data, size_t length,
 }
 
 static ucs_status_t ucp_eager_first_handler(void *arg, void *data, size_t length,
-                                            void *desc)
+                                            unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, desc,
+    return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER|
                              UCP_RECV_DESC_FLAG_FIRST,
                              sizeof(ucp_eager_first_hdr_t));
 }
 
 static ucs_status_t ucp_eager_middle_handler(void *arg, void *data, size_t length,
-                                             void *desc)
+                                             unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, desc,
+    return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER,
                              sizeof(ucp_eager_hdr_t));
 }
 
 static ucs_status_t ucp_eager_last_handler(void *arg, void *data, size_t length,
-                                           void *desc)
+                                           unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, desc,
+    return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER|
                              UCP_RECV_DESC_FLAG_LAST,
                              sizeof(ucp_eager_hdr_t));
 }
 
 static ucs_status_t ucp_eager_sync_only_handler(void *arg, void *data,
-                                                size_t length, void *desc)
+                                                size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, desc,
+    return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER|
                              UCP_RECV_DESC_FLAG_FIRST|
                              UCP_RECV_DESC_FLAG_LAST|
@@ -172,9 +172,9 @@ static ucs_status_t ucp_eager_sync_only_handler(void *arg, void *data,
 }
 
 static ucs_status_t ucp_eager_sync_first_handler(void *arg, void *data,
-                                                 size_t length, void *desc)
+                                                 size_t length, unsigned am_flags)
 {
-    return ucp_eager_handler(arg, data, length, desc,
+    return ucp_eager_handler(arg, data, length, am_flags,
                              UCP_RECV_DESC_FLAG_EAGER|
                              UCP_RECV_DESC_FLAG_FIRST|
                              UCP_RECV_DESC_FLAG_SYNC,
@@ -182,7 +182,7 @@ static ucs_status_t ucp_eager_sync_first_handler(void *arg, void *data,
 }
 
 static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,
-                                               size_t length, void *desc)
+                                               size_t length, unsigned am_flags)
 {
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *req;
