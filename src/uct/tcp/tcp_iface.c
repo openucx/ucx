@@ -304,9 +304,11 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
         if (entry == NULL) {
             if (errno != 0) {
                 ucs_error("readdir(%s) failed: %m", netdev_dir);
+                ucs_free(resources);
                 status = UCS_ERR_IO_ERROR;
+                goto out_closedir;
             }
-            break;
+            break; /* no more items */
         }
 
         if (!uct_tcp_netif_check(entry->d_name)) {
