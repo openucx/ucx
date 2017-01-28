@@ -83,8 +83,9 @@ ucs_status_t test_rc_flow_control::am_send(uct_pending_req_t *self)
 
 void test_rc_flow_control::validate_grant(entity *e)
 {
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
-    while ((ucs_get_time() < timeout) && (get_fc_ptr(e)->fc_wnd <= 0)) {
+    ucs_time_t timeout = ucs_get_time() +
+                         ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+    while ((ucs_get_time() < timeout) && (!get_fc_ptr(e)->fc_wnd)) {
         short_progress_loop();
     }
     EXPECT_GT(get_fc_ptr(e)->fc_wnd, 0);

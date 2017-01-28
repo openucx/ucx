@@ -373,7 +373,8 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      }
 
      /* timeout used to prevent test hung */
-     ucs_time_t loop_end_limit_comp = ucs_get_time() + ucs_time_from_sec(1.0);
+     ucs_time_t loop_end_limit_comp = ucs_get_time() +
+                                      ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
      /* coverity[loop_condition] */
      while (flush_req.comp.count != 1) {
          if (ucs_get_time() > loop_end_limit_comp) {
@@ -389,9 +390,9 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
          reqs.pop_back();
      }
 
-     sender().destroy_ep(0);
-
      wait_am(count);
+
+     sender().destroy_ep(0);
 
      uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
 
