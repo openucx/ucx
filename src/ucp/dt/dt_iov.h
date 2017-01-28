@@ -11,6 +11,10 @@
 #include <ucp/api/ucp.h>
 
 
+#define UCP_DT_IS_IOV(_datatype) \
+    (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_IOV)
+
+
 /**
  * Get the total length of the data contains in IOV buffers
  */

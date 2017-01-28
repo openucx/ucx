@@ -315,6 +315,7 @@ void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     }
 
     /* if on the recv side there is a contig datatype, read the data with a get operation */
+    rndv_req->send.datatype = rreq->recv.datatype;
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
          ucp_rndv_handle_recv_contig(rndv_req, rreq, rndv_rts_hdr);
     } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype)) {
@@ -511,7 +512,6 @@ static ucs_status_t ucp_rndv_zcopy_multi(uct_pending_req_t *self)
 
 static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
 {
-    size_t max_zcopy;
     ucs_status_t status;
 
     ucs_trace_data("send on sreq %p with zcopy, am lane: %d, datatype: %zu, "
@@ -526,17 +526,14 @@ static void ucp_rndv_prepare_zcopy(ucp_request_t *sreq, ucp_ep_h ep)
         ucs_assert_always(status == UCS_OK);
     }
 
-    sreq->send.uct_comp.func = ucp_rndv_contig_zcopy_completion;
+    sreq->send.uct_comp.func  = ucp_rndv_contig_zcopy_completion;
+    sreq->send.uct_comp.count = 1;
 
-    max_zcopy = ucp_ep_config(ep)->am.max_zcopy;
-    if (sreq->send.length <= max_zcopy - sizeof(ucp_rndv_data_hdr_t)) {
-        sreq->send.uct_comp.count = 1;
-        sreq->send.uct.func = ucp_rndv_zcopy_single;
+    if (sreq->send.length <= ucp_ep_config(ep)->am.max_zcopy -
+        sizeof(ucp_rndv_data_hdr_t)) {
+        sreq->send.uct.func   = ucp_rndv_zcopy_single;
     } else {
-        /* calculate number of zcopy fragments */
-        sreq->send.uct_comp.count = 1 + (sreq->send.length - 1) /
-                                    (max_zcopy - sizeof(ucp_rndv_data_hdr_t));
-        sreq->send.uct.func = ucp_rndv_zcopy_multi;
+        sreq->send.uct.func   = ucp_rndv_zcopy_multi;
     }
 }
 
@@ -551,7 +548,7 @@ ucp_rndv_rtr_handler(void *arg, void *data, size_t length, void *desc)
     ucs_assert_always(!ucp_ep_is_stub(ep));
     ucs_trace_req("RTR received. start sending on sreq %p", sreq);
 
-    if (sreq->send.length >= ucp_ep_config(ep)->am.zcopy_thresh) {
+    if (sreq->send.length >= ucp_ep_config(ep)->am.zcopy_thresh[0]) {
         /* send with zcopy */
         ucp_rndv_prepare_zcopy(sreq, ep);
     } else {
