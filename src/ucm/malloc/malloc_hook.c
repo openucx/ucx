@@ -82,6 +82,7 @@ typedef struct ucm_malloc_hook_state {
     /**
      * Save the environment strings we've allocated
      */
+    pthread_mutex_t      env_lock;
     char                 **env_strs;
     unsigned             num_env_strs;
 } ucm_malloc_hook_state_t;
@@ -99,6 +100,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .ptrs             = NULL,
     .num_ptrs         = 0,
     .max_ptrs         = 0,
+    .env_lock         = PTHREAD_MUTEX_INITIALIZER,
     .env_strs         = NULL,
     .num_env_strs     = 0
 };
@@ -373,8 +375,6 @@ static void ucm_operator_vec_delete(void* ptr)
  * We remember the string we pass to putenv() so we would be able to release them
  * during library destructor (and thus avoid leaks). Also, if a variable is replaced,
  * we release the old string.
- *
- * This function is **not** thread safe, since setenv() is not thread safe anyway.
  */
 static int ucm_add_to_environ(char *env_str)
 {
@@ -427,16 +427,18 @@ static int ucm_setenv(const char *name, const char *value, int overwrite)
     char *env_str;
     int ret;
 
+    pthread_mutex_lock(&ucm_malloc_hook_state.env_lock);
     curr_value = getenv(name);
     if ((curr_value != NULL) && !overwrite) {
-        return 0;
+        ret = 0;
+        goto out;
     }
 
     env_str = ucm_malloc(strlen(name) + 1 + strlen(value) + 1, NULL);
     if (env_str == NULL) {
         errno = ENOMEM;
         ret = -1;
-        goto err;
+        goto out;
     }
 
     sprintf(env_str, "%s=%s", name, value);
@@ -446,11 +448,13 @@ static int ucm_setenv(const char *name, const char *value, int overwrite)
     }
 
     ucm_add_to_environ(env_str);
-    return 0;
+    ret = 0;
+    goto out;
 
 err_free:
     ucm_free(env_str, NULL);
-err:
+out:
+    pthread_mutex_unlock(&ucm_malloc_hook_state.env_lock);
     return ret;
 }
 

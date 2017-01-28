@@ -166,7 +166,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface);
 
-void uct_ud_iface_begin_cleanup(uct_ud_iface_t *iface);
+void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface);
 
 void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
                         void *data, size_t length, size_t valid_length,
