@@ -11,9 +11,6 @@
    libnl_error_string
    Memcheck:Leak
    ...
-   fun:__vasprintf_chk
-   fun:__asprintf_chk
-   fun:asprintf
    fun:__nl_error
 }
 
