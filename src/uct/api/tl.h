@@ -48,6 +48,8 @@ typedef struct uct_iface_ops {
 
     void         (*iface_wakeup_close)(uct_wakeup_h wakeup);
 
+    int (*iface_progress_set)(uct_iface_h iface, int enable, int disable);
+
     /* Connection establishment */
 
     ucs_status_t (*ep_create)(uct_iface_h iface, uct_ep_h *ep_p);
