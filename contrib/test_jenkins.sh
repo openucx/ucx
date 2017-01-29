@@ -182,7 +182,7 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     module unload hpcx-gcc
 
     module load intel/ics
-    ../contrib/configure-devel --prefix=$ucx_inst CC=icc
+    ../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icc
     make $make_opt clean
     make $make_opt all
     make $make_opt distclean
