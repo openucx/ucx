@@ -9,7 +9,7 @@
 #ifndef UCS_TYPES_STATUS_H_
 #define UCS_TYPES_STATUS_H_
 
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 
 
 /**

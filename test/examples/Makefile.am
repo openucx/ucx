@@ -14,5 +14,5 @@ dist_examples_DATA = \
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
 	$(CC) -o uct_hello_world $(examplesdir)/uct_hello_world.c -luct -lucs -I$(includedir) -L$(libdir) -Wl,-rpath,$(libdir)
-	$(CC) -o ucp_hello_world $(examplesdir)/ucp_hello_world.c -lucp -lucs -I$(includedir) -L$(libdir) -Wpadded -Wl,-rpath,$(libdir)
+	$(CC) -o ucp_hello_world $(examplesdir)/ucp_hello_world.c -lucp -lucs -I$(includedir) -L$(libdir) -pedantic -Werror -Wl,-rpath,$(libdir)
 	$(RM) *.o uct_hello_world ucp_hello_world

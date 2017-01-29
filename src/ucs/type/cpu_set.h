@@ -54,21 +54,20 @@ typedef struct {
         } \
     } while (0)
 
-#define UCS_CPU_ISSET(_cpu, _cpusetp) \
-    ({ \
-        size_t _cpu2 = (_cpu); \
-        (_cpu2 < (8 * sizeof(ucs_cpu_set_t))) ? \
-            (((((const ucs_cpu_mask_t *) ((_cpusetp)->ucs_bits))[UCS_CPUELT (_cpu2)] & \
-                UCS_CPUMASK (_cpu2))) != 0) : \
-            0; \
-     })
-
+static inline int ucs_cpu_is_set(int cpu, const ucs_cpu_set_t *cpusetp)
+{
+    if (cpu < (int)(8 * sizeof(ucs_cpu_set_t))) {
+        const ucs_cpu_mask_t *mask = cpusetp->ucs_bits;
+        return ((mask[UCS_CPUELT(cpu)] & UCS_CPUMASK(cpu)) != 0);
+    }
+    return 0;
+}
 
 static inline int ucs_cpu_set_find_lcs(const ucs_cpu_set_t * cpu_mask)
 {
     int i;
     for (i = 0; i < UCS_CPU_SETSIZE; ++i) {
-        if (UCS_CPU_ISSET(i, cpu_mask)) {
+        if (ucs_cpu_is_set(i, cpu_mask)) {
             return i;
         }
     }

@@ -8,6 +8,7 @@
 #define UCS_COMPILER_H_
 
 #include "preprocessor.h"
+#include "compiler_def.h"
 
 #include <stddef.h>
 #include <stdarg.h>
@@ -38,9 +39,6 @@
 #define UCS_STATIC_ASSERT(_cond) \
      switch(0) {case 0:case (_cond):;}
 
-/* Packed structure */
-#define UCS_S_PACKED __attribute__((packed))
-
 /* Aliasing structure */
 #define UCS_S_MAY_ALIAS __attribute__((may_alias))
 
@@ -55,13 +53,6 @@
 #define UCS_F_NOOPTIMIZE __attribute__((optimize("O0")))
 #else
 #define UCS_F_NOOPTIMIZE
-#endif
-
-/* Always inline the function */
-#ifdef __GNUC__
-#define UCS_F_ALWAYS_INLINE inline __attribute__ ((always_inline))
-#else
-#define UCS_F_ALWAYS_INLINE inline 
 #endif
 
 /* Avoid inlining the function */

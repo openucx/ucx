@@ -8,8 +8,7 @@
 #define UCS_CONFIG_TYPES_H
 
 
-#include <ucs/sys/math.h>
-
+#include <ucs/sys/compiler_def.h>
 
 /**
  * Logging levels.
@@ -51,7 +50,7 @@ typedef enum ucs_ternary_value {
     UCS_NO  = 0,
     UCS_YES = 1,
     UCS_TRY = 2,
-    UCS_TERNARY_LAST,
+    UCS_TERNARY_LAST
 } ucs_ternary_value_t;
 
 
@@ -73,7 +72,7 @@ typedef enum {
     UCS_CONFIG_PRINT_CONFIG        = UCS_BIT(0),
     UCS_CONFIG_PRINT_HEADER        = UCS_BIT(1),
     UCS_CONFIG_PRINT_DOC           = UCS_BIT(2),
-    UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(3),
+    UCS_CONFIG_PRINT_HIDDEN        = UCS_BIT(3)
 } ucs_config_print_flags_t;
 
 

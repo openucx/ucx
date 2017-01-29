@@ -8,6 +8,7 @@
 #define SM_IFACE_H_
 
 #include <uct/api/uct.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 
 #define UCT_SM_IFACE_DEVICE_ADDR_LEN    sizeof(uint64_t)

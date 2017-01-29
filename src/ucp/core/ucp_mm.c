@@ -8,6 +8,7 @@
 
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/sys/math.h>
 
 #include <string.h>
 #include <inttypes.h>

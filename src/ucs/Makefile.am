@@ -39,8 +39,30 @@ nobase_dist_libucs_la_HEADERS = \
 	config/global_opts.h \
 	config/parser.h \
 	config/types.h \
-	datastruct/arbiter.h \
 	datastruct/callbackq.h \
+	datastruct/list_types.h \
+	debug/check.h \
+	debug/debug.h \
+	debug/instrument.h \
+	debug/log.h \
+	debug/memtrack.h \
+	debug/profile.h \
+	stats/stats_fd.h \
+	stats/libstats.h \
+	stats/stats.h \
+	sys/compiler_def.h\
+	time/time.h \
+	time/timerq.h \
+	time/timer_wheel.h \
+	type/class.h \
+	type/component.h \
+	type/spinlock.h \
+	type/status.h \
+	type/thread_mode.h \
+	type/cpu_set.h
+
+noinst_HEADERS = \
+	datastruct/arbiter.h \
 	datastruct/callbackq.inl \
 	datastruct/frag_list.h \
 	datastruct/hash.h \
@@ -55,31 +77,11 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/khash.h \
-	debug/check.h \
-	debug/debug.h \
-	debug/instrument.h \
-	debug/log.h \
-	debug/memtrack.h \
-	debug/profile.h \
-	stats/stats_fd.h \
-	stats/libstats.h \
-	stats/stats.h \
 	sys/compiler.h \
 	sys/math.h \
 	sys/preprocessor.h \
 	sys/rcache.h \
 	sys/sys.h \
-	time/time.h \
-	time/timerq.h \
-	time/timer_wheel.h \
-	type/class.h \
-	type/component.h \
-	type/spinlock.h \
-	type/status.h \
-	type/thread_mode.h \
-	type/cpu_set.h
-
-noinst_HEADERS = \
 	async/async_int.h
 
 libucs_la_SOURCES = \

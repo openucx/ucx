@@ -18,24 +18,24 @@ UCS_TEST_F(test_type, cpu_set) {
     ucs_cpu_set_t cpu_mask;
 
     UCS_CPU_ZERO(&cpu_mask);
-    EXPECT_FALSE(UCS_CPU_ISSET(117, &cpu_mask));
-    EXPECT_FALSE(UCS_CPU_ISSET(127, &cpu_mask));
+    EXPECT_FALSE(ucs_cpu_is_set(117, &cpu_mask));
+    EXPECT_FALSE(ucs_cpu_is_set(127, &cpu_mask));
     EXPECT_EQ(0, ucs_cpu_set_find_lcs(&cpu_mask));
 
     UCS_CPU_SET(127, &cpu_mask);
     UCS_CPU_SET(117, &cpu_mask);
-    EXPECT_TRUE(UCS_CPU_ISSET(117, &cpu_mask));
-    EXPECT_TRUE(UCS_CPU_ISSET(127, &cpu_mask));
+    EXPECT_TRUE(ucs_cpu_is_set(117, &cpu_mask));
+    EXPECT_TRUE(ucs_cpu_is_set(127, &cpu_mask));
     EXPECT_EQ(117, ucs_cpu_set_find_lcs(&cpu_mask));
 
     UCS_CPU_CLR(117, &cpu_mask);
-    EXPECT_FALSE(UCS_CPU_ISSET(117, &cpu_mask));
-    EXPECT_TRUE(UCS_CPU_ISSET(127, &cpu_mask));
+    EXPECT_FALSE(ucs_cpu_is_set(117, &cpu_mask));
+    EXPECT_TRUE(ucs_cpu_is_set(127, &cpu_mask));
     EXPECT_EQ(127, ucs_cpu_set_find_lcs(&cpu_mask));
 
     UCS_CPU_CLR(127, &cpu_mask);
-    EXPECT_FALSE(UCS_CPU_ISSET(117, &cpu_mask));
-    EXPECT_FALSE(UCS_CPU_ISSET(127, &cpu_mask));
+    EXPECT_FALSE(ucs_cpu_is_set(117, &cpu_mask));
+    EXPECT_FALSE(ucs_cpu_is_set(127, &cpu_mask));
     EXPECT_EQ(0, ucs_cpu_set_find_lcs(&cpu_mask));
 }
 
