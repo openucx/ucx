@@ -73,6 +73,11 @@ typedef struct uct_ib_md {
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
     UCS_STATS_NODE_DECLARE(stats);
+
+    struct {
+        uct_ib_device_spec_t *specs;    /* Custom device specifications */
+        unsigned             count;     /* Number of custom devices */
+    } custom_devices;
 } uct_ib_md_t;
 
 
@@ -91,11 +96,13 @@ typedef struct uct_ib_md_config {
 
     uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
-
-    unsigned                fork_init;     /**< Use ibv_fork_init() */
-    int                     eth_pause;     /**< Whether or not Pause Frame is
+    unsigned                 fork_init;    /**< Use ibv_fork_init() */
+    int                      eth_pause;    /**< Whether or not Pause Frame is
                                                 enabled on the Ethernet network */
     uct_ib_odp_config_t      odp;          /**< ODP configuration */
+
+    UCS_CONFIG_STRING_ARRAY_FIELD(spec) custom_devices; /**< Custom device specifications */
+
 } uct_ib_md_config_t;
 
 

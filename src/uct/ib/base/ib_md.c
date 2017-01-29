@@ -114,6 +114,17 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "Maximal memory region size to enable ODP for. 0 - disable.\n",
    ucs_offsetof(uct_ib_md_config_t, odp.max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"DEVICE_SPECS", "",
+   "Array of custom device specification. Each element is a string of the following format:\n"
+   "  <vendor-id>:<part-id>[:name[:<flags>[:<priority>]]]\n"
+   "where:\n"
+   "  <vendor-id> - (mandatory) vendor id, integer or hexadecimal.\n"
+   "  <part-id>   - (mandatory) vendor part id, integer or hexadecimal.\n"
+   "  <name>      - (optional) device name.\n"
+   "  <flags>     - (optional) empty, or any of: '4' - mlx4 device, '5' - mlx5 device.\n"
+   "  <priority>  - (optional) device priority, integer.\n",
+   ucs_offsetof(uct_ib_md_config_t, custom_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {NULL}
 };
 
@@ -989,6 +1000,83 @@ static void uct_ib_fork_warn_enable()
     }
 }
 
+static void uct_ib_md_release_device_config(uct_ib_md_t *md)
+{
+    unsigned i;
+
+    for (i = 0; i < md->custom_devices.count; ++i) {
+        free((char*)md->custom_devices.specs[i].name);
+    }
+    ucs_free(md->custom_devices.specs);
+}
+
+static ucs_status_t
+uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
+{
+    uct_ib_device_spec_t *spec;
+    ucs_status_t status;
+    char *flags_str, *p;
+    unsigned i, count;
+    int nfields;
+
+    count = md->custom_devices.count = md_config->custom_devices.count;
+    if (count == 0) {
+        md->custom_devices.specs = NULL;
+        md->custom_devices.count = 0;
+        return UCS_OK;
+    }
+
+    md->custom_devices.specs = ucs_calloc(count, sizeof(*md->custom_devices.specs),
+                                          "ib_custom_devices");
+    if (md->custom_devices.specs == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    for (i = 0; i < count; ++i) {
+        spec = &md->custom_devices.specs[i];
+        nfields = sscanf(md_config->custom_devices.spec[i],
+                         "%hi:%hi:%m[^:]:%m[^:]:%hhu",
+                         &spec->vendor_id, &spec->part_id, &spec->name,
+                         &flags_str, &spec->priority);
+        if (nfields < 2) {
+            ucs_error("failed to parse device config '%s' (parsed: %d/%d)",
+                      md_config->custom_devices.spec[i], nfields, 5);
+            status = UCS_ERR_INVALID_PARAM;
+            goto err_free;
+        }
+
+        if (nfields >= 4) {
+            for (p = flags_str; *p != 0; ++p) {
+                if (*p == '4') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_MLX4_PRM;
+                } else if (*p == '5') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+                } else {
+                    ucs_error("invalid device flag: '%c'", *p);
+                    free(flags_str);
+                    status = UCS_ERR_INVALID_PARAM;
+                    goto err_free;
+                }
+            }
+            free(flags_str);
+        }
+
+        ucs_trace("added device '%s' vendor_id 0x%x part_id %d flags %c%c prio %d",
+                  spec->name, spec->vendor_id, spec->part_id,
+                  (spec->flags & UCT_IB_DEVICE_FLAG_MLX4_PRM) ? '4' : '-',
+                  (spec->flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) ? '5' : '-',
+                  spec->priority);
+    }
+
+    return UCS_OK;
+
+err_free:
+    uct_ib_md_release_device_config(md);
+err:
+    return status;
+}
+
 static ucs_status_t
 uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
@@ -1106,6 +1194,11 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
         }
     }
 
+    status = uct_ib_md_parse_device_config(md, md_config);
+    if (status != UCS_OK) {
+        goto err_destroy_rcache;
+    }
+
     *md_p = &md->super;
     status = UCS_OK;
 
@@ -1114,6 +1207,10 @@ out_free_dev_list:
 out:
     return status;
 
+err_destroy_rcache:
+    if (md->rcache != NULL) {
+        ucs_rcache_destroy(md->rcache);
+    }
 err_destroy_umr_qp:
     uct_ib_md_umr_qp_destroy(md);
 err_dealloc_pd:
@@ -1131,6 +1228,7 @@ static void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
+    uct_ib_md_release_device_config(md);
     if (md->rcache != NULL) {
         ucs_rcache_destroy(md->rcache);
     }

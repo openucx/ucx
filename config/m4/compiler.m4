@@ -95,9 +95,30 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
          CFLAGS="$SAVE_CFLAGS"
 ])
 
-CHECK_DEPRECATED_DECL_FLAG([-diag-disable=1478], CFLAGS_NO_DEPRECATED) # icc
+CHECK_DEPRECATED_DECL_FLAG([-diag-disable 1478], CFLAGS_NO_DEPRECATED) # icc
 CHECK_DEPRECATED_DECL_FLAG([-Wno-deprecated-declarations], CFLAGS_NO_DEPRECATED) # gcc
 AC_SUBST([CFLAGS_NO_DEPRECATED], [$CFLAGS_NO_DEPRECATED])
+
+
+#
+# Disable format-string warning on ICC
+#
+SAVE_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -diag-disable 269"
+AC_MSG_CHECKING([-diag-disable 269])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+                     #include <stdlib.h>
+                     #include <stdio.h>
+                     int main() {
+                         char *p = NULL;
+                         scanf("%m[^.]", &p);
+                         free(p);
+                         return 0;
+                     }
+                 ]])],
+               [AC_MSG_RESULT([yes])],
+               [AC_MSG_RESULT([no])
+                CFLAGS="$SAVE_CFLAGS"])
 
 
 #

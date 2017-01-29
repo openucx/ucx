@@ -15,13 +15,11 @@
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
 
-#define UCT_IB_DEVICE_NAME_LEN 256
 #define UCT_IB_MAX_IOV         8UL
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
-typedef struct uct_ib_device_info    uct_ib_device_info_t;
 typedef struct uct_ib_iface         uct_ib_iface_t;
 
 
@@ -85,13 +83,6 @@ struct uct_ib_iface_ops {
     void                    (*handle_failure)(uct_ib_iface_t *iface, void *arg);
 };
 
-
-struct uct_ib_device_info {
-    int                     vendor_part_id;
-    char                    name[UCT_IB_DEVICE_NAME_LEN];
-    unsigned                flags;
-    uint8_t                 priority;
-};
 
 struct uct_ib_iface {
     uct_base_iface_t        super;
