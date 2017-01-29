@@ -608,8 +608,7 @@ static ucs_status_t ucp_wireup_add_am_lane(ucp_ep_h ep, unsigned address_count,
 static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count,
                                              const ucp_address_entry_t *address_list,
                                              ucp_wireup_lane_desc_t *lane_descs,
-                                             ucp_lane_index_t *num_lanes_p,
-                                             int usage)
+                                             ucp_lane_index_t *num_lanes_p)
 {
     ucp_wireup_criteria_t criteria;
     ucp_rsc_index_t rsc_index;
@@ -641,7 +640,7 @@ static ucs_status_t ucp_wireup_add_rndv_lane(ucp_ep_h ep, unsigned address_count
         (strstr(ep->worker->context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni") == NULL)) {
          ucp_wireup_add_lane_desc(lane_descs, num_lanes_p, rsc_index, addr_index,
                                  address_list[addr_index].md_index, score,
-                                 usage);
+                                 UCP_WIREUP_LANE_USAGE_RNDV);
     }
 
     return UCS_OK;
@@ -741,8 +740,7 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
     }
 
     status = ucp_wireup_add_rndv_lane(ep, address_count, address_list,
-                                      lane_descs, &key->num_lanes,
-                                      UCP_WIREUP_LANE_USAGE_RNDV);
+                                      lane_descs, &key->num_lanes);
     if (status != UCS_OK) {
         return status;
     }

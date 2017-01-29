@@ -475,7 +475,6 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
                     unsigned length, void *desc)
 {
     uct_am_handler_t *handler = &iface->am[id];
-
     ucs_assert(id < UCT_AM_ID_MAX);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
