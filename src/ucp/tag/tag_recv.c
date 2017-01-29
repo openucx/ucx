@@ -86,6 +86,8 @@ ucp_tag_recv_request_init(ucp_request_t *req, ucp_worker_h worker, void* buffer,
     case UCP_DATATYPE_IOV:
         req->recv.state.dt.iov.iov_offset    = 0;
         req->recv.state.dt.iov.iovcnt_offset = 0;
+        req->recv.state.dt.iov.iovcnt        = count;
+        req->recv.state.dt.iov.memh          = UCT_INVALID_MEM_HANDLE;
         break;
 
     case UCP_DATATYPE_GENERIC:

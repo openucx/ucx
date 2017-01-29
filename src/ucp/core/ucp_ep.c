@@ -653,12 +653,14 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     ucp_rsc_index_t rsc_index;
     uct_md_attr_t *md_attr;
     ucp_lane_index_t lane;
-    double zcopy_thresh;
-    size_t rndv_thresh;
+    size_t zcopy_thresh, rndv_thresh, it;
 
     /* Default settings */
-    config->am.zcopy_thresh       = SIZE_MAX;
-    config->am.sync_zcopy_thresh  = -1;
+    for (it = 0; it < UCP_MAX_IOV; ++it) {
+        config->am.zcopy_thresh[it]       = SIZE_MAX;
+        config->am.sync_zcopy_thresh[it]  = SIZE_MAX;
+    }
+    config->am.zcopy_auto_thresh  = 0;
     config->bcopy_thresh          = context->config.ext.bcopy_thresh;
     config->rndv.rma_thresh       = SIZE_MAX;
     config->rndv.max_get_zcopy    = SIZE_MAX;
@@ -700,28 +702,25 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             if ((iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) &&
                 (md_attr->cap.flags & UCT_MD_FLAG_REG))
             {
-                config->am.max_zcopy = iface_attr->cap.am.max_zcopy;
+                config->am.max_zcopy  = iface_attr->cap.am.max_zcopy;
+                config->am.max_iovcnt = ucs_min(UCP_MAX_IOV, iface_attr->cap.am.max_iov);
 
                 if (context->config.ext.zcopy_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
                     /* auto */
-                    zcopy_thresh = md_attr->reg_cost.overhead / (
-                                            (1.0 / context->config.ext.bcopy_bw) -
-                                            (1.0 / iface_attr->bandwidth) -
-                                            md_attr->reg_cost.growth);
-                    if (zcopy_thresh < 0) {
-                        config->am.zcopy_thresh      = SIZE_MAX;
-                        config->am.sync_zcopy_thresh = -1;
-                    } else {
-                        config->am.zcopy_thresh      = zcopy_thresh;
-                        config->am.sync_zcopy_thresh = zcopy_thresh;
+                    config->am.zcopy_auto_thresh = 1;
+                    for (it = 0; it < UCP_MAX_IOV; ++it) {
+                        zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(
+                                           it + 1, &md_attr->reg_cost, context,
+                                           iface_attr->bandwidth);
+                        config->am.sync_zcopy_thresh[it] = zcopy_thresh;
+                        config->am.zcopy_thresh[it]      = ucs_max(zcopy_thresh,
+                                                                   iface_attr->cap.am.min_zcopy);
                     }
                 } else {
-                    config->am.zcopy_thresh      = context->config.ext.zcopy_thresh;
-                    config->am.sync_zcopy_thresh = context->config.ext.zcopy_thresh;
+                    config->am.sync_zcopy_thresh[0] = context->config.ext.zcopy_thresh;
+                    config->am.zcopy_thresh[0]      = ucs_max(context->config.ext.zcopy_thresh,
+                                                              iface_attr->cap.am.min_zcopy);
                 }
-
-                config->am.zcopy_thresh = ucs_max(config->am.zcopy_thresh,
-                                                  iface_attr->cap.am.min_zcopy);
             }
 
             /* calculate an rndv threshold for AM Rendezvous */
@@ -968,12 +967,12 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     if (context->config.features & UCP_FEATURE_TAG) {
          ucp_ep_config_print_tag_proto(stream, "tag_send",
                                        config->am.max_eager_short,
-                                       config->am.zcopy_thresh,
+                                       config->am.zcopy_thresh[0],
                                        config->rndv.rma_thresh,
                                        config->rndv.am_thresh);
          ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
                                        config->am.max_eager_short,
-                                       config->am.sync_zcopy_thresh,
+                                       config->am.sync_zcopy_thresh[0],
                                        config->rndv.rma_thresh,
                                        config->rndv.am_thresh);
      }
@@ -1026,4 +1025,22 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     fprintf(stream, "#\n");
 
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
+}
+
+size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
+                                           const uct_linear_growth_t *reg_cost,
+                                           const ucp_context_h context,
+                                           double bandwidth)
+{
+    double zcopy_thresh;
+    double bcopy_bw = context->config.ext.bcopy_bw;
+
+    zcopy_thresh = (iovcnt * reg_cost->overhead) /
+                   ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->growth));
+
+    if ((zcopy_thresh < 0.0) || (zcopy_thresh > SIZE_MAX)) {
+        return SIZE_MAX;
+    }
+
+    return zcopy_thresh;
 }

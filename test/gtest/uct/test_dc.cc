@@ -14,6 +14,12 @@ extern "C" {
 #include "uct_test.h"
 #include "test_rc.h"
 
+
+#define UCT_DC_INSTANTIATE_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
+
+
 class test_dc : public uct_test {
 public:
     virtual void init() {
@@ -358,8 +364,7 @@ UCS_TEST_P(test_dc, dcs_ep_purge_pending) {
     EXPECT_EQ(0, iface->tx.stack_top);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_dc, dc)
-_UCT_INSTANTIATE_TEST_CASE(test_dc, dc_mlx5)
+UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
 
 class test_dc_flow_control : public test_rc_flow_control {
@@ -380,12 +385,15 @@ public:
 
 UCS_TEST_P(test_dc_flow_control, general_enabled)
 {
-    test_general(8, true);
+    /* Do not set FC hard thresh bigger than 1, because DC decreases
+     * the window by one when it sends fc grant request. So some checks
+     * may fail if threshold is bigger than 1. */
+    test_general(8, 4, 1, true);
 }
 
 UCS_TEST_P(test_dc_flow_control, general_disabled)
 {
-    test_general(8, false);
+    test_general(8, 4, 1, false);
 }
 
 UCS_TEST_P(test_dc_flow_control, pending_grant)
@@ -406,7 +414,7 @@ UCS_TEST_P(test_dc_flow_control, soft_request)
     send_am_messages(m_e1, wnd - (s_thresh - 1), UCS_OK);
     progress_loop();
 
-    set_tx_moderation(m_e2, 1);
+    set_tx_moderation(m_e2, 0);
     send_am_messages(m_e2, 1, UCS_OK);
     progress_loop();
 
@@ -429,12 +437,12 @@ UCS_TEST_P(test_dc_flow_control, flush)
     send_am_messages(m_e1, wnd, UCS_OK);
     progress_loop();
 
-    EXPECT_EQ(uct_ep_flush(m_e1->ep(0), 0, NULL), UCS_INPROGRESS);
+    EXPECT_EQ(uct_ep_flush(m_e1->ep(0), 0, NULL), UCS_ERR_NO_RESOURCE);
 
     /* Enable send capabilities of m_e2 and send AM message
      * to force pending queue dispatch */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 1);
+    set_tx_moderation(m_e2, 0);
     send_am_messages(m_e2, 1, UCS_OK);
     progress_loop();
 
@@ -460,8 +468,9 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     EXPECT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &req));
 
     /* Make sure that ep does not hold dci when sends completed */
-    ucs_time_t timeout    = ucs_get_time() + ucs_time_from_sec(10);
     uct_dc_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_dc_iface_t);
+    ucs_time_t timeout    = ucs_get_time() +
+                            ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
     while (iface->tx.stack_top && (ucs_get_time() < timeout)) {
         progress();
     }
@@ -477,7 +486,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     validate_grant(m_e1);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control, dc)
+UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control)
 
 
 #if ENABLE_STATS
@@ -503,7 +512,7 @@ public:
 
 UCS_TEST_P(test_dc_flow_control_stats, general)
 {
-    test_general(5);
+    test_general(5, 2, 1);
 }
 
 UCS_TEST_P(test_dc_flow_control_stats, fc_ep)
@@ -532,7 +541,8 @@ UCS_TEST_P(test_dc_flow_control_stats, fc_ep)
     flush();
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_dc_flow_control_stats, dc)
+
+UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control_stats)
 
 #endif
 

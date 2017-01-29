@@ -79,7 +79,7 @@ void ucs_debug_print_backtrace(FILE *stream, int strip);
  * Called when UCS detects a fatal error and provides means to debug the current
  * state of UCS.
  */
-void ucs_handle_error();
+void ucs_handle_error(const char *error_type, const char *message, ...);
 
 
 /**

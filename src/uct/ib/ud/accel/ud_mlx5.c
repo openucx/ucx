@@ -681,7 +681,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
         return status;
     }
 
-    status = uct_ud_mlx5_iface_common_init(&self->mlx5_common, &config->mlx5_common);
+    status = uct_ud_mlx5_iface_common_init(&self->super.super,
+                                           &self->mlx5_common, &config->mlx5_common);
     if (status != UCS_OK) {
         return status;
     }
@@ -707,9 +708,10 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
 {
     ucs_trace_func("");
+    uct_ud_iface_remove_async_handlers(&self->super);
     uct_ud_enter(&self->super);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
-    uct_ud_iface_begin_cleanup(&self->super);
+    ucs_twheel_cleanup(&self->super.async.slow_timer);
     uct_ib_mlx5_txwq_cleanup(self->super.super.super.worker, &self->tx.wq);
     uct_ud_leave(&self->super);
 }

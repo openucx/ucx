@@ -169,3 +169,98 @@ ucs_status_t ucp_request_start_send(ucp_request_t *req)
     return status;
 }
 
+static UCS_F_ALWAYS_INLINE
+void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
+                               size_t count)
+{
+    size_t it;
+
+    for (it = 0; it < count; ++it) {
+        if (memh[it] != UCT_INVALID_MEM_HANDLE) {
+            uct_md_mem_dereg(uct_md, memh[it]);
+        }
+    }
+}
+
+ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    uct_md_h uct_md         = ucp_ep_md(req->send.ep, lane);
+    ucp_frag_state_t *state = &req->send.state;
+    size_t iov_it, iovcnt;
+    const ucp_dt_iov_t *iov;
+    uct_mem_h *memh;
+    ucs_status_t status;
+
+    status = UCS_OK;
+    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        status = uct_md_mem_reg(uct_md, (void *)req->send.buffer, req->send.length,
+                                0, &state->dt.contig.memh);
+        break;
+    case UCP_DATATYPE_IOV:
+        iovcnt = state->dt.iov.iovcnt;
+        iov    = req->send.buffer;
+        memh   = ucs_malloc(sizeof(*memh) * iovcnt, "IOV memh");
+        if (NULL == memh) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+            if (iov[iov_it].length) {
+                status = uct_md_mem_reg(uct_md, iov[iov_it].buffer,
+                                        iov[iov_it].length, 0, &memh[iov_it]);
+                if (status != UCS_OK) {
+                    /* unregister previously registered memory */
+                    ucp_iov_buffer_memh_dereg(uct_md, memh, iov_it);
+                    ucs_free(memh);
+                    goto err;
+                }
+            } else {
+                memh[iov_it] = UCT_INVALID_MEM_HANDLE; /* Indicator for zero length */
+            }
+        }
+        state->dt.iov.memh = memh;
+        break;
+    default:
+        status = UCS_ERR_INVALID_PARAM;
+        ucs_error("Invalid data type %lx", req->send.datatype);
+    }
+
+err:
+    if (status != UCS_OK) {
+        ucs_error("failed to register user buffer [datatype=%lx address=%p "
+                  "len=%zu pd=\"%s\"]: %s",
+                  req->send.datatype, req->send.buffer, req->send.length,
+                  ucp_ep_md_attr(req->send.ep, lane)->component_name,
+                  ucs_status_string(status));
+    }
+    return status;
+}
+
+void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    uct_md_h uct_md         = ucp_ep_md(req->send.ep, lane);
+    ucp_frag_state_t *state = &req->send.state;
+    uct_mem_h *memh;
+    size_t iov_it;
+
+    switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
+        if (req->send.state.dt.contig.memh != UCT_INVALID_MEM_HANDLE) {
+            uct_md_mem_dereg(uct_md, state->dt.contig.memh);
+        }
+        break;
+    case UCP_DATATYPE_IOV:
+        memh = state->dt.iov.memh;
+        for (iov_it = 0; iov_it < state->dt.iov.iovcnt; ++iov_it) {
+            if (memh[iov_it] != UCT_INVALID_MEM_HANDLE) { /* skip zero memh */
+                uct_md_mem_dereg(uct_md, memh[iov_it]);
+            }
+        }
+        ucs_free(state->dt.iov.memh);
+        break;
+    default:
+        ucs_error("Invalid data type");
+    }
+}
+

@@ -83,7 +83,8 @@ ucs_status_t test_rc_flow_control::am_send(uct_pending_req_t *self)
 
 void test_rc_flow_control::validate_grant(entity *e)
 {
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(10.0);
+    ucs_time_t timeout = ucs_get_time() +
+                         ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
     while ((ucs_get_time() < timeout) && (!get_fc_ptr(e)->fc_wnd)) {
         short_progress_loop();
     }
@@ -93,11 +94,10 @@ void test_rc_flow_control::validate_grant(entity *e)
 /* Check that FC window works as expected:
  * - If FC enabled, only 'wnd' messages can be sent in a row
  * - If FC is disabled 'wnd' does not limit senders flow  */
-void test_rc_flow_control::test_general(int wnd, bool is_fc_enabled)
+void test_rc_flow_control::test_general(int wnd, int soft_thresh,
+                                        int hard_thresh, bool is_fc_enabled)
 {
-    set_fc_attributes(m_e1, is_fc_enabled, wnd,
-                      ucs_max((int)(wnd*0.5), 1),
-                      ucs_max((int)(wnd*0.25), 1));
+    set_fc_attributes(m_e1, is_fc_enabled, wnd, soft_thresh, hard_thresh);
 
     send_am_messages(m_e1, wnd, UCS_OK);
     send_am_messages(m_e1, 1, is_fc_enabled ?  UCS_ERR_NO_RESOURCE : UCS_OK);
@@ -125,12 +125,12 @@ void test_rc_flow_control::test_pending_grant(int wnd)
     /* Now m_e1 should be blocked by FC window and FC grant
      * should be in pending queue of m_e2. */
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
-    EXPECT_EQ(get_fc_ptr(m_e1)->fc_wnd, 0);
+    EXPECT_LE(get_fc_ptr(m_e1)->fc_wnd, 0);
 
     /* Enable send capabilities of m_e2 and send AM message
      * to force pending queue dispatch */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 1);
+    set_tx_moderation(m_e2, 0);
     send_am_messages(m_e2, 1, UCS_OK);
 
     /* Check that m_e1 got grant */
@@ -164,12 +164,12 @@ void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
 /* Check that FC window works as expected */
 UCS_TEST_P(test_rc_flow_control, general_enabled)
 {
-    test_general(8, true);
+    test_general(8, 4, 2, true);
 }
 
 UCS_TEST_P(test_rc_flow_control, general_disabled)
 {
-    test_general(8, true);
+    test_general(8, 4, 2, true);
 }
 
 /* Test the scenario when ep is being destroyed while there is
@@ -205,13 +205,12 @@ UCT_RC_INSTANTIATE_TEST_CASE(test_rc_flow_control)
 
 #if ENABLE_STATS
 
-void test_rc_flow_control_stats::test_general(int wnd)
+void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
+                                              int hard_thresh)
 {
     uint64_t v;
 
-    set_fc_attributes(m_e1, true, wnd,
-                      ucs_max((int)(wnd*0.5), 1),
-                      ucs_max((int)(wnd*0.25), 1));
+    set_fc_attributes(m_e1, true, wnd, soft_thresh, hard_thresh);
 
     send_am_messages(m_e1, wnd, UCS_OK);
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
@@ -234,7 +233,7 @@ void test_rc_flow_control_stats::test_general(int wnd)
 
 UCS_TEST_P(test_rc_flow_control_stats, general)
 {
-    test_general(5);
+    test_general(5, 2, 1);
 }
 
 UCS_TEST_P(test_rc_flow_control_stats, soft_request)

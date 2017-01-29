@@ -64,8 +64,12 @@ public:
     void check_am_rx_counters(size_t len) {
         uint64_t v;
 
-        short_progress_loop(100.0);
-        v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM);
+        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+        do {
+            short_progress_loop();
+            v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM);
+        } while ((ucs_get_time() < timeout) && !v);
+
         EXPECT_EQ(1UL, v);
         v = UCS_STATS_GET_COUNTER(uct_iface(receiver())->stats, UCT_IFACE_STAT_RX_AM_BYTES);
         EXPECT_EQ(len, v);
@@ -216,12 +220,18 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
 
     check_caps(UCT_IFACE_FLAG_GET_BCOPY);
 
+    m_comp.count = 2;
+    m_comp.func  = NULL;
     status = uct_ep_get_bcopy(sender_ep(), (uct_unpack_callback_t)memcpy,
                               lbuf->ptr(), lbuf->length(),
-                              rbuf->addr(), rbuf->rkey(), NULL);
+                              rbuf->addr(), rbuf->rkey(), &m_comp);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
 
-    short_progress_loop();
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+    do {
+        short_progress_loop();
+    } while ((ucs_get_time() < timeout) && (m_comp.count != 1));
+
     check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_BCOPY,
                       lbuf->length());
 }
@@ -235,8 +245,15 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.get.max_iov);
 
+    m_comp.count = 2;
+    m_comp.func  = NULL;
     status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
+
+    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
+    do {
+        short_progress_loop();
+    } while ((ucs_get_time() < timeout) && (m_comp.count != 1));
 
     short_progress_loop();
     check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_ZCOPY,

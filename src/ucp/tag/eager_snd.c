@@ -169,23 +169,23 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     return status;
 }
 
-static void ucp_tag_eager_contig_zcopy_req_complete(ucp_request_t *req)
+static void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req)
 {
     ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
     ucp_request_complete_send(req, UCS_OK);
 }
 
-static ucs_status_t ucp_tag_eager_contig_zcopy_single(uct_pending_req_t *self)
+static ucs_status_t ucp_tag_eager_zcopy_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_hdr_t hdr;
 
     hdr.super.tag = req->send.tag;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_ONLY, &hdr, sizeof(hdr),
-                                  ucp_tag_eager_contig_zcopy_req_complete);
+                                  ucp_tag_eager_zcopy_req_complete);
 }
 
-static ucs_status_t ucp_tag_eager_contig_zcopy_multi(uct_pending_req_t *self)
+static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_first_hdr_t first_hdr;
@@ -198,23 +198,23 @@ static ucs_status_t ucp_tag_eager_contig_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_EAGER_LAST,
                                  &first_hdr, sizeof(first_hdr),
                                  &first_hdr.super, sizeof(first_hdr.super),
-                                 ucp_tag_eager_contig_zcopy_req_complete);
+                                 ucp_tag_eager_zcopy_req_complete);
 }
 
-static void ucp_tag_eager_contig_zcopy_completion(uct_completion_t *self,
-                                                  ucs_status_t status)
+static void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
+                                           ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_tag_eager_contig_zcopy_req_complete(req);
+    ucp_tag_eager_zcopy_req_complete(req);
 }
 
 const ucp_proto_t ucp_tag_eager_proto = {
     .contig_short            = ucp_tag_eager_contig_short,
     .bcopy_single            = ucp_tag_eager_bcopy_single,
     .bcopy_multi             = ucp_tag_eager_bcopy_multi,
-    .contig_zcopy_single     = ucp_tag_eager_contig_zcopy_single,
-    .contig_zcopy_multi      = ucp_tag_eager_contig_zcopy_multi,
-    .contig_zcopy_completion = ucp_tag_eager_contig_zcopy_completion,
+    .zcopy_single            = ucp_tag_eager_zcopy_single,
+    .zcopy_multi             = ucp_tag_eager_zcopy_multi,
+    .zcopy_completion        = ucp_tag_eager_zcopy_completion,
     .only_hdr_size           = sizeof(ucp_eager_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
@@ -264,13 +264,13 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
     return status;
 }
 
-static inline void ucp_tag_eager_sync_contig_zcopy_req_complete(ucp_request_t *req)
+static inline void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req)
 {
     ucp_request_send_buffer_dereg(req, req->send.lane); /* TODO register+lane change */
     ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED);
 }
 
-static ucs_status_t ucp_tag_eager_sync_contig_zcopy_single(uct_pending_req_t *self)
+static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_sync_hdr_t hdr;
@@ -280,10 +280,10 @@ static ucs_status_t ucp_tag_eager_sync_contig_zcopy_single(uct_pending_req_t *se
     hdr.req.reqptr      = (uintptr_t)req;
 
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY, &hdr, sizeof(hdr),
-                                  ucp_tag_eager_sync_contig_zcopy_req_complete);
+                                  ucp_tag_eager_sync_zcopy_req_complete);
 }
 
-static ucs_status_t ucp_tag_eager_sync_contig_zcopy_multi(uct_pending_req_t *self)
+static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_sync_first_hdr_t first_hdr;
@@ -292,30 +292,29 @@ static ucs_status_t ucp_tag_eager_sync_contig_zcopy_multi(uct_pending_req_t *sel
     first_hdr.super.total_len       = req->send.length;
     first_hdr.req.sender_uuid       = req->send.ep->worker->uuid;
     first_hdr.req.reqptr            = (uintptr_t)req;
-
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_EAGER_SYNC_FIRST,
                                  UCP_AM_ID_EAGER_MIDDLE,
                                  UCP_AM_ID_EAGER_LAST,
                                  &first_hdr, sizeof(first_hdr),
                                  &first_hdr.super.super, sizeof(first_hdr.super.super),
-                                 ucp_tag_eager_sync_contig_zcopy_req_complete);
+                                 ucp_tag_eager_sync_zcopy_req_complete);
 }
 
-static void ucp_tag_eager_sync_contig_zcopy_completion(uct_completion_t *self,
-                                                       ucs_status_t status)
+static void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self,
+                                                ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
-    ucp_tag_eager_sync_contig_zcopy_req_complete(req);
+    ucp_tag_eager_sync_zcopy_req_complete(req);
 }
 
 const ucp_proto_t ucp_tag_eager_sync_proto = {
     .contig_short            = NULL,
     .bcopy_single            = ucp_tag_eager_sync_bcopy_single,
     .bcopy_multi             = ucp_tag_eager_sync_bcopy_multi,
-    .contig_zcopy_single     = ucp_tag_eager_sync_contig_zcopy_single,
-    .contig_zcopy_multi      = ucp_tag_eager_sync_contig_zcopy_multi,
-    .contig_zcopy_completion = ucp_tag_eager_sync_contig_zcopy_completion,
+    .zcopy_single            = ucp_tag_eager_sync_zcopy_single,
+    .zcopy_multi             = ucp_tag_eager_sync_zcopy_multi,
+    .zcopy_completion        = ucp_tag_eager_sync_zcopy_completion,
     .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_sync_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)

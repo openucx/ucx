@@ -60,6 +60,8 @@ typedef struct ucp_frag_state {
         struct {
             size_t                iov_offset;     /* Offset in the IOV item */
             size_t                iovcnt_offset;  /* The IOV item to start copy */
+            size_t                iovcnt;         /* Number of IOV buffers */
+            uct_mem_h             *memh;          /* Pointer to IOV memh[iovcnt] */
         } iov;
         struct {
             void                  *state;
@@ -169,5 +171,9 @@ ucs_status_t ucp_request_start_send(ucp_request_t *req);
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
 
 void ucp_request_release_pending_send(uct_pending_req_t *self, void *arg);
+
+ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t lane);
+
+void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane);
 
 #endif

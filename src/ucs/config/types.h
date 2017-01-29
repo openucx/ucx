@@ -59,7 +59,6 @@ typedef enum ucs_ternary_value {
  * Error handling modes
  */
 typedef enum {
-    UCS_HANDLE_ERROR_NONE,      /* No error handling */
     UCS_HANDLE_ERROR_BACKTRACE, /* Print backtrace */
     UCS_HANDLE_ERROR_FREEZE,    /* Freeze and wait for a debugger */
     UCS_HANDLE_ERROR_DEBUG,     /* Attach debugger */

@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <netinet/tcp.h>
+#include <dirent.h>
 
 
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
@@ -282,21 +283,35 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
                                                unsigned *num_resources_p)
 {
     uct_tl_resource_desc_t *resources, *tmp, *resource;
+    static const char *netdev_dir = "/sys/class/net";
+    struct dirent *entry;
     unsigned num_resources;
-    struct if_nameindex *ifs, *netif;
     ucs_status_t status;
+    DIR *dir;
 
-    ifs = if_nameindex();
-    if (ifs == NULL) {
-        ucs_error("if_nameindex() failed: %m");
+    dir = opendir(netdev_dir);
+    if (dir == NULL) {
+        ucs_error("opendir(%s) failed: %m", netdev_dir);
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
 
     resources     = NULL;
     num_resources = 0;
-    for (netif = ifs; netif->if_name != NULL; ++netif) {
-        if (!uct_tcp_netif_check(netif->if_name)) {
+    for (;;) {
+        errno = 0;
+        entry = readdir(dir);
+        if (entry == NULL) {
+            if (errno != 0) {
+                ucs_error("readdir(%s) failed: %m", netdev_dir);
+                ucs_free(resources);
+                status = UCS_ERR_IO_ERROR;
+                goto out_closedir;
+            }
+            break; /* no more items */
+        }
+
+        if (!uct_tcp_netif_check(entry->d_name)) {
             continue;
         }
 
@@ -305,7 +320,7 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
         if (tmp == NULL) {
             ucs_free(resources);
             status = UCS_ERR_NO_MEMORY;
-            goto out_free_ifaddrs;
+            goto out_closedir;
         }
         resources = tmp;
 
@@ -313,7 +328,7 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
         ucs_snprintf_zero(resource->tl_name, sizeof(resource->tl_name),
                           "%s", UCT_TCP_NAME);
         ucs_snprintf_zero(resource->dev_name, sizeof(resource->dev_name),
-                          "%s", netif->if_name);
+                          "%s", entry->d_name);
         resource->dev_type = UCT_DEVICE_TYPE_NET;
     }
 
@@ -321,8 +336,8 @@ static ucs_status_t uct_tcp_query_tl_resources(uct_md_h md,
     *resource_p      = resources;
     status           = UCS_OK;
 
-out_free_ifaddrs:
-    if_freenameindex(ifs);
+out_closedir:
+    closedir(dir);
 out:
     return status;
 }

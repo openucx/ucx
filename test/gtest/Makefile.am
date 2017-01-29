@@ -28,6 +28,7 @@ VALGRIND_ARGS = \
 	--leak-check=full \
 	--track-origins=yes \
 	--fair-sched=try \
+	--num-callers=25 \
 	--suppressions=$(top_srcdir)/contrib/valgrind.supp \
 	$(VALGRIND_EXTRA_ARGS)
 

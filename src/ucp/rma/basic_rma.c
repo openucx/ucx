@@ -107,6 +107,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->flags                = flags; /* Implicit release */
     req->send.ep              = ep;
     req->send.buffer          = buffer;
+    req->send.datatype        = ucp_dt_make_contig(1);
     req->send.length          = length;
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;

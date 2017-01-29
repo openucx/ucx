@@ -50,7 +50,7 @@ void ucp_tag_send_start_rndv(ucp_request_t *req);
 void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
                       ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
-ucs_status_t ucp_proto_progress_rndv_get(uct_pending_req_t *self);
+ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self);
 
 static inline size_t ucp_rndv_total_len(ucp_rndv_rts_hdr_t *hdr)
 {

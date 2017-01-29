@@ -37,10 +37,16 @@ typedef struct {
     int                      mpool_fifo;
 
     /* Handle errors mode */
-    ucs_handle_error_t       handle_errors;
+    unsigned                 handle_errors;
 
     /* Error signals */
     UCS_CONFIG_ARRAY_FIELD(int, signals) error_signals;
+
+    /* If not empty, send mail notifications to that address in case of error */
+    char                     *error_mail_to;
+
+    /* Footer for error report mail notification */
+    char                     *error_mail_footer;
 
     /* If not NULL, attach gdb to the process in case of error */
     char                     *gdb_command;

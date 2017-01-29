@@ -570,6 +570,7 @@ ucs_status_t uct_dc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completio
     }
 
     if (status == UCS_INPROGRESS) {
+        ucs_assert(ep->super.dci != UCT_DC_EP_NO_DCI);
         uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
     }
     return status;
