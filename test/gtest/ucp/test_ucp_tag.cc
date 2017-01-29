@@ -15,6 +15,9 @@ extern "C" {
 
 ucp_params_t test_ucp_tag::get_ctx_params() {
     ucp_params_t params = ucp_test::get_ctx_params();
+    params.field_mask  |= UCP_PARAM_FIELD_FEATURES |
+                          UCP_PARAM_FIELD_REQUEST_INIT |
+                          UCP_PARAM_FIELD_REQUEST_SIZE;
     params.features     = UCP_FEATURE_TAG;
     params.request_size = sizeof(request);
     params.request_init = request_init;
