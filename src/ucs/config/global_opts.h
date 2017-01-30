@@ -54,6 +54,9 @@ typedef struct {
     /* Signal number which causes to enter debug mode */
     unsigned                 debug_signo;
 
+    /* Log level to trigger error handling */
+    ucs_log_level_t          log_level_trigger;
+
     /* File name to dump instrumentation records to */
     char                     *instrument_file;
 

@@ -115,6 +115,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Signal number which causes UCS to enter debug mode. Set to 0 to disable.",
   ucs_offsetof(ucs_global_opts_t, debug_signo), UCS_CONFIG_TYPE_SIGNO},
 
+ {"LOG_LEVEL_TRIGGER", "fatal",
+  "Log level to trigger error handling.",
+  ucs_offsetof(ucs_global_opts_t, log_level_trigger), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
  {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
   "Maximal number of events which can be handled from one context",
   ucs_offsetof(ucs_global_opts_t, async_max_events), UCS_CONFIG_TYPE_UINT},

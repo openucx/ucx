@@ -110,9 +110,9 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     short_file = (short_file == NULL) ? file : short_file + 1;
     gettimeofday(&tv, NULL);
 
-    if (level <= UCS_LOG_LEVEL_FATAL) {
-        ucs_handle_error("fatal error", "%13s:%-4u Fatal: %s", short_file, line,
-                         buf);
+    if (level <= ucs_global_opts.log_level_trigger) {
+        ucs_handle_error(ucs_log_level_names[level], "%13s:%-4u %s: %s",
+                         short_file, line, ucs_log_level_names[level], buf);
     } else if (RUNNING_ON_VALGRIND) {
         valg_buf = ucs_alloca(buffer_size + 1);
         snprintf(valg_buf, buffer_size,
