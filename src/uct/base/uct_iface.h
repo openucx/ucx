@@ -474,11 +474,15 @@ static inline ucs_status_t
 uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
                     unsigned length, void *desc)
 {
+    ucs_status_t status;
     uct_am_handler_t *handler = &iface->am[id];
+
     ucs_assert(id < UCT_AM_ID_MAX);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM, 1);
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_IFACE_STAT_RX_AM_BYTES, length);
-    return handler->cb(handler->arg, data, length, desc);
+    status = handler->cb(handler->arg, data, length, desc);
+    ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
+    return status;
 }
 
 
