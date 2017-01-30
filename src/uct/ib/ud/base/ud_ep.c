@@ -289,6 +289,7 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
 
     ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX);
     if (ep) {
+        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         *new_ep_p = ep;
         *skb_p    = NULL;
         return UCS_ERR_ALREADY_EXISTS;
@@ -478,6 +479,9 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     ucs_assert_always(ep->rx.ooo_pkts.head_sn == neth->psn);
     /* scedule connection reply op */
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
+        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
+    }
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_RCVD);
 }
@@ -857,12 +861,14 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         skb = uct_ud_ep_prepare_creq(ep);
         if (skb) {
             flag = 1;
+            uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_SENT);
             uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
         }
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP)) {
         skb = uct_ud_ep_prepare_crep(ep);
         if (skb) {
             flag = 1;
+            uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_SENT);
             uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREP);
         }
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_RESEND)) {

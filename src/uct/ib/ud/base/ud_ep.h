@@ -190,7 +190,10 @@ enum {
     /* debug flags */
     UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1),
     UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(2),
-    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(3)
+    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(3),
+    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(4),
+    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(5),
+    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(6)
 };
 
 typedef struct uct_ud_peer_name {
