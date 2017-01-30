@@ -2181,7 +2181,7 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  * @ingroup UCP_COMM
  * @brief Atomic operation requested for ucp_atomic_post
  *
- * This enumeration defines the type of atomic memory operation should be 
+ * This enumeration defines which atomic memory operation should be 
  * performed by the ucp_atomic_post family of fuctions. All of these are
  * non-fetching atomics and will not result in a request handle.
  */
@@ -2196,7 +2196,7 @@ typedef enum {
  *
  * This enumeration defines which atomic memory operation should be performed
  * by the ucp_atomic_fetch family of functions. All of these functions
- * will fetch data from the remote node
+ * will fetch data from the remote node.
  */
 typedef enum {
     UCP_ATOMIC_FETCH_OP_FADD, /**< Atomic Fetch and add */
@@ -2240,12 +2240,11 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  * The routine is non-blocking and therefore returns immediately. However the 
  * actual atomic operation may be delayed. The atomic operation is not considered complete
  * until the values in remote and local memory are completed. If the atomic operation 
- * operation is completed immediately the routine returns UCS_OK and the 
- * call-back routine @a cb is @b not invoked. If the operation is @b not 
- * completed immediately and no error reported then the UCP library will 
- * schedule to invoke the call-back routine @a cb whenever the atomic operation will be
- * completed. In other words, the completion of an atomic operation can be signaled by 
- * the return code or the call-back.
+ * completes immediately, the routine returns UCS_OK and the call-back routine
+ * @a cb is @b not invoked. If the operation is @b not completed immediately and no
+ * error is reported, then the UCP library will schedule invocation of the call-back
+ * routine @a cb upon completion of the atomic operation. In other words, the completion
+ * of an atomic operation can be signaled by the return code or execution of the call-back.
  *
  * @note The user should not modify any part of the @a result after this
  *       operation is called, until the operation completes.
@@ -2273,7 +2272,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  *                              completed at any point in time. The request handle
  *                              is returned to the application in order to track
  *                              progress of the operation. The application is
- *                              responsible to released the handle using
+ *                              responsible for releasing the handle using
  *                              @ref ucp_request_release "ucp_request_release()"
  *                              routine.
  */
