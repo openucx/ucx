@@ -33,7 +33,6 @@
 #include "ucx_hello_world.h"
 
 #include <ucp/api/ucp.h>
-#include <ucp/api/ucp_def.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -347,9 +346,9 @@ err:
     return ret;
 }
 
-static int run_test(const char *server, ucp_worker_h ucp_worker)
+static int run_test(const char *client_target_name, ucp_worker_h ucp_worker)
 {
-    if (server != NULL) {
+    if (client_target_name != NULL) {
         return run_ucx_client(ucp_worker);
     } else {
         return run_ucx_server(ucp_worker);
@@ -370,25 +369,30 @@ int main(int argc, char **argv)
 
     /* OOB connection vars */
     uint64_t addr_len = 0;
-    char *server = NULL;
+    char *client_target_name = NULL;
     int oob_sock = -1;
     int ret = -1;
 
+    memset(&ucp_params, 0, sizeof(ucp_params));
+    memset(&worker_params, 0, sizeof(worker_params));
+
     /* Parse the command line */
-    status = parse_cmd(argc, argv, &server);
+    status = parse_cmd(argc, argv, &client_target_name);
     CHKERR_JUMP(status != UCS_OK, "parse_cmd\n", err);
 
     /* UCP initialization */
     status = ucp_config_read(NULL, NULL, &config);
     CHKERR_JUMP(status != UCS_OK, "ucp_config_read\n", err);
 
-    ucp_params.features = UCP_FEATURE_TAG;
+    ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
+                              UCP_PARAM_FIELD_REQUEST_SIZE |
+                              UCP_PARAM_FIELD_REQUEST_INIT;
+    ucp_params.features     = UCP_FEATURE_TAG;
     if (ucp_test_mode == TEST_MODE_WAIT || ucp_test_mode == TEST_MODE_EVENTFD) {
         ucp_params.features |= UCP_FEATURE_WAKEUP;
     }
     ucp_params.request_size    = sizeof(struct ucx_context);
     ucp_params.request_init    = request_init;
-    ucp_params.request_cleanup = NULL;
 
     status = ucp_init(&ucp_params, config, &ucp_context);
 
@@ -410,10 +414,10 @@ int main(int argc, char **argv)
            (unsigned int)pthread_self(), local_addr_len);
 
     /* OOB connection establishment */
-    if (server) {
+    if (client_target_name) {
         peer_addr_len = local_addr_len;
 
-        oob_sock = client_connect(server, server_port);
+        oob_sock = client_connect(client_target_name, server_port);
         CHKERR_JUMP(oob_sock < 0, "client_connect\n", err_addr);
 
         ret = recv(oob_sock, &addr_len, sizeof(addr_len), 0);
@@ -439,7 +443,7 @@ int main(int argc, char **argv)
                     "send address\n", err_peer_addr);
     }
 
-    ret = run_test(server, ucp_worker);
+    ret = run_test(client_target_name, ucp_worker);
 
     /* Make sure remote is disconnected before destroying local worker */
     barrier(oob_sock);
