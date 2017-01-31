@@ -761,12 +761,15 @@ WARN_LOGFILE           =
 # spaces.
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = $(SRCDIR)/src/ucp/api/  \
-                         $(SRCDIR)/src/uct/api/  \
-                         $(SRCDIR)/src/ucs/type/ \
+INPUT                  = $(SRCDIR)/src/ucp/api/   \
+                         $(SRCDIR)/src/uct/api/   \
+                         $(SRCDIR)/src/ucs/type/  \
+                         $(SRCDIR)/src/ucs/async/ \
+                         $(SRCDIR)/src/ucs/time/  \
+                         $(SRCDIR)/src/ucs/sys/   \
                          $(SRCDIR)/doc/doxygen/preface.dox \
-                         $(SRCDIR)/doc/doxygen/intro.dox \
-                         $(SRCDIR)/doc/doxygen/design.dox \
+                         $(SRCDIR)/doc/doxygen/intro.dox   \
+                         $(SRCDIR)/doc/doxygen/design.dox  \
                          $(SRCDIR)/doc/doxygen/conventions.dox
 
 # This tag can be used to specify the character encoding of the source files
@@ -787,11 +790,14 @@ INPUT_ENCODING         = UTF-8
 # *.md, *.mm, *.dox, *.py, *.f90, *.f, *.for, *.tcl, *.vhd, *.vhdl, *.ucf,
 # *.qsf, *.as and *.js.
 
-FILE_PATTERNS          = ucp.h      \
-                         ucp_def.h  \
-                         uct.h      \
-                         uct_def.h  \
-                         status.h   \
+FILE_PATTERNS          = ucp.h          \
+                         ucp_def.h      \
+                         uct.h          \
+                         uct_def.h      \
+                         status.h       \
+                         async_fwd.h    \
+                         compiler_def.h \
+                         time_def.h     \
                          thread_mode.h
 
 # The RECURSIVE tag can be used to specify whether or not subdirectories should
