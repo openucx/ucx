@@ -246,7 +246,9 @@ void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
 
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        uct_md_mem_dereg(uct_md, state->dt.contig.memh);
+        if (req->send.state.dt.contig.memh != UCT_INVALID_MEM_HANDLE) {
+            uct_md_mem_dereg(uct_md, state->dt.contig.memh);
+        }
         break;
     case UCP_DATATYPE_IOV:
         memh = state->dt.iov.memh;

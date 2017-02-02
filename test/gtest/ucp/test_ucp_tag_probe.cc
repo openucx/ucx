@@ -133,9 +133,7 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     ucp_tag_message_h message;
     request *my_send_req, *my_recv_req;
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
@@ -189,9 +187,7 @@ UCS_TEST_P(test_ucp_tag_probe, limited_probe_size) {
     request *req;
     int recvd;
 
-    if (&sender() == &receiver()) {
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    skip_loopback();
 
     sendbuf.resize(100, '1');
     recvbuf.resize(100, '0');

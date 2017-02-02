@@ -547,6 +547,7 @@ static double ucp_wireup_rndv_score_func(ucp_context_h context,
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used with the Rendezvous protocol, for
      * how long it would take to transfer it with a certain transport. */
+
     return 1 / ((UCP_WIREUP_RNDV_TEST_MSG_SIZE / iface_attr->bandwidth) +
                 ucp_tl_iface_latency(context, iface_attr) +
                 iface_attr->overhead + md_attr->reg_cost.overhead +

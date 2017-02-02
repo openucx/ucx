@@ -66,6 +66,8 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
                 req->recv.state.offset += recv_len;
             }
             UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
+            /* TODO In case an error status is returned from ucp_tag_process_recv,
+             * need to discard the rest of the messages */
             status = UCS_OK;
             goto out;
         }

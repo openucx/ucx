@@ -18,7 +18,8 @@
 
 static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                                       ssize_t max_short, size_t *zcopy_thresh_arr,
-                                      size_t rndv_thresh,
+                                      size_t rndv_rma_thresh,
+                                      size_t rndv_am_thresh,
                                       const ucp_proto_t *proto)
 {
     ucp_ep_config_t *config   = ucp_ep_config(req->send.ep);
@@ -63,19 +64,19 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     req->send.length = length;
 
     ucs_trace_req("select request(%p) progress algorithm datatype=%lx buffer=%p "
-                  " length=%zu max_short=%zd rndv_thresh=%zu zcopy_thresh=%zu",
+                  " length=%zu max_short=%zd rndv_rma_thresh=%zu ndv_rma_thresh=%zu "
+                  "zcopy_thresh=%zu",
                   req, req->send.datatype, req->send.buffer, length, max_short,
-                  rndv_thresh, zcopy_thresh);
+                  rndv_rma_thresh, rndv_am_thresh, zcopy_thresh);
 
     if (((ssize_t)length <= max_short) && !is_iov) {
         /* short */
-        req->send.uct.func       = proto->contig_short;
-    } else if ((length >= rndv_thresh) && !is_iov) {
-        /* rendezvous */
-        status = ucp_tag_send_start_rndv(req);
-        if (status != UCS_OK) {
-            return status;
-        }
+        req->send.uct.func = proto->contig_short;
+    } else if ((((config->key.rndv_lane != UCP_NULL_RESOURCE) &&
+               (length >= rndv_rma_thresh)) ||
+               (length >= rndv_am_thresh)) && !is_iov) {
+        /* RMA/AM rendezvous */
+        ucp_tag_send_start_rndv(req);
     } else if (length < zcopy_thresh) {
         /* bcopy */
         if (length <= (config->am.max_bcopy - only_hdr_size)) {
@@ -104,7 +105,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
 }
 
 static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
-                                      size_t rndv_thresh,
+                                      size_t rndv_rma_thresh, size_t rndv_am_thresh,
                                       const ucp_proto_t *proto)
 {
     ucp_ep_config_t *config = ucp_ep_config(req->send.ep);
@@ -118,9 +119,14 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     req->send.state.dt.generic.state = state;
     req->send.length = length = dt_gen->ops.packed_size(state);
 
-    if (length <= config->am.max_bcopy - proto->only_hdr_size) {
+    if (length >= rndv_am_thresh) {
+        /* rendezvous */
+        ucp_tag_send_start_rndv(req);
+    } else if (length <= config->am.max_bcopy - proto->only_hdr_size) {
+        /* bcopy single */
         req->send.uct.func = proto->bcopy_single;
     } else {
+        /* bcopy multi */
         req->send.uct.func = proto->bcopy_multi;
     }
 }
@@ -138,8 +144,8 @@ static void ucp_send_req_stat(ucp_request_t *req)
 
 static inline ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
-                 size_t *zcopy_thresh, size_t rndv_thresh, ucp_send_callback_t cb,
-                 const ucp_proto_t *proto)
+                 size_t *zcopy_thresh, size_t rndv_rma_thresh, size_t rndv_am_thresh,
+                 ucp_send_callback_t cb, const ucp_proto_t *proto)
 {
     ucs_status_t status;
 
@@ -147,14 +153,15 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
     case UCP_DATATYPE_CONTIG:
     case UCP_DATATYPE_IOV:
         status = ucp_tag_req_start(req, count, max_short, zcopy_thresh,
-                                   rndv_thresh, proto);
+                                   rndv_rma_thresh, rndv_am_thresh, proto);
         if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
         break;
 
     case UCP_DATATYPE_GENERIC:
-        ucp_tag_req_start_generic(req, count, rndv_thresh, proto);
+        ucp_tag_req_start_generic(req, count, rndv_rma_thresh,
+                                  rndv_am_thresh, proto);
         break;
 
     default:
@@ -251,7 +258,8 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
     ret = ucp_tag_send_req(req, count,
                            ucp_ep_config(ep)->am.max_eager_short,
                            ucp_ep_config(ep)->am.zcopy_thresh,
-                           ucp_ep_config(ep)->rndv.thresh,
+                           ucp_ep_config(ep)->rndv.rma_thresh,
+                           ucp_ep_config(ep)->rndv.am_thresh,
                            cb, &ucp_tag_eager_proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
@@ -287,7 +295,8 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
     ret = ucp_tag_send_req(req, count,
                            -1, /* disable short method */
                            ucp_ep_config(ep)->am.sync_zcopy_thresh,
-                           ucp_ep_config(ep)->rndv.sync_thresh,
+                           ucp_ep_config(ep)->rndv.rma_thresh,
+                           ucp_ep_config(ep)->rndv.am_thresh,
                            cb, &ucp_tag_eager_sync_proto);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);

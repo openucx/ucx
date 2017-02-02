@@ -462,11 +462,9 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, true, false);
 }
 
@@ -475,11 +473,9 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_err_unexp_sync) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, contig_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_contig, true, true, false);
 }
 
@@ -488,11 +484,9 @@ UCS_TEST_P(test_ucp_tag_xfer, contig_unexp_sync) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, generic_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, true, true, false);
 }
 
@@ -501,11 +495,9 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_sync) {
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_exp_sync) {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, true, true, false);
 }
 
@@ -513,15 +505,19 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_unexp_sync) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, true, false);
 }
 
+/* send_contig_recv_contig */
+
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp, "RNDV_THRESH=1248576") {
     test_run_xfer(true, true, true, false, false);
 }
+
+/* send_generic_recv_generic */
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp, "RNDV_THRESH=1248576") {
     test_run_xfer(false, false, true, false, false);
 }
 
-/* send_contig_recv_contig */
+/* send_contig_recv_generic */
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp, "RNDV_THRESH=1248576") {
     test_run_xfer(true, false, true, false, false);
@@ -532,11 +528,9 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync, "RNDV_THRESH=
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync, "RNDV_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
@@ -555,19 +549,164 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync, "RNDV_THRESH=
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync, "RNDV_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(false, true, true, true, false);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp, "RNDV_THRESH=1248576") {
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp, "RNDV_THRESH=1248576",
+        "ZCOPY_THRESH=1248576") {
     test_run_xfer(false, true, false, false, false);
 }
 
-/* rndv bcopy */
+/* rndv send_config_recv_config am_rndv with bcopy on the sender side
+ * (zcopy is tested in the match tests) */
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv, "RNDV_THRESH=1000",
+                                                                "ZCOPY_THRESH=1248576") {
+    test_run_xfer(true, true, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv_truncated, "RNDV_THRESH=1000",
+                                                                          "ZCOPY_THRESH=1248576") {
+    test_run_xfer(true, true, true, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_sync_rndv, "RNDV_THRESH=1000",
+                                                                     "ZCOPY_THRESH=1248576") {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_run_xfer(true, true, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_sync_rndv_truncated,
+                                    "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_run_xfer(true, true, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_rndv, "RNDV_THRESH=1000",
+                                                                  "ZCOPY_THRESH=1248576") {
+    test_run_xfer(true, true, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_rndv_truncated, "RNDV_THRESH=1000",
+                                                                            "ZCOPY_THRESH=1248576") {
+    test_run_xfer(true, true, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_sync_rndv, "RNDV_THRESH=1000",
+                                                                        "ZCOPY_THRESH=1248576") {
+    test_run_xfer(true, true, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_sync_rndv_truncated,
+                                     "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
+    test_run_xfer(true, true, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv_probe, "RNDV_THRESH=1000",
+                                                                      "ZCOPY_THRESH=1248576") {
+    test_xfer_probe(true, true, true, false);
+}
+
+/* rndv send_generic_recv_generic am_rndv with bcopy on the sender side */
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv, "RNDV_THRESH=1000") {
+    test_run_xfer(false, false, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_truncated, "RNDV_THRESH=1000") {
+    test_run_xfer(false, false, true, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv, "RNDV_THRESH=1000") {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_run_xfer(false, false, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv_truncated,
+           "RNDV_THRESH=1000") {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_run_xfer(false, false, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_rndv, "RNDV_THRESH=1000") {
+    test_run_xfer(false, false, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_rndv_truncated, "RNDV_THRESH=1000") {
+    test_run_xfer(false, false, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv, "RNDV_THRESH=1000") {
+    test_run_xfer(false, false, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv_truncated,
+           "RNDV_THRESH=1000") {
+    test_run_xfer(false, false, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_probe, "RNDV_THRESH=1000") {
+    test_xfer_probe(false, false, true, false);
+}
+
+/* rndv send_generic_recv_contig am_rndv with bcopy on the sender side */
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv, "RNDV_THRESH=1000") {
+    test_run_xfer(false, true, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_truncated, "RNDV_THRESH=1000") {
+    test_run_xfer(false, true, true, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv, "RNDV_THRESH=1000") {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_run_xfer(false, true, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv_truncated,
+           "RNDV_THRESH=1000") {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_run_xfer(false, true, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_rndv, "RNDV_THRESH=1000") {
+    test_run_xfer(false, true, false, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_rndv_truncated, "RNDV_THRESH=1000") {
+    test_run_xfer(false, true, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv, "RNDV_THRESH=1000") {
+    test_run_xfer(false, true, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv_truncated,
+           "RNDV_THRESH=1000") {
+    test_run_xfer(false, true, false, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_probe, "RNDV_THRESH=1000") {
+    test_xfer_probe(false, true, true, false);
+}
+
+/* rndv send_contig_recv_generic am_rndv with bcopy on the sender side */
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv, "RNDV_THRESH=1000",
                                                                  "ZCOPY_THRESH=1248576") {
@@ -581,21 +720,17 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_truncated,
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_truncated,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, true);
 }
 
@@ -619,14 +754,12 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_truncated
     test_run_xfer(true, false, false, true, true);
 }
 
-/* rndv bcopy probe */
-
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe, "RNDV_THRESH=1000",
                                                                        "ZCOPY_THRESH=1248576") {
     test_xfer_probe(true, false, true, false);
 }
 
-/* rndv zcopy */
+/* rndv send_contig_recv_generic am_rndv with zcopy on the sender side */
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_zcopy, "RNDV_THRESH=1000",
                                                                        "ZCOPY_THRESH=1000") {
@@ -640,26 +773,22 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_truncated_zcopy,
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_zcopy,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, false);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_sync_rndv_truncated_zcopy,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
-    if (&sender() == &receiver()) { /* because ucp_tag_send_req return status
-                                       (instead request) if send operation
-                                       completed immediately */
-        UCS_TEST_SKIP_R("loop-back unsupported");
-    }
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
     test_run_xfer(true, false, true, true, true);
 }
 
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv_zcopy, "RNDV_THRESH=1000",
-                                                                         "ZCOPY_THRESH=1000") {
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_rndv_zcopy,
+           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
     test_run_xfer(true, false, false, false, false);
 }
 
@@ -678,10 +807,8 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_unexp_sync_rndv_truncated
     test_run_xfer(true, false, false, true, true);
 }
 
-/* rndv zcopy probe */
-
-UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy,
-           "RNDV_THRESH=1000", "ZCOPY_THRESH=1000") {
+UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_generic_exp_rndv_probe_zcopy, "RNDV_THRESH=1000",
+                                                                             "ZCOPY_THRESH=1000") {
     test_xfer_probe(true, false, true, false);
 }
 
@@ -708,12 +835,6 @@ public:
 
     ucs_stats_node_t* worker_stats(entity &e) {
         return e.worker()->stats;
-    }
-
-    void skip_if_no_rndv() {
-        if (ucp_ep_config(sender().ep())->key.rndv_lane == UCP_NULL_RESOURCE) {
-            UCS_TEST_SKIP_R("No RNDV support on TL");
-        }
     }
 
     void validate_counters(uint64_t tx_cntr, uint64_t rx_cntr) {
@@ -772,14 +893,12 @@ UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576") {
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000") {
-    skip_if_no_rndv();
     test_run_xfer(true, true, true, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
-    skip_if_no_rndv();
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);

@@ -67,7 +67,7 @@ typedef struct ucp_ep_config_key {
     ucp_md_map_t           reachable_md_map;
 
     ucp_lane_index_t       am_lane;             /* Lane for AM (can be NULL) */
-    ucp_lane_index_t       rndv_lane;           /* Lane for Rendezvous (can be NULL) */
+    ucp_lane_index_t       rndv_lane;           /* Lane for zcopy Rendezvous (can be NULL) */
     ucp_lane_index_t       wireup_msg_lane;     /* Lane for wireup messages (can be NULL) */
     ucp_rsc_index_t        lanes[UCP_MAX_LANES];/* Resource index for every lane */
     ucp_lane_index_t       num_lanes;           /* Number of lanes */
@@ -122,10 +122,10 @@ typedef struct ucp_ep_config {
     struct {
         /* Maximal total size of rndv_get_zcopy */
         size_t                 max_get_zcopy;
-        /* Threshold for switching from eager to rendezvous */
-        size_t                 thresh;
-        /* threshold for switching from eager-sync to rendezvous */
-        size_t                 sync_thresh;
+        /* Threshold for switching from eager to RMA based rendezvous */
+        size_t                 rma_thresh;
+        /* Threshold for switching from eager to AM based rendezvous */
+        size_t                 am_thresh;
     } rndv;
 } ucp_ep_config_t;
 

@@ -37,6 +37,11 @@ static inline ucp_lane_index_t ucp_ep_get_rndv_get_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.rndv_lane;
 }
 
+static inline int ucp_ep_is_rndv_lane_present(ucp_ep_h ep)
+{
+    return ucp_ep_config(ep)->key.rndv_lane != UCP_NULL_RESOURCE;
+}
+
 static inline uct_ep_h ucp_ep_get_am_uct_ep(ucp_ep_h ep)
 {
     return ep->uct_eps[ucp_ep_get_am_lane(ep)];
@@ -50,6 +55,11 @@ static inline uct_ep_h ucp_ep_get_rndv_data_uct_ep(ucp_ep_h ep)
 static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_ep_config(ep)->key.lanes[lane];
+}
+
+static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    return &ep->worker->iface_attrs[ucp_ep_get_rsc_index(ep, lane)];
 }
 
 static inline ucp_rsc_index_t ucp_ep_num_lanes(ucp_ep_h ep)
@@ -85,6 +95,11 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
 {
     ucp_context_h context = ep->worker->context;
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
+}
+
+static inline uint64_t ucp_ep_rndv_md_flags(ucp_ep_h ep)
+{
+    return ucp_ep_md_attr(ep, ucp_ep_get_rndv_get_lane(ep))->cap.flags;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

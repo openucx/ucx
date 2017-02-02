@@ -65,9 +65,7 @@ ucp_rma_request_advance(ucp_request_t *req, size_t frag_length,
         if (req->send.length == 0) {
             /* bcopy is the fast path */
             if (ucs_likely(req->send.uct_comp.count == 0)) {
-                if (ucs_unlikely(req->send.state.dt.contig.memh != NULL)) {
-                    ucp_request_send_buffer_dereg(req, req->send.lane);
-                }
+                ucp_request_send_buffer_dereg(req, req->send.lane);
                 ucp_request_put(req, UCS_OK);
             }
             return UCS_OK;
