@@ -109,6 +109,12 @@ public:
         return UCS_OK;
     }
 
+    void connect_to_iface(unsigned index = 0)
+    {
+        m_e1->connect_to_iface(index, *m_e2);
+        m_e2->connect_to_iface(index, *m_e1);
+    }
+
     void validate_connect(uct_ud_ep_t *ep, unsigned value,
                           double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
@@ -120,14 +126,18 @@ public:
         EXPECT_EQ(value, ep->ep_id);
     }
 
+    unsigned no_creq_cnt(uct_ud_ep_t *ep) {
+        return (ep->flags & UCT_UD_EP_FLAG_CREQ_NOTSENT) ? 1 : 0;
+    }
+
     void validate_recv(uct_ud_ep_t *ep, unsigned value,
                        double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
-        while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value) &&
+        while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value - no_creq_cnt(ep)) &&
                (ucs_get_time() < timeout)) {
             progress();
         }
-        EXPECT_EQ(value, ucs_frag_list_sn(&ep->rx.ooo_pkts));
+        EXPECT_EQ(value - no_creq_cnt(ep), ucs_frag_list_sn(&ep->rx.ooo_pkts));
     }
 
     void validate_flush() {
@@ -364,8 +374,7 @@ UCS_TEST_P(test_ud, crep_drop1) {
  * both sides connect simultaniously.
  */
 UCS_TEST_P(test_ud, crep_drop2) {
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
+    connect_to_iface();
 
     ep(m_e1)->rx.rx_hook = drop_ctl;
     ep(m_e2)->rx.rx_hook = drop_ctl;
@@ -401,8 +410,7 @@ UCS_TEST_P(test_ud, crep_drop2) {
 UCS_TEST_P(test_ud, crep_ack_drop) {
     ucs_status_t status;
 
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
+    connect_to_iface();
 
     /* drop ACK from CERQ/CREP */
     ep(m_e1, 0)->rx.rx_hook = drop_ack;
@@ -417,10 +425,6 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
 
     status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     ASSERT_UCS_OK(status);
-
-    short_progress_loop();
-    twait(500);
-    short_progress_loop();
 
     validate_recv(ep(m_e2), 3U);
 
@@ -590,8 +594,7 @@ UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
     /* single connect */
     iface(m_e2)->rx.hook = drop_creq;
 
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
+    connect_to_iface();
     short_progress_loop(50);
 
     iface(m_e2)->rx.hook = uct_ud_iface_null_hook;
@@ -617,7 +620,6 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
     /* 2 to 1 connect */
     m_e1->connect_to_iface(0, *m_e2);
     m_e1->connect_to_iface(1, *m_e2);
-    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
     validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1,0)->tx.psn);
@@ -631,7 +633,6 @@ UCS_TEST_P(test_ud, connect_iface_2to1) {
 UCS_TEST_P(test_ud, connect_iface_seq) {
     /* sequential connect from both sides */
     m_e1->connect_to_iface(0, *m_e2);
-    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
     validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
     /* one becase of crep */
@@ -639,7 +640,6 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
-    short_progress_loop(50);
     validate_connect(ep(m_e2), 0U);
     EXPECT_EQ(2, ep(m_e2)->tx.psn);
     /* one becase creq sets initial psn */
@@ -650,9 +650,7 @@ UCS_TEST_P(test_ud, connect_iface_seq) {
 
 UCS_TEST_P(test_ud, connect_iface_sim) {
     /* simultanious connect from both sides */
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
-    short_progress_loop();
+    connect_to_iface();
 
     validate_connect(ep(m_e1), 0U);
     validate_connect(ep(m_e2), 0U);
@@ -662,11 +660,8 @@ UCS_TEST_P(test_ud, connect_iface_sim) {
 
 UCS_TEST_P(test_ud, connect_iface_sim2v2) {
     /* simultanious connect from both sides */
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
-    m_e1->connect_to_iface(1, *m_e2);
-    m_e2->connect_to_iface(1, *m_e1);
-    short_progress_loop(50);
+    connect_to_iface(0);
+    connect_to_iface(1);
 
     validate_connect(ep(m_e1),    0U);
     validate_connect(ep(m_e2),    0U);
@@ -862,8 +857,8 @@ UCS_TEST_P(test_ud, res_skb_tx) {
 UCS_TEST_P(test_ud, ctls_loss) {
 
     iface(m_e2)->tx.available = 0;
-    m_e1->connect_to_iface(0, *m_e2);
-    m_e2->connect_to_iface(0, *m_e1);
+
+    connect_to_iface();
 
     /* Simulate loss of CREQ to m_e1 */
     ep(m_e2)->tx.tx_hook = invalidate_creq_tx;

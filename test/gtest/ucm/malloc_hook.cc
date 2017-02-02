@@ -63,11 +63,13 @@ public:
         m_name(name), m_num_threads(num_threads), m_barrier(barrier),
         m_map_size(0), m_unmap_size(0), m_test(test)
     {
+        pthread_mutex_init(&m_stats_lock, NULL);
         pthread_create(&m_thread, NULL, thread_func, reinterpret_cast<void*>(this));
     }
 
     ~test_thread() {
         join();
+        pthread_mutex_destroy(&m_stats_lock);
     }
 
     void join() {
@@ -110,10 +112,13 @@ private:
     int                m_num_threads;
     pthread_barrier_t  *m_barrier;
     pthread_t          m_thread;
+
+    pthread_mutex_t    m_stats_lock;
     size_t             m_map_size;
     size_t             m_unmap_size;
     std::vector<range> m_map_ranges;
     std::vector<range> m_unmap_ranges;
+
     malloc_hook        *m_test;
 };
 
@@ -121,6 +126,7 @@ pthread_mutex_t test_thread::lock = PTHREAD_MUTEX_INITIALIZER;
 
 void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
 {
+    pthread_mutex_lock(&m_stats_lock);
     switch (event_type) {
     case UCM_EVENT_VM_MAPPED:
         m_map_ranges.push_back(range(event->vm_mapped.address,
@@ -135,6 +141,7 @@ void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
     default:
         break;
     }
+    pthread_mutex_unlock(&m_stats_lock);
 }
 
 void test_thread::test() {
