@@ -131,8 +131,9 @@ protected:
         ucs_status_t status;
 
         ucp_mem_map_params_t params;
+        ucp_mem_attr_t mem_attr;
         ucp_mem_h memh;
-        void *memheap;
+        void *memheap = NULL;
 
         void *rkey_buffer;
         size_t rkey_buffer_size;
@@ -145,18 +146,31 @@ protected:
             receiver().connect(&sender());
         }
 
-        memheap = malloc(memheap_size);
-
         params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        params.address    = memheap;
         params.length     = memheap_size;
         params.flags      = GetParam().variant;
+        if (params.flags & UCP_MEM_MAP_FIXED) {
+            params.address  = (void *)(uintptr_t)0xFF000000;
+            params.flags   |= UCP_MEM_MAP_ALLOCATE;
+        } else {
+            memheap = malloc(memheap_size);
+            params.address = memheap;
+            params.flags = params.flags & (~UCP_MEM_MAP_ALLOCATE);
+        }
 
         status = ucp_mem_map(receiver().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
 
+        mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS |
+                              UCP_MEM_ATTR_FIELD_LENGTH;
+        status = ucp_mem_query(memh, &mem_attr);
+        ASSERT_UCS_OK(status);
+        EXPECT_LE(memheap_size, mem_attr.length);
+        if (!memheap) {
+            memheap = mem_attr.address;
+        }
         memset(memheap, 0, memheap_size);
 
         status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
@@ -172,14 +186,15 @@ protected:
         EXPECT_EQ(error, (uint32_t)0);
 
         ucp_rkey_destroy(rkey);
+        status = ucp_mem_unmap(receiver().ucph(), memh);
+        ASSERT_UCS_OK(status);
 
         disconnect(sender());
         disconnect(receiver());
 
-        status = ucp_mem_unmap(receiver().ucph(), memh);
-        ASSERT_UCS_OK(status);
-
-        free(memheap);
+        if (!(GetParam().variant & UCP_MEM_MAP_FIXED)) {
+            free(memheap);
+        }
     }
 
     static ucp_params_t get_ctx_params() {

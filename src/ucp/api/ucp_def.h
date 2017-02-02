@@ -115,6 +115,44 @@ typedef struct ucp_mem                   *ucp_mem_h;
 
 
 /**
+ * @ingroup UCP_MEM
+ * @brief Attributes of the @ref ucp_mem_h "UCP Memory handle", filled by
+ *        @ref ucp_mem_query function.
+ */
+typedef struct ucp_mem_attr {
+   /**
+     * Mask of valid fields in this structure, using bits from @ref ucp_mem_attr_field.
+     * Fields not specified in this mask would be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Address of the memory segment.
+     */
+     void                   *address;
+
+    /**
+     * Size of the memory segment.
+     */
+     size_t                 length;
+} ucp_mem_attr_t;
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief UCP Memory handle attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_mem_attr_t are
+ * present. It is used for the enablement of backward compatibility support.
+ */
+enum ucp_mem_attr_field {
+    UCP_MEM_ATTR_FIELD_ADDRESS = UCS_BIT(0), /**< Virtual address */
+    UCP_MEM_ATTR_FIELD_LENGTH  = UCS_BIT(1)  /**< The size of memory region */
+};
+
+
+/**
  * @ingroup UCP_WORKER
  * @brief UCP Worker
  *

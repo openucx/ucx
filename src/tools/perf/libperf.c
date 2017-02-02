@@ -756,6 +756,7 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
 {
     ucs_status_t status;
     ucp_mem_map_params_t mem_map_params;
+    ucp_mem_attr_t mem_attr;
     size_t buffer_size;
 
     if (params->iov_stride) {
@@ -774,13 +775,21 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
     mem_map_params.length     = buffer_size * params->thread_count;
     mem_map_params.flags      = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
                                  UCP_MEM_MAP_NONBLOCK : 0;
+    mem_map_params.flags     |= UCP_MEM_MAP_ALLOCATE;
 
     status = ucp_mem_map(perf->ucp.context, &mem_map_params,
                          &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
     }
-    perf->send_buffer = mem_map_params.address;
+
+    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    status = ucp_mem_query(perf->ucp.send_memh, &mem_attr);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    perf->send_buffer = mem_attr.address;
 
     /* Allocate receive buffer memory */
     perf->recv_buffer = NULL;
@@ -790,13 +799,20 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf, ucx_perf_p
                                 UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     mem_map_params.address    = perf->recv_buffer;
     mem_map_params.length     = buffer_size * params->thread_count;
-    mem_map_params.flags      = 0;
+    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
 
     status = ucp_mem_map(perf->ucp.context, &mem_map_params, &perf->ucp.recv_memh);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
     }
-    perf->recv_buffer = mem_map_params.address;
+
+    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    status = ucp_mem_query(perf->ucp.recv_memh, &mem_attr);
+    if (status != UCS_OK) {
+        goto err_free_send_buffer;
+    }
+
+    perf->recv_buffer = mem_attr.address;
 
     /* Allocate IOV datatype memory */
     perf->params.msg_size_cnt = params->msg_size_cnt;
@@ -1411,4 +1427,3 @@ static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
     return UCS_ERR_INVALID_PARAM;
 }
 #endif /* _OPENMP */
-
