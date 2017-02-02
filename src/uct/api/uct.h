@@ -376,6 +376,10 @@ enum {
                                                 mapping may be deferred until
                                                 it is accessed by the CPU or a
                                                 transport. */
+    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1), /**< Don't interpret addr as a hint:
+                                                place the mapping at exactly
+                                                that address. See man mmap for
+                                                details */
 };
 
 
