@@ -14,6 +14,7 @@ extern "C" {
 
 
 #define MB   pow(1024.0, -2)
+#define UCT_PERF_TEST_MULTIPLIER 2
 
 class test_uct_perf : public uct_test, public test_perf {
 protected:
@@ -130,6 +131,8 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     /* Run all tests */
     for (test_spec *test = tests; test->title != NULL; ++test) {
+        test->max *= UCT_PERF_TEST_MULTIPLIER;
+        test->min /= UCT_PERF_TEST_MULTIPLIER;
         run_test(*test, 0, check_perf, GetParam()->tl_name, GetParam()->dev_name);
     }
 }
