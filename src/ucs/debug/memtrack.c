@@ -265,7 +265,8 @@ void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
 {
     ucs_memtrack_buffer_t *buffer;
 
-    if ((flags & MAP_FIXED) || !(prot & PROT_WRITE)) {
+    if (ucs_memtrack_is_enabled() &&
+        ((flags & MAP_FIXED) || !(prot & PROT_WRITE))) {
         return MAP_FAILED;
     }
 

@@ -363,6 +363,8 @@ enum {
                                               remote memory key for remote memory
                                               operations */
     UCT_MD_FLAG_ADVISE    = UCS_BIT(4),  /**< MD support memory advice */
+    UCT_MD_FLAG_FIXED     = UCS_BIT(5)   /**< MD support memory allocation with
+                                              fixed address */
 };
 
 
@@ -376,6 +378,8 @@ enum {
                                                 mapping may be deferred until
                                                 it is accessed by the CPU or a
                                                 transport. */
+    UCT_MD_MEM_FLAG_FIXED    = UCS_BIT(1)  /**< Place the mapping at exactly
+                                                defined address */
 };
 
 
@@ -1140,6 +1144,15 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * exhausted. In this case the next allocation method from the initial list will
  * be attempted.
  *
+ * @param [in]     addr        If @a addr is NULL, the underlying allocation routine
+ *                             will choose the address at which to create the mapping.
+ *                             If @a addr is non-NULL but UCT_MD_MEM_FLAG_FIXED is
+ *                             not set, the address will be interpreted as a hint
+ *                             as to where to establish the mapping. If @a addr is
+ *                             non-NULL and UCT_MD_MEM_FLAG_FIXED is set, then
+ *                             the specified address is interpreted as a requirement.
+ *                             In this case, if the mapping to the exact address
+ *                             cannot be made, the allocation request fails.
  * @param [in]     min_length  Minimal size to allocate. The actual size may be
  *                             larger, for example because of alignment restrictions.
  * @param [in]     flags       Memory allocation flags, UCT_MD_MEM_FLAG_xx.
@@ -1154,9 +1167,10 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [out]    mem         In case of success, filled with information about
  *                              the allocated memory. @ref uct_allocated_memory_t.
  */
-ucs_status_t uct_mem_alloc(size_t min_length, unsigned flags, uct_alloc_method_t *methods,
-                           unsigned num_methods, uct_md_h *mds, unsigned num_mds,
-                           const char *name, uct_allocated_memory_t *mem);
+ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
+                           uct_alloc_method_t *methods, unsigned num_methods,
+                           uct_md_h *mds, unsigned num_mds, const char *name,
+                           uct_allocated_memory_t *mem);
 
 
 /**

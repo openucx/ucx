@@ -33,6 +33,7 @@ uct_sysv_alloc(uct_md_h md, size_t *length_p, ucs_ternary_value_t hugetlb,
     int flags, shmid = 0;
 
     flags = UCT_MM_SYSV_MSTR;
+    *address_p = NULL;
 
     if (0 == *length_p) {
         ucs_error("Unexpected length %zu", *length_p);

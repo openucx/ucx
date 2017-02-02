@@ -270,6 +270,8 @@ ucs_status_t ucs_mpool_hugetlb_malloc(ucs_mpool_t *mp, size_t *size_p, void **ch
     size_t real_size;
     int shmid;
 
+    ptr = NULL;
+
     /* First, try hugetlb */
     real_size = *size_p;
     status = ucs_sysv_alloc(&real_size, (void**)&ptr, SHM_HUGETLB, &shmid

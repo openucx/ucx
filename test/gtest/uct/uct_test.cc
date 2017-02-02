@@ -275,7 +275,8 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
         free(rkey_buffer);
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
-        status = uct_mem_alloc(length, 0, &method, 1, NULL, 0, alloc_name, mem);
+        status = uct_mem_alloc(NULL, length, 0, &method, 1, NULL, 0, alloc_name,
+                               mem);
         ASSERT_UCS_OK(status);
 
         ucs_assert(mem->memh == UCT_INVALID_MEM_HANDLE);
@@ -619,4 +620,3 @@ void uct_test::entity::async_wrapper::check_miss()
 {
     ucs_async_check_miss(&m_async);
 }
-

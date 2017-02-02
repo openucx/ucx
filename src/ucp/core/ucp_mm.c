@@ -150,7 +150,9 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
             }
         }
 
-        status = uct_mem_alloc(length, uct_flags, &method, 1, mds, num_mds, name, &mem);
+        /* TODO: pass addr */
+        status = uct_mem_alloc(NULL, length, uct_flags, &method, 1, mds, num_mds,
+                               name, &mem);
         if (status == UCS_OK) {
             goto allocated;
         }
