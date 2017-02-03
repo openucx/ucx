@@ -5,6 +5,7 @@
 */
 
 #include "test_ucp_memheap.h"
+#include "ucp/core/ucp_mm.h"
 
 
 class test_ucp_mmap : public test_ucp_memheap {
@@ -236,6 +237,44 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     ASSERT_UCS_OK(status);
 
     free(ptr);
+}
+
+UCS_TEST_P(test_ucp_mmap, fixed) {
+    const size_t page_size = sysconf(_SC_PAGESIZE);
+    ucs_status_t status;
+    bool         is_dummy;
+
+    sender().connect(&sender());
+
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        size_t size = rand() % (1024 * 1024) + page_size;
+        void *ptr = malloc(size);
+        uintptr_t uptr = (uintptr_t)ptr;
+        uptr += page_size - (uptr % page_size);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = (void *)uptr;
+        params.length     = size - page_size;
+        params.flags      = UCP_MEM_MAP_FIXED;
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ((uintptr_t)memh->address, uptr);
+        EXPECT_GE(memh->length, size - page_size);
+        EXPECT_GE(memh->alloc_method, UCT_ALLOC_METHOD_MMAP);
+
+        is_dummy = (size - page_size == 0);
+        test_rkey_management(&sender(), memh, is_dummy);
+
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
+        free(ptr);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_mmap)
