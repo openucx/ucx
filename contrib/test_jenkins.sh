@@ -128,13 +128,34 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         ./ucp_hello_world ${test_mode} -n $(hostname) -p ${UCP_TEST_HELLO_WORLD_PORT} &
         hw_client_pid=$!
 
-        # make sure server process in not running
+        # make sure server process is not running
         wait ${hw_server_pid} ${hw_client_pid}
     done
     rm -f ./ucp_hello_world
 
-    # compile and then run UCT example to make sure it's not broken by UCX API changes
-    mpicc -o ./active_message $ucx_inst/share/ucx/examples/active_message.c -luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
+    # compile and run UCT hello world example
+    gcc -o ./uct_hello_world ${ucx_inst}/share/ucx/examples/uct_hello_world.c -luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
+
+    UCT_TEST_HELLO_WORLD_PORT=$(( 10000 + ${BASHPID} ))
+    for dev in $(ibstat -l); do
+        hca="${dev}:1"
+        for send_func in -i -b -z ; do
+            echo Running UCT hello world server with sending ${send_func}
+            ./uct_hello_world ${send_func} -p ${UCT_TEST_HELLO_WORLD_PORT} -d $hca -t "rc" &
+            hw_server_pid=$!
+
+            sleep 3
+
+            #need to be ran in background to reflect application PID in $!
+            echo Running UCT hello world client with sending ${send_func}
+            ./uct_hello_world ${send_func} -n $(hostname) -p ${UCT_TEST_HELLO_WORLD_PORT} -d $hca -t "rc" &
+            hw_client_pid=$!
+
+            # make sure server process is not running
+            wait ${hw_server_pid} ${hw_client_pid}
+        done
+    done
+    rm -f ./uct_hello_world
 
     for dev in $(ibstat -l); do
         hca="${dev}:1"
@@ -148,9 +169,6 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         echo Running ucx_perf kit on $hca
         mpirun -np 2 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $hca $opt_perftest
 
-        echo Running active_message example on $hca with rc
-         mpirun -np 2 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self -mca coll ^hcoll -x UCX_IB_ETH_PAUSE_ON=y ./active_message $hca "rc"
-
         # todo: add csv generation
 
     done
@@ -159,8 +177,6 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
         echo Running ucx_perf kit with shared memory
         mpirun -np 2 -x UCX_ERROR_SIGNALS -x UCX_HANDLE_ERRORS -mca pml ob1 -mca btl sm,self $AFFINITY $ucx_inst/bin/ucx_perftest -d $mm_device $opt_perftest_common -x mm
     done
-
-    rm -f ./active_message
 
     for tname in malloc_hooks external_events flag_no_install; do
         echo "Running memory hook (${tname}) on MPI"

@@ -30,6 +30,8 @@
  *    Sergey Shalnov <sergeysh@mellanox.com> 7-June-2016
  */
 
+#include "ucx_hello_world.h"
+
 #include <ucp/api/ucp.h>
 #include <ucp/api/ucp_def.h>
 
@@ -74,9 +76,6 @@ static size_t local_addr_len;
 static size_t peer_addr_len;
 
 static int parse_cmd(int argc, char * const argv[], char **server_name);
-static int run_server();
-static int run_client(const char *server);
-static void generate_random_string(char *str, int size);
 
 static void request_init(void *request)
 {
@@ -114,35 +113,30 @@ static void wait(ucp_worker_h ucp_worker, struct ucx_context *context)
 
 static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
 {
-    int ret = -1;
+    int ret = -1, err = 0;
     ucs_status_t status;
     int epoll_fd_local = 0, epoll_fd = 0;
     struct epoll_event ev;
     ev.data.u64 = 0;
 
     status = ucp_worker_get_efd(ucp_worker, &epoll_fd);
-    if (status != UCS_OK) {
-        goto err;
-    }
+    CHKERR_JUMP(UCS_OK != status, "ucp_worker_get_efd", err);
+
     /* It is recommended to copy original fd */
     epoll_fd_local = epoll_create(1);
 
     ev.data.fd = epoll_fd;
     ev.events = EPOLLIN;
-    if (epoll_ctl(epoll_fd_local, EPOLL_CTL_ADD, epoll_fd, &ev) < 0) {
-        fprintf(stderr, "Couldn't add original socket %d to the "
-                "new epoll: %m\n", epoll_fd);
-        goto err_fd;
-    }
+    err = epoll_ctl(epoll_fd_local, EPOLL_CTL_ADD, epoll_fd, &ev);
+    CHKERR_JUMP(err < 0, "add original socket to the new epoll\n", err_fd);
+
     /* Need to prepare ucp_worker before epoll_wait */
     status = ucp_worker_arm(ucp_worker);
     if (status == UCS_ERR_BUSY) { /* some events are arrived already */
         ret = UCS_OK;
         goto err_fd;
     }
-    if (status != UCS_OK) {
-        goto err_fd;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_worker_arm\n", err_fd);
 
     do {
         ret = epoll_wait(epoll_fd_local, &ev, 1, -1);
@@ -174,15 +168,11 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     ep_params.address    = peer_addr;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
-    if (status != UCS_OK) {
-        goto err;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
 
     msg_len = sizeof(*msg) + local_addr_len;
     msg = calloc(1, msg_len);
-    if (!msg) {
-        goto err_ep;
-    }
+    CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     msg->data_len = local_addr_len;
     memcpy(msg->data, local_addr, local_addr_len);
@@ -211,14 +201,10 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         if (ucp_test_mode == TEST_MODE_WAIT) {
             /* Polling incoming events*/
             status = ucp_worker_wait(ucp_worker);
-            if (status != UCS_OK) {
-                goto err_ep;
-            }
+            CHKERR_JUMP(status != UCS_OK, "ucp_worker_wait\n", err_ep);
         } else if (ucp_test_mode == TEST_MODE_EVENTFD) {
             status = test_poll_wait(ucp_worker);
-            if (status != UCS_OK) {
-                goto err_ep;
-            }
+            CHKERR_JUMP(status != UCS_OK, "test_poll_wait\n", err_ep);
         }
 
         /* Progressing before probe to update the state */
@@ -229,10 +215,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     } while (msg_tag == NULL);
 
     msg = malloc(info_tag.length);
-    if (!msg) {
-        fprintf(stderr, "unable to allocate memory\n");
-        goto err_ep;
-    }
+    CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag,
@@ -284,14 +267,10 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
          */
         if (ucp_test_mode == TEST_MODE_WAIT) {
             status = ucp_worker_wait(ucp_worker);
-            if (status != UCS_OK) {
-                goto err;
-            }
+            CHKERR_JUMP(status != UCS_OK, "ucp_worker_wait\n", err);
         } else if (ucp_test_mode == TEST_MODE_EVENTFD) {
             status = test_poll_wait(ucp_worker);
-            if (status != UCS_OK) {
-                goto err;
-            }
+            CHKERR_JUMP(status != UCS_OK, "test_poll_wait\n", err);
         }
 
         /* Progressing before probe to update the state */
@@ -302,10 +281,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     } while (msg_tag == NULL);
 
     msg = malloc(info_tag.length);
-    if (!msg) {
-        fprintf(stderr, "unable to allocate memory\n");
-        goto err;
-    }
+    CHKERR_JUMP(!msg, "allocate memory\n", err);
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag, recv_handle);
 
@@ -338,16 +314,11 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ep_params.address    = peer_addr;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
-    if (status != UCS_OK) {
-        goto err;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
 
     msg_len = sizeof(*msg) + test_string_length;
     msg = calloc(1, msg_len);
-    if (!msg) {
-        printf("unable to allocate memory\n");
-        goto err_ep;
-    }
+    CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     msg->data_len = msg_len - sizeof(*msg);
     generate_random_string(msg->data, test_string_length);
@@ -385,23 +356,6 @@ static int run_test(const char *server, ucp_worker_h ucp_worker)
     }
 }
 
-static void barrier(int oob_sock)
-{
-    int dummy = 0;
-    send(oob_sock, &dummy, sizeof(dummy), 0);
-    recv(oob_sock, &dummy, sizeof(dummy), 0);
-}
-
-static void generate_random_string(char *str, int size)
-{
-    int i;
-    srand(time(NULL)); // randomize seed
-    for (i = 0; i < (size-1); ++i) {
-        str[i] =  'A' + (rand() % 26);
-    }
-    str[i] = 0;
-}
-
 int main(int argc, char **argv)
 {
     /* UCP temporary vars */
@@ -421,14 +375,12 @@ int main(int argc, char **argv)
     int ret = -1;
 
     /* Parse the command line */
-    if (parse_cmd(argc, argv, &server) != UCS_OK) {
-        goto err;
-    }
+    status = parse_cmd(argc, argv, &server);
+    CHKERR_JUMP(status != UCS_OK, "parse_cmd\n", err);
+
     /* UCP initialization */
     status = ucp_config_read(NULL, NULL, &config);
-    if (status != UCS_OK) {
-        goto err;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_config_read\n", err);
 
     ucp_params.features = UCP_FEATURE_TAG;
     if (ucp_test_mode == TEST_MODE_WAIT || ucp_test_mode == TEST_MODE_EVENTFD) {
@@ -443,22 +395,16 @@ int main(int argc, char **argv)
     ucp_config_print(config, stdout, NULL, UCS_CONFIG_PRINT_CONFIG);
 
     ucp_config_release(config);
-    if (status != UCS_OK) {
-        goto err;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_init\n", err);
 
     worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
     worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
 
     status = ucp_worker_create(ucp_context, &worker_params, &ucp_worker);
-    if (status != UCS_OK) {
-        goto err_cleanup;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_worker_create\n", err_cleanup);
 
     status = ucp_worker_get_address(ucp_worker, &local_addr, &local_addr_len);
-    if (status != UCS_OK) {
-        goto err_worker;
-    }
+    CHKERR_JUMP(status != UCS_OK, "ucp_worker_get_address\n", err_worker);
 
     printf("[0x%x] local address length: %zu\n",
            (unsigned int)pthread_self(), local_addr_len);
@@ -467,47 +413,30 @@ int main(int argc, char **argv)
     if (server) {
         peer_addr_len = local_addr_len;
 
-        oob_sock = run_client(server);
-        if (oob_sock < 0) {
-            goto err_addr;
-        }
+        oob_sock = client_connect(server, server_port);
+        CHKERR_JUMP(oob_sock < 0, "client_connect\n", err_addr);
 
         ret = recv(oob_sock, &addr_len, sizeof(addr_len), 0);
-        if (ret < 0) {
-            fprintf(stderr, "failed to receive address length\n");
-            goto err_addr;
-        }
+        CHKERR_JUMP(ret < 0, "receive address length\n", err_addr);
 
         peer_addr_len = addr_len;
         peer_addr = malloc(peer_addr_len);
-        if (!peer_addr) {
-            fprintf(stderr, "unable to allocate memory\n");
-            goto err_addr;
-        }
+        CHKERR_JUMP(!peer_addr, "allocate memory\n", err_addr);
 
         ret = recv(oob_sock, peer_addr, peer_addr_len, 0);
-        if (ret < 0) {
-            fprintf(stderr, "failed to receive address\n");
-            goto err_peer_addr;
-        }
+        CHKERR_JUMP(ret < 0, "receive address\n", err_peer_addr);
     } else {
-        oob_sock = run_server();
-        if (oob_sock < 0) {
-            goto err_peer_addr;
-        }
+        oob_sock = server_connect(server_port);
+        CHKERR_JUMP(oob_sock < 0, "server_connect\n", err_peer_addr);
 
         addr_len = local_addr_len;
         ret = send(oob_sock, &addr_len, sizeof(addr_len), 0);
-        if (ret < 0 || ret != sizeof(addr_len)) {
-            fprintf(stderr, "failed to send address length\n");
-            goto err_peer_addr;
-        }
+        CHKERR_JUMP((ret < 0 || ret != sizeof(addr_len)),
+                    "send address length\n", err_peer_addr);
 
         ret = send(oob_sock, local_addr, local_addr_len, 0);
-        if (ret < 0 || ret != local_addr_len) {
-            fprintf(stderr, "failed to send address\n");
-            goto err_peer_addr;
-        }
+        CHKERR_JUMP((ret < 0 || ret != local_addr_len),
+                    "send address\n", err_peer_addr);
     }
 
     ret = run_test(server, ucp_worker);
@@ -610,42 +539,27 @@ int run_server()
     int ret;
 
     lsock = socket(AF_INET, SOCK_STREAM, 0);
-    if (lsock < 0) {
-        fprintf(stderr, "server socket() failed\n");
-        goto err;
-    }
+    CHKERR_JUMP(lsock < 0, "open server socket\n", err);
 
     optval = 1;
     ret = setsockopt(lsock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    if (ret < 0) {
-        fprintf(stderr, "server setsockopt() failed\n");
-        goto err_sock;
-    }
+    CHKERR_JUMP(ret < 0, "setsockopt server\n", err_sock);
 
     inaddr.sin_family      = AF_INET;
     inaddr.sin_port        = htons(server_port);
     inaddr.sin_addr.s_addr = INADDR_ANY;
     memset(inaddr.sin_zero, 0, sizeof(inaddr.sin_zero));
     ret = bind(lsock, (struct sockaddr*)&inaddr, sizeof(inaddr));
-    if (ret < 0) {
-        fprintf(stderr, "server bind() failed\n");
-        goto err_sock;
-    }
+    CHKERR_JUMP(ret < 0, "bind server\n", err_sock);
 
     ret = listen(lsock, 0);
-    if (ret < 0) {
-        fprintf(stderr, "server listen() failed\n");
-        goto err_sock;
-    }
+    CHKERR_JUMP(ret < 0, "listen server\n", err_sock);
 
     printf("Waiting for connection...\n");
 
     /* Accept next connection */
     dsock = accept(lsock, NULL, NULL);
-    if (dsock < 0) {
-        fprintf(stderr, "server accept() failed\n");
-        goto err_sock;
-    }
+    CHKERR_JUMP(dsock < 0, "accept server\n", err_sock);
 
     close(lsock);
 
@@ -672,10 +586,7 @@ int run_client(const char *server)
     }
 
     he = gethostbyname(server);
-    if (he == NULL || he->h_addr_list == NULL) {
-        fprintf(stderr, "host %s not found: %s\n", server, hstrerror(h_errno));
-        goto err_conn;
-    }
+    CHKERR_JUMP((he == NULL || he->h_addr_list == NULL), "found host\n", err_conn);
 
     conn_addr.sin_family = he->h_addrtype;
     conn_addr.sin_port   = htons(server_port);
@@ -684,10 +595,7 @@ int run_client(const char *server)
     memset(conn_addr.sin_zero, 0, sizeof(conn_addr.sin_zero));
 
     ret = connect(connfd, (struct sockaddr*)&conn_addr, sizeof(conn_addr));
-    if (ret < 0) {
-        fprintf(stderr, "run_client connect() failed: %m\n");
-        goto err_conn;
-    }
+    CHKERR_JUMP(ret < 0, "connect client\n", err_conn);
 
     return connfd;
 
