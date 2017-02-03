@@ -13,7 +13,6 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/debug/instrument.h>
 #include <string.h>
 
 static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
@@ -220,16 +219,9 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 
     if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
         length = ucp_contig_dt_length(datatype, count);
-        UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
-                              "ucp_tag_send_nb (eager - start)",
-                              buffer, length);
         if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_eager_short)) {
             status = ucp_tag_send_eager_short(ep, tag, buffer, length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-                UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
-                                      "ucp_tag_send_nb (eager - finish)",
-                                      buffer, length);
-
                 UCP_EP_STAT_TAG_OP(ep, EAGER);
                 ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
                 goto out;
@@ -242,9 +234,6 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
     }
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb", req,
-                          ucp_dt_length(datatype, count, buffer, &req->send.state));
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag, 0);
 
@@ -276,9 +265,6 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
     }
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_sync_nb", req,
-                          ucp_dt_length(datatype, count, buffer, &req->send.state));
 
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);

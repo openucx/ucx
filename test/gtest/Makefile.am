@@ -114,7 +114,6 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_debug.cc \
 	ucs/test_memtrack.cc \
-	ucs/test_instr.cc \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \
 	ucs/test_mpool.cc \

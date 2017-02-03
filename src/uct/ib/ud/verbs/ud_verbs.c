@@ -11,12 +11,10 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
-#include <ucs/debug/instrument.h>
 #include <string.h>
 #include <arpa/inet.h> /* For htonl */
 
 #include <uct/ib/base/ib_log.h>
-#include <uct/ib/base/ib_instr.h>
 
 #include <uct/ib/ud/base/ud_iface.h>
 #include <uct/ib/ud/base/ud_ep.h>
@@ -81,7 +79,6 @@ uct_ud_verbs_ep_tx_inlv(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     iface->tx.sge[1].length = length;
     uct_ud_verbs_iface_fill_tx_wr(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)iface->tx.sge[0].addr);
-    UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_ud_verbs_ep_tx_inlv", &iface->tx.wr_inl);
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_inl, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_inl,
@@ -101,7 +98,6 @@ uct_ud_verbs_ep_tx_skb(uct_ud_verbs_iface_t *iface,
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
     uct_ud_verbs_iface_fill_tx_wr(iface, ep, &iface->tx.wr_skb, flags);
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t *)iface->tx.sge[0].addr);
-    UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_ud_verbs_ep_tx_skb", &iface->tx.wr_skb);
     ret = ibv_post_send(iface->super.qp, &iface->tx.wr_skb, &bad_wr);
     ucs_assertv(ret == 0, "ibv_post_send() returned %d (%m)", ret);
     uct_ib_log_post_send(&iface->super.super, iface->super.qp, &iface->tx.wr_skb,
@@ -302,9 +298,6 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface)
     }
 
     iface->super.tx.available += UCT_UD_TX_MODERATION + 1;
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX,
-                          "uct_ud_verbs_iface_poll_tx",
-                          wc.wr_id, wc.status);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -514,8 +507,6 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max)
         return;
     }
 
-    UCT_IB_INSTRUMENT_RECORD_RECV_WR_LEN("uct_ud_verbs_iface_post_recv_always",
-                                      &wrs[0].ibwr);
     ret = ibv_post_recv(iface->super.qp, &wrs[0].ibwr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_recv() returned %d: %m", ret);

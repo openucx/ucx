@@ -121,8 +121,6 @@ uct_dc_verbs_iface_post_send_to_dci(uct_dc_verbs_iface_t* iface,
     uct_ib_log_exp_post_send(&iface->super.super.super, txqp->qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
-    UCT_IB_INSTRUMENT_RECORD_SEND_EXP_WR_LEN("uct_dc_verbs_ep_post_send", wr);
-
     ret = ibv_exp_post_send(txqp->qp, wr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_send() returned %d (%m)", ret);

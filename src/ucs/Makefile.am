@@ -39,7 +39,6 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/list_types.h \
 	debug/check.h \
 	debug/debug.h \
-	debug/instrument.h \
 	debug/log.h \
 	debug/memtrack.h \
 	debug/profile.h \
@@ -104,7 +103,6 @@ libucs_la_SOURCES = \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
 	debug/debug.c \
-	debug/instrument.c \
 	debug/log.c \
 	debug/memtrack.c \
 	debug/profile.c \

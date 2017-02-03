@@ -9,7 +9,6 @@
 #include "rc_iface.h"
 
 #include <uct/ib/base/ib_verbs.h>
-#include <ucs/debug/instrument.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
@@ -294,7 +293,6 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
 
     ucs_mpool_put(desc);
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
@@ -307,14 +305,12 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
     ucs_mpool_put(desc);
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
 void uct_rc_ep_send_completion_proxy_handler(uct_rc_iface_send_op_t *op,
                                              const void *resp)
 {
     uct_invoke_completion(op->user_comp, UCS_OK);
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_IB_TX, __FUNCTION__, op);
 }
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n)
@@ -472,7 +468,6 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
         \
         uct_invoke_completion(desc->super.user_comp, UCS_OK); \
         ucs_mpool_put(desc); \
-        UCT_IB_INSTRUMENT_RECORD_SEND_OP(op); \
   }
 
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 0);
@@ -485,5 +480,4 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
     ucs_mpool_put(desc);
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }

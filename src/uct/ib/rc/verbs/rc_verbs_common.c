@@ -75,8 +75,6 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max
         return 0;
     }
 
-    UCT_IB_INSTRUMENT_RECORD_RECV_WR_LEN("uct_rc_iface_post_recv_always",
-                                         &wrs[0].ibwr);
     ret = ibv_post_srq_recv(iface->rx.srq, &wrs[0].ibwr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);

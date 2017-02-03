@@ -12,7 +12,6 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
-#include <ucs/debug/instrument.h>
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -133,10 +132,6 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
                   function, req, req + 1, info->sender_tag, info->length,
                   ucs_status_string(status));
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
-                          "ucp_tag_recv_request_completed",
-                          req, info->length);
-
     req->status = status;
     req->flags |= UCP_REQUEST_FLAG_COMPLETED;
 }
@@ -191,12 +186,8 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
 
     buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr", req,
-                          buffer_size);
-
     status = ucp_tag_recv_common(worker, buffer, buffer_size, datatype, tag,
                                  tag_mask, req, NULL, "recv_nbr");
-
     if (status != UCS_INPROGRESS) {
         ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nbr");
     }
@@ -226,9 +217,6 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
     }
 
     buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb", req,
-                          buffer_size);
 
     status = ucp_tag_recv_common(worker, buffer, buffer_size, datatype, tag,
                                  tag_mask, req, cb, "recv_nb");
@@ -271,9 +259,6 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     }
 
     buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb", req,
-                          buffer_size);
 
     /* First, handle the first packet that was already matched */
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
@@ -339,9 +324,6 @@ void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req)
     ucs_queue_for_each_safe(qreq, iter, &context->tag.expected, recv.queue) {
         if (qreq == req) {
             ucs_queue_del_iter(&context->tag.expected, iter);
-            UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
-                                  "ucp_tag_cancel_expected",
-                                  req, 0);
             return;
         }
     }
