@@ -141,7 +141,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
          * name specified in the configuration.
          */
         num_mds = 0;
-        if (method == UCT_ALLOC_METHOD_MD && !(uct_flags & UCT_MD_MEM_FLAG_FIXED)) {
+        if ((method == UCT_ALLOC_METHOD_MD) && !(uct_flags & UCT_MD_MEM_FLAG_FIXED)) {
             for (md_index = 0; md_index < context->num_mds; ++md_index) {
                 if (ucp_is_md_selected_by_config(context, method_index, md_index)) {
                     mds[num_mds++] = context->tl_mds[md_index].md;
@@ -199,7 +199,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
                          ucp_mem_h *memh_p)
 {
     ucs_status_t status;
-    unsigned flags = uct_flags(params);
+    unsigned flags;
     ucp_mem_h memh;
 
     /* always acquire context lock */
@@ -227,6 +227,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
         status = UCS_ERR_NO_MEMORY;
         goto out;
     }
+
+    flags = uct_flags(params);
 
     if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS)) {
         params->address = NULL;
