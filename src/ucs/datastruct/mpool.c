@@ -103,6 +103,11 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
         elem->mpool = NULL;
     }
 
+    /* Must be done before chunks are released and other threads could allocated
+     * the same memory address
+     */
+    VALGRIND_DESTROY_MEMPOOL(mp);
+
     /*
      * Go over all elements in the chunks and make sure they were on the freelist.
      * Then, release the chunk.
@@ -118,7 +123,6 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
         data->ops->chunk_release(mp, chunk);
     }
 
-    VALGRIND_DESTROY_MEMPOOL(mp);
     ucs_debug("mpool %s destroyed", ucs_mpool_name(mp));
 
     free(data->name);
