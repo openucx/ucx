@@ -528,7 +528,7 @@ public:
         ucs_status_t status1, status2;
 
         /* can not reduce mpool size below retransmission window
-         * fo ud
+         * for ud
          */
         if ((GetParam()->tl_name.compare("ud") == 0) || 
             (GetParam()->tl_name.compare("ud_mlx5") == 0)) { 
@@ -575,8 +575,14 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
 
     /* short progress shall release tx buffers and 
      * the next message shall go out */
-    short_progress_loop();
-    status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
+    do {
+        progress();
+        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
+        if (status == UCS_OK) {
+            break;
+        }
+    } while (ucs_get_time() < loop_end_limit);
     EXPECT_EQ(UCS_OK, status);
 }
 
