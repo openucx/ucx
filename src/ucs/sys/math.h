@@ -9,7 +9,8 @@
 #ifndef UCS_MATH_H
 #define UCS_MATH_H
 
-#include <ucs/sys/compiler.h>
+#include "compiler.h"
+#include "compiler_def.h"
 
 #include <stdint.h>
 #include <math.h>
@@ -74,12 +75,6 @@
 
 /* Return values: off-set from the alignment */
 #define ucs_padding_pow2(n, p) ucs_check_if_align_pow2(n, p)
-
-/* The i-th bit */
-#define UCS_BIT(i)               (1ull << (i))
-
-/* Mask of bits 0..i-1 */
-#define UCS_MASK(i)              (UCS_BIT(i) - 1)
 
 #define UCS_MASK_SAFE(i) \
     (((i) >= 64) ? ((uint64_t)(-1)) : UCS_MASK(i))

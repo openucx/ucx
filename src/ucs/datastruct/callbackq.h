@@ -9,7 +9,7 @@
 #define UCS_CALLBACKQ_H
 
 #include <ucs/async/async_fwd.h>
-#include <ucs/datastruct/list.h>
+#include <ucs/datastruct/list_types.h>
 #include <stdint.h>
 
 /*

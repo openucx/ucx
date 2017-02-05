@@ -43,15 +43,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>  //getopt
-#include <ctype.h>   //isprint
-#include <pthread.h> //pthread_self
-#include <errno.h>   //errno
+#include <unistd.h>  /* getopt */
+#include <ctype.h>   /* isprint */
+#include <pthread.h> /* pthread_self */
+#include <errno.h>   /* errno */
 #include <time.h>
 
 struct msg {
     uint64_t        data_len;
-    uint8_t         data[0];
 };
 
 struct ucx_context {
@@ -99,7 +98,7 @@ static void recv_handle(void *request, ucs_status_t status,
 
     context->completed = 1;
 
-    printf("[0x%x] receive handler called with status %d (length %zu)\n",
+    printf("[0x%x] receive handler called with status %d (length %lu)\n",
            (unsigned int)pthread_self(), status, info->length);
 }
 
@@ -174,7 +173,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     msg->data_len = local_addr_len;
-    memcpy(msg->data, local_addr, local_addr_len);
+    memcpy(msg + 1, local_addr, local_addr_len);
 
     request = ucp_tag_send_nb(server_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,
@@ -233,7 +232,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     }
 
     printf("\n\n----- UCP TEST SUCCESS ----\n\n");
-    printf("%s", msg->data);
+    printf("%s", (char *)(msg + 1));
     printf("\n\n---------------------------\n\n");
 
     free(msg);
@@ -304,7 +303,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     }
 
     peer_addr_len = msg->data_len;
-    memcpy(peer_addr, msg->data, peer_addr_len);
+    memcpy(peer_addr, msg + 1, peer_addr_len);
 
     free(msg);
 
@@ -320,7 +319,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     CHKERR_JUMP(!msg, "allocate memory\n", err_ep);
 
     msg->data_len = msg_len - sizeof(*msg);
-    generate_random_string(msg->data, test_string_length);
+    generate_random_string((char *)(msg + 1), test_string_length);
 
     request = ucp_tag_send_nb(client_ep, msg, msg_len,
                               ucp_dt_make_contig(1), tag,
@@ -410,7 +409,7 @@ int main(int argc, char **argv)
     status = ucp_worker_get_address(ucp_worker, &local_addr, &local_addr_len);
     CHKERR_JUMP(status != UCS_OK, "ucp_worker_get_address\n", err_worker);
 
-    printf("[0x%x] local address length: %zu\n",
+    printf("[0x%x] local address length: %lu\n",
            (unsigned int)pthread_self(), local_addr_len);
 
     /* OOB connection establishment */
@@ -585,7 +584,7 @@ int run_client(const char *server)
 
     connfd = socket(AF_INET, SOCK_STREAM, 0);
     if (connfd < 0) {
-        fprintf(stderr, "socket() failed: %m\n");
+        fprintf(stderr, "socket() failed: %s\n", strerror(errno));
         return -1;
     }
 

@@ -8,15 +8,7 @@
 #define UCS_LIST_H_
 
 #include <ucs/sys/compiler.h>
-
-
-/**
- * A link in a circular list.
- */
-typedef struct ucs_list_link {
-    struct ucs_list_link  *prev;
-    struct ucs_list_link  *next;
-} ucs_list_link_t;
+#include <ucs/datastruct/list_types.h>
 
 
 #define UCS_LIST_INITIALIZER(_prev, _next) \

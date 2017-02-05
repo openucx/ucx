@@ -7,8 +7,9 @@
 #ifndef UCT_DEF_H_
 #define UCT_DEF_H_
 
-#include <ucs/sys/math.h>
 #include <ucs/type/status.h>
+
+#include <stddef.h>
 #include <stdint.h>
 
 
@@ -34,7 +35,7 @@ enum uct_event_types {
     UCP_EVENT_RX_COMPLETION = UCS_BIT(2),
     UCP_EVENT_RX_RESOURCES  = UCS_BIT(3),
     UCP_EVENT_TX_ERROR      = UCS_BIT(4),
-    UCP_EVENT_RX_ERROR      = UCS_BIT(5),
+    UCP_EVENT_RX_ERROR      = UCS_BIT(5)
 };
 
 

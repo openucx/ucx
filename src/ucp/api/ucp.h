@@ -12,7 +12,6 @@
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
-#include <ucs/sys/math.h>
 #include <stdio.h>
 
 
@@ -151,7 +150,7 @@ enum ucp_feature {
  */
 enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
+    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1)  /**< Worker's CPU bitmap */
 };
 
 
@@ -163,7 +162,7 @@ enum ucp_worker_params_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_ep_params_field {
-    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0), /**< Address of remote peer */
+    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0)  /**< Address of remote peer */
 };
 
 
@@ -180,7 +179,7 @@ enum ucp_mem_map_params_field {
                                                        would be allocated or
                                                        registered in the
                                                        ucp_mem_map routine.*/
-    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /**< Allocation flags */
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags */
 };
 
 /**
@@ -193,7 +192,7 @@ enum ucp_mem_map_params_field {
 enum ucp_mem_advise_params_field {
     UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory */
     UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */ 
-    UCP_MEM_ADVISE_PARAM_FIELD_ADVICE  = UCS_BIT(2), /**< Advice on memory usage */
+    UCP_MEM_ADVISE_PARAM_FIELD_ADVICE  = UCS_BIT(2)  /**< Advice on memory usage */
 };
 
 
@@ -1315,7 +1314,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
  */
 typedef enum ucp_mem_advice {
     UCP_MADV_NORMAL   = 0,  /**< No special treatment */
-    UCP_MADV_WILLNEED,      /**< can be used on the memory mapped with 
+    UCP_MADV_WILLNEED       /**< can be used on the memory mapped with
                                  @ref UCP_MEM_MAP_NONBLOCK to speed up memory
                                  mapping and to avoid page faults when 
                                  the memory is accessed for the first time. */
@@ -2272,7 +2271,7 @@ ucs_status_t ucp_worker_flush(ucp_worker_h worker);
  */
 typedef enum {
     UCP_ATOMIC_POST_OP_ADD, /**< Atomic add */
-    UCP_ATOMIC_POST_OP_LAST,
+    UCP_ATOMIC_POST_OP_LAST
 } ucp_atomic_post_op_t;
 
 /**
@@ -2287,7 +2286,7 @@ typedef enum {
     UCP_ATOMIC_FETCH_OP_FADD, /**< Atomic Fetch and add */
     UCP_ATOMIC_FETCH_OP_SWAP, /**< Atomic swap */
     UCP_ATOMIC_FETCH_OP_CSWAP, /**< Atomic conditional swap */
-    UCP_ATOMIC_FETCH_OP_LAST,
+    UCP_ATOMIC_FETCH_OP_LAST
 } ucp_atomic_fetch_op_t;
 
 /**
