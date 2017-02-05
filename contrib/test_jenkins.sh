@@ -158,7 +158,11 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     rm -f ./uct_hello_world
 
     for dev in $(ibstat -l); do
-        hca="${dev}:1"
+        port=1
+        hca="${dev}:${port}"
+
+        # skip non-active ports
+        (ibstat ${dev} ${port} | grep "State: Active") || continue
 
         if [[ $dev =~ .*mlx5.* ]]; then
             opt_perftest="$opt_perftest_common -b $ucx_inst_ptest/transports"
