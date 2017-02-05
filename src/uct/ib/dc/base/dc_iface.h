@@ -117,10 +117,11 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
  */
 static inline uint8_t uct_dc_iface_dci_find(uct_dc_iface_t *iface, uint32_t qp_num)
 {
-    int i;
+    uct_dc_dci_t *dcis = iface->tx.dcis;
+    int i, ndci = iface->tx.ndci;
 
-    for (i = 0; i < iface->tx.ndci; i++) {
-        if (iface->tx.dcis[i].txqp.qp->qp_num == qp_num) {
+    for (i = 0; i < ndci; i++) {
+        if (dcis[i].txqp.qp->qp_num == qp_num) {
             return i;
         }
     }
