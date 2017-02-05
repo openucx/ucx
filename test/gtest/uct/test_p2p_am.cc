@@ -520,3 +520,72 @@ UCS_TEST_P(uct_p2p_am_misc, am_max_short_multi) {
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)
+
+class uct_p2p_am_tx_bufs : public uct_p2p_am_test
+{
+public:
+    uct_p2p_am_tx_bufs() : uct_p2p_am_test() {
+        ucs_status_t status1, status2;
+
+        /* can not reduce mpool size below retransmission window
+         * for ud
+         */
+        if ((GetParam()->tl_name.compare("ud") == 0) || 
+            (GetParam()->tl_name.compare("ud_mlx5") == 0)) { 
+            m_inited = false;
+            return;
+        }
+
+        status1 = uct_config_modify(m_iface_config, "IB_TX_MAX_BUFS" , "32");
+        status2 = uct_config_modify(m_iface_config, "IB_TX_BUFS_GROW" , "32");
+        if ((status1 != UCS_OK) || (status2 != UCS_OK)) {
+            m_inited = false;
+        } else {
+            m_inited = true;
+        }
+    }
+    bool m_inited;
+};
+
+UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
+    ucs_status_t status;
+    mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+    mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
+            SEED1, sender());
+
+    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                      this, UCT_AM_CB_FLAG_ASYNC);
+    ASSERT_UCS_OK(status);
+    /* skip on cm, ud */
+    if (!m_inited) { 
+        UCS_TEST_SKIP_R("Test does not apply to the current transport");
+    }
+    if (GetParam()->tl_name.compare("cm") == 0) { 
+        UCS_TEST_SKIP_R("Test does not work with IB CM transport");
+    }
+    if ((GetParam()->tl_name.compare("rc") == 0) ||
+        (GetParam()->tl_name.compare("rc_mlx5") == 0)) { 
+        UCS_TEST_SKIP_R("Test does not work with IB RC transports");
+    }
+    do {
+        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
+        if (status == UCS_OK) {
+        }
+    } while (status == UCS_OK);
+
+    /* short progress shall release tx buffers and 
+     * the next message shall go out */
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
+    do {
+        progress();
+        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
+        if (status == UCS_OK) {
+            break;
+        }
+    } while (ucs_get_time() < loop_end_limit);
+
+    EXPECT_EQ(UCS_OK, status);
+}
+
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_tx_bufs)
+
