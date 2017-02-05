@@ -583,6 +583,7 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
             break;
         }
     } while (ucs_get_time() < loop_end_limit);
+
     EXPECT_EQ(UCS_OK, status);
 }
 
