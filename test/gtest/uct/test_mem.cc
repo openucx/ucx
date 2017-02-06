@@ -143,23 +143,31 @@ UCS_TEST_P(test_mem, mmap_fixed) {
                 mem_arr[j].address = (void *)p_addr;
                 status = uct_mem_alloc(1, UCT_MD_MEM_FLAG_FIXED, &meth_mmap,
                                        1, &pd, 1, "test", &mem_arr[j]);
-                ASSERT_UCS_OK(status);
-                ++n_success;
-                EXPECT_EQ(UCT_ALLOC_METHOD_MMAP, mem_arr[j].method);
-                EXPECT_EQ(p_addr, (uintptr_t)mem_arr[j].address);
-                EXPECT_GE(mem_arr[j].length, 1);
-                /* touch the page*/
-                *((char *)mem_arr[j].address) = 'c';
-                EXPECT_EQ(*(char *)p_addr, 'c');
-
-                p_addr += mem_arr[j].length + (mem_arr[j].length % page_size);
+                if (status == UCS_OK) {
+                    ++n_success;
+                    EXPECT_EQ(UCT_ALLOC_METHOD_MMAP, mem_arr[j].method);
+                    EXPECT_EQ(p_addr, (uintptr_t)mem_arr[j].address);
+                    EXPECT_GE(mem_arr[j].length, 1);
+                    /* touch the page*/
+                    *((char *)mem_arr[j].address) = 'c';
+                    EXPECT_EQ(*(char *)p_addr, 'c');
+                } else {
+                    EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
+                    mem_arr[j].address = NULL;
+                }
+                p_addr += mem_arr[j].length + (page_size - mem_arr[j].length % page_size);
             }
 
             for (j = 0; j < n_tryes + 1; ++j) {
+                if (mem_arr[j].address == NULL) {
+                    continue;
+                }
+
                 if (j == n_tryes) {
                     EXPECT_EQ(UCT_ALLOC_METHOD_HEAP, mem_arr[j].method);
                 } else {
                     EXPECT_EQ(UCT_ALLOC_METHOD_MMAP, mem_arr[j].method);
+                    --n_success;
                 }
                 status = uct_mem_free(&mem_arr[j]);
                 ASSERT_UCS_OK(status);
@@ -169,7 +177,7 @@ UCS_TEST_P(test_mem, mmap_fixed) {
         uct_md_close(pd);
     }
 
-    EXPECT_GT(n_success, 0);
+    EXPECT_EQ(n_success, 0);
     uct_release_md_resource_list(md_resources);
 }
 
