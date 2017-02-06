@@ -316,13 +316,15 @@ static void usage(struct perftest_context *ctx, const char *program)
         printf("                   %11s : %s.\n", test->name, test->desc);
     }
     printf("\n");
-    printf("     -D <layout>    Data layout. Default is \"short\" in UCT, \"contig\""
-                                    " in UCP and previous one in batch mode.\n");
-    printf("                        short : Use short messages API (cannot used for get).\n");
-    printf("                        bcopy : Use copy-out API (cannot used for atomics).\n");
-    printf("                        zcopy : Use zero-copy API (cannot used for atomics).\n");
-    printf("                       contig : Use continuous datatype in UCP tests.\n");
-    printf("                          iov : Use IOV datatype in UCP tests.\n");
+    printf("     -D <layout>[,<layout>]    Data layout. Default is \"short\" in UCT,"
+                                         " \"contig\" in UCP and previous one "
+                                         "in batch mode. Second parameter is for "
+                                         "receive side in UCP only.\n");
+    printf("                                 short : Use short messages API (cannot used for get).\n");
+    printf("                                 bcopy : Use copy-out API (cannot used for atomics).\n");
+    printf("                                 zcopy : Use zero-copy API (cannot used for atomics).\n");
+    printf("                                contig : Use continuous datatype in UCP tests.\n");
+    printf("                                   iov : Use IOV datatype in UCP tests.\n");
     printf("\n");
     printf("     -d <device>    Device to use for testing.\n");
     printf("     -x <tl>        Transport to use for testing.\n");
@@ -375,6 +377,25 @@ static const char *__basename(const char *path)
 {
     const char *p = strrchr(path, '/');
     return (p == NULL) ? path : p;
+}
+
+static ucs_status_t parse_ucp_datatype_params(const char *optarg,
+                                              ucp_perf_datatype_t *datatype)
+{
+    const char  *iov_type         = "iov";
+    const size_t iov_type_size    = strlen("iov");
+    const char  *contig_type      = "contig";
+    const size_t contig_type_size = strlen("contig");
+
+    if (0 == strncmp(optarg, iov_type, iov_type_size)) {
+        *datatype = UCP_PERF_DATATYPE_IOV;
+    } else if (0 == strncmp(optarg, contig_type, contig_type_size)) {
+        *datatype = UCP_PERF_DATATYPE_CONTIG;
+    } else {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t parse_message_sizes_params(const char *optarg,
@@ -439,7 +460,8 @@ static void init_test_params(ucx_perf_params_t *params)
     params->uct.data_layout = UCT_PERF_DATA_LAYOUT_SHORT;
     params->msg_size_cnt    = 1;
     params->iov_stride      = 0;
-    params->ucp.datatype    = UCP_PERF_DATATYPE_CONTIG;
+    params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
+    params->ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
     strcpy(params->uct.dev_name, "<none>");
     strcpy(params->uct.tl_name, "<none>");
 
@@ -451,6 +473,7 @@ static void init_test_params(ucx_perf_params_t *params)
 static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
 {
     test_type_t *test;
+    char *optarg2 = NULL;
 
     switch (opt) {
     case 'd':
@@ -482,10 +505,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
         } else if (0 == strcmp(optarg, "zcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
-        } else if (0 == strcmp(optarg, "iov")) {
-            params->ucp.datatype      = UCP_PERF_DATATYPE_IOV;
-        } else if (0 == strcmp(optarg, "contig")) {
-            params->ucp.datatype      = UCP_PERF_DATATYPE_CONTIG;
+        } else if (UCS_OK == parse_ucp_datatype_params(optarg,
+                                                       &params->ucp.send_datatype)) {
+            optarg2 = strchr(optarg, ',');
+            if (optarg2) {
+                if (UCS_OK != parse_ucp_datatype_params(optarg2 + 1,
+                                                       &params->ucp.recv_datatype)) {
+                    return -1;
+                }
+            }
         } else {
             ucs_error("Invalid option argument for -D");
             return -1;

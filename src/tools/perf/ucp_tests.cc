@@ -15,7 +15,7 @@ extern "C" {
 #include <ucs/sys/preprocessor.h>
 
 
-template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, ucp_perf_datatype_t DATA, bool ONESIDED>
+template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, bool ONESIDED>
 class ucp_perf_test_runner {
 public:
     static const ucp_tag_t TAG = 0x1337a880u;
@@ -31,34 +31,51 @@ public:
         ucs_assert_always(m_max_outstanding > 0);
     }
 
+    void create_iov_buffer(ucp_dt_iov_t *iov, void *buffer)
+    {
+        size_t iov_length_it, iov_it;
+        const size_t iovcnt = m_perf.params.msg_size_cnt;
+
+        ucs_assert(NULL != m_perf.params.msg_size_list);
+        ucs_assert(iovcnt > 0);
+
+        iov_length_it = 0;
+        for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+            iov[iov_it].buffer = (char *)buffer + iov_length_it;
+            iov[iov_it].length = m_perf.params.msg_size_list[iov_it];
+
+            if (m_perf.params.iov_stride) {
+                iov_length_it += m_perf.params.iov_stride;
+            } else {
+                iov_length_it += iov[iov_it].length;
+            }
+        }
+    }
+
+    ucp_datatype_t ucp_perf_test_get_datatype(ucp_perf_datatype_t datatype, ucp_dt_iov_t *iov,
+                                              size_t *length, void **buffer_p)
+    {
+        ucp_datatype_t type = ucp_dt_make_contig(1);
+        if (UCX_PERF_CMD_TAG == CMD) {
+            if (UCP_PERF_DATATYPE_IOV == datatype) {
+                *buffer_p = iov;
+                *length   = m_perf.params.msg_size_cnt;
+                type      = ucp_dt_make_iov();
+            }
+        }
+        return type;
+    }
     /**
      * Make ucp_dt_iov_t iov[msg_size_cnt] array with pointer elements to
      * original buffer
      */
-    void ucp_perf_test_prepare_iov_buffer()
+    void ucp_perf_test_prepare_iov_buffers()
     {
-        const size_t iovcnt    = m_perf.params.msg_size_cnt;
-        size_t iov_length_it, iov_it;
-
-        if (UCP_PERF_DATATYPE_IOV == DATA) {
-            ucs_assert(NULL != m_perf.params.msg_size_list);
-            ucs_assert(iovcnt > 0);
-
-            iov_length_it = 0;
-            for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-                m_perf.ucp.iov[iov_it].buffer = (char *)m_perf.send_buffer +
-                                                iov_length_it;
-                m_perf.ucp.iov[iov_it].length = m_perf.params.msg_size_list[iov_it];
-
-                if (m_perf.params.iov_stride) {
-                    iov_length_it += m_perf.params.iov_stride;
-                } else {
-                    iov_length_it += m_perf.ucp.iov[iov_it].length;
-                }
-            }
-
-            ucs_debug("IOV buffer filled by %lu slices with total length %lu",
-                      iovcnt, iov_length_it);
+        if (UCP_PERF_DATATYPE_IOV == m_perf.params.ucp.send_datatype) {
+            create_iov_buffer(m_perf.ucp.send_iov, m_perf.send_buffer);
+        }
+        if (UCP_PERF_DATATYPE_IOV == m_perf.params.ucp.recv_datatype) {
+            create_iov_buffer(m_perf.ucp.recv_iov, m_perf.recv_buffer);
         }
     }
 
@@ -90,19 +107,13 @@ public:
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    send(ucp_ep_h ep, void *buffer, unsigned length, uint8_t sn,
-         uint64_t remote_addr, ucp_rkey_h rkey)
+    send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
+         uint8_t sn, uint64_t remote_addr, ucp_rkey_h rkey)
     {
         void *request;
-        ucp_datatype_t datatype = ucp_dt_make_contig(1);
 
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            if (UCP_PERF_DATATYPE_IOV == m_perf.params.ucp.datatype) {
-                buffer   = m_perf.ucp.iov;
-                length   = m_perf.params.msg_size_cnt;
-                datatype = ucp_dt_make_iov();
-            }
             request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
                                       (ucp_send_callback_t)ucs_empty_function);
             return wait(request, true);
@@ -149,15 +160,15 @@ public:
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
-    recv(ucp_worker_h worker, void *buffer, unsigned length, uint8_t sn)
+    recv(ucp_worker_h worker, void *buffer, unsigned length, ucp_datatype_t datatype,
+         uint8_t sn)
     {
         volatile uint8_t *ptr;
         void *request;
 
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
-            request = ucp_tag_recv_nb(worker, buffer, length, ucp_dt_make_contig(1),
-                                      TAG, 0,
+            request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, 0,
                                       (ucp_tag_recv_callback_t)ucs_empty_function);
             return wait(request, false);
         case UCX_PERF_CMD_PUT:
@@ -196,43 +207,52 @@ public:
         ucp_worker_h worker;
         ucp_ep_h ep;
         void *send_buffer, *recv_buffer;
+        ucp_datatype_t send_datatype, recv_datatype;
         uint64_t remote_addr;
         uint8_t sn;
         ucp_rkey_h rkey;
-        size_t length;
+        size_t length, send_length, recv_length;
 
-        length = ucx_perf_get_message_size(&m_perf.params);
+        length        = ucx_perf_get_message_size(&m_perf.params);
         ucs_assert(length >= sizeof(psn_t));
 
-        ucp_perf_test_prepare_iov_buffer();
+        ucp_perf_test_prepare_iov_buffers();
 
         *((volatile uint8_t*)m_perf.recv_buffer + length - 1) = -1;
 
         rte_call(&m_perf, barrier);
 
-        my_index = rte_call(&m_perf, group_index);
+        my_index      = rte_call(&m_perf, group_index);
 
         ucx_perf_test_start_clock(&m_perf);
 
-        send_buffer = m_perf.send_buffer;
-        recv_buffer = m_perf.recv_buffer;
-        worker      = m_perf.ucp.worker;
-        ep          = m_perf.ucp.peers[1 - my_index].ep;
-        remote_addr = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
-        rkey        = m_perf.ucp.peers[1 - my_index].rkey;
-        sn          = 0;
+        send_buffer   = m_perf.send_buffer;
+        recv_buffer   = m_perf.recv_buffer;
+        worker        = m_perf.ucp.worker;
+        ep            = m_perf.ucp.peers[1 - my_index].ep;
+        remote_addr   = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
+        rkey          = m_perf.ucp.peers[1 - my_index].rkey;
+        sn            = 0;
+        send_length   = length;
+        recv_length   = length;
+        send_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.send_datatype,
+                                                   m_perf.ucp.send_iov, &send_length,
+                                                   &send_buffer);
+        recv_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.recv_datatype,
+                                                   m_perf.ucp.recv_iov, &recv_length,
+                                                   &recv_buffer);
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, length, sn, remote_addr, rkey);
-                recv(worker, recv_buffer, length, sn);
+                send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
+                recv(worker, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, length, sn);
-                send(ep, send_buffer, length, sn, remote_addr, rkey);
+                recv(worker, recv_buffer, recv_length, recv_datatype, sn);
+                send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
@@ -249,39 +269,48 @@ public:
         ucp_worker_h worker;
         ucp_ep_h ep;
         void *send_buffer, *recv_buffer;
+        ucp_datatype_t send_datatype, recv_datatype;
         uint64_t remote_addr;
         ucp_rkey_h rkey;
-        size_t length;
+        size_t length, send_length, recv_length;
         uint8_t sn;
 
-        length = ucx_perf_get_message_size(&m_perf.params);
+        length        = ucx_perf_get_message_size(&m_perf.params);
         ucs_assert(length >= sizeof(psn_t));
 
-        ucp_perf_test_prepare_iov_buffer();
+        ucp_perf_test_prepare_iov_buffers();
 
         rte_call(&m_perf, barrier);
 
-        my_index = rte_call(&m_perf, group_index);
+        my_index      = rte_call(&m_perf, group_index);
 
         ucx_perf_test_start_clock(&m_perf);
 
-        send_buffer = m_perf.send_buffer;
-        recv_buffer = m_perf.recv_buffer;
-        worker      = m_perf.ucp.worker;
-        ep          = m_perf.ucp.peers[1 - my_index].ep;
-        remote_addr = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
-        rkey        = m_perf.ucp.peers[1 - my_index].rkey;
-        sn          = 0;
+        send_buffer   = m_perf.send_buffer;
+        recv_buffer   = m_perf.recv_buffer;
+        worker        = m_perf.ucp.worker;
+        ep            = m_perf.ucp.peers[1 - my_index].ep;
+        remote_addr   = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
+        rkey          = m_perf.ucp.peers[1 - my_index].rkey;
+        sn            = 0;
+        send_length   = length;
+        recv_length   = length;
+        send_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.send_datatype,
+                                                   m_perf.ucp.send_iov, &send_length,
+                                                   &send_buffer);
+        recv_datatype = ucp_perf_test_get_datatype(m_perf.params.ucp.recv_datatype,
+                                                   m_perf.ucp.recv_iov, &recv_length,
+                                                   &recv_buffer);
 
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                recv(worker, recv_buffer, length, sn);
+                recv(worker, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
-                send(ep, send_buffer, length, sn, remote_addr, rkey);
+                send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
@@ -312,34 +341,31 @@ private:
 };
 
 
-#define TEST_CASE(_perf, _cmd, _type, _data, _onesided) \
+#define TEST_CASE(_perf, _cmd, _type, _onesided) \
     if (((_perf)->params.command == (_cmd)) && \
         ((_perf)->params.test_type == (_type)) && \
-        ((_perf)->params.ucp.datatype == (_data)) && \
         (!!((_perf)->params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED) == !!(_onesided))) \
     { \
-        ucp_perf_test_runner<_cmd, _type, _data, _onesided> r(*_perf); \
+        ucp_perf_test_runner<_cmd, _type, _onesided> r(*_perf); \
         return r.run(); \
     }
 #define TEST_CASE_ALL_OSD(_perf, _case) \
-   TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, UCS_PP_TUPLE_2 _case, true) \
-   TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, UCS_PP_TUPLE_2 _case, false)
+   TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, true) \
+   TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, false)
 
 
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG,   UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG,   UCP_PERF_DATATYPE_IOV),
-        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_IOV),
-        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG,   UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_FADD,  UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG),
-        (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI, UCP_PERF_DATATYPE_CONTIG)
+        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_TAG,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_FADD,  UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_SWAP,  UCX_PERF_TEST_TYPE_STREAM_UNI),
+        (UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI)
         );
 
     ucs_error("Invalid test case");
