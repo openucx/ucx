@@ -160,7 +160,7 @@ public:
         mapped_buffer sendbuf(length, SEED1, sender());
         mapped_buffer recvbuf(0, 0, sender()); /* dummy */
 
-        blocking_send(send, sender_ep(), sendbuf, recvbuf);
+        blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
         sendbuf.pattern_fill(SEED2);
 
         while (m_am_count == 0) {
@@ -204,20 +204,18 @@ public:
         m_keep_data = keep;
     }
 
-    void am_sync_finish() {
+    void am_sync_finish(unsigned prev_am_count) {
         /* am message handler must be only invoked from progress */
-
-        unsigned prev_am_count = m_am_count;
         twait(500);
         EXPECT_EQ(prev_am_count, m_am_count);
-        short_progress_loop();
+        wait_for_value(&m_am_count, prev_am_count + 1, true);
         EXPECT_EQ(prev_am_count+1, m_am_count);
     }
 
     void am_async_finish(unsigned prev_am_count) {
         /* am message handler must be only invoked within reasonable time if
          * progress is not called */
-        twait(500);
+        wait_for_value(&m_am_count, prev_am_count + 1, false);
         EXPECT_EQ(prev_am_count+1, m_am_count);
     }
 
@@ -242,7 +240,7 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
     check_caps(UCT_IFACE_FLAG_AM_CB_SYNC, UCT_IFACE_FLAG_AM_DUP);
 
     mapped_buffer recvbuf(0, 0, sender()); /* dummy */
-    m_am_count = 0;
+    unsigned am_count = m_am_count = 0;
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
                                       this, UCT_AM_CB_FLAG_SYNC);
@@ -251,27 +249,28 @@ UCS_TEST_P(uct_p2p_am_test, am_sync) {
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
         mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
                                     SEED1, sender());
-
-        status = am_short(sender_ep(), sendbuf_short, recvbuf);
-        EXPECT_UCS_OK(status);
-        am_sync_finish();
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                      sender_ep(), sendbuf_short, recvbuf, false);
+        am_sync_finish(am_count);
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
         mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
                                     SEED1, sender());
-
-        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
-        EXPECT_UCS_OK(status);
-        am_sync_finish();
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
+                      sender_ep(), sendbuf_bcopy, recvbuf, false);
+        am_sync_finish(am_count);
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
         mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy,
                                     SEED1, sender());
-
-        am_zcopy(sender_ep(), sendbuf_zcopy, recvbuf);
-        am_sync_finish();
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
+                      sender_ep(), sendbuf_zcopy, recvbuf, false);
+        am_sync_finish(am_count);
     }
 
     status = uct_iface_set_am_handler(receiver().iface(), AM_ID, NULL, NULL, 0);
@@ -293,29 +292,27 @@ UCS_TEST_P(uct_p2p_am_test, am_async) {
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
         mapped_buffer sendbuf_short(sender().iface_attr().cap.am.max_short,
                                     SEED1, sender());
-
         am_count = m_am_count;
-        status = am_short(sender_ep(), sendbuf_short, recvbuf);
-        EXPECT_UCS_OK(status);
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                      sender_ep(), sendbuf_short, recvbuf, false);
         am_async_finish(am_count);
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
         mapped_buffer sendbuf_bcopy(sender().iface_attr().cap.am.max_bcopy,
                                     SEED1, sender());
-
         am_count = m_am_count;
-        status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
-        EXPECT_UCS_OK(status);
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy),
+                      sender_ep(), sendbuf_bcopy, recvbuf, false);
         am_async_finish(am_count);
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
         mapped_buffer sendbuf_zcopy(sender().iface_attr().cap.am.max_zcopy,
                                     SEED1, sender());
-
         am_count = m_am_count;
-        am_zcopy(sender_ep(), sendbuf_zcopy, recvbuf);
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy),
+                      sender_ep(), sendbuf_zcopy, recvbuf, false);
         am_async_finish(am_count);
     }
 
