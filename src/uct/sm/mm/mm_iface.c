@@ -265,11 +265,9 @@ static inline void uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 
         /* raise the read_index. */
         iface->read_index++;
-    } else {
-       /* progress the tail when there is nothing to read
-        * to improve latency of receiving a message */
-       uct_mm_progress_fifo_tail(iface);
     }
+
+    uct_mm_progress_fifo_tail(iface);
 }
 
 void uct_mm_iface_progress(void *arg)
