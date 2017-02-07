@@ -190,18 +190,28 @@ void uct_test::short_progress_loop(double delay_ms) const {
     }
 }
 
-void uct_test::wait_for_flag(volatile unsigned *flag, double timeout)
+void uct_test::wait_for_flag(volatile unsigned *flag, double timeout) const
 {
-    ucs_time_t loop_end_limit;
-
-    loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
-
-    while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+    while ((ucs_get_time() < deadline) && (!(*flag))) {
         short_progress_loop();
     }
 }
 
-void uct_test::twait(int delta_ms) {
+void uct_test::wait_for_value(volatile unsigned *var, unsigned value,
+                              bool progress, double timeout) const
+{
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+    while ((ucs_get_time() < deadline) && (*var != value)) {
+        if (progress) {
+            short_progress_loop();
+        } else {
+            twait();
+        }
+    }
+}
+
+void uct_test::twait(int delta_ms) const {
     ucs_time_t now, t1, t2;
     int left;
 

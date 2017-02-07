@@ -155,6 +155,8 @@ protected:
         return result;
     }
 
+    static const double DEFAULT_DELAY_MS    = 1.0;
+    static const double DEFAULT_TIMEOUT_SEC = 10.0;
 
     virtual void init();
     virtual void cleanup();
@@ -167,9 +169,12 @@ protected:
     const entity& ent(unsigned index) const;
     void progress() const;
     void flush() const;
-    virtual void short_progress_loop(double delay_ms=1.0) const;
-    void wait_for_flag(volatile unsigned *flag, double timeout = 10.0);
-    virtual void twait(int delta_ms);
+    virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
+    void wait_for_flag(volatile unsigned *flag,
+                       double timeout = DEFAULT_TIMEOUT_SEC) const;
+    void wait_for_value(volatile unsigned *var, unsigned value,
+                        bool progress, double timeout = DEFAULT_TIMEOUT_SEC) const;
+    virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
 
     uct_test::entity* create_entity(size_t rx_headroom);
 

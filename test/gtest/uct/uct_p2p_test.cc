@@ -214,7 +214,8 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
 
 void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
                                  const mapped_buffer &sendbuf,
-                                 const mapped_buffer &recvbuf)
+                                 const mapped_buffer &recvbuf,
+                                 bool wait_for_completion)
 {
     unsigned prev_comp_count = m_completion_count;
 
@@ -234,16 +235,18 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
 
     /* Operation in progress, wait for completion */
     ucs_assert(status == UCS_INPROGRESS);
-    if (comp() == NULL) {
-        /* implicit non-blocking mode */
-        sender().flush();
-    } else {
-        /* explicit non-blocking mode */
-        ++m_completion.uct.count;
-        while (m_completion_count <= prev_comp_count) {
-            progress();
+    if (wait_for_completion) {
+        if (comp() == NULL) {
+            /* implicit non-blocking mode */
+            sender().flush();
+        } else {
+            /* explicit non-blocking mode */
+            ++m_completion.uct.count;
+            while (m_completion_count <= prev_comp_count) {
+                progress();
+            }
+            EXPECT_EQ(0, m_completion.uct.count);
         }
-        EXPECT_EQ(0, m_completion.uct.count);
     }
 }
 
