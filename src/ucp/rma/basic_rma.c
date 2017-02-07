@@ -65,7 +65,10 @@ ucp_rma_request_advance(ucp_request_t *req, size_t frag_length,
         if (req->send.length == 0) {
             /* bcopy is the fast path */
             if (ucs_likely(req->send.uct_comp.count == 0)) {
-                ucp_request_send_buffer_dereg(req, req->send.lane);
+                if (ucs_unlikely(req->send.state.dt.contig.memh != 
+                                 UCT_INVALID_MEM_HANDLE)) {
+                    ucp_request_send_buffer_dereg(req, req->send.lane);
+                }
                 ucp_request_put(req, UCS_OK);
             }
             return UCS_OK;
@@ -123,7 +126,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     } 
 
     req->send.uct_comp.func        = ucp_rma_request_bcopy_completion;
-    req->send.state.dt.contig.memh = NULL;
+    req->send.state.dt.contig.memh = UCT_INVALID_MEM_HANDLE;
 
     return UCS_OK;
 }
