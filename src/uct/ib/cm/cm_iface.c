@@ -246,7 +246,7 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
     }
 }
 
-static void uct_cm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_cm_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
     ucs_free(desc - iface->super.config.rx_headroom_offset);
@@ -401,7 +401,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
-    .iface_release_am_desc    = uct_cm_iface_release_am_desc,
+    .iface_release_desc       = uct_cm_iface_release_desc,
     .ep_am_bcopy              = uct_cm_ep_am_bcopy,
     .ep_pending_add           = uct_cm_ep_pending_add,
     .ep_pending_purge         = uct_cm_ep_pending_purge,

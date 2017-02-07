@@ -189,7 +189,7 @@ static void uct_ugni_smsg_progress(void *arg)
                          uct_ugni_ep_process_pending, NULL);
 }
 
-static void uct_ugni_smsg_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_ugni_smsg_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_ugni_smsg_desc_t *ugni_desc = ((uct_ugni_smsg_desc_t *)desc)-1;
     ucs_mpool_put(ugni_desc);
@@ -297,7 +297,7 @@ uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .iface_get_address     = uct_ugni_iface_get_address,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_is_reachable    = uct_ugni_iface_is_reachable,
-    .iface_release_am_desc = uct_ugni_smsg_iface_release_am_desc,
+    .iface_release_desc    = uct_ugni_smsg_iface_release_desc,
     .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_smsg_ep_t),
     .ep_get_address        = uct_ugni_smsg_ep_get_address,
     .ep_connect_to_ep      = uct_ugni_smsg_ep_connect_to_ep,

@@ -178,7 +178,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp);
 
-void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
+void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc);
 
 
 static UCS_F_ALWAYS_INLINE void

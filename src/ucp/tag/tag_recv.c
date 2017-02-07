@@ -52,7 +52,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
                                                buffer, count, datatype,
                                                &req->recv.state, info);
                 ucs_trace_req("release receive descriptor %p", rdesc);
-                uct_iface_release_am_desc(rdesc);
+                uct_iface_release_desc(rdesc);
                 if (status != UCS_INPROGRESS) {
                     return status;
                 }
@@ -62,7 +62,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
                 req->recv.count    = count;
                 req->recv.datatype = datatype;
                 ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
-                uct_iface_release_am_desc(rdesc);
+                uct_iface_release_desc(rdesc);
                 UCP_WORKER_STAT_RNDV(worker, UNEXP);
                 return UCS_INPROGRESS;
             }
@@ -274,13 +274,13 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
                                        buffer, count, datatype, &req->recv.state,
                                        &req->recv.info);
         ucs_trace_req("release receive descriptor %p", rdesc);
-        uct_iface_release_am_desc(rdesc);
+        uct_iface_release_desc(rdesc);
     } else if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
         req->recv.buffer   = buffer;
         req->recv.count    = count;
         req->recv.datatype = datatype;
         ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
-        uct_iface_release_am_desc(rdesc);
+        uct_iface_release_desc(rdesc);
         status = UCS_INPROGRESS;
         save_rreq = 0;
         UCP_WORKER_STAT_RNDV(worker, UNEXP);

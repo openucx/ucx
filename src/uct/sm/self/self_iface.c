@@ -108,7 +108,7 @@ static int uct_self_iface_is_reachable(const uct_iface_h iface, const uct_device
     return  self_iface->id == *self_addr;
 }
 
-static void uct_self_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_self_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_am_recv_desc_t *self_desc = 0;
 
@@ -125,7 +125,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_get_address        = uct_self_iface_get_address,
     .iface_query              = uct_self_iface_query,
     .iface_is_reachable       = uct_self_iface_is_reachable,
-    .iface_release_am_desc    = uct_self_iface_release_am_desc,
+    .iface_release_desc       = uct_self_iface_release_desc,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_self_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .ep_am_short              = uct_self_ep_am_short,

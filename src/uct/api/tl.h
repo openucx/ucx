@@ -33,7 +33,7 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_fence)(uct_iface_h iface, unsigned flags);
 
-    void         (*iface_release_am_desc)(uct_iface_h iface, void *desc);
+    void         (*iface_release_desc)(uct_iface_h iface, void *desc);
 
     ucs_status_t (*iface_wakeup_open)(uct_iface_h iface, unsigned events,
                                      uct_wakeup_h wakeup);
@@ -47,6 +47,17 @@ typedef struct uct_iface_ops {
     ucs_status_t (*iface_wakeup_signal)(uct_wakeup_h wakeup);
 
     void         (*iface_wakeup_close)(uct_wakeup_h wakeup);
+
+    ucs_status_t (*iface_tag_recv_zcopy)(uct_iface_h iface, uct_tag_t tag,
+                                         uct_tag_t tag_mask,
+                                         const uct_iov_t *iov,
+                                         size_t iovcnt,
+                                         uct_tag_context_t *ctx);
+
+    ucs_status_t (*iface_tag_recv_cancel)(uct_iface_h iface,
+                                          uct_tag_context_t *ctx,
+                                          int force);
+
 
     /* Connection establishment */
 
@@ -157,6 +168,30 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_fence)(uct_ep_h ep, unsigned flags);
 
+    /* Tagged operations */
+
+    ucs_status_t (*ep_tag_eager_short)(uct_ep_h ep, uct_tag_t tag,
+                                       const void *data, size_t length);
+
+    ssize_t      (*ep_tag_eager_bcopy)(uct_ep_h ep, uct_tag_t tag, uint64_t imm,
+                                       uct_pack_callback_t pack_cb, void *arg);
+
+    ucs_status_t (*ep_tag_eager_zcopy)(uct_ep_h ep, uct_tag_t tag, uint64_t imm,
+                                       const uct_iov_t *iov, size_t iovcnt,
+                                       uct_completion_t *comp);
+
+    ucs_status_ptr_t (*ep_tag_rndv_zcopy)(uct_ep_h ep, uct_tag_t tag,
+                                          const void *header,
+                                          unsigned header_length,
+                                          const uct_iov_t *iov,
+                                          size_t iovcnt,
+                                          uct_completion_t *comp);
+
+    ucs_status_t (*ep_tag_rndv_cancel)(uct_ep_h ep, void *op);
+
+    ucs_status_t (*ep_tag_rndv_request)(uct_ep_h ep, uct_tag_t tag,
+                                        const void* header,
+                                        unsigned header_length);
 } uct_iface_ops_t;
 
 

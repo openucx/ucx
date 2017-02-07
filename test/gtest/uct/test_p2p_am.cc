@@ -97,7 +97,7 @@ public:
             EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
             pthread_mutex_unlock(&m_lock);
-            uct_iface_release_am_desc(my_desc);
+            uct_iface_release_desc(my_desc);
             pthread_mutex_lock(&m_lock);
         }
         pthread_mutex_unlock(&m_lock);

@@ -164,7 +164,7 @@ static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems
    *fifo_elems = (void*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 }
 
-void uct_mm_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
+void uct_mm_iface_release_desc(uct_iface_t *tl_iface, void *desc);
 ucs_status_t uct_mm_flush();
 
 void uct_mm_iface_progress(void *arg);
