@@ -32,10 +32,6 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/bitops.h \
 	arch/cpu.h \
 	async/async_fwd.h \
-	async/async.h \
-	async/pipe.h \
-	async/signal.h \
-	async/thread.h \
 	config/global_opts.h \
 	config/parser.h \
 	config/types.h \
@@ -51,9 +47,7 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/libstats.h \
 	stats/stats.h \
 	sys/compiler_def.h\
-	time/time.h \
-	time/timerq.h \
-	time/timer_wheel.h \
+	time/time_def.h \
 	type/class.h \
 	type/component.h \
 	type/spinlock.h \
@@ -82,6 +76,13 @@ noinst_HEADERS = \
 	sys/preprocessor.h \
 	sys/rcache.h \
 	sys/sys.h \
+	time/time.h \
+	time/timerq.h \
+	time/timer_wheel.h \
+	async/async.h \
+	async/pipe.h \
+	async/signal.h \
+	async/thread.h \
 	async/async_int.h
 
 libucs_la_SOURCES = \

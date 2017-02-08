@@ -526,7 +526,13 @@ typedef struct ucp_context_attr {
     ucs_thread_mode_t     thread_mode;
 } ucp_context_attr_t;
 
-
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker attributes.
+ *
+ * The structure defines the attributes which characterize
+ * the particular worker.
+ */
 typedef struct ucp_worker_attr {
     /**
      * Mask of valid fields in this structure, using bits from
@@ -1369,7 +1375,7 @@ typedef struct ucp_mem_advise_params {
  * @param [in]  params      Memory base address and length. The advice field 
  *                          is used to pass memory use advice as defined in 
  *                          the @ref ucp_mem_advice list
- *                          The memory range must belong to the @ref memh
+ *                          The memory range must belong to the @a memh
  *
  * @return Error code as defined by @ref ucs_status_t
  */
@@ -2340,7 +2346,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
  *                         the value to be placed in remote memory.
  * @param [inout] result   Local memory address to store resulting fetch to.
  *                         In the case of CSWAP the value in result will be
- *                         swapped into the @ref remote_addr if the condition
+ *                         swapped into the @a remote_addr if the condition
  *                         is true.
  * @param [in] op_size     Size of value in bytes and pointer type for result
  * @param [in] remote_addr Remote address to operate on.
@@ -2365,6 +2371,8 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                      uint64_t value, void *result, size_t op_size,
                      uint64_t remote_addr, ucp_rkey_h rkey,
                      ucp_send_callback_t cb);
+
+
 /**
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.

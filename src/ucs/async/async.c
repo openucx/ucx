@@ -300,6 +300,32 @@ err:
     return status;
 }
 
+ucs_status_t ucs_async_context_create(ucs_async_mode_t mode,
+                                      ucs_async_context_t **async_p)
+{
+    ucs_async_context_t *async;
+    ucs_status_t status;
+
+    async = ucs_malloc(sizeof(*async), "async context");
+    if (async == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    status = ucs_async_context_init(async, mode);
+    if (status != UCS_OK) {
+        goto err_free_mem;
+    }
+
+    *async_p = async;
+    return UCS_OK;
+
+err_free_mem:
+    ucs_free(async);
+err:
+    return status;
+}
+
 void ucs_async_context_cleanup(ucs_async_context_t *async)
 {
     ucs_async_handler_t *handler;
@@ -319,6 +345,12 @@ void ucs_async_context_cleanup(ucs_async_context_t *async)
         pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
     }
     ucs_mpmc_queue_cleanup(&async->missed);
+}
+
+void ucs_async_context_destroy(ucs_async_context_t *async)
+{
+    ucs_async_context_cleanup(async);
+    ucs_free(async);
 }
 
 static ucs_status_t ucs_async_alloc_handler(ucs_async_mode_t mode, int id,
