@@ -220,11 +220,11 @@ enum {
     /* Event notification */
     UCT_IFACE_FLAG_WAKEUP = UCS_BIT(46), /**< Event notification supported */
 
-    /* Tag Matching (TM) operations */
-    UCT_IFACE_FLAG_TAG_EAGER_SHORT = UCS_BIT(47),  /**< Hardware TM short eager support */
-    UCT_IFACE_FLAG_TAG_EAGER_BCOPY = UCS_BIT(48),  /**< Hardware TM bcopy eager support */
-    UCT_IFACE_FLAG_TAG_EAGER_ZCOPY = UCS_BIT(49),  /**< Hardware TM zcopy eager support */
-    UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  = UCS_BIT(50)   /**< Hardware TM rendezvous zcopy support */
+    /* Tag matching operations */
+    UCT_IFACE_FLAG_TAG_EAGER_SHORT = UCS_BIT(47),  /**< Hardware tag matching short eager support */
+    UCT_IFACE_FLAG_TAG_EAGER_BCOPY = UCS_BIT(48),  /**< Hardware tag matching bcopy eager support */
+    UCT_IFACE_FLAG_TAG_EAGER_ZCOPY = UCS_BIT(49),  /**< Hardware tag matching zcopy eager support */
+    UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  = UCS_BIT(50)   /**< Hardware tag matching rendezvous zcopy support */
 };
 
 
@@ -325,31 +325,34 @@ struct uct_iface_attr {
         } am;                            /**< Attributes for AM operations */
 
         struct {
-            size_t           min_recv;    /**< Minimal allowed length of posted receive buffer */
-            size_t           max_iov;     /**< Maximal @a iovcnt parameter in
-                                               @ref uct_iface_tag_recv_zcopy
-                                               @anchor uct_iface_attr_cap_tag_recv_iov */
             struct {
-                  size_t     max_short;   /**< Maximal allowed data length in
-                                               @ref uct_ep_tag_eager_short */
-                  size_t     max_bcopy;   /**< Maximal allowed data length in
-                                               @ref uct_ep_tag_eager_bcopy */
-                  size_t     max_zcopy;   /**< Maximal allowed data length in
-                                               @ref uct_ep_tag_eager_zcopy */
-                  size_t     max_iov;     /**< Maximal @a iovcnt parameter in
-                                               @ref uct_ep_tag_eager_zcopy */
-            } eager;                      /**< Attributes related to eager protocol */
+                size_t       min_recv;   /**< Minimal allowed length of posted receive buffer */
+                size_t       max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_iface_tag_recv_zcopy
+                                              @anchor uct_iface_attr_cap_tag_recv_iov */
+            } recv;
 
             struct {
-                  size_t     max_zcopy;   /**< Maximal allowed data length in
-                                               @ref uct_ep_tag_rndv_zcopy */
-                  size_t     max_hdr;     /**< Maximal allowed header length in
-                                               @ref uct_ep_tag_rndv_zcopy and
-                                               @ref uct_ep_tag_rndv_request */
-                  size_t     max_iov;     /**< Maximal @a iovcnt parameter in
-                                               @ref uct_ep_tag_rndv_zcopy */
-            } rndv;                       /**< Attributes related to rendezvous protocol */
-        } tag;                            /**< Attributes for TAG operations */
+                  size_t     max_short;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_short */
+                  size_t     max_bcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_bcopy */
+                  size_t     max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_zcopy */
+                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_tag_eager_zcopy */
+            } eager;                     /**< Attributes related to eager protocol */
+
+            struct {
+                  size_t     max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_rndv_zcopy */
+                  size_t     max_hdr;    /**< Maximal allowed header length in
+                                              @ref uct_ep_tag_rndv_zcopy and
+                                              @ref uct_ep_tag_rndv_request */
+                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_tag_rndv_zcopy */
+            } rndv;                      /**< Attributes related to rendezvous protocol */
+        } tag;                           /**< Attributes for TAG operations */
 
         uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
     } cap;                               /**< Interface capabilities */
@@ -389,8 +392,8 @@ struct uct_iface_params {
                                                the receive segment.*/
 
     /* These callbacks are only relevant for HW Tag Matching */
-    uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for TM unexpected eager messages */
-    uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for TM unexpected rndv messages */
+    uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
+    uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
 };
 
 
@@ -524,12 +527,17 @@ struct uct_pending_req {
 struct uct_tag_context {
     /**
      * Tag is consumed by the transport and should not be matched in software.
+     *
+     * @param [in]  self    Pointer to relevant context structure, which was
+     *                      initially passed to @ref uct_iface_tag_recv_zcopy.
      */
     void (*tag_consumed_cb)(uct_tag_context_t *self);
 
     /**
      * Tag processing is completed by the transport.
      *
+     * @param [in]  self    Pointer to relevant context structure, which was
+     *                      initially passed to @ref uct_iface_tag_recv_zcopy.
      * @param [in]  stag    Tag from sender.
      * @param [in]  imm     Immediate data from sender. For rendezvous, it’s always 0.
      * @param [in]  length  Completed length.
@@ -546,6 +554,8 @@ struct uct_tag_context {
      * Tag was matched by a rendezvous request, which should be completed by
      * the protocol layer.
      *
+     * @param [in]  self          Pointer to relevant context structure, which was
+     *                            initially passed to @ref uct_iface_tag_recv_zcopy.
      * @param [in]  stag          Tag from sender.
      * @param [in]  header        User defined header.
      * @param [in]  header_length User defined header length in bytes.
@@ -554,7 +564,7 @@ struct uct_tag_context {
      void (*rndv_cb)(uct_tag_context_t *self, uct_tag_t stag, const void *header,
                      unsigned header_length, ucs_status_t status);
 
-     /** Private data used by the transport */
+     /** A placeholder for the private data used by the transport */
      char priv[UCT_TAG_PRIV_LENGTH];
 };
 
