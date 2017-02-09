@@ -176,11 +176,8 @@ static ucs_status_t ucp_rndv_truncated(uct_pending_req_t *self)
 }
 
 static void ucp_rndv_recv_am(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                             uintptr_t sender_reqptr, size_t total_size,
-                             int contig)
+                             uintptr_t sender_reqptr, size_t total_size)
 {
-    size_t recv_size;
-
     ucs_trace_req("handle generic datatype on rndv receive. local rndv_req: %p, "
                   "recv request: %p", rndv_req, rreq);
 
@@ -192,17 +189,10 @@ static void ucp_rndv_recv_am(ucp_request_t *rndv_req, ucp_request_t *rreq,
     rndv_req->send.proto.status         = UCS_OK;
     rndv_req->send.proto.rreq_ptr       = (uintptr_t) rreq;
 
-    if (contig) {
-        recv_size = ucp_contig_dt_length(rreq->recv.datatype, rreq->recv.count);
-    } else {
-        ucp_dt_generic_t *dt_gen;
-        dt_gen = ucp_dt_generic(rreq->recv.datatype);
-        recv_size = dt_gen->ops.packed_size(rreq->recv.state.dt.generic.state);
-    }
-    if (ucs_unlikely(recv_size < total_size)) {
+    if (ucs_unlikely(rreq->recv.length < total_size)) {
         ucs_trace_req("rndv msg truncated: rndv_req: %p. received %zu. "
                       "expected %zu on rreq: %p ",
-                      rndv_req, total_size, recv_size, rreq);
+                      rndv_req, total_size, rreq->recv.length, rreq);
         rndv_req->send.uct.func = ucp_rndv_truncated;
     }
 }
@@ -224,7 +214,7 @@ ucs_status_t ucp_proto_progress_rndv_get_zcopy(uct_pending_req_t *self)
         /* can't perform get_zcopy - switch to AM rndv */
         ucp_rndv_recv_am(rndv_req, rndv_req->send.rndv_get.rreq,
                          rndv_req->send.rndv_get.remote_request,
-                         rndv_req->send.length, 1);
+                         rndv_req->send.length);
 
         if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
             uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
@@ -304,8 +294,6 @@ static void ucp_rndv_get_completion(uct_completion_t *self, ucs_status_t status)
 static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                         ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
-    size_t recv_size;
-
     ucs_trace_req("handle contig datatype on rndv receive. local rndv_req: %p, "
                   "recv request: %p", rndv_req, rreq);
 
@@ -316,11 +304,10 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
     rndv_req->send.rndv_get.remote_address = rndv_rts_hdr->address;
     rndv_req->send.rndv_get.rreq = rreq;
 
-    recv_size = ucp_contig_dt_length(rreq->recv.datatype, rreq->recv.count);
-    if (ucs_unlikely(recv_size < rndv_rts_hdr->size)) {
+    if (ucs_unlikely(rreq->recv.length < rndv_rts_hdr->size)) {
         ucs_trace_req("rndv msg truncated: rndv_req: %p. received %zu. "
                       "expected %zu on rreq: %p ",
-                      rndv_req, rndv_rts_hdr->size, recv_size, rreq);
+                      rndv_req, rndv_rts_hdr->size, rreq->recv.length, rreq);
         rndv_req->send.uct.func  = ucp_rndv_truncated;
         rndv_req->send.lane      = ucp_ep_get_am_lane(rndv_req->send.ep);
         /* prepare for handling a truncated message. the rndv_get struct isn't needed anymore */
@@ -341,14 +328,14 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
 }
 
 static void ucp_rndv_handle_recv_am(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                                    ucp_rndv_rts_hdr_t *rndv_rts_hdr, int contig)
+                                    ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
 
     ucs_trace_req("handle generic datatype on rndv receive. local rndv_req: %p, "
                   "recv request: %p", rndv_req, rreq);
 
     ucp_rndv_recv_am(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr,
-                     rndv_rts_hdr->size, contig);
+                     rndv_rts_hdr->size);
 
     ucp_request_start_send(rndv_req);
 }
@@ -365,7 +352,7 @@ void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     rreq->recv.info.sender_tag = rndv_rts_hdr->super.tag;
     rreq->recv.info.length     = rndv_rts_hdr->size;
 
-    ucs_assert_always(rreq->recv.count != 0);
+    ucs_assert_always(rreq->recv.length != 0);
 
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
@@ -395,12 +382,12 @@ void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
             /* if the sender didn't specify its address in the RTS, can't do a
              * get operation, so send an RTR and the sender will send the data
              * with AM messages */
-            ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr, 1);
+            ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
         }
     } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype)) {
         /* if the recv side has a generic datatype,
          * send an RTR and the sender will send the data with AM messages */
-        ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr, 0);
+        ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
     } else {
         ucs_fatal("datatype isn't implemented");
     }
@@ -671,7 +658,7 @@ ucp_rndv_data_handler(void *arg, void *data, size_t length, void *desc)
 
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
-    status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.count,
+    status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.length,
                                   rreq->recv.datatype, &rreq->recv.state,
                                   data + hdr_len, recv_len, 0);
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
@@ -700,9 +687,9 @@ ucp_rndv_data_last_handler(void *arg, void *data, size_t length, void *desc)
 
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
-    status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.count,
+    status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.length,
                                   rreq->recv.datatype, &rreq->recv.state,
-                                  data + hdr_len, recv_len, UCP_RECV_DESC_FLAG_LAST);
+                                  data + hdr_len, recv_len, 1);
 
     ucp_request_complete_recv(rreq, status, &rreq->recv.info);
 
