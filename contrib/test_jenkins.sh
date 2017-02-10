@@ -61,6 +61,8 @@ should_do_task() {
 	tasks_per_worker=$(( (ntasks + nworkers - 1) / nworkers ))
 	my_tasks_begin=$((tasks_per_worker * worker))
 	my_tasks_end=$((my_tasks_begin + tasks_per_worker))
+
+	# set return value to 0 (success) iff ($my_tasks_begin <= $task < $my_tasks_end)
 	[ $task -ge $my_tasks_begin ] && [ $task -lt $my_tasks_end ]
 	rc=$?
 	set -x
@@ -176,6 +178,7 @@ build_release_pkg() {
 # Build with Intel compiler
 #
 build_icc() {
+	echo 1..1 > build_icc.tap
 	if module_load intel/ics
 	then
 		echo "==== Build with Intel compiler ===="
@@ -184,8 +187,10 @@ build_icc() {
 		$MAKE
 		$MAKE distclean
 		module unload intel/ics
+		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
+		echo "ok 1 - # SKIP because Coverity not installed" >> build_icc.tap
 	fi
 }
 
@@ -308,13 +313,14 @@ test_malloc_hooks_mpi() {
 # Run tests with MPI library
 #
 run_mpi_tests() {
+	echo "1..2" > mpi_tests.tap
 	if module_load hpcx-gcc
 	then
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		$MAKE clean
 		$MAKE install
 		$MAKE installcheck # check whether installation is valid (it compiles examples at least)
-		
+
 		# Prevent our tests from using installed UCX libraries
 		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
 
@@ -324,13 +330,19 @@ run_mpi_tests() {
 				-mca pml ob1 \
 				-mca btl sm,self \
 				-mca coll ^hcoll,ml"
+
 		run_ucx_perftest_mpi
+		echo "ok 1 - ucx perftest" >> mpi_tests.tap
+
 		test_malloc_hooks_mpi
+		echo "ok 2 - malloc hooks" >> mpi_tests.tap
 
 		$MAKE distclean
 		module unload hpcx-gcc
 	else
 		echo "==== Not running MPI tests ===="
+		echo "ok 1 - # SKIP because MPI not installed" >> mpi_tests.tap
+		echo "ok 2 - # SKIP because MPI not installed" >> mpi_tests.tap
 	fi
 }
 
@@ -355,6 +367,7 @@ test_profiling() {
 # Run Coverity and report errors
 #
 run_coverity() {
+	echo 1..1 > coverity.tap
 	if module_load tools/cov
 	then
 		echo "==== Running coverity ===="
@@ -370,7 +383,6 @@ run_coverity() {
 		index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
 		cov_url="$WS_URL/$cov_build_id/${index_html}"
 		rm -f jenkins_sidelinks.txt
-		echo 1..1 > coverity.tap
 		if [ $nerrors -gt 0 ]; then
 			cov-format-errors --dir $cov_build --emacs-style
 			echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
@@ -385,6 +397,7 @@ run_coverity() {
 		return $rc
 	else
 		echo "==== Not running Coverity ===="
+		echo "ok 1 - # SKIP because Coverity not installed" >> coverity.tap
 	fi
 }
 
