@@ -1,5 +1,32 @@
 #!/bin/bash -eExl
 
+#use this function with one argument
+function get_free_port()
+{
+    local _result=$1
+    local _increment=100
+    local _free_port=$((10000 + ${EXECUTOR_NUMBER}))
+
+    read lower_port upper_port < /proc/sys/net/ipv4/ip_local_port_range
+    # To avoid races we have to use simple +/- opeartions with PID value
+    # instead using PID value normalization into the range
+    if [[ ${_free_port} -ge ${upper_port} ]]; then
+        _increment=$((-${_increment}))
+    fi
+
+    while true; do
+        if [ ${_free_port} -gt ${lower_port} ] && [ ${_free_port} -lt ${upper_port} ]; then
+            if [ ! `netstat -nat4 | cut -f 2 -d: | cut -f 1 -d' ' | grep -w ${_free_port}` ]; then
+                #found free port
+                break;
+            fi
+        fi
+        _free_port=$((${_free_port} + ${_increment}))
+    done
+
+    eval $_result='${_free_port}'
+}
+
 rc=0
 
 WORKSPACE=${WORKSPACE:=$PWD}
@@ -115,17 +142,17 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 
 	# hello-world example
-    UCP_TEST_HELLO_WORLD_PORT=$(( 10000 + ${BASHPID} ))
+    get_free_port UCX_TEST_HELLO_WORLD_PORT
     for test_mode in -w -f -b ; do
         echo Running UCP hello world server with mode ${test_mode}
-        ./ucp_hello_world ${test_mode} -p ${UCP_TEST_HELLO_WORLD_PORT} &
+        ./ucp_hello_world ${test_mode} -p ${UCX_TEST_HELLO_WORLD_PORT} &
         hw_server_pid=$!
 
         sleep 3
 
         #need to be ran in background to reflect application PID in $!
         echo Running UCP hello world client with mode ${test_mode}
-        ./ucp_hello_world ${test_mode} -n $(hostname) -p ${UCP_TEST_HELLO_WORLD_PORT} &
+        ./ucp_hello_world ${test_mode} -n $(hostname) -p ${UCX_TEST_HELLO_WORLD_PORT} &
         hw_client_pid=$!
 
         # make sure server process is not running
@@ -136,19 +163,18 @@ if [ -n "$JENKINS_RUN_TESTS" ]; then
     # compile and run UCT hello world example
     gcc -o ./uct_hello_world ${ucx_inst}/share/ucx/examples/uct_hello_world.c -luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
 
-    UCT_TEST_HELLO_WORLD_PORT=$(( 10000 + ${BASHPID} ))
     for dev in $(ibstat -l); do
         hca="${dev}:1"
         for send_func in -i -b -z ; do
             echo Running UCT hello world server with sending ${send_func}
-            ./uct_hello_world ${send_func} -p ${UCT_TEST_HELLO_WORLD_PORT} -d $hca -t "rc" &
+            ./uct_hello_world ${send_func} -p ${UCX_TEST_HELLO_WORLD_PORT} -d $hca -t "rc" &
             hw_server_pid=$!
 
             sleep 3
 
             #need to be ran in background to reflect application PID in $!
             echo Running UCT hello world client with sending ${send_func}
-            ./uct_hello_world ${send_func} -n $(hostname) -p ${UCT_TEST_HELLO_WORLD_PORT} -d $hca -t "rc" &
+            ./uct_hello_world ${send_func} -n $(hostname) -p ${UCX_TEST_HELLO_WORLD_PORT} -d $hca -t "rc" &
             hw_client_pid=$!
 
             # make sure server process is not running
