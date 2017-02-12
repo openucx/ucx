@@ -105,6 +105,17 @@ get_my_tasks() {
 }
 
 #
+# Get list of active IB devices
+#
+get_active_ib_devices() {
+	for ibdev in $(ibstat -l)
+	do
+		port=1
+		(ibstat $ibdev $port | grep -q Active) && echo "$ibdev:$port"
+	done
+}
+
+#
 # Prepare build environment
 #
 prepare() {
@@ -194,29 +205,43 @@ build_icc() {
 	fi
 }
 
+run_hello() {
+	api=$1
+	shift
+	test_args="$@"
+	test_name=${api}_hello_world
+
+	if [ ! -x ${test_name} ]
+	then
+		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
+		-l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
+		-Wl,-rpath=${ucx_inst}/lib
+	fi
+
+	# hello-world example
+	tcp_port=$((10000 + EXECUTOR_NUMBER))
+
+	./${test_name} ${test_args} -p ${tcp_port} &
+	hw_server_pid=$!
+
+	sleep 5
+
+	# need to be ran in background to reflect application PID in $!
+	./${test_name} ${test_args} -n $(hostname) -p ${tcp_port} &
+	hw_client_pid=$!
+
+	# make sure server process is not running
+	wait ${hw_server_pid} ${hw_client_pid}
+}
+
 #
 # Compile and run UCP hello world example
 #
 run_ucp_hello() {
-	gcc -o ./ucp_hello_world ${ucx_inst}/share/ucx/examples/ucp_hello_world.c \
-		-lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
-
-	# hello-world example
-	tcp_port=$((10000 + EXECUTOR_NUMBER))
 	for test_mode in -w -f -b
 	do
 		echo "==== Running UCP hello world with mode ${test_mode} ===="
-		./ucp_hello_world ${test_mode} -p ${tcp_port} &
-		hw_server_pid=$!
-
-		sleep 5
-
-		# need to be ran in background to reflect application PID in $!
-		./ucp_hello_world ${test_mode} -n $(hostname) -p ${tcp_port} &
-		hw_client_pid=$!
-
-		# make sure server process is not running
-		wait ${hw_server_pid} ${hw_client_pid}
+		run_hello ucp ${test_mode}
 	done
 	rm -f ./ucp_hello_world
 }
@@ -225,27 +250,12 @@ run_ucp_hello() {
 # Compile and run UCT hello world example
 #
 run_uct_hello() {
-	gcc -o ./uct_hello_world ${ucx_inst}/share/ucx/examples/uct_hello_world.c \
-		-luct -lucs -I${ucx_inst}/include -L${ucx_inst}/lib
-
-	tcp_port=$((10000 + ${EXECUTOR_NUMBER}))
-	for dev in $(ibstat -l)
+	for ucx_dev in $(get_active_ib_devices)
 	do
-		hca="${dev}:1"
 		for send_func in -i -b -z
 		do
-			echo "==== Running UCT hello world server on ${dev} with sending ${send_func} ===="
-			./uct_hello_world ${send_func} -p ${tcp_port} -d $hca -t "rc" &
-			hw_server_pid=$!
-
-			sleep 5
-
-			# need to be ran in background to reflect application PID in $!
-			./uct_hello_world ${send_func} -n $(hostname) -p ${tcp_port} -d $hca -t "rc" &
-			hw_client_pid=$!
-
-			# make sure server process is not running
-			wait ${hw_server_pid} ${hw_client_pid}
+			echo "==== Running UCT hello world server on ${ucx_dev} with sending ${send_func} ===="
+			run_hello uct  -d ${ucx_dev} -t "rc"
 		done
 	done
 	rm -f ./uct_hello_world
@@ -266,15 +276,8 @@ run_ucx_perftest_mpi() {
 					-b $ucx_inst_ptest/test_types_short \
 					-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
-	# Add shared memory devices
-	devices="posix"
-
-	# Add IB devices
-	for ibdev in $(ibstat -l)
-	do
-		port=1
-		(ibstat $ibdev $port | grep -q Active) && devices="$devices $ibdev:$port"
-	done
+	# shared memory, IB
+	devices="posix $(get_active_ib_devices)"
 
 	# Run on all devices
 	my_devices=$(get_my_tasks $devices)
