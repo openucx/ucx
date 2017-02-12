@@ -8,16 +8,10 @@
 #define UCS_TIME_H
 
 #include <ucs/arch/cpu.h>
+#include <ucs/time/time_def.h>
 #include <ucs/sys/math.h>
 #include <sys/time.h>
 
-
-/**
- * UCS time units.
- * These are not necessarily aligned with metric time units.
- * MUST compare short time values with UCS_SHORT_TIME_CMP to handle wrap-around.
- */
-typedef unsigned long long   ucs_time_t;
 
 /**
  * Short time type

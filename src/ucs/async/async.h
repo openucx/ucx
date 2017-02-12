@@ -11,7 +11,6 @@
 #include "signal.h"
 #include "async_fwd.h"
 
-#include <ucs/config/types.h>
 #include <ucs/datastruct/mpmc.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/log.h>
@@ -35,15 +34,8 @@ struct ucs_async_context {
 
 
 /**
- * Async event callback.
+ * @ingroup UCS_RESOURCE
  *
- * @param id           Event id (timer or file descriptor).
- * @param arg          User-defined argument.
- */
-typedef void (*ucs_async_event_cb_t)(int id, void *arg);
-
-
-/**
  * GLobal initialization and cleanup of async event handling.
  */
 void ucs_async_global_init();
@@ -51,78 +43,26 @@ void ucs_async_global_cleanup();
 
 
 /**
- * Register a file descriptor for monitoring (call handler upon events).
- * Every fd can have only one handler.
- *
- * @param mode            Thread or signal.
- * @param event_fd        File descriptor to set handler for.
- * @param events          Events to wait on (POLLxx/EPOLLxx bits).
- * @param cb              Callback function to execute.
- * @param arg             Argument to callback.
- * @param async           Async context to which events are delivered.
- *                        If NULL, safety is up to the user.
- */
-ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
-                                         int events, ucs_async_event_cb_t cb,
-                                         void *arg, ucs_async_context_t *async);
-
-
-/**
- * Add timer handler.
- *
- * @param mode            Thread or signal.
- * @param interval        Timer interval.
- * @param cb              Callback function to execute.
- * @param arg             Argument to callback.
- * @param async           Async context to which events are delivered.
- *                        If NULL, safety is up to the user.
- * @param timer_id_p      Filled with timer id.
- */
-ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
-                                 ucs_async_event_cb_t cb, void *arg,
-                                 ucs_async_context_t *async, int *timer_id_p);
-
-
-/**
- * Remove an event handler (Timer or event file).
- *
- * @param id        Timer/FD to remove.
- * @param sync      If nonzero, wait until the handler for this event is not
- *                  running anymore. Cannot be used in the context of the event
- *                  handler itself because it would deadlock.
- */
-ucs_status_t ucs_async_remove_handler(int id, int sync);
-
-
-/**
- * Initialize an asynchronous execution context.
+ * Initialize an asynchronous execution context. The context is not allocated.
+ * To allocate the context, please use public version of the
+ * function @ref ucs_async_context_create
  * This can be used to ensure safe event delivery.
  *
  * @param async           Event context to initialize.
  * @param mode            Either to use signals or epoll threads to wait.
  *
- * @return Success status.
+ * @return Error code as defined by @ref ucs_status_t.
  */
-ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t mode);
+ucs_status_t ucs_async_context_init(ucs_async_context_t *async,
+                                    ucs_async_mode_t mode);
 
 
 /**
  * Clean up the async context, and release system resources if possible.
  *
- * @param event           Asynchronous context to clean up.
+ * @param async           Asynchronous context to clean up.
  */
 void ucs_async_context_cleanup(ucs_async_context_t *async);
-
-
-/**
- * Poll on async context.
- *
- * @param async Async context to poll on. NULL polls on all.
- */
-void ucs_async_poll(ucs_async_context_t *async);
-
-
-void __ucs_async_poll_missed(ucs_async_context_t *async);
 
 
 /**

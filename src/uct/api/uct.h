@@ -1191,8 +1191,8 @@ typedef enum uct_mem_advice {
  *
  * @param [in]     md          Memory domain memory was allocated or registered on.
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc
- * @param [in]     address     Memory base address. Memory range must belong to the
- *                             @ref memh
+ * @param [in]     addr        Memory base address. Memory range must belong to the
+ *                             @a memh
  * @param [in]     length      Length of memory to advise. Must be >0.
  * @param [in]     advice      Memory use advice as defined in the
  *                             @ref uct_mem_advice_t list
@@ -1785,6 +1785,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
     return ep->iface->ops.ep_tag_eager_short(ep, tag, data, length);
 }
 
+
 /**
  * @ingroup UCT_TAG
  * @brief Send tagged message using bcopy eager protocol.
@@ -2016,6 +2017,12 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
 {
     return iface->ops.iface_tag_recv_cancel(iface, ctx, force);
 }
+
+
+/**
+ * @example uct_hello_world.c
+ * UCT hello world client / server example utility.
+ */
 
 
 #endif

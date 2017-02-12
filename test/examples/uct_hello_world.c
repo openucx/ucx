@@ -449,13 +449,15 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
 int main(int argc, char **argv)
 {
     uct_device_addr_t   *own_dev;
-    uct_device_addr_t   *peer_dev = NULL;
+    uct_device_addr_t   *peer_dev   = NULL;
     uct_iface_addr_t    *own_iface;
     uct_iface_addr_t    *peer_iface = NULL;
     uct_ep_addr_t       *own_ep;
-    uct_ep_addr_t       *peer_ep = NULL;
-    ucs_status_t        status = UCS_OK; /* status codes for UCS */
-    uct_ep_h            ep;     /* Remote endpoint */
+    uct_ep_addr_t       *peer_ep    = NULL;
+    ucs_status_t        status      = UCS_OK; /* status codes for UCS */
+    uct_ep_h            ep;                   /* Remote endpoint */
+    ucs_async_context_t *async;               /* Async event context manages
+                                                 times and fd notifications */
     cmd_args_t          cmd_args;
 
     iface_info_t        if_info;
@@ -468,9 +470,15 @@ int main(int argc, char **argv)
         goto out;
     }
 
+    /* Initialize context
+     * It is better to use different contexts for different workers
+     */
+    status = ucs_async_context_create(UCS_ASYNC_MODE_THREAD, &async);
+    CHKERR_JUMP(UCS_OK != status, "init async context", out);
+
     /* Create a worker object */
-    status = uct_worker_create(NULL, UCS_THREAD_MODE_SINGLE, &if_info.worker);
-    CHKERR_JUMP(UCS_OK != status, "create worker", out);
+    status = uct_worker_create(async, UCS_THREAD_MODE_SINGLE, &if_info.worker);
+    CHKERR_JUMP(UCS_OK != status, "create worker", out_cleanup_async);
 
     /* Search for the desired transport */
     status = dev_tl_lookup(&cmd_args, &if_info);
@@ -606,6 +614,8 @@ out_destroy_iface:
     uct_md_close(if_info.pd);
 out_destroy_worker:
     uct_worker_destroy(if_info.worker);
+out_cleanup_async:
+    ucs_async_context_destroy(async);
 out:
     return status == UCS_ERR_UNSUPPORTED ? UCS_OK : status;
 }
