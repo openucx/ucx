@@ -130,17 +130,11 @@ public:
         return (ep->flags & UCT_UD_EP_FLAG_CREQ_NOTSENT) ? 1 : 0;
     }
 
-    void validate_recv(uct_ud_ep_t *ep, unsigned value,
-                       double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
-        ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
-        while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value - no_creq_cnt(ep)) &&
-               (ucs_get_time() < timeout)) {
-            progress();
-        }
-        EXPECT_EQ(value - no_creq_cnt(ep), ucs_frag_list_sn(&ep->rx.ooo_pkts));
+    void validate_send(uct_ud_ep_t *ep, unsigned value) {
+        EXPECT_EQ(ep->tx.acked_psn, value - no_creq_cnt(ep));
     }
 
-    void validate_send(uct_ud_ep_t *ep, unsigned value,
+    void validate_recv(uct_ud_ep_t *ep, unsigned value,
                        double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
         while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value - no_creq_cnt(ep)) &&
@@ -399,12 +393,8 @@ UCS_TEST_P(test_ud, crep_drop2) {
     validate_connect(ep(m_e2), 0U);
 
     /* Expect that creq (and maybe crep already) are sent */
-    if (!(ep(m_e1)->flags & UCT_UD_EP_FLAG_CREQ_NOTSENT)) {
-        EXPECT_EQ(ep(m_e1)->tx.acked_psn, 1);
-    }
-    if (!(ep(m_e2)->flags & UCT_UD_EP_FLAG_CREQ_NOTSENT)) {
-        EXPECT_EQ(ep(m_e2)->tx.acked_psn, 1);
-    }
+    validate_send(ep(m_e1), 1);
+    validate_send(ep(m_e2), 1);
     EXPECT_GE(ep(m_e1)->tx.psn, 2);
     EXPECT_GE(ep(m_e2)->tx.psn, 2);
 
