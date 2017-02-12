@@ -175,7 +175,8 @@ typedef struct ucx_perf_params {
 
     struct {
         unsigned               nonblocking_mode; /* TBD */
-        ucp_perf_datatype_t    datatype;
+        ucp_perf_datatype_t    send_datatype;
+        ucp_perf_datatype_t    recv_datatype;
     } ucp;
 
 } ucx_perf_params_t;

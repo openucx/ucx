@@ -22,7 +22,13 @@ fadd          -t fadd
 swap          -t swap
 cswap         -t cswap
 # UCP
-ucp_iov_tag_lat   -t tag_lat -D iov
-ucp_iov_tag_bw    -t tag_bw  -D iov
-ucp_contig_tag_lat   -t tag_lat -D contig
-ucp_contig_tag_bw    -t tag_bw  -D contig
+ucp_iov_contig_tag_lat      -t tag_lat -D iov,contig
+ucp_iov_iov_tag_lat         -t tag_lat -D iov,iov
+ucp_contig_contig_tag_lat   -t tag_lat -D contig,contig
+#IOV with RNDV is not yet supported
+#ucp_contig_iov_tag_lat      -t tag_lat -D contig,iov
+ucp_iov_contig_tag_bw       -t tag_bw  -D iov,contig
+ucp_iov_iov_tag_bw          -t tag_bw  -D iov,iov
+ucp_contig_contig_tag_bw    -t tag_bw  -D contig,contig
+#IOV with RNDV is not yet supported
+#ucp_contig_iov_tag_bw       -t tag_bw  -D contig,iov
