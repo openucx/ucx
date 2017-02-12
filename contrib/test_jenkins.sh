@@ -11,6 +11,11 @@ WORKSPACE=${WORKSPACE:=$PWD}
 MAKE="make -j$(($(nproc) / 2 + 1))"
 ucx_inst=${WORKSPACE}/install
 
+if [ $(hostname) == odroid64 ]
+then
+	export JENKINS_RUN_TESTS=1
+fi
+
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1

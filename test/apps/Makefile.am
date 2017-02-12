@@ -20,5 +20,6 @@ noinst_PROGRAMS += \
 
 test_profiling_SOURCES  = profiling.c
 test_profiling_LDADD    = $(top_builddir)/src/ucs/libucs.la
+test_profiling_LDFLAGS  = -lm
 test_profiling_CPPFLAGS = -g -I$(top_srcdir)/src
 endif
