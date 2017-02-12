@@ -541,6 +541,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     if (status == UCS_OK) {
         uct_ud_mlx5_ep_tx_ctl_skb(&ep->super, skb, 1);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+        ep->super.flags |= UCT_UD_EP_FLAG_CREQ_SENT;
     }
 
     uct_ud_leave(&iface->super);

@@ -378,14 +378,15 @@ UCS_TEST_P(test_ud, crep_drop2) {
 
     ep(m_e1)->rx.rx_hook = drop_ctl;
     ep(m_e2)->rx.rx_hook = drop_ctl;
-    short_progress_loop();
 
-    validate_connect(ep(m_e1), 0U);
-    validate_connect(ep(m_e2), 0U);
+    short_progress_loop(100);
 
     /* Remove filter for CREP to be handled and TX win to be freed. */
     ep(m_e1)->rx.rx_hook = uct_ud_ep_null_hook;
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
+
+    validate_connect(ep(m_e1), 0U);
+    validate_connect(ep(m_e2), 0U);
 
     /* Expect that creq (and maybe crep already) are sent */
     EXPECT_EQ(ep(m_e1)->tx.acked_psn, 1);
