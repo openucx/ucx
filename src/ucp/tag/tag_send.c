@@ -185,14 +185,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
     }
 
     ucs_trace_req("returning send request %p", req);
+    req->flags  |= UCP_REQUEST_FLAG_CALLBACK;
     req->send.cb = cb;
     return req + 1;
-}
-
-/* Will be called if request is completed internally before returned to user */
-static void ucp_tag_stub_send_completion(void *request, ucs_status_t status)
-{
-    ucs_assertv(status == UCS_OK, "status=%s", ucs_status_string(status));
 }
 
 static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
@@ -203,7 +198,6 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.ep           = ep;
     req->send.buffer       = buffer;
     req->send.datatype     = datatype;
-    req->send.cb           = ucp_tag_stub_send_completion;
     req->send.tag          = tag;
     req->send.state.offset = 0;
 #if ENABLE_ASSERT

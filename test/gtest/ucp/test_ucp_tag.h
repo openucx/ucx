@@ -48,6 +48,8 @@ protected:
 
     static void request_release(struct request *req);
 
+    static void request_free(struct request *req);
+
     static void send_callback(void *request, ucs_status_t status);
 
     static void recv_callback(void *request, ucs_status_t status,

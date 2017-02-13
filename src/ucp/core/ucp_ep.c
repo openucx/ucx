@@ -317,9 +317,7 @@ static void ucp_ep_flushed_slow_path_callback(ucs_callbackq_slow_elem_t *self)
 
     /* Complete send request from here, to avoid releasing the request while
      * slow-path element is still pending */
-    ucs_trace_req("completing flush request %p (%p) with status %s", req, req + 1,
-                  ucs_status_string(req->status));
-    ucp_request_put(req, req->status);
+    ucp_request_complete_send(req, req->status);
 }
 
 static int ucp_flush_check_completion(ucp_request_t *req)
