@@ -131,7 +131,7 @@ public:
     }
 
     void validate_send(uct_ud_ep_t *ep, unsigned value) {
-        EXPECT_EQ(ep->tx.acked_psn, value - no_creq_cnt(ep));
+        EXPECT_GE(ep->tx.acked_psn, value - no_creq_cnt(ep));
     }
 
     void validate_recv(uct_ud_ep_t *ep, unsigned value,
