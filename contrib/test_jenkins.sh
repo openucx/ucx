@@ -231,6 +231,7 @@ run_hello() {
 
 	sleep 5
 
+    export UCX_LOG_LEVEL=trace
 	# need to be ran in background to reflect application PID in $!
 	./${test_name} ${test_args} -n $(hostname) -p ${tcp_port} &
 	hw_client_pid=$!
