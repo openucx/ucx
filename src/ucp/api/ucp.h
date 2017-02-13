@@ -8,6 +8,7 @@
 #define UCP_H_
 
 #include <ucp/api/ucp_def.h>
+#include <ucp/api/ucp_compat.h>
 #include <ucp/api/ucp_version.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
@@ -252,6 +253,36 @@ enum {
                                            they are accessed by communication
                                            routines. */
 };
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Atomic operation requested for ucp_atomic_post
+ *
+ * This enumeration defines which atomic memory operation should be
+ * performed by the ucp_atomic_post family of fuctions. All of these are
+ * non-fetching atomics and will not result in a request handle.
+ */
+typedef enum {
+    UCP_ATOMIC_POST_OP_ADD, /**< Atomic add */
+    UCP_ATOMIC_POST_OP_LAST
+} ucp_atomic_post_op_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Atomic operation requested for ucp_atomic_fetch
+ *
+ * This enumeration defines which atomic memory operation should be performed
+ * by the ucp_atomic_fetch family of functions. All of these functions
+ * will fetch data from the remote node.
+ */
+typedef enum {
+    UCP_ATOMIC_FETCH_OP_FADD, /**< Atomic Fetch and add */
+    UCP_ATOMIC_FETCH_OP_SWAP, /**< Atomic swap */
+    UCP_ATOMIC_FETCH_OP_CSWAP, /**< Atomic conditional swap */
+    UCP_ATOMIC_FETCH_OP_LAST
+} ucp_atomic_fetch_op_t;
 
 
 /**
@@ -685,7 +716,7 @@ struct ucp_tag_recv_info {
  * the run-time environment. Then, the fetched descriptor is used for
  * UCP library @ref ucp_init "initialization". The Application can print out the
  * descriptor using @ref ucp_config_print "print" routine. In addition
- * the application is responsible to @ref ucp_config_release "release" the
+ * the application is responsible to @ref ucp_config_free "free" the
  * descriptor back to UCP library.
  *
  * @param [in]  env_prefix    If non-NULL, the routine searches for the
@@ -1199,7 +1230,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  *                          is returned to the application in order to track
  *                          progress of the disconnect. The application is
  *                          responsible to release the handle using
- *                          @ref ucp_request_release "ucp_request_release()"
+ *                          @ref ucp_request_free "ucp_request_free()"
  *                          routine.
  */
 ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep);
@@ -1537,8 +1568,7 @@ ucs_status_t ucp_rmem_ptr(ucp_ep_h ep, void *remote_addr, ucp_rkey_h rkey,
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
  *                          responsible to released the handle using
- *                          @ref ucp_request_release "ucp_request_release()"
- *                          routine.
+ *                          @ref ucp_request_free "ucp_request_free()" routine.
  * @todo
  * @li Describe the thread safety requirement for the call-back.
  * @li What happens if the request is released before the call-back is invoked.
@@ -1574,8 +1604,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *                          is returned to the application in order to track
  *                          progress of the message. The application is
  *                          responsible to release the handle using
- *                          @ref ucp_request_release "ucp_request_release()"
- *                          routine.
+ *                          @ref ucp_request_free "ucp_request_free()" routine.
  */
 ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
                                       ucp_datatype_t datatype, ucp_tag_t tag,
@@ -1617,8 +1646,8 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *                              handle is returned to the application in order
  *                              to track progress of the operation. The
  *                              application is responsible to released the
- *                              handle using @ref ucp_request_release
- *                              "ucp_request_release()" routine.
+ *                              handle using @ref ucp_request_free
+ *                              "ucp_request_free()" routine.
  */
 ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
                                  ucp_datatype_t datatype, ucp_tag_t tag,
@@ -1733,8 +1762,8 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  *                              handle is returned to the application in order
  *                              to track progress of the operation. The
  *                              application is responsible to released the
- *                              handle using @ref ucp_request_release
- *                              "ucp_request_release()" routine.
+ *                              handle using @ref ucp_request_free
+ *                              "ucp_request_free()" routine.
  */
 ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
                                      size_t count, ucp_datatype_t datatype,
@@ -2101,16 +2130,80 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
 
 /**
  * @ingroup UCP_COMM
- * @brief Check if a non-blocking request is completed.
+ * @brief Post an atomic memory operation.
  *
- * This routine check the state of the request and returns @a true if the
- * request is in a completed state. Otherwise @a false is returned.
+ * This routine posts an atomic memory operation to a remote value.
+ * The remote value is described by the combination of the remote
+ * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
+ * @a rkey.
+ * Return from the function does not guarantee completion. A user must
+ * call @ref ucp_ep_flush or @ref ucp_worker_flush to guarentee that the remote
+ * value has been updated.
  *
- * @param [in]  request      Non-blocking request to check.
+ * @param [in] ep          UCP endpoint.
+ * @param [in] opcode      One of @ref ucp_atomic_post_op_t.
+ * @param [in] value       Source operand for the atomic operation.
+ * @param [in] op_size     Size of value in bytes
+ * @param [in] remote_addr Remote address to operate on.
+ * @param [in] rkey        Remote key handle for the remote address.
  *
- * @return @a true if the request was completed and @a false otherwise.
+ * @return Error code as defined by @ref ucs_status_t
  */
-int ucp_request_is_completed(void *request);
+ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
+                             size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Post an atomic fetch operation.
+ *
+ * This routine will post an atomic fetch operation to remote memory.
+ * The remote value is described by the combination of the remote
+ * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
+ * @a rkey.
+ * The routine is non-blocking and therefore returns immediately. However the
+ * actual atomic operation may be delayed. The atomic operation is not considered complete
+ * until the values in remote and local memory are completed. If the atomic operation
+ * completes immediately, the routine returns UCS_OK and the call-back routine
+ * @a cb is @b not invoked. If the operation is @b not completed immediately and no
+ * error is reported, then the UCP library will schedule invocation of the call-back
+ * routine @a cb upon completion of the atomic operation. In other words, the completion
+ * of an atomic operation can be signaled by the return code or execution of the call-back.
+ *
+ * @note The user should not modify any part of the @a result after this
+ *       operation is called, until the operation completes.
+ *
+ * @param [in] ep          UCP endpoint.
+ * @param [in] opcode      One of @ref ucp_atomic_fetch_op_t.
+ * @param [in] value       Source operand for atomic operation. In the case of CSWAP
+ *                         this is the conditional for the swap. For SWAP this is
+ *                         the value to be placed in remote memory.
+ * @param [inout] result   Local memory address to store resulting fetch to.
+ *                         In the case of CSWAP the value in result will be
+ *                         swapped into the @a remote_addr if the condition
+ *                         is true.
+ * @param [in] op_size     Size of value in bytes and pointer type for result
+ * @param [in] remote_addr Remote address to operate on.
+ * @param [in] rkey        Remote key handle for the remote address.
+ * @param [in] cb          Call-back function that is invoked whenever the
+ *                         send operation is completed. It is important to note
+ *                         that the call-back function is only invoked in a case when
+ *                         the operation cannot be completed in place.
+ *
+ * @return UCS_OK               - The operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
+ * @return otherwise            - Operation was scheduled and can be
+ *                              completed at any point in time. The request handle
+ *                              is returned to the application in order to track
+ *                              progress of the operation. The application is
+ *                              responsible for releasing the handle using
+ *                              @ref ucp_request_free "ucp_request_free()" routine.
+ */
+ucs_status_ptr_t
+ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
+                     uint64_t value, void *result, size_t op_size,
+                     uint64_t remote_addr, ucp_rkey_h rkey,
+                     ucp_send_callback_t cb);
 
 
 /**
@@ -2136,27 +2229,6 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
 
 /**
  * @ingroup UCP_COMM
- * @brief Release a communications request.
- *
- * @param [in]  request      Non-blocking request to release.
- *
- * This routine marks and potentially releases back to the library the
- * non-blocking request. If the request is already completed or
- * canceled state it is released and the resources associated with the request are
- * returned back to the library.  If the request in any other stated it is
- * marked as a "ready to release" and it will be released once it enters
- * completed and canceled states.
- *
- * @todo I think this release semantics is a bit confusing. I would suggest to
- * remove the "marked" ready to release. Instead, user has to call the release
- * explicitly once it is completed or released and we should return an error if
- * the request is not in one of these states.
- */
-void ucp_request_release(void *request);
-
-
-/**
- * @ingroup UCP_COMM
  * @brief Cancel an outstanding communications request.
  *
  * @param [in]  worker       UCP worker.
@@ -2171,10 +2243,24 @@ void ucp_request_release(void *request);
  * called with the @a status argument of the callback set to UCS_OK, and in a
  * case it is canceled the @a status argument is set to UCS_ERR_CANCELED.  It is
  * important to note that in order to release the request back to the library
- * the application is responsible to call @ref ucp_request_release
- * "ucp_request_release()".
+ * the application is responsible to call @ref ucp_request_free
+ * "ucp_request_free()".
  */
 void ucp_request_cancel(ucp_worker_h worker, void *request);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Release a communications request.
+ *
+ * @param [in]  request      Non-blocking request to release.
+ *
+ * This routine releases the non-blocking request back to the library, regardless
+ * of its current state. Communications operations associated with this request
+ * will make progress internally, however no further notifications or callbacks
+ * would be invoked for this request.
+ */
+void ucp_request_free(void *request);
 
 
 /**
@@ -2267,123 +2353,11 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  */
 ucs_status_t ucp_worker_flush(ucp_worker_h worker);
 
-/**
- * @ingroup UCP_COMM
- * @brief Atomic operation requested for ucp_atomic_post
- *
- * This enumeration defines which atomic memory operation should be 
- * performed by the ucp_atomic_post family of fuctions. All of these are
- * non-fetching atomics and will not result in a request handle.
- */
-typedef enum {
-    UCP_ATOMIC_POST_OP_ADD, /**< Atomic add */
-    UCP_ATOMIC_POST_OP_LAST
-} ucp_atomic_post_op_t;
-
-/**
- * @ingroup UCP_COMM
- * @brief Atomic operation requested for ucp_atomic_fetch
- *
- * This enumeration defines which atomic memory operation should be performed
- * by the ucp_atomic_fetch family of functions. All of these functions
- * will fetch data from the remote node.
- */
-typedef enum {
-    UCP_ATOMIC_FETCH_OP_FADD, /**< Atomic Fetch and add */
-    UCP_ATOMIC_FETCH_OP_SWAP, /**< Atomic swap */
-    UCP_ATOMIC_FETCH_OP_CSWAP, /**< Atomic conditional swap */
-    UCP_ATOMIC_FETCH_OP_LAST
-} ucp_atomic_fetch_op_t;
-
-/**
- * @ingroup UCP_COMM
- * @brief Post an atomic memory operation.
- *
- * This routine posts an atomic memory operation to a remote value.
- * The remote value is described by the combination of the remote
- * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
- * @a rkey.
- * Return from the function does not guarantee completion. A user must
- * call @ref ucp_ep_flush or @ref ucp_worker_flush to guarentee that the remote
- * value has been updated.
- *
- * @param [in] ep          UCP endpoint.
- * @param [in] opcode      One of @ref ucp_atomic_post_op_t.
- * @param [in] value       Source operand for the atomic operation.
- * @param [in] op_size     Size of value in bytes
- * @param [in] remote_addr Remote address to operate on.
- * @param [in] rkey        Remote key handle for the remote address.
- *
- * @return Error code as defined by @ref ucs_status_t
- */
-ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
-                             size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey);
-
-/**
- * @ingroup UCP_COMM
- * @brief Post an atomic fetch operation.
- *
- * This routine will post an atomic fetch operation to remote memory.
- * The remote value is described by the combination of the remote
- * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
- * @a rkey.
- * The routine is non-blocking and therefore returns immediately. However the 
- * actual atomic operation may be delayed. The atomic operation is not considered complete
- * until the values in remote and local memory are completed. If the atomic operation 
- * completes immediately, the routine returns UCS_OK and the call-back routine
- * @a cb is @b not invoked. If the operation is @b not completed immediately and no
- * error is reported, then the UCP library will schedule invocation of the call-back
- * routine @a cb upon completion of the atomic operation. In other words, the completion
- * of an atomic operation can be signaled by the return code or execution of the call-back.
- *
- * @note The user should not modify any part of the @a result after this
- *       operation is called, until the operation completes.
- *
- * @param [in] ep          UCP endpoint.
- * @param [in] opcode      One of @ref ucp_atomic_fetch_op_t.
- * @param [in] value       Source operand for atomic operation. In the case of CSWAP
- *                         this is the conditional for the swap. For SWAP this is
- *                         the value to be placed in remote memory.
- * @param [inout] result   Local memory address to store resulting fetch to.
- *                         In the case of CSWAP the value in result will be
- *                         swapped into the @a remote_addr if the condition
- *                         is true.
- * @param [in] op_size     Size of value in bytes and pointer type for result
- * @param [in] remote_addr Remote address to operate on.
- * @param [in] rkey        Remote key handle for the remote address.
- * @param [in] cb          Call-back function that is invoked whenever the
- *                         send operation is completed. It is important to note
- *                         that the call-back function is only invoked in a case when
- *                         the operation cannot be completed in place.
- *
- * @return UCS_OK               - The operation was completed immediately.
- * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
- * @return otherwise            - Operation was scheduled and can be
- *                              completed at any point in time. The request handle
- *                              is returned to the application in order to track
- *                              progress of the operation. The application is
- *                              responsible for releasing the handle using
- *                              @ref ucp_request_release "ucp_request_release()"
- *                              routine.
- */
-ucs_status_ptr_t
-ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
-                     uint64_t value, void *result, size_t op_size,
-                     uint64_t remote_addr, ucp_rkey_h rkey,
-                     ucp_send_callback_t cb);
-
 
 /**
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.
  */
-
-
-/**
- * @ingroup UCP_ENDPOINT
- * @deprecated Replaced by @ref ucp_disconnect_nb.
- */
-void ucp_ep_destroy(ucp_ep_h ep);
 
 
 #endif

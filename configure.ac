@@ -10,7 +10,7 @@ AC_PREREQ([2.63])
 
 define([scm_r], esyscmd([sh -c "git rev-parse --short=7 HEAD"]))
 define([ucx_ver_major], 1)
-define([ucx_ver_minor], 0)
+define([ucx_ver_minor], 1)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 define([revcount], esyscmd([git rev-list HEAD | wc -l | sed -e 's/ *//g' | xargs -n1 printf]))
 

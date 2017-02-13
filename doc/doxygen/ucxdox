@@ -791,6 +791,7 @@ INPUT_ENCODING         = UTF-8
 # *.qsf, *.as and *.js.
 
 FILE_PATTERNS          = ucp.h          \
+                         ucp_compat.h   \
                          ucp_def.h      \
                          uct.h          \
                          uct_def.h      \
