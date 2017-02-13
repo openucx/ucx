@@ -130,6 +130,10 @@ public:
         return (ep->flags & UCT_UD_EP_FLAG_CREQ_NOTSENT) ? 1 : 0;
     }
 
+    void validate_send(uct_ud_ep_t *ep, unsigned value) {
+        EXPECT_GE(ep->tx.acked_psn, value - no_creq_cnt(ep));
+    }
+
     void validate_recv(uct_ud_ep_t *ep, unsigned value,
                        double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
@@ -378,20 +382,21 @@ UCS_TEST_P(test_ud, crep_drop2) {
 
     ep(m_e1)->rx.rx_hook = drop_ctl;
     ep(m_e2)->rx.rx_hook = drop_ctl;
-    short_progress_loop();
 
-    validate_connect(ep(m_e1), 0U);
-    validate_connect(ep(m_e2), 0U);
+    short_progress_loop(100);
 
     /* Remove filter for CREP to be handled and TX win to be freed. */
     ep(m_e1)->rx.rx_hook = uct_ud_ep_null_hook;
     ep(m_e2)->rx.rx_hook = uct_ud_ep_null_hook;
 
+    validate_connect(ep(m_e1), 0U);
+    validate_connect(ep(m_e2), 0U);
+
     /* Expect that creq (and maybe crep already) are sent */
-    EXPECT_EQ(ep(m_e1)->tx.acked_psn, 1);
-    EXPECT_EQ(ep(m_e2)->tx.acked_psn, 1);
-    EXPECT_GE(ep(m_e1)->tx.psn,       2);
-    EXPECT_GE(ep(m_e2)->tx.psn,       2);
+    validate_send(ep(m_e1), 1);
+    validate_send(ep(m_e2), 1);
+    EXPECT_GE(ep(m_e1)->tx.psn, 2);
+    EXPECT_GE(ep(m_e2)->tx.psn, 2);
 
     /* Wait for TX win to be empty (which means that all
      * CONN packets are handled) */

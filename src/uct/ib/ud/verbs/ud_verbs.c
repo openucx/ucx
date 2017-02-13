@@ -424,6 +424,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     if (status == UCS_OK) {
         uct_ud_verbs_ep_tx_skb(iface, ep, skb, IBV_SEND_INLINE|IBV_SEND_SOLICITED);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+        ep->super.flags |= UCT_UD_EP_FLAG_CREQ_SENT;
     }
     uct_ud_leave(&iface->super);
     return UCS_OK;
