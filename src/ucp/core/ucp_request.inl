@@ -15,84 +15,58 @@
 #include <inttypes.h>
 
 
-#define UCP_REQUEST_FLAGS_FMT \
-    "%c%c%c%c%c%c%c%c%c"
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_request_get(ucp_worker_h worker)
+{
+    ucp_request_t *req = ucs_mpool_get_inline(&worker->req_mp);
 
-#define UCP_REQUEST_FLAGS_ARG(_flags) \
-    (((_flags) & UCP_REQUEST_FLAG_COMPLETED)       ? 'd' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RELEASED)        ? 'f' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_BLOCKING)        ? 'b' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_EXPECTED)        ? 'e' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_LOCAL_COMPLETED) ? 'L' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RECV)            ? 'r' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RNDV)            ? 'v' : '-')
-
-
-/* defined as a macro to print the call site */
-#define ucp_request_get(_worker) \
-    ({ \
-        ucp_request_t *req = ucs_mpool_get_inline(&(_worker)->req_mp); \
-        if (req != NULL) { \
-            VALGRIND_MAKE_MEM_DEFINED(req + 1, \
-                                      (_worker)->context->config.request.size); \
-            ucs_trace_req("allocated request %p", req); \
-        } \
-        req; \
-    })
-
-#define ucp_request_complete(_req, _cb, _status, ...) \
-    { \
-        (_req)->status = (_status); \
-        if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
-            (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
-        } \
-        if (ucs_unlikely(((_req)->flags  |= UCP_REQUEST_FLAG_COMPLETED) & \
-                         UCP_REQUEST_FLAG_RELEASED)) { \
-            ucp_request_put(_req); \
-        } \
+    if (req != NULL) {
+        VALGRIND_MAKE_MEM_DEFINED(req + 1,  worker->context->config.request.size);
     }
-
-#define ucp_request_set_callback(_req, _cb, _value) \
-    { \
-        (_req)->_cb    = _value; \
-        (_req)->flags |= UCP_REQUEST_FLAG_CALLBACK; \
-        ucs_trace_data("request %p %s set to %p", _req, #_cb, _value); \
-    }
+    return req;
+}
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_put(ucp_request_t *req)
+ucp_request_put(ucp_request_t *req, ucs_status_t status)
 {
-    ucs_trace_req("put request %p", req);
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_COMPLETED);
-    ucs_mpool_put_inline(req);
+    req->status = status;
+    if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
+        /* Release should not be called for external requests */
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_EXTERNAL));
+        ucs_mpool_put(req);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
 {
-    ucs_trace_req("completing send request %p (%p) "UCP_REQUEST_FLAGS_FMT" %s",
-                  req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
-                  ucs_status_string(status));
+    ucs_trace_data("completing send request %p (%p), %s", req, req + 1,
+                   ucs_status_string(status));
+    req->send.cb(req + 1, status);
+
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
                           "ucp_request_complete_send",
                           req, 0);
-    ucp_request_complete(req, send.cb, status);
+    ucp_request_put(req, status);
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
+ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status,
+                          ucp_tag_recv_info_t *info)
 {
-    ucs_trace_req("completing receive request %p (%p) "UCP_REQUEST_FLAGS_FMT
-                  " stag 0x%"PRIx64" len %zu, %s",
-                  req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
-                  req->recv.info.sender_tag, req->recv.info.length,
-                  ucs_status_string(status));
+    ucs_trace_data("completing recv request %p (%p) stag 0x%"PRIx64" len %zu, %s",
+                   req, req + 1, info->sender_tag, info->length,
+                   ucs_status_string(status));
+
+    if (!(req->flags & UCP_REQUEST_FLAG_EXTERNAL)) {
+        /* In the current API callbacks are defined for internal reqs only. */
+        req->recv.cb(req + 1, status, info);
+    }
+    ucp_request_put(req, status);
+
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
                           "ucp_request_complete_recv",
-                          req, req->recv.info.length);
-    ucp_request_complete(req, recv.cb, status, &req->recv.info);
+                          req, info->length);
 }
 
 static UCS_F_ALWAYS_INLINE

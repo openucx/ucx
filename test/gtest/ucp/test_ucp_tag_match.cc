@@ -56,26 +56,6 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
     EXPECT_EQ(send_data, recv_data);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_unexp_rqfree) {
-    if (GetParam().variant == RECV_REQ_EXTERNAL) {
-        UCS_TEST_SKIP_R("request free cannot be used for external requests");
-    }
-
-    request *my_recv_req;
-    uint64_t send_data = 0xdeadbeefdeadbeef;
-    uint64_t recv_data = 0;
-
-    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
-
-    request_free(my_recv_req);
-
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x1337);
-
-    wait_for_flag(&recv_data);
-    EXPECT_EQ(send_data, recv_data);
-}
-
 UCS_TEST_P(test_ucp_tag_match, send_recv_exp_medium) {
     static const size_t size = 50000;
     request *my_recv_req;
