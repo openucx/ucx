@@ -54,6 +54,13 @@
         } \
     }
 
+#define ucp_request_set_callback(_req, _cb, _value) \
+    { \
+        (_req)->_cb    = _value; \
+        (_req)->flags |= UCP_REQUEST_FLAG_CALLBACK; \
+        ucs_trace_data("request %p %s set to %p", _req, #_cb, _value); \
+    }
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {

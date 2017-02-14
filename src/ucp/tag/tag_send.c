@@ -184,9 +184,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(status);
     }
 
+    ucp_request_set_callback(req, send.cb, cb)
     ucs_trace_req("returning send request %p", req);
-    req->flags  |= UCP_REQUEST_FLAG_CALLBACK;
-    req->send.cb = cb;
     return req + 1;
 }
 

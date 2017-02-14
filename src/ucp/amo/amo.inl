@@ -160,9 +160,7 @@ ucp_amo_send_request(ucp_request_t *req, ucp_send_callback_t cb)
     }
     ucs_trace_req("returning amo request %p, status %s", req,
                   ucs_status_string(status));
-    req->send.cb = cb;
-    req->flags  |= UCP_REQUEST_FLAG_CALLBACK;
-    ucs_trace("req cb set to %p", req->send.cb);
+    ucp_request_set_callback(req, send.cb, cb);
     return req + 1;
 }
 
