@@ -379,7 +379,7 @@ run_coverity() {
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
 		cov-build   --dir $cov_build $MAKE all
-		cov-analyze --dir $cov_build
+    cov-analyze $COV_OPT --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
 
