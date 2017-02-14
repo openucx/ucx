@@ -160,8 +160,7 @@ ucp_amo_send_request(ucp_request_t *req, ucp_send_callback_t cb)
     }
     ucs_trace_req("returning amo request %p, status %s", req,
                   ucs_status_string(status));
-    req->send.cb = cb;
-    ucs_trace("req cb set to %p", req->send.cb);
+    ucp_request_set_callback(req, send.cb, cb);
     return req + 1;
 }
 
@@ -224,18 +223,11 @@ uct_pending_callback_t ucp_amo_post_select_uct_func(ucp_atomic_post_op_t opcode,
     return progress_func;
 }
 
-/* Will be called if request is completed internally before returned to user */
-static void ucp_amo_stub_send_completion(void *request, ucs_status_t status)
-{
-    ucs_assertv(status != UCS_INPROGRESS, "status=%s", ucs_status_string(status));
-}
-
 static inline void init_amo_common(ucp_request_t *req, ucp_ep_h ep, uint64_t remote_addr,
                                    ucp_rkey_h rkey, uint64_t value)
 {
     req->flags                = 0;
     req->send.ep              = ep;
-    req->send.cb              = ucp_amo_stub_send_completion;
     req->send.amo.remote_addr = remote_addr;
     req->send.amo.rkey        = rkey;
     req->send.amo.value       = value;

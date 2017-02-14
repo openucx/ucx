@@ -150,7 +150,7 @@ static void ucp_rndv_complete_rndv_get(ucp_request_t *rndv_req)
 
     ucs_trace_data("ep: %p rndv get completed", rndv_req->send.ep);
 
-    ucp_request_complete_recv(rreq, UCS_OK, &rreq->recv.info);
+    ucp_request_complete_recv(rreq, UCS_OK);
 
     if (rndv_req->send.rndv_get.rkey_bundle.rkey != UCT_INVALID_RKEY) {
         uct_rkey_release(&rndv_req->send.rndv_get.rkey_bundle);
@@ -169,7 +169,7 @@ static ucs_status_t ucp_rndv_truncated(uct_pending_req_t *self)
     /* if the recv request has a generic datatype, need to finish it */
     ucp_request_recv_generic_dt_finish(rreq);
 
-    ucp_request_complete_recv(rreq, UCS_ERR_MESSAGE_TRUNCATED, &rreq->recv.info);
+    ucp_request_complete_recv(rreq, UCS_ERR_MESSAGE_TRUNCATED);
     ucp_rndv_send_ats(rndv_req, rndv_req->send.proto.remote_request);
 
     return UCS_OK;
@@ -704,7 +704,7 @@ ucp_rndv_data_last_handler(void *arg, void *data, size_t length, void *desc)
                                   rreq->recv.datatype, &rreq->recv.state,
                                   data + hdr_len, recv_len, UCP_RECV_DESC_FLAG_LAST);
 
-    ucp_request_complete_recv(rreq, status, &rreq->recv.info);
+    ucp_request_complete_recv(rreq, status);
 
     return UCS_OK;
 }

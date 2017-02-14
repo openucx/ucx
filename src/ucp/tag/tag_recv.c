@@ -118,7 +118,8 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
         return NULL;
     }
 
-    ucp_tag_recv_request_init(req, worker, buffer, count, datatype, 0);
+    ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
+                              UCP_REQUEST_FLAG_CALLBACK);
     return req;
 }
 
@@ -134,19 +135,19 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
                           "ucp_tag_recv_request_completed",
                           req, info->length);
 
-    ucp_request_put(req, status);
+    req->status = status;
+    req->flags |= UCP_REQUEST_FLAG_COMPLETED;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                    ucp_request_t *req)
+                    ucp_request_t *req, const char *debug_name)
 {
     ucs_status_t status;
     unsigned save_rreq = 1;
 
-    ucs_trace_req("recv_nb%c buffer %p count %zu tag %"PRIx64"/%"PRIx64,
-                  (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
+    ucs_trace_req("%s buffer %p count %zu tag %"PRIx64"/%"PRIx64, debug_name,
                   buffer, count, tag, tag_mask);
 
     /* First, search in unexpected list */
@@ -163,8 +164,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag      = tag;
         req->recv.tag_mask = tag_mask;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
-        ucs_trace_req("recv_nb%c returning expected request %p (%p)",
-                      (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
+        ucs_trace_req("%s returning expected request %p (%p)", debug_name,
                       req, req + 1);
     }
 
@@ -182,14 +182,14 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
-                              UCP_REQUEST_FLAG_EXTERNAL);
+                              UCP_REQUEST_DEBUG_FLAG_EXTERNAL);
 
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr", req,
                           ucp_dt_length(datatype, count, buffer, &req->recv.state));
 
     req->recv.cb  = NULL;
     status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
-                                 tag_mask, req);
+                                 tag_mask, req, "recv_nbr");
 
     if (status != UCS_INPROGRESS) {
         ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nbr");
@@ -224,7 +224,7 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
     req->recv.cb = cb;
 
     status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
-                                 tag_mask, req);
+                                 tag_mask, req, "recv_nb");
 
     if (status != UCS_INPROGRESS) {
         cb(req + 1, status, &req->recv.info);
@@ -265,7 +265,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb", req,
                           ucp_dt_length(datatype, count, buffer, &req->recv.state));
 
-    req->recv.cb       = cb;
+    req->recv.cb = cb;
 
     /* First, handle the first packet that was already matched */
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
