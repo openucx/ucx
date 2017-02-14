@@ -1127,6 +1127,40 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WAKEUP
+ * @brief Wait for memory update on the address
+ *
+ * This routine waits for a memory update at the local memory @a address.  This
+ * is a blocking routine. The routine returns when the memory address is
+ * updated ("write") or an event occurs in the system.
+ *
+ * @note This routine can be used by applications that "polls" for a memory
+ * update. Instead of continues polling on an address the application may
+ * use @a ucp_ptr_wait , which may suspend execution until the memory is
+ * updated. The goal of the routine is to provide an opportunity for energy
+ * savings for architectures that support this functionality.
+ *
+ * @param [in] address          Local memory address
+ */
+inline void ucp_ptr_wait(void *address)
+#if defined(__aarch64__)
+{
+    unsigned long tmp;
+    __asm__ __volatile__ ("ldxr %0, [%1] \n"
+                          "wfe           \n"
+                          : "=&r"(tmp)
+                          : "r"(address));
+}
+#elif defined(__x86_64__)
+{}
+#elif defined(__powerpc64__)
+{}
+#else
+{ /* do nothing */ }
+#endif
+
+
+/**
+ * @ingroup UCP_WAKEUP
  * @brief Turn on event notification for the next event.
  *
  * This routine needs to be called before waiting on each notification on this
