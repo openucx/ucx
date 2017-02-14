@@ -8,7 +8,6 @@
 #define UCP_H_
 
 #include <ucp/api/ucp_def.h>
-#include <ucp/api/ucp_compat.h>
 #include <ucp/api/ucp_version.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
@@ -2102,6 +2101,20 @@ ucs_status_t ucp_atomic_cswap64(ucp_ep_h ep, uint64_t compare, uint64_t swap,
 
 /**
  * @ingroup UCP_COMM
+ * @brief Check if a non-blocking request is completed.
+ *
+ * This routine check the state of the request and returns @a true if the
+ * request is in a completed state. Otherwise @a false is returned.
+ *
+ * @param [in]  request      Non-blocking request to check.
+ *
+ * @return @a true if the request was completed and @a false otherwise.
+ */
+int ucp_request_is_completed(void *request);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Check the status of non-blocking request.
  *
  * This routine checks the state of the request and returns its current status.
@@ -2127,12 +2140,19 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info);
  *
  * @param [in]  request      Non-blocking request to release.
  *
- * This routine releases the non-blocking request back to the library, regardless
- * of its current state. Communications which were started by this request will
- * make progress internally, however no further notifications or callbacks would
- * be invoked for this request.
+ * This routine marks and potentially releases back to the library the
+ * non-blocking request. If the request is already completed or
+ * canceled state it is released and the resources associated with the request are
+ * returned back to the library.  If the request in any other stated it is
+ * marked as a "ready to release" and it will be released once it enters
+ * completed and canceled states.
+ *
+ * @todo I think this release semantics is a bit confusing. I would suggest to
+ * remove the "marked" ready to release. Instead, user has to call the release
+ * explicitly once it is completed or released and we should return an error if
+ * the request is not in one of these states.
  */
-void ucp_request_free(void *request);
+void ucp_request_release(void *request);
 
 
 /**
@@ -2357,6 +2377,13 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  * @example ucp_hello_world.c
  * UCP hello world client / server example utility.
  */
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @deprecated Replaced by @ref ucp_disconnect_nb.
+ */
+void ucp_ep_destroy(ucp_ep_h ep);
 
 
 #endif
