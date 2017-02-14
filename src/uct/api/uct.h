@@ -1762,11 +1762,12 @@ UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
 
 /**
  * @ingroup UCT_TAG
- * @brief Send tagged message using short eager protocol.
+ * @brief Short eager tagged-send operation.
  *
- * Eager protocol means that the whole data is sent immediately to the peer.
- * The data is provided as buffer and its length, and must not be larger than
- * the corresponding @a max_short value in @ref uct_iface_attr. The immediate
+ * This routine sends a message using short eager protocol. Eager protocol
+ * means that the whole data is sent immediately to the peer. The data is
+ * provided as buffer and its length, and must not be larger than the
+ * corresponding @a max_short value in @ref uct_iface_attr. The immediate
  * value delivered to the receiver is implicitly equal to 0. If it’s required
  * to pass non-zero imm value, @ref uct_ep_tag_eager_bcopy should be used.
  *
@@ -1788,9 +1789,10 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
 
 /**
  * @ingroup UCT_TAG
- * @brief Send tagged message using bcopy eager protocol.
+ * @brief Bcopy eager tagged-send operation.
  *
- * Eager protocol means that the whole data is sent immediately to the peer.
+ * This routine sends a message using buffered copy eager protocol. Eager
+ * protocol means that the whole data is sent immediately to the peer.
  * Custom data callback is used to copy the data to the network buffers.
  *
  * @note The resulted data length must not be larger than the corresponding
@@ -1817,13 +1819,14 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
 
 /**
  * @ingroup UCT_TAG
- * @brief Send tagged message using zcopy eager protocol.
+ * @brief Zcopy eager tagged-send operation.
  *
- * Eager protocol means that the whole data is sent immediately to the peer.
- * The input data (which has to be previously registered) in @a iov array of
- * @ref uct_iov_t structures sent to remote side ("gather output"). Buffers
- * in @a iov are processed in array order. This means that the function complete
- * iov[0] before proceeding to iov[1], and so on.
+ * This routine sends a message using zero copy eager protocol. Eager protocol
+ * means that the whole data is sent immediately to the peer. The input data
+ * (which has to be previously registered) in @a iov array of @ref uct_iov_t
+ * structures sent to remote side ("gather output"). Buffers in @a iov are
+ * processed in array order, so the function complete iov[0] before proceeding
+ * to iov[1], and so on.
  *
  * @note The resulted data length must not be larger than the corresponding
  *       @a max_zcopy value in @ref uct_iface_attr.
@@ -1861,15 +1864,16 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
 
 /**
  * @ingroup UCT_TAG
- * @brief Send tagged message using rendezvous protocol.
+ * @brief Rendezvous tagged-send operation.
  *
- * Rendezvous protocol means that only a small notification is sent at first,
- * and the data itself is transferred later (when there is a match) to avoid
- * extra memory copy.
+ * This routine sends a message using rendezvous protocol. Rendezvous protocol
+ * means that only a small notification is sent at first, and the data itself
+ * is transferred later (when there is a match) to avoid extra memory copy.
  *
- * @note The header will be available to the receiver only in case of unexpected
- *       rendezvous operation, i.e. the peer has not posted tag for this message
- *       yet (by means of @ref uct_iface_tag_recv_zcopy), when it is arrived.
+ * @note The header will be available to the receiver in case of unexpected
+ *       rendezvous operation only, i.e. the peer has not posted tag for this
+ *       message yet (by means of @ref uct_iface_tag_recv_zcopy), when it is
+ *       arrived.
  *
  * @param [in]  ep            Destination endpoint handle.
  * @param [in]  tag           Tag to use for the eager message.
@@ -1909,8 +1913,8 @@ UCT_INLINE_API ucs_status_ptr_t uct_ep_tag_rndv_zcopy(uct_ep_h ep, uct_tag_t tag
  * @ingroup UCT_TAG
  * @brief Cancel outstanding rendezvous operation.
  *
- * The transport will disregard the outstanding operation without calling
- * completion callback provided in @ref uct_ep_tag_rndv_zcopy.
+ * This routine makes transport disregard the outstanding operation without
+ * calling completion callback provided in @ref uct_ep_tag_rndv_zcopy.
  *
  * @param [in] ep Destination endpoint handle.
  * @param [in] op Rendezvous operation handle, as returned from
@@ -1928,10 +1932,8 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rdnv_cancel(uct_ep_h ep, void *op)
  * @ingroup UCT_TAG
  * @brief Send software rendezvous request.
  *
- * Send a rendezvous request only, which will allow the peer to complete the
- * data transfer in software. If the peer has posted corresponding receive it
- * will be reported as incomplete match with both data address and key equal to
- * NULL. Otherwise it will be reported as unexpected.
+ * This routine sends a rendezvous request only, which will allow the peer to
+ * complete the data transfer in software.
  *
  * @param [in]  ep            Destination endpoint handle.
  * @param [in]  tag           Tag to use for matching.
@@ -1954,8 +1956,9 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
 
 /**
  * @ingroup UCT_TAG
- * @brief Post a tag to be matched on a transport interface.
+ * @brief Post a tag to a transport interface.
  *
+ * This routine posts a tag to be matched on a transport interface.
  * The operation completion is reported using callbacks on the @a ctx structure.
  *
  * @param [in]    iface     Interface to post the tag on.
@@ -1992,11 +1995,12 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_zcopy(uct_iface_h iface,
 
 /**
  * @ingroup UCT_TAG
- * @brief Cancel a tag previously posted by @ref uct_iface_tag_recv_zcopy.
+ * @brief Cancel a posted tag.
  *
- * The tag would be either matched or canceled, in a bounded time, regardless
- * of the peer actions. The original completion callback of the tag would be
- * called with the status if @a force is not set.
+ * This routine cancels a tag, which was previously posted by
+ * @ref uct_iface_tag_recv_zcopy. The tag would be either matched or canceled,
+ * in a bounded time, regardless of the peer actions. The original completion
+ * callback of the tag would be called with the status if @a force is not set.
  *
  * @param [in]  iface     Interface to cancel the tag on.
  * @param [in]  ctx       Tag context which was used for posting the tag. If
@@ -2005,9 +2009,9 @@ UCT_INLINE_API ucs_status_t uct_iface_tag_recv_zcopy(uct_iface_h iface,
  *                        received despite the cancel request, or
  *                        UCS_ERR_CANCELED which means the tag was successfully
  *                        canceled before it was matched.
- * @param [in]  force     Whether to report completions to ctx->completed_cb. If
- *                        nonzero, the cancel is assumed to be successful, and
- *                        the callback is not called.
+ * @param [in]  force     Whether to report completions to @a ctx->completed_cb.
+ *                        If nonzero, the cancel is assumed to be successful,
+ *                        and the callback is not called.
  *
  * @return UCS_OK  -      The tag is canceled in the transport.
  */

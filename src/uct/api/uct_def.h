@@ -239,7 +239,16 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
 
 
 /**
- * Callback to handle unexpected eager tag.
+ * @ingroup UCT_TAG
+ * @brief Callback to process unexpected eager tagged message.
+ *
+ * This callback is invoked when tagged message sent by eager protocol is
+ * arrived and there is no corresponding tag posted.
+ *
+ * @note The callback is always invoked from the context (thread, process)
+ *       that called @a uct_iface_progress().
+ *
+ * @note It is allowed to call other communication routines from the callback.
  *
  * @param [in]  arg     User-defined argument
  * @param [in]  data    Points to the received unexpected data.
@@ -264,7 +273,16 @@ typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
 
 
 /**
- * Callback to handle unexpected rendezvous tag.
+ * @ingroup UCT_TAG
+ * @brief Callback to process unexpected rendezvous tagged message.
+ *
+ * This callback is invoked when rendezvous send notification is arrived
+ * and there is no corresponding tag posted.
+ *
+ * @note The callback is always invoked from the context (thread, process)
+ *       that called @a uct_iface_progress().
+ *
+ * @note It is allowed to call other communication routines from the callback.
  *
  * @param [in]  arg           User-defined argument
  * @param [in]  desc          Points to the received descriptor, at the
