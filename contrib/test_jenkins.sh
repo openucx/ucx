@@ -244,12 +244,17 @@ run_hello() {
 # Compile and run UCP hello world example
 #
 run_ucp_hello() {
-	for test_mode in -w -f -b
-	do
-		echo "==== Running UCP hello world with mode ${test_mode} ===="
-		run_hello ucp ${test_mode}
-	done
-	rm -f ./ucp_hello_world
+    # Hack: Due to the event driver communication requirement for now this
+    # test required IB
+    if [ `ibv_devinfo  | grep PORT_ACTIVE | wc -l` -gt 0 ]
+    then
+	    for test_mode in -w -f -b
+	    do
+		    echo "==== Running UCP hello world with mode ${test_mode} ===="
+		    run_hello ucp ${test_mode}
+	    done
+	    rm -f ./ucp_hello_world
+   fi
 }
 
 #
