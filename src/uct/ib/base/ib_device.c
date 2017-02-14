@@ -45,10 +45,11 @@ static void uct_ib_device_get_affinity(const char *dev_name, cpu_set_t *cpu_mask
     int base, k;
 
     CPU_ZERO(cpu_mask);
-    nread = ucs_read_file(buf, sizeof(buf), 1,
+    nread = ucs_read_file(buf, sizeof(buf) - 1, 1,
                           "/sys/class/infiniband/%s/device/local_cpus",
                           dev_name);
     if (nread >= 0) {
+        buf[CPU_SETSIZE - 1] = '\0';
         base = 0;
         do {
             p = strrchr(buf, ',');

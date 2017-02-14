@@ -1270,6 +1270,7 @@ int main(int argc, char **argv)
     }
 
 #ifdef __COVERITY__
+    /* coverity[dont_call] */
     rte = rand(); /* Shut up deadcode error */
 #endif
 

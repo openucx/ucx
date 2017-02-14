@@ -32,7 +32,7 @@ uint16_t ucs_crc16(const void *buffer, size_t size)
         }
     };
 
-    result = (result << 8) | ((result >> 8) & 0xff);
+    result = ((result & 0xff) << 8) | ((result >> 8) & 0xff);
     return ~result;
 }
 

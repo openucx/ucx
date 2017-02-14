@@ -173,7 +173,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(params->dev_name));
 
-    strncpy(self->if_name, params->dev_name, sizeof(self->if_name));
+    ucs_strncpy_zero(self->if_name, params->dev_name, sizeof(self->if_name));
     self->config.max_bcopy       = config->super.max_bcopy;
     self->config.prefer_default  = config->prefer_default;
     self->sockopt.nodelay        = config->sockopt_nodelay;

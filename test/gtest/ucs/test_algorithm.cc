@@ -35,11 +35,11 @@ void * test_algorithm::MAGIC = (void*)0xdeadbeef1ee7a880ull;
 UCS_TEST_F(test_algorithm, qsort_r) {
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        unsigned nmemb = rand() % 100;
+        unsigned nmemb = ucs::rand() % 100;
 
         std::vector<int> vec;
         for (unsigned j = 0; j < nmemb; ++j) {
-            vec.push_back(rand() % 200);
+            vec.push_back(ucs::rand() % 200);
         }
 
         std::vector<int> vec2 = vec;

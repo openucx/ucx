@@ -385,7 +385,7 @@ protected:
 
     void timer() {
         if (is_fast_path) {
-            if ((m_add_count > 0) && ((rand() % 2) == 0)) {
+            if ((m_add_count > 0) && ((ucs::rand() % 2) == 0)) {
                 remove_safe(&m_cbctx);
                 --m_add_count;
             } else {

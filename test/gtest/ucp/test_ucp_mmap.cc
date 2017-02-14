@@ -16,7 +16,7 @@ public:
     }
 
     static int rand_flags() {
-        if ((rand() % 2) == 0) {
+        if ((ucs::rand() % 2) == 0) {
             return 0;
         } else {
             return UCP_MEM_MAP_NONBLOCK;
@@ -64,7 +64,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
     sender().connect(&sender());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = rand() % (1024 * 1024);
+        size_t size = ucs::rand() % (1024 * 1024);
 
         ucp_mem_h memh;
         ucp_mem_map_params_t params;
@@ -95,7 +95,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
     sender().connect(&sender());
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = rand() % (1024 * 1024);
+        size_t size = ucs::rand() % (1024 * 1024);
 
         void *ptr = malloc(size);
 

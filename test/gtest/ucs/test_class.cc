@@ -156,6 +156,7 @@ UCS_TEST_F(test_class, failure) {
     /* Should fail on base */
     derived = NULL;
     status = UCS_CLASS_NEW(derived_t, &derived, -1, 2);
+    /* coverity[leaked_storage] */
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
     ASSERT_TRUE(NULL == derived);
 
@@ -166,6 +167,7 @@ UCS_TEST_F(test_class, failure) {
     /* Should fail on derived */
     derived = NULL;
     status = UCS_CLASS_NEW(derived_t, &derived, 1, -2);
+    /* coverity[leaked_storage] */
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
     ASSERT_TRUE(NULL == derived);
 
@@ -184,6 +186,7 @@ UCS_TEST_F(test_class, failure2) {
     /* Should fail on base */
     derived = NULL;
     status = UCS_CLASS_NEW(derived2_t, &derived, -1, 2);
+    /* coverity[leaked_storage] */
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
     ASSERT_TRUE(NULL == derived);
 
@@ -194,6 +197,7 @@ UCS_TEST_F(test_class, failure2) {
     /* Should fail on derived */
     derived = NULL;
     status = UCS_CLASS_NEW(derived2_t, &derived, 1, -2);
+    /* coverity[leaked_storage] */
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
     ASSERT_TRUE(NULL == derived);
 

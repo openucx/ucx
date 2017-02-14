@@ -130,7 +130,8 @@ static inline ucp_md_lane_map_t ucp_ep_md_map_expand(ucp_md_map_t md_map)
  * mask for each possible lane). The first set bit in the 'and' product represents
  * the first matching lane and its md_index.
  */
-#define UCP_EP_RESOLVE_RKEY(_ep, _rkey, _name, _config, _lane, _uct_rkey) \
+#define UCP_EP_RESOLVE_RKEY(_ep, _rkey, _name, _config, _lane, _uct_rkey, \
+                _err_action) \
     { \
         ucp_md_lane_map_t ep_lane_map, rkey_md_map; \
         ucp_rsc_index_t dst_md_index, rkey_index; \
@@ -142,7 +143,7 @@ static inline ucp_md_lane_map_t ucp_ep_md_map_expand(ucp_md_map_t md_map)
         \
         if (ENABLE_PARAMS_CHECK && !(ep_lane_map & rkey_md_map)) { \
             ucs_error("Remote memory is unreachable"); \
-            return UCS_ERR_UNREACHABLE; \
+            _err_action; \
         } \
         \
         /* Find the first lane which supports one of the remote md's in the rkey*/ \
@@ -153,20 +154,21 @@ static inline ucp_md_lane_map_t ucp_ep_md_map_expand(ucp_md_map_t md_map)
         _uct_rkey    = (_rkey)->uct[rkey_index].rkey; \
     }
 
-#define UCP_EP_RESOLVE_RKEY_RMA(_ep, _rkey, _lane, _uct_rkey, _rma_config) \
+#define UCP_EP_RESOLVE_RKEY_RMA(_ep, _rkey, _lane, _uct_rkey, _rma_config, \
+                                _err_action) \
     { \
         ucp_ep_config_t *config; \
         \
-        UCP_EP_RESOLVE_RKEY(_ep, _rkey, rma, config, _lane, _uct_rkey); \
+        UCP_EP_RESOLVE_RKEY(_ep, _rkey, rma, config, _lane, _uct_rkey, _err_action); \
         _rma_config  = &config->rma[(_lane)]; \
     }
 
-#define UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, _lane, _uct_rkey) \
+#define UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, _lane, _uct_rkey, _err_action) \
     { \
         ucp_ep_config_t *config; \
         ucp_lane_index_t amo_index; \
         \
-        UCP_EP_RESOLVE_RKEY(_ep, _rkey, amo, config, amo_index, _uct_rkey); \
+        UCP_EP_RESOLVE_RKEY(_ep, _rkey, amo, config, amo_index, _uct_rkey, _err_action); \
         _lane        = config->key.amo_lanes[amo_index]; \
     }
 

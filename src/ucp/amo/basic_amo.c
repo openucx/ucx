@@ -28,7 +28,7 @@
         comp.count = 2; \
         \
         for (;;) { \
-            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey); \
+            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey, goto err_unreach); \
             status = UCS_PROFILE_CALL(_uct_func, \
                                       (_ep)->uct_eps[lane], UCS_PP_TUPLE_BREAK _params, \
                                       _remote_addr, uct_rkey, _result, &comp); \
@@ -49,6 +49,9 @@
     out: \
         UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
         return UCS_OK; \
+    err_unreach: \
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
+        return UCS_ERR_UNREACHABLE; \
     }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_add32, (ep, add, remote_addr, rkey),

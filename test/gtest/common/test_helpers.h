@@ -88,6 +88,11 @@ static std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
 
 std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec);
 
+static inline int rand() {
+    /* coverity[dont_call] */
+    return ::rand();
+}
+
 template <typename OutputIterator>
 static void fill_random(OutputIterator begin, OutputIterator end) {
     for (OutputIterator iter = begin; iter != end; ++iter) {
@@ -485,7 +490,7 @@ public:
         ucp_dt_iov_t _name_iov[_iovcnt]; \
         const size_t _name_iovcnt = _iovcnt; \
         const size_t _name_iov##_length = (_buffer_length > _name_iovcnt) ? \
-                                           rand() % (_buffer_length / _name_iovcnt) : 0; \
+                                           ucs::rand() % (_buffer_length / _name_iovcnt) : 0; \
         size_t _name_iov##_length_it = 0; \
         for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
             _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _name_iov##_length_it; \

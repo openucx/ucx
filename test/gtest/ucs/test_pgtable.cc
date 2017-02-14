@@ -174,8 +174,8 @@ UCS_TEST_F(test_pgtable, multi_search) {
         /* generate random regions */
         unsigned num_regions = 0;
         for (int i = 0; i < 200 / ucs::test_time_multiplier(); ++i) {
-            ucs_pgt_addr_t start = (rand() & 0x7fffffff) << 24;
-            size_t         size  = ucs_min((size_t)rand(), ULONG_MAX - start);
+            ucs_pgt_addr_t start = (ucs::rand() & 0x7fffffff) << 24;
+            size_t         size  = ucs_min((size_t)ucs::rand(), ULONG_MAX - start);
             ucs_pgt_addr_t end   = start + ucs_align_down(size, UCS_PGT_ADDR_ALIGN);
             if (count_overlap(regions, start, end)) {
                 /* Make sure regions do not overlap */
@@ -338,13 +338,13 @@ protected:
         unsigned block_idx = 0;
         for (unsigned n = 0; n < num_lookups; ++n) {
             ucs_pgt_addr_t addr = superblocks[sb_idx] + block_idx * block_size;
-            if (rand() > (RAND_MAX * hit_ratio)) {
+            if (ucs::rand() > (RAND_MAX * hit_ratio)) {
                 addr += superblock_size; /* make it miss by falling to inter-block gap */
             }
             lookups.push_back(addr);
             if (random_access) {
-                sb_idx    = rand() % num_superblocks;
-                block_idx = rand() % blocks_per_superblock;
+                sb_idx    = ucs::rand() % num_superblocks;
+                block_idx = ucs::rand() % blocks_per_superblock;
             } else {
                 block_idx = (block_idx + 1) % blocks_per_superblock;
                 if (block_idx == 0)
@@ -404,7 +404,7 @@ private:
     }
 
     ucs_pgt_addr_t random_address(ucs_pgt_addr_t start, ucs_pgt_addr_t max) {
-        ucs_pgt_addr_t r = (ucs_pgt_addr_t)rand() * (max / 1000) / RAND_MAX;
+        ucs_pgt_addr_t r = (ucs_pgt_addr_t)ucs::rand() * (max / 1000) / RAND_MAX;
         return ucs_align_up_pow2((r % (max - start)) + start,
                                  UCS_PGT_ADDR_ALIGN);
     }

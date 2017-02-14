@@ -47,6 +47,7 @@ UCS_TEST_F(test_sys, spinlock) {
     ucs_spin_lock(&lock);
     EXPECT_TRUE(ucs_spin_is_owner(&lock, self));
 
+    /* coverity[double_lock] */
     ucs_spin_lock(&lock);
     EXPECT_TRUE(ucs_spin_is_owner(&lock, self));
 

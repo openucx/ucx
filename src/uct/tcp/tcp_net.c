@@ -51,7 +51,7 @@ static ucs_status_t uct_tcp_netif_ioctl(const char *if_name, unsigned long reque
     ucs_status_t status;
     int fd, ret;
 
-    strncpy(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
+    ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
 
     status = uct_tcp_socket_create(&fd);
     if (status != UCS_OK) {

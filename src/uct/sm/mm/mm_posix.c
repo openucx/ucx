@@ -158,8 +158,8 @@ static ucs_status_t uct_posix_shm_open(const char *file_name, size_t length, int
     *shm_fd = shm_open(file_name, O_CREAT | O_RDWR | O_EXCL,
                        UCT_MM_POSIX_SHM_OPEN_MODE);
     if (*shm_fd == -1) {
-        ucs_error("Error returned from shm_open %m. File name is: %s",
-                  file_name);
+        ucs_error("Error returned from shm_open %s. File name is: %s",
+                  strerror(errno), file_name);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err;
     }
@@ -187,7 +187,8 @@ static ucs_status_t uct_posix_open(const char *file_name, size_t length, int *sh
     /* use open with the given path */
     *shm_fd = open(file_name, O_CREAT | O_RDWR | O_EXCL, UCT_MM_POSIX_SHM_OPEN_MODE);
     if (*shm_fd == -1) {
-        ucs_error("Error returned from open %m . File name is: %s", file_name);
+        ucs_error("Error returned from open %s . File name is: %s",
+                  strerror(errno), file_name);
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err;
     }
@@ -429,10 +430,11 @@ static ucs_status_t uct_posix_attach(uct_mm_id_t mmid, size_t length,
     }
 
     if (shm_fd == -1) {
-        ucs_error("Error returned from open in attach. %m. File name is: %s%s",
-                 (mmid & UCT_MM_POSIX_PROC_LINK) ? "" :
-                 (mmid & UCT_MM_POSIX_SHM_OPEN) ? "/dev/shm" : "",
-                 file_name);
+        ucs_error("Error returned from open in attach. %s. File name is: %s%s",
+                  strerror(errno),
+                  (mmid & UCT_MM_POSIX_PROC_LINK) ? "" :
+                   (mmid & UCT_MM_POSIX_SHM_OPEN) ? "/dev/shm" : "",
+                  file_name);
 
         status = UCS_ERR_SHMEM_SEGMENT;
         goto err_free_file;

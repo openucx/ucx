@@ -197,8 +197,8 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.rte_group       = NULL;
     params.rte             = &rte::test_rte;
     params.report_arg      = NULL;
-    strncpy(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
-    strncpy(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
+    ucs_strncpy_zero(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
+    ucs_strncpy_zero(params.uct.tl_name , tl_name.c_str(),  sizeof(params.uct.tl_name));
     params.uct.data_layout = test.data_layout;
     params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
     params.msg_size_cnt    = test.msglencnt;

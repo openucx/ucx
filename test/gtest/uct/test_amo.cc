@@ -16,7 +16,7 @@ uct_amo_test::uct_amo_test() {
 void uct_amo_test::init() {
     uct_test::init();
 
-    srand48(rand());
+    srand48(ucs::rand());
 
     entity *receiver = uct_test::create_entity(0);
     m_entities.push_back(receiver);
@@ -34,6 +34,7 @@ void uct_amo_test::cleanup() {
 }
 
 uint64_t uct_amo_test::rand64() {
+    /* coverity[dont_call] */
     return (mrand48() << 32) | (uint32_t)mrand48();
 }
 

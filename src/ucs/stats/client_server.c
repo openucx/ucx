@@ -522,7 +522,8 @@ static void* ucs_stats_server_thread_func(void *arg)
         recv_len = recvfrom(server->sockfd, recv_buf, UCS_STATS_MSG_FRAG_SIZE, 0,
                             (struct sockaddr*)&recv_addr, &recv_addr_len);
         if (recv_len < 0) {
-            ucs_error("recvfrom() failed: %m (return value: %ld)", recv_len);
+            ucs_error("recvfrom() failed: %s (return value: %ld)", strerror(errno),
+                      recv_len);
             break;
         } else if (recv_len == 0) {
             ucs_debug("Empty receive - ignoring");
@@ -535,6 +536,7 @@ static void* ucs_stats_server_thread_func(void *arg)
         }
 
         /* Update with new data */
+        /* coverity[tainted_data] */
         status = ucs_stats_server_update_context(server, &recv_addr, (void*)recv_buf, recv_len);
         if (status != UCS_OK) {
             break;

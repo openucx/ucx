@@ -279,7 +279,8 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     self->qp = ibv_exp_create_qp(uct_ib_iface_md(&self->super)->pd, &qp_init_attr);
 #endif
     if (self->qp == NULL) {
-        ucs_error("Failed to create qp: %m [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",
+        ucs_error("Failed to create qp: %s [inline: %u rsge: %u ssge: %u rwr: %u swr: %u]",
+                  strerror(errno),
                   qp_init_attr.cap.max_inline_data, qp_init_attr.cap.max_recv_sge,
                   qp_init_attr.cap.max_send_sge, qp_init_attr.cap.max_recv_wr,
                   qp_init_attr.cap.max_send_wr);

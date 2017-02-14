@@ -24,12 +24,12 @@
     typeof(_wr) iterator = (_wr); \
     while (iterator) { \
         if _check(iterator) { \
-            size_t length = 0; \
+            size_t _length = 0; \
             int sge_index; \
             for (sge_index = 0; sge_index < iterator->num_sge; sge_index++) { \
-                length += iterator->sg_list[sge_index].length; \
+                _length += iterator->sg_list[sge_index].length; \
             } \
-            UCS_INSTRUMENT_RECORD(_type, _name, iterator->wr_id, length); \
+            UCS_INSTRUMENT_RECORD(_type, _name, iterator->wr_id, _length); \
         } \
         iterator = iterator->next; \
     } \

@@ -174,9 +174,9 @@ fail:
 int malloc_hooks_run(void *dl)
 {
     ucs_status_t status;
-    void *ptr_malloc_core;
-    void *ptr_malloc_mmap;
-    void *ptr_direct_mmap;
+    void *ptr_malloc_core = NULL;
+    void *ptr_malloc_mmap = NULL;
+    void *ptr_direct_mmap = MAP_FAILED;
     void *dl_test;
     const size_t size = 1024 * 1024;
     const char *lib_path = UCS_PP_MAKE_STRING(TEST_LIB_DIR) "/" "libtest_memhooks.so";
@@ -219,6 +219,7 @@ int malloc_hooks_run(void *dl)
     /* Release indirectly */
     total_unmapped = 0;
     free(ptr_malloc_mmap);
+    ptr_malloc_mmap = NULL;
     malloc_trim(0);
     CHKERR_JUMP(total_unmapped == 0, "No callback for munmap from malloc",
                 fail_close_ucm);
@@ -237,6 +238,7 @@ int malloc_hooks_run(void *dl)
                 fail_close_all);
     printf("After another mmap from dynamic lib: mapped=%zu\n", total_mapped);
     munmap(ptr_direct_mmap, size);
+    ptr_direct_mmap = MAP_FAILED;
 
     /*
      * Test closing UCM.
@@ -247,6 +249,7 @@ int malloc_hooks_run(void *dl)
     dlclose(dl);
     dlclose(dl_test);
     free(ptr_malloc_core); /* This should still work */
+    ptr_malloc_core = NULL;
     CHKERR_JUMP(total_unmapped == 0, "No callback for munmap from malloc", fail);
     printf("After core malloc free: unmapped=%zu\n", total_unmapped);
 
@@ -254,11 +257,15 @@ int malloc_hooks_run(void *dl)
 
 fail_close_all:
     dlclose(dl_test);
-
 fail_close_ucm:
     dlclose(dl);
-
 fail:
+    free(ptr_malloc_mmap);
+    free(ptr_malloc_core);
+    if (ptr_direct_mmap != MAP_FAILED) {
+        munmap(ptr_direct_mmap, size);
+    }
+
     return  -1;
 }
 

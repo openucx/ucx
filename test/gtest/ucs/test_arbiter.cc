@@ -86,12 +86,12 @@ protected:
         advance_expected_group();
 
         /* Sometimes we just move to the next group */
-        if ((rand() % 5) == 0) {
+        if ((ucs::rand() % 5) == 0) {
             return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
         }
 
         /* Sometimes we want to detach the whole group */
-        if ((rand() % 10) == 0) {
+        if ((ucs::rand() % 10) == 0) {
             m_empty_groups.insert(e->group_idx);
             m_detached_groups.insert(e->group_idx);
             return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
@@ -251,7 +251,7 @@ UCS_TEST_F(test_arbiter, multiple_dispatch) {
     for (unsigned i = 0; i < m_num_groups; ++i) {
         ucs_arbiter_group_init(&groups[i]);
 
-        unsigned num_elems = rand() % 9;
+        unsigned num_elems = ucs::rand() % 9;
 
         for (unsigned j = 0; j < num_elems; ++j) {
             arb_elem *e = new arb_elem;

@@ -57,7 +57,7 @@ ucp_rma_get_is_zcopy(ucp_ep_rma_config_t *rma_config, size_t length)
  */
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_rma_request_advance(ucp_request_t *req, size_t frag_length, 
+ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
                         ucs_status_t status)
 {
     if (ucs_likely((status == UCS_OK) || (status == UCS_INPROGRESS))) {
@@ -262,7 +262,8 @@ static ucs_status_t ucp_progress_get_nbi(uct_pending_req_t *self)
     int is_zcopy;
 
     do {
-        UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+        UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                                return UCS_ERR_UNREACHABLE);
         is_zcopy = ucp_rma_get_is_zcopy(rma_config, req->send.length);
     } while (ucp_request_rma_lane_switch(req, lane, is_zcopy) == UCS_ERR_BUSY);
 
@@ -281,7 +282,8 @@ static ucs_status_t ucp_progress_put_nbi(uct_pending_req_t *self)
     int is_zcopy;
 
     do {
-        UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+        UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                                return UCS_ERR_UNREACHABLE);
         is_zcopy = ucp_rma_put_is_zcopy(rma_config, req->send.length);
     } while (ucp_request_rma_lane_switch(req, lane, is_zcopy) == UCS_ERR_BUSY);
 
@@ -321,7 +323,8 @@ ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote
         } else {
             ucp_worker_progress(ep->worker);
             do {
-                UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+                UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                                        return UCS_ERR_UNREACHABLE);
             } while (ucp_request_rma_lane_switch(&req, lane, zcopy) == UCS_ERR_BUSY);
         }
     }
@@ -383,7 +386,8 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                            status = UCS_ERR_UNREACHABLE; goto out);
 
     /* Fast path for a single short message */
     if (length <= rma_config->max_put_short) {
@@ -414,7 +418,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                            status = UCS_ERR_UNREACHABLE; goto out);
 
     if (length <= rma_config->max_put_short) {
         do {
@@ -428,7 +433,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
                 goto out;
             }
             ucp_worker_progress(ep->worker);
-            UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+            UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                                    status = UCS_ERR_UNREACHABLE; goto out);
         } while(1);
     }
 
@@ -452,13 +458,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                            status = UCS_ERR_UNREACHABLE; goto out);
 
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
                               rma_config, lane, uct_rkey, 
                               ucp_progress_get_inner,
                               ucp_rma_get_is_zcopy(rma_config, length));
 
+out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }
@@ -473,13 +481,15 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
 
     UCP_RMA_CHECK_PARAMS(buffer, length);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config);
+    UCP_EP_RESOLVE_RKEY_RMA(ep, rkey, lane, uct_rkey, rma_config,
+                            status = UCS_ERR_UNREACHABLE; goto out);
 
     status = ucp_rma_nbi(ep, buffer, length, remote_addr, rkey, 
                          rma_config, lane, uct_rkey, 
                          ucp_progress_get_inner,
                          ucp_rma_get_is_zcopy(rma_config, length));
 
+out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }

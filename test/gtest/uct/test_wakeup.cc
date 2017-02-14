@@ -60,7 +60,7 @@ UCS_TEST_P(test_uct_wakeup, am)
     uint64_t send_data   = 0xdeadbeef;
     uint64_t test_ib_hdr = 0xbeef;
     recv_desc_t *recv_buffer;
-    uct_wakeup_h wakeup_handle;
+    ucs::handle<uct_wakeup_h> wakeup_handle;
     struct pollfd wakeup_fd;
     ucs_status_t status;
 
@@ -75,8 +75,9 @@ UCS_TEST_P(test_uct_wakeup, am)
                              UCT_AM_CB_FLAG_SYNC);
 
     /* create receiver wakeup */
-    ASSERT_EQ(uct_wakeup_open(m_e2->iface(), UCT_WAKEUP_RX_SIGNALED_AM,
-              &wakeup_handle), UCS_OK);
+    UCS_TEST_CREATE_HANDLE(uct_wakeup_h, wakeup_handle, uct_wakeup_close,
+                           uct_wakeup_open, m_e2->iface(), UCT_WAKEUP_RX_SIGNALED_AM);
+
     ASSERT_EQ(uct_wakeup_efd_get(wakeup_handle, &wakeup_fd.fd), UCS_OK);
     wakeup_fd.events = POLLIN;
     EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
@@ -106,7 +107,6 @@ UCS_TEST_P(test_uct_wakeup, am)
     ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
     EXPECT_EQ(uct_wakeup_wait(wakeup_handle), UCS_OK);
 
-    uct_wakeup_close(wakeup_handle);
     free(recv_buffer);
 }
 

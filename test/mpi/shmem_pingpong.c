@@ -73,6 +73,7 @@ int main(int argc, char **argv)
 
     shared_buffer = shmalloc(sizeof(long));
 
+    /* coverity[tainted_data] */
     for (i = 0; i < iters; ++i) {
         memset(shared_buffer, 0, sizeof(long));
         shmem_barrier_all();

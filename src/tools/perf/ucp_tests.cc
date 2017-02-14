@@ -112,6 +112,7 @@ public:
     {
         void *request;
 
+        /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
             request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
@@ -166,12 +167,14 @@ public:
         volatile uint8_t *ptr;
         void *request;
 
+        /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
             request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, 0,
                                       (ucp_tag_recv_callback_t)ucs_empty_function);
             return wait(request, false);
         case UCX_PERF_CMD_PUT:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
                 ptr = (volatile uint8_t*)buffer + length - 1;
@@ -189,6 +192,7 @@ public:
         case UCX_PERF_CMD_FADD:
         case UCX_PERF_CMD_SWAP:
         case UCX_PERF_CMD_CSWAP:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 progress_responder();
@@ -323,6 +327,7 @@ public:
 
     ucs_status_t run()
     {
+        /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
             return run_pingpong();

@@ -1233,12 +1233,12 @@ static struct {
     [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup, ucp_perf_test_dispatch}
 };
 
-static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
+static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                  ucx_perf_result_t* result);
 
 ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
 {
-    ucx_perf_context_t perf;
+    ucx_perf_context_t *perf;
     ucs_status_t status;
 
     if (params->command == UCX_PERF_CMD_LAST) {
@@ -1253,38 +1253,46 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
         goto out;
     }
 
-    if (UCS_THREAD_MODE_SINGLE != params->thread_mode) {
-        return ucx_perf_thread_spawn(params, result);
-    }
-        
-    ucx_perf_test_reset(&perf, params);
-
-    status = ucx_perf_funcs[params->api].setup(&perf, params);
-    if (status != UCS_OK) {
+    perf = malloc(sizeof(*perf));
+    if (perf == NULL) {
+        status = UCS_ERR_NO_MEMORY;
         goto out;
     }
 
-    if (params->warmup_iter > 0) {
-        ucx_perf_set_warmup(&perf, params);
-        status = ucx_perf_funcs[params->api].run(&perf);
-        if (status != UCS_OK) {
-            goto out_cleanup;
-        }
+    ucx_perf_test_reset(perf, params);
 
-        rte_call(&perf, barrier);
-        ucx_perf_test_reset(&perf, params);
+    status = ucx_perf_funcs[params->api].setup(perf, params);
+    if (status != UCS_OK) {
+        goto out_free;
     }
 
-    /* Run test */
-    status = ucx_perf_funcs[params->api].run(&perf);
-    rte_call(&perf, barrier);
-    if (status == UCS_OK) {
-        ucx_perf_calc_result(&perf, result);
-        rte_call(&perf, report, result, perf.params.report_arg, 1);
+    if (UCS_THREAD_MODE_SINGLE == params->thread_mode) {
+        if (params->warmup_iter > 0) {
+            ucx_perf_set_warmup(perf, params);
+            status = ucx_perf_funcs[params->api].run(perf);
+            if (status != UCS_OK) {
+                goto out_cleanup;
+            }
+
+            rte_call(perf, barrier);
+            ucx_perf_test_reset(perf, params);
+        }
+
+        /* Run test */
+        status = ucx_perf_funcs[params->api].run(perf);
+        rte_call(perf, barrier);
+        if (status == UCS_OK) {
+            ucx_perf_calc_result(perf, result);
+            rte_call(perf, report, result, perf->params.report_arg, 1);
+        }
+    } else {
+        status = ucx_perf_thread_spawn(perf, result);
     }
 
 out_cleanup:
-    ucx_perf_funcs[params->api].cleanup(&perf);
+    ucx_perf_funcs[params->api].cleanup(perf);
+out_free:
+    free(perf);
 out:
     return status;
 }
@@ -1299,16 +1307,16 @@ typedef struct {
     int                 ntid;
     ucs_status_t*       statuses;
     ucx_perf_context_t  perf;
-    ucx_perf_params_t   params;
     ucx_perf_result_t   result;
 } ucx_perf_thread_context_t;
 
 
-static void* ucx_perf_thread_run_test(void* arg) {
+static void* ucx_perf_thread_run_test(void* arg)
+{
     ucx_perf_thread_context_t* tctx = (ucx_perf_thread_context_t*) arg;
-    ucx_perf_params_t* params = &tctx->params;
     ucx_perf_result_t* result = &tctx->result;
     ucx_perf_context_t* perf = &tctx->perf;
+    ucx_perf_params_t* params = &perf->params;
     ucs_status_t* statuses = tctx->statuses;
     int tid = tctx->tid;
     int i;
@@ -1347,26 +1355,24 @@ out:
     return &statuses[tid];
 }
 
-static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
-                                 ucx_perf_result_t* result) {
-    ucx_perf_context_t perf;
-    ucs_status_t status = UCS_OK;
+static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
+                                 ucx_perf_result_t* result)
+{
+    ucx_perf_thread_context_t* tctx;
+    ucs_status_t* statuses;
     size_t message_size;
+    ucs_status_t status;
     int ti, nti;
 
-    message_size = ucx_perf_get_message_size(params);
-    omp_set_num_threads(params->thread_count);
-    nti = params->thread_count;
+    message_size = ucx_perf_get_message_size(&perf->params);
+    omp_set_num_threads(perf->params.thread_count);
+    nti = perf->params.thread_count;
 
-    ucx_perf_thread_context_t* tctx =
-        calloc(nti, sizeof(ucx_perf_thread_context_t));
-    ucs_status_t* statuses =
-        calloc(nti, sizeof(ucs_status_t));
-
-    ucx_perf_test_reset(&perf, params);
-    status = ucx_perf_funcs[params->api].setup(&perf, params);
-    if (UCS_OK != status) {
-        goto out_cleanup;
+    tctx     = calloc(nti, sizeof(ucx_perf_thread_context_t));
+    statuses = calloc(nti, sizeof(ucs_status_t));
+    if ((tctx == NULL) || (statuses == NULL)) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_free;
     }
 
 #pragma omp parallel private(ti)
@@ -1375,31 +1381,30 @@ static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
     tctx[ti].tid = ti;
     tctx[ti].ntid = nti;
     tctx[ti].statuses = statuses;
-    tctx[ti].params = *params;
-    tctx[ti].perf = perf;
+    tctx[ti].perf = *perf;
     /* Doctor the src and dst buffers to make them thread specific */
     tctx[ti].perf.send_buffer += ti * message_size;
     tctx[ti].perf.recv_buffer += ti * message_size;
     tctx[ti].perf.offset = ti * message_size;
     ucx_perf_thread_run_test((void*)&tctx[ti]);
 }
+
+    status = UCS_OK;
     for (ti = 0; ti < nti; ti++) {
         if (UCS_OK != statuses[ti]) {
-            ucs_error("Thread %d failed to run test: %s", tctx[ti].tid, ucs_status_string(statuses[ti]));
+            ucs_error("Thread %d failed to run test: %s", tctx[ti].tid,
+                      ucs_status_string(statuses[ti]));
             status = statuses[ti];
         }
     }
 
-    ucx_perf_funcs[params->api].cleanup(&perf);
-
-out_cleanup:
+out_free:
     free(statuses);
     free(tctx);
-
     return status;
 }
 #else
-static int ucx_perf_thread_spawn(ucx_perf_params_t* params,
+static int ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                  ucx_perf_result_t* result) {
     ucs_error("Invalid test parameter (thread mode requested without OpenMP capabilities)");
     return UCS_ERR_INVALID_PARAM;

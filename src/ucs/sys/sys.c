@@ -351,6 +351,12 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
     va_end(ap);
 }
 
+void ucs_strncpy_zero(char *dest, const char *src, size_t max)
+{
+    strncpy(dest, src, max - 1);
+    dest[max - 1] = '\0';
+}
+
 void ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
     static const char * suffixes[] = {"", "k", "m", "g", "t"};
@@ -498,7 +504,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     struct shminfo shminfo, *shminfo_ptr;
     size_t alloc_size;
     void *ptr;
-    int ret;
+    int ret, err;
 
     alloc_size = ucs_memtrack_adjust_alloc_size(*size);
 
@@ -517,11 +523,12 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
         case ENOSPC:
         case EPERM:
             if (!(flags & SHM_HUGETLB)) {
+                err = errno;
                 shminfo_ptr = &shminfo;
                 if ((shmctl(0, IPC_INFO, (struct shmid_ds *) shminfo_ptr)) > -1) {
-                    ucs_error("shmget failed: %m. (size=%zu). The max number of shared memory segments in the system is = %ld. "
+                    ucs_error("shmget failed: %s. (size=%zu). The max number of shared memory segments in the system is = %ld. "
                               "Please try to increase this value through /proc/sys/kernel/shmmni",
-                              alloc_size, shminfo.shmmni);
+                              strerror(err), alloc_size, shminfo.shmmni);
                 }
             }
 
