@@ -16,9 +16,10 @@
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
+ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                      ucp_datatype_t datatype, ucp_tag_t tag, uint64_t tag_mask,
-                     ucp_request_t *req, ucp_tag_recv_info_t *info, unsigned *save_rreq)
+                     ucp_request_t *req, ucp_tag_recv_info_t *info,
+                     ucp_tag_recv_callback_t cb, unsigned *save_rreq)
 {
     ucp_context_h context = worker->context;
     ucp_recv_desc_t *rdesc;
@@ -49,7 +50,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
             ucs_queue_del_iter(&context->tag.unexpected, iter);
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
-                                               buffer, count, datatype,
+                                               buffer, buffer_size, datatype,
                                                &req->recv.state, info);
                 ucs_trace_req("release receive descriptor %p", rdesc);
                 uct_iface_release_am_desc(rdesc);
@@ -57,10 +58,11 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t count,
                     return status;
                 }
             } else if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
-                *save_rreq = 0;
+                *save_rreq         = 0;
                 req->recv.buffer   = buffer;
-                req->recv.count    = count;
+                req->recv.length   = buffer_size;
                 req->recv.datatype = datatype;
+                req->recv.cb       = cb;
                 ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
                 uct_iface_release_am_desc(rdesc);
                 UCP_WORKER_STAT_RNDV(worker, UNEXP);
@@ -138,30 +140,31 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
+ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t buffer_size,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                    ucp_request_t *req)
+                    ucp_request_t *req, ucp_tag_recv_callback_t cb)
 {
     ucs_status_t status;
     unsigned save_rreq = 1;
 
-    ucs_trace_req("recv_nb%c buffer %p count %zu tag %"PRIx64"/%"PRIx64,
+    ucs_trace_req("recv_nb%c buffer %p buffer_size %zu tag %"PRIx64"/%"PRIx64,
                   (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
-                  buffer, count, tag, tag_mask);
+                  buffer, buffer_size, tag, tag_mask);
 
     /* First, search in unexpected list */
-    status = ucp_tag_search_unexp(worker, buffer, count, datatype, tag,
-                                  tag_mask, req, &req->recv.info, &save_rreq);
+    status = ucp_tag_search_unexp(worker, buffer, buffer_size, datatype, tag,
+                                  tag_mask, req, &req->recv.info, cb, &save_rreq);
     if (status != UCS_INPROGRESS) {
         return status;
     } else if (save_rreq) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
         req->recv.buffer   = buffer;
-        req->recv.count    = count;
+        req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
         req->recv.tag      = tag;
         req->recv.tag_mask = tag_mask;
+        req->recv.cb       = cb;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
         ucs_trace_req("recv_nb%c returning expected request %p (%p)",
                       (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
@@ -177,6 +180,7 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
 {
     ucp_request_t  *req = (ucp_request_t *)request - 1;
     ucs_status_t status;
+    size_t buffer_size;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
@@ -184,12 +188,13 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
     ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
                               UCP_REQUEST_FLAG_EXTERNAL);
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr", req,
-                          ucp_dt_length(datatype, count, buffer, &req->recv.state));
+    buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
 
-    req->recv.cb  = NULL;
-    status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
-                                 tag_mask, req);
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nbr", req,
+                          buffer_size);
+
+    status = ucp_tag_recv_common(worker, buffer, buffer_size, datatype, tag,
+                                 tag_mask, req, NULL);
 
     if (status != UCS_INPROGRESS) {
         ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nbr");
@@ -208,6 +213,7 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
     ucp_request_t *req;
     ucs_status_t status;
     ucs_status_ptr_t ret;
+    size_t buffer_size;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
@@ -218,13 +224,13 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
         goto out;
     }
 
+    buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
+
     UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_recv_nb", req,
-                          ucp_dt_length(datatype, count, buffer, &req->recv.state));
+                          buffer_size);
 
-    req->recv.cb = cb;
-
-    status = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
-                                 tag_mask, req);
+    status = ucp_tag_recv_common(worker, buffer, buffer_size, datatype, tag,
+                                 tag_mask, req, cb);
 
     if (status != UCS_INPROGRESS) {
         cb(req + 1, status, &req->recv.info);
@@ -249,6 +255,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
     ucp_tag_t tag;
     unsigned save_rreq = 1;
     ucs_status_ptr_t ret;
+    size_t buffer_size;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
@@ -262,23 +269,24 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         goto out;
     }
 
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb", req,
-                          ucp_dt_length(datatype, count, buffer, &req->recv.state));
+    buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
 
-    req->recv.cb       = cb;
+    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX, "ucp_tag_msg_recv_nb", req,
+                          buffer_size);
 
     /* First, handle the first packet that was already matched */
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
         tag = ((ucp_tag_hdr_t*)(rdesc + 1))->tag;
         status = ucp_eager_unexp_match(worker, rdesc, tag, rdesc->flags,
-                                       buffer, count, datatype, &req->recv.state,
-                                       &req->recv.info);
+                                       buffer, buffer_size, datatype,
+                                       &req->recv.state, &req->recv.info);
         ucs_trace_req("release receive descriptor %p", rdesc);
         uct_iface_release_am_desc(rdesc);
     } else if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
         req->recv.buffer   = buffer;
-        req->recv.count    = count;
+        req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
+        req->recv.cb       = cb;
         ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
         uct_iface_release_am_desc(rdesc);
         status = UCS_INPROGRESS;
@@ -294,8 +302,8 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
      * to receive additional fragments.
      */
     if (status == UCS_INPROGRESS) {
-        status = ucp_tag_search_unexp(worker, buffer, count, datatype, 0,
-                                      -1, req, &req->recv.info, &save_rreq);
+        status = ucp_tag_search_unexp(worker, buffer, buffer_size, datatype, 0,
+                                      -1, req, &req->recv.info, cb, &save_rreq);
     }
 
     if (status != UCS_INPROGRESS) {
@@ -303,13 +311,15 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
         ucp_tag_recv_request_completed(req, status, &req->recv.info,
                                        "msg_recv_nb");
     } else if (save_rreq) {
-        ucs_trace_req("msg_recv_nb returning inprogress request %p (%p)", req, req + 1);
+        ucs_trace_req("msg_recv_nb returning inprogress request %p (%p)",
+                      req, req + 1);
         /* For eager - need to put the recv_req in expected since more packets
          * will follow. For rndv - don't need to keep the recv_req in the expected queue
          * as the match to the RTS already happened. */
         req->recv.buffer   = buffer;
-        req->recv.count    = count;
+        req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
+        req->recv.cb       = cb;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
     }
 

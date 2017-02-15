@@ -64,58 +64,46 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_process_recv(void *buffer, size_t count, ucp_datatype_t datatype,
+ucp_tag_process_recv(void *buffer, size_t buffer_size, ucp_datatype_t datatype,
                      ucp_frag_state_t *state, void *recv_data, size_t recv_length,
                      int last)
 {
     ucp_dt_generic_t *dt_gen;
     size_t offset = state->offset;
-    size_t buffer_size;
     ucs_status_t status;
+
+    if (ucs_unlikely((recv_length + offset) > buffer_size)) {
+        ucs_trace_req("message truncated: recv_length %zu offset %zu buffer_size %zu",
+                      recv_length, offset, buffer_size);
+        if (UCP_DT_IS_GENERIC(datatype) && last) {
+            ucp_dt_generic(datatype)->ops.finish(state->dt.generic.state);
+        }
+        return UCS_ERR_MESSAGE_TRUNCATED;
+    }
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        buffer_size = ucp_contig_dt_length(datatype, count);
-        if (ucs_unlikely(recv_length + offset > buffer_size)) {
-            ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu",
-                      recv_length, offset, buffer_size);
-            return UCS_ERR_MESSAGE_TRUNCATED;
-        }
         memcpy(buffer + offset, recv_data, recv_length);
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:
-        buffer_size = ucp_dt_iov_length(buffer, count);
-        if (ucs_unlikely(recv_length + offset > buffer_size)) {
-            ucs_debug("message truncated: recv_length %zu offset %zu buffer_size %zu"
-                      " iovcnt %zu iovcnt_offset %zu",
-                      recv_length, offset, buffer_size, count,
-                      state->dt.iov.iovcnt_offset);
-            return UCS_ERR_MESSAGE_TRUNCATED;
-        }
-        ucp_dt_iov_scatter(buffer, count, recv_data, recv_length,
+        ucp_dt_iov_scatter(buffer, state->dt.iov.iovcnt, recv_data, recv_length,
                            &state->dt.iov.iov_offset,
                            &state->dt.iov.iovcnt_offset);
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:
         dt_gen = ucp_dt_generic(datatype);
-
-        buffer_size = dt_gen->ops.packed_size(state->dt.generic.state);
-        if (ucs_unlikely(recv_length + offset > buffer_size)) {
-            status = UCS_ERR_MESSAGE_TRUNCATED;
-        } else {
-            status = dt_gen->ops.unpack(state->dt.generic.state, offset, recv_data, recv_length);
-        }
-
+        status = dt_gen->ops.unpack(state->dt.generic.state, offset, recv_data,
+                                    recv_length);
         if (last) {
             dt_gen->ops.finish(state->dt.generic.state);
         }
         return status;
 
     default:
-        ucs_bug("unexpected datatype");
-        return UCS_OK;
+        ucs_error("unexpected datatype=%lx", datatype);
+        return UCS_ERR_INVALID_PARAM;
     }
 }
 

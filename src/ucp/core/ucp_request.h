@@ -138,7 +138,7 @@ struct ucp_request {
             ucs_queue_elem_t      queue;    /* Expected queue element */
             void                  *buffer;  /* Buffer to receive data to */
             ucp_datatype_t        datatype; /* Receive type */
-            size_t                count;    /* Receive count */
+            size_t                length;   /* Total length, in bytes */
             ucp_tag_t             tag;      /* Expected tag */
             ucp_tag_t             tag_mask; /* Expected tag mask */
             ucp_tag_recv_callback_t cb;     /* Completion callback */
