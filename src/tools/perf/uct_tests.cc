@@ -124,7 +124,14 @@ public:
         uct_worker_progress(m_perf.uct.worker);
     }
 
-    static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)
+    void UCS_F_ALWAYS_INLINE wait_for_window(bool send_window)
+    {
+        while (send_window && (outstanding() >= m_max_outstanding)) {
+            progress_requestor();
+        }
+    }
+
+   static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)
     {
         ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
         *(psn_t*)arg = *(psn_t*)data;
@@ -333,13 +340,6 @@ public:
 
         uct_perf_iface_flush_b(&m_perf);
         return UCS_OK;
-    }
-
-    void wait_for_window(bool send_window)
-    {
-        while (send_window && (outstanding() >= m_max_outstanding)) {
-            progress_requestor();
-        }
     }
 
     ucs_status_t run_stream_req_uni(bool flow_control, bool send_window,
