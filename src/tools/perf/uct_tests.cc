@@ -124,7 +124,14 @@ public:
         uct_worker_progress(m_perf.uct.worker);
     }
 
-    static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)
+    void UCS_F_ALWAYS_INLINE wait_for_window(bool send_window)
+    {
+        while (send_window && (outstanding() >= m_max_outstanding)) {
+            progress_requestor();
+        }
+    }
+
+   static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)
     {
         ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
         *(psn_t*)arg = *(psn_t*)data;
@@ -389,13 +396,10 @@ public:
                         progress_responder();
                     }
                 }
-                if (send_window) {
-                    /* Wait until we have enough sends completed, then take
-                     * the next completion handle in the window. */
-                    while (outstanding() >= m_max_outstanding) {
-                        progress_requestor();
-                    }
-                }
+
+                /* Wait until we have enough sends completed, then take
+                 * the next completion handle in the window. */
+                wait_for_window(send_window);
 
                 if (flow_control) {
                     send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
@@ -412,9 +416,7 @@ public:
             if (!flow_control) {
                 /* Send "sentinel" value */
                 if (direction_to_responder) {
-                    while (outstanding() >= m_max_outstanding) {
-                        progress_requestor();
-                    }
+                    wait_for_window(send_window);
                     *(psn_t*)buffer = 2;
                     send_b(ep, 2, send_sn, buffer, length, remote_addr, rkey,
                            &m_completion);
@@ -440,6 +442,7 @@ public:
                     progress_responder();
                     if (UCS_CIRCULAR_COMPARE8(sn, >, (psn_t)(send_sn + (fc_window / 2)))) {
                         /* Send ACK every half-window */
+                        wait_for_window(send_window);
                         send_b(ep, sn, send_sn, buffer, length, remote_addr,
                                rkey, &m_completion);
                         send_sn = sn;
@@ -452,6 +455,7 @@ public:
 
                 /* Send ACK for last packet */
                 if (UCS_CIRCULAR_COMPARE8(*recv_sn, >, send_sn)) {
+                    wait_for_window(send_window);
                     send_b(ep, *recv_sn, send_sn, buffer, length, remote_addr,
                            rkey, &m_completion);
                 }
@@ -462,6 +466,7 @@ public:
                     progress_responder();
                     if (!direction_to_responder) {
                         if (ucs_get_time() > poll_time + ucs_time_from_msec(1.0)) {
+                            wait_for_window(send_window);
                             send_b(ep, 0, 0, buffer, length, remote_addr, rkey,
                                    &m_completion);
                             poll_time = ucs_get_time();
