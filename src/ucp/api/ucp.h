@@ -246,11 +246,14 @@ enum ucp_dt_type {
  * ucp_mem_map() function.
  */
 enum {
-    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0) /**< Complete the mapping faster, possibly by
-                                           not populating the pages in the mapping
-                                           up-front, and mapping them later when
-                                           they are accessed by communication
-                                           routines. */
+    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0), /**< Complete the mapping faster, possibly by
+                                            not populating the pages in the mapping
+                                            up-front, and mapping them later when
+                                            they are accessed by communication
+                                            routines. */
+    UCP_MEM_MAP_FIXED    = UCS_BIT(1)  /**< Don't interpret addr as a hint:
+                                            place the mapping at exactly that
+                                            address. See man mmap for details */
 };
 
 

@@ -142,12 +142,15 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
          * name specified in the configuration.
          */
         num_mds = 0;
-        if (method == UCT_ALLOC_METHOD_MD) {
+        if ((method == UCT_ALLOC_METHOD_MD) && !(uct_flags & UCT_MD_MEM_FLAG_FIXED)) {
             for (md_index = 0; md_index < context->num_mds; ++md_index) {
                 if (ucp_is_md_selected_by_config(context, method_index, md_index)) {
                     mds[num_mds++] = context->tl_mds[md_index].md;
                 }
             }
+        } else if ((method == UCT_ALLOC_METHOD_MMAP) &&
+                   (uct_flags & UCT_MD_MEM_FLAG_FIXED)) {
+            mem.address = memh->address;
         }
 
         status = uct_mem_alloc(length, uct_flags, &method, 1, mds, num_mds, name, &mem);
@@ -176,11 +179,28 @@ out:
 }
 
 
+static inline unsigned uct_flags(ucp_mem_map_params_t *params)
+{
+    unsigned flags = 0;
+
+    if (params && (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS)) {
+        if (params->flags & UCP_MEM_MAP_NONBLOCK) {
+            flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+        }
+
+        if (params->flags & UCP_MEM_MAP_FIXED) {
+            flags |= UCT_MD_MEM_FLAG_FIXED;
+        }
+    }
+
+    return flags;
+}
+
 ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
                          ucp_mem_h *memh_p)
 {
     ucs_status_t status;
-    unsigned uct_flags;
+    unsigned flags;
     ucp_mem_h memh;
 
     /* always acquire context lock */
@@ -209,18 +229,23 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
         goto out;
     }
 
-    uct_flags = 0;
-    if ((params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) &&
-        (params->flags & UCP_MEM_MAP_NONBLOCK)) {
-        uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
-    }
+    flags = uct_flags(params);
 
     if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS)) {
         params->address = NULL;
+
+        /* Address must be defined */
+        if (flags & UCT_MD_MEM_FLAG_FIXED) {
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
     }
 
+    memh->address      = params->address;
+    memh->length       = params->length;
+
     if (params->address == NULL) {
-        status = ucp_mem_alloc(context, params->length, uct_flags, "user allocation", memh);
+        status = ucp_mem_alloc(context, params->length, flags, "user allocation", memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
@@ -228,11 +253,9 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
         params->address = memh->address;
     } else {
         ucs_debug("registering user memory at %p length %zu", params->address, params->length);
-        memh->address      = params->address;
-        memh->length       = params->length;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
-        status = ucp_memh_reg_mds(context, memh, uct_flags, UCT_INVALID_MEM_HANDLE);
+        status = ucp_memh_reg_mds(context, memh, flags, UCT_INVALID_MEM_HANDLE);
         if (status != UCS_OK) {
             goto err_free_memh;
         }

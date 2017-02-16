@@ -32,6 +32,20 @@ const char *uct_alloc_method_names[] = {
 };
 
 
+static inline unsigned mmap_flags(unsigned uct_mmap_flags)
+{
+    unsigned mm_flags = MAP_PRIVATE | MAP_ANON;
+
+    if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
+        mm_flags |= MAP_FIXED;
+    }
+    if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
+        mm_flags |= MAP_NONBLOCK;
+    }
+
+    return mm_flags;
+}
+
 ucs_status_t uct_mem_alloc(size_t min_length, unsigned flags, uct_alloc_method_t *methods,
                            unsigned num_methods, uct_md_h *mds, unsigned num_mds,
                            const char *alloc_name, uct_allocated_memory_t *mem)
@@ -113,8 +127,8 @@ ucs_status_t uct_mem_alloc(size_t min_length, unsigned flags, uct_alloc_method_t
         case UCT_ALLOC_METHOD_MMAP:
             /* Request memory from operating system using mmap() */
             alloc_length = ucs_align_up_pow2(min_length, ucs_get_page_size());
-            address = ucs_mmap(NULL, alloc_length, PROT_READ|PROT_WRITE,
-                               MAP_PRIVATE|MAP_ANON, -1, 0 UCS_MEMTRACK_VAL);
+            address = ucs_mmap(mem->address, alloc_length, PROT_READ|PROT_WRITE,
+                               mmap_flags(flags), -1, 0 UCS_MEMTRACK_VAL);
             if (address != MAP_FAILED) {
                 goto allocated_without_md;
             }
@@ -335,4 +349,3 @@ ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,
     uct_iface_mp_priv(mp)->init_obj_cb = init_obj_cb;
     return UCS_OK;
 }
-
