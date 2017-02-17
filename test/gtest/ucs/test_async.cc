@@ -508,7 +508,11 @@ protected:
 UCS_TEST_P(test_async, timer_unset_from_handler) {
     local_timer_remove_handler lt(GetParam());
     suspend_and_poll(&lt, COUNT);
-    EXPECT_EQ(1, lt.count());
+    EXPECT_GE(lt.count(), 1);
+    EXPECT_LE(lt.count(), 5); /* timer could fire multiple times before we remove it */
+    int count = lt.count();
+    suspend_and_poll(&lt, COUNT);
+    EXPECT_EQ(count, lt.count());
 }
 
 class local_event_remove_handler : public local_event {

@@ -102,7 +102,7 @@ void test_profile::test_locations(ucs_profile_location_t *locations,
         EXPECT_EQ(std::string(basename(__FILE__)), std::string(loc->file));
         EXPECT_GE(loc->line, MIN_LINE);
         EXPECT_LE(loc->line, MAX_LINE);
-        EXPECT_LT(loc->total_time, ucs_time_from_msec(1.0) * ucs::test_time_multiplier());
+        EXPECT_LT(loc->total_time, ucs_time_from_sec(1.0) * ucs::test_time_multiplier());
         EXPECT_EQ(exp_count, locations[i].count);
         loc_names.insert(loc->name);
     }
