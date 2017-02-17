@@ -31,15 +31,15 @@ enum {
  * endpoint it also contains an auxiliary endpoint which can send wireup messages.
  */
 struct ucp_stub_ep {
-    uct_ep_t            super;         /**< Derive from uct_ep */
-    ucp_ep_h            ep;            /**< Pointer to the ucp_ep we're wiring */
-    ucs_queue_head_t    pending_q;     /**< Queue of pending operations */
-    uct_ep_h            aux_ep;        /**< Used to wireup the "real" endpoint */
-    uct_ep_h            next_ep;       /**< Next transport being wired up */
-    ucp_rsc_index_t     aux_rsc_index; /**< Index of auxiliary transport */
-    volatile uint32_t   pending_count; /**< Number of pending wireup operations */
-    volatile uint32_t   flags;         /**< Connection state flags */
-    ucs_list_link_t     list;
+    uct_ep_t                  super;         /**< Derive from uct_ep */
+    ucp_ep_h                  ep;            /**< Pointer to the ucp_ep we're wiring */
+    ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
+    uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
+    uct_ep_h                  next_ep;       /**< Next transport being wired up */
+    ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
+    volatile uint32_t         pending_count; /**< Number of pending wireup operations */
+    volatile uint32_t         flags;         /**< Connection state flags */
+    ucs_callbackq_slow_elem_t elem;          /**< Slow-path callback */
 };
 
 
@@ -75,8 +75,5 @@ void ucp_stub_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 void ucp_stub_ep_remote_connected(uct_ep_h uct_ep);
 
 int ucp_stub_ep_test(uct_ep_h uct_ep);
-
-void ucp_stub_ep_progress(ucp_stub_ep_t *stub_ep);
-
 
 #endif

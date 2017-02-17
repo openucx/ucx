@@ -499,7 +499,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->inprogress      = 0;
     worker->ep_config_max   = config_count;
     worker->ep_config_count = 0;
-    ucs_list_head_init(&worker->stub_ep_list);
 
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
@@ -862,45 +861,6 @@ ucp_request_t *ucp_worker_allocate_reply(ucp_worker_h worker, uint64_t dest_uuid
     req->flags   = 0;
     req->send.ep = ucp_worker_get_reply_ep(worker, dest_uuid);
     return req;
-}
-
-void ucp_worker_progress_stub_eps(void *arg)
-{
-    ucp_worker_h worker = arg;
-    ucp_stub_ep_t *stub_ep, *tmp;
-
-    /*
-     * We switch the endpoint in this function (instead in wireup code) since
-     * this is guaranteed to run from the main thread.
-     * Don't start using the transport before the wireup protocol finished
-     * sending ack/reply.
-     */
-    sched_yield();
-    ucs_async_check_miss(&worker->async);
-
-    UCS_ASYNC_BLOCK(&worker->async);
-    ucs_list_for_each_safe(stub_ep, tmp, &worker->stub_ep_list, list) {
-        ucp_stub_ep_progress(stub_ep);
-    }
-    UCS_ASYNC_UNBLOCK(&worker->async);
-}
-
-void ucp_worker_stub_ep_add(ucp_worker_h worker, ucp_stub_ep_t *stub_ep)
-{
-    UCS_ASYNC_BLOCK(&worker->async);
-    ucs_list_add_head(&worker->stub_ep_list, &stub_ep->list);
-    uct_worker_progress_register(worker->uct, ucp_worker_progress_stub_eps,
-                                 worker);
-    UCS_ASYNC_UNBLOCK(&worker->async);
-}
-
-void ucp_worker_stub_ep_remove(ucp_worker_h worker, ucp_stub_ep_t *stub_ep)
-{
-    UCS_ASYNC_BLOCK(&worker->async);
-    ucs_list_del(&stub_ep->list);
-    uct_worker_progress_unregister(worker->uct, ucp_worker_progress_stub_eps,
-                                   worker);
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
