@@ -516,7 +516,11 @@ UCS_TEST_F(test_datatype, ptr_array_perf) {
 
     EXPECT_LT(insert_ns, 1000.0);
     EXPECT_LT(remove_ns, 1000.0);
+#ifdef __x86_64__
     EXPECT_LT(lookup_ns, 15.0);
+#else
+    EXPECT_LT(lookup_ns, 100.0);
+#endif
 }
 
 UCS_TEST_F(test_datatype, ptr_status) {

@@ -12,9 +12,8 @@ extern "C" {
 #include <ucs/arch/cpu.h>
 }
 
-
-#define MB   pow(1024.0, -2)
-#define UCT_PERF_TEST_MULTIPLIER 2
+#define MB                        pow(1024, -2)
+#define UCT_PERF_TEST_MULTIPLIER  5
 
 class test_uct_perf : public uct_test, public test_perf {
 protected:
