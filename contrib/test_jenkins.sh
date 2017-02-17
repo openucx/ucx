@@ -6,6 +6,19 @@
 #
 # See file LICENSE for terms.
 #
+#
+# Environment variables set by Jenkins CI:
+#  - WORKSPACE         : path to work dir
+#  - BUILD_NUMBER      : jenkins build number
+#  - JOB_URL           : jenkins job url
+#  - EXECUTOR_NUMBER   : number of executor within the test machine
+#  - JENKINS_RUN_TESTS : whether to run unit tests
+#
+# Optional environment variables (could be set by job configuration):
+#  - nworkers : number of parallel executors
+#  - worker   : number of current parallel executor
+#  - COV_OPT  : command line options for Coverity static checker
+#
 
 WORKSPACE=${WORKSPACE:=$PWD}
 MAKE="make -j$(($(nproc) / 2 + 1))"
