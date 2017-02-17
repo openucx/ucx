@@ -541,7 +541,11 @@ ucs_status_t ucs_sysv_alloc(size_t *size, void **address_p, int flags, int *shmi
     }
 
     /* Attach segment */
-    ptr = shmat(*shmid, NULL, 0);
+    if (*address_p) {
+        ptr = shmat(*shmid, *address_p, SHM_REMAP);
+    } else {
+        ptr = shmat(*shmid, NULL, 0);
+    }
 
     /* Remove segment, the attachment keeps a reference to the mapping */
     /* FIXME having additional attaches to a removed segment is not portable
@@ -802,4 +806,3 @@ ucs_status_t ucs_empty_function_return_busy()
 {
     return UCS_ERR_BUSY;
 }
-
