@@ -45,7 +45,7 @@ void test_ucp_atomic::blocking_add(entity *e,  size_t max_size, void *memheap_ad
     T add, prev;
 
     prev = *(T*)memheap_addr;
-    add  = (T)rand() * (T)rand();
+    add  = (T)ucs::rand() * (T)ucs::rand();
 
     if (sizeof(T) == sizeof(uint32_t)) {
         status = ucp_atomic_add32(e->ep(), add, (uintptr_t)memheap_addr, rkey);
@@ -80,7 +80,7 @@ void test_ucp_atomic::blocking_fadd(entity *e,  size_t max_size,
     T add, prev, result;
 
     prev = *(T*)memheap_addr;
-    add  = (T)rand() * (T)rand();
+    add  = (T)ucs::rand() * (T)ucs::rand();
 
     if (sizeof(T) == sizeof(uint32_t)) {
         status = ucp_atomic_fadd32(e->ep(), add, (uintptr_t)memheap_addr, rkey,
@@ -107,7 +107,7 @@ void test_ucp_atomic::blocking_swap(entity *e,  size_t max_size, void *memheap_a
     T swap, prev, result;
 
     prev = *(T*)memheap_addr;
-    swap = (T)rand() * (T)rand();
+    swap = (T)ucs::rand() * (T)ucs::rand();
 
     if (sizeof(T) == sizeof(uint32_t)) {
         status = ucp_atomic_swap32(e->ep(), swap, (uintptr_t)memheap_addr,
@@ -134,12 +134,12 @@ void test_ucp_atomic::blocking_cswap(entity *e,  size_t max_size, void *memheap_
     T compare, swap, prev, result;
 
     prev = *(T*)memheap_addr;
-    if ((rand() % 2) == 0) {
+    if ((ucs::rand() % 2) == 0) {
         compare = prev; /* success mode */
     } else {
         compare = ~prev; /* fail mode */
     }
-    swap = (T)rand() * (T)rand();
+    swap = (T)ucs::rand() * (T)ucs::rand();
 
     if (sizeof(T) == sizeof(uint32_t)) {
         status = ucp_atomic_cswap32(e->ep(), compare, swap,
@@ -180,7 +180,7 @@ void test_ucp_atomic::nb_add(entity *e,  size_t max_size, void *memheap_addr,
     T add, prev;
 
     prev = *(T*)memheap_addr;
-    add  = (T)rand() * (T)rand();
+    add  = (T)ucs::rand() * (T)ucs::rand();
 
     status = test_ucp_atomic::ucp_atomic_post_nbi<T>(e->ep(), UCP_ATOMIC_POST_OP_ADD, add,
                                                  memheap_addr, rkey);
@@ -228,7 +228,7 @@ void test_ucp_atomic::nb_fadd(entity *e,  size_t max_size,
     T add, prev, result;
 
     prev = *(T*)memheap_addr;
-    add  = (T)rand() * (T)rand();
+    add  = (T)ucs::rand() * (T)ucs::rand();
 
     amo_req = test_ucp_atomic::ucp_atomic_fetch<T>(e->ep(), UCP_ATOMIC_FETCH_OP_FADD,
                                                    add, &result, memheap_addr, rkey);
@@ -250,7 +250,7 @@ void test_ucp_atomic::nb_swap(entity *e,  size_t max_size, void *memheap_addr,
     void *amo_req;
 
     prev = *(T*)memheap_addr;
-    swap = (T)rand() * (T)rand();
+    swap = (T)ucs::rand() * (T)ucs::rand();
 
     amo_req = test_ucp_atomic::ucp_atomic_fetch<T>(e->ep(), UCP_ATOMIC_FETCH_OP_SWAP,
                                                    swap, &result, memheap_addr, rkey);
@@ -272,12 +272,12 @@ void test_ucp_atomic::nb_cswap(entity *e,  size_t max_size, void *memheap_addr,
     void *amo_req;
 
     prev = *(T*)memheap_addr;
-    if ((rand() % 2) == 0) {
+    if ((ucs::rand() % 2) == 0) {
         compare = prev; /* success mode */
     } else {
         compare = ~prev; /* fail mode */
     }
-    swap = result = (T)rand() * (T)rand();
+    swap = result = (T)ucs::rand() * (T)ucs::rand();
 
     amo_req = test_ucp_atomic::ucp_atomic_fetch<T>(e->ep(), UCP_ATOMIC_FETCH_OP_CSWAP,
                                                    compare, &result,

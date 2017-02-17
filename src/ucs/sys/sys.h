@@ -192,6 +192,12 @@ void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
 
 
 /**
+ * Same as strncpy(), but guarantee that the last char in the buffer is '\0'.
+ */
+void ucs_strncpy_zero(char *dest, const char *src, size_t max);
+
+
+/**
  * Convert a memory units value to a string which is abbreviated if possible.
  * For example:
  *  1024 -> 1kb

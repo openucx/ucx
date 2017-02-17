@@ -155,8 +155,10 @@ public:
         size_t header_size;
         ssize_t packed_len;
 
+        /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_AM:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_SHORT:
                 am_short_hdr = sn;
@@ -181,6 +183,7 @@ public:
                 /* Put the control word at the latest byte of the IOV message */
                 *((psn_t*)buffer + uct_perf_get_buffer_extent(&m_perf.params) - 1) = sn;
             }
+            /* coverity[switch_selector_expr_is_constant] */
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_SHORT:
                 return uct_ep_put_short(ep, buffer, length, remote_addr, rkey);
@@ -194,6 +197,7 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
         case UCX_PERF_CMD_GET:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (DATA) {
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 return uct_ep_get_bcopy(ep, (uct_unpack_callback_t)memcpy,
@@ -287,6 +291,7 @@ public:
         length = ucx_perf_get_message_size(&m_perf.params);
         ucs_assert(length >= sizeof(psn_t));
 
+        /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_AM:
         case UCX_PERF_CMD_ADD:
@@ -489,10 +494,12 @@ public:
     {
         bool zcopy = (DATA == UCT_PERF_DATA_LAYOUT_ZCOPY);
 
+        /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
             return run_pingpong();
         case UCX_PERF_TEST_TYPE_STREAM_UNI:
+            /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_PUT:
                 return run_stream_req_uni(false, /* No need for flow control for RMA */

@@ -39,7 +39,7 @@ void frag_list::permute_array(int *arr, int n)
     }
 
     for (i = 0; i < n - 1; i++) {
-        idx = i + ::rand() % (n - i);
+        idx = i + ucs::rand() % (n - i);
         tmp = arr[i];
         arr[i] = arr[idx];
         arr[idx] = tmp;
@@ -289,18 +289,19 @@ UCS_TEST_F(frag_list, two_holes_advanced) {
 #define FRAG_LIST_N_PKTS 10000
 
 UCS_TEST_F(frag_list, random_arrival) {
-    pkt pkts[FRAG_LIST_N_PKTS+1], *out;
+    std::vector<pkt> pkts(FRAG_LIST_N_PKTS + 1);
+    pkt *out;
     ucs_frag_list_elem_t *elem;
     unsigned i;
-    int idx[FRAG_LIST_N_PKTS];
+    std::vector<int> idx(FRAG_LIST_N_PKTS);
     int err;
     int fast_inserts, slow_inserts, pulled;
     uint32_t last_sn = 0;
     uint32_t max_holes=0, max_elems=0;
 
-    init_pkts(pkts, FRAG_LIST_N_PKTS+1);
 
-    permute_array(idx, FRAG_LIST_N_PKTS);
+    init_pkts(&pkts[0], FRAG_LIST_N_PKTS+1);
+    permute_array(&idx[0], FRAG_LIST_N_PKTS);
 
     fast_inserts = slow_inserts = pulled = 0;
     for (i = 0; i < FRAG_LIST_N_PKTS; i++) {

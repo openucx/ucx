@@ -721,8 +721,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
              * component name.
              */
             context->config.alloc_methods[i].method = UCT_ALLOC_METHOD_MD;
-            strncpy(context->config.alloc_methods[i].mdc_name,
-                    method_name + 3, UCT_MD_COMPONENT_NAME_MAX);
+            ucs_strncpy_zero(context->config.alloc_methods[i].mdc_name,
+                             method_name + 3, UCT_MD_COMPONENT_NAME_MAX);
             ucs_debug("allocation method[%d] is md '%s'", i, method_name + 3);
         } else {
             /* Otherwise, this is specific allocation method name.

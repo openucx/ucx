@@ -115,6 +115,7 @@ static char * ucs_stats_read_str(FILE *stream)
     char *str;
 
     FREAD_ONE(&tmp, stream);
+    /* coverity[tainted_data] */
     str = malloc(tmp + 1);
     FREAD(str, tmp, stream);
     str[tmp] = '\0';
@@ -339,13 +340,18 @@ ucs_status_t ucs_stats_serialize(FILE *stream, ucs_stats_node_t *root, int optio
 
 static ucs_status_t
 ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
-                             size_t headroom, ucs_stats_node_t **p_root)
+                             unsigned num_classes, size_t headroom,
+                             ucs_stats_node_t **p_root)
 {
     ucs_stats_node_t *node, *child;
     ucs_stats_class_t *cls;
     uint8_t clsid, namelen;
     ucs_status_t status;
     void *ptr;
+
+    if (headroom >= UINT_MAX) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     if (feof(stream)) {
         ucs_error("Error parsing statistics - premature end of stream");
@@ -355,6 +361,11 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
     FREAD_ONE(&clsid, stream);
     if (clsid == UCS_STATS_CLSID_SENTINEL) {
         return UCS_ERR_NO_MESSAGE; /* Sentinel */
+    }
+
+    if (clsid >= num_classes) {
+        ucs_error("Error parsing statistics - class id out of range");
+        return UCS_ERR_OUT_OF_RANGE;
     }
 
     FREAD_ONE(&namelen, stream);
@@ -384,7 +395,8 @@ ucs_stats_deserialize_recurs(FILE *stream, ucs_stats_class_t **classes,
 
     /* Read children */
     do {
-        status = ucs_stats_deserialize_recurs(stream, classes, 0, &child);
+        status = ucs_stats_deserialize_recurs(stream, classes, num_classes, 0,
+                                              &child);
         if (status == UCS_OK) {
             ucs_list_add_tail(&node->children[UCS_STATS_ACTIVE_CHILDREN], &child->list);
         } else if (status == UCS_ERR_NO_MESSAGE) {
@@ -448,10 +460,12 @@ ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_stats_node_t **p_root)
         name = ucs_stats_read_str(stream);
         FREAD_ONE(&num_counters, stream);
 
+        /* coverity[tainted_data] */
         cls = malloc(sizeof *cls + num_counters * sizeof(cls->counter_names[0]));
         cls->name = name;
         cls->num_counters = num_counters;
 
+        /* coverity[tainted_data] */
         for (j = 0; j < cls->num_counters; ++j) {
             cls->counter_names[j] = ucs_stats_read_str(stream);
         }
@@ -460,7 +474,7 @@ ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_stats_node_t **p_root)
     }
 
     /* Read nodes */
-    status = ucs_stats_deserialize_recurs(stream, classes,
+    status = ucs_stats_deserialize_recurs(stream, classes, hdr.num_classes,
                                          sizeof(ucs_stats_root_storage_t) - sizeof(ucs_stats_node_t),
                                          p_root);
     if (status != UCS_OK) {

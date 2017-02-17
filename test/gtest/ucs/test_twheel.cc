@@ -110,10 +110,10 @@ void twheel::set_timer_delta(struct hr_timer *t, int how)
         break;
     case -2:
         /* overflow */
-        slot = m_wheel.num_slots + (::rand() % 1000000);
+        slot = m_wheel.num_slots + (ucs::rand() % 1000000);
         break;
     default:
-        slot = 1 + ::rand() % (m_wheel.num_slots - 2);
+        slot = 1 + ucs::rand() % (m_wheel.num_slots - 2);
         break;
     }
 

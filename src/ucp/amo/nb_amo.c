@@ -50,7 +50,8 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         return status;
     }
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-    UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, lane, uct_rkey);
+    UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, lane, uct_rkey,
+                            status = UCS_ERR_UNREACHABLE; goto out);
     if (op_size == sizeof(uint32_t)) {
         status = UCS_PROFILE_CALL(uct_ep_atomic_add32, ep->uct_eps[lane],
                                   (uint32_t)value, remote_addr, uct_rkey);
@@ -73,6 +74,7 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
             status = UCS_PTR_STATUS(status_p);
         }
     }
+out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }

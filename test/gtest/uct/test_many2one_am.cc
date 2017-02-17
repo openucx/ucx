@@ -29,7 +29,7 @@ public:
     }
 
     ucs_status_t am_handler(void *data, size_t length, void *desc) {
-        if (rand() % 4 == 0) {
+        if (ucs::rand() % 4 == 0) {
             receive_desc_t *my_desc = (receive_desc_t *)desc;
             my_desc->magic  = MAGIC;
             my_desc->length = length;
@@ -92,7 +92,7 @@ UCS_TEST_P(test_many2one_am, am_bcopy, "MAX_BCOPY=16384")
     ASSERT_UCS_OK(status);
 
     for (unsigned i = 0; i < num_sends; ++i) {
-        unsigned sender_num = rand() % NUM_SENDERS;
+        unsigned sender_num = ucs::rand() % NUM_SENDERS;
 
         mapped_buffer& buffer = buffers.at(sender_num);
         buffer.pattern_fill(i);

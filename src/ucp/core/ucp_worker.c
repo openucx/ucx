@@ -280,6 +280,7 @@ out_close_wakeup:
 out_close_iface:
     uct_iface_close(iface);
 out:
+    /* coverity[leaked_storage] */
     return status;
 }
 

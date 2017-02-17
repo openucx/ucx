@@ -715,6 +715,7 @@ UCS_TEST_P(test_ud, ep_destroy_simple) {
 
     status = uct_ep_create(m_e1->iface(), &ep);
     EXPECT_UCS_OK(status);
+    /* coverity[use_after_free] */
     ud_ep2 = ucs_derived_of(ep, uct_ud_ep_t);
     uct_ep_destroy(ep);
 
@@ -773,6 +774,7 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
 
     status = uct_ep_create(m_e2->iface(), &ep);
     EXPECT_UCS_OK(status);
+    /* coverity[use_after_free] */
     ud_ep = ucs_derived_of(ep, uct_ud_ep_t);
     uct_ep_destroy(ep);
     EXPECT_EQ(1U, ud_ep->ep_id);

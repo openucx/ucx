@@ -18,6 +18,7 @@ ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq)
     pthread_spin_init(&timerq->lock, 0);
     timerq->timers       = NULL;
     timerq->num_timers   = 0;
+    /* coverity[missing_lock] */
     timerq->min_interval = UCS_TIME_INFINITY;
     return UCS_OK;
 }

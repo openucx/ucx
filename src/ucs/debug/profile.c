@@ -128,9 +128,9 @@ void ucs_profile_get_location(ucs_profile_type_t type, const char *name,
 
     /* Initialize new location */
     loc             = &ucs_profile_ctx.locations[location];
-    strncpy(loc->file, basename(file), sizeof(loc->file));
-    strncpy(loc->function, function, sizeof(loc->function));
-    strncpy(loc->name, name, sizeof(loc->name));
+    ucs_strncpy_zero(loc->file, basename(file), sizeof(loc->file));
+    ucs_strncpy_zero(loc->function, function, sizeof(loc->function));
+    ucs_strncpy_zero(loc->name, name, sizeof(loc->name));
     loc->line       = line;
     loc->type       = type;
     loc->total_time = 0;

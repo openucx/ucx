@@ -162,7 +162,7 @@ UCS_TEST_P(test_uct_pending, pending_op)
                 if (status != UCS_OK) {
                     /* the request wasn't added to the pending data structure
                      * since resources became available. retry sending this message */
-                    free(req);
+                    delete req;
                 } else {
                     /* the request was added to the pending data structure */
                     send_data += 1;
@@ -210,7 +210,7 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
 
             status_pend = uct_ep_pending_add(m_e1->ep(0), &req->uct);
             if (status_pend == UCS_ERR_BUSY) {
-                free(req);
+                delete req;
             } else {
                 /* coverity[leaked_storage] */
                 break;

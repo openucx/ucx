@@ -185,6 +185,7 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
                             req.service_id);
     uct_cm_leave(iface);
     ucs_free(hdr);
+    /* coverity[missing_unlock] */
     return payload_len;
 
 err_destroy_id:

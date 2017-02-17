@@ -111,7 +111,7 @@ public:
         size_t header_length;
         uct_iov_t iov;
 
-        header_length = ucs_min(rand() % sender().iface_attr().cap.am.max_hdr,
+        header_length = ucs_min(ucs::rand() % sender().iface_attr().cap.am.max_hdr,
                                 sendbuf.length());
 
         iov.buffer = (char*)sendbuf.ptr() + header_length;
@@ -132,7 +132,7 @@ public:
         ucs_status_t status;
         int op;
 
-        op         = rand() % m_avail_send_funcs.size();
+        op         = ucs::rand() % m_avail_send_funcs.size();
         comp.count = 1;
         comp.func  = completion_callback;
 

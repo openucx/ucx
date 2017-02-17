@@ -16,7 +16,7 @@ class test_time : public ucs::test {
 };
 
 UCS_TEST_F(test_time, time_calc) {
-    double value = rand() % UCS_USEC_PER_SEC;
+    double value = ucs::rand() % UCS_USEC_PER_SEC;
 
     EXPECT_NEAR(value * 1000, ucs_time_to_msec(ucs_time_from_sec (value)), 0.000001);
     EXPECT_NEAR(value * 1000, ucs_time_to_usec(ucs_time_from_msec(value)), 0.001);
@@ -64,10 +64,10 @@ UCS_TEST_F(test_time, timerq) {
     ::srand(::time(NULL));
     for (unsigned test_count = 0; test_count < 500; ++test_count) {
 
-        const ucs_time_t interval1 = (::rand() % 20) + 1;
-        const ucs_time_t interval2 = (::rand() % 20) + 1;
-        const ucs_time_t test_time = ::rand() % 10000;
-        const ucs_time_t time_base = ::rand();
+        const ucs_time_t interval1 = (ucs::rand() % 20) + 1;
+        const ucs_time_t interval2 = (ucs::rand() % 20) + 1;
+        const ucs_time_t test_time = ucs::rand() % 10000;
+        const ucs_time_t time_base = ucs::rand();
         ucs_timer_t *timer;
         unsigned counter1, counter2;
 

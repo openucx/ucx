@@ -351,12 +351,12 @@ ucs_debug_get_line_info(const char *filename, unsigned long base,
     }
 
     if (line.function) {
-        strncpy(info->function, line.function, sizeof(info->function));
+        ucs_strncpy_zero(info->function, line.function, sizeof(info->function));
     } else {
         strcpy(info->function, UCS_DEBUG_UNKNOWN_SYM);
     }
     if (line.file) {
-        strncpy(info->source_file, line.file, sizeof(info->source_file));
+        ucs_strncpy_zero(info->source_file, line.file, sizeof(info->source_file));
     } else {
         strcpy(info->function, UCS_DEBUG_UNKNOWN_SYM);
     }

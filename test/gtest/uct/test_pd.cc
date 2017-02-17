@@ -117,7 +117,7 @@ UCS_TEST_P(test_pd, alloc) {
     check_caps(UCT_MD_FLAG_ALLOC, "allocation");
 
     for (unsigned i = 0; i < 300; ++i) {
-        size = orig_size = rand() % 65536;
+        size = orig_size = ucs::rand() % 65536;
         if (size == 0) {
             continue;
         }
@@ -147,7 +147,7 @@ UCS_TEST_P(test_pd, reg) {
     check_caps(UCT_MD_FLAG_REG, "registration");
 
     for (unsigned i = 0; i < 300; ++i) {
-        size = rand() % 65536;
+        size = ucs::rand() % 65536;
         if (size == 0) {
             continue;
         }

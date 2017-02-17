@@ -2455,6 +2455,7 @@ class MutexBase {
     // considered valid. We don't protect writing to has_owner_ here, as it's
     // the caller's responsibility to ensure that the current thread holds the
     // mutex when this is called.
+    // coverity[missing_lock]
     has_owner_ = false;
     GTEST_CHECK_POSIX_SUCCESS_(pthread_mutex_unlock(&mutex_));
   }

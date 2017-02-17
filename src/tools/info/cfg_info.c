@@ -6,6 +6,7 @@
 
 #include "ucx_info.h"
 
+#include <ucs/sys/sys.h>
 #include <string.h>
 
 
@@ -81,8 +82,8 @@ void print_uct_config(ucs_config_print_flags_t print_flags, const char *tl_name)
             if ((i == num_tls) &&
                 ((tl_name == NULL) || !strcmp(tl_name, tl_resources[tl_rsc_index].tl_name)))
             {
-                strncpy(tl_names[num_tls], tl_resources[tl_rsc_index].tl_name,
-                        UCT_TL_NAME_MAX);
+                ucs_strncpy_zero(tl_names[num_tls], tl_resources[tl_rsc_index].tl_name,
+                                 UCT_TL_NAME_MAX);
                 ++num_tls;
             }
         }

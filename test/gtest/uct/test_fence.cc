@@ -59,9 +59,9 @@ public:
         worker(uct_fence_test* test, send_func_t send, recv_func_t recv,
                const mapped_buffer& recvbuf,
                const entity& entity, uint64_t initial_value, uint32_t* error) :
-            test(test), value(initial_value), result(0), error(error), running(true),
-            m_send(send), m_recv(recv), m_recvbuf(recvbuf),
-            m_entity(entity) {
+            test(test), value(initial_value), result32(0), result64(0),
+            error(error), running(true), m_send(send), m_recv(recv),
+            m_recvbuf(recvbuf), m_entity(entity) {
             pthread_create(&m_thread, NULL, run, reinterpret_cast<void*>(this));
         }
 
@@ -83,7 +83,8 @@ public:
 
         uct_fence_test* const test;
         uint64_t value;
-        uint64_t result;
+        uint32_t result32;
+        uint64_t result64;
         uint32_t* error;
         bool running;
 
@@ -97,13 +98,17 @@ public:
                 uct_ep_fence(m_entity.ep(0), 0);
                 (test->*m_recv)(m_entity.ep(0), *this,
                                 m_recvbuf, &uct_comp);
-
                 m_entity.flush();
+
+                uint64_t result = (m_recvbuf.length() == sizeof(uint32_t)) ?
+                                    result32 : result64;
 
                 if (result != (uint64_t)(i+1))
                     (*error)++;
 
-                result = 0; // reset for next loop
+                // reset for next loop
+                result32 = 0;
+                result64 = 0;
             }
         }
 
@@ -136,13 +141,13 @@ public:
     ucs_status_t fadd32(uct_ep_h ep, worker& worker,
                         const mapped_buffer& recvbuf, uct_completion_t *comp) {
         return uct_ep_atomic_fadd32(ep, 0, recvbuf.addr(), recvbuf.rkey(),
-                                    (uint32_t *)(void *)&worker.result, comp);
+                                    &worker.result32, comp);
     }
 
     ucs_status_t fadd64(uct_ep_h ep, worker& worker,
                         const mapped_buffer& recvbuf, uct_completion_t *comp) {
         return uct_ep_atomic_fadd64(ep, 0, recvbuf.addr(), recvbuf.rkey(),
-                                    &worker.result, comp);
+                                    &worker.result64, comp);
     }
 
     template <typename T>

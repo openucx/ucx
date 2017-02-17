@@ -88,6 +88,7 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     /* Run all tests */
     std::stringstream ss;
     ss << GetParam();
+    /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     for (test_spec *test = tests; test->title != NULL; ++test) {
         unsigned flags = (test->command == UCX_PERF_CMD_TAG) ? 0 :

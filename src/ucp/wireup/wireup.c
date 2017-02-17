@@ -370,6 +370,7 @@ static ucs_status_t ucp_wireup_connect_lane(ucp_ep_h ep, ucp_lane_index_t lane,
                                          address_list[addr_index].iface_addr,
                                          &new_uct_ep);
         if (status != UCS_OK) {
+            /* coverity[leaked_storage] */
             return status;
         }
 

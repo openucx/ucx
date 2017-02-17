@@ -173,10 +173,12 @@ UCS_TEST_F(test_config, clone) {
     car_opts *opts_clone_ptr;
 
     {
+        /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env1("UCX_COLOR", "white");
         car_opts opts(NULL, NULL);
         EXPECT_EQ((unsigned)COLOR_WHITE, opts->color);
 
+        /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env2("UCX_COLOR", "black");
         opts_clone_ptr = new car_opts(opts);
     }
@@ -194,7 +196,9 @@ UCS_TEST_F(test_config, set) {
 }
 
 UCS_TEST_F(test_config, set_with_table_prefix) {
+    /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_COLOR", "black");
+    /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env2("UCX_CARS_COLOR", "white");
 
     car_opts opts(NULL, "CARS_");
@@ -202,7 +206,9 @@ UCS_TEST_F(test_config, set_with_table_prefix) {
 }
 
 UCS_TEST_F(test_config, set_with_env_prefix) {
+    /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env1("UCX_COLOR", "black");
+    /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env2("UCX_TEST_COLOR", "white");
 
     car_opts opts("TEST", NULL);

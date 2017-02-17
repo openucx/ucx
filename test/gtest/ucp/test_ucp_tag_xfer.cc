@@ -96,7 +96,7 @@ void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync,
         }
         ms << count << "x10^" << i << " " << std::flush;
         for (long j = 0; j < count; ++j) {
-            size_t size = rand() % max + 1;
+            size_t size = ucs::rand() % max + 1;
             (this->*func)(size, expected, sync, truncated);
         }
     }
@@ -120,7 +120,6 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         /* the sender has a generic datatype */
         status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, send_dt);
         ASSERT_UCS_OK(status);
-        sendbuf = NULL;
     }
 
     if (recv_contig) {
@@ -132,7 +131,6 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         /* the recvbuf can be NULL because we only validate the received data in the
         * unpack function - we don't copy it to the recvbuf */
         ASSERT_UCS_OK(status);
-        recvbuf = NULL;
     }
 }
 
@@ -197,14 +195,8 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     dt_gen_start_count  = 0;
     dt_gen_finish_count = 0;
 
-    if (send_contig) {
-        /* the sender has a contig datatype for the data buffer */
-        sendbuf = (uint8_t*) malloc(count * sizeof(*sendbuf));
-    }
-    if (recv_contig) {
-        /* the recv has a contig datatype for the data buffer */
-        recvbuf = (uint8_t*) malloc(count * sizeof(*recvbuf));
-    }
+    sendbuf = (uint8_t*) malloc(count * sizeof(*sendbuf));
+    recvbuf = (uint8_t*) malloc(count * sizeof(*recvbuf));
 
     test_xfer_prepare_bufs(sendbuf, recvbuf, count, send_contig, recv_contig,
                            &send_dt, &recv_dt);
@@ -240,15 +232,12 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     }
     request_release(rreq);
 
-    if (send_contig) {
-        free(sendbuf);
-    } else {
+    free(sendbuf);
+    free(recvbuf);
+    if (!send_contig) {
         ucp_dt_destroy(send_dt);
     }
-
-    if (recv_contig) {
-        free(recvbuf);
-    } else {
+    if (!recv_contig) {
         ucp_dt_destroy(recv_dt);
     }
 }
