@@ -34,25 +34,42 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
     return UCS_INPROGRESS;
 }
 
-void ucp_request_release(void *request)
+static UCS_F_ALWAYS_INLINE void
+ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_name)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
+    ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req),
+                                                        ucp_worker_t, req_mp);
+    uint16_t flags;
 
-    ucs_trace_data("release request %p (%p) flags: 0x%x", req, req + 1, req->flags);
+    UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
-    /* Release should not be called for external requests */
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_EXTERNAL));
+    flags = req->flags;
+    ucs_trace_req("%s request %p (%p) "UCP_REQUEST_FLAGS_FMT, debug_name,
+                  req, req + 1, UCP_REQUEST_FLAGS_ARG(flags));
 
-    if ((req->flags |= UCP_REQUEST_FLAG_RELEASED) & UCP_REQUEST_FLAG_COMPLETED) {
-        ucp_worker_h UCS_V_UNUSED worker = ucs_container_of(ucs_mpool_obj_owner(req), ucp_worker_t, req_mp);
+    ucs_assert(!(flags & UCP_REQUEST_DEBUG_FLAG_EXTERNAL));
+    ucs_assert(!(flags & UCP_REQUEST_FLAG_RELEASED));
 
-        UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
-
-        ucs_trace_data("put %p to mpool", req);
-        ucs_mpool_put_inline(req);
-
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+    if (ucs_likely(flags & UCP_REQUEST_FLAG_COMPLETED)) {
+        ucp_request_put(req);
+    } else {
+        req->flags = (flags | UCP_REQUEST_FLAG_RELEASED) & ~cb_flag;
     }
+
+    UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
+}
+
+void ucp_request_release(void *request)
+{
+    /* mark request as released */
+    ucp_request_release_common(request, 0, "release");
+}
+
+void ucp_request_free(void *request)
+{
+    /* mark request as released and disable the callback */
+    ucp_request_release_common(request, UCP_REQUEST_FLAG_CALLBACK, "free");
 }
 
 void ucp_request_cancel(ucp_worker_h worker, void *request)
@@ -68,7 +85,7 @@ void ucp_request_cancel(ucp_worker_h worker, void *request)
         UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
         ucp_tag_cancel_expected(worker->context, req);
-        ucp_request_complete_recv(req, UCS_ERR_CANCELED, NULL);
+        ucp_request_complete_recv(req, UCS_ERR_CANCELED);
 
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);

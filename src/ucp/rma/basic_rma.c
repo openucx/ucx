@@ -46,7 +46,7 @@ ucp_rma_get_is_zcopy(ucp_ep_rma_config_t *rma_config, size_t length)
  *  - all fragments were sent (length == 0) (bcopy & zcopy mix)
  *  - all zcopy fragments are done (uct_comp.count == 0)
  *  - and request was allocated from the mpool 
- *    (checked in ucp_request_put)
+ *    (checked in ucp_request_complete_send)
  *
  * Request can be released either immediately or in the completion callback.
  * We must check req length in the completion callback to avoid the following
@@ -69,7 +69,7 @@ ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
                                  UCT_INVALID_MEM_HANDLE)) {
                     ucp_request_send_buffer_dereg(req, req->send.lane);
                 }
-                ucp_request_put(req, UCS_OK);
+                ucp_request_complete_send(req, UCS_OK);
             }
             return UCS_OK;
         } 
@@ -87,7 +87,7 @@ ucp_rma_request_bcopy_completion(uct_completion_t *self, ucs_status_t status)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct_comp);
 
     if (ucs_likely(req->send.length == 0)) {
-        ucp_request_put(req, UCS_OK);
+        ucp_request_complete_send(req, UCS_OK);
     }
 }
 
@@ -97,7 +97,7 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self, ucs_status_
 
     if (ucs_likely(req->send.length == 0)) {
         ucp_request_send_buffer_dereg(req, req->send.lane);
-        ucp_request_put(req, UCS_OK);
+        ucp_request_complete_send(req, UCS_OK);
     }
 }
 
@@ -313,6 +313,8 @@ ucp_rma_blocking(ucp_ep_h ep, const void *buffer, size_t length, uint64_t remote
      * because it can be * changed by transport switch.
      */
     for (;;) {
+        ucs_assert(!(req.flags & UCP_REQUEST_FLAG_CALLBACK));
+        /* coverity[callee_ptr_arith] */
         status = send_func(&req, uct_rkey, rma_config, zcopy);
         if (ucs_likely(status == UCS_OK)) {
             break;

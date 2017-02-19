@@ -49,12 +49,21 @@ void test_ucp_tag::request_init(void *request)
 
 void test_ucp_tag::request_release(struct request *req)
 {
-    req->completed = false;
-
     if (req->external) {
         free(req->req_mem);
     } else {
+        req->completed = false;
         ucp_request_release(req);
+    }
+}
+
+void test_ucp_tag::request_free(struct request *req)
+{
+    if (req->external) {
+        free(req->req_mem);
+    } else {
+        req->completed = false;
+        ucp_request_free(req);
     }
 }
 

@@ -120,7 +120,8 @@ ucp_tag_recv_request_get(ucp_worker_h worker, void* buffer, size_t count,
         return NULL;
     }
 
-    ucp_tag_recv_request_init(req, worker, buffer, count, datatype, 0);
+    ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
+                              UCP_REQUEST_FLAG_CALLBACK);
     return req;
 }
 
@@ -136,19 +137,20 @@ ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
                           "ucp_tag_recv_request_completed",
                           req, info->length);
 
-    ucp_request_put(req, status);
+    req->status = status;
+    req->flags |= UCP_REQUEST_FLAG_COMPLETED;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t buffer_size,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
-                    ucp_request_t *req, ucp_tag_recv_callback_t cb)
+                    ucp_request_t *req, ucp_tag_recv_callback_t cb,
+                    const char *debug_name)
 {
     ucs_status_t status;
     unsigned save_rreq = 1;
 
-    ucs_trace_req("recv_nb%c buffer %p buffer_size %zu tag %"PRIx64"/%"PRIx64,
-                  (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
+    ucs_trace_req("%s buffer %p buffer_size %zu tag %"PRIx64"/%"PRIx64, debug_name,
                   buffer, buffer_size, tag, tag_mask);
 
     /* First, search in unexpected list */
@@ -166,8 +168,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t buffer_size,
         req->recv.tag_mask = tag_mask;
         req->recv.cb       = cb;
         ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
-        ucs_trace_req("recv_nb%c returning expected request %p (%p)",
-                      (req->flags & UCP_REQUEST_FLAG_EXTERNAL) ? 'r' : ' ',
+        ucs_trace_req("%s returning expected request %p (%p)", debug_name,
                       req, req + 1);
     }
 
@@ -186,7 +187,7 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
     ucp_tag_recv_request_init(req, worker, buffer, count, datatype,
-                              UCP_REQUEST_FLAG_EXTERNAL);
+                              UCP_REQUEST_DEBUG_FLAG_EXTERNAL);
 
     buffer_size = ucp_dt_length(datatype, count, buffer, &req->recv.state);
 
@@ -194,7 +195,7 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
                           buffer_size);
 
     status = ucp_tag_recv_common(worker, buffer, buffer_size, datatype, tag,
-                                 tag_mask, req, NULL);
+                                 tag_mask, req, NULL, "recv_nbr");
 
     if (status != UCS_INPROGRESS) {
         ucp_tag_recv_request_completed(req, status, &req->recv.info, "recv_nbr");
@@ -230,7 +231,7 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer,
                           buffer_size);
 
     status = ucp_tag_recv_common(worker, buffer, buffer_size, datatype, tag,
-                                 tag_mask, req, cb);
+                                 tag_mask, req, cb, "recv_nb");
 
     if (status != UCS_INPROGRESS) {
         cb(req + 1, status, &req->recv.info);
