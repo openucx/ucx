@@ -9,6 +9,15 @@
 #ifndef UCS_COMPILER_DEF_H
 #define UCS_COMPILER_DEF_H
 
+
+#ifdef __cplusplus
+# define BEGIN_C_DECLS  extern "C" {
+# define END_C_DECLS    }
+#else
+# define BEGIN_C_DECLS
+# define END_C_DECLS
+#endif
+
 /* Packed structure */
 #define UCS_S_PACKED             __attribute__((packed))
 
