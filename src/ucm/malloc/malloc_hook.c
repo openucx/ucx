@@ -25,6 +25,7 @@
 #include <ucs/type/component.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 
 #include <string.h>

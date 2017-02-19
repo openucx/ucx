@@ -16,6 +16,7 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/ucm_config.h>
+#include <ucs/sys/math.h>
 
 #include <sys/mman.h>
 #include <sys/shm.h>

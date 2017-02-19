@@ -8,17 +8,17 @@
 #ifndef UCM_H_
 #define UCM_H_
 
-#include <ucs/sys/compiler.h>
+#include <ucs/sys/compiler_def.h>
 
 BEGIN_C_DECLS
 
 #include <ucs/config/types.h>
-#include <ucs/sys/math.h>
 #include <ucs/type/status.h>
 
 #include <sys/types.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdint.h>
 
 
 /**
