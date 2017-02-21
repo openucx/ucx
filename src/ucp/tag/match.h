@@ -84,7 +84,8 @@ ucp_tag_process_recv(void *buffer, size_t buffer_size, ucp_datatype_t datatype,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        UCS_PROFILE_CALL(memcpy, buffer + offset, recv_data, recv_length);
+        UCS_PROFILE_NAMED_CALL("memcpy_recv", memcpy, buffer + offset,
+                               recv_data, recv_length);
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:
