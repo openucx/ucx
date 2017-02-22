@@ -62,10 +62,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_verbs_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_dc_verbs_ep_t, uct_dc_ep_t);
-UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_verbs_ep_t, uct_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_verbs_ep_t, uct_ep_t, uct_iface_h, const uct_device_addr_t *,
                           const uct_iface_addr_t *);
 
+static void uct_dc_verbs_ep_destroy(uct_ep_h tl_ep)
+{
+    uct_dc_ep_cleanup(tl_ep, &UCS_CLASS_NAME(uct_dc_verbs_ep_t));
+}
 
 static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
@@ -729,7 +732,7 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
             .iface_flush              = uct_dc_iface_flush,
 
             .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_dc_verbs_ep_t),
-            .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_ep_t),
+            .ep_destroy               = uct_dc_verbs_ep_destroy,
 
             .ep_am_short              = uct_dc_verbs_ep_am_short,
             .ep_am_bcopy              = uct_dc_verbs_ep_am_bcopy,

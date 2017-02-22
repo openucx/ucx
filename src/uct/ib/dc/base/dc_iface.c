@@ -208,6 +208,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->tx.policy                  = config->tx_policy;
     self->tx.available_quota         = 0; /* overridden by mlx5/verbs */
     self->super.config.tx_moderation = 0; /* disable tx moderation for dcs */
+    ucs_list_head_init(&self->tx.gc_list);
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis", self,
               uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci);
@@ -238,8 +239,13 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_iface_t)
 {
+    uct_dc_ep_t *ep, *tmp;
+
     ucs_trace_func("");
     ibv_exp_destroy_dct(self->rx.dct);
+    ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
+        uct_dc_ep_release(ep);
+    }
     uct_dc_iface_dcis_destroy(self, self->tx.ndci);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);
     uct_dc_iface_cleanup_fc_ep(self);
@@ -417,6 +423,11 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                            ucs_status_string(status));
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         ep = *((uct_dc_ep_t**)(hdr + 1));
+
+        if (ep->state == UCT_DC_EP_INVALID) {
+            uct_dc_ep_release(ep);
+            return UCS_OK;
+        }
 
         cur_wnd = ep->fc.fc_wnd;
 

@@ -25,8 +25,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
     ucs_arbiter_group_cleanup(&self->arb_group);
     uct_rc_fc_cleanup(&self->fc);
 
-    ucs_assertv(!uct_dc_ep_fc_wait_for_grant(self),
-                "ep %p is being destroyed while awaiting FC grant", self);
+    ucs_assert_always(self->state != UCT_DC_EP_INVALID);
 
     if (self->dci == UCT_DC_EP_NO_DCI) {
         return;
@@ -45,6 +44,30 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_ep_t)
              uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
     uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
     iface->tx.dcis[self->dci].ep = NULL;
+}
+
+void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls)
+{
+    uct_dc_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_ep_t);
+    uct_dc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_iface_t);
+
+    UCS_CLASS_CLEANUP_CALL(cls, ep);
+
+    if (uct_dc_ep_fc_wait_for_grant(ep)) {
+        ucs_trace("not releasing dc_ep %p - waiting for grant", ep);
+        ep->state = UCT_DC_EP_INVALID;
+        ucs_list_add_tail(&iface->tx.gc_list, &ep->list);
+    } else {
+        ucs_free(ep);
+    }
+}
+
+void uct_dc_ep_release(uct_dc_ep_t *ep)
+{
+    ucs_assert_always(ep->state == UCT_DC_EP_INVALID);
+    ucs_debug("release dc_ep %p", ep);
+    ucs_list_del(&ep->list);
+    ucs_free(ep);
 }
 
 /* TODO:
@@ -219,13 +242,16 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
      * Otherwise grant for destroyed ep will arrive and there will be a
      * segfault when we will try to access the ep by address from the grant
      * message. */
-    if (!uct_rc_iface_has_tx_resources(&iface->super) ||
-        uct_dc_ep_fc_wait_for_grant(ep)) {
+    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
+        ucs_trace("no tx res cqeav=%d mpe=%d",
+                  uct_rc_iface_have_tx_cqe_avail(&iface->super),
+                  ucs_mpool_is_empty(&iface->super.tx.mp));
         return UCS_ERR_NO_RESOURCE;
     }
 
     if (ep->dci == UCT_DC_EP_NO_DCI) {
         if (!uct_dc_iface_dci_can_alloc(iface)) {
+            ucs_trace("no dci");
             return UCS_ERR_NO_RESOURCE; /* waiting for dci */
         } else {
             UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
@@ -234,6 +260,7 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
     }
 
     if (!uct_dc_iface_dci_ep_can_send(ep)) {
+        ucs_trace("no can send");
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 

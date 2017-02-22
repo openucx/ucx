@@ -73,7 +73,11 @@ typedef struct uct_dc_iface {
 
         /* Used to send grant messages for all peers */
         uct_dc_ep_t               *fc_ep;
+
+        /* List of destroyed endpoints waiting for credit grant */
+        ucs_list_link_t           gc_list;
     } tx;
+
     struct {
         struct ibv_exp_dct        *dct;
     } rx;
