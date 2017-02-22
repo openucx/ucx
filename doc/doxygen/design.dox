@@ -33,11 +33,17 @@
  * allocation and management of device-specific memories including those found
  * in accelerators. In terms of communication APIs, UCT defines interfaces for
  * immediate (short), buffered copy-and-send (bcopy), and zero-copy (zcopy)
- * communication operations. The short operations are optimized for small
- * messages that can be posted and completed in place. The bcopy operations
- * are optimized for medium size messages that are typically sent through a
- * so-called bouncing-buffer. Finally, the zcopy operations expose
- * zero-copy memory-to-memory communication semantics. 
+ * communication operations.
+ *
+ * \b Short: This type of operations is optimized for small messages that can be posted and completed
+ * in place @anchor uct_short_protocol_desc.
+ *
+ * \b Bcopy: This type of operations is optimized for medium size messages that are typically sent through a
+ * so-called bouncing-buffer. This auxiliary buffer is typically allocated given network constraints and ready for
+ * immediate utilization by the hardware @anchor uct_bcopy_protocol_desc.
+ *
+ * \b Zcopy: This type of operations exposes zero-copy memory-to-memory communication semantics, which means that
+ * message is sent directly from the user buffer without being copied between the network layers @anchor uct_zcopy_protocol_desc.
  *
  * \section UCP
  * UCP implements higher-level protocols that are typically used by message passing (MPI)

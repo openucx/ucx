@@ -18,7 +18,7 @@
 #define UCT_MD_NAME_MAX          16
 #define UCT_DEVICE_NAME_MAX      32
 #define UCT_PENDING_REQ_PRIV_LEN 32
-#define UCT_TAG_PRIV_LENGTH      32
+#define UCT_TAG_PRIV_LEN         32
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_INVALID_MEM_HANDLE   NULL
@@ -79,7 +79,7 @@ typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
 typedef struct uct_tag_context   uct_tag_context_t;
-typedef uint64_t                 uct_tag_t;  /* tag type – 64 bit */
+typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
 /**
  * @}
  */
@@ -290,9 +290,9 @@ typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
  * @param [in]  stag          Tag from sender.
  * @param [in]  header        User defined header.
  * @param [in]  header_length User defined header length in bytes.
- * @param [in]  remote_addr   Sender’s buffer virtual address.
- * @param [in]  length        Sender’s buffer length.
- * @param [in]  rkey_buf      Sender’s buffer packed remote key. It can be
+ * @param [in]  remote_addr   Sender's buffer virtual address.
+ * @param [in]  length        Sender's buffer length.
+ * @param [in]  rkey_buf      Sender's buffer packed remote key. It can be
  *                            passed to uct_rkey_unpack() to create uct_rkey_t.
  *
  * @warning If the user became the owner of the @a desc (by returning

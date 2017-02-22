@@ -392,7 +392,9 @@ struct uct_iface_params {
                                                the receive segment.*/
 
     /* These callbacks are only relevant for HW Tag Matching */
+    void                     *eager_arg;
     uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
+    void                     *rndv_arg;
     uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
 };
 
@@ -539,13 +541,13 @@ struct uct_tag_context {
      * @param [in]  self    Pointer to relevant context structure, which was
      *                      initially passed to @ref uct_iface_tag_recv_zcopy.
      * @param [in]  stag    Tag from sender.
-     * @param [in]  imm     Immediate data from sender. For rendezvous, it’s always 0.
+     * @param [in]  imm     Immediate data from sender. For rendezvous, it's always 0.
      * @param [in]  length  Completed length.
      * @param [in]  status  Completion status:
-     * (a)   UCS_OK – Success, data placed in provided buffer.
-     * (b)   UCS_ERR_TRUNCATED – Sender’s length exceed posted
+     * (a)   UCS_OK - Success, data placed in provided buffer.
+     * (b)   UCS_ERR_TRUNCATED - Sender's length exceed posted
                                  buffer, no data is copied.
-     * (c)   UCS_ERR_CANCELED – Canceled by user.
+     * (c)   UCS_ERR_CANCELED - Canceled by user.
      */
      void (*completed_cb)(uct_tag_context_t *self, uct_tag_t stag, uint64_t imm,
                           size_t length, ucs_status_t status);
@@ -565,7 +567,7 @@ struct uct_tag_context {
                      unsigned header_length, ucs_status_t status);
 
      /** A placeholder for the private data used by the transport */
-     char priv[UCT_TAG_PRIV_LENGTH];
+     char priv[UCT_TAG_PRIV_LEN];
 };
 
 
@@ -1764,12 +1766,13 @@ UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
  * @ingroup UCT_TAG
  * @brief Short eager tagged-send operation.
  *
- * This routine sends a message using short eager protocol. Eager protocol
- * means that the whole data is sent immediately to the peer. The data is
- * provided as buffer and its length, and must not be larger than the
- * corresponding @a max_short value in @ref uct_iface_attr. The immediate
- * value delivered to the receiver is implicitly equal to 0. If it’s required
- * to pass non-zero imm value, @ref uct_ep_tag_eager_bcopy should be used.
+ * This routine sends a message using @ref uct_short_protocol_desc "short"
+ * eager protocol. Eager protocol means that the whole data is sent immediately
+ * to the peer. The data is provided as buffer and its length, and must not be
+ * larger than the corresponding @a max_short value in @ref uct_iface_attr.
+ * The immediate value delivered to the receiver is implicitly equal to 0.
+ * If it's required to pass non-zero imm value, @ref uct_ep_tag_eager_bcopy
+ * should be used.
  *
  * @param [in]  ep        Destination endpoint handle.
  * @param [in]  tag       Tag to use for the eager message.
@@ -1791,9 +1794,10 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
  * @ingroup UCT_TAG
  * @brief Bcopy eager tagged-send operation.
  *
- * This routine sends a message using buffered copy eager protocol. Eager
- * protocol means that the whole data is sent immediately to the peer.
- * Custom data callback is used to copy the data to the network buffers.
+ * This routine sends a message using @ref uct_bcopy_protocol_desc "bcopy"
+ * eager protocol. Eager protocol means that the whole data is sent
+ * immediately to the peer. Custom data callback is used to copy the data to
+ * the network buffers.
  *
  * @note The resulted data length must not be larger than the corresponding
  *       @a max_bcopy value in @ref uct_iface_attr.
@@ -1821,12 +1825,12 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  * @ingroup UCT_TAG
  * @brief Zcopy eager tagged-send operation.
  *
- * This routine sends a message using zero copy eager protocol. Eager protocol
- * means that the whole data is sent immediately to the peer. The input data
- * (which has to be previously registered) in @a iov array of @ref uct_iov_t
- * structures sent to remote side ("gather output"). Buffers in @a iov are
- * processed in array order, so the function complete iov[0] before proceeding
- * to iov[1], and so on.
+ * This routine sends a message using @ref uct_zcopy_protocol_desc "zcopy"
+ * eager protocol. Eager protocol means that the whole data is sent immediately
+ * to the peer. The input data (which has to be previously registered) in
+ * @a iov array of @ref uct_iov_t structures sent to remote side
+ * ("gather output"). Buffers in @a iov are processed in array order, so the
+ * function complete @a iov[0] before proceeding to @a iov[1], and so on.
  *
  * @note The resulted data length must not be larger than the corresponding
  *       @a max_zcopy value in @ref uct_iface_attr.
@@ -1849,8 +1853,8 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  * @return UCS_OK              - operation completed successfully.
  * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
  *                               of send resources.
- * @return UCS_INPROGRESS      - operation started, and “comp” will be used to
- *                               notify when it’s completed.
+ * @return UCS_INPROGRESS      - operation started, and @a comp will be used to
+ *                               notify when it's completed.
  */
 UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
                                                    uint64_t imm,
@@ -1913,8 +1917,13 @@ UCT_INLINE_API ucs_status_ptr_t uct_ep_tag_rndv_zcopy(uct_ep_h ep, uct_tag_t tag
  * @ingroup UCT_TAG
  * @brief Cancel outstanding rendezvous operation.
  *
- * This routine makes transport disregard the outstanding operation without
- * calling completion callback provided in @ref uct_ep_tag_rndv_zcopy.
+ * This routine signals the underlying transport disregard the outstanding
+ * operation without calling completion callback provided in
+ * @ref uct_ep_tag_rndv_zcopy.
+ *
+ * @note The operation handle should be valid at the time the routine is
+ * invoked. I.e. it should be a handle of the real operation which is not
+ * completed yet.
  *
  * @param [in] ep Destination endpoint handle.
  * @param [in] op Rendezvous operation handle, as returned from
@@ -1932,8 +1941,8 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rdnv_cancel(uct_ep_h ep, void *op)
  * @ingroup UCT_TAG
  * @brief Send software rendezvous request.
  *
- * This routine sends a rendezvous request only, which will allow the peer to
- * complete the data transfer in software.
+ * This routine sends a rendezvous request only, which indicates that the data
+ * transfer should be completed in software.
  *
  * @param [in]  ep            Destination endpoint handle.
  * @param [in]  tag           Tag to use for matching.
@@ -1958,8 +1967,10 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
  * @ingroup UCT_TAG
  * @brief Post a tag to a transport interface.
  *
- * This routine posts a tag to be matched on a transport interface.
- * The operation completion is reported using callbacks on the @a ctx structure.
+ * This routine posts a tag to be matched on a transport interface. When a
+ * message with the corresponding tag arrives it is stored in the user buffer
+ * (described by @a iov and @a iovcnt) directly. The operation completion is
+ * reported using callbacks on the @a ctx structure.
  *
  * @param [in]    iface     Interface to post the tag on.
  * @param [in]    tag       Tag to expect.
@@ -1974,7 +1985,7 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
  *                          array. If @a iovcnt is zero, the data is considered empty.
  *                          @a iovcnt is limited by @ref uct_iface_attr_cap_tag_recv_iov
  *                          "uct_iface_attr::cap::tag::max_iov"
- * @param [inout] ctx       Context associated with this particular tag, “priv” field
+ * @param [inout] ctx       Context associated with this particular tag, "priv" field
  *                          in this structure is used to track the state internally.
  *
  * @return UCS_OK                - The tag is posted to the transport.

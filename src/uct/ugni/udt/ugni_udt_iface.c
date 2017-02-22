@@ -157,7 +157,7 @@ static void uct_ugni_udt_iface_release_desc(uct_iface_t *tl_iface, void *desc)
     uct_ugni_udt_desc_t *ugni_desc;
     uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_udt_iface_t);
 
-    ugni_desc = (uct_ugni_udt_desc_t *)((uct_am_recv_desc_t *)desc - 1);
+    ugni_desc = (uct_ugni_udt_desc_t *)((uct_recv_desc_t *)desc - 1);
     ucs_assert_always(NULL != ugni_desc);
     uct_ugni_udt_reset_desc(ugni_desc, iface);
     ucs_mpool_put(ugni_desc);

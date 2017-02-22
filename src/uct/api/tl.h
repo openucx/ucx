@@ -214,13 +214,13 @@ typedef struct uct_ep {
 /**
  * Receive descriptor
  */
-typedef struct uct_am_recv_desc {
+typedef struct uct_recv_desc {
     uct_iface_h              iface;
-} uct_am_recv_desc_t;
+} uct_recv_desc_t;
 
 
 #define uct_recv_desc_iface(_desc) \
-    ((((uct_am_recv_desc_t*)(_desc)) - 1)->iface)
+    ((((uct_recv_desc_t*)(_desc)) - 1)->iface)
 
 
 

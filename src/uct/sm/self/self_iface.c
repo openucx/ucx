@@ -110,9 +110,9 @@ static int uct_self_iface_is_reachable(const uct_iface_h iface, const uct_device
 
 static void uct_self_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
-    uct_am_recv_desc_t *self_desc = 0;
+    uct_recv_desc_t *self_desc = 0;
 
-    self_desc = (uct_am_recv_desc_t *) desc - 1;
+    self_desc = (uct_recv_desc_t *) desc - 1;
     ucs_trace_func("iface=%p, desc=%p", tl_iface, self_desc);
     ucs_mpool_put(self_desc);
 }
@@ -173,9 +173,9 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     /* create a memory pool for data transferred */
     status = uct_iface_mpool_init(&self->super,
                                   &self->msg_desc_mp,
-                                  sizeof(uct_am_recv_desc_t) + self->rx_headroom +
-                                                               self->data_length,
-                                  sizeof(uct_am_recv_desc_t) + self->rx_headroom,
+                                  sizeof(uct_recv_desc_t) + self->rx_headroom +
+                                                            self->data_length,
+                                  sizeof(uct_recv_desc_t) + self->rx_headroom,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &self_config->mp,
                                   256,

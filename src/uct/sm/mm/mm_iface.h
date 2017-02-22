@@ -120,7 +120,7 @@ struct uct_mm_recv_desc {
     uct_mm_id_t         key;
     void                *base_address;
     size_t              mpool_length;
-    uct_am_recv_desc_t  am_recv;   /* has to be in the end */
+    uct_recv_desc_t     recv;   /* has to be in the end */
 };
 
 
