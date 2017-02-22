@@ -320,7 +320,7 @@ retry:
  * Create a profiled function whose return type is void.
  *
  * Usage:
- *  UCS_PROFILE_FUNC(<retval>, <name>, (a, b), int a, char b)
+ *  UCS_PROFILE_FUNC_VOID(<name>, (a, b), int a, char b)
  *
  * @param _name       Function name.
  * @param _arglist    List of argument *names* only.
@@ -341,6 +341,9 @@ retry:
  * Profile a function call, and specify explicit name string for the profile.
  * Useful when calling a function by a pointer.
  *
+ * Usage:
+ *  UCS_PROFILE_NAMED_CALL("name", function, arg1, arg2)
+ *
  * @param _name   Name string for the profile.
  * @param _func   Function name.
  * @param ...     Function call arguments.
@@ -358,6 +361,9 @@ retry:
 /*
  * Profile a function call.
  *
+ * Usage:
+ *  UCS_PROFILE_CALL(function, arg1, arg2)
+ *
  * @param _func   Function name.
  * @param ...     Function call arguments.
  */
@@ -368,6 +374,9 @@ retry:
 /*
  * Profile a function call which does not return a value, and specify explicit
  * name string for the profile. Useful when calling a function by a pointer.
+ *
+ * Usage:
+ *  UCS_PROFILE_NAMED_CALL_VOID("name", function, arg1, arg2)
  *
  * @param _name   Name string for the profile.
  * @param _func   Function name.
@@ -382,7 +391,10 @@ retry:
 
 
 /*
- * Profile a function call which does not return a value..
+ * Profile a function call which does not return a value.
+ *
+ * Usage:
+ *  UCS_PROFILE_CALL_VOID(function, arg1, arg2)
  *
  * @param _func   Function name.
  * @param ...     Function call arguments.

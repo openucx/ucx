@@ -132,7 +132,7 @@ void ucp_tag_send_start_rndv(ucp_request_t *sreq)
     sreq->send.uct.func = ucp_proto_progress_rndv_rts;
 }
 
-void ucp_rndv_send_ats(ucp_request_t *rndv_req, uintptr_t remote_request)
+static void ucp_rndv_send_ats(ucp_request_t *rndv_req, uintptr_t remote_request)
 {
     ucs_trace_req("ep: %p send ats. rndv_req: %p, remote_request: %zu",
                   rndv_req->send.ep, rndv_req, remote_request);
