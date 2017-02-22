@@ -58,6 +58,11 @@ typedef struct uct_iface_ops {
                                           uct_tag_context_t *ctx,
                                           int force);
 
+    /* progress */
+
+    ucs_status_t (*iface_progress_disable)(uct_iface_h iface, uint32_t flags);
+
+    ucs_status_t (*iface_progress_enable)(uct_iface_h iface, uint32_t flags);
 
     /* Connection establishment */
 

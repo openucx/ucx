@@ -334,6 +334,13 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
         self->ops.iface_fence = uct_base_iface_fence;
     }
 
+    if (ops->iface_progress_disable == NULL) {
+        self->ops.iface_progress_disable = (void *)ucs_empty_function_return_unsupported;
+    }
+
+    if (ops->iface_progress_enable == NULL) {
+        self->ops.iface_progress_disable = (void *)ucs_empty_function_return_unsupported;
+    }
     return UCS_OK;
 }
 
@@ -420,6 +427,16 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
                                   const uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
+}
+
+ucs_status_t uct_iface_progress_disable(uct_iface_h iface, uint32_t flags)
+{
+    return iface->ops.iface_progress_disable(iface, flags);
+}
+
+ucs_status_t uct_iface_progress_enable(uct_iface_h iface, uint32_t flags)
+{
+    return iface->ops.iface_progress_enable(iface, flags);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
