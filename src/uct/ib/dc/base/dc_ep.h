@@ -21,12 +21,23 @@ enum {
 };
 
 struct uct_dc_ep {
-    uct_base_ep_t         super;
-    ucs_arbiter_group_t   arb_group;
-    uint8_t               dci;
-    uint8_t               state;
-    uint16_t              atomic_mr_offset;
-    uct_rc_fc_t           fc;
+    /*
+     * per value of 'state':
+     * INVALID   - 'list' is added to iface->tx.gc_list.
+     * Otherwise - 'super' and 'arb_group' are used.
+     */
+    union {
+        struct {
+            uct_base_ep_t         super;
+            ucs_arbiter_group_t   arb_group;
+        };
+        ucs_list_link_t           list;
+    };
+
+    uint8_t                       dci;
+    uint8_t                       state;
+    uint16_t                      atomic_mr_offset;
+    uct_rc_fc_t                   fc;
 };
 
 UCS_CLASS_DECLARE(uct_dc_ep_t, uct_dc_iface_t *, const uct_dc_iface_addr_t *);
@@ -43,6 +54,10 @@ uct_dc_iface_dci_do_pending_tx(ucs_arbiter_t *arbiter,
 
 ucs_status_t uct_dc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r);
 void uct_dc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
+
+void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
+
+void uct_dc_ep_release(uct_dc_ep_t *ep);
 
 static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
@@ -87,7 +102,8 @@ static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t 
 
 enum uct_dc_ep_state {
     UCT_DC_EP_TX_OK,
-    UCT_DC_EP_TX_WAIT
+    UCT_DC_EP_TX_WAIT,
+    UCT_DC_EP_INVALID
 };
 
 #define UCT_DC_EP_NO_DCI ((uint8_t)-1)

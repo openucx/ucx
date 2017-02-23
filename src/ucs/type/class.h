@@ -109,10 +109,20 @@ struct ucs_class {
  * @param _type  Class type.
  * @param _obj   Instance pointer to cleanup.
  */
+#define UCS_CLASS_CLEANUP_CALL(_cls, _obj) \
+    ucs_class_call_cleanup_chain(_cls, _obj, -1)
+
+
+/**
+ * Cleanup a class in-place.
+ *
+ * @param _type  Class type.
+ * @param _obj   Instance pointer to cleanup.
+ */
 #define UCS_CLASS_CLEANUP(_type, _obj) \
     { \
         extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
-        ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), _obj, -1); \
+        UCS_CLASS_CLEANUP_CALL(&_UCS_CLASS_DECL_NAME(_type), _obj); \
     }
 
 

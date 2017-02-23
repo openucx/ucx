@@ -422,9 +422,8 @@ UCS_TEST_P(test_dc_flow_control, soft_request)
     EXPECT_EQ(get_fc_ptr(m_e1)->fc_wnd, s_thresh - 1);
 }
 
-/* Check that flush returns UCS_INPROGRESS if there is
- * an outgoing grant request */
-UCS_TEST_P(test_dc_flow_control, flush)
+/* Check that flush returns UCS_OK even if there is an outgoing grant request */
+UCS_TEST_P(test_dc_flow_control, flush_destroy)
 {
     int wnd = 5;
 
@@ -437,7 +436,8 @@ UCS_TEST_P(test_dc_flow_control, flush)
     send_am_messages(m_e1, wnd, UCS_OK);
     progress_loop();
 
-    EXPECT_EQ(uct_ep_flush(m_e1->ep(0), 0, NULL), UCS_ERR_NO_RESOURCE);
+    EXPECT_UCS_OK(uct_ep_flush(m_e1->ep(0), 0, NULL));
+    m_e1->destroy_eps();
 
     /* Enable send capabilities of m_e2 and send AM message
      * to force pending queue dispatch */
@@ -445,9 +445,6 @@ UCS_TEST_P(test_dc_flow_control, flush)
     set_tx_moderation(m_e2, 0);
     send_am_messages(m_e2, 1, UCS_OK);
     progress_loop();
-
-    /* Grant should be received by now. Flush should return ok */
-    EXPECT_UCS_OK(uct_ep_flush(m_e1->ep(0), 0, NULL));
 }
 
 /* Check that there is no dci leak when just one (out of several) ep gets

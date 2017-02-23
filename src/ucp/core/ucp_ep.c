@@ -276,11 +276,11 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 break;
             }
 
-            req->send.lane = lane;
             status = uct_ep_pending_add(uct_ep, &req->send.uct);
             ucs_trace("adding pending flush on ep %p lane[%d]: %s", ep, lane,
                       ucs_status_string(status));
             if (status == UCS_OK) {
+                req->send.lane        = lane;
                 req->send.flush.lanes &= ~UCS_BIT(lane);
             } else if (status != UCS_ERR_BUSY) {
                 ucp_ep_flush_error(req, status);
