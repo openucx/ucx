@@ -59,7 +59,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
             hdr            = uct_ib_iface_recv_desc_hdr(&iface->super, desc);
             seg->srq.desc  = desc;
             seg->dptr.lkey = htonl(desc->lkey);
-            seg->dptr.addr = htonll((uintptr_t)hdr);
+            seg->dptr.addr = htobe64((uintptr_t)hdr);
             VALGRIND_MAKE_MEM_NOACCESS(hdr, iface->super.config.seg_size);
         }
 
@@ -93,7 +93,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
         } else if (_bits == 32) { \
             *dest = ntohl(*value);  /* response in CQE as 32-bit value */ \
         } else if (_bits == 64) { \
-            *dest = ntohll(*value); /* response in CQE as 64-bit value */ \
+            *dest = be64toh(*value); /* response in CQE as 64-bit value */ \
         } \
         \
         uct_invoke_completion(desc->super.user_comp, UCS_OK); \

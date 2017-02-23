@@ -129,7 +129,7 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
         UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
         rx_wqes[pi].lkey = htonl(desc->lkey);
-        rx_wqes[pi].addr = htonll((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
+        rx_wqes[pi].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
         pi = next_pi;
     }
     if (ucs_unlikely(count == 0)) {
@@ -380,7 +380,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     ucs_status_t status;
 
     ci     = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
-    packet = (void *)ntohll(iface->rx.wq.wqes[ci].addr);
+    packet = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
     ucs_prefetch(packet + UCT_IB_GRH_LEN);
     desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
 

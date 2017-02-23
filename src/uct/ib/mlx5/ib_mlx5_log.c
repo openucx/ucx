@@ -141,7 +141,7 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         ++(*index);
     } else {
         dpseg      = *dseg_p;
-        sg->addr   = ntohll(dpseg->addr);
+        sg->addr   = be64toh(dpseg->addr);
         sg->length = ntohl(dpseg->byte_count);
         sg->lkey   = ntohl(dpseg->lkey);
         *is_inline = 0;
@@ -161,7 +161,7 @@ static uint64_t network_to_host(uint64_t value, int size)
     if (size == 4) {
         return ntohl(value);
     } else if (size == 8) {
-        return ntohll(value);
+        return be64toh(value);
     } else {
         return value;
     }
@@ -239,7 +239,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     /* Remote address segment */
     if (op->flags & UCT_IB_OPCODE_FLAG_HAS_RADDR) {
         struct mlx5_wqe_raddr_seg *rseg = seg;
-        uct_ib_log_dump_remote_addr(ntohll(rseg->raddr), ntohl(rseg->rkey), s, ends - s);
+        uct_ib_log_dump_remote_addr(be64toh(rseg->raddr), ntohl(rseg->rkey), s, ends - s);
         s += strlen(s);
 
         --ds;
@@ -253,10 +253,10 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
     if (op->flags & UCT_IB_OPCODE_FLAG_HAS_ATOMIC) {
         struct mlx5_wqe_atomic_seg *atomic = seg;
         if (opcode == MLX5_OPCODE_ATOMIC_FA) {
-            uct_ib_log_dump_atomic_fadd(ntohll(atomic->swap_add), s, ends - s);
+            uct_ib_log_dump_atomic_fadd(be64toh(atomic->swap_add), s, ends - s);
         } else if (opcode == MLX5_OPCODE_ATOMIC_CS) {
-            uct_ib_log_dump_atomic_cswap(ntohll(atomic->compare),
-                                     ntohll(atomic->swap_add), s, ends - s);
+            uct_ib_log_dump_atomic_cswap(be64toh(atomic->compare),
+                                     be64toh(atomic->swap_add), s, ends - s);
         }
         s += strlen(s);
 

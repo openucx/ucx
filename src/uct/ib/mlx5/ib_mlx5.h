@@ -16,8 +16,8 @@
 #include <ucs/type/status.h>
 
 #include <infiniband/mlx5_hw.h>
-#include <infiniband/arch.h>
 #include <netinet/in.h>
+#include <endian.h>
 #include <string.h>
 
 

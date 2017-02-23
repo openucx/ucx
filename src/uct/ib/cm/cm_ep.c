@@ -11,7 +11,6 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <uct/base/uct_log.h>
-#include <infiniband/arch.h>
 
 
 typedef struct uct_cm_iov {

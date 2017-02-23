@@ -299,7 +299,7 @@ ucs_status_t uct_rc_mlx5_ep_atomic_add64(uct_ep_h tl_ep, uint64_t add,
                                          uint64_t remote_addr, uct_rkey_t rkey)
 {
     return uct_rc_mlx5_ep_atomic_add(tl_ep, MLX5_OPCODE_ATOMIC_FA, sizeof(uint64_t),
-                                     htonll(add), remote_addr, rkey);
+                                     htobe64(add), remote_addr, rkey);
 }
 
 ucs_status_t uct_rc_mlx5_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
@@ -308,7 +308,7 @@ ucs_status_t uct_rc_mlx5_ep_atomic_fadd64(uct_ep_h tl_ep, uint64_t add,
 {
     return uct_rc_mlx5_ep_atomic(ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t),
                                  MLX5_OPCODE_ATOMIC_FA, result, 0, sizeof(uint64_t),
-                                 remote_addr, rkey, 0, 0, htonll(add), comp);
+                                 remote_addr, rkey, 0, 0, htobe64(add), comp);
 }
 
 ucs_status_t uct_rc_mlx5_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
@@ -318,7 +318,7 @@ ucs_status_t uct_rc_mlx5_ep_atomic_swap64(uct_ep_h tl_ep, uint64_t swap,
     return uct_rc_mlx5_ep_atomic(ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t),
                                  MLX5_OPCODE_ATOMIC_MASKED_CS, result, 1,
                                  sizeof(uint64_t), remote_addr, rkey, 0, 0,
-                                 htonll(swap), comp);
+                                 htobe64(swap), comp);
 }
 
 ucs_status_t uct_rc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
@@ -327,7 +327,7 @@ ucs_status_t uct_rc_mlx5_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uin
 {
     return uct_rc_mlx5_ep_atomic(ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t),
                                  MLX5_OPCODE_ATOMIC_CS, result, 0, sizeof(uint64_t),
-                                 remote_addr, rkey, 0, htonll(compare), htonll(swap),
+                                 remote_addr, rkey, 0, htobe64(compare), htobe64(swap),
                                  comp);
 }
 

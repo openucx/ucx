@@ -174,7 +174,7 @@ uct_ib_mlx5_ep_set_rdma_seg(struct mlx5_wqe_raddr_seg *raddr, uint64_t rdma_radd
     uint64x2_t data = {rdma_raddr, rdma_rkey};
     *(uint8x16_t *)raddr = vqtbl1q_u8((uint8x16_t)data, table);
 #else
-    raddr->raddr = htonll(rdma_raddr);
+    raddr->raddr = htobe64(rdma_raddr);
     raddr->rkey  = htonl(rdma_rkey);
 #endif
 }
@@ -188,7 +188,7 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
     if (qp_type == IBV_QPT_UD) {
         mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_KEY);
     } else if (qp_type == IBV_EXP_QPT_DC_INI) {
-        mlx5_av_base(&seg->av)->key.dc_key     = htonll(UCT_IB_KEY);
+        mlx5_av_base(&seg->av)->key.dc_key     = htobe64(UCT_IB_KEY);
     }
     mlx5_av_base(&seg->av)->dqp_dct            = av->dqp_dct;
     mlx5_av_base(&seg->av)->stat_rate_sl       = av->stat_rate_sl;
@@ -309,7 +309,7 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
     ucs_assert(((unsigned long)dptr % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
     dptr->byte_count = htonl(length);
     dptr->lkey       = htonl(lkey);
-    dptr->addr       = htonll((uintptr_t)address);
+    dptr->addr       = htobe64((uintptr_t)address);
 }
 
 
