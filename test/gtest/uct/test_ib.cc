@@ -442,7 +442,7 @@ UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
     send_msg_e1_e2();
 
     /* make sure the file descriptor is signaled once */
-    ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
+    ASSERT_EQ(poll(&wakeup_fd, 1, 10000), 1);
 
     status = uct_wakeup_efd_arm(wakeup_handle);
     ASSERT_EQ(status, UCS_ERR_BUSY);
