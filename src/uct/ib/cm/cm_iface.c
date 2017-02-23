@@ -13,7 +13,6 @@
 #include <ucs/async/async.h>
 #include <ucs/debug/log.h>
 #include <poll.h>
-#include <infiniband/arch.h>
 
 
 static ucs_config_field_t uct_cm_iface_config_table[] = {

@@ -635,6 +635,8 @@ static void uct_ib_mem_init(uct_ib_mem_t *memh, uint64_t exp_access)
 {
     memh->lkey  = memh->mr->lkey;
     memh->flags = 0;
+
+    /* coverity[dead_error_condition] */
     if (exp_access & IBV_EXP_ACCESS_ON_DEMAND) {
         memh->flags |= UCT_IB_MEM_FLAG_ODP;
     }

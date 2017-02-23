@@ -11,8 +11,9 @@
 
 #include <uct/api/uct.h>
 #include <ucs/stats/stats.h>
-#include <infiniband/arch.h>
 #include <ucs/debug/log.h>
+
+#include <endian.h>
 
 
 #define UCT_IB_QPN_ORDER            24  /* How many bits can be an IB QP number */
@@ -37,9 +38,9 @@
 #define UCT_IB_DEV_MAX_PORTS        2
 #define UCT_IB_INVALID_RKEY         0xffffffffu
 #define UCT_IB_KEY                  0x1ee7a330
-#define UCT_IB_LINK_LOCAL_PREFIX    ntohll(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
-#define UCT_IB_SITE_LOCAL_PREFIX    ntohll(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
-#define UCT_IB_SITE_LOCAL_MASK      ntohll(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_LINK_LOCAL_PREFIX    be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
+#define UCT_IB_SITE_LOCAL_PREFIX    be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_SITE_LOCAL_MASK      be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 
 
 enum {

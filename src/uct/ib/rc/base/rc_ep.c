@@ -13,8 +13,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
-#include <infiniband/arch.h>
-
+#include <endian.h>
 
 #if ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
@@ -465,7 +464,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
         if (_is_be && (_num_bits == 32)) { \
             *dest = ntohl(*value); /* TODO swap in-place */ \
         } else if (_is_be && (_num_bits == 64)) { \
-            *dest = ntohll(*value); \
+            *dest = be64toh(*value); \
         } else { \
             *dest = *value; \
         } \

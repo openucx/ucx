@@ -301,7 +301,7 @@ UCS_TEST_P(test_uct_ib, non_default_gid_idx, "IB_GID_INDEX=1")
 UCS_TEST_P(test_uct_ib, address_pack) {
     initialize();
     test_address_pack(UCT_IB_ADDRESS_TYPE_LINK_LOCAL, UCT_IB_LINK_LOCAL_PREFIX);
-    test_address_pack(UCT_IB_ADDRESS_TYPE_SITE_LOCAL, UCT_IB_SITE_LOCAL_PREFIX | htonll(0x7200));
+    test_address_pack(UCT_IB_ADDRESS_TYPE_SITE_LOCAL, UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_address_pack(UCT_IB_ADDRESS_TYPE_GLOBAL,     0xdeadfeedbeefa880ul);
 }
 
