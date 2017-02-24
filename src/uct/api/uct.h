@@ -1767,9 +1767,10 @@ UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
  * @brief Short eager tagged-send operation.
  *
  * This routine sends a message using @ref uct_short_protocol_desc "short"
- * eager protocol. Eager protocol means that the whole data is sent immediately
- * to the peer. The data is provided as buffer and its length, and must not be
- * larger than the corresponding @a max_short value in @ref uct_iface_attr.
+ * eager protocol. Eager protocol means that the whole data is sent to the peer
+ * immediately without any preceding notification.
+ * The data is provided as buffer and its length,and must not be larger than the
+ * corresponding @a max_short value in @ref uct_iface_attr.
  * The immediate value delivered to the receiver is implicitly equal to 0.
  * If it's required to pass non-zero imm value, @ref uct_ep_tag_eager_bcopy
  * should be used.
@@ -1795,9 +1796,9 @@ UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
  * @brief Bcopy eager tagged-send operation.
  *
  * This routine sends a message using @ref uct_bcopy_protocol_desc "bcopy"
- * eager protocol. Eager protocol means that the whole data is sent
- * immediately to the peer. Custom data callback is used to copy the data to
- * the network buffers.
+ * eager protocol. Eager protocol means that the whole data is sent to the peer
+ * immediately without any preceding notification.
+ * Custom data callback is used to copy the data to the network buffers.
  *
  * @note The resulted data length must not be larger than the corresponding
  *       @a max_bcopy value in @ref uct_iface_attr.
@@ -1826,11 +1827,12 @@ UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
  * @brief Zcopy eager tagged-send operation.
  *
  * This routine sends a message using @ref uct_zcopy_protocol_desc "zcopy"
- * eager protocol. Eager protocol means that the whole data is sent immediately
- * to the peer. The input data (which has to be previously registered) in
- * @a iov array of @ref uct_iov_t structures sent to remote side
- * ("gather output"). Buffers in @a iov are processed in array order, so the
- * function complete @a iov[0] before proceeding to @a iov[1], and so on.
+ * eager protocol. Eager protocol means that the whole data is sent to the peer
+ * immediately without any preceding notification.
+ * The input data (which has to be previously registered) in @a iov array of
+ * @ref uct_iov_t structures sent to remote side ("gather output"). Buffers in
+ * @a iov are processed in array order, so the function complete @a iov[0]
+ * before proceeding to @a iov[1], and so on.
  *
  * @note The resulted data length must not be larger than the corresponding
  *       @a max_zcopy value in @ref uct_iface_attr.
