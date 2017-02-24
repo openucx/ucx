@@ -128,15 +128,21 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         break;
 #if HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
     case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
+        snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
+                 "DCT key violation", event.element.dct->dct_num);
+        break;
     case IBV_EXP_EVENT_DCT_ACCESS_ERR:
+        snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
+                 "DCT access error", event.element.dct->dct_num);
+        break;
     case IBV_EXP_EVENT_DCT_REQ_ERR:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                 ibv_event_type_str(event.event_type), event.element.dct->dct_num);
+                 "DCT requester error", event.element.dct->dct_num);
         break;
 #endif
     default:
-        snprintf(event_info, sizeof(event_info), "%s",
-                 ibv_event_type_str(event.event_type));
+        snprintf(event_info, sizeof(event_info), "%s (%d)",
+                 ibv_event_type_str(event.event_type), event.event_type);
         break;
     };
 
