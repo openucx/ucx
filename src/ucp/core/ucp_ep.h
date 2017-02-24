@@ -18,6 +18,10 @@
 #define UCP_MAX_IOV                16UL
 
 
+/* Configuration */
+typedef uint16_t                   ucp_ep_cfg_index_t;
+
+
 /**
  * Endpoint flags
  */
@@ -115,9 +119,9 @@ typedef struct ucp_ep_config {
     } am;
 
     /* Configuration for each lane that provides RMA */
-    ucp_ep_rma_config_t    rma[UCP_MAX_LANES];
+    ucp_ep_rma_config_t        rma[UCP_MAX_LANES];
     /* Threshold for switching from put_short to put_bcopy */
-    size_t                 bcopy_thresh;
+    size_t                     bcopy_thresh;
 
     struct {
         /* Maximal total size of rndv_get_zcopy */
@@ -136,7 +140,7 @@ typedef struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uint16_t                      cfg_index;     /* Configuration index */
+    ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
     ucp_lane_index_t              am_lane;       /* Cached value */
     uint8_t                       flags;         /* Endpoint flags */
 
