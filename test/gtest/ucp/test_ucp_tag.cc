@@ -136,7 +136,7 @@ void test_ucp_tag::wait_and_validate(request *req)
     request_release(req);
 }
 
-void test_ucp_tag::wait_for_unexpected_msg(ucs_queue_head_t unexpected_q,
+void test_ucp_tag::wait_for_unexpected_msg(ucs_queue_head_t *unexpected_q,
                                            double sec)
 {
     /* Wait for some message to be added to unexpected queue */
@@ -144,7 +144,7 @@ void test_ucp_tag::wait_for_unexpected_msg(ucs_queue_head_t unexpected_q,
 
     do {
         short_progress_loop();
-    } while (ucs_queue_is_empty(&unexpected_q) &&
+    } while (ucs_queue_is_empty(unexpected_q) &&
             (ucs_get_time() < timeout));
 }
 

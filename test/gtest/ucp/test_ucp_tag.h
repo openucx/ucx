@@ -86,7 +86,7 @@ protected:
 
     void wait_and_validate(request *req);
 
-    void wait_for_unexpected_msg(ucs_queue_head_t unexpected_q, double sec);
+    void wait_for_unexpected_msg(ucs_queue_head_t *unexpected_q, double sec);
 
     static void* dt_common_start(size_t count);
 
