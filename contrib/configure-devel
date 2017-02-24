@@ -13,8 +13,7 @@
 basedir=$(cd $(dirname $0) && pwd)
 $basedir/../configure \
 	--enable-gtest \
-    --with-valgrind \
-	--enable-instrumentation \
+	--with-valgrind \
 	--enable-profiling \
 	--enable-frame-pointer \
 	--enable-stats \
