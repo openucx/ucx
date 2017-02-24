@@ -124,7 +124,7 @@ get_active_ib_devices() {
 	for ibdev in $(ibstat -l)
 	do
 		port=1
-		(ibstat $ibdev $port | grep -q Active) && echo "$ibdev:$port"
+		(ibstat $ibdev $port | grep -q Active) && echo "$ibdev:$port" || true
 	done
 }
 
@@ -438,15 +438,22 @@ run_gtest() {
 	$AFFINITY $TIMEOUT make -C test/gtest test
 	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
-	echo "==== Running valgrind tests ===="
-	if [ $(valgrind --version) != "valgrind-3.10.0" ]
+	if ! [[ $(uname -m) =~ "aarch" ]]
 	then
-		module load tools/valgrind-latest
+		echo "==== Running valgrind tests ===="
+		if [ $(valgrind --version) != "valgrind-3.10.0" ]
+		then
+			module load tools/valgrind-latest
+		fi
+		export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes"
+		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
+		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+		module unload tools/valgrind-latest
+	else
+		echo "==== Not running valgrind tests ===="
+		echo "1..1"                                          > vg_skipped.tap
+		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
-	export VALGRIND_EXTRA_ARGS="--xml=yes --xml-file=valgrind.xml --child-silent-after-fork=yes"
-	$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-	(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
-	module unload tools/valgrind-latest
 }
 
 #
@@ -474,9 +481,9 @@ run_tests() {
 	# all are running mpi tests
 	run_mpi_tests
 
-    ../contrib/configure-devel --prefix=$ucx_inst
-    $MAKE
-    $MAKE install
+	../contrib/configure-devel --prefix=$ucx_inst
+	$MAKE
+	$MAKE install
 
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
