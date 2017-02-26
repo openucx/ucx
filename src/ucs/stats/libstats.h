@@ -7,7 +7,7 @@
 #ifndef UCS_LIBSTATS_H_
 #define UCS_LIBSTATS_H_
 
-#include <ucs/stats/stats_fd.h>
+#include <ucs/stats/stats_fwd.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/math.h>

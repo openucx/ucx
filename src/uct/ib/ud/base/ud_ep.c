@@ -129,7 +129,7 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     }
 
     if (now - ep->tx.send_time > 3*uct_ud_slow_tick()) {
-        ucs_trace("sceduling resend now: %llu send_time: %llu diff: %llu tick: %llu",
+        ucs_trace("sceduling resend now: %lu send_time: %lu diff: %lu tick: %lu",
                    now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick());
         ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
