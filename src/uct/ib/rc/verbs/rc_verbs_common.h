@@ -164,6 +164,15 @@ out:
     return status;
 }
 
+ucs_status_t uct_rc_iface_verbs_iov_callback(uct_iface_h tl_iface, uint32_t length,
+                                             void **desc_iov_p, size_t *desc_offset_p,
+                                             uint64_t *addr_p, uint32_t *lkey_p);
+
+ucs_status_t
+uct_rc_iface_verbs_iov_rdma_read_callback(uct_iface_h tl_iface, uint32_t length,
+                                          void **desc_iov_p, size_t *desc_offset_p,
+                                          uint64_t *addr_p, uint32_t *lkey_p);
+
 static inline void
 uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                        uct_rc_am_short_hdr_t *am,

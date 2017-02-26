@@ -45,10 +45,11 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
 
     mapped_buffer buffer(256, 0, *m_sender);
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer.ptr(),
+    UCT_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer.ptr(),
                             (ucs_min(buffer.length(), m_sender->iface_attr().cap.am.max_zcopy)),
                             buffer.memh(),
-                            m_sender->iface_attr().cap.am.max_iov);
+                            m_sender->iface_attr().cap.am.max_iov,
+                            m_sender->iface_attr().cap.am.max_bcopy);
 
     for (int i = 0; i < 100 / ucs::test_time_multiplier(); ++i) {
         connect();

@@ -131,9 +131,10 @@ public:
                                   sendbuf.length());
         size_t hdr_size = ucs::rand() % (max_hdr + 1);
 
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ((char*)sendbuf.ptr() + hdr_size),
+        UCT_TEST_GET_BUFFER_IOV(iov, iovcnt, ((char*)sendbuf.ptr() + hdr_size),
                                 (sendbuf.length() - hdr_size), sendbuf.memh(),
-                                sender().iface_attr().cap.am.max_iov);
+                                sender().iface_attr().cap.am.max_iov,
+                                sender().iface_attr().cap.am.max_bcopy);
 
         return uct_ep_am_zcopy(ep,
                                AM_ID,

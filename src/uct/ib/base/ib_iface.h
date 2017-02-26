@@ -302,34 +302,62 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
                1; }); ++_i)
 
 /**
+ * Callback for UCT_MEM_HANDLE_COPY mode handling in local key.
+ *
+ * It might return UCS_ERR_NO_RESOURCE if no memory in the pool.
+ */
+typedef ucs_status_t (*uct_ib_verbs_iov_callback_t)(uct_iface_h tl_iface, uint32_t length,
+                                                    void **desc_iov_p, size_t *desc_offset_p,
+                                                    uint64_t *addr_p, uint32_t *lkey_p);
+
+/**
  * Fill ibv_sge data structure by data provided in uct_iov_t
  * The function avoids copying IOVs with zero length
  *
- * @return Number of elements in sge[]
+ * if uct_iov_t::memh is UCT_MEM_HANDLE_COPY the function copy the data into
+ * the local memory pool and uses its local key
  */
 static UCS_F_ALWAYS_INLINE
-size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
-                                 size_t iovcnt)
+ucs_status_t uct_ib_verbs_sge_fill_iov(uct_iface_h iface, void **desc_iov,
+                                       struct ibv_sge *sge,
+                                       const uct_iov_t *iov, size_t iovcnt,
+                                       size_t *sgecnt_p,
+                                       uct_ib_verbs_iov_callback_t lazy_cb)
 {
     size_t iov_it, sge_it = 0;
+    size_t desc_offset    = 0;
+    uct_ib_mem_t *mem_h;
+    ucs_status_t status;
+    uint32_t length;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-        sge[sge_it].length = uct_iov_get_length(&iov[iov_it]);
-        if (sge[sge_it].length > 0) {
+        length = uct_iov_get_length(&iov[iov_it]);
+
+        if (length > 0) {
             sge[sge_it].addr   = (uintptr_t)(iov[iov_it].buffer);
+            sge[sge_it].length = length;
         } else {
             continue; /* to avoid zero length elements in sge */
         }
 
-        if (iov[sge_it].memh == UCT_MEM_HANDLE_NULL) {
+        mem_h = (uct_ib_mem_t *) iov[iov_it].memh;
+        if (mem_h == UCT_MEM_HANDLE_NULL) {
             sge[sge_it].lkey = 0;
+        } else if (mem_h == UCT_MEM_HANDLE_COPY) {
+            status = lazy_cb(iface, length, desc_iov, &desc_offset,
+                             &sge[sge_it].addr, &sge[sge_it].lkey);
+            if (UCS_OK != status) {
+                return status;
+            }
         } else {
-            sge[sge_it].lkey = ((uct_ib_mem_t *)(iov[iov_it].memh))->lkey;
+            sge[sge_it].lkey = mem_h->lkey;
         }
+
         ++sge_it;
     }
 
-    return sge_it;
+    *sgecnt_p = sge_it;
+    return UCS_OK;
 }
 
 

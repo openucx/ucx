@@ -422,6 +422,19 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
     return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
 }
 
+size_t uct_iov_total_copy_length(const uct_iov_t *iov, size_t iovcnt)
+{
+    size_t iov_it, total_length = 0;
+
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        if (UCT_MEM_HANDLE_COPY == iov[iov_it].memh) {
+            total_length += uct_iov_get_length(&iov[iov_it]);
+        }
+    }
+
+    return total_length;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
 {
     self->iface = iface;

@@ -106,6 +106,13 @@ enum {
                     "Invalid %s length: %zu (expected: <= %zu)", \
                     _name, (size_t)(_length), (size_t)(_max_length))
 
+
+#define UCT_CHECK_IOV_PARAM(_iov, _iovcnt, _iface, _max_msg_size, _max_copy_size, _name) \
+    UCT_CHECK_IOV_SIZE(_iovcnt, uct_ib_iface_get_max_iov(_iface), _name " iov size"); \
+    UCT_CHECK_LENGTH(uct_iov_total_length(_iov, _iovcnt), _max_msg_size, _name " total length"); \
+    UCT_CHECK_LENGTH(uct_iov_total_copy_length(_iov, _iovcnt), _max_copy_size, _name " copy length");
+
+
 /**
  * Skip if this is a zero-length operation.
  */
@@ -526,6 +533,11 @@ size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
 
     return total_length;
 }
+
+/**
+ * Calculates total length of the iov array buffers with no registered memory key.
+ */
+size_t uct_iov_total_copy_length(const uct_iov_t *iov, size_t iovcnt);
 
 
 #endif

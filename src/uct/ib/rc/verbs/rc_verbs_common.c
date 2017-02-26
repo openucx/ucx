@@ -138,3 +138,94 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
     txcnt->pi = txcnt->ci = 0;
 }
 
+static
+void uct_rc_ep_get_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    char *desc_ptr                 = (char *)(desc + 1);
+    size_t desc_offset             = 0;
+    uct_rc_iface_send_iov_save_desc_t *iov_desc;
+    size_t iov_it, iovcnt, length;
+
+    ucs_assert(NULL != desc->super.buffer);
+    iov_desc = desc->super.buffer;
+    iovcnt   = iov_desc->iovcnt;
+
+    /* copy the payload arrived to the mpool descriptor to the user buffers */
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        length = iov_desc->length[iov_it];
+        memcpy(iov_desc->buffer[iov_it], desc_ptr + desc_offset, length);
+        desc_offset += length;
+    }
+
+    ucs_mpool_put(desc->super.buffer);
+    ucs_mpool_put(desc);
+}
+
+ucs_status_t
+uct_rc_iface_verbs_iov_rdma_read_callback(uct_iface_h tl_iface, uint32_t length,
+                                          void **desc_iov_p, size_t *desc_offset_p,
+                                          uint64_t *addr_p, uint32_t *lkey_p)
+{
+    uct_rc_iface_send_desc_t *desc  = *desc_iov_p;
+    char *desc_ptr                  = NULL;
+    uct_rc_iface_send_iov_save_desc_t *iov_desc;
+    uct_rc_iface_t *iface ;
+
+    if (NULL == desc) {
+        iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+        UCT_RC_IFACE_GET_TX_DESC(iface, &iface->tx.mp, desc);
+        UCT_RC_IFACE_GET_TX_DESC(iface, &iface->tx.mp, iov_desc);
+        VALGRIND_MAKE_MEM_DEFINED(desc + 1, iface->super.config.seg_size);
+
+        /* schedule a callback to copy payload to the user buffer at completion */
+        desc->super.handler = uct_rc_ep_get_zcopy_handler;
+        desc->super.buffer  = iov_desc;
+        iov_desc->iovcnt    = 0;
+        *desc_iov_p         = desc;
+    }
+
+    iov_desc = desc->super.buffer;
+
+    ucs_assert(NULL != iov_desc);
+    ucs_assert(iov_desc->iovcnt < UCT_IB_MAX_IOV);
+
+    /* save offset to extract payload from descriptor later */
+    iov_desc->length[iov_desc->iovcnt] = length;
+    iov_desc->buffer[iov_desc->iovcnt] = (void *) *addr_p;
+    ++iov_desc->iovcnt;
+    desc_ptr        = (char *)(desc + 1);
+    *addr_p         = (uintptr_t)(desc_ptr + *desc_offset_p);
+    *lkey_p         = desc->lkey;
+    *desc_offset_p += length;
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_iface_verbs_iov_callback(uct_iface_h tl_iface, uint32_t length,
+                                             void **desc_iov_p, size_t *desc_offset_p,
+                                             uint64_t *addr_p, uint32_t *lkey_p)
+{
+
+    uct_rc_iface_send_desc_t *desc  = *desc_iov_p;
+    char *desc_ptr                  = NULL;
+    uct_rc_iface_t *iface ;
+
+    if (NULL == desc) {
+        iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+        UCT_RC_IFACE_GET_TX_DESC(iface, &iface->tx.mp, desc);
+        desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+        *desc_iov_p = desc;
+    }
+
+    desc_ptr = (char *)(desc + 1);
+
+    /* copy payload from user buffer to the descriptor */
+    memcpy(desc_ptr + *desc_offset_p, (void *) *addr_p, length);
+    *addr_p         = (uintptr_t)(desc_ptr + *desc_offset_p);
+    *lkey_p         = desc->lkey;
+    *desc_offset_p += length;
+
+    return UCS_OK;
+}
+
