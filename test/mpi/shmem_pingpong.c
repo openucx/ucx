@@ -189,5 +189,7 @@ int main(int argc, char **argv)
     if (!use_global) {
         shfree(mem);
     }
+
+    shmem_finalize();
     return 0;
 }
