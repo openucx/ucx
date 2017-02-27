@@ -716,7 +716,7 @@ struct ucp_tag_recv_info {
  * the run-time environment. Then, the fetched descriptor is used for
  * UCP library @ref ucp_init "initialization". The Application can print out the
  * descriptor using @ref ucp_config_print "print" routine. In addition
- * the application is responsible to @ref ucp_config_release "release" the
+ * the application is responsible to @ref ucp_config_free "free" the
  * descriptor back to UCP library.
  *
  * @param [in]  env_prefix    If non-NULL, the routine searches for the

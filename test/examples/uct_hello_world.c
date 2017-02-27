@@ -8,6 +8,7 @@
 #include <uct/api/uct.h>
 
 #include <assert.h>
+#include <ctype.h>
 
 typedef enum {
     FUNC_AM_SHORT,
@@ -555,7 +556,7 @@ int main(int argc, char **argv)
 
     if (cmd_args.test_strlen > func_am_max_size(cmd_args.func_am_type, &if_info.attr)) {
         status = UCS_ERR_UNSUPPORTED;
-        fprintf(stderr, "Test string is too long: %d, max supported: %d\n",
+        fprintf(stderr, "Test string is too long: %ld, max supported: %lu\n",
                 cmd_args.test_strlen,
                 func_am_max_size(cmd_args.func_am_type, &if_info.attr));
         goto out_free_ep;

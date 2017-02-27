@@ -140,10 +140,12 @@ typedef struct uct_tl_resource_desc {
 
 
 /**
+ * @defgroup UCT_RESOURCE_IFACE_CAP   UCT interface operations and capabilities
  * @ingroup UCT_RESOURCE
+ *
  * @brief  List of capabilities supported by UCX API
  *
- * The enumeration list presents a full list of operations and capabilities
+ * The definition list presents a full list of operations and capabilities
  * exposed by UCX API.
  * @{
  */
@@ -313,7 +315,7 @@ struct uct_iface_attr {
                                               @anchor uct_iface_attr_cap_am_max_iov */
         } am;                            /**< Attributes for AM operations */
 
-        uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
+        uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
     } cap;                               /**< Interface capabilities */
 
     size_t                   device_addr_len;/**< Size of device address */
@@ -794,7 +796,7 @@ ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *
  * @ingroup UCT_RESOURCE
  * @brief Get interface address.
  *
- * requires UCT_IFACE_FLAG_CONNECT_TO_IFACE.
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE.
  *
  * @param [in]  iface       Interface to query.
  * @param [out] addr        Filled with interface address. The size of the buffer
