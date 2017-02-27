@@ -54,11 +54,11 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         goto out;
     }
     if (op_size == sizeof(uint32_t)) {
-        status = UCS_PROFILE_CALL(uct_ep_atomic_add32, ep->uct_eps[rkey->c.amo_lane],
-                                  (uint32_t)value, remote_addr, rkey->c.amo_rkey);
+        status = UCS_PROFILE_CALL(uct_ep_atomic_add32, ep->uct_eps[rkey->cache.amo_lane],
+                                  (uint32_t)value, remote_addr, rkey->cache.amo_rkey);
     } else if (op_size == sizeof(uint64_t)) {
-        status = UCS_PROFILE_CALL(uct_ep_atomic_add64, ep->uct_eps[rkey->c.amo_lane],
-                                  (uint64_t)value, remote_addr, rkey->c.amo_rkey);
+        status = UCS_PROFILE_CALL(uct_ep_atomic_add64, ep->uct_eps[rkey->cache.amo_lane],
+                                  (uint64_t)value, remote_addr, rkey->cache.amo_rkey);
     }
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req = ucp_request_get(ep->worker);

@@ -269,20 +269,21 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     ucp_lane_index_t amo_index;
     ucp_ep_config_t *config;
 
-    UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, rkey->c.rma_lane, rkey->c.rma_rkey);
-    if (rkey->c.rma_lane != UCP_NULL_LANE) {
-        rkey->c.max_put_short = config->rma[rkey->c.rma_lane].max_put_short;
+    UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, rkey->cache.rma_lane,
+                        rkey->cache.rma_rkey);
+    if (rkey->cache.rma_lane != UCP_NULL_LANE) {
+        rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
     }
 
-    UCP_EP_RESOLVE_RKEY(ep, rkey, amo, config, amo_index, rkey->c.amo_rkey);
+    UCP_EP_RESOLVE_RKEY(ep, rkey, amo, config, amo_index, rkey->cache.amo_rkey);
     if (amo_index != UCP_NULL_LANE) {
-        rkey->c.amo_lane      = config->key.amo_lanes[amo_index];
+        rkey->cache.amo_lane      = config->key.amo_lanes[amo_index];
     } else {
-        rkey->c.amo_lane      = UCP_NULL_LANE;
+        rkey->cache.amo_lane      = UCP_NULL_LANE;
     }
 
-    rkey->c.ep_cfg_index  = ep->cfg_index;
+    rkey->cache.ep_cfg_index  = ep->cfg_index;
     ucs_trace("rkey %p ep %p @ cfg[%d] rma_lane %d amo_lane %d", rkey, ep,
-              ep->cfg_index, rkey->c.rma_lane, rkey->c.amo_lane);
+              ep->cfg_index, rkey->cache.rma_lane, rkey->cache.amo_lane);
 }
 

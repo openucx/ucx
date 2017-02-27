@@ -32,7 +32,7 @@ typedef struct ucp_rkey {
         unsigned                  max_put_short;/* Cached value of max_put_short */
         uct_rkey_t                rma_rkey;     /* Key to use for RMAs */
         uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
-    } c;
+    } cache;
     ucp_md_map_t                  md_map;  /* Which *remote* MDs have valid memory handles */
     uct_rkey_bundle_t             uct[0];  /* Remote key for every MD */
 } ucp_rkey_t;
@@ -60,9 +60,9 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 #define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
     ({ \
         ucs_status_t status = UCS_OK; \
-        if (ucs_unlikely((_ep)->cfg_index != (_rkey)->c.ep_cfg_index)) { \
+        if (ucs_unlikely((_ep)->cfg_index != (_rkey)->cache.ep_cfg_index)) { \
             ucp_rkey_resolve_inner(rkey, ep); \
-            if (ucs_unlikely((_rkey)->c._op_type##_lane == UCP_NULL_LANE)) { \
+            if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
                 ucs_error("Remote memory is unreachable"); \
                 status = UCS_ERR_UNREACHABLE; \
             } \

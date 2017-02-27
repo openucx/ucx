@@ -99,7 +99,7 @@ ucp_rma_request_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.rma.remote_addr = remote_addr;
     req->send.rma.rkey        = rkey;
     req->send.uct.func        = cb;
-    req->send.lane            = rkey->c.rma_lane;
+    req->send.lane            = rkey->cache.rma_lane;
     req->send.uct_comp.count  = 0; 
 #if ENABLE_ASSERT
     req->send.cb              = NULL;
@@ -124,8 +124,8 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
     ucs_status_t status;
     ssize_t packed_len;
 
-    ucs_assert(rkey->c.ep_cfg_index == ep->cfg_index);
-    ucs_assert(rkey->c.rma_lane == lane);
+    ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
+    ucs_assert(rkey->cache.rma_lane == lane);
 
     if (req->send.length <= ucp_ep_config(ep)->bcopy_thresh) {
         packed_len = ucs_min(req->send.length, rma_config->max_put_short);
@@ -134,7 +134,7 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
                                   req->send.buffer,
                                   packed_len,
                                   req->send.rma.remote_addr,
-                                  rkey->c.rma_rkey);
+                                  rkey->cache.rma_rkey);
     } else if (ucs_likely(req->send.length < rma_config->put_zcopy_thresh)) {
         ucp_memcpy_pack_context_t pack_ctx;
         pack_ctx.src    = req->send.buffer;
@@ -144,7 +144,7 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
                                       ucp_memcpy_pack,
                                       &pack_ctx,
                                       req->send.rma.remote_addr,
-                                      rkey->c.rma_rkey);
+                                      rkey->cache.rma_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
     } else {
         uct_iov_t iov;
@@ -161,7 +161,7 @@ static ucs_status_t ucp_progress_put(uct_pending_req_t *self)
                                   ep->uct_eps[lane],
                                   &iov, 1, 
                                   req->send.rma.remote_addr,
-                                  rkey->c.rma_rkey,
+                                  rkey->cache.rma_rkey,
                                   &req->send.uct_comp);
         if (status <= 0) {
             --req->send.uct_comp.count;
@@ -181,8 +181,8 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
     ucs_status_t status;
     size_t frag_length;
 
-    ucs_assert(rkey->c.ep_cfg_index == ep->cfg_index);
-    ucs_assert(rkey->c.rma_lane == lane);
+    ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
+    ucs_assert(rkey->cache.rma_lane == lane);
 
     ++req->send.uct_comp.count;
     if (ucs_likely(req->send.length < rma_config->get_zcopy_thresh)) {
@@ -193,7 +193,7 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
                                   (void*)req->send.buffer,
                                   frag_length,
                                   req->send.rma.remote_addr,
-                                  rkey->c.rma_rkey,
+                                  rkey->cache.rma_rkey,
                                   &req->send.uct_comp);
     } else {
         uct_iov_t iov;
@@ -207,7 +207,7 @@ static ucs_status_t ucp_progress_get(uct_pending_req_t *self)
                                   ep->uct_eps[lane],
                                   &iov, 1, 
                                   req->send.rma.remote_addr,
-                                  rkey->c.rma_rkey,
+                                  rkey->cache.rma_rkey,
                                   &req->send.uct_comp);
     }
     if (status <= 0) {
@@ -291,14 +291,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
         goto out_unlock;
     }
 
-    if (ucs_likely(length <= rkey->c.max_put_short)) {
+    if (ucs_likely(length <= rkey->cache.max_put_short)) {
         do {
             /* testing shows that for put message rate it is better to finish
              * put_short here instead of doing it once, getting NO_RESOURCE 
              * and continuing to ucp_rma_blocking()
              */
-            status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->c.rma_lane],
-                                      buffer, length, remote_addr, rkey->c.rma_rkey);
+            status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->cache.rma_lane],
+                                      buffer, length, remote_addr, rkey->cache.rma_rkey);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
                 goto out_unlock;
             }
@@ -312,7 +312,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),
         } while (1);
     }
 
-    rma_config = &ucp_ep_config(ep)->rma[rkey->c.rma_lane];
+    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey,
                               ucp_progress_put, rma_config->put_zcopy_thresh);
 out_unlock:
@@ -335,7 +335,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get, (ep, buffer, length, remote_addr, rkey),
         goto out_unlock;
     }
 
-    rma_config = &ucp_ep_config(ep)->rma[rkey->c.rma_lane];
+    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_blocking(ep, buffer, length, remote_addr, rkey, 
                               ucp_progress_get, rma_config->get_zcopy_thresh);
 out_unlock:
@@ -358,15 +358,15 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     /* Fast path for a single short message */
-    if (ucs_likely(length <= rkey->c.max_put_short)) {
-        status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->c.rma_lane],
-                                  buffer, length, remote_addr, rkey->c.rma_rkey);
+    if (ucs_likely(length <= rkey->cache.max_put_short)) {
+        status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->cache.rma_lane],
+                                  buffer, length, remote_addr, rkey->cache.rma_rkey);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
             goto out_unlock;
         }
     }
 
-    rma_config = &ucp_ep_config(ep)->rma[rkey->c.rma_lane];
+    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                                  ucp_progress_put, rma_config->put_zcopy_thresh);
 out_unlock:
@@ -388,7 +388,7 @@ ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
         goto out_unlock;
     }
 
-    rma_config = &ucp_ep_config(ep)->rma[rkey->c.rma_lane];
+    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
     status = ucp_rma_nonblocking(ep, buffer, length, remote_addr, rkey,
                          ucp_progress_get, rma_config->get_zcopy_thresh);
 out_unlock:

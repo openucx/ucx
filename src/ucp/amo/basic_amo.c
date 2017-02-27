@@ -32,9 +32,9 @@
                 goto out_unlock; \
             } \
             \
-            status = UCS_PROFILE_CALL(_uct_func, (_ep)->uct_eps[(_rkey)->c.amo_lane], \
+            status = UCS_PROFILE_CALL(_uct_func, (_ep)->uct_eps[(_rkey)->cache.amo_lane], \
                                       UCS_PP_TUPLE_BREAK _params, _remote_addr, \
-                                      (_rkey)->c.amo_rkey, _result, &comp); \
+                                      (_rkey)->cache.amo_rkey, _result, &comp); \
             if (ucs_likely(status == UCS_OK)) { \
                 goto out_unlock; \
             } else if (status == UCS_INPROGRESS) { \
