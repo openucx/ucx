@@ -128,8 +128,9 @@ typedef uint8_t                      ucp_rsc_index_t;
 
 /* MDs */
 #define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE(UCS_PP_TOKENPASTE(uint, _bits), _t)
-#define UCP_MD_INDEX_BITS            8  /* How many bits are in MD index */
-#define UCP_MAX_MDS                  UCP_MAX_RESOURCES
+#define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
+typedef ucp_rsc_index_t              ucp_md_index_t;
+#define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 
 /* Lanes */
@@ -138,9 +139,6 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 typedef uint8_t                      ucp_lane_index_t;
 UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
 
-/* MD-lane map */
-#define UCP_MD_LANE_MAP_BITS         64 /* should be UCP_MD_INDEX_BITS * UCP_MAX_LANES */
-UCP_UINT_TYPE(UCP_MD_LANE_MAP_BITS)  ucp_md_lane_map_t;
 
 /* Forward declarations */
 typedef struct ucp_request              ucp_request_t;
@@ -271,7 +269,6 @@ typedef struct ucp_tl_md {
 typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_rsc_index_t               num_mds;    /* Number of memory domains */
-    ucp_rsc_index_t               max_rkey_md;/* Maximal MD index with rkey */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/

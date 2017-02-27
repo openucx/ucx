@@ -334,28 +334,29 @@ out_update_score:
     }
 }
 
-static int ucp_wireup_compare_score(double score1, double score2)
-{
-    /* sort from highest score to lowest */
-    return (score1 < score2) ? 1 : ((score1 > score2) ? -1 : 0);
-}
+#define UCP_WIREUP_COMPARE_SCORE(_elem1, _elem2, _arg, _token) \
+    ({ \
+        const ucp_lane_index_t *lane1 = (_elem1); \
+        const ucp_lane_index_t *lane2 = (_elem2); \
+        const ucp_wireup_lane_desc_t *lanes = (_arg); \
+        double score1, score2; \
+        \
+        score1 = (*lane1 == UCP_NULL_LANE) ? 0.0 : lanes[*lane1]._token##_score; \
+        score2 = (*lane2 == UCP_NULL_LANE) ? 0.0 : lanes[*lane2]._token##_score; \
+        /* sort from highest score to lowest */ \
+        (score1 < score2) ? 1 : ((score1 > score2) ? -1 : 0); \
+    })
 
-static int ucp_wireup_compare_lane_rma_score(const void *elem1, const void *elem2)
+static int ucp_wireup_compare_lane_rma_score(const void *elem1, const void *elem2,
+                                             void *arg)
 {
-    const ucp_wireup_lane_desc_t *desc1 = elem1;
-    const ucp_wireup_lane_desc_t *desc2 = elem2;
-
-    return ucp_wireup_compare_score(desc1->rma_score, desc2->rma_score);
+    return UCP_WIREUP_COMPARE_SCORE(elem1, elem2, arg, rma);
 }
 
 static int ucp_wireup_compare_lane_amo_score(const void *elem1, const void *elem2,
                                              void *arg)
 {
-    const ucp_lane_index_t *lane1  = elem1;
-    const ucp_lane_index_t *lane2  = elem2;
-    const ucp_wireup_lane_desc_t *lanes = arg;
-
-    return ucp_wireup_compare_score(lanes[*lane1].amo_score, lanes[*lane2].amo_score);
+    return UCP_WIREUP_COMPARE_SCORE(elem1, elem2, arg, amo);
 }
 
 static UCS_F_NOINLINE ucs_status_t
@@ -712,14 +713,12 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
                                      ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker            = ep->worker;
-    ucp_lane_index_t num_amo_lanes = 0;
     ucp_wireup_lane_desc_t lane_descs[UCP_MAX_LANES];
-    ucp_rsc_index_t rsc_index, dst_md_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
 
     memset(lane_descs, 0, sizeof(lane_descs));
-    memset(key, 0, sizeof(*key));
+    ucp_ep_config_key_reset(key);
 
     status = ucp_wireup_add_rma_lanes(ep, address_count, address_list,
                                       lane_descs, &key->num_lanes);
@@ -752,58 +751,47 @@ ucs_status_t ucp_wireup_select_lanes(ucp_ep_h ep, unsigned address_count,
         return UCS_ERR_UNREACHABLE;
     }
 
-    /* Sort lanes according to RMA score */
-    qsort(lane_descs, key->num_lanes, sizeof(*lane_descs),
-          ucp_wireup_compare_lane_rma_score);
-
     /* Construct the endpoint configuration key:
      * - arrange lane description in the EP configuration
      * - create remote MD bitmap
-     * - create bitmap of lanes used for RMA and AMO
      * - if AM lane exists and fits for wireup messages, select it for this purpose.
      */
-    key->am_lane   = UCP_NULL_LANE;
-    key->rndv_lane = UCP_NULL_LANE;
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        rsc_index          = lane_descs[lane].rsc_index;
-        dst_md_index       = lane_descs[lane].dst_md_index;
-        key->lanes[lane]   = rsc_index;
-        addr_indices[lane] = lane_descs[lane].addr_index;
         ucs_assert(lane_descs[lane].usage != 0);
+        key->lanes[lane].rsc_index    = lane_descs[lane].rsc_index;
+        key->lanes[lane].dst_md_index = lane_descs[lane].dst_md_index;
+        addr_indices[lane]            = lane_descs[lane].addr_index;
 
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AM) {
             ucs_assert(key->am_lane == UCP_NULL_LANE);
             key->am_lane = lane;
         }
-        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
-            key->rma_lane_map |= UCS_BIT(dst_md_index + lane * UCP_MD_INDEX_BITS);
-        }
-        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
-            key->amo_lanes[num_amo_lanes] = lane;
-            ++num_amo_lanes;
-        }
         if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RNDV) {
             ucs_assert(key->rndv_lane == UCP_NULL_LANE);
             key->rndv_lane = lane;
         }
-    }
-
-    /* Sort and add AMO lanes */
-    ucs_qsort_r(key->amo_lanes, num_amo_lanes, sizeof(*key->amo_lanes),
-                ucp_wireup_compare_lane_amo_score, lane_descs);
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-        if (lane < num_amo_lanes) {
-            dst_md_index      = lane_descs[key->amo_lanes[lane]].dst_md_index;
-            key->amo_lane_map |= UCS_BIT(dst_md_index + lane * UCP_MD_INDEX_BITS);
-        } else {
-            key->amo_lanes[lane] = UCP_NULL_LANE;
+        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA) {
+            key->rma_lanes[lane] = lane;
+        }
+        if (lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
+            key->amo_lanes[lane] = lane;
         }
     }
 
+    /* Sort RMA and AMO lanes according to score */
+    ucs_qsort_r(key->rma_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
+                ucp_wireup_compare_lane_rma_score, lane_descs);
+    ucs_qsort_r(key->amo_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
+                ucp_wireup_compare_lane_amo_score, lane_descs);
+
+    /* Get all reachable MDs from full remote address list */
     key->reachable_md_map = ucp_wireup_get_reachable_mds(worker, address_count,
                                                          address_list);
-    key->wireup_msg_lane  = ucp_wireup_select_wireup_msg_lane(worker, address_list,
-                                                              lane_descs, key->num_lanes);
+
+    /* Select lane for wireup messages */
+    key->wireup_lane  = ucp_wireup_select_wireup_msg_lane(worker, address_list,
+                                                          lane_descs, key->num_lanes);
+
     return UCS_OK;
 }
 

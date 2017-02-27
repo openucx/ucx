@@ -4,7 +4,6 @@
  * See file LICENSE for terms.
  */
 
-
 #ifndef UCP_EP_H_
 #define UCP_EP_H_
 
@@ -48,37 +47,39 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
 
-/* Lanes configuration.
- * Every lane is a UCT endpoint to the same remote worker.
+/*
+ * Endpoint configuration key.
+ * This is filled by to the transport selection logic, according to the local
+ * resources and set of remote addresses.
  */
 typedef struct ucp_ep_config_key {
-    /* Lookup for rma and amo lanes:
-     * Every group of UCP_MD_INDEX_BITS consecutive bits in the map (in total
-     * UCP_MAX_LANES such groups) is a bitmap. All bits in it are zero, except
-     * the md_index-th bit of that lane. If the lane is unused, all bits are zero.
-     * For example, the bitmap '00000100' means the lane remote md_index is 2.
-     * It allows to quickly lookup
-     */
-    ucp_md_lane_map_t      rma_lane_map;
 
-    /* AMO lanes point to another indirect lookup array */
-    ucp_md_lane_map_t      amo_lane_map;
+    ucp_lane_index_t       num_lanes;    /* Number of active lanes */
+
+    struct {
+        ucp_rsc_index_t    rsc_index;    /* Resource index */
+        ucp_md_index_t     dst_md_index; /* Destination memory domain index */
+    } lanes[UCP_MAX_LANES];
+
+    ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
+    ucp_lane_index_t       rndv_lane;    /* Lane for zcopy Rendezvous (can be NULL) */
+    ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
+
+    /* Lanes for remote memory access, sorted by priority, highest first */
+    ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
+
+    /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
 
     /* Bitmap of remote mds which are reachable from this endpoint (with any set
-     * of transports which could be selected in the future)
+     * of transports which could be selected in the future).
      */
     ucp_md_map_t           reachable_md_map;
 
-    ucp_lane_index_t       am_lane;             /* Lane for AM (can be NULL) */
-    ucp_lane_index_t       rndv_lane;           /* Lane for zcopy Rendezvous (can be NULL) */
-    ucp_lane_index_t       wireup_msg_lane;     /* Lane for wireup messages (can be NULL) */
-    ucp_rsc_index_t        lanes[UCP_MAX_LANES];/* Resource index for every lane */
-    ucp_lane_index_t       num_lanes;           /* Number of lanes */
 } ucp_ep_config_key_t;
 
 
-/**
+/*
  * Configuration for RMA protocols
  */
 typedef struct ucp_ep_rma_config {
@@ -158,6 +159,15 @@ typedef struct ucp_ep {
 } ucp_ep_t;
 
 
+void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
+
+void ucp_ep_config_lane_info_str(ucp_context_h context,
+                                 const ucp_ep_config_key_t *key,
+                                 const uint8_t *addr_indices,
+                                 ucp_lane_index_t lane,
+                                 ucp_rsc_index_t aux_rsc_index,
+                                 char *buf, size_t max);
+
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
                         ucp_ep_h *ep_p);
@@ -174,11 +184,8 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config);
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);
 
-ucp_md_map_t ucp_ep_config_get_rma_md_map(const ucp_ep_config_key_t *key,
-                                          ucp_lane_index_t lane);
-
-ucp_md_map_t ucp_ep_config_get_amo_md_map(const ucp_ep_config_key_t *key,
-                                          ucp_lane_index_t lane);
+int ucp_ep_config_get_rma_prio(const ucp_lane_index_t *lanes,
+                               ucp_lane_index_t lane);
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const uct_linear_growth_t *reg_cost,
