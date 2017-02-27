@@ -108,11 +108,11 @@ static int uct_self_iface_is_reachable(const uct_iface_h iface, const uct_device
     return  self_iface->id == *self_addr;
 }
 
-static void uct_self_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_self_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
-    uct_am_recv_desc_t *self_desc = 0;
+    uct_recv_desc_t *self_desc = 0;
 
-    self_desc = (uct_am_recv_desc_t *) desc - 1;
+    self_desc = (uct_recv_desc_t *) desc - 1;
     ucs_trace_func("iface=%p, desc=%p", tl_iface, self_desc);
     ucs_mpool_put(self_desc);
 }
@@ -125,7 +125,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_get_address        = uct_self_iface_get_address,
     .iface_query              = uct_self_iface_query,
     .iface_is_reachable       = uct_self_iface_is_reachable,
-    .iface_release_am_desc    = uct_self_iface_release_am_desc,
+    .iface_release_desc       = uct_self_iface_release_desc,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_self_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_self_ep_t),
     .ep_am_short              = uct_self_ep_am_short,
@@ -173,9 +173,9 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     /* create a memory pool for data transferred */
     status = uct_iface_mpool_init(&self->super,
                                   &self->msg_desc_mp,
-                                  sizeof(uct_am_recv_desc_t) + self->rx_headroom +
-                                                               self->data_length,
-                                  sizeof(uct_am_recv_desc_t) + self->rx_headroom,
+                                  sizeof(uct_recv_desc_t) + self->rx_headroom +
+                                                            self->data_length,
+                                  sizeof(uct_recv_desc_t) + self->rx_headroom,
                                   UCS_SYS_CACHE_LINE_SIZE,
                                   &self_config->mp,
                                   256,

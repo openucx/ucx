@@ -52,7 +52,7 @@ typedef struct uct_ugni_udt_header {
 
 void uct_ugni_udt_progress(void *arg);
 #define uct_ugni_udt_get_offset(i) ((size_t)(ucs_max(sizeof(uct_ugni_udt_header_t), ((i)->config.rx_headroom  + \
-                 sizeof(uct_am_recv_desc_t)))))
+                 sizeof(uct_recv_desc_t)))))
 
 #define uct_ugni_udt_get_diff(i) ((size_t)(uct_ugni_udt_get_offset(i) - sizeof(uct_ugni_udt_header_t)))
 

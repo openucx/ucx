@@ -135,7 +135,7 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
  *                   |
  * uct_recv_desc_t   |
  *               |   |
- *               |   am_callback
+ *               |   am_callback/tag_unexp_callback
  *               |   |
  * +------+------+---+-----------+---------+
  * | LKey |  ??? | D | Head Room | Payload |
@@ -146,7 +146,7 @@ UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
  *                      post_receive
  *
  * (2)
- *            am_callback
+ *            am_callback/tag_unexp_callback
  *            |
  * +------+---+------------------+---------+
  * | LKey | D |     Head Room    | Payload |
@@ -178,7 +178,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp);
 
-void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc);
+void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc);
 
 
 static UCS_F_ALWAYS_INLINE void

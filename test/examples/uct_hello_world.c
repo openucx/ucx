@@ -592,7 +592,7 @@ int main(int argc, char **argv)
 
         print_strings("main", func_am_t_str(cmd_args.func_am_type), desc_holder);
         /* Release descriptor because callback returns UCS_INPROGRESS */
-        uct_iface_release_am_desc(desc_holder);
+        uct_iface_release_desc(desc_holder);
     }
 
     barrier(oob_sock);
