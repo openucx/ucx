@@ -36,7 +36,7 @@ static int show_result(const struct timeval *tv_prev,
 }
 
 static void run_pingpong(char *mem, size_t msg_size, long num_iters, int use_wait,
-                         int do_quiet)
+                         int do_quiet, int use_flag)
 {
     struct timeval tv_prev, tv_curr;
     int my_pe, dst_pe;
@@ -75,7 +75,13 @@ static void run_pingpong(char *mem, size_t msg_size, long num_iters, int use_wai
             while (*rsn != sn);
         }
         if (my_pe == 1) {
-            shmem_putmem(mem, msg, msg_size, dst_pe);
+            if (use_flag) {
+                shmem_putmem(mem, msg, msg_size - sizeof(int), dst_pe);
+                shmem_fence();
+                shmem_int_put((int*)rsn, ssn, 1, dst_pe);
+            } else {
+                shmem_putmem(mem, msg, msg_size, dst_pe);
+            }
             if (do_quiet) {
                 shmem_quiet();
             }
@@ -102,6 +108,7 @@ static void usage()
     printf("  -n <iters>     Specify number of iterations to run (default: 10000).\n");
     printf("  -s <size>      Specify message size (default: 4 bytes).\n");
     printf("  -w             Wait for data using shmem_wait_until() (default: poll on memory).\n");
+    printf("  -f             Send data and flag separately with shmem_fence() in-between.\n");
     printf("  -g             Use global data (default: heap).\n");
     printf("  -q             call shmem_quiet() after every shmem_put().\n");
     printf("\n");
@@ -110,7 +117,7 @@ static void usage()
 int main(int argc, char **argv)
 {
     static char global_buffer[GLOBAL_DATA_SIZE];
-    int use_wait, use_global, do_quiet;
+    int use_wait, use_global, do_quiet, use_flag;
     size_t msg_size;
     long num_iters;
     int my_pe;
@@ -130,8 +137,9 @@ int main(int argc, char **argv)
     use_global = 0;
     use_wait   = 0;
     do_quiet   = 0;
+    use_flag   = 0;
     msg_size   = 8;
-    while ((c = getopt (argc, argv, "n:s:wgqh")) != -1) {
+    while ((c = getopt (argc, argv, "n:s:wgqfh")) != -1) {
         switch (c) {
             break;
         case 'n':
@@ -148,6 +156,9 @@ int main(int argc, char **argv)
             break;
         case 'q':
             do_quiet = 1;
+            break;
+        case 'f':
+            use_flag = 1;
             break;
         case 's':
             msg_size = atol(optarg);
@@ -182,7 +193,7 @@ int main(int argc, char **argv)
 
     shmem_barrier_all();
 
-    run_pingpong(mem, msg_size, num_iters, use_wait, do_quiet);
+    run_pingpong(mem, msg_size, num_iters, use_wait, do_quiet, use_flag);
 
     shmem_barrier_all();
 
