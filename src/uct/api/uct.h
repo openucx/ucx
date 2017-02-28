@@ -18,7 +18,7 @@
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
-#include <ucs/stats/stats_fd.h>
+#include <ucs/stats/stats_fwd.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -147,85 +147,89 @@ typedef struct uct_tl_resource_desc {
 
 
 /**
+ * @defgroup UCT_RESOURCE_IFACE_CAP   UCT interface operations and capabilities
  * @ingroup UCT_RESOURCE
+ *
  * @brief  List of capabilities supported by UCX API
  *
- * The enumeration list presents a full list of operations and capabilities
+ * The definition list presents a full list of operations and capabilities
  * exposed by UCX API.
+ * @{
  */
-enum {
-    /* Active message capabilities */
-    UCT_IFACE_FLAG_AM_SHORT       = UCS_BIT(0), /**< Short active message */
-    UCT_IFACE_FLAG_AM_BCOPY       = UCS_BIT(1), /**< Buffered active message */
-    UCT_IFACE_FLAG_AM_ZCOPY       = UCS_BIT(2), /**< Zero-copy active message */
+        /* Active message capabilities */
+#define UCT_IFACE_FLAG_AM_SHORT       UCS_BIT(0)  /**< Short active message */
+#define UCT_IFACE_FLAG_AM_BCOPY       UCS_BIT(1)  /**< Buffered active message */
+#define UCT_IFACE_FLAG_AM_ZCOPY       UCS_BIT(2)  /**< Zero-copy active message */
 
-    UCT_IFACE_FLAG_PENDING        = UCS_BIT(3), /**< Pending operations */
+#define UCT_IFACE_FLAG_PENDING        UCS_BIT(3)  /**< Pending operations */
 
-    /* PUT capabilities */
-    UCT_IFACE_FLAG_PUT_SHORT      = UCS_BIT(4), /**< Short put */
-    UCT_IFACE_FLAG_PUT_BCOPY      = UCS_BIT(5), /**< Buffered put */
-    UCT_IFACE_FLAG_PUT_ZCOPY      = UCS_BIT(6), /**< Zero-copy put */
+        /* PUT capabilities */
+#define UCT_IFACE_FLAG_PUT_SHORT      UCS_BIT(4)  /**< Short put */
+#define UCT_IFACE_FLAG_PUT_BCOPY      UCS_BIT(5)  /**< Buffered put */
+#define UCT_IFACE_FLAG_PUT_ZCOPY      UCS_BIT(6)  /**< Zero-copy put */
 
-    /* GET capabilities */
-    UCT_IFACE_FLAG_GET_SHORT      = UCS_BIT(8), /**< Short get */
-    UCT_IFACE_FLAG_GET_BCOPY      = UCS_BIT(9), /**< Buffered get */
-    UCT_IFACE_FLAG_GET_ZCOPY      = UCS_BIT(10), /**< Zero-copy get */
+        /* GET capabilities */
+#define UCT_IFACE_FLAG_GET_SHORT      UCS_BIT(8)  /**< Short get */
+#define UCT_IFACE_FLAG_GET_BCOPY      UCS_BIT(9)  /**< Buffered get */
+#define UCT_IFACE_FLAG_GET_ZCOPY      UCS_BIT(10) /**< Zero-copy get */
 
-    /* Atomic operations capabilities */
-    UCT_IFACE_FLAG_ATOMIC_ADD32   = UCS_BIT(16), /**< 32bit atomic add */
-    UCT_IFACE_FLAG_ATOMIC_ADD64   = UCS_BIT(17), /**< 64bit atomic add */
-    UCT_IFACE_FLAG_ATOMIC_FADD32  = UCS_BIT(18), /**< 32bit atomic fetch-and-add */
-    UCT_IFACE_FLAG_ATOMIC_FADD64  = UCS_BIT(19), /**< 64bit atomic fetch-and-add */
-    UCT_IFACE_FLAG_ATOMIC_SWAP32  = UCS_BIT(20), /**< 32bit atomic swap */
-    UCT_IFACE_FLAG_ATOMIC_SWAP64  = UCS_BIT(21), /**< 64bit atomic swap */
-    UCT_IFACE_FLAG_ATOMIC_CSWAP32 = UCS_BIT(22), /**< 32bit atomic compare-and-swap */
-    UCT_IFACE_FLAG_ATOMIC_CSWAP64 = UCS_BIT(23), /**< 64bit atomic compare-and-swap */
+        /* Atomic operations capabilities */
+#define UCT_IFACE_FLAG_ATOMIC_ADD32   UCS_BIT(16) /**< 32bit atomic add */
+#define UCT_IFACE_FLAG_ATOMIC_ADD64   UCS_BIT(17) /**< 64bit atomic add */
+#define UCT_IFACE_FLAG_ATOMIC_FADD32  UCS_BIT(18) /**< 32bit atomic fetch-and-add */
+#define UCT_IFACE_FLAG_ATOMIC_FADD64  UCS_BIT(19) /**< 64bit atomic fetch-and-add */
+#define UCT_IFACE_FLAG_ATOMIC_SWAP32  UCS_BIT(20) /**< 32bit atomic swap */
+#define UCT_IFACE_FLAG_ATOMIC_SWAP64  UCS_BIT(21) /**< 64bit atomic swap */
+#define UCT_IFACE_FLAG_ATOMIC_CSWAP32 UCS_BIT(22) /**< 32bit atomic compare-and-swap */
+#define UCT_IFACE_FLAG_ATOMIC_CSWAP64 UCS_BIT(23) /**< 64bit atomic compare-and-swap */
 
-    /* Atomic operations domain */
-    UCT_IFACE_FLAG_ATOMIC_CPU     = UCS_BIT(30), /**< Atomic communications are consistent
-                                                      with respect to CPU operations. */
-    UCT_IFACE_FLAG_ATOMIC_DEVICE  = UCS_BIT(31), /**< Atomic communications are consistent
-                                                      only with respect to other atomics
-                                                      on the same device. */
+        /* Atomic operations domain */
+#define UCT_IFACE_FLAG_ATOMIC_CPU     UCS_BIT(30) /**< Atomic communications are consistent
+                                                       with respect to CPU operations. */
+#define UCT_IFACE_FLAG_ATOMIC_DEVICE  UCS_BIT(31) /**< Atomic communications are consistent
+                                                       only with respect to other atomics
+                                                       on the same device. */
 
-    /* Error handling capabilities */
-    UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF    = UCS_BIT(32), /**< Invalid buffer for short operation */
-    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF    = UCS_BIT(33), /**< Invalid buffer for buffered operation */
-    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    = UCS_BIT(34), /**< Invalid buffer for zero copy operation */
-    UCT_IFACE_FLAG_ERRHANDLE_AM_ID        = UCS_BIT(35), /**< Invalid AM id on remote */
-    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM   = UCS_BIT(36), /**< Remote memory access */
-    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN    = UCS_BIT(37), /**< Invalid length for buffered operation */
-    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE = UCS_BIT(38), /**< Remote peer failures/outage */
+        /* Error handling capabilities */
+#define UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF    UCS_BIT(32) /**< Invalid buffer for short operation */
+#define UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF    UCS_BIT(33) /**< Invalid buffer for buffered operation */
+#define UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    UCS_BIT(34) /**< Invalid buffer for zero copy operation */
+#define UCT_IFACE_FLAG_ERRHANDLE_AM_ID        UCS_BIT(35) /**< Invalid AM id on remote */
+#define UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM   UCS_BIT(36) /**< Remote memory access */
+#define UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN    UCS_BIT(37) /**< Invalid length for buffered operation */
+#define UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE UCS_BIT(38) /**< Remote peer failures/outage */
 
-    /* Connection establishment */
-    UCT_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(40), /**< Supports connecting to interface */
-    UCT_IFACE_FLAG_CONNECT_TO_EP    = UCS_BIT(41), /**< Supports connecting to specific endpoint */
+        /* Connection establishment */
+#define UCT_IFACE_FLAG_CONNECT_TO_IFACE       UCS_BIT(40) /**< Supports connecting to interface */
+#define UCT_IFACE_FLAG_CONNECT_TO_EP          UCS_BIT(41) /**< Supports connecting to specific endpoint */
 
-    /* Special transport flags */
-    UCT_IFACE_FLAG_AM_DUP           = UCS_BIT(43), /**< Active messages may be received with duplicates
-                                                        This happens if the transport does not keep enough
-                                                        information to detect retransmissions */
+        /* Special transport flags */
+#define UCT_IFACE_FLAG_AM_DUP         UCS_BIT(43) /**< Active messages may be received with duplicates
+                                                       This happens if the transport does not keep enough
+                                                       information to detect retransmissions */
 
-    /* Active message callback invocation */
-    UCT_IFACE_FLAG_AM_CB_SYNC       = UCS_BIT(44), /**< Interface supports setting active message callback
-                                                        which is invoked only from the calling context of
-                                                        uct_worker_progress() */
-    UCT_IFACE_FLAG_AM_CB_ASYNC      = UCS_BIT(45), /**< Interface supports setting active message callback
-                                                        which will be invoked within a reasonable amount of
-                                                        time if uct_worker_progress() is not being called.
-                                                        The callback can be invoked from any progress context
-                                                        and it may also be invoked when uct_worker_progress()
-                                                        is called. */
+        /* Active message callback invocation */
+#define UCT_IFACE_FLAG_AM_CB_SYNC     UCS_BIT(44) /**< Interface supports setting active message callback
+                                                       which is invoked only from the calling context of
+                                                       uct_worker_progress() */
+#define UCT_IFACE_FLAG_AM_CB_ASYNC    UCS_BIT(45) /**< Interface supports setting active message callback
+                                                       which will be invoked within a reasonable amount of
+                                                       time if uct_worker_progress() is not being called.
+                                                       The callback can be invoked from any progress context
+                                                       and it may also be invoked when uct_worker_progress()
+                                                       is called. */
 
-    /* Event notification */
-    UCT_IFACE_FLAG_WAKEUP = UCS_BIT(46), /**< Event notification supported */
+        /* Event notification */
+#define UCT_IFACE_FLAG_WAKEUP         UCS_BIT(46) /**< Event notification supported */
 
-    /* Tag matching operations */
-    UCT_IFACE_FLAG_TAG_EAGER_SHORT = UCS_BIT(47),  /**< Hardware tag matching short eager support */
-    UCT_IFACE_FLAG_TAG_EAGER_BCOPY = UCS_BIT(48),  /**< Hardware tag matching bcopy eager support */
-    UCT_IFACE_FLAG_TAG_EAGER_ZCOPY = UCS_BIT(49),  /**< Hardware tag matching zcopy eager support */
-    UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  = UCS_BIT(50)   /**< Hardware tag matching rendezvous zcopy support */
-};
+        /* Tag matching operations */
+#define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(47) /**< Hardware tag matching short eager support */
+#define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(48) /**< Hardware tag matching bcopy eager support */
+#define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(49) /**< Hardware tag matching zcopy eager support */
+#define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(50) /**< Hardware tag matching rendezvous zcopy support */
+/**
+ * @}
+ */
 
 
 /**
@@ -249,7 +253,7 @@ typedef enum {
 enum uct_wakeup_event_types {
     UCT_WAKEUP_TX_COMPLETION   = UCS_BIT(0),
     UCT_WAKEUP_RX_AM           = UCS_BIT(1),
-    UCT_WAKEUP_RX_SIGNALED_AM  = UCS_BIT(2),
+    UCT_WAKEUP_RX_SIGNALED_AM  = UCS_BIT(2)
 };
 
 
@@ -354,7 +358,7 @@ struct uct_iface_attr {
             } rndv;                      /**< Attributes related to rendezvous protocol */
         } tag;                           /**< Attributes for TAG operations */
 
-        uint64_t             flags;      /**< Flags from UCT_IFACE_FLAG_xx */
+        uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
     } cap;                               /**< Interface capabilities */
 
     size_t                   device_addr_len;/**< Size of device address */
@@ -893,7 +897,7 @@ ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *
  * @ingroup UCT_RESOURCE
  * @brief Get interface address.
  *
- * requires UCT_IFACE_FLAG_CONNECT_TO_IFACE.
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE.
  *
  * @param [in]  iface       Interface to query.
  * @param [out] addr        Filled with interface address. The size of the buffer
@@ -1025,7 +1029,7 @@ enum uct_am_cb_cap {
                                             have @ref UCT_IFACE_FLAG_AM_CB_SYNC flag set to support sync
                                             callback invocation */
 
-    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2), /**< Callback may be invoked from any context. For example,
+    UCT_AM_CB_FLAG_ASYNC = UCS_BIT(2)  /**< Callback may be invoked from any context. For example,
                                             it may be called from transport async progress thread. To guarantee
                                             async invocation, interface must have @ref UCT_IFACE_FLAG_AM_CB_ASYNC
                                             flag set.

@@ -15,7 +15,7 @@
  * These are not necessarily aligned with metric time units.
  * MUST compare short time values with UCS_SHORT_TIME_CMP to handle wrap-around.
  */
-typedef unsigned long long   ucs_time_t;
+typedef unsigned long   ucs_time_t;
 
 
 #endif /* UCS_TIME_DEF_H */

@@ -217,7 +217,7 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
         handler->cb(handler->id, handler->arg);
         ucs_async_method_call(mode, context_unblock, async);
     } else /* async != NULL */ {
-        ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %llu",
+        ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %lu",
                         UCS_ASYNC_HANDLER_ARG(handler), async->last_wakeup);
         if (ucs_atomic_cswap32(&handler->missed, 0, 1) == 0) {
             status = ucs_mpmc_queue_push(&async->missed, handler->id);

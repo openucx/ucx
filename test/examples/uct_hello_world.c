@@ -6,9 +6,9 @@
 #include "ucx_hello_world.h"
 
 #include <uct/api/uct.h>
-#include <ucs/type/status.h>
 
 #include <assert.h>
+#include <ctype.h>
 
 typedef enum {
     FUNC_AM_SHORT,
@@ -17,12 +17,12 @@ typedef enum {
 } func_am_t;
 
 typedef struct {
-    char        *server_name;
-    uint16_t    server_port;
-    func_am_t   func_am_type;
-    const char  *dev_name;
-    const char  *tl_name;
-    long        test_strlen;
+    char               *server_name;
+    uint16_t            server_port;
+    func_am_t           func_am_type;
+    const char         *dev_name;
+    const char         *tl_name;
+    long                test_strlen;
 } cmd_args_t;
 
 typedef struct {
@@ -34,15 +34,15 @@ typedef struct {
 
 /* Helper data type for am_short */
 typedef struct {
-    uint64_t        header;
-    const uint8_t*  payload;
-    size_t          len;
+    uint64_t            header;
+    char               *payload;
+    size_t              len;
 } am_short_args_t;
 
 /* Helper data type for am_bcopy */
 typedef struct {
-    const uint8_t*  data;
-    size_t          len;
+    char               *data;
+    size_t              len;
 } am_bcopy_args_t;
 
 /* Helper data type for am_zcopy */
@@ -82,9 +82,9 @@ static size_t func_am_max_size(func_am_t func_am_type,
 }
 
 /* Helper function for am_short */
-void am_short_params_pack(const uint8_t *buf, size_t len, am_short_args_t *args)
+void am_short_params_pack(char *buf, size_t len, am_short_args_t *args)
 {
-    args->header = *(uint64_t *)buf;
+    args->header      = *(uint64_t *)buf;
     if (len > sizeof(args->header)) {
         args->payload = (buf + sizeof(args->header));
         args->len     = len - sizeof(args->header);
@@ -95,7 +95,7 @@ void am_short_params_pack(const uint8_t *buf, size_t len, am_short_args_t *args)
 }
 
 ucs_status_t do_am_short(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
-                         const uint8_t *buf)
+                         char *buf)
 {
     am_short_args_t send_args;
     am_short_params_pack(buf, cmd_args->test_strlen, &send_args);
@@ -113,14 +113,16 @@ size_t am_bcopy_data_pack_cb(void *dest, void *arg)
 }
 
 ucs_status_t do_am_bcopy(uct_ep_h ep, uint8_t id, const cmd_args_t *cmd_args,
-                         const uint8_t *buf)
+                         char *buf)
 {
-    am_bcopy_args_t args = {
-        .data = buf,
-        .len = cmd_args->test_strlen
-    };
+    am_bcopy_args_t args;
+    ssize_t len;
+
+    args.data = buf;
+    args.len  = cmd_args->test_strlen;
+
     /* Send active message to remote endpoint */
-    ssize_t len = uct_ep_am_bcopy(ep, id, am_bcopy_data_pack_cb, &args);
+    len = uct_ep_am_bcopy(ep, id, am_bcopy_data_pack_cb, &args);
     /* Negative len is an error code */
     return (len >= 0) ? UCS_OK : len;
 }
@@ -135,27 +137,24 @@ void zcopy_completion_cb(uct_completion_t *self, ucs_status_t status)
 }
 
 ucs_status_t do_am_zcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
-                         const cmd_args_t *cmd_args, uint8_t *buf)
+                         const cmd_args_t *cmd_args, char *buf)
 {
     uct_mem_h memh;
+    uct_iov_t iov;
+    zcopy_comp_t comp;
+
     ucs_status_t status = uct_md_mem_reg(if_info->pd, buf, cmd_args->test_strlen,
                                          0, &memh);
-    const uct_iov_t iov = {
-        .buffer = buf,
-        .length = cmd_args->test_strlen,
-        .memh = memh,
-        .stride = 0,
-        .count = 1
-    };
+    iov.buffer          = buf;
+    iov.length          = cmd_args->test_strlen;
+    iov.memh            = memh;
+    iov.stride          = 0;
+    iov.count           = 1;
 
-    zcopy_comp_t comp = {
-        .uct_comp = {
-            .func = zcopy_completion_cb,
-            .count = 1
-        },
-        .md = if_info->pd,
-        .memh = memh
-    };
+    comp.uct_comp.func  = zcopy_completion_cb;
+    comp.uct_comp.count = 1;
+    comp.md             = if_info->pd;
+    comp.memh           = memh;
 
     if (status == UCS_OK) {
         status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1,
@@ -197,12 +196,12 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
 {
     ucs_status_t        status;
     uct_iface_config_t  *config; /* Defines interface configuration options */
-    uct_iface_params_t  params = {
-        .tl_name     = tl_name,
-        .dev_name    = dev_name,
-        .stats_root  = NULL,
-        .rx_headroom = 0
-    };
+    uct_iface_params_t  params;
+
+    params.tl_name     = tl_name;
+    params.dev_name    = dev_name;
+    params.stats_root  = NULL;
+    params.rx_headroom = 0;
 
     UCS_CPU_ZERO(&params.cpu_mask);
     /* Read transport-specific interface configuration */
@@ -557,7 +556,7 @@ int main(int argc, char **argv)
 
     if (cmd_args.test_strlen > func_am_max_size(cmd_args.func_am_type, &if_info.attr)) {
         status = UCS_ERR_UNSUPPORTED;
-        fprintf(stderr, "Test string is too long: %d, max supported: %d\n",
+        fprintf(stderr, "Test string is too long: %ld, max supported: %lu\n",
                 cmd_args.test_strlen,
                 func_am_max_size(cmd_args.func_am_type, &if_info.attr));
         goto out_free_ep;
