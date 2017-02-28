@@ -35,25 +35,6 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
-static inline unsigned uct_rc_verbs_iface_post_recv(uct_rc_verbs_iface_t *iface,
-                                                    int fill)
-{
-    unsigned batch = iface->super.super.config.rx_max_batch;
-    unsigned count;
-
-    if (iface->super.rx.available < batch) {
-        if (!fill) {
-            return 0;
-        } else {
-            count = iface->super.rx.available;
-        }
-    } else {
-        count = batch;
-    }
-
-    return uct_rc_verbs_iface_post_recv_always(&iface->super, count);
-}
-
 static UCS_F_NOINLINE void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface,
                                                        void *arg)
 {
@@ -136,7 +117,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
-                              worker, params, 0, &config->super,
+                              worker, params, &config->super, 0,
+                              config->super.super.rx.queue_len,
+                              sizeof(uct_rc_hdr_t),
+                              config->super.super.rx.queue_len,
                               sizeof(uct_rc_fc_request_t));
 
     /* Initialize inline work request */
@@ -170,7 +154,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
 
     /* Create a dummy QP in order to find out max_inline */
-    status = uct_rc_iface_qp_create(&self->super, IBV_QPT_RC, &qp, &cap);
+    status = uct_rc_iface_qp_create(&self->super, IBV_QPT_RC, &qp, &cap,
+                                    self->super.rx.srq.srq,
+                                    self->super.config.tx_qp_len);
     if (status != UCS_OK) {
         goto err;
     }
@@ -178,7 +164,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->verbs_common.config.max_inline   = cap.max_inline_data;
     uct_ib_iface_set_max_iov(&self->super.super, cap.max_send_sge);
 
-    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super);
+    status = uct_rc_verbs_iface_prepost_recvs_common(&self->super,
+                                                     &self->super.rx.srq);
     if (status != UCS_OK) {
         goto err;
     }

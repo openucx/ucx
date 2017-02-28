@@ -52,7 +52,7 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 
     init_attr.pd               = uct_ib_iface_md(&iface->super.super)->pd;
     init_attr.cq               = iface->super.super.recv_cq;
-    init_attr.srq              = iface->super.rx.srq;
+    init_attr.srq              = iface->super.rx.srq.srq;
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.config.port_num;
     init_attr.mtu              = iface->super.config.path_mtu;
@@ -152,7 +152,8 @@ static ucs_status_t uct_dc_iface_create_dcis(uct_dc_iface_t *iface,
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
         status = uct_rc_txqp_init(&iface->tx.dcis[i].txqp, &iface->super,
-                                  IBV_EXP_QPT_DC_INI, &cap
+                                  IBV_EXP_QPT_DC_INI, &cap,
+                                  iface->super.rx.srq.srq
                                   UCS_STATS_ARG(iface->super.stats));
         if (status != UCS_OK) {
             goto err;
@@ -189,9 +190,12 @@ UCS_CLASS_INIT_FUNC(uct_dc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, md, worker, params,
-                              rx_priv_len, &config->super,
+                              &config->super, rx_priv_len,
+                              config->super.super.rx.queue_len,
+                              sizeof(uct_rc_hdr_t),
+                              config->super.super.rx.queue_len,
                               sizeof(uct_dc_fc_request_t));
-
+ 
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);

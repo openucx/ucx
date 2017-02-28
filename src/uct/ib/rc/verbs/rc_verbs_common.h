@@ -68,31 +68,32 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
-ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface);
+ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
+                                                     uct_rc_srq_t *srq);
 
 void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
                                      uct_rc_iface_t *rc_iface, uct_iface_attr_t *iface_attr);
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max);
-
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface,
+                                             uct_rc_srq_t *srq, unsigned max);
 
 static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_iface_t *iface,
+                                                           uct_rc_srq_t *srq,
                                                            int fill)
 {
     unsigned batch = iface->super.config.rx_max_batch;
     unsigned count;
 
-    if (iface->rx.available < batch) {
+    if (srq->available < batch) {
         if (ucs_likely(fill == 0)) {
             return 0;
         } else {
-            count = iface->rx.available;
+            count = srq->available;
         }
     } else {
         count = batch;
     }
-
-    return uct_rc_verbs_iface_post_recv_always(iface, count);
+    return uct_rc_verbs_iface_post_recv_always(iface, srq, count);
 }
 
 #define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
@@ -110,17 +111,42 @@ static inline int uct_rc_verbs_txcq_get_comp_count(struct ibv_wc *wc)
     return wc->wr_id + 1;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
+                             uct_rc_hdr_t *hdr, uint32_t length)
+{
+    uct_ib_iface_recv_desc_t *desc;
+    uct_rc_iface_ops_t *rc_ops;
+    void *udesc;
+    ucs_status_t status;
+    uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr,
+                               uct_rc_ep_am_packet_dump);
+    desc = (uct_ib_iface_recv_desc_t *)wc->wr_id;
+    if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
+        udesc = (char*)desc + iface->super.config.rx_headroom_offset;
+        rc_ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+        status = rc_ops->fc_handler(iface, wc->qp_num, hdr,
+                                    length - sizeof(*hdr),
+                                    wc->imm_data, wc->slid, udesc);
+        if (status == UCS_OK) {
+            ucs_mpool_put_inline(desc);
+        } else {
+            uct_recv_desc_iface(udesc) = &iface->super.super.super;
+        }
+    } else {
+        uct_ib_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
+                               length - sizeof(*hdr), desc);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
 {
     uct_rc_hdr_t *hdr;
     unsigned i;
     ucs_status_t status;
-    uct_rc_iface_ops_t *rc_ops;
     unsigned num_wcs = iface->super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
-    uct_ib_iface_recv_desc_t *desc;
-
 
     status = uct_ib_poll_cq(iface->super.recv_cq, &num_wcs, wc);
     if (status != UCS_OK) {
@@ -128,32 +154,13 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, hdr, wc, num_wcs) {
-
-        uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, &wc[i],
-                                   hdr, uct_rc_ep_am_packet_dump);
-        desc = (uct_ib_iface_recv_desc_t *)wc[i].wr_id;
-        if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
-            void *udesc;
-            udesc  = (char*)desc + iface->super.config.rx_headroom_offset;
-            rc_ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-            status = rc_ops->fc_handler(iface, wc[i].qp_num, hdr,
-                                        wc[i].byte_len - sizeof(*hdr),
-                                        wc[i].imm_data, wc[i].slid, udesc);
-            if (status == UCS_OK) {
-                ucs_mpool_put_inline(desc);
-            } else {
-                uct_recv_desc_iface(udesc) = &iface->super.super.super;
-            }
-        } else {
-            uct_ib_iface_invoke_am(&iface->super, hdr->am_id, hdr + 1,
-                                   wc[i].byte_len - sizeof(*hdr), desc);
-        }
+        uct_rc_verbs_iface_handle_am(iface, &wc[i], hdr, wc[i].byte_len);
     }
-    iface->rx.available += num_wcs;
+    iface->rx.srq.available += num_wcs;
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
-    uct_rc_verbs_iface_post_recv_common(iface, 0);
+    uct_rc_verbs_iface_post_recv_common(iface, &iface->rx.srq, 0);
     return status;
 }
 

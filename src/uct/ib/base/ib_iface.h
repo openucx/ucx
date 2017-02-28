@@ -119,7 +119,7 @@ struct uct_ib_iface {
 };
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, unsigned, unsigned, unsigned,
-                  size_t, const uct_ib_iface_config_t*)
+                  unsigned, size_t, const uct_ib_iface_config_t*)
 
 
 /*

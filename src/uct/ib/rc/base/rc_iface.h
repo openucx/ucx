@@ -141,6 +141,13 @@ typedef struct uct_rc_iface_ops {
 } uct_rc_iface_ops_t;
 
 
+typedef struct uct_rc_srq
+{
+    struct ibv_srq           *srq;
+    unsigned                 available;
+} uct_rc_srq_t;
+
+
 struct uct_rc_iface {
     uct_ib_iface_t           super;
 
@@ -155,8 +162,7 @@ struct uct_rc_iface {
 
     struct {
         ucs_mpool_t          mp;
-        struct ibv_srq       *srq;
-        unsigned             available;
+        uct_rc_srq_t         srq;
     } rx;
 
     struct {
@@ -197,8 +203,9 @@ struct uct_rc_iface {
     ucs_list_link_t          ep_list;
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
-                  uct_worker_h, const uct_iface_params_t*, unsigned,
-                  const uct_rc_iface_config_t*, unsigned)
+                  uct_worker_h, const uct_iface_params_t*,
+                  const uct_rc_iface_config_t*, unsigned,
+                  unsigned, unsigned, unsigned, unsigned)
 
 
 struct uct_rc_iface_send_op {
@@ -248,8 +255,14 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 /**
  * Creates an RC or DCI QP and fills 'cap' with QP capabilities;
  */
-ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type, struct ibv_qp **qp_p,
-                                    struct ibv_qp_cap *cap);
+ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
+                                    struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
+                                    struct ibv_srq *srq, unsigned max_send_wr);
+ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
+ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
+                                     const uint32_t qp_num,
+                                     struct ibv_ah_attr *ah_attr,
+                                     uint8_t atomic_mr_id);
 
 ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
@@ -320,7 +333,7 @@ static inline void uct_rc_zcopy_desc_set_header(uct_rc_iface_send_desc_t *desc,
                                                 uint8_t id, const void *header,
                                                 unsigned header_length)
 {
-     uct_rc_hdr_t *rch;
+    uct_rc_hdr_t *rch;
 
     /* Header buffer: active message ID + user header */
     rch = (uct_rc_hdr_t *)(desc + 1);

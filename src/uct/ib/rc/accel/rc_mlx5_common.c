@@ -68,9 +68,9 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
 
     count = index - srq->sw_pi;
     if (count > 0) {
-        srq->ready_idx        = index;
-        srq->sw_pi            = index;
-        iface->rx.available  -= count;
+        srq->ready_idx           = index;
+        srq->sw_pi               = index;
+        iface->rx.srq.available -= count;
         ucs_memory_cpu_store_fence();
         *srq->db = htonl(srq->sw_pi);
         ucs_assert(uct_ib_mlx5_srq_get_wqe(srq, srq->mask)->srq.next_wqe_index == 0);
@@ -119,13 +119,13 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    status = uct_ib_mlx5_srq_init(&iface->rx.srq, rc_iface->rx.srq,
+    status = uct_ib_mlx5_srq_init(&iface->rx.srq, rc_iface->rx.srq.srq,
                                   rc_iface->super.config.seg_size);
     if (status != UCS_OK) {
         return status;
     }
 
-    rc_iface->rx.available = iface->rx.srq.mask + 1;
+    rc_iface->rx.srq.available = iface->rx.srq.mask + 1;
     if (uct_rc_mlx5_iface_srq_post_recv(rc_iface, &iface->rx.srq) == 0) {
         ucs_error("Failed to post receives");
         return UCS_ERR_NO_MEMORY;

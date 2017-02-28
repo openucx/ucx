@@ -59,8 +59,8 @@ void uct_rc_verbs_iface_common_query(uct_rc_verbs_iface_common_t *verbs_iface,
     iface_attr->overhead          = 75e-9;
 }
 
-
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max)
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface,
+                                             uct_rc_srq_t *srq, unsigned max)
 {
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
@@ -75,19 +75,20 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_iface_t *iface, unsigned max
         return 0;
     }
 
-    ret = ibv_post_srq_recv(iface->rx.srq, &wrs[0].ibwr, &bad_wr);
+    ret = ibv_post_srq_recv(srq->srq, &wrs[0].ibwr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
     }
-    iface->rx.available -= count;
+    srq->available -= count;
 
     return count;
 }
 
-ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface)
+ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
+                                                     uct_rc_srq_t *srq)
 {
-    while (iface->rx.available > 0) {
-        if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
+    while (srq->available > 0) {
+        if (uct_rc_verbs_iface_post_recv_common(iface, srq, 1) == 0) {
             ucs_error("failed to post receives");
             return UCS_ERR_NO_MEMORY;
         }

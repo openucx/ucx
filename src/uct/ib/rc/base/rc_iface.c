@@ -329,21 +329,22 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned rx_priv_len, const uct_rc_iface_config_t *config,
+                    const uct_rc_iface_config_t *config, unsigned rx_priv_len,
+                    unsigned rx_cq_len, unsigned rx_hdr_len, unsigned srq_size,
                     unsigned fc_req_size)
 {
     struct ibv_srq_init_attr srq_init_attr;
-    uct_ib_device_t *dev;
     ucs_status_t status;
-    unsigned tx_cq_len = config->tx.cq_len;
+    uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    unsigned tx_cq_len   = config->tx.cq_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
-                              rx_priv_len, sizeof(uct_rc_hdr_t), config->tx.cq_len,
+                              rx_priv_len, rx_hdr_len, tx_cq_len, rx_cq_len,
                               SIZE_MAX, &config->super);
 
     self->tx.cq_available           = tx_cq_len - 1; /* Reserve one for error */
     self->tx.next_op                = 0;
-    self->rx.available              = 0;
+    self->rx.srq.available          = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
@@ -402,20 +403,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 
     /* Create SRQ */
     srq_init_attr.attr.max_sge   = 1;
-    srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
+    srq_init_attr.attr.max_wr    = srq_size;
     srq_init_attr.attr.srq_limit = 0;
     srq_init_attr.srq_context    = self;
-    self->rx.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
-    if (self->rx.srq == NULL) {
+    self->rx.srq.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
+    if (self->rx.srq.srq == NULL) {
         ucs_error("failed to create SRQ: %m");
         status = UCS_ERR_IO_ERROR;
         goto err_free_tx_ops;
     }
-
-    self->rx.available           = srq_init_attr.attr.max_wr;
+    self->rx.srq.available       = srq_init_attr.attr.max_wr;
 
     /* Set atomic handlers according to atomic reply endianness */
-    dev = uct_ib_iface_device(&self->super);
     self->config.atomic64_handler = uct_ib_atomic_is_be_reply(dev, 0, sizeof(uint64_t)) ?
                                     uct_rc_ep_atomic_handler_64_be1 :
                                     uct_rc_ep_atomic_handler_64_be0;
@@ -467,7 +466,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_srq:
-    ibv_destroy_srq(self->rx.srq);
+    ibv_destroy_srq(self->rx.srq.srq);
 err_free_tx_ops:
     ucs_free(self->tx.ops);
 err_destroy_tx_mp:
@@ -497,7 +496,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     UCS_STATS_NODE_FREE(self->stats);
 
     /* TODO flush RX buffers */
-    ret = ibv_destroy_srq(self->rx.srq);
+    ret = ibv_destroy_srq(self->rx.srq.srq);
     if (ret) {
         ucs_warn("failed to destroy SRQ: %m");
     }
@@ -514,7 +513,8 @@ UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
-                                    struct ibv_qp **qp_p, struct ibv_qp_cap *cap)
+                                    struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
+                                    struct ibv_srq *srq, unsigned max_send_wr)
 {
     uct_ib_device_t *dev UCS_V_UNUSED = uct_ib_iface_device(&iface->super);
     struct ibv_exp_qp_init_attr qp_init_attr;
@@ -538,9 +538,9 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.send_cq             = iface->super.send_cq;
     qp_init_attr.recv_cq             = iface->super.recv_cq;
     if (qp_type == IBV_QPT_RC) {
-        qp_init_attr.srq             = iface->rx.srq;
+        qp_init_attr.srq             = srq;
     }
-    qp_init_attr.cap.max_send_wr     = iface->config.tx_qp_len;
+    qp_init_attr.cap.max_send_wr     = max_send_wr;
     qp_init_attr.cap.max_recv_wr     = 0;
     qp_init_attr.cap.max_send_sge    = iface->config.tx_min_sge;
     qp_init_attr.cap.max_recv_sge    = 1;
@@ -590,5 +590,93 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
 
     *qp_p = qp;
     *cap  = qp_init_attr.cap;
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
+{
+    struct ibv_qp_attr qp_attr;
+    int ret;
+
+    memset(&qp_attr, 0, sizeof(qp_attr));
+
+    qp_attr.qp_state              = IBV_QPS_INIT;
+    qp_attr.pkey_index            = iface->super.pkey_index;
+    qp_attr.port_num              = iface->super.config.port_num;
+    qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE  |
+                                    IBV_ACCESS_REMOTE_WRITE |
+                                    IBV_ACCESS_REMOTE_READ  |
+                                    IBV_ACCESS_REMOTE_ATOMIC;
+    ret = ibv_modify_qp(qp, &qp_attr,
+                        IBV_QP_STATE      |
+                        IBV_QP_PKEY_INDEX |
+                        IBV_QP_PORT       |
+                        IBV_QP_ACCESS_FLAGS);
+    if (ret) {
+         ucs_error("error modifying QP to INIT: %m");
+         return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
+                                     const uint32_t dest_qp_num,
+                                     struct ibv_ah_attr *ah_attr,
+                                     uint8_t atomic_mr_id)
+{
+    struct ibv_qp_attr qp_attr;
+    int ret;
+
+    memset(&qp_attr, 0, sizeof(qp_attr));
+
+    qp_attr.qp_state              = IBV_QPS_RTR;
+    qp_attr.dest_qp_num           = dest_qp_num;
+    qp_attr.rq_psn                = 0;
+    qp_attr.path_mtu              = iface->config.path_mtu;
+    qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
+    qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
+    qp_attr.ah_attr               = *ah_attr;
+
+    ret = ibv_modify_qp(qp, &qp_attr,
+                        IBV_QP_STATE              |
+                        IBV_QP_AV                 |
+                        IBV_QP_PATH_MTU           |
+                        IBV_QP_DEST_QPN           |
+                        IBV_QP_RQ_PSN             |
+                        IBV_QP_MAX_DEST_RD_ATOMIC |
+                        IBV_QP_MIN_RNR_TIMER);
+    if (ret) {
+        ucs_error("error modifying QP to RTR: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    qp_attr.qp_state              = IBV_QPS_RTS;
+    qp_attr.sq_psn                = 0;
+    qp_attr.timeout               = iface->config.timeout;
+    qp_attr.rnr_retry             = iface->config.rnr_retry;
+    qp_attr.retry_cnt             = iface->config.retry_cnt;
+    qp_attr.max_rd_atomic         = iface->config.max_rd_atomic;
+    ret = ibv_modify_qp(qp, &qp_attr,
+                        IBV_QP_STATE              |
+                        IBV_QP_TIMEOUT            |
+                        IBV_QP_RETRY_CNT          |
+                        IBV_QP_RNR_RETRY          |
+                        IBV_QP_SQ_PSN             |
+                        IBV_QP_MAX_QP_RD_ATOMIC);
+    if (ret) {
+        ucs_error("error modifying QP to RTS: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ucs_debug("connected rc qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
+              "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d "
+              "atomic_mr_offset 0x%0x", qp->qp_num,
+              UCT_IB_IFACE_ARG(&iface->super), ah_attr->dlid,
+              ah_attr->src_path_bits, ah_attr->sl, qp_attr.dest_qp_num,
+              uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
+              qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
+              qp_attr.max_rd_atomic, uct_ib_md_atomic_offset(atomic_mr_id));
+
     return UCS_OK;
 }
