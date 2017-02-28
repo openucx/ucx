@@ -466,8 +466,9 @@ out:
  */
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
-                    unsigned rx_priv_len, unsigned rx_hdr_len, unsigned tx_cq_len,
-                    size_t mss, const uct_ib_iface_config_t *config)
+                    unsigned rx_priv_len, unsigned rx_hdr_len,
+                    unsigned tx_cq_len, unsigned rx_cq_len, size_t mss,
+                    const uct_ib_iface_config_t *config)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     int preferred_cpu = ucs_cpu_set_find_lcs(&params->cpu_mask);
@@ -546,7 +547,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.max_inl_resp = inl;
 
     inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, config->rx.queue_len, &inl,
+    status = uct_ib_iface_create_cq(self, rx_cq_len, &inl,
                                     preferred_cpu, &self->recv_cq);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;

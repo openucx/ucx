@@ -464,7 +464,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->mlx5_common.tx.cq.cq_ci);
     uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->mlx5_common.rx.cq.cq_ci);
     uct_rc_ep_reset_qp(&self->super);
-    uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq);
+    uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq.srq);
     iface->mlx5_common.tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.send_cq);
     iface->mlx5_common.rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.recv_cq);
 }
