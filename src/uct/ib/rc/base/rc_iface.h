@@ -141,8 +141,7 @@ typedef struct uct_rc_iface_ops {
 } uct_rc_iface_ops_t;
 
 
-typedef struct uct_rc_srq
-{
+typedef struct uct_rc_srq {
     struct ibv_srq           *srq;
     unsigned                 available;
 } uct_rc_srq_t;
@@ -258,7 +257,9 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
                                     struct ibv_qp **qp_p, struct ibv_qp_cap *cap,
                                     struct ibv_srq *srq, unsigned max_send_wr);
+
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
+
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t qp_num,
                                      struct ibv_ah_attr *ah_attr,
