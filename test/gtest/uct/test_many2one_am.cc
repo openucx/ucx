@@ -51,7 +51,7 @@ public:
             m_backlog.pop_back();
             EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length);
-            uct_iface_release_am_desc(my_desc);
+            uct_iface_release_desc(my_desc);
         }
     }
 

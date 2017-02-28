@@ -165,7 +165,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                 name);
 }
 
-void uct_ib_iface_release_am_desc(uct_iface_t *tl_iface, void *desc)
+void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     void *ib_desc;
@@ -493,7 +493,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->ops                      = ops;
 
     self->config.rx_payload_offset = sizeof(uct_ib_iface_recv_desc_t) +
-                                     ucs_max(sizeof(uct_am_recv_desc_t) +
+                                     ucs_max(sizeof(uct_recv_desc_t) +
                                              params->rx_headroom,
                                              rx_priv_len + rx_hdr_len);
     self->config.rx_hdr_offset     = self->config.rx_payload_offset - rx_hdr_len;

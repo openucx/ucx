@@ -93,6 +93,13 @@
  * @}
  */
 
+/**
+ * @defgroup UCT_TAG   UCT Tag matching operations
+ * @ingroup UCT_API
+ * @{
+ * Defines tag matching operations.
+ * @}
+ */
 
 /**
  * @ingroup UCT_RESOURCE
@@ -214,6 +221,12 @@ typedef struct uct_tl_resource_desc {
 
         /* Event notification */
 #define UCT_IFACE_FLAG_WAKEUP         UCS_BIT(46) /**< Event notification supported */
+
+        /* Tag matching operations */
+#define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(47) /**< Hardware tag matching short eager support */
+#define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(48) /**< Hardware tag matching bcopy eager support */
+#define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(49) /**< Hardware tag matching zcopy eager support */
+#define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(50) /**< Hardware tag matching rendezvous zcopy support */
 /**
  * @}
  */
@@ -315,6 +328,36 @@ struct uct_iface_attr {
                                               @anchor uct_iface_attr_cap_am_max_iov */
         } am;                            /**< Attributes for AM operations */
 
+        struct {
+            struct {
+                size_t       min_recv;   /**< Minimal allowed length of posted receive buffer */
+                size_t       max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_iface_tag_recv_zcopy
+                                              @anchor uct_iface_attr_cap_tag_recv_iov */
+            } recv;
+
+            struct {
+                  size_t     max_short;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_short */
+                  size_t     max_bcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_bcopy */
+                  size_t     max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_eager_zcopy */
+                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_tag_eager_zcopy */
+            } eager;                     /**< Attributes related to eager protocol */
+
+            struct {
+                  size_t     max_zcopy;  /**< Maximal allowed data length in
+                                              @ref uct_ep_tag_rndv_zcopy */
+                  size_t     max_hdr;    /**< Maximal allowed header length in
+                                              @ref uct_ep_tag_rndv_zcopy and
+                                              @ref uct_ep_tag_rndv_request */
+                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
+                                              @ref uct_ep_tag_rndv_zcopy */
+            } rndv;                      /**< Attributes related to rendezvous protocol */
+        } tag;                           /**< Attributes for TAG operations */
+
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
     } cap;                               /**< Interface capabilities */
 
@@ -351,6 +394,12 @@ struct uct_iface_params {
                                                statistics tree. */
     size_t                   rx_headroom; /**< How much bytes to reserve before
                                                the receive segment.*/
+
+    /* These callbacks are only relevant for HW Tag Matching */
+    void                     *eager_arg;
+    uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */
+    void                     *rndv_arg;
+    uct_tag_unexp_rndv_cb_t  rndv_cb;     /**< Callback for tag matching unexpected rndv messages */
 };
 
 
@@ -475,6 +524,58 @@ struct uct_completion {
 struct uct_pending_req {
     uct_pending_callback_t    func;   /**< User callback function */
     char                      priv[UCT_PENDING_REQ_PRIV_LEN]; /**< Used internally by UCT */
+};
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Posted tag context.
+ *
+ * Tag context is an object which tracks a tag posted to the transport. It
+ * contains callbacks for matching events on this tag.
+ */
+struct uct_tag_context {
+    /**
+     * Tag is consumed by the transport and should not be matched in software.
+     *
+     * @param [in]  self    Pointer to relevant context structure, which was
+     *                      initially passed to @ref uct_iface_tag_recv_zcopy.
+     */
+    void (*tag_consumed_cb)(uct_tag_context_t *self);
+
+    /**
+     * Tag processing is completed by the transport.
+     *
+     * @param [in]  self    Pointer to relevant context structure, which was
+     *                      initially passed to @ref uct_iface_tag_recv_zcopy.
+     * @param [in]  stag    Tag from sender.
+     * @param [in]  imm     Immediate data from sender. For rendezvous, it's always 0.
+     * @param [in]  length  Completed length.
+     * @param [in]  status  Completion status:
+     * (a)   UCS_OK - Success, data placed in provided buffer.
+     * (b)   UCS_ERR_TRUNCATED - Sender's length exceed posted
+                                 buffer, no data is copied.
+     * (c)   UCS_ERR_CANCELED - Canceled by user.
+     */
+     void (*completed_cb)(uct_tag_context_t *self, uct_tag_t stag, uint64_t imm,
+                          size_t length, ucs_status_t status);
+
+    /**
+     * Tag was matched by a rendezvous request, which should be completed by
+     * the protocol layer.
+     *
+     * @param [in]  self          Pointer to relevant context structure, which was
+     *                            initially passed to @ref uct_iface_tag_recv_zcopy.
+     * @param [in]  stag          Tag from sender.
+     * @param [in]  header        User defined header.
+     * @param [in]  header_length User defined header length in bytes.
+     * @param [in]  status        Completion status.
+     */
+     void (*rndv_cb)(uct_tag_context_t *self, uct_tag_t stag, const void *header,
+                     unsigned header_length, ucs_status_t status);
+
+     /** A placeholder for the private data used by the transport */
+     char priv[UCT_TAG_PRIV_LEN];
 };
 
 
@@ -1305,10 +1406,10 @@ UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
  *
  * @param [in]  desc  Descriptor to release.
  */
-UCT_INLINE_API void uct_iface_release_am_desc(void *desc)
+UCT_INLINE_API void uct_iface_release_desc(void *desc)
 {
     uct_iface_h iface = uct_recv_desc_iface(desc);
-    iface->ops.iface_release_am_desc(iface, desc);
+    iface->ops.iface_release_desc(iface, desc);
 }
 
 
@@ -1660,6 +1761,7 @@ UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
     return ep->iface->ops.ep_flush(ep, flags, comp);
 }
 
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Ensures ordering of outstanding communications on the endpoint.
@@ -1675,6 +1777,280 @@ UCT_INLINE_API ucs_status_t uct_ep_flush(uct_ep_h ep, unsigned flags,
 UCT_INLINE_API ucs_status_t uct_ep_fence(uct_ep_h ep, unsigned flags)
 {
     return ep->iface->ops.ep_fence(ep, flags);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Short eager tagged-send operation.
+ *
+ * This routine sends a message using @ref uct_short_protocol_desc "short"
+ * eager protocol. Eager protocol means that the whole data is sent to the peer
+ * immediately without any preceding notification.
+ * The data is provided as buffer and its length,and must not be larger than the
+ * corresponding @a max_short value in @ref uct_iface_attr.
+ * The immediate value delivered to the receiver is implicitly equal to 0.
+ * If it's required to pass non-zero imm value, @ref uct_ep_tag_eager_bcopy
+ * should be used.
+ *
+ * @param [in]  ep        Destination endpoint handle.
+ * @param [in]  tag       Tag to use for the eager message.
+ * @param [in]  data      Data to send.
+ * @param [in]  length    Data length.
+ *
+ * @return UCS_OK              - operation completed successfully.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
+ *                               of send resources.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_tag_eager_short(uct_ep_h ep, uct_tag_t tag,
+                                                   const void *data, size_t length)
+{
+    return ep->iface->ops.ep_tag_eager_short(ep, tag, data, length);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Bcopy eager tagged-send operation.
+ *
+ * This routine sends a message using @ref uct_bcopy_protocol_desc "bcopy"
+ * eager protocol. Eager protocol means that the whole data is sent to the peer
+ * immediately without any preceding notification.
+ * Custom data callback is used to copy the data to the network buffers.
+ *
+ * @note The resulted data length must not be larger than the corresponding
+ *       @a max_bcopy value in @ref uct_iface_attr.
+ *
+ * @param [in]  ep        Destination endpoint handle.
+ * @param [in]  tag       Tag to use for the eager message.
+ * @param [in]  imm       Immediate value which will be available to the
+ *                        receiver.
+ * @param [in]  pack_cb   User callback to pack the data.
+ * @param [in]  arg       Custom argument to @a pack_cb.
+ *
+ * @return >=0       - The size of the data packed by @a pack_cb.
+ * @return otherwise - Error code.
+ */
+UCT_INLINE_API ssize_t uct_ep_tag_eager_bcopy(uct_ep_h ep, uct_tag_t tag,
+                                              uint64_t imm,
+                                              uct_pack_callback_t pack_cb,
+                                              void *arg)
+{
+    return ep->iface->ops.ep_tag_eager_bcopy(ep, tag, imm, pack_cb, arg);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Zcopy eager tagged-send operation.
+ *
+ * This routine sends a message using @ref uct_zcopy_protocol_desc "zcopy"
+ * eager protocol. Eager protocol means that the whole data is sent to the peer
+ * immediately without any preceding notification.
+ * The input data (which has to be previously registered) in @a iov array of
+ * @ref uct_iov_t structures sent to remote side ("gather output"). Buffers in
+ * @a iov are processed in array order, so the function complete @a iov[0]
+ * before proceeding to @a iov[1], and so on.
+ *
+ * @note The resulted data length must not be larger than the corresponding
+ *       @a max_zcopy value in @ref uct_iface_attr.
+ *
+ * @param [in]  ep        Destination endpoint handle.
+ * @param [in]  tag       Tag to use for the eager message.
+ * @param [in]  imm       Immediate value which will be available to the
+ *                        receiver.
+ * @param [in]  iov       Points to an array of @ref uct_iov_t structures.
+ *                        A particular structure pointer must be valid address.
+ *                        NULL terminated pointer is not required.
+ * @param [in]  iovcnt    Size of the @a iov array. If @a iovcnt is zero, the
+ *                        data is considered empty. Note that @a iovcnt is
+ *                        limited by the corresponding @a max_iov value in
+ *                        @ref uct_iface_attr.
+ * @param [in]  comp      Completion callback which will be called when the data
+ *                        is reliably received by the peer, and the buffer
+ *                        can be reused or invalidated.
+ *
+ * @return UCS_OK              - operation completed successfully.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack
+ *                               of send resources.
+ * @return UCS_INPROGRESS      - operation started, and @a comp will be used to
+ *                               notify when it's completed.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_tag_eager_zcopy(uct_ep_h ep, uct_tag_t tag,
+                                                   uint64_t imm,
+                                                   const uct_iov_t *iov,
+                                                   size_t iovcnt,
+                                                   uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_tag_eager_zcopy(ep, tag, imm, iov, iovcnt, comp);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Rendezvous tagged-send operation.
+ *
+ * This routine sends a message using rendezvous protocol. Rendezvous protocol
+ * means that only a small notification is sent at first, and the data itself
+ * is transferred later (when there is a match) to avoid extra memory copy.
+ *
+ * @note The header will be available to the receiver in case of unexpected
+ *       rendezvous operation only, i.e. the peer has not posted tag for this
+ *       message yet (by means of @ref uct_iface_tag_recv_zcopy), when it is
+ *       arrived.
+ *
+ * @param [in]  ep            Destination endpoint handle.
+ * @param [in]  tag           Tag to use for the eager message.
+ * @param [in]  header        User defined header.
+ * @param [in]  header_length User defined header length in bytes. Note that
+ *                            it is limited by the corresponding @a max_hdr
+ *                            value in @ref uct_iface_attr.
+ * @param [in]  iov           Points to an array of @ref uct_iov_t structures.
+ *                            A particular structure pointer must be valid
+ *                            address. NULL terminated pointer is not required.
+ * @param [in]  iovcnt        Size of the @a iov array. If @a iovcnt is zero,
+ *                            the data is considered empty. Note that @a iovcnt
+ *                            is limited by the corresponding @a max_iov value
+ *                            in @ref uct_iface_attr.
+ * @param [in]  comp          Completion callback which will be called when the
+ *                            data is reliably received by the peer, and the
+ *                            buffer can be reused or invalidated.
+ *
+ * @return >=0       - The operation is in progress and the return value is a
+ *                     handle which can be used to cancel the outstanding
+ *                     rendezvous operation.
+ * @return otherwise - Error code.
+ */
+UCT_INLINE_API ucs_status_ptr_t uct_ep_tag_rndv_zcopy(uct_ep_h ep, uct_tag_t tag,
+                                                      const void *header,
+                                                      unsigned header_length,
+                                                      const uct_iov_t *iov,
+                                                      size_t iovcnt,
+                                                      uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_tag_rndv_zcopy(ep, tag, header, header_length,
+                                            iov, iovcnt, comp);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Cancel outstanding rendezvous operation.
+ *
+ * This routine signals the underlying transport disregard the outstanding
+ * operation without calling completion callback provided in
+ * @ref uct_ep_tag_rndv_zcopy.
+ *
+ * @note The operation handle should be valid at the time the routine is
+ * invoked. I.e. it should be a handle of the real operation which is not
+ * completed yet.
+ *
+ * @param [in] ep Destination endpoint handle.
+ * @param [in] op Rendezvous operation handle, as returned from
+ *                @ref uct_ep_tag_rndv_zcopy.
+ *
+ * @return UCS_OK - The operation has been canceled.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_tag_rdnv_cancel(uct_ep_h ep, void *op)
+{
+    return ep->iface->ops.ep_tag_rndv_cancel(ep, op);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Send software rendezvous request.
+ *
+ * This routine sends a rendezvous request only, which indicates that the data
+ * transfer should be completed in software.
+ *
+ * @param [in]  ep            Destination endpoint handle.
+ * @param [in]  tag           Tag to use for matching.
+ * @param [in]  header        User defined header
+ * @param [in]  header_length User defined header length in bytes. Note that it
+ *                            is limited by the corresponding @a max_hdr value
+ *                            in @ref uct_iface_attr.
+ *
+ * @return UCS_OK              - operation completed successfully.
+ * @return UCS_ERR_NO_RESOURCE - could not start the operation now due to lack of
+ *                               send resources.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_request(uct_ep_h ep, uct_tag_t tag,
+                                                    const void* header,
+                                                    unsigned header_length)
+{
+    return ep->iface->ops.ep_tag_rndv_request(ep, tag, header, header_length);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Post a tag to a transport interface.
+ *
+ * This routine posts a tag to be matched on a transport interface. When a
+ * message with the corresponding tag arrives it is stored in the user buffer
+ * (described by @a iov and @a iovcnt) directly. The operation completion is
+ * reported using callbacks on the @a ctx structure.
+ *
+ * @param [in]    iface     Interface to post the tag on.
+ * @param [in]    tag       Tag to expect.
+ * @param [in]    tag_mask  Mask which specifies what bits of the tag to
+ *                          compare.
+ * @param [in]    iov       Points to an array of @ref ::uct_iov_t structures.
+ *                          The @a iov pointer must be valid address of an array
+ *                          of @ref ::uct_iov_t structures. A particular structure
+ *                          pointer must be valid address. NULL terminated pointer
+ *                          is not required.
+ * @param [in]    iovcnt    Size of the @a iov data @ref ::uct_iov_t structures
+ *                          array. If @a iovcnt is zero, the data is considered empty.
+ *                          @a iovcnt is limited by @ref uct_iface_attr_cap_tag_recv_iov
+ *                          "uct_iface_attr::cap::tag::max_iov"
+ * @param [inout] ctx       Context associated with this particular tag, "priv" field
+ *                          in this structure is used to track the state internally.
+ *
+ * @return UCS_OK                - The tag is posted to the transport.
+ * @return UCS_ERR_NO_RESOURCE   - Could not start the operation due to lack of
+ *                                 resources.
+ * @return UCS_ERR_EXCEEDS_LIMIT - No more room for tags in the transport.
+ */
+UCT_INLINE_API ucs_status_t uct_iface_tag_recv_zcopy(uct_iface_h iface,
+                                                     uct_tag_t tag,
+                                                     uct_tag_t tag_mask,
+                                                     const uct_iov_t *iov,
+                                                     size_t iovcnt,
+                                                     uct_tag_context_t *ctx)
+{
+    return iface->ops.iface_tag_recv_zcopy(iface, tag, tag_mask, iov, iovcnt, ctx);
+}
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Cancel a posted tag.
+ *
+ * This routine cancels a tag, which was previously posted by
+ * @ref uct_iface_tag_recv_zcopy. The tag would be either matched or canceled,
+ * in a bounded time, regardless of the peer actions. The original completion
+ * callback of the tag would be called with the status if @a force is not set.
+ *
+ * @param [in]  iface     Interface to cancel the tag on.
+ * @param [in]  ctx       Tag context which was used for posting the tag. If
+ *                        force is 0, @a ctx->completed_cb will be called with
+ *                        either UCS_OK which means the tag was matched and data
+ *                        received despite the cancel request, or
+ *                        UCS_ERR_CANCELED which means the tag was successfully
+ *                        canceled before it was matched.
+ * @param [in]  force     Whether to report completions to @a ctx->completed_cb.
+ *                        If nonzero, the cancel is assumed to be successful,
+ *                        and the callback is not called.
+ *
+ * @return UCS_OK  -      The tag is canceled in the transport.
+ */
+UCT_INLINE_API ucs_status_t uct_iface_tag_recv_cancel(uct_iface_h iface,
+                                                      uct_tag_context_t *ctx,
+                                                      int force)
+{
+    return iface->ops.iface_tag_recv_cancel(iface, ctx, force);
 }
 
 

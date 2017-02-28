@@ -18,6 +18,7 @@
 #define UCT_MD_NAME_MAX          16
 #define UCT_DEVICE_NAME_MAX      32
 #define UCT_PENDING_REQ_PRIV_LEN 32
+#define UCT_TAG_PRIV_LEN         32
 #define UCT_AM_ID_BITS           5
 #define UCT_AM_ID_MAX            UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_INVALID_MEM_HANDLE   NULL
@@ -77,6 +78,8 @@ typedef enum uct_am_trace_type   uct_am_trace_type_t;
 typedef struct uct_device_addr   uct_device_addr_t;
 typedef struct uct_iface_addr    uct_iface_addr_t;
 typedef struct uct_ep_addr       uct_ep_addr_t;
+typedef struct uct_tag_context   uct_tag_context_t;
+typedef uint64_t                 uct_tag_t;  /* tag type - 64 bit */
 /**
  * @}
  */
@@ -140,7 +143,7 @@ typedef struct uct_iov {
 
  * @warning If the user became the owner of the @a desc (by returning
  *          @ref UCS_INPROGRESS) the descriptor must be released later by
- *          @ref uct_iface_release_am_desc by the user.
+ *          @ref uct_iface_release_desc by the user.
  *
  * @retval UCS_OK         - descriptor was consumed, and can be released
  *                          by the caller.
@@ -233,6 +236,79 @@ typedef size_t (*uct_pack_callback_t)(void *dest, void *arg);
  * @note The arguments for this callback are in the same order as libc's memcpy().
  */
 typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length);
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Callback to process unexpected eager tagged message.
+ *
+ * This callback is invoked when tagged message sent by eager protocol has
+ * arrived and no corresponding tag has been posted.
+ *
+ * @note The callback is always invoked from the context (thread, process)
+ *       that called @a uct_iface_progress().
+ *
+ * @note It is allowed to call other communication routines from the callback.
+ *
+ * @param [in]  arg     User-defined argument
+ * @param [in]  data    Points to the received unexpected data.
+ * @param [in]  length  Length of data.
+ * @param [in]  desc    Points to the received descriptor, at the beginning of
+ *                      the user-defined rx_headroom.
+ * @param [in]  stag    Tag from sender.
+ * @param [in]  imm     Immediate data from sender.
+ *
+ * @warning If the user became the owner of the @a desc (by returning
+ *          @ref UCS_INPROGRESS) the descriptor must be released later by
+ *          @ref uct_iface_release_desc by the user.
+ *
+ * @retval UCS_OK         - descriptor was consumed, and can be released
+ *                          by the caller.
+ * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
+ *                          released later.
+ */
+typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
+                                                 size_t length, void *desc,
+                                                 uct_tag_t stag,  uint64_t imm);
+
+
+/**
+ * @ingroup UCT_TAG
+ * @brief Callback to process unexpected rendezvous tagged message.
+ *
+ * This callback is invoked when rendezvous send notification has arrived
+ * and no corresponding tag has been posted.
+ *
+ * @note The callback is always invoked from the context (thread, process)
+ *       that called @a uct_iface_progress().
+ *
+ * @note It is allowed to call other communication routines from the callback.
+ *
+ * @param [in]  arg           User-defined argument
+ * @param [in]  desc          Points to the received descriptor, at the
+ *                            beginning of the user-defined rx_headroom.
+ * @param [in]  stag          Tag from sender.
+ * @param [in]  header        User defined header.
+ * @param [in]  header_length User defined header length in bytes.
+ * @param [in]  remote_addr   Sender's buffer virtual address.
+ * @param [in]  length        Sender's buffer length.
+ * @param [in]  rkey_buf      Sender's buffer packed remote key. It can be
+ *                            passed to uct_rkey_unpack() to create uct_rkey_t.
+ *
+ * @warning If the user became the owner of the @a desc (by returning
+ *          @ref UCS_INPROGRESS) the descriptor must be released later by
+ *          @ref uct_iface_release_desc by the user.
+ *
+ * @retval UCS_OK         - descriptor was consumed, and can be released
+ *                          by the caller.
+ * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
+ *                          released later.
+ */
+typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, void *desc,
+                                                uint64_t stag, const void *header,
+                                                unsigned header_length,
+                                                uint64_t remote_addr, size_t length,
+                                                const void *rkey_buf);
 
 
 #endif
