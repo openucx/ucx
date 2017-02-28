@@ -7,6 +7,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
+#include <ucs/debug/profile.h>
 
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req);
 
@@ -56,6 +57,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             goto err; /* Failed */
         }
 
+        UCS_PROFILE_REQUEST_EVENT(req, "am_bcopy_first", packed_len);
         return UCS_INPROGRESS;
     } else if (offset + max_middle < req->send.length) {
         /* Middle */
@@ -67,6 +69,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         ucs_assertv((packed_len < 0) || (packed_len <= max_middle + hdr_size_middle),
                     "packed_len=%zd max_middle=%zu hdr_size_middle=%zu",
                     packed_len, max_middle, hdr_size_middle);
+        UCS_PROFILE_REQUEST_EVENT(req, "am_bcopy_middle", packed_len);
         return UCS_INPROGRESS;
     } else {
         /* Last */
@@ -75,6 +78,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             goto err; /* Failed */
         }
 
+        UCS_PROFILE_REQUEST_EVENT(req, "am_bcopy_last", packed_len);
         return UCS_OK;
     }
 
@@ -218,6 +222,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             goto err; /* Failed */
         }
 
+        UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_first", iov[0].length);
         state->offset      += length_it;
         ++req->send.uct_comp.count;
         return UCS_INPROGRESS;
@@ -232,6 +237,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             goto err; /* Failed */
         }
 
+        UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_middle", iov[0].length);
         state->offset      += length_it;
         ++req->send.uct_comp.count;
         return UCS_INPROGRESS;
@@ -247,6 +253,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             goto err; /* Failed */
         }
 
+        UCS_PROFILE_REQUEST_EVENT(req, "am_zcopy_last", iov[0].length);
         ucs_assert(req->send.length == (state->offset + length_it));
         if (status == UCS_OK) {
             complete(req);

@@ -10,7 +10,6 @@
 #include "rc_iface.h"
 
 #include <uct/api/uct.h>
-#include <uct/ib/base/ib_instr.h>
 
 
 enum {
@@ -272,7 +271,6 @@ uct_rc_txqp_add_send_op(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op)
      */
     ucs_assert(op != NULL);
     ucs_queue_push(&txqp->outstanding, &op->queue);
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -307,7 +305,6 @@ uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         op->handler(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
     }
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static inline void
@@ -319,7 +316,6 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         op->handler(op, resp);
     }
-    UCT_IB_INSTRUMENT_RECORD_SEND_OP(op);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t

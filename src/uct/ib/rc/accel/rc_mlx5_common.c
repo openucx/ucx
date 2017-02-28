@@ -98,7 +98,6 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
         \
         uct_invoke_completion(desc->super.user_comp, UCS_OK); \
         ucs_mpool_put(desc); \
-        UCT_IB_INSTRUMENT_RECORD_SEND_OP(op); \
     }
 
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(32)

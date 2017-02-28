@@ -10,7 +10,7 @@
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
-#include <ucs/debug/instrument.h>
+#include <ucs/debug/profile.h>
 #include <ucs/datastruct/mpool.inl>
 #include <inttypes.h>
 
@@ -33,13 +33,14 @@
 /* defined as a macro to print the call site */
 #define ucp_request_get(_worker) \
     ({ \
-        ucp_request_t *req = ucs_mpool_get_inline(&(_worker)->req_mp); \
-        if (req != NULL) { \
-            VALGRIND_MAKE_MEM_DEFINED(req + 1, \
+        ucp_request_t *_req = ucs_mpool_get_inline(&(_worker)->req_mp); \
+        if (_req != NULL) { \
+            VALGRIND_MAKE_MEM_DEFINED(_req + 1, \
                                       (_worker)->context->config.request.size); \
-            ucs_trace_req("allocated request %p", req); \
+            ucs_trace_req("allocated request %p", _req); \
+            UCS_PROFILE_REQUEST_NEW(_req, "ucp_request", 0); \
         } \
-        req; \
+        _req; \
     })
 
 #define ucp_request_complete(_req, _cb, _status, ...) \
@@ -65,7 +66,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_COMPLETED);
+    UCS_PROFILE_REQUEST_FREE(req);
     ucs_mpool_put_inline(req);
 }
 
@@ -75,9 +76,7 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
     ucs_trace_req("completing send request %p (%p) "UCP_REQUEST_FLAGS_FMT" %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
-                          "ucp_request_complete_send",
-                          req, 0);
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
     ucp_request_complete(req, send.cb, status);
 }
 
@@ -89,9 +88,7 @@ ucp_request_complete_recv(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.info.sender_tag, req->recv.info.length,
                   ucs_status_string(status));
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_RX,
-                          "ucp_request_complete_recv",
-                          req, req->recv.info.length);
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
     ucp_request_complete(req, recv.cb, status, &req->recv.info);
 }
 

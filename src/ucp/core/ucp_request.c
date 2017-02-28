@@ -60,19 +60,20 @@ ucp_request_release_common(void *request, uint8_t cb_flag, const char *debug_nam
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
 }
 
-void ucp_request_release(void *request)
+UCS_PROFILE_FUNC_VOID(ucp_request_release, (request), void *request)
 {
     /* mark request as released */
     ucp_request_release_common(request, 0, "release");
 }
 
-void ucp_request_free(void *request)
+UCS_PROFILE_FUNC_VOID(ucp_request_free, (request), void *request)
 {
     /* mark request as released and disable the callback */
     ucp_request_release_common(request, UCP_REQUEST_FLAG_CALLBACK, "free");
 }
 
-void ucp_request_cancel(ucp_worker_h worker, void *request)
+UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
+                      ucp_worker_h worker, void *request)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
@@ -199,7 +200,8 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
     }
 }
 
-ucs_status_t ucp_request_send_buffer_reg(ucp_request_t *req, ucp_lane_index_t lane)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
+                 ucp_request_t *req, ucp_lane_index_t lane)
 {
     uct_md_h uct_md         = ucp_ep_md(req->send.ep, lane);
     ucp_frag_state_t *state = &req->send.state;
@@ -254,7 +256,8 @@ err:
     return status;
 }
 
-void ucp_request_send_buffer_dereg(ucp_request_t *req, ucp_lane_index_t lane)
+UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
+                      ucp_request_t *req, ucp_lane_index_t lane)
 {
     uct_md_h uct_md         = ucp_ep_md(req->send.ep, lane);
     ucp_frag_state_t *state = &req->send.state;

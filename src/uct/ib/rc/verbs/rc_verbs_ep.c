@@ -29,8 +29,6 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     uct_ib_log_post_send(&iface->super.super, ep->super.txqp.qp, wr,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
 
-    UCT_IB_INSTRUMENT_RECORD_SEND_WR_LEN("uct_rc_verbs_ep_post_send", wr);
-
     ret = ibv_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
         ucs_fatal("ibv_post_send() returned %d (%m)", ret);
@@ -58,8 +56,6 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
 
     uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr,
                              (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
-
-    UCT_IB_INSTRUMENT_RECORD_SEND_EXP_WR_LEN("uct_rc_verbs_exp_post_send", wr);
 
     ret = ibv_exp_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {

@@ -13,7 +13,6 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/debug/instrument.h>
 #include <string.h>
 
 static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
@@ -72,17 +71,21 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
     if (((ssize_t)length <= max_short) && !is_iov) {
         /* short */
         req->send.uct.func = proto->contig_short;
+        UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
     } else if ((((config->key.rndv_lane != UCP_NULL_RESOURCE) &&
                (length >= rndv_rma_thresh)) ||
                (length >= rndv_am_thresh)) && !is_iov) {
         /* RMA/AM rendezvous */
         ucp_tag_send_start_rndv(req);
+        UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else if (length < zcopy_thresh) {
         /* bcopy */
         if (length <= (config->am.max_bcopy - only_hdr_size)) {
             req->send.uct.func   = proto->bcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_bcopy_single", req->send.length);
         } else {
             req->send.uct.func   = proto->bcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_bcopy_multi", req->send.length);
         }
     } else {
         /* eager zcopy */
@@ -97,8 +100,10 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
         if ((length <= (config->am.max_zcopy - only_hdr_size)) &&
             flag_iov_single) {
             req->send.uct.func   = proto->zcopy_single;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_zcopy_single", req->send.length);
         } else {
             req->send.uct.func   = proto->zcopy_multi;
+            UCS_PROFILE_REQUEST_EVENT(req, "start_egr_zcopy_multi", req->send.length);
         }
     }
     return UCS_OK;
@@ -122,12 +127,15 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
     if (length >= rndv_am_thresh) {
         /* rendezvous */
         ucp_tag_send_start_rndv(req);
+        UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else if (length <= config->am.max_bcopy - proto->only_hdr_size) {
         /* bcopy single */
         req->send.uct.func = proto->bcopy_single;
+        UCS_PROFILE_REQUEST_EVENT(req, "start_gen_bcopy_single", req->send.length);
     } else {
         /* bcopy multi */
         req->send.uct.func = proto->bcopy_multi;
+        UCS_PROFILE_REQUEST_EVENT(req, "start_gen_bcopy_multi", req->send.length);
     }
 }
 
@@ -180,7 +188,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
-        ucs_mpool_put(req);
+        ucp_request_put(req);
         return UCS_STATUS_PTR(status);
     }
 
@@ -204,9 +212,10 @@ static void ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep,
 #endif
 }
 
-ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
-                                 ucp_datatype_t datatype, ucp_tag_t tag,
-                                 ucp_send_callback_t cb)
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
+                 (ep, buffer, count, datatype, tag, cb),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 uintptr_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
 {
     ucs_status_t status;
     ucp_request_t *req;
@@ -220,16 +229,10 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
 
     if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
         length = ucp_contig_dt_length(datatype, count);
-        UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
-                              "ucp_tag_send_nb (eager - start)",
-                              buffer, length);
         if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_eager_short)) {
-            status = ucp_tag_send_eager_short(ep, tag, buffer, length);
+            status = UCS_PROFILE_CALL(ucp_tag_send_eager_short, ep, tag, buffer,
+                                      length);
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-                UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX,
-                                      "ucp_tag_send_nb (eager - finish)",
-                                      buffer, length);
-
                 UCP_EP_STAT_TAG_OP(ep, EAGER);
                 ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
                 goto out;
@@ -242,9 +245,6 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
     }
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_nb", req,
-                          ucp_dt_length(datatype, count, buffer, &req->send.state));
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, tag, 0);
 
@@ -259,9 +259,10 @@ out:
     return ret;
 }
 
-ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t count,
-                                      ucp_datatype_t datatype, ucp_tag_t tag,
-                                      ucp_send_callback_t cb)
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
+                 (ep, buffer, count, datatype, tag, cb),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 uintptr_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
 {
     ucp_request_t *req;
     ucs_status_ptr_t ret;
@@ -276,9 +277,6 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
         ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
         goto out;
     }
-
-    UCS_INSTRUMENT_RECORD(UCS_INSTRUMENT_TYPE_UCP_TX, "ucp_tag_send_sync_nb", req,
-                          ucp_dt_length(datatype, count, buffer, &req->send.state));
 
     /* Remote side needs to send reply, so have it connect to us */
     ucp_ep_connect_remote(ep);
@@ -328,20 +326,22 @@ size_t ucp_tag_pack_dt_copy(void *dest, const void *src, ucp_frag_state_t *state
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        memcpy(dest, src + state->offset, length);
+        UCS_PROFILE_CALL(memcpy, dest, src + state->offset, length);
         result_len = length;
         break;
 
     case UCP_DATATYPE_IOV:
-        ucp_dt_iov_gather(dest, src, length, &state->dt.iov.iov_offset,
-                          &state->dt.iov.iovcnt_offset);
+        UCS_PROFILE_CALL_VOID(ucp_dt_iov_gather, dest, src, length,
+                              &state->dt.iov.iov_offset,
+                              &state->dt.iov.iovcnt_offset);
         result_len = length;
         break;
 
     case UCP_DATATYPE_GENERIC:
         dt = ucp_dt_generic(datatype);
-        result_len = dt->ops.pack(state->dt.generic.state, state->offset, dest,
-                                  length);
+        result_len = UCS_PROFILE_NAMED_CALL("dt_pack", dt->ops.pack,
+                                            state->dt.generic.state,
+                                            state->offset, dest, length);
         break;
 
     default:

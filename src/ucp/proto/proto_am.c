@@ -7,6 +7,9 @@
 #include "proto.h"
 #include "proto_am.inl"
 
+#include <ucp/core/ucp_request.inl>
+
+
 static size_t ucp_proto_pack(void *dest, void *arg)
 {
     ucp_reply_hdr_t *rep_hdr = dest;
@@ -31,7 +34,7 @@ ucs_status_t ucp_proto_progress_am_bcopy_single(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_single(self, req->send.proto.am_id,
                                                  ucp_proto_pack);
     if (status == UCS_OK) {
-        ucs_mpool_put(req);
+        ucp_request_put(req);
     }
     return status;
 }

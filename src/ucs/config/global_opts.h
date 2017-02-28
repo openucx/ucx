@@ -57,15 +57,6 @@ typedef struct {
     /* Log level to trigger error handling */
     ucs_log_level_t          log_level_trigger;
 
-    /* File name to dump instrumentation records to */
-    char                     *instrument_file;
-
-    /* Types of instrumentation to be recorded for this run */
-    unsigned                 instrument_types;
-
-    /* Limit for instrumentation data size */
-    size_t                   instrument_max_size;
-
     /* Max. events per context, will be removed in the future */
     unsigned                 async_max_events;
 

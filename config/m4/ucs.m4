@@ -7,21 +7,6 @@
 
 
 #
-# Internal instrumentation support.
-# This option may affect perofrmance so it is off by default.
-#
-AC_ARG_ENABLE([instrumentation],
-	AS_HELP_STRING([--enable-instrumentation], [Enable instrumentation support, default: NO]),
-	[],
-	[enable_instrumentation=no])
-	
-AS_IF([test "x$enable_instrumentation" == xyes], 
-	[AC_DEFINE([HAVE_INSTRUMENTATION], [1], [Enable instrumentation])]
-	[:]
-)
-
-
-#
 # Internal profiling support.
 # This option may affect perofrmance so it is off by default.
 #
