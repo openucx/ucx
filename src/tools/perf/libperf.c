@@ -10,6 +10,7 @@
 #include "libperf_int.h"
 
 #include <ucs/debug/log.h>
+#include <string.h>
 #include <malloc.h>
 #include <unistd.h>
 

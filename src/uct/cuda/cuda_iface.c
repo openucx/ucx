@@ -9,6 +9,7 @@
 #include "cuda_ep.h"
 
 #include <ucs/type/class.h>
+#include <ucs/sys/string.h>
 
 
 static ucs_config_field_t uct_cuda_iface_config_table[] = {

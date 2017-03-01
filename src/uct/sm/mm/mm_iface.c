@@ -12,6 +12,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/string.h>
 #include <sys/poll.h>
 
 

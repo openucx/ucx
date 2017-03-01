@@ -10,6 +10,7 @@
 #include "test_perf.h"
 
 extern "C" {
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 }
 #include <pthread.h>

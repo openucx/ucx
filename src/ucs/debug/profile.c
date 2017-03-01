@@ -6,6 +6,7 @@
 
 #include "profile.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 
 #if HAVE_PROFILING

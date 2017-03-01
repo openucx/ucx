@@ -15,6 +15,7 @@
 #include "libperf.h"
 #include "libperf_int.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 #include <sys/socket.h>

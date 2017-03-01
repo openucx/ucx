@@ -14,7 +14,9 @@
 #include <ucp/tag/eager.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/string.h>
 #include <string.h>
+
 
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {

@@ -10,6 +10,7 @@
 
 #include <uct/base/uct_md.h>
 #include <uct/sm/base/sm_iface.h>
+#include <ucs/sys/string.h>
 
 
 UCT_MD_REGISTER_TL(&uct_knem_md_component, &uct_knem_tl);

@@ -11,6 +11,8 @@
 #include <ctype.h>
 #include <ucs/debug/log.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/string.h>
+
 
 #define PRINT_CAP(_name, _cap_flags, _max) \
     if ((_cap_flags) & (UCT_IFACE_FLAG_##_name)) { \

@@ -14,7 +14,9 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/callbackq.inl>
+#include <ucs/sys/string.h>
 #include <malloc.h>
+
 
 UCS_LIST_HEAD(uct_md_components_list);
 

@@ -13,6 +13,8 @@
 #include <ucp/tag/eager.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/type/cpu_set.h>
+#include <ucs/sys/string.h>
+
 
 #if ENABLE_STATS
 static ucs_stats_class_t ucp_worker_stats_class = {
