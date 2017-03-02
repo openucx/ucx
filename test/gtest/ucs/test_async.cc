@@ -11,6 +11,7 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>
+#include <ucs/sys/sys.h>
 }
 
 #include <sys/poll.h>

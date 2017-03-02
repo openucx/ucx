@@ -11,6 +11,7 @@
 extern "C" {
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 }
 #include <ucs/sys/preprocessor.h>
 

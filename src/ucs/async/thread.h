@@ -8,7 +8,7 @@
 #define UCS_ASYNC_THREAD_H
 
 #include <ucs/type/spinlock.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/checker.h>
 
 
 typedef struct ucs_async_thread_context {

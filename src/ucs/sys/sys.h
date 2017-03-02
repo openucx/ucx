@@ -44,63 +44,18 @@
 #include <limits.h>
 #include <pthread.h>
 
-/*
- * Valgrind support
- */
-#ifndef NVALGRIND
-#  include <valgrind/memcheck.h>
-#  ifndef VALGRIND_MAKE_MEM_DEFINED
-#    define VALGRIND_MAKE_MEM_DEFINED(p, n)   VALGRIND_MAKE_READABLE(p, n)
-#  endif
-#  ifndef VALGRIND_MAKE_MEM_UNDEFINED
-#    define VALGRIND_MAKE_MEM_UNDEFINED(p, n) VALGRIND_MAKE_WRITABLE(p, n)
-#  endif
-#else
-#  define VALGRIND_MAKE_MEM_DEFINED(p, n)
-#  define VALGRIND_MAKE_MEM_UNDEFINED(p, n)
-#  define VALGRIND_MAKE_MEM_NOACCESS(p, n)
-#  define VALGRIND_CREATE_MEMPOOL(n,p,x)
-#  define VALGRIND_DESTROY_MEMPOOL(p)
-#  define VALGRIND_MEMPOOL_ALLOC(n,p,x)
-#  define VALGRIND_MEMPOOL_FREE(n,p)
-#  define VALGRIND_MALLOCLIKE_BLOCK(p,s,r,z)
-#  define VALGRIND_FREELIKE_BLOCK(p,r)
-#  define VALGRIND_CHECK_MEM_IS_DEFINED(p, n) ({(uintptr_t)0;})
-#  define VALGRIND_COUNT_ERRORS              0
-#  define VALGRIND_COUNT_LEAKS(a,b,c,d)      { a = b = c = d = 0; }
-#  define RUNNING_ON_VALGRIND                0
-#  define VALGRIND_PRINTF(...)
-#endif
-
-
-/*
- * BullsEye Code Coverage tool
- */
-#if _BullseyeCoverage
-#define BULLSEYE_ON                          1
-#define BULLSEYE_EXCLUDE_START               #pragma BullseyeCoverage off
-#define BULLSEYE_EXCLUDE_END                 #pragma BullseyeCoverage on
-#define BULLSEYE_EXCLUDE_BLOCK_START         "BullseyeCoverage save off";
-#define BULLSEYE_EXCLUDE_BLOCK_END           "BullseyeCoverage restore";
-#else
-#define BULLSEYE_ON                          0
-#define BULLSEYE_EXCLUDE_START
-#define BULLSEYE_EXCLUDE_END
-#define BULLSEYE_EXCLUDE_BLOCK_START
-#define BULLSEYE_EXCLUDE_BLOCK_END
-#endif
-
-#define UCS_SYS_PCI_MAX_PAYLOAD             512
 
 /**
  * @return Host name.
  */
 const char *ucs_get_host_name();
 
+
 /**
  * @return user name.
  */
 const char *ucs_get_user_name();
+
 
 /**
  * Expand a partial path to full path.
@@ -147,18 +102,6 @@ uint64_t ucs_generate_uuid(uint64_t seed);
 
 
 /**
- * Fill a filename template. The following values in the string are replaced:
- *  %p - replaced by process id
- *  %h - replaced by host name
- *
- * @param tmpl   File name template (possibly containing formatting sequences)
- * @param buf    Filled with resulting file name
- * @param max    Maximal size of destination buffer.
- */
-void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max);
-
-
-/**
  * Open an output stream according to user configuration:
  *   - file:<name> - file name, %p, %h, %c are substituted.
  *   - stdout
@@ -171,42 +114,6 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max);
 ucs_status_t
 ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_close,
                        const char **p_next_token);
-
-
-/**
- * Return a number filled with the first characters of the string.
- */
-uint64_t ucs_string_to_id(const char *str);
-
-
-/**
- * Format a string to a buffer of given size, and fill the rest of the buffer
- * with '\0'. Also, guarantee that the last char in the buffer is '\0'.
- *
- * @param buf  Buffer to format the string to.
- * @param size Buffer size.
- * @param fmt  Format string.
- */
-void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
-    UCS_F_PRINTF(3, 4);
-
-
-/**
- * Same as strncpy(), but guarantee that the last char in the buffer is '\0'.
- */
-void ucs_strncpy_zero(char *dest, const char *src, size_t max);
-
-
-/**
- * Convert a memory units value to a string which is abbreviated if possible.
- * For example:
- *  1024 -> 1kb
- *
- * @param value  Value to convert.
- * @param buf    Buffer to place the string.
- * @param max    Maximal length of the buffer.
- */
-void ucs_memunits_to_str(size_t value, char *buf, size_t max);
 
 
 /**
@@ -327,6 +234,7 @@ double ucs_get_cpuinfo_clock_freq(const char *mhz_header);
  * @return shmmax size
  */
 size_t ucs_get_shmmax();
+
 
 /**
  * Empty function which can be casted to a no-operation callback in various situations.

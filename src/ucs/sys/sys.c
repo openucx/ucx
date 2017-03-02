@@ -10,11 +10,13 @@
 #  include "config.h"
 #endif
 
-#include <ucs/sys/sys.h>
-#include <ucs/sys/math.h>
+#include "sys.h"
+#include "checker.h"
+#include "string.h"
+#include "math.h"
+
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
-
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -22,6 +24,7 @@
 #include <net/if.h>
 #include <dirent.h>
 #include <sched.h>
+
 
 /* Default huge page size is 2 MBytes */
 #define UCS_DEFAULT_HUGEPAGE_SIZE  (2 * UCS_MBYTE)
@@ -221,72 +224,6 @@ uint64_t ucs_generate_uuid(uint64_t seed)
            __sumup_host_name(5);
 }
 
-void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
-{
-    char *p, *end;
-    const char *pf, *pp;
-    size_t length;
-    time_t t;
-
-    p = buf;
-    end = buf + max - 1;
-    *end = 0;
-    pf = tmpl;
-    while (*pf != 0 && p < end) {
-        pp = strchr(pf, '%');
-        if (pp == NULL) {
-            strncpy(p, pf, end - p);
-            p = end;
-            break;
-        }
-
-        length = ucs_min(pp - pf, end - p);
-        strncpy(p, pf, length);
-        p += length;
-
-        switch (*(pp + 1)) {
-        case 'p':
-            snprintf(p, end - p, "%d", getpid());
-            pf = pp + 2;
-            p += strlen(p);
-            break;
-        case 'h':
-            snprintf(p, end - p, "%s", ucs_get_host_name());
-            pf = pp + 2;
-            p += strlen(p);
-            break;
-        case 'c':
-            snprintf(p, end - p, "%02d", ucs_get_first_cpu());
-            pf = pp + 2;
-            p += strlen(p);
-            break;
-        case 't':
-            t = time(NULL);
-            strftime(p, end - p, "%Y-%m-%d-%H:%M:%S", localtime(&t));
-            pf = pp + 2;
-            p += strlen(p);
-            break;
-        case 'u':
-            snprintf(p, end - p, "%s", basename(ucs_get_user_name()));
-            pf = pp + 2;
-            p += strlen(p);
-            break;
-        case 'e':
-            snprintf(p, end - p, "%s", basename(ucs_get_exe()));
-            pf = pp + 2;
-            p += strlen(p);
-            break;
-        default:
-            *(p++) = *pp;
-            pf = pp + 1;
-            break;
-        }
-
-        p += strlen(p);
-    }
-    *p = 0;
-}
-
 ucs_status_t
 ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_close,
                        const char **p_next_token)
@@ -332,47 +269,6 @@ ucs_open_output_stream(const char *config_str, FILE **p_fstream, int *p_need_clo
     }
 
     return UCS_OK;
-}
-
-uint64_t ucs_string_to_id(const char* str)
-{
-    uint64_t id = 0;
-    strncpy((char*)&id, str, sizeof(id) - 1); /* Last character will be \0 */
-    return id;
-}
-
-void ucs_snprintf_zero(char *buf, size_t size, const char *fmt, ...)
-{
-    va_list ap;
-
-    memset(buf, 0, size);
-    va_start(ap, fmt);
-    vsnprintf(buf, size, fmt, ap);
-    va_end(ap);
-}
-
-void ucs_strncpy_zero(char *dest, const char *src, size_t max)
-{
-    strncpy(dest, src, max - 1);
-    dest[max - 1] = '\0';
-}
-
-void ucs_memunits_to_str(size_t value, char *buf, size_t max)
-{
-    static const char * suffixes[] = {"", "k", "m", "g", "t"};
-
-    const char **suffix;
-
-    if (value == SIZE_MAX) {
-        strncpy(buf, "(inf)", max);
-    } else {
-        suffix = &suffixes[0];
-        while ((value >= 1024) && ((value % 1024) == 0)) {
-            value /= 1024;
-            ++suffix;
-        }
-        snprintf(buf, max, "%zu%s", value, *suffix);
-    }
 }
 
 ssize_t ucs_read_file(char *buffer, size_t max, int silent,

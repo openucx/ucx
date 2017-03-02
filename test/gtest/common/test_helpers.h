@@ -8,14 +8,17 @@
 #ifndef UCS_TEST_HELPERS_H
 #define UCS_TEST_HELPERS_H
 
-#include <ucs/sys/preprocessor.h>
 #include "gtest.h"
+
+#include <ucs/sys/preprocessor.h>
+#include <ucs/sys/checker.h>
 #include <errno.h>
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
 #include <vector>
 #include <string>
+
 
 namespace ucs {
 

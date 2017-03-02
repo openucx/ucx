@@ -11,7 +11,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
-#include <string.h>
+#include <inttypes.h>
 
 
 /*

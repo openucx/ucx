@@ -12,6 +12,7 @@
 #include <ucs/debug/profile.h>
 #include <ucs/stats/stats.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/sys.h>
 
 
 /* run-time CPU detection */

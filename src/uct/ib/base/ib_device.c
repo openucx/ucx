@@ -12,6 +12,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <sched.h>

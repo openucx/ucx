@@ -10,6 +10,7 @@
 #  include "config.h"
 #endif
 
+#include <ucs/sys/string.h>
 #include <linux/sockios.h>
 #include <linux/types.h>
 #include <linux/ethtool.h>

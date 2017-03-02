@@ -7,6 +7,7 @@
 #include "ucx_info.h"
 
 #include <ucs/sys/sys.h>
+#include <ucs/sys/string.h>
 #include <string.h>
 
 

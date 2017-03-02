@@ -9,6 +9,7 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/arch/cpu.h>
 

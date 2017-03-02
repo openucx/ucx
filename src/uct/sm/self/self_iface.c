@@ -9,6 +9,8 @@
 
 #include <uct/sm/base/sm_ep.h>
 #include <ucs/type/class.h>
+#include <ucs/sys/string.h>
+
 
 static ucs_config_field_t uct_self_iface_config_table[] = {
     {"", "", NULL,

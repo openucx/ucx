@@ -7,6 +7,7 @@
 #include "log.h"
 #include "debug.h"
 
+#include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/config/parser.h>

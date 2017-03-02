@@ -13,6 +13,8 @@
 #include "profile.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/sys/checker.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <sys/wait.h>
 #include <execinfo.h>

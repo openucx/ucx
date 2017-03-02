@@ -46,6 +46,7 @@ nobase_dist_libucs_la_HEADERS = \
 	stats/libstats.h \
 	stats/stats.h \
 	sys/compiler_def.h\
+	sys/string.h \
 	time/time_def.h \
 	type/class.h \
 	type/component.h \
@@ -70,6 +71,7 @@ noinst_HEADERS = \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/khash.h \
+	sys/checker.h \
 	sys/compiler.h \
 	sys/math.h \
 	sys/preprocessor.h \
@@ -110,6 +112,7 @@ libucs_la_SOURCES = \
 	sys/init.c \
 	sys/math.c \
 	sys/rcache.c \
+	sys/string.c \
 	sys/sys.c \
 	time/time.c \
 	time/timer_wheel.c \
