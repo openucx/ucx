@@ -133,6 +133,9 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
     ucs_status_t status;
     uct_ep_h uct_ep;
 
+    ucs_assertv(req->send.lane != UCP_NULL_LANE, "%s() did not set req->send.lane",
+                ucs_debug_get_symbol_name(req->send.uct.func));
+
     uct_ep = req->send.ep->uct_eps[req->send.lane];
     status = uct_ep_pending_add(uct_ep, &req->send.uct);
     if (status == UCS_OK) {
@@ -148,43 +151,6 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status)
     ucs_assert(status != UCS_INPROGRESS);
     *req_status = status;
     return 1;
-}
-
-/*
- * @return Whether completed.
- *         *req_status if filled with the completion status if completed.
- */
-static int ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status)
-{
-    ucs_status_t status;
-
-    status = req->send.uct.func(&req->send.uct);
-    if (status == UCS_OK) {
-        /* Completed the operation */
-        *req_status = UCS_OK;
-        return 1;
-    } else if (status == UCS_INPROGRESS) {
-        /* Not completed, but made progress */
-        return 0;
-    } else if (status != UCS_ERR_NO_RESOURCE) {
-        /* Unexpected error */
-        *req_status = status;
-        return 1;
-    }
-
-    ucs_assert(status == UCS_ERR_NO_RESOURCE);
-    ucs_assertv(req->send.lane != UCP_NULL_LANE, "%s() did not set req->send.lane",
-                ucs_debug_get_symbol_name(req->send.uct.func));
-
-    /* No send resources, try to add to pending queue */
-    return ucp_request_pending_add(req, req_status);
-}
-
-ucs_status_t ucp_request_start_send(ucp_request_t *req)
-{
-    ucs_status_t status = UCS_ERR_NOT_IMPLEMENTED;
-    while (!ucp_request_try_send(req, &status));
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE

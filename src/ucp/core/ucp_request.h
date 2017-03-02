@@ -168,16 +168,6 @@ typedef struct ucp_recv_desc {
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
 
-/**
- * Start sending a request.
- *
- * @param [in]  req   Request to start.
- *
- * @return UCS_OK - completed (callback will not be called)
- *         UCS_INPROGRESS - started but not completed
- *         other error - failure
- */
-ucs_status_t ucp_request_start_send(ucp_request_t *req);
 
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status);
 

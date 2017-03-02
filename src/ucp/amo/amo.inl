@@ -26,25 +26,26 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status);
     UCS_PP_TOKENPASTE(ucp_amo_progress_, _function)
 
 #define UCP_PROGRESS_AMO_DECL(_type, _function, _params) \
-static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
+    static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
     { \
-    ucp_request_t *req = ucs_container_of(_self, ucp_request_t, send.uct); \
-    ucp_rkey_h rkey    = req->send.amo.rkey; \
-    ucp_ep_t *ep       = req->send.ep; \
-    _type value = (_type)req->send.amo.value;         \
-    _type *result = (_type *)req->send.amo.result;    \
-    uint64_t remote_addr = req->send.amo.remote_addr; \
-    ucs_status_t status; \
-    uct_rkey_t uct_rkey; \
-    uint32_t lane; \
-    \
-    UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, req->send.lane, uct_rkey, \
-                            return UCS_ERR_UNREACHABLE); \
-    lane = req->send.lane; \
-    status = _function(ep->uct_eps[lane], UCS_PP_TUPLE_BREAK _params, remote_addr, \
-                       uct_rkey, result, &req->send.uct_comp); \
-    return ucp_amo_check_send_status(req, status); \
-}
+        ucp_request_t *req = ucs_container_of(_self, ucp_request_t, send.uct); \
+        ucp_rkey_h rkey    = req->send.amo.rkey; \
+        ucp_ep_t *ep       = req->send.ep; \
+        _type value = (_type)req->send.amo.value;         \
+        _type *result = (_type *)req->send.amo.result;    \
+        uint64_t remote_addr = req->send.amo.remote_addr; \
+        ucs_status_t status; \
+        \
+        status = UCP_RKEY_RESOLVE(rkey, ep, amo); \
+        if (status != UCS_OK) { \
+            return UCS_ERR_UNREACHABLE; \
+        } \
+        \
+        req->send.lane = rkey->cache.amo_lane; \
+        status = _function(ep->uct_eps[req->send.lane], UCS_PP_TUPLE_BREAK _params, \
+                           remote_addr, rkey->cache.amo_rkey, result, &req->send.uct_comp); \
+        return ucp_amo_check_send_status(req, status); \
+    }
 
 UCP_PROGRESS_AMO_DECL(uint32_t, uct_ep_atomic_swap32, UCP_AMO_ONE_PARAM)
 
@@ -59,7 +60,7 @@ UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_fadd64, UCP_AMO_ONE_PARAM)
 UCP_PROGRESS_AMO_DECL(uint64_t, uct_ep_atomic_cswap64, UCP_AMO_TWO_PARAM)
 
 #define UCP_POST_AMO_DECL(_type, _function) \
-static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
+    static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) \
     { \
         ucp_request_t *req = ucs_container_of(_self, ucp_request_t, send.uct); \
         ucp_rkey_h rkey    = req->send.amo.rkey; \
@@ -67,14 +68,15 @@ static ucs_status_t _UCP_PROGRESS_AMO_NAME(_function)(uct_pending_req_t *_self) 
         _type value = (_type)req->send.amo.value;         \
         uint64_t remote_addr = req->send.amo.remote_addr; \
         ucs_status_t status; \
-        uct_rkey_t uct_rkey; \
-        uint32_t lane; \
         \
-        UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, req->send.lane, uct_rkey, \
-                                return UCS_ERR_UNREACHABLE); \
-        lane = req->send.lane; \
-        status = UCS_PROFILE_CALL(_function, ep->uct_eps[lane], value,\
-                                  remote_addr, uct_rkey); \
+        status = UCP_RKEY_RESOLVE(rkey, ep, amo); \
+        if (status != UCS_OK) { \
+            return UCS_ERR_UNREACHABLE; \
+        } \
+        \
+        req->send.lane = rkey->cache.amo_lane; \
+        status = UCS_PROFILE_CALL(_function, ep->uct_eps[req->send.lane], value, \
+                                  remote_addr, rkey->cache.amo_rkey); \
         return ucp_amo_check_send_status(req, status); \
     }
 
@@ -85,30 +87,33 @@ UCP_POST_AMO_DECL(uint32_t, uct_ep_atomic_add32)
 #define UCP_AMO_WITHOUT_RESULT(_ep, _param, _remote_addr, _rkey, _uct_func, _size) \
     { \
         ucs_status_t status; \
-        uct_rkey_t uct_rkey; \
-        ucp_lane_index_t lane; \
         \
         status = ucp_rma_check_atomic(_remote_addr, _size); \
         if (status != UCS_OK) { \
-            return status; \
+            goto out; \
         } \
+        \
         UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
         for (;;) { \
-            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey, goto err_unreach); \
-            status = UCS_PROFILE_CALL(_uct_func, \
-                                      (_ep)->uct_eps[lane], _param, _remote_addr, \
-                                      uct_rkey); \
+            status = UCP_RKEY_RESOLVE(_rkey, _ep, amo); \
+            if (status != UCS_OK) { \
+                goto out_unlock; \
+            } \
+            \
+            status = UCS_PROFILE_CALL(_uct_func, (_ep)->uct_eps[(_rkey)->cache.amo_lane], \
+                                      _param, _remote_addr, (_rkey)->cache.amo_rkey); \
             if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) { \
                 UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
                 return status; \
             } \
             ucp_worker_progress((_ep)->worker); \
         } \
+        \
+        status = UCS_OK; \
+    out_unlock: \
         UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-        return UCS_OK; \
-    err_unreach: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-        return UCS_ERR_UNREACHABLE; \
+    out: \
+        return status; \
     }
 
 #define UCP_RMA_CHECK_ATOMIC_PTR(_addr, _op_size) \

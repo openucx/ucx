@@ -17,28 +17,30 @@
     { \
         uct_completion_t comp; \
         ucs_status_t status; \
-        uct_rkey_t uct_rkey; \
-        ucp_lane_index_t lane; \
         \
         status = ucp_rma_check_atomic(_remote_addr, _size); \
         if (status != UCS_OK) { \
-            return status; \
+            goto out; \
         } \
+        \
         UCP_THREAD_CS_ENTER_CONDITIONAL(&(_ep)->worker->mt_lock); \
         comp.count = 2; \
         \
         for (;;) { \
-            UCP_EP_RESOLVE_RKEY_AMO(_ep, _rkey, lane, uct_rkey, goto err_unreach); \
-            status = UCS_PROFILE_CALL(_uct_func, \
-                                      (_ep)->uct_eps[lane], UCS_PP_TUPLE_BREAK _params, \
-                                      _remote_addr, uct_rkey, _result, &comp); \
+            status = UCP_RKEY_RESOLVE(_rkey, _ep, amo); \
+            if (status != UCS_OK) { \
+                goto out_unlock; \
+            } \
+            \
+            status = UCS_PROFILE_CALL(_uct_func, (_ep)->uct_eps[(_rkey)->cache.amo_lane], \
+                                      UCS_PP_TUPLE_BREAK _params, _remote_addr, \
+                                      (_rkey)->cache.amo_rkey, _result, &comp); \
             if (ucs_likely(status == UCS_OK)) { \
-                goto out; \
+                goto out_unlock; \
             } else if (status == UCS_INPROGRESS) { \
                 goto out_wait; \
             } else if (status != UCS_ERR_NO_RESOURCE) { \
-                UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-                return status; \
+                goto out_unlock; \
             } \
             ucp_worker_progress((_ep)->worker); \
         } \
@@ -46,12 +48,11 @@
         do { \
             ucp_worker_progress((_ep)->worker); \
         } while (comp.count != 1); \
+        status = UCS_OK; \
+    out_unlock: \
+        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
     out: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-        return UCS_OK; \
-    err_unreach: \
-        UCP_THREAD_CS_EXIT_CONDITIONAL(&(_ep)->worker->mt_lock); \
-        return UCS_ERR_UNREACHABLE; \
+        return status; \
     }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_add32, (ep, add, remote_addr, rkey),

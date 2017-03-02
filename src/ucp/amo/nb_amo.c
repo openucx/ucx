@@ -36,10 +36,8 @@ ucs_status_ptr_t ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
                              size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)    
 {
-    ucs_status_t status;
-    uct_rkey_t uct_rkey;
-    ucp_lane_index_t lane;
     ucs_status_ptr_t status_p;
+    ucs_status_t status;
     ucp_request_t *req;
 
     if (ucs_unlikely(opcode != UCP_ATOMIC_POST_OP_ADD)) {
@@ -50,14 +48,17 @@ ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t 
         return status;
     }
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
-    UCP_EP_RESOLVE_RKEY_AMO(ep, rkey, lane, uct_rkey,
-                            status = UCS_ERR_UNREACHABLE; goto out);
+
+    status = UCP_RKEY_RESOLVE(rkey, ep, amo);
+    if (status != UCS_OK) {
+        goto out;
+    }
     if (op_size == sizeof(uint32_t)) {
-        status = UCS_PROFILE_CALL(uct_ep_atomic_add32, ep->uct_eps[lane],
-                                  (uint32_t)value, remote_addr, uct_rkey);
+        status = UCS_PROFILE_CALL(uct_ep_atomic_add32, ep->uct_eps[rkey->cache.amo_lane],
+                                  (uint32_t)value, remote_addr, rkey->cache.amo_rkey);
     } else if (op_size == sizeof(uint64_t)) {
-        status = UCS_PROFILE_CALL(uct_ep_atomic_add64, ep->uct_eps[lane],
-                                  (uint64_t)value, remote_addr, uct_rkey);
+        status = UCS_PROFILE_CALL(uct_ep_atomic_add64, ep->uct_eps[rkey->cache.amo_lane],
+                                  (uint64_t)value, remote_addr, rkey->cache.amo_rkey);
     }
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req = ucp_request_get(ep->worker);
