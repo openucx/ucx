@@ -85,12 +85,6 @@ static inline uct_md_h ucp_ep_md(ucp_ep_h ep, ucp_lane_index_t lane)
     return context->tl_mds[ucp_ep_md_index(ep, lane)].md;
 }
 
-//static inline ucp_md_map_t ucp_lane_map_get_lane(ucp_md_lane_map_t lane_map,
-//                                                 ucp_lane_index_t lane)
-//{
-//    return (lane_map >> (lane * UCP_MD_INDEX_BITS)) & UCS_MASK(UCP_MD_INDEX_BITS);
-//}
-
 static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_context_h context = ep->worker->context;
