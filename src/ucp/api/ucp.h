@@ -262,7 +262,8 @@ enum {
                                             address for allocation. */
     UCP_MEM_MAP_FIXED    = UCS_BIT(2)  /**< Don't interpret address as a hint:
                                             place the mapping at exactly that
-                                            address. */
+                                            address. Address must be a multiple
+                                            of the page size. */
 };
 
 
@@ -1312,42 +1313,20 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  *
  * <table>
  * <caption id="ucp_mem_map_matrix">Matrix of behavior</caption>
- * <tr><th>Parameter/Flag                  <th colspan="8">Value
- * <tr><td>@ref UCP_MEM_MAP_NONBLOCK       <td colspan="8" align="center">
- *                                         0/1 - the value affects only
- *                                         registration/mapping phase </td>
- * <tr><td>@ref UCP_MEM_MAP_ALLOCATE       <td align="center">0</td>
- *                                         <td align="center">1</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">1</td>
- *                                         <td align="center">1</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">1</td>
- * <tr><td>@ref UCP_MEM_MAP_FIXED          <td align="center">0</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">1</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">1</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">1</td>
- *                                         <td align="center">1</td>
- * <tr><td>@ref ucp_mem_map_params.address <td align="center">0</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">defined</td>
- *                                         <td align="center">0</td>
- *                                         <td align="center">defined</td>
- *                                         <td align="center">defined</td>
- *                                         <td align="center">defined</td>
- * <tr><td>Result                          <td>@ref anch_err "error"
- *                                         <td>@ref anch_alloc_reg "alloc+register"
- *                                         <td>@ref anch_err "error"
- *                                         <td>@ref anch_reg "register"
- *                                         <td>@ref anch_err "error"
- *                                         <td>@ref anch_alloc_hint_reg "alloc+register,hint"
- *                                         <td>@ref anch_err "error"
- *                                         <td>@ref anch_alloc_fixed_reg "alloc+register,fixed"
+ * <tr><th>parameter/flag <td align="center">@ref UCP_MEM_MAP_NONBLOCK "NONBLOCK"</td>
+ *                        <td align="center">@ref UCP_MEM_MAP_ALLOCATE "ALLOCATE"</td>
+ *                        <td align="center">@ref UCP_MEM_MAP_FIXED "FIXED"</td>
+ *                        <td align="center">@ref ucp_mem_map_params.address "address"</td>
+ *                        <td align="center">@b result
+ * <tr><td rowspan="8" align="center">@b value <td rowspan="8" align="center">0/1 - the value\n only affects the\n register/map\n phase</td>
+ *                                               <td align="center">0 <td align="center">0 <td align="center">0 <td align="center">@ref anch_err "error"
+ * <tr>                                          <td align="center">1 <td align="center">0 <td align="center">0 <td align="center">@ref anch_alloc_reg "alloc+register"
+ * <tr>                                          <td align="center">0 <td align="center">1 <td align="center">0 <td align="center">@ref anch_err "error"</td>
+ * <tr>                                          <td align="center">0 <td align="center">0 <td align="center">defined <td align="center">@ref anch_reg "register"
+ * <tr>                                          <td align="center">1 <td align="center">1 <td align="center">0 <td align="center">@ref anch_err "error"</td>
+ * <tr>                                          <td align="center">1 <td align="center">0 <td align="center">defined <td align="center">@ref anch_alloc_hint_reg "alloc+register,hint"
+ * <tr>                                          <td align="center">0 <td align="center">1 <td align="center">defined <td align="center">@ref anch_err "error"</td>
+ * <tr>                                          <td align="center">1 <td align="center">1 <td align="center">defined <td align="center">@ref anch_alloc_fixed_reg "alloc+register,fixed"
  * </table>
  *
  * @note
