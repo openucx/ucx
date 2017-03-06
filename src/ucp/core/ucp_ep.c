@@ -31,6 +31,18 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 #endif
 
 
+void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
+{
+    memset(key, 0, sizeof(*key));
+    key->num_lanes        = 0;
+    key->am_lane          = UCP_NULL_LANE;
+    key->rndv_lane        = UCP_NULL_LANE;
+    key->wireup_lane      = UCP_NULL_LANE;
+    key->reachable_md_map = 0;
+    memset(key->rma_lanes, UCP_NULL_LANE, sizeof(key->rma_lanes));
+    memset(key->amo_lanes, UCP_NULL_LANE, sizeof(key->amo_lanes));
+}
+
 ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
                         const char *peer_name, const char *message,
                         ucp_ep_h *ep_p)
@@ -48,17 +60,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, uint64_t dest_uuid,
         goto err;
     }
 
-    /* EP configuration without any lanes */
-    memset(&key, 0, sizeof(key));
-    key.rma_lane_map     = 0;
-    key.amo_lane_map     = 0;
-    key.reachable_md_map = 0;
-    key.am_lane          = UCP_NULL_RESOURCE;
-    key.rndv_lane        = UCP_NULL_RESOURCE;
-    key.wireup_msg_lane  = UCP_NULL_LANE;
-    key.num_lanes        = 0;
-    memset(key.amo_lanes, UCP_NULL_LANE, sizeof(key.amo_lanes));
-
+    ucp_ep_config_key_reset(&key);
     ep->worker           = worker;
     ep->dest_uuid        = dest_uuid;
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
@@ -128,17 +130,15 @@ ucs_status_t ucp_ep_create_stub(ucp_worker_h worker, uint64_t dest_uuid,
         goto err;
     }
 
+    ucp_ep_config_key_reset(&key);
+
     /* all operations will use the first lane, which is a stub endpoint */
-    memset(&key, 0, sizeof(key));
-    key.rma_lane_map     = 1;
-    key.amo_lane_map     = 1;
-    key.reachable_md_map = 0; /* TODO */
-    key.am_lane          = 0;
-    key.rndv_lane        = 0;
-    key.wireup_msg_lane  = 0;
-    key.lanes[0]         = UCP_NULL_RESOURCE;
-    key.num_lanes        = 1;
-    memset(key.amo_lanes, UCP_NULL_LANE, sizeof(key.amo_lanes));
+    key.num_lanes             = 1;
+    key.lanes[0].rsc_index    = UCP_NULL_RESOURCE;
+    key.lanes[0].dst_md_index = UCP_NULL_RESOURCE;
+    key.am_lane               = 0;
+    key.rndv_lane             = 0;
+    key.wireup_lane           = 0;
 
     ep->cfg_index        = ucp_worker_get_ep_config(worker, &key);
     ep->am_lane          = 0;
@@ -552,19 +552,20 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
 
 
     if ((key1->num_lanes        != key2->num_lanes) ||
-        (key1->rma_lane_map     != key2->rma_lane_map) ||
-        (key1->amo_lane_map     != key2->amo_lane_map) ||
+        memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
         memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
         (key1->reachable_md_map != key2->reachable_md_map) ||
         (key1->am_lane          != key2->am_lane) ||
         (key1->rndv_lane        != key2->rndv_lane) ||
-        (key1->wireup_msg_lane  != key2->wireup_msg_lane))
+        (key1->wireup_lane      != key2->wireup_lane))
     {
         return 0;
     }
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
-        if (key1->lanes[lane] != key2->lanes[lane]) {
+        if ((key1->lanes[lane].rsc_index != key2->lanes[lane].rsc_index) ||
+            (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index))
+        {
             return 0;
         }
     }
@@ -627,7 +628,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_context_h context, uct_iface_at
 
 
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
-    ucs_assert(config->key.lanes[config->key.am_lane] != UCP_NULL_RESOURCE);
+    ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
     if (context->config.ext.rndv_thresh == UCS_CONFIG_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
@@ -669,7 +670,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
     /* Collect p2p lanes */
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        rsc_index   = config->key.lanes[lane];
+        rsc_index   = config->key.lanes[lane].rsc_index;
         if ((rsc_index != UCP_NULL_RESOURCE) &&
             ucp_worker_is_tl_p2p(worker, rsc_index))
         {
@@ -680,7 +681,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     /* Configuration for active messages */
     if (config->key.am_lane != UCP_NULL_LANE) {
         lane        = config->key.am_lane;
-        rsc_index   = config->key.lanes[lane];
+        rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr  = &worker->iface_attrs[rsc_index];
             md_attr     = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -732,12 +733,12 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
 
     /* Configuration for remote memory access */
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        if (ucp_lane_map_get_lane(config->key.rma_lane_map, lane) == 0) {
+        if (ucp_ep_config_get_rma_prio(config->key.rma_lanes, lane) == -1) {
             continue;
         }
 
         rma_config = &config->rma[lane];
-        rsc_index  = config->key.lanes[lane];
+        rsc_index  = config->key.lanes[lane].rsc_index;
         iface_attr = &worker->iface_attrs[rsc_index];
 
         rma_config->put_zcopy_thresh = SIZE_MAX;
@@ -783,7 +784,7 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
     /* Configuration for Rendezvous data */
     if (config->key.rndv_lane != UCP_NULL_LANE) {
         lane        = config->key.rndv_lane;
-        rsc_index   = config->key.lanes[lane];
+        rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = &worker->iface_attrs[rsc_index];
             md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -812,55 +813,6 @@ void ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config)
             ucs_debug("rendezvous (get_zcopy) protocol is not supported ");
         }
     }
-}
-
-static ucp_lane_index_t ucp_ep_get_amo_lane_index(const ucp_ep_config_key_t *key,
-                                                  ucp_lane_index_t lane)
-{
-    ucp_lane_index_t i;
-
-    for (i = 0; i < UCP_MAX_LANES; ++i) {
-        if (key->amo_lanes[i] == lane) {
-            return i;
-        } else if (key->amo_lanes[i] == UCP_NULL_LANE) {
-            break;
-        }
-    }
-    return UCP_NULL_LANE;
-}
-
-ucp_md_map_t ucp_ep_config_get_rma_md_map(const ucp_ep_config_key_t *key,
-                                          ucp_lane_index_t lane)
-{
-    return ucp_lane_map_get_lane(key->rma_lane_map, lane);
-}
-
-ucp_md_map_t ucp_ep_config_get_amo_md_map(const ucp_ep_config_key_t *key,
-                                          ucp_lane_index_t lane)
-{
-    ucp_lane_index_t amo_lane= ucp_ep_get_amo_lane_index(key, lane);
-    if (amo_lane != UCP_NULL_LANE) {
-        return ucp_lane_map_get_lane(key->amo_lane_map, amo_lane);
-    } else {
-        return 0;
-    }
-}
-
-static void ucp_ep_config_print_md_map(FILE *stream, const char *name,
-                                       ucp_md_map_t md_map)
-{
-    ucp_rsc_index_t md_index;
-    int first;
-
-    first = 1;
-    fprintf(stream, "%s", name);
-    for (md_index = 0; md_index < UCP_MD_INDEX_BITS; ++md_index) {
-        if (md_map & UCS_BIT(md_index)) {
-            fprintf(stream, "%c%d", first ? '{' : ',', md_index);
-            first = 0;
-        }
-    }
-    fprintf(stream, "}");
 }
 
 static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
@@ -898,10 +850,11 @@ static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
 }
 
 static void ucp_ep_config_print_rma_proto(FILE *stream, const char *name,
+                                          ucp_lane_index_t lane,
                                           size_t bcopy_thresh, size_t zcopy_thresh)
 {
 
-    fprintf(stream, "# %23s: 0", name);
+    fprintf(stream, "# %20s[%d]: 0", name, lane);
     if (bcopy_thresh > 0) {
         fprintf(stream, "..<short>");
     }
@@ -917,51 +870,95 @@ static void ucp_ep_config_print_rma_proto(FILE *stream, const char *name,
     fprintf(stream, "..(inf)\n");
 }
 
+int ucp_ep_config_get_rma_prio(const ucp_lane_index_t *lanes,
+                               ucp_lane_index_t lane)
+{
+    int prio;
+    for (prio = 0; prio < UCP_MAX_LANES; ++prio) {
+        if (lane == lanes[prio]) {
+            return prio;
+        }
+    }
+    return -1;
+}
+
+void ucp_ep_config_lane_info_str(ucp_context_h context,
+                                 const ucp_ep_config_key_t *key,
+                                 const uint8_t *addr_indices,
+                                 ucp_lane_index_t lane,
+                                 ucp_rsc_index_t aux_rsc_index,
+                                 char *buf, size_t max)
+{
+    uct_tl_resource_desc_t *rsc;
+    ucp_rsc_index_t rsc_index;
+    char *p, *endp;
+    int prio;
+
+    p         = buf;
+    endp      = buf + max;
+    rsc_index = key->lanes[lane].rsc_index;
+
+    rsc = &context->tl_rscs[rsc_index].tl_rsc;
+    snprintf(p, endp - p, "lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT "%-*c-> ",
+             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc),
+             20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)), ' ');
+    p += strlen(p);
+
+    if (addr_indices != NULL) {
+        snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
+        p += strlen(p);
+    }
+
+    snprintf(p, endp - p, "md[%d]", key->lanes[lane].dst_md_index);
+    p += strlen(p);
+
+    prio = ucp_ep_config_get_rma_prio(key->rma_lanes, lane);
+    if (prio != -1) {
+        snprintf(p, endp - p, " rma#%d", prio);
+        p += strlen(p);
+    }
+
+    prio = ucp_ep_config_get_rma_prio(key->amo_lanes, lane);
+    if (prio != -1) {
+        snprintf(p, endp - p, " amo#%d", prio);
+        p += strlen(p);
+    }
+
+    if (key->am_lane == lane) {
+        snprintf(p, endp - p, " am");
+        p += strlen(p);
+    }
+
+    if (lane == key->rndv_lane) {
+        snprintf(p, endp - p, " zcopy_rndv");
+        p += strlen(p);
+    }
+
+    if (key->wireup_lane == lane) {
+        snprintf(p, endp - p, " wireup");
+        p += strlen(p);
+        if (aux_rsc_index != UCP_NULL_RESOURCE) {
+            snprintf(p, endp - p, "{" UCT_TL_RESOURCE_DESC_FMT "}",
+                     UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[aux_rsc_index].tl_rsc));
+            p += strlen(p);
+        }
+    }
+}
+
 static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                 const ucp_ep_config_t *config,
                                 const uint8_t *addr_indices,
                                 ucp_rsc_index_t aux_rsc_index)
 {
     ucp_context_h context   = worker->context;
-    ucp_tl_resource_desc_t *rsc;
-    ucp_rsc_index_t rsc_index;
+    char lane_info[128] = {0};
     ucp_lane_index_t lane;
-    ucp_md_map_t md_map;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        rsc_index   = config->key.lanes[lane];
-        rsc         = &context->tl_rscs[rsc_index];
-        fprintf(stream, "#                 lane[%d]: %d:" UCT_TL_RESOURCE_DESC_FMT,
-                lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
-
-        if (addr_indices != NULL) {
-            fprintf(stream, "->addr[%d] ", addr_indices[lane]);
-        }
-        fprintf(stream, " -");
-        if (lane == config->key.am_lane) {
-            fprintf(stream, " am");
-        }
-        md_map = ucp_ep_config_get_rma_md_map(&config->key, lane);
-        if (md_map) {
-            ucp_ep_config_print_md_map(stream, " rma", md_map);
-        }
-        md_map = ucp_ep_config_get_amo_md_map(&config->key, lane);
-        if (md_map) {
-            ucp_ep_config_print_md_map(stream, " amo", md_map);
-        }
-        if (lane == config->key.rndv_lane) {
-            fprintf(stream, " zcopy_rndv");
-        }
-        if (lane == config->key.wireup_msg_lane) {
-            fprintf(stream, " wireup");
-            if (aux_rsc_index != UCP_NULL_RESOURCE) {
-                fprintf(stream, "{" UCT_TL_RESOURCE_DESC_FMT "}",
-                        UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[aux_rsc_index].tl_rsc));
-            }
-        }
-        fprintf(stream, "\n");
+        ucp_ep_config_lane_info_str(context, &config->key, addr_indices, lane,
+                                    aux_rsc_index, lane_info, sizeof(lane_info));
+        fprintf(stream, "#                 %s\n", lane_info);
     }
-
     fprintf(stream, "#\n");
 
     if (context->config.features & UCP_FEATURE_TAG) {
@@ -979,14 +976,14 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
      if (context->config.features & UCP_FEATURE_RMA) {
          for (lane = 0; lane < config->key.num_lanes; ++lane) {
-             if (!ucp_ep_config_get_rma_md_map(&config->key, lane)) {
+             if (ucp_ep_config_get_rma_prio(config->key.rma_lanes, lane) == -1) {
                  continue;
              }
-             ucp_ep_config_print_rma_proto(stream, "put",
+             ucp_ep_config_print_rma_proto(stream, "put", lane,
                                            ucs_max(config->rma[lane].max_put_short + 1,
                                                    config->bcopy_thresh),
                                            config->rma[lane].put_zcopy_thresh);
-             ucp_ep_config_print_rma_proto(stream, "get", 0,
+             ucp_ep_config_print_rma_proto(stream, "get", lane, 0,
                                            config->rma[lane].get_zcopy_thresh);
          }
      }

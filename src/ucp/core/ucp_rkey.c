@@ -30,7 +30,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%x",
+    ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%lx",
               memh->address, memh, memh->md_map);
 
     if (memh->length == 0) {
@@ -127,7 +127,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, void *rkey_buffer, ucp_rkey_h *rkey
     /* Read remote MD map */
     md_map   = *(ucp_md_map_t*)p;
 
-    ucs_trace("unpacking rkey with md_map 0x%x", md_map);
+    ucs_trace("unpacking rkey with md_map 0x%lx", md_map);
 
     if (md_map == 0) {
         /* Dummy key return ok */
@@ -222,64 +222,50 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
     ucs_free(rkey);
 }
 
-static inline ucp_md_lane_map_t ucp_ep_md_map_expand(ucp_md_map_t md_map)
+static ucp_lane_index_t ucp_config_find_rma_lane(const ucp_ep_config_t *config,
+                                                 const ucp_lane_index_t *lanes,
+                                                 ucp_md_map_t rkey_md_map,
+                                                 ucp_md_index_t *rkey_index_p)
 {
-    /* "Broadcast" md_map to all bit groups in ucp_md_lane_map_t, so that
-     * if would look like this: <md_map><md_map>....<md_map>.
-     * The expanded value can be used to select which lanes support a given md_map.
-     * TODO use SSE and support larger md_lane_map with shuffle / broadcast
-     */
-    UCS_STATIC_ASSERT(UCP_MD_LANE_MAP_BITS == 64);
-    UCS_STATIC_ASSERT(UCP_MD_INDEX_BITS    == 8);
-    return md_map * 0x0101010101010101ul;
-}
+    ucp_md_index_t dst_md_index;
+    ucp_lane_index_t lane;
+    ucp_md_map_t dst_md_mask;
+    int prio;
 
-/*
- * Calculate lane and rkey index based of the lane_map in ep configuration: the
- * lane_map holds the md_index which each lane supports, so we do 'and' between
- * that, and the md_map of the rkey (we duplicate the md_map in rkey to fill the
- * mask for each possible lane). The first set bit in the 'and' product represents
- * the first matching lane and its md_index.
- */
-#define UCP_EP_RESOLVE_RKEY(_ep, _rkey, _name, _config, _lane, _uct_rkey) \
-    { \
-        ucp_md_lane_map_t ep_lane_map, rkey_md_map; \
-        ucp_rsc_index_t dst_md_index, rkey_index; \
-        uint8_t bit_index; \
-        \
-        _config     = ucp_ep_config(_ep); \
-        ep_lane_map = (_config)->key._name##_lane_map; \
-        rkey_md_map = ucp_ep_md_map_expand((_rkey)->md_map); \
-        \
-        if (!(ep_lane_map & rkey_md_map)) { \
-            _lane     = UCP_NULL_LANE; \
-            _uct_rkey = UCT_INVALID_RKEY; \
-        } else { \
-            /* Find the first lane which supports one of the remote md's in the rkey*/ \
-            bit_index    = ucs_ffs64(ep_lane_map & rkey_md_map); \
-            _lane        = bit_index / UCP_MD_INDEX_BITS; \
-            dst_md_index = bit_index % UCP_MD_INDEX_BITS; \
-            rkey_index   = ucs_count_one_bits(rkey_md_map & UCS_MASK(dst_md_index)); \
-            _uct_rkey    = (_rkey)->uct[rkey_index].rkey; \
-        } \
+    for (prio = 0; prio < UCP_MAX_LANES; ++prio) {
+        lane = lanes[prio];
+        if (lane == UCP_NULL_LANE) {
+            return UCP_NULL_LANE; /* No more lanes */
+        }
+
+        dst_md_index = config->key.lanes[lane].dst_md_index;
+        dst_md_mask  = UCS_BIT(dst_md_index);
+        if (rkey_md_map & dst_md_mask) {
+            /* Return first matching lane */
+            *rkey_index_p = ucs_count_one_bits(rkey_md_map & (dst_md_mask - 1));
+            return lane;
+        }
     }
+
+    return UCP_NULL_LANE;
+}
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 {
-    ucp_lane_index_t amo_index;
-    ucp_ep_config_t *config;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    ucp_md_index_t rkey_index;
 
-    UCP_EP_RESOLVE_RKEY(ep, rkey, rma, config, rkey->cache.rma_lane,
-                        rkey->cache.rma_rkey);
+    rkey->cache.rma_lane = ucp_config_find_rma_lane(config, config->key.rma_lanes,
+                                                    rkey->md_map, &rkey_index);
     if (rkey->cache.rma_lane != UCP_NULL_LANE) {
+        rkey->cache.rma_rkey      = rkey->uct[rkey_index].rkey;
         rkey->cache.max_put_short = config->rma[rkey->cache.rma_lane].max_put_short;
     }
 
-    UCP_EP_RESOLVE_RKEY(ep, rkey, amo, config, amo_index, rkey->cache.amo_rkey);
-    if (amo_index != UCP_NULL_LANE) {
-        rkey->cache.amo_lane      = config->key.amo_lanes[amo_index];
-    } else {
-        rkey->cache.amo_lane      = UCP_NULL_LANE;
+    rkey->cache.amo_lane = ucp_config_find_rma_lane(config, config->key.amo_lanes,
+                                                    rkey->md_map, &rkey_index);
+    if (rkey->cache.amo_lane != UCP_NULL_LANE) {
+        rkey->cache.amo_rkey      = rkey->uct[rkey_index].rkey;
     }
 
     rkey->cache.ep_cfg_index  = ep->cfg_index;

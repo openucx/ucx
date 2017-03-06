@@ -27,7 +27,7 @@ static inline ucp_lane_index_t ucp_ep_get_am_lane(ucp_ep_h ep)
 
 static inline ucp_lane_index_t ucp_ep_get_wireup_msg_lane(ucp_ep_h ep)
 {
-    ucp_lane_index_t lane = ucp_ep_config(ep)->key.wireup_msg_lane;
+    ucp_lane_index_t lane = ucp_ep_config(ep)->key.wireup_lane;
     return (lane == UCP_NULL_LANE) ? ucp_ep_get_am_lane(ep) : lane;
 }
 
@@ -54,7 +54,7 @@ static inline uct_ep_h ucp_ep_get_rndv_data_uct_ep(ucp_ep_h ep)
 
 static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return ucp_ep_config(ep)->key.lanes[lane];
+    return ucp_ep_config(ep)->key.lanes[lane].rsc_index;
 }
 
 static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_index_t lane)
@@ -83,12 +83,6 @@ static inline uct_md_h ucp_ep_md(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_context_h context = ep->worker->context;
     return context->tl_mds[ucp_ep_md_index(ep, lane)].md;
-}
-
-static inline ucp_md_map_t ucp_lane_map_get_lane(ucp_md_lane_map_t lane_map,
-                                                 ucp_lane_index_t lane)
-{
-    return (lane_map >> (lane * UCP_MD_INDEX_BITS)) & UCS_MASK(UCP_MD_INDEX_BITS);
 }
 
 static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t lane)

@@ -15,6 +15,7 @@
 #include <ucs/datastruct/mpool.inl>
 #include <string.h>
 
+
 static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                                       ssize_t max_short, size_t *zcopy_thresh_arr,
                                       size_t rndv_rma_thresh,
@@ -23,10 +24,10 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
 {
     ucp_ep_config_t *config   = ucp_ep_config(req->send.ep);
     ucp_lane_index_t lane     = ucp_ep_get_am_lane(req->send.ep);
-    ucp_rsc_index_t rsc_index = config->key.lanes[lane];
     ucp_worker_h worker       = req->send.ep->worker;
     size_t only_hdr_size      = proto->only_hdr_size;
     unsigned flag_iov_single  = 1;
+    ucp_rsc_index_t rsc_index;
     unsigned is_iov;
     size_t zcopy_thresh;
     ucs_status_t status;
@@ -51,6 +52,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
             zcopy_thresh = zcopy_thresh_arr[count - 1];
         } else {
             /* Calculate threshold */
+            rsc_index    = config->key.lanes[lane].rsc_index;
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(count,
                                &ucp_ep_md_attr(req->send.ep, lane)->reg_cost,
                                worker->context,
