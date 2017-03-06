@@ -131,7 +131,7 @@ UCS_TEST_P(test_pd, alloc) {
         ASSERT_UCS_OK(status);
         EXPECT_GE(size, orig_size);
         EXPECT_TRUE(address != NULL);
-        EXPECT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+        EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
         memset(address, 0xBB, size);
         uct_md_mem_free(pd(), memh);
@@ -160,7 +160,7 @@ UCS_TEST_P(test_pd, reg) {
         status = uct_md_mem_reg(pd(), address, size, 0, &memh);
 
         ASSERT_UCS_OK(status);
-        ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+        ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
         EXPECT_EQ('\xBB', *((char*)address + size - 1));
 
         status = uct_md_mem_dereg(pd(), memh);
@@ -187,7 +187,7 @@ UCS_TEST_P(test_pd, reg_perf) {
             uct_mem_h memh;
             status = uct_md_mem_reg(pd(), ptr, size, 0, &memh);
             ASSERT_UCS_OK(status);
-            ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+            ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
             status = uct_md_mem_dereg(pd(), memh);
             ASSERT_UCS_OK(status);
@@ -216,7 +216,7 @@ UCS_TEST_P(test_pd, reg_advise) {
 
     status = uct_md_mem_reg(pd(), address, size, UCT_MD_MEM_FLAG_NONBLOCK, &memh);
     ASSERT_UCS_OK(status);
-    ASSERT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+    ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
     status = uct_md_mem_advise(pd(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
@@ -240,7 +240,7 @@ UCS_TEST_P(test_pd, alloc_advise) {
     ASSERT_UCS_OK(status);
     EXPECT_GE(size, orig_size);
     EXPECT_TRUE(address != NULL);
-    EXPECT_TRUE(memh != UCT_INVALID_MEM_HANDLE);
+    EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
     status = uct_md_mem_advise(pd(), memh, (char *)address + 7, 32*1024, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);

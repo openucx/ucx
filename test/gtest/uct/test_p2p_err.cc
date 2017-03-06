@@ -196,7 +196,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_short_length) {
     mapped_buffer recvbuf(max_short + 1, 2, receiver());
 
     test_error_run(OP_PUT_SHORT, 0, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   UCT_MEM_HANDLE_NULL, recvbuf.addr(), recvbuf.rkey(),
                    "length");
 
     recvbuf.pattern_check(2);
@@ -213,7 +213,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_put_bcopy_length) {
     mapped_buffer recvbuf(max_bcopy + 1, 2, receiver());
 
     test_error_run(OP_PUT_BCOPY, 0, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   UCT_MEM_HANDLE_NULL, recvbuf.addr(), recvbuf.rkey(),
                    "length");
 
     recvbuf.pattern_check(2);
@@ -230,7 +230,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_short_length) {
     mapped_buffer recvbuf(max_short + 1,                    2, receiver());
 
     test_error_run(OP_AM_SHORT, 0, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   UCT_MEM_HANDLE_NULL, recvbuf.addr(), recvbuf.rkey(),
                    "length");
 
     recvbuf.pattern_check(2);
@@ -247,7 +247,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_bcopy_length) {
     mapped_buffer recvbuf(max_bcopy + 1, 2, receiver());
 
     test_error_run(OP_AM_BCOPY, 0, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, recvbuf.addr(), recvbuf.rkey(),
+                   UCT_MEM_HANDLE_NULL, recvbuf.addr(), recvbuf.rkey(),
                    "length");
 
     recvbuf.pattern_check(2);
@@ -280,7 +280,7 @@ UCS_TEST_P(uct_p2p_err_test, invalid_am_id) {
     mapped_buffer sendbuf(4, 2, sender());
 
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
-                   UCT_INVALID_MEM_HANDLE, 0, UCT_INVALID_RKEY,
+                   UCT_MEM_HANDLE_NULL, 0, UCT_INVALID_RKEY,
                    "active message id");
 }
 #endif

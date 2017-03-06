@@ -279,7 +279,7 @@ void uct_test::entity::mem_alloc(size_t length, uct_allocated_memory_t *mem,
                                mem);
         ASSERT_UCS_OK(status);
 
-        ucs_assert(mem->memh == UCT_INVALID_MEM_HANDLE);
+        ucs_assert(mem->memh == UCT_MEM_HANDLE_NULL);
 
         rkey_bundle->rkey   = UCT_INVALID_RKEY;
         rkey_bundle->handle = NULL;
@@ -490,7 +490,7 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_mem.method  = UCT_ALLOC_METHOD_LAST;
         m_mem.address = NULL;
         m_mem.md      = NULL;
-        m_mem.memh    = UCT_INVALID_MEM_HANDLE;
+        m_mem.memh    = UCT_MEM_HANDLE_NULL;
         m_mem.length  = 0;
         m_buf         = NULL;
         m_end         = NULL;

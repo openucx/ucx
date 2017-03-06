@@ -33,7 +33,7 @@ static ucs_status_t ucp_memh_dereg_mds(ucp_context_h context, ucp_mem_h memh,
     ucs_status_t status;
 
     uct_index        = 0;
-    *alloc_md_memh_p = UCT_INVALID_MEM_HANDLE;
+    *alloc_md_memh_p = UCT_MEM_HANDLE_NULL;
 
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
         if (!(memh->md_map & UCS_BIT(md_index))) {
@@ -234,7 +234,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
         memh->length       = params->length;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
-        status = ucp_memh_reg_mds(context, memh, uct_flags, UCT_INVALID_MEM_HANDLE);
+        status = ucp_memh_reg_mds(context, memh, uct_flags, UCT_MEM_HANDLE_NULL);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
