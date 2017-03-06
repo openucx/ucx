@@ -302,7 +302,8 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     UCT_RC_CHECK_AM_SHORT(id, length, iface->verbs_common.config.max_inline);
 
     UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
-    uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, &am, id, hdr, buffer, length);
+    uct_rc_verbs_iface_fill_inl_am_sge(iface->verbs_common.inl_sge, &am, id,
+                                       hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
@@ -325,7 +326,7 @@ ssize_t uct_dc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super.super, &iface->super.super.tx.mp, desc,
                                       id, pack_cb, arg, &length);
-    UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.exp_opcode);
+    UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, sizeof(uct_rc_hdr_t) + length, wr.exp_opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, 0);
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
@@ -793,6 +794,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp_init_attr dci_init_attr;
     struct ibv_qp_attr dci_attr;
     ucs_status_t status;
+    size_t am_hdr_size;
     int i, ret;
 
     ucs_trace_func("");
@@ -801,8 +803,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     uct_dc_verbs_iface_init_wrs(self);
 
+    am_hdr_size = ucs_max(config->verbs_common.max_am_hdr, sizeof(uct_rc_hdr_t));
     status = uct_rc_verbs_iface_common_init(&self->verbs_common, &self->super.super,
-                                            &config->verbs_common, &config->super.super);
+                                            &config->verbs_common, &config->super.super,
+                                            am_hdr_size);
     if (status != UCS_OK) {
         goto err;
     }

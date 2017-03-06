@@ -105,32 +105,25 @@ void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *self)
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
-                                            uct_rc_iface_config_t *rc_config)
+                                            uct_rc_iface_config_t *rc_config,
+                                            size_t am_hdr_size)
 {
-    ucs_status_t status;
-    size_t am_hdr_size;
-
     memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
 
     /* Configuration */
-    am_hdr_size = ucs_max(config->max_am_hdr, sizeof(uct_rc_hdr_t));
     iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
 
     /* Create AM headers and Atomic mempool */
-    status = uct_iface_mpool_init(&rc_iface->super.super,
-                                  &iface->short_desc_mp,
-                                  sizeof(uct_rc_iface_send_desc_t) +
-                                      iface->config.short_desc_size,
-                                  sizeof(uct_rc_iface_send_desc_t),
-                                  UCS_SYS_CACHE_LINE_SIZE,
-                                  &rc_config->super.tx.mp,
-                                  rc_iface->config.tx_qp_len,
-                                  uct_rc_iface_send_desc_init,
-                                  "rc_verbs_short_desc");
-    if (status != UCS_OK) {
-        return status;
-    }
-    return UCS_OK;
+    return uct_iface_mpool_init(&rc_iface->super.super,
+                                &iface->short_desc_mp,
+                                sizeof(uct_rc_iface_send_desc_t) +
+                                    iface->config.short_desc_size,
+                                sizeof(uct_rc_iface_send_desc_t),
+                                UCS_SYS_CACHE_LINE_SIZE,
+                                &rc_config->super.tx.mp,
+                                rc_iface->config.tx_qp_len,
+                                uct_rc_iface_send_desc_init,
+                                "rc_verbs_short_desc");
 }
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
