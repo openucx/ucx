@@ -126,7 +126,7 @@ void ucp_tag_send_start_rndv(ucp_request_t *sreq)
     ucp_ep_connect_remote(sreq->send.ep);
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
-        sreq->send.state.dt.contig.memh = UCT_INVALID_MEM_HANDLE;
+        sreq->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
     }
 
     sreq->send.uct.func = ucp_proto_progress_rndv_rts;
@@ -238,7 +238,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_get_zcopy, (self),
                    rndv_req->send.ep, rndv_req, rndv_req->send.lane);
 
     /* rndv_req is the internal request to perform the get operation */
-    if (rndv_req->send.state.dt.contig.memh == UCT_INVALID_MEM_HANDLE) {
+    if (rndv_req->send.state.dt.contig.memh == UCT_MEM_HANDLE_NULL) {
         /* TODO Not all UCTs need registration on the recv side */
         UCS_PROFILE_REQUEST_EVENT(rndv_req->send.rndv_get.rreq, "rndv_recv_reg", 0);
         status = ucp_request_send_buffer_reg(rndv_req, rndv_req->send.lane);
@@ -333,7 +333,7 @@ static void ucp_rndv_handle_recv_contig(ucp_request_t *rndv_req, ucp_request_t *
         rndv_req->send.uct_comp.count = 0;
         rndv_req->send.state.offset   = 0;
         rndv_req->send.lane           = ucp_ep_get_rndv_get_lane(rndv_req->send.ep);
-        rndv_req->send.state.dt.contig.memh = UCT_INVALID_MEM_HANDLE;
+        rndv_req->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
     }
     ucp_request_start_send(rndv_req);
 }
@@ -605,9 +605,9 @@ static void ucp_rndv_prepare_zcopy_send_buffer(ucp_request_t *sreq, ucp_ep_h ep)
         (ucp_ep_get_am_lane(ep) != ucp_ep_get_rndv_get_lane(ep))) {
         /* dereg the original send request since we are going to send on the AM lane next */
         ucp_rndv_rma_request_send_buffer_dereg(sreq);
-        sreq->send.state.dt.contig.memh = UCT_INVALID_MEM_HANDLE;
+        sreq->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
     }
-    if (sreq->send.state.dt.contig.memh == UCT_INVALID_MEM_HANDLE) {
+    if (sreq->send.state.dt.contig.memh == UCT_MEM_HANDLE_NULL) {
         /* register the send buffer for the zcopy operation */
         status = ucp_request_send_buffer_reg(sreq, ucp_ep_get_am_lane(ep));
         ucs_assert_always(status == UCS_OK);

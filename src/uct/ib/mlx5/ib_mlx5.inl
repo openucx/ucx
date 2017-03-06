@@ -325,7 +325,7 @@ unsigned uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
         if (!iov[iov_it].length) { /* Skip zero length WQE*/
             continue;
         }
-        ucs_assert(iov[iov_it].memh != UCT_INVALID_MEM_HANDLE);
+        ucs_assert(iov[iov_it].memh != UCT_MEM_HANDLE_NULL);
 
         /* place data into the buffer */
         dptr = uct_ib_mlx5_txwq_wrap_any(txwq, dptr);

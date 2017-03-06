@@ -22,7 +22,7 @@ protected:
         EXPECT_GE(mem.length, min_length);
         if (mem.method == UCT_ALLOC_METHOD_MD) {
             EXPECT_TRUE(mem.md != NULL);
-            EXPECT_TRUE(mem.memh != UCT_INVALID_MEM_HANDLE);
+            EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
         } else {
             EXPECT_TRUE((mem.method == GetParam()) ||
                         (mem.method == UCT_ALLOC_METHOD_HEAP));

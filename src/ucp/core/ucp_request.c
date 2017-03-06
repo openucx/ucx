@@ -160,7 +160,7 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
     size_t it;
 
     for (it = 0; it < count; ++it) {
-        if (memh[it] != UCT_INVALID_MEM_HANDLE) {
+        if (memh[it] != UCT_MEM_HANDLE_NULL) {
             uct_md_mem_dereg(uct_md, memh[it]);
         }
     }
@@ -201,7 +201,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
                     goto err;
                 }
             } else {
-                memh[iov_it] = UCT_INVALID_MEM_HANDLE; /* Indicator for zero length */
+                memh[iov_it] = UCT_MEM_HANDLE_NULL; /* Indicator for zero length */
             }
         }
         state->dt.iov.memh = memh;
@@ -232,14 +232,14 @@ UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
 
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (req->send.state.dt.contig.memh != UCT_INVALID_MEM_HANDLE) {
+        if (req->send.state.dt.contig.memh != UCT_MEM_HANDLE_NULL) {
             uct_md_mem_dereg(uct_md, state->dt.contig.memh);
         }
         break;
     case UCP_DATATYPE_IOV:
         memh = state->dt.iov.memh;
         for (iov_it = 0; iov_it < state->dt.iov.iovcnt; ++iov_it) {
-            if (memh[iov_it] != UCT_INVALID_MEM_HANDLE) { /* skip zero memh */
+            if (memh[iov_it] != UCT_MEM_HANDLE_NULL) { /* skip zero memh */
                 uct_md_mem_dereg(uct_md, memh[iov_it]);
             }
         }

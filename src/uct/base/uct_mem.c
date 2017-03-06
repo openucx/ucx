@@ -121,7 +121,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                     return status;
                 }
 
-                ucs_assert(memh != UCT_INVALID_MEM_HANDLE);
+                ucs_assert(memh != UCT_MEM_HANDLE_NULL);
                 mem->md   = md;
                 mem->memh = memh;
                 goto allocated;
@@ -179,7 +179,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
 allocated_without_md:
     mem->md      = NULL;
-    mem->memh    = UCT_INVALID_MEM_HANDLE;
+    mem->memh    = UCT_MEM_HANDLE_NULL;
 allocated:
     ucs_debug("allocated %zu bytes at %p using %s", alloc_length, address,
               (mem->md == NULL) ? uct_alloc_method_names[*method]
@@ -250,9 +250,9 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
                 goto err_free;
             }
 
-            ucs_assert(mem->memh != UCT_INVALID_MEM_HANDLE);
+            ucs_assert(mem->memh != UCT_MEM_HANDLE_NULL);
         } else {
-            mem->memh = UCT_INVALID_MEM_HANDLE;
+            mem->memh = UCT_MEM_HANDLE_NULL;
         }
 
         mem->md = iface->md;
@@ -269,7 +269,7 @@ err:
 void uct_iface_mem_free(const uct_allocated_memory_t *mem)
 {
     if ((mem->method != UCT_ALLOC_METHOD_MD) &&
-        (mem->memh != UCT_INVALID_MEM_HANDLE))
+        (mem->memh != UCT_MEM_HANDLE_NULL))
     {
         (void)uct_md_mem_dereg(mem->md, mem->memh);
     }
@@ -297,7 +297,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
         return status;
     }
 
-    ucs_assert(mem.memh != UCT_INVALID_MEM_HANDLE);
+    ucs_assert(mem.memh != UCT_MEM_HANDLE_NULL);
     ucs_assert(mem.md == iface->md);
 
     hdr         = mem.address;
