@@ -28,6 +28,13 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
+static const char * ucp_device_type_names[] = {
+    [UCT_DEVICE_TYPE_NET]  = "network",
+    [UCT_DEVICE_TYPE_SHM]  = "intra-node",
+    [UCT_DEVICE_TYPE_ACC]  = "accelerator",
+    [UCT_DEVICE_TYPE_SELF] = "loopback",
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", "all",
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -35,12 +42,12 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_NET]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"SHM_DEVICES", "all",
-   "Specifies which shared memory device(s) to use. The order is not meaningful.\n"
+   "Specifies which intra-node device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SHM]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"ACC_DEVICES", "all",
-   "Specifies which acceleration device(s) to use. The order is not meaningful.\n"
+   "Specifies which accelerator device(s) to use. The order is not meaningful.\n"
    "\"all\" would use all available devices.",
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_ACC]), UCS_CONFIG_TYPE_STRING_ARRAY},
 
@@ -217,7 +224,7 @@ static int ucp_config_is_tl_enabled(const ucp_config_t *config, const char *tl_n
 }
 
 static int ucp_is_resource_in_device_list(uct_tl_resource_desc_t *resource,
-                                          const str_names_array_t *devices,
+                                          const ucs_config_names_array_t *devices,
                                           uint64_t *masks, int index)
 {
     int device_enabled, config_idx;
@@ -352,15 +359,22 @@ err:
     return status;
 }
 
-static void ucp_check_unavailable_devices(const str_names_array_t *devices, uint64_t *masks)
+static void ucp_report_unavailable_devices(const ucs_config_names_array_t *devices,
+                                           uint64_t *masks)
 {
     int dev_type_idx, i;
 
     /* Go over the devices lists and check which devices were marked as unavailable */
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; dev_type_idx++) {
-        for (i = 0; i < devices[dev_type_idx].count; i++) {
-            if (!(masks[dev_type_idx] & UCS_BIT(i))) {
-                ucs_info("Device %s is not available", devices[dev_type_idx].names[i]);
+        if (masks[dev_type_idx] == 0) {
+            ucs_info("No %s devices are available",
+                     ucp_device_type_names[dev_type_idx]);
+        } else {
+            for (i = 0; i < devices[dev_type_idx].count; i++) {
+                if (!(masks[dev_type_idx] & UCS_BIT(i))) {
+                    ucs_info("Device %s is not available",
+                             devices[dev_type_idx].names[i]);
+                }
             }
         }
     }
@@ -483,11 +497,71 @@ static ucs_status_t ucp_fill_tl_md(const uct_md_resource_desc_t *md_rsc,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_check_resources(ucp_context_h context)
+static void ucp_resource_config_array_str(const ucs_config_names_array_t *array,
+                                          const char *title, char *buf, size_t max)
 {
+    char *p, *endp;
+    unsigned i;
+
+    if (ucp_str_array_search((const char**)array->names, array->count, "all") >= 0) {
+        strncpy(buf, "", max);
+        return;
+    }
+
+    p    = buf;
+    endp = buf + max;
+
+    if (strlen(title)) {
+        snprintf(p, endp - p, "%s:", title);
+        p += strlen(p);
+    }
+
+    for (i = 0; i < array->count; ++i) {
+        snprintf(p, endp - p, "%s%c", array->names[i],
+                  (i == array->count - 1) ? ' ' : ',');
+        p += strlen(p);
+    }
+}
+
+static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
+                                    size_t max)
+{
+    int dev_type_idx;
+    char *p, *endp, *devs_p;
+
+    p    = buf;
+    endp = buf + max;
+
+    ucp_resource_config_array_str(&config->tls, "", p, endp - p);
+
+    if (strlen(p)) {
+        p += strlen(p);
+        snprintf(p, endp - p, "on ");
+        p += strlen(p);
+    }
+
+    devs_p = p;
+    for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; ++dev_type_idx) {
+        ucp_resource_config_array_str(&config->devices[dev_type_idx],
+                                      ucp_device_type_names[dev_type_idx], p,
+                                      endp - p);
+        p += strlen(p);
+    }
+
+    if (devs_p == p) {
+        snprintf(p, endp - p, "all devices");
+    }
+}
+
+static ucs_status_t ucp_check_resources(ucp_context_h context,
+                                        const ucp_config_t *config)
+{
+    char info_str[128];
+
     /* Error check: Make sure there is at least one transport */
     if (0 == context->num_tls) {
-        ucs_error("There are no available resources matching the configured criteria");
+        ucp_resource_config_str(config, info_str, sizeof(info_str));
+        ucs_error("No matching transports/devices, using %s", info_str);
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -499,7 +573,7 @@ static ucs_status_t ucp_check_resources(ucp_context_h context)
 
     /* Error check: Make sure there are not too many transports */
     if (context->num_tls >= UCP_MAX_RESOURCES) {
-        ucs_error("Exceeded resources limit (%u requested, up to %d are supported)",
+        ucs_error("Exceeded transports/devices limit (%u requested, up to %d are supported)",
                   context->num_tls, UCP_MAX_RESOURCES);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
@@ -600,7 +674,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucs_free(tmp_mds);
 
     /* Validate context resources */
-    status = ucp_check_resources(context);
+    status = ucp_check_resources(context, config);
     if (status != UCS_OK) {
         goto err_free_context_resources;
     }
@@ -608,7 +682,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     uct_release_md_resource_list(md_rscs);
 
     /* Notify the user if there are devices from the command line that are not available */
-    ucp_check_unavailable_devices(config->devices, masks);
+    ucp_report_unavailable_devices(config->devices, masks);
 
     return UCS_OK;
 
