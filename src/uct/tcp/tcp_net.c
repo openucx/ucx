@@ -79,6 +79,11 @@ int uct_tcp_netif_check(const char *if_name)
     ucs_status_t status;
     struct ifreq ifr;
 
+    status = uct_tcp_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
     status = uct_tcp_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
     if (status != UCS_OK) {
         return 0;
