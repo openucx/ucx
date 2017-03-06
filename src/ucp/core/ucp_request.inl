@@ -63,6 +63,42 @@
     }
 
 
+static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
+ucp_recv_desc_get(ucp_worker_t *worker, void *data, void *desc, size_t length,
+                  uint16_t hdr_len, uint16_t flags)
+{
+    ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
+    if (rdesc == desc) {
+        rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+    } else {
+        rdesc = ucs_mpool_get_inline(&worker->am_mp);
+        if (rdesc) {
+            rdesc->flags = flags;
+            memcpy(rdesc + 1, data, length);
+        } else {
+            ucs_error("ucp recv descriptor is not allocated");
+            return NULL;
+        }
+    }
+
+    rdesc->length  = length;
+    rdesc->hdr_len = hdr_len;
+
+    return rdesc;
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
+{
+    if (rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC) {
+        uct_iface_release_desc(rdesc);
+    } else {
+        ucs_mpool_put_inline(rdesc);
+    }
+}
+
+
 /*
  * @return Whether completed.
  *         *req_status if filled with the completion status if completed.
