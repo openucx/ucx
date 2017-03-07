@@ -243,6 +243,7 @@ libuct_la_SOURCES += \
 	sm/knem/knem_iface.c \
 	sm/knem/knem_ep.c \
 	sm/knem/knem_md.c
+endif
 
 #Loopback interface (self)
 noinst_HEADERS += \
@@ -254,5 +255,3 @@ libuct_la_SOURCES += \
 	sm/self/self_md.c \
 	sm/self/self_iface.c \
 	sm/self/self_ep.c
-
-endif

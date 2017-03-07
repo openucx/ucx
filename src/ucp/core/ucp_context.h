@@ -216,9 +216,9 @@ struct ucp_config {
     /** Array of device lists names to use.
      *  This array holds three lists - network devices, shared memory devices
      *  and acceleration devices */
-    str_names_array_t                      devices[UCT_DEVICE_TYPE_LAST];
+    ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
-    str_names_array_t                      tls;
+    ucs_config_names_array_t               tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Configuration saved directly in the context */
