@@ -175,11 +175,15 @@ enum ucp_ep_params_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_mem_map_params_field {
-    UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of remote peer */
+    UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory that
+                                                       would be used in the
+                                                       @ref ucp_mem_map routine,
+                                                       see @ref ucp_mem_map_matrix
+                                                       for details */
     UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory that
                                                        would be allocated or
                                                        registered in the
-                                                       ucp_mem_map routine.*/
+                                                       @ref ucp_mem_map routine.*/
     UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags */
 };
 
@@ -247,11 +251,19 @@ enum ucp_dt_type {
  * ucp_mem_map() function.
  */
 enum {
-    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0) /**< Complete the mapping faster, possibly by
-                                           not populating the pages in the mapping
-                                           up-front, and mapping them later when
-                                           they are accessed by communication
-                                           routines. */
+    UCP_MEM_MAP_NONBLOCK = UCS_BIT(0), /**< Complete the mapping faster, possibly by
+                                            not populating the pages in the mapping
+                                            up-front, and mapping them later when
+                                            they are accessed by communication
+                                            routines. */
+    UCP_MEM_MAP_ALLOCATE = UCS_BIT(1), /**< Identify requirement for allocation,
+                                            if passed address is not a null-pointer
+                                            then it will be used as a hint or direct
+                                            address for allocation. */
+    UCP_MEM_MAP_FIXED    = UCS_BIT(2)  /**< Don't interpret address as a hint:
+                                            place the mapping at exactly that
+                                            address. The address must be a multiple
+                                            of the page size. */
 };
 
 
@@ -667,7 +679,7 @@ typedef struct ucp_mem_map_params {
      * segment and returns its address in this argument.
      * Therefore, this value is optional.
      * If it's not set (along with its corresponding bit in the field_mask -
-     * UCP_MEM_MAP_PARAM_FIELD_ADDRESS), the ucp_mem_map routine will consider
+     * @ref UCP_MEM_MAP_PARAM_FIELD_ADDRESS), the ucp_mem_map routine will consider
      * address as set to NULL and will allocate memory.
      */
      void                   *address;
@@ -675,18 +687,18 @@ typedef struct ucp_mem_map_params {
      /**
       * Length (in bytes) to allocate or map (register).
       * This field is mandatory for filling (along with its corresponding bit
-      * in the field_mask - UCP_MEM_MAP_PARAM_FIELD_LENGTH).
-      * The ucp_mem_map routine will return with an error if the length isn't
+      * in the field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_LENGTH).
+      * The @ref ucp_mem_map routine will return with an error if the length isn't
       * specified.
       */
      size_t                 length;
 
      /**
-      * Allocation flags, e.g. @ref UCP_MEM_MAP_NONBLOCK "UCP_MEM_MAP_NONBLOCK".
+      * Allocation flags, e.g. @ref UCP_MEM_MAP_NONBLOCK.
       * This value is optional.
       * If it's not set (along with its corresponding bit in the field_mask -
-      * UCP_MEM_MAP_PARAM_FIELD_FLAGS), the ucp_mem_map routine will consider
-      * the flags as set to zero.
+      * @ref UCP_MEM_MAP_PARAM_FIELD_FLAGS), the @ref ucp_mem_map routine will
+      * consider the flags as set to zero.
       */
      unsigned               flags;
 } ucp_mem_map_params_t;
@@ -1299,6 +1311,39 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  * by a user, then the user is responsible for segmentation and subsequent
  * management.
  *
+ * <table>
+ * <caption id="ucp_mem_map_matrix">Matrix of behavior</caption>
+ * <tr><th>parameter/flag <td align="center">@ref UCP_MEM_MAP_NONBLOCK "NONBLOCK"</td>
+ *                        <td align="center">@ref UCP_MEM_MAP_ALLOCATE "ALLOCATE"</td>
+ *                        <td align="center">@ref UCP_MEM_MAP_FIXED "FIXED"</td>
+ *                        <td align="center">@ref ucp_mem_map_params.address "address"</td>
+ *                        <td align="center">@b result
+ * <tr><td rowspan="8" align="center">@b value <td rowspan="8" align="center">0/1 - the value\n only affects the\n register/map\n phase</td>
+ *                                               <td align="center">0 <td align="center">0 <td align="center">0 <td align="center">@ref anch_err "error"
+ * <tr>                                          <td align="center">1 <td align="center">0 <td align="center">0 <td align="center">@ref anch_alloc_reg "alloc+register"
+ * <tr>                                          <td align="center">0 <td align="center">1 <td align="center">0 <td align="center">@ref anch_err "error"</td>
+ * <tr>                                          <td align="center">0 <td align="center">0 <td align="center">defined <td align="center">@ref anch_reg "register"
+ * <tr>                                          <td align="center">1 <td align="center">1 <td align="center">0 <td align="center">@ref anch_err "error"</td>
+ * <tr>                                          <td align="center">1 <td align="center">0 <td align="center">defined <td align="center">@ref anch_alloc_hint_reg "alloc+register,hint"
+ * <tr>                                          <td align="center">0 <td align="center">1 <td align="center">defined <td align="center">@ref anch_err "error"</td>
+ * <tr>                                          <td align="center">1 <td align="center">1 <td align="center">defined <td align="center">@ref anch_alloc_fixed_reg "alloc+register,fixed"
+ * </table>
+ *
+ * @note
+ * @li \anchor anch_reg @b register means that the memory will be registered in
+ *     corresponding transports for RMA/AMO operations. This case intends that
+ *     the memory was allocated by user before.
+ * @li \anchor anch_alloc_reg @b alloc+register means that the memory will be allocated
+ *     in the memory provided by the system and registered in corresponding
+ *     transports for RMA/AMO operations.
+ * @li \anchor anch_alloc_hint_reg <b>alloc+register,hint</b> means that
+ *     the memory will be allocated with using @ref ucp_mem_map_params.address
+ *     as a hint and registered in corresponding transports for RMA/AMO operations.
+ * @li \anchor anch_alloc_fixed_reg <b>alloc+register,fixed</b> means that the memory
+ *     will be allocated and registered in corresponding transports for RMA/AMO
+ *     operations.
+ * @li \anchor anch_err @b error is an erroneous combination of the parameters.
+ *
  * @param [in]     context    Application @ref ucp_context_h "context" to map
  *                            (register) and allocate the memory on.
  * @param [in]     params     User defined @ref ucp_mem_map_params_t configurations
@@ -1308,7 +1353,7 @@ ucs_status_t ucp_ep_flush(ucp_ep_h ep);
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
+ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *params,
                          ucp_mem_h *memh_p);
 
 
@@ -1340,6 +1385,22 @@ ucs_status_t ucp_mem_map(ucp_context_h context, ucp_mem_map_params_t *params,
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh);
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief query mapped memory segment
+ *
+ * This routine returns address and length of memory segment mapped with
+ * @ref ucp_mem_map "ucp_mem_map()" routine.
+ *
+ * @param [in]  memh    @ref ucp_mem_h "Handle" to memory region.
+ * @param [out] attr    Filled with attributes of the @ref ucp_mem_h
+ *                      "UCP memory handle".
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr);
 
 
 /**

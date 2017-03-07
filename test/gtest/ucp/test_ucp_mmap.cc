@@ -5,6 +5,7 @@
 */
 
 #include "test_ucp_memheap.h"
+#include "ucp/core/ucp_mm.h"
 
 
 class test_ucp_mmap : public test_ucp_memheap {
@@ -74,7 +75,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
         params.address    = NULL;
         params.length     = size;
-        params.flags      = rand_flags();
+        params.flags      = rand_flags() | UCP_MEM_MAP_ALLOCATE;
 
         status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
@@ -141,7 +142,7 @@ UCS_TEST_P(test_ucp_mmap, dummy_mem) {
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address    = NULL;
     params.length     = 0;
-    params.flags      = rand_flags();
+    params.flags      = rand_flags() | UCP_MEM_MAP_ALLOCATE;
 
     status = ucp_mem_map(sender().ucph(), &params, &memh[0]);
     ASSERT_UCS_OK(status);
@@ -167,6 +168,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
 
     ucp_mem_h memh;
     ucp_mem_map_params_t params;
+    ucp_mem_attr_t attr;
     ucp_mem_advise_params_t advise_params;
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -174,16 +176,20 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address    = NULL;
     params.length     = size;
-    params.flags      = UCP_MEM_MAP_NONBLOCK;
+    params.flags      = UCP_MEM_MAP_NONBLOCK | UCP_MEM_MAP_ALLOCATE;
 
     status = ucp_mem_map(sender().ucph(), &params, &memh);
     ASSERT_UCS_OK(status);
 
-    
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH;
+    status = ucp_mem_query(memh, &attr);
+    ASSERT_UCS_OK(status);
+    EXPECT_GE(attr.length, size);
+
     advise_params.field_mask = UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS |
                                UCP_MEM_ADVISE_PARAM_FIELD_LENGTH |
                                UCP_MEM_ADVISE_PARAM_FIELD_ADVICE;
-    advise_params.address    = params.address;
+    advise_params.address    = attr.address;
     advise_params.length     = size;
     advise_params.advice     = UCP_MADV_WILLNEED;
     status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
@@ -207,8 +213,9 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
 
     void *ptr = malloc(size);
 
-    ucp_mem_h memh;
-    ucp_mem_map_params_t params;
+    ucp_mem_h               memh;
+    ucp_mem_map_params_t    params;
+    ucp_mem_attr_t          mem_attr;
     ucp_mem_advise_params_t advise_params;
 
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -221,10 +228,14 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     status = ucp_mem_map(sender().ucph(), &params, &memh);
     ASSERT_UCS_OK(status);
 
+    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    status = ucp_mem_query(memh, &mem_attr);
+    ASSERT_UCS_OK(status);
+
     advise_params.field_mask = UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS |
                                UCP_MEM_ADVISE_PARAM_FIELD_LENGTH |
                                UCP_MEM_ADVISE_PARAM_FIELD_ADVICE;
-    advise_params.address    = params.address;
+    advise_params.address    = mem_attr.address;
     advise_params.length     = size;
     advise_params.advice     = UCP_MADV_WILLNEED;
     status = ucp_mem_advise(sender().ucph(), memh, &advise_params); 
@@ -236,6 +247,41 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     ASSERT_UCS_OK(status);
 
     free(ptr);
+}
+
+UCS_TEST_P(test_ucp_mmap, fixed) {
+    ucs_status_t status;
+    bool         is_dummy;
+
+    sender().connect(&sender());
+
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        size_t size = (i + 1) * ((i % 2) ? 1000 : 1);
+        uintptr_t uptr = 0xFF000000;
+        void *ptr = (void *)uptr;
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address    = ptr;
+        params.length     = size;
+        params.flags      = UCP_MEM_MAP_FIXED | UCP_MEM_MAP_ALLOCATE;
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(memh->address, ptr);
+        EXPECT_GE(memh->length, size);
+        EXPECT_GE(memh->alloc_method, UCT_ALLOC_METHOD_MMAP);
+
+        is_dummy = (size == 0);
+        test_rkey_management(&sender(), memh, is_dummy);
+
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_mmap)
