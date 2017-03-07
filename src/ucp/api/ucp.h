@@ -262,7 +262,7 @@ enum {
                                             address for allocation. */
     UCP_MEM_MAP_FIXED    = UCS_BIT(2)  /**< Don't interpret address as a hint:
                                             place the mapping at exactly that
-                                            address. Address must be a multiple
+                                            address. The address must be a multiple
                                             of the page size. */
 };
 
