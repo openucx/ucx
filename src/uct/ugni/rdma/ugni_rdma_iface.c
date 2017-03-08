@@ -81,7 +81,7 @@ static ucs_status_t uct_ugni_rdma_iface_query(uct_iface_h tl_iface, uct_iface_at
                                          UCT_IFACE_FLAG_ATOMIC_SWAP32 |
                                          UCT_IFACE_FLAG_ATOMIC_FADD32 |
                                          UCT_IFACE_FLAG_ATOMIC_ADD32 |
-                                         UCT_IFACE_FLAG_ATOMIC_SWAP32;
+                                         UCT_IFACE_FLAG_ATOMIC_CSWAP32;
     }
     iface_attr->overhead               = 80e-9; /* 80 ns */
     iface_attr->latency.overhead       = 900e-9; /* 900 ns */
