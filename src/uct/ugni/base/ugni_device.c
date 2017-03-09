@@ -14,6 +14,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 
 
