@@ -139,8 +139,10 @@ UCS_CLASS_INIT_FUNC(uct_ugni_ep_t, uct_iface_t *tl_iface,
 
     uint32_t *big_hash;
     big_hash = (void *)&self->ep;
-
     self->hash_key = big_hash[0];
+    if (GNI_DEVICE_ARIES == iface->dev->type) {
+        self->hash_key &= 0x00FFFFFF;
+    }
     ucs_debug("Adding ep hash %x to iface %p", self->hash_key, iface);
     sglib_hashed_uct_ugni_ep_t_add(iface->eps, self);
 
