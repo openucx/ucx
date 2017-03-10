@@ -102,7 +102,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32|
                                       UCT_IFACE_FLAG_ATOMIC_DEVICE |
                                       UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE|
+                                      UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     return UCS_OK;
 }
@@ -553,8 +554,22 @@ static void uct_dc_mlx5_iface_progress(void *arg)
 static UCS_F_NOINLINE void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                                             void *arg)
 {
-    struct mlx5_cqe64 *cqe = arg;
-    uct_ib_mlx5_completion_with_err((void*)cqe, 0);
+    struct mlx5_cqe64   *cqe    = arg;
+    uint32_t            qp_num  = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_dc_mlx5_iface_t *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+    uint8_t             dci     = uct_dc_iface_dci_find(&iface->super, qp_num);
+    uct_dc_ep_t         *ep     = iface->super.tx.dcis[dci].ep;
+
+    if (ep) {
+        uct_rc_txqp_purge_outstanding(&iface->super.tx.dcis[dci].txqp,
+                                      UCS_ERR_ENDPOINT_TIMEOUT, 0);
+
+        uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t),
+                          &ep->super.super,
+                          &ib_iface->super.super);
+    }
+
+    uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_ERROR);
 }
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -783,4 +798,3 @@ UCT_TL_COMPONENT_DEFINE(uct_dc_mlx5_tl,
                         uct_dc_mlx5_iface_config_table,
                         uct_dc_mlx5_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_dc_mlx5_tl);
-
