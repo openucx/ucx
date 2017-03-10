@@ -106,7 +106,9 @@ enum {
                     "Invalid %s length: %zu (expected: <= %zu)", \
                     _name, (size_t)(_length), (size_t)(_max_length))
 
-
+/**
+ * Helper macro to avoid similar checks in several functions
+ */
 #define UCT_CHECK_IOV_PARAM(_iov, _iovcnt, _iface, _max_msg_size, _max_copy_size, _name) \
     UCT_CHECK_IOV_SIZE(_iovcnt, uct_ib_iface_get_max_iov(_iface), _name " iov size"); \
     UCT_CHECK_LENGTH(uct_iov_total_length(_iov, _iovcnt), _max_msg_size, _name " total length"); \
@@ -287,13 +289,14 @@ typedef struct uct_iface_mpool_config {
  * Get a descriptor from memory pool, tell valgrind it's already defined, return
  * error if the memory pool is empty.
  *
- * @param _mp       Memory pool to get descriptor from.
- * @param _desc     Variable to assign descriptor to.
- * @param _failure  What do to if memory poll is empty.
+ * @param _mp        Memory pool to get descriptor from.
+ * @param _desc      Variable to assign descriptor to.
+ * @param _desc_size Descriptor header size.
+ * @param _failure   What do to if memory poll is empty.
  *
  * @return TX descriptor fetched from memory pool.
  */
-#define UCT_TL_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
+#define UCT_TL_IFACE_GET_TX_DESC_SIZE(_iface, _mp, _desc, _desc_size, _failure) \
     { \
         _desc = ucs_mpool_get(_mp); \
         if (ucs_unlikely((_desc) == NULL)) { \
@@ -301,8 +304,12 @@ typedef struct uct_iface_mpool_config {
             _failure; \
         } \
         \
-        VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
+        VALGRIND_MAKE_MEM_DEFINED(_desc, _desc_size); \
     }
+
+
+#define UCT_TL_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
+    UCT_TL_IFACE_GET_TX_DESC_SIZE(_iface, _mp, _desc, sizeof(*(_desc)), _failure)
 
 
 #define UCT_TL_IFACE_GET_RX_DESC(_iface, _mp, _desc, _failure) \

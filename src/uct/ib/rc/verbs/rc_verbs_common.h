@@ -44,6 +44,8 @@ typedef struct uct_rc_verbs_iface_common {
 
 extern ucs_config_field_t uct_rc_verbs_iface_common_config_table[];
 
+void uct_rc_ep_get_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt);
 
 static inline void
@@ -163,15 +165,6 @@ out:
     uct_rc_verbs_iface_post_recv_common(iface, &iface->rx.srq, 0);
     return status;
 }
-
-ucs_status_t uct_rc_iface_verbs_iov_callback(uct_iface_h tl_iface, uint32_t length,
-                                             void **desc_iov_p, size_t *desc_offset_p,
-                                             uint64_t *addr_p, uint32_t *lkey_p);
-
-ucs_status_t
-uct_rc_iface_verbs_iov_rdma_read_callback(uct_iface_h tl_iface, uint32_t length,
-                                          void **desc_iov_p, size_t *desc_offset_p,
-                                          uint64_t *addr_p, uint32_t *lkey_p);
 
 static inline void
 uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,

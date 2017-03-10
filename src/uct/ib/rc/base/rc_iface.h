@@ -227,14 +227,6 @@ struct uct_rc_iface_send_desc {
 };
 
 
-struct uct_rc_iface_send_iov_save_desc {
-    uct_rc_iface_send_desc_t      super;
-    uint16_t                      iovcnt; /* number of elements in the buffer */
-    void                         *buffer[UCT_IB_MAX_IOV];
-    uint16_t                      length[UCT_IB_MAX_IOV];
-};
-
-
 /*
  * Short active message header (active message header is always 64 bit).
  */
