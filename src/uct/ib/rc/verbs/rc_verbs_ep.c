@@ -89,10 +89,11 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    unsigned is_rdma_read                  = (IBV_WR_RDMA_READ == opcode);
-    unsigned copy_used                     = 0;
-    uct_rc_iface_send_desc_t *iov_buf_desc = NULL;
-    uct_rc_iface_send_desc_t *desc_iov     = NULL;
+    unsigned is_rdma_read       = (IBV_WR_RDMA_READ == opcode);
+    unsigned copy_used          = 0;
+    void *iov_buf_desc          = NULL;
+    void *desc_iov_t            = NULL; /* avoid break strict-aliasing rules */
+    uct_rc_iface_send_desc_t *desc_iov;
     struct ibv_sge sge[UCT_IB_MAX_IOV];
     struct ibv_send_wr wr;
     ucs_status_t status;
@@ -101,8 +102,8 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     status = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt,
                                        &iface->super.super, &iface->super.tx.mp,
-                                       (void **)&desc_iov, sizeof(*desc_iov),
-                                       (void **)&iov_buf_desc,
+                                       &desc_iov_t, sizeof(*desc_iov),
+                                       &iov_buf_desc,
                                        ucs_offsetof(uct_rc_iface_send_desc_t, lkey),
                                        is_rdma_read, &copy_used, &sge_cnt);
     if (UCS_OK != status) {
@@ -116,6 +117,8 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, comp, ep->txcnt.pi);
     /* TODO if copy_used == sge_cnt the UCS_OK could be returned */
     if (copy_used) {
+        ucs_assert(NULL != desc_iov_t);
+        desc_iov = desc_iov_t;
         if (is_rdma_read) {
             /* schedule a callback to copy payload to the user buffer at completion */
             desc_iov->super.handler = uct_rc_ep_get_zcopy_handler;
@@ -352,8 +355,9 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     uct_rc_verbs_iface_t     *iface    = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t        *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_iface_send_desc_t *desc     = NULL;
-    uct_rc_iface_send_desc_t *desc_iov = NULL;
     unsigned copy_used                 = 0;
+    void *desc_iov_t                   = NULL; /* avoid break strict-aliasing rules */
+    uct_rc_iface_send_desc_t *desc_iov;
     struct ibv_sge sge[UCT_IB_MAX_IOV]; /* First sge is reserved for the header */
     struct ibv_send_wr wr;
     ucs_status_t status;
@@ -375,7 +379,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
     status = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt,
                                        &iface->super.super, &iface->super.tx.mp,
-                                       (void **)&desc_iov, sizeof(*desc_iov), NULL,
+                                       &desc_iov_t, sizeof(*desc_iov), NULL,
                                        ucs_offsetof(uct_rc_iface_send_desc_t, lkey),
                                        0, &copy_used, &sge_cnt);
     if (UCS_OK != status) {
@@ -388,6 +392,8 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);
     /* TODO if copy_used == sge_cnt the UCS_OK could be returned */
     if (copy_used) {
+        ucs_assert(NULL != desc_iov_t);
+        desc_iov = desc_iov_t;
         desc_iov->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
         uct_rc_txqp_add_send_op_sn(&ep->super.txqp, &desc_iov->super, ep->txcnt.pi);
     }

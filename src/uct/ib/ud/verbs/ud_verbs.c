@@ -197,7 +197,8 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_ud_verbs_iface_t);
     unsigned copy_used          = 0;
-    uct_ud_send_skb_t *desc     = NULL;
+    void *desc_t                = NULL; /* avoid break strict-aliasing rules */
+    uct_ud_send_skb_t *desc;
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
     size_t sge_cnt;
@@ -223,7 +224,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     status = uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1, iov, iovcnt,
                                        &iface->super.super, &iface->super.tx.mp,
-                                       (void **)&desc, sizeof(*desc) + sizeof(*desc->neth),
+                                       &desc_t, sizeof(*desc) + sizeof(*desc->neth),
                                        NULL,
                                        ucs_offsetof(uct_ud_send_skb_t, lkey),
                                        0, &copy_used, &sge_cnt);
@@ -237,6 +238,8 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     uct_ud_am_set_zcopy_desc(skb, iov, iovcnt, comp);
     if (copy_used) {
+        ucs_assert(NULL != desc_t);
+        desc = desc_t;
         desc->neth->psn = ep->super.tx.psn;
         ucs_queue_push(&ep->super.tx.window, &desc->queue);
     }
