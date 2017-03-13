@@ -11,8 +11,9 @@ noinst_PROGRAMS = \
 
 objdir = $(shell sed -n -e 's/^objdir=\(.*\)$$/\1/p' $(LIBTOOL))
 
-test_dlopen_SOURCES = dlopen.c
+test_dlopen_SOURCES  = dlopen.c
 test_dlopen_CPPFLAGS = -g -DUCP_LIB_PATH=$(abs_top_builddir)/src/ucp/$(objdir)/libucp.so
+test_dlopen_LDADD    = -ldl
 
 if HAVE_PROFILING
 noinst_PROGRAMS += \
