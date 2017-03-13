@@ -21,7 +21,8 @@ public:
 
         /* To reduce test execution time decrease retransmition timeouts
          * where it is relevant */
-        if (GetParam()->tl_name == "rc" || GetParam()->tl_name == "rc_mlx5") {
+        if (GetParam()->tl_name == "rc" || GetParam()->tl_name == "rc_mlx5" ||
+            GetParam()->tl_name == "dc" || GetParam()->tl_name == "dc_mlx5") {
             set_config("RC_TIMEOUT=0.0001"); /* 100 us should be enough */
             set_config("RC_RETRY_COUNT=2");
         }
@@ -30,7 +31,6 @@ public:
         m_entities.push_back(m_e1);
 
         m_e2 = uct_test::create_entity(0);
-        m_entities.push_back(m_e2);
 
         connect();
     }
@@ -71,7 +71,7 @@ UCS_TEST_P(test_error_handling, peer_failure)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
-    m_e2->destroy_ep(0);
+    delete m_e2;
     EXPECT_EQ(uct_ep_put_short(m_e1->ep(0), NULL, 0, 0, 0), UCS_OK);
 
     m_e1->flush();
@@ -130,7 +130,7 @@ UCS_TEST_P(test_error_handling, purge_failed_ep)
 
     req_count = 0;
 
-    m_e2->destroy_ep(0);
+    delete m_e2;
 
     do {
           status = uct_ep_put_short(m_e1->ep(0), NULL, 0, 0, 0);
@@ -151,4 +151,3 @@ UCS_TEST_P(test_error_handling, purge_failed_ep)
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_error_handling)
-
