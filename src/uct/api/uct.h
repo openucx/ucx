@@ -1015,12 +1015,9 @@ ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
  * during @ref uct_worker_progress(). Thus the latency of
  * other transports may be reduced.
  *
- * To progress the interface the application must call
- * @ref uct_iface_async_progress(). 
- * 
  * The function can be called from any context or thread.
  *
- * By default the progress is enabled when interface is created.
+ * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to disable progress.
  *
@@ -1033,40 +1030,17 @@ void uct_iface_progress_disable(uct_iface_h iface);
  * @brief Enable synchronous progress for the interface
  *
  * Notify the transport that it should do work 
- * during uct_worker_progree(). 
+ * during @ref uct_worker_progress(). 
  * Thus the latency of the transport may be reduced.
  *
  * The function can be called from any context or thread.
  *
- * By default the progress is enabled when interface is created.
+ * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to enable progress.
  *
  */
 void uct_iface_progress_enable(uct_iface_h iface);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Progress the interface from any context or thread
- *
- * This routine explicitly progresses asynchrounous 
- * @ref UCT_AM_CB_FLAG_ASYNC active message requests on 
- * the interface. It may also schedule a slow path callback
- * @ref uct_worker_slowpath_progress_register to progress
- * pending requests and sync @ref UCT_AM_CB_FLAG_SYNC
- * active message requests. 
- *
- * It is guaranteed that the function dispatches all 
- * outstanding operations. 
- *
- * The wakeup API can be used to request notification 
- * of communnication events. Than this function can be 
- * called to dispatch them. 
- *
- * @param [in]  iface    The interface to progress.
- */
-void uct_iface_async_progress(uct_iface_h iface);
 
 
 /**
