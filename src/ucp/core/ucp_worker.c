@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -738,6 +738,11 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     }
 
     return UCS_OK;
+}
+
+void ucp_worker_wait_mem(ucp_worker_h worker, void *address)
+{
+   ucs_arch_wait_mem(address);
 }
 
 ucs_status_t ucp_worker_wait(ucp_worker_h worker)

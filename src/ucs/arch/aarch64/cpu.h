@@ -65,3 +65,12 @@ static inline int ucs_arch_get_cpu_flag()
 }
 
 #endif
+
+static inline void ucs_arch_wait_mem(void *address)
+{
+    unsigned long tmp;
+    __asm__ __volatile__ ("ldxr %0, [%1] \n"
+                          "wfe           \n"
+                          : "=&r"(tmp)
+                          : "r"(address));
+}

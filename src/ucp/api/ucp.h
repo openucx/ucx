@@ -1,6 +1,7 @@
 /*
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -1135,28 +1136,13 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker);
  *
  * @note This routine can be used by applications that "polls" for a memory
  * update. Instead of continues polling on an address the application may
- * use @a ucp_ptr_wait , which may suspend execution until the memory is
+ * use @a ucp_worker_wait_mem, which may suspend execution until the memory is
  * updated. The goal of the routine is to provide an opportunity for energy
  * savings for architectures that support this functionality.
  *
  * @param [in] address          Local memory address
  */
-inline void ucp_ptr_wait(void *address)
-#if defined(__aarch64__)
-{
-    unsigned long tmp;
-    __asm__ __volatile__ ("ldxr %0, [%1] \n"
-                          "wfe           \n"
-                          : "=&r"(tmp)
-                          : "r"(address));
-}
-#elif defined(__x86_64__)
-{}
-#elif defined(__powerpc64__)
-{}
-#else
-{ /* do nothing */ }
-#endif
+void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
 
 
 /**

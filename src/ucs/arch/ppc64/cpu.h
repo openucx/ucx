@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,6 +13,7 @@
 #ifdef HAVE_SYS_PLATFORM_PPC_H
 #  include <sys/platform/ppc.h>
 #endif
+#include <ucs/arch/generic/cpu.h>
 #include <stdint.h>
 
 
@@ -49,5 +50,7 @@ static inline int ucs_arch_get_cpu_flag()
 }
 
 double ucs_arch_get_clocks_per_sec();
+
+#define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
 #endif
