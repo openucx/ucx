@@ -429,7 +429,7 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_famo, fma,
                              return UCS_ERR_NO_RESOURCE);
-    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_CSWAP_S,
+    uct_ugni_format_fma_amo(fma, GNI_POST_AMO, GNI_FMA_ATOMIC2_FCSWAP_S,
                             (uint64_t)compare, (uint64_t)swap, fma + 1, remote_addr,
                             rkey, LEN_32, ep, comp, uct_ugni_amo_unpack32, (void *)result);
     ucs_trace_data("Posting AMO CSWAP, GNI_PostFma of size %"PRIx64" value"
