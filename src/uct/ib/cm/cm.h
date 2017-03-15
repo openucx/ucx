@@ -43,13 +43,15 @@ typedef struct uct_cm_iface_op {
  * IB CM interface/
  */
 typedef struct uct_cm_iface {
-    uct_ib_iface_t         super;
-    uint32_t               service_id;  /* Service ID we're listening to */
-    struct ib_cm_device    *cmdev;      /* CM device */
-    struct ib_cm_id        *listen_id;  /* Listening "socket" */
-    ucs_queue_head_t       notify_q;    /* Notification queue */
-    uint32_t               num_outstanding; /* Number of outstanding sends */
-    ucs_queue_head_t       outstanding_q; /* Outstanding operations queue */
+    uct_ib_iface_t            super;
+    uint32_t                  service_id;      /* Service ID we're listening to */
+    struct ib_cm_device      *cmdev;           /* CM device */
+    struct ib_cm_id          *listen_id;       /* Listening "socket" */
+    ucs_queue_head_t          notify_q;        /* Notification queue */
+    uint32_t                  num_outstanding; /* Number of outstanding sends */
+    ucs_queue_head_t          outstanding_q;   /* Outstanding operations queue */
+    ucs_callbackq_slow_elem_t cbq_elem;        /* Slow-path callback */
+    uint8_t                   cbq_elem_on;
 
     struct {
         int                timeout_ms;
