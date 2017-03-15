@@ -30,7 +30,7 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     uct_rc_verbs_iface_common_config_t verbs_common;
     uct_rc_fc_config_t                 fc;
-#if HAVE_IBV_HW_TM
+#if HAVE_IBV_EX_HW_TM
     struct {
         int                            enable;
         unsigned                       list_size;
@@ -47,12 +47,9 @@ typedef struct uct_rc_verbs_iface {
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
     uct_rc_verbs_iface_common_t verbs_common;
-    struct ibv_sge              *inl_sge_ptr;
-#if HAVE_IBV_HW_TM
+#if HAVE_IBV_EX_HW_TM
     struct {
-        void                    *notag_hdr;
         unsigned                tag_available;
-        unsigned                notag_hdr_size;
         uint8_t                 enabled;
         struct {
             void                     *arg; /* User defined arg */
@@ -73,62 +70,69 @@ typedef struct uct_rc_verbs_iface {
 } uct_rc_verbs_iface_t;
 
 
-#if HAVE_IBV_HW_TM
+#define UCT_RC_VERBS_CHECK_AM_SHORT(_iface, _id, _length, _max_inline) \
+     UCT_CHECK_AM_ID(_id); \
+     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length + \
+                      (_iface)->verbs_common.config.notag_hdr_size, \
+                      _max_inline, "am_short");
+
+#define UCT_RC_VERBS_CHECK_AM_ZCOPY(_iface, _id, _header_len, _len, _desc_size, _seg_size) \
+     UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_len, _len, _seg_size) \
+     UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_len + \
+                      (_iface)->verbs_common.config.notag_hdr_size, \
+                      _desc_size, "am_zcopy header");
+
+#define UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _hdr, _len) \
+     { \
+         UCT_RC_IFACE_GET_TX_DESC(&(_iface)->super, _mp, _desc) \
+         hdr = _desc + 1; \
+         len = uct_rc_verbs_notag_header_fill(_iface, _hdr); \
+     }
+
+#define UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, \
+                                          _arg, _length, _data_length) \
+     { \
+         void *hdr; \
+         size_t len; \
+         UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, hdr, len) \
+         (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+         uct_rc_bcopy_desc_fill(hdr + len, _id, _pack_cb, _arg, &(_data_length)); \
+         _length = _data_length + len + sizeof(uct_rc_hdr_t); \
+     }
+
+#define UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, _id, _header, \
+                                          _header_length, _comp, _send_flags, _sge) \
+     { \
+         void *hdr; \
+         size_t len; \
+         UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, hdr, len) \
+         uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
+         uct_rc_zcopy_desc_set_header(hdr + len, _id, _header, _header_length); \
+         _sge.length = sizeof(uct_rc_hdr_t) + header_length + len; \
+     }
+
+
+#if HAVE_IBV_EX_HW_TM
 
 #  define UCT_RC_VERBS_TAG_MIN_POSTED  33
 
 #  define UCT_RC_VERBS_TM_ENABLED(_iface) \
-       (IBV_DEVICE_TM_CONFIG(uct_ib_iface_device(&(_iface)->super.super), max_num_tags) && \
+       (IBV_DEVICE_TM_CAPS(uct_ib_iface_device(&(_iface)->super.super), max_num_tags) && \
         (_iface)->tm.enabled)
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
 
-#  define UCT_RC_VERBS_CHECK_FC_CTRL(_iface, _len) \
-       ucs_assert(_len + (_iface)->tm.notag_hdr_size <= \
-                  (_iface)->verbs_common.config.max_inline); 
+#else
 
-#  define UCT_RC_VERBS_CHECK_AM_SHORT(_iface, _id, _length, _max_inline) \
-       UCT_CHECK_AM_ID(_id); \
-       UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length + (_iface)->tm.notag_hdr_size, \
-                        _max_inline, "am_short");
+#  define UCT_RC_VERBS_TM_ENABLED(_iface)          0
 
-#  define UCT_RC_VERBS_CHECK_AM_ZCOPY(_iface, _id, _header_len, _len, _desc_size, _seg_size) \
-       UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_len, _len, _seg_size) \
-       UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_len + (_iface)->tm.notag_hdr_size, \
-                        _desc_size, "am_zcopy header");
+#endif /* HAVE_IBV_EX_HW_TM */
 
-#  define UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _hdr, _len) \
-       { \
-           UCT_RC_IFACE_GET_TX_DESC(&(_iface)->super, _mp, _desc) \
-           hdr = _desc + 1; \
-           len = uct_rc_verbs_notag_header_fill(_iface, _hdr); \
-       }
-
-#  define UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, \
-                                            _arg, _length, _data_length) \
-       { \
-           void *hdr; \
-           size_t len; \
-           UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, hdr, len) \
-           (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-           uct_rc_bcopy_desc_fill(hdr + len, _id, _pack_cb, _arg, &(_data_length)); \
-           _length = _data_length + len + sizeof(uct_rc_hdr_t); \
-       }
-
-#  define UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, _id, _header, \
-                                            _header_length, _comp, _send_flags, _sge) \
-       { \
-           void *hdr; \
-           size_t len; \
-           UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, hdr, len) \
-           uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
-           uct_rc_zcopy_desc_set_header(hdr + len, _id, _header, _header_length); \
-           _sge.length = sizeof(uct_rc_hdr_t) + header_length + len; \
-       }
 
 static UCS_F_ALWAYS_INLINE size_t
 uct_rc_verbs_notag_header_fill(uct_rc_verbs_iface_t *iface, void *hdr)
 {
+#if HAVE_IBV_EX_HW_TM
     struct ibv_tm_info tm_info;
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
 
@@ -136,9 +140,14 @@ uct_rc_verbs_notag_header_fill(uct_rc_verbs_iface_t *iface, void *hdr)
         tm_info.op = IBV_TM_OP_NO_TAG;
         return ibv_pack_tm_info(dev->ibv_context, hdr, &tm_info);
     }
+#endif
 
     return 0;
 }
+
+
+UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 
 void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *iface,
                                     uct_am_trace_type_t type,
@@ -146,45 +155,6 @@ void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *iface,
                                     size_t valid_length,
                                     char *buffer, size_t max);
 
-#else
-
-#  define UCT_RC_VERBS_TM_ENABLED(_iface)          0
-
-#  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  0
-
-#  define UCT_RC_VERBS_CHECK_FC_CTRL(_iface, _hdr) \
-       ucs_assert(sizeof(_hdr) <= (_iface)->verbs_common.config.max_inline); 
-
-#  define UCT_RC_VERBS_CHECK_AM_SHORT(_iface, _id, _length, _max_inline) \
-       UCT_RC_CHECK_AM_SHORT(_id, _length, _max_inline)
-
-#  define UCT_RC_VERBS_CHECK_AM_ZCOPY(_iface, _id, _header_len, _len, _desc_size, _seg_size) \
-       UCT_RC_CHECK_AM_ZCOPY(_id, _header_len, _len, _desc_size, _seg_size)
-
-#  define UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, \
-                                            _arg, _length, _data_length) \
-       { \
-           UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&(_iface)->super, _mp, _desc, _id, \
-                                             _pack_cb, _arg, &(_data_length)) \
-           _length = _data_length + sizeof(uct_rc_hdr_t); \
-       }
-
-
-#  define UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, _id, _header, \
-                                            _header_length, _comp, _send_flags, _sge) \
-       { \
-           UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&(_iface)->super, _mp, _desc, _id, _header, \
-                                             _header_length, _comp, _send_flags) \
-           _sge.length = sizeof(uct_rc_hdr_t) + header_length; \
-       }
-
-#  define uct_rc_verbs_ep_am_packet_dump uct_rc_ep_am_packet_dump
-
-#endif /* HAVE_IBV_HW_TM */
-
-
-UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
-UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 
 ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        unsigned length, uint64_t remote_addr,

@@ -297,13 +297,11 @@ ucs_status_t uct_dc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
-    uct_rc_am_short_hdr_t am;
 
     UCT_RC_CHECK_AM_SHORT(id, length, iface->verbs_common.config.max_inline);
 
     UCT_DC_CHECK_RES_AND_FC(&iface->super, &ep->super);
-    uct_rc_verbs_iface_fill_inl_am_sge(iface->verbs_common.inl_sge, &am, id,
-                                       hdr, buffer, length);
+    uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_dc_verbs_iface_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);

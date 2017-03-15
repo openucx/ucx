@@ -13,13 +13,6 @@
 #include <uct/ib/rc/base/rc_ep.h>
 
 
-#if HAVE_IBV_HW_TM
-#  define UCT_RC_VERBS_NUM_INL_SGE 3
-#else
-#  define UCT_RC_VERBS_NUM_INL_SGE 2
-#endif
-
-
 /* definitions common to rc_verbs and dc_verbs go here */
 
 typedef struct uct_rc_verbs_txcnt {
@@ -39,13 +32,16 @@ typedef struct uct_rc_verbs_iface_common_config {
 
 
 typedef struct uct_rc_verbs_iface_common {
-    struct ibv_sge         inl_sge[UCT_RC_VERBS_NUM_INL_SGE];
+    struct ibv_sge         inl_sge[2];
+    void                   *am_inl_hdr;
     ucs_mpool_t            short_desc_mp;
+
 
     /* TODO: make a separate datatype */
     struct {
-        size_t                 short_desc_size;
-        size_t                 max_inline;
+        size_t             notag_hdr_size;
+        size_t             short_desc_size;
+        size_t             max_inline;
     } config;
 } uct_rc_verbs_iface_common_t;
 
@@ -174,18 +170,19 @@ out:
 }
 
 static inline void
-uct_rc_verbs_iface_fill_inl_am_sge(struct ibv_sge *sge,
-                                   uct_rc_am_short_hdr_t *am,
+uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
                                    uint8_t id, uint64_t hdr,
                                    const void *buffer, unsigned length)
 {
+    uct_rc_am_short_hdr_t *am = (uct_rc_am_short_hdr_t*)((char*)iface->am_inl_hdr +
+                                iface->config.notag_hdr_size);
     am->rc_hdr.am_id = id;
     am->am_hdr       = hdr;
 
-    sge[0].addr      = (uintptr_t)am;
-    sge[0].length    = sizeof(*am);
-    sge[1].addr      = (uintptr_t)buffer;
-    sge[1].length    = length;
+    iface->inl_sge[0].addr      = (uintptr_t)iface->am_inl_hdr;
+    iface->inl_sge[0].length    = sizeof(*am) + iface->config.notag_hdr_size;
+    iface->inl_sge[1].addr      = (uintptr_t)buffer;
+    iface->inl_sge[1].length    = length;
 }
 
 #define UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
@@ -198,7 +195,6 @@ uct_rc_verbs_iface_fill_inl_am_sge(struct ibv_sge *sge,
     _iface->inl_rwrite_wr.wr.rdma.rkey        = uct_ib_md_direct_rkey(_rkey); \
     _iface->verbs_common.inl_sge[0].addr      = (uintptr_t)_buf; \
     _iface->verbs_common.inl_sge[0].length    = _len;
-
 
 #define UCT_RC_VERBS_FILL_AM_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
     UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \

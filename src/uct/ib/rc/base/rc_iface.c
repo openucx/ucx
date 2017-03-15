@@ -470,7 +470,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_srq:
-    if (srq_size > 0) {
+    if (self->rx.srq.srq != NULL) {
         ibv_destroy_srq(self->rx.srq.srq);
     }
 err_free_tx_ops:
@@ -501,7 +501,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
     UCS_STATS_NODE_FREE(self->stats);
 
-    if(self->rx.srq.srq != NULL) {
+    if (self->rx.srq.srq != NULL) {
         /* TODO flush RX buffers */
         ret = ibv_destroy_srq(self->rx.srq.srq);
         if (ret) {

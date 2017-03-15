@@ -170,11 +170,11 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 /*
  * HW tag matching
  */
-#if HAVE_IBV_HW_TM
+#if HAVE_IBV_EX_HW_TM
    /* TM (eager) is supported if tm_caps.max_num_tags is not 0. */
-#  define IBV_DEVICE_TM_CONFIG(_dev, _field)  ((_dev)->dev_attr_ex.tm_caps._field)
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr_ex.tm_caps._field)
 #else
-#  define IBV_DEVICE_TM_CONFIG(_dev, _field)  0
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #endif
 
 

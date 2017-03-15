@@ -180,7 +180,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev, struct ibv_device *ibv_dev
         goto err_free_context;
     }
 
-#if HAVE_IBV_HW_TM
+#if HAVE_IBV_EX_HW_TM
     memset(&dev->dev_attr_ex, 0, sizeof(dev->dev_attr_ex));
     ret = ibv_query_device_ex(dev->ibv_context, NULL,  &dev->dev_attr_ex);
     if (ret != 0) {

@@ -282,14 +282,13 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_am_short_hdr_t am;
 
     UCT_RC_VERBS_CHECK_AM_SHORT(iface, id, length,
                                 iface->verbs_common.config.max_inline);
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    uct_rc_verbs_iface_fill_inl_am_sge(iface->inl_sge_ptr, &am, id, hdr, buffer, length);
+    uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
@@ -527,11 +526,12 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req)
 {
+    struct ibv_send_wr fc_wr;
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_hdr_t hdr;
-    struct ibv_send_wr fc_wr;
+    size_t notag_hdr_size = iface->verbs_common.config.notag_hdr_size;
+    uct_rc_hdr_t *hdr     = iface->verbs_common.am_inl_hdr + notag_hdr_size;
 
     /* In RC only PURE grant is sent as a separate message. Other FC
      * messages are bundled with AM. */
@@ -539,18 +539,18 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     /* Do not check FC WND here to avoid head-to-head deadlock.
      * Credits grant should be sent regardless of FC wnd state. */
-    UCT_RC_VERBS_CHECK_FC_CTRL(iface, sizeof(hdr));
+    ucs_assert(sizeof(hdr) + notag_hdr_size <=
+               iface->verbs_common.config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    hdr.am_id                     = UCT_RC_EP_FC_PURE_GRANT;
+    hdr->am_id    = UCT_RC_EP_FC_PURE_GRANT;
+    fc_wr.sg_list = iface->verbs_common.inl_sge;
+    fc_wr.opcode  = IBV_WR_SEND;
+    fc_wr.next    = NULL;
+    fc_wr.num_sge = 1;
 
-    fc_wr.sg_list                 = iface->verbs_common.inl_sge;
-    fc_wr.opcode                  = IBV_WR_SEND;
-    fc_wr.next                    = NULL;
-    fc_wr.num_sge = UCT_RC_VERBS_TM_ENABLED(iface) ? 2 : 1;
-
-    iface->inl_sge_ptr[0].addr    = (uintptr_t)&hdr;
-    iface->inl_sge_ptr[0].length  = sizeof(hdr);
+    iface->verbs_common.inl_sge[0].addr    = (uintptr_t)iface->verbs_common.am_inl_hdr;
+    iface->verbs_common.inl_sge[0].length  = sizeof(hdr) + notag_hdr_size;
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, IBV_SEND_INLINE);
     return UCS_OK;

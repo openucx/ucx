@@ -58,10 +58,10 @@ AC_ARG_WITH([cm],
 #
 # TM (IB Tag Matching) Support
 #
-AC_ARG_WITH([tm],
-            [AC_HELP_STRING([--with-tm], [Compile with IB Tag Matching support])],
+AC_ARG_WITH([ib-hw-tm],
+            [AC_HELP_STRING([--with-ib-hw-tm], [Compile with IB Tag Matching support])],
             [],
-            [with_tm=yes])
+            [with_ib_hw_tm=yes])
 
 
 #
@@ -250,12 +250,12 @@ AS_IF([test "x$with_ib" == xyes],
            transports="${transports},cm"])
 
        # XRQ with Tag Matching support
-       AS_IF([test "x$with_tm" != xno],
-           [AC_CHECK_MEMBER([struct ibv_device_attr_ex.tm_caps], [], [with_tm=no],
+       AS_IF([test "x$with_ib_hw_tm" != xno],
+           [AC_CHECK_MEMBER([struct ibv_rndv_data.rkey], [], [with_ib_hw_tm=no],
                             [[#include <infiniband/verbs.h>]])
            ])
-       AS_IF([test "x$with_tm" != xno],
-           [AC_DEFINE([HAVE_IBV_HW_TM], 1, [IB Tag Matching support])])
+       AS_IF([test "x$with_ib_hw_tm" != xno],
+           [AC_DEFINE([HAVE_IBV_EX_HW_TM], 1, [IB Tag Matching support])])
 
        mlnx_valg_libdir=$with_verbs/lib${libsuff}/mlnx_ofed/valgrind
        AC_MSG_NOTICE([Checking OFED valgrind libs $mlnx_valg_libdir])
@@ -272,7 +272,7 @@ AS_IF([test "x$with_ib" == xyes],
         with_rc=no
         with_ud=no
         with_mlx5_hw=no
-        with_tm=no
+        with_ib_hw_tm=no
     ])
 
 
@@ -285,4 +285,4 @@ AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_TL_CM],   [test "x$with_cm" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
-AM_CONDITIONAL([HAVE_IBV_HW_TM], [test "x$with_tm"  != xno])
+AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [test "x$with_ib_hw_tm"  != xno])

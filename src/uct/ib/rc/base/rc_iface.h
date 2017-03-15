@@ -337,7 +337,6 @@ static inline void uct_rc_zcopy_desc_set_header(uct_rc_hdr_t *rch,
     memcpy(rch + 1, header, header_length);
 }
 
-
 static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {
     return uct_rc_iface_have_tx_cqe_avail(iface) &&

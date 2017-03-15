@@ -98,6 +98,7 @@ ucs_status_t uct_rc_verbs_iface_prepost_recvs_common(uct_rc_iface_t *iface,
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *self)
 {
+    ucs_mpool_put(self->am_inl_hdr);
     ucs_mpool_cleanup(&self->short_desc_mp, 1);
 }
 
@@ -109,21 +110,35 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             size_t am_hdr_size)
 {
     memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
+    ucs_status_t status;
 
     /* Configuration */
     iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
 
     /* Create AM headers and Atomic mempool */
-    return uct_iface_mpool_init(&rc_iface->super.super,
-                                &iface->short_desc_mp,
-                                sizeof(uct_rc_iface_send_desc_t) +
-                                    iface->config.short_desc_size,
-                                sizeof(uct_rc_iface_send_desc_t),
-                                UCS_SYS_CACHE_LINE_SIZE,
-                                &rc_config->super.tx.mp,
-                                rc_iface->config.tx_qp_len,
-                                uct_rc_iface_send_desc_init,
-                                "rc_verbs_short_desc");
+    status = uct_iface_mpool_init(&rc_iface->super.super,
+                                  &iface->short_desc_mp,
+                                  sizeof(uct_rc_iface_send_desc_t) +
+                                      iface->config.short_desc_size,
+                                  sizeof(uct_rc_iface_send_desc_t),
+                                  UCS_SYS_CACHE_LINE_SIZE,
+                                  &rc_config->super.tx.mp,
+                                  rc_iface->config.tx_qp_len,
+                                  uct_rc_iface_send_desc_init,
+                                  "rc_verbs_short_desc");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->config.notag_hdr_size = 0;
+
+    iface->am_inl_hdr = ucs_mpool_get(&iface->short_desc_mp);
+    if (iface->am_inl_hdr == NULL) {
+        ucs_error("Failed to allocate AM short header");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    return UCS_OK;
 }
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
