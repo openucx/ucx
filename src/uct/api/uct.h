@@ -1006,6 +1006,11 @@ ucs_status_t uct_wakeup_wait(uct_wakeup_h wakeup);
  */
 ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
 
+enum uct_progress_types {
+    UCT_PROGRESS_RX   = UCS_BIT(0),
+    UCT_PROGRESS_TX   = UCS_BIT(1),
+    UCT_PROGRESS_RXTX = (UCS_BIT(0) | UCS_BIT(1))
+};
 
 /**
  * @ingroup UCT_RESOURCE
@@ -1020,9 +1025,10 @@ ucs_status_t uct_wakeup_signal(uct_wakeup_h wakeup);
  * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to disable progress.
+ * @param [in]  flags    What kind of progress to disable. See @ref uct_progress_types  
  *
  */
-void uct_iface_progress_disable(uct_iface_h iface);
+void uct_iface_progress_disable(uct_iface_h iface, unsigned flags);
 
 
 /**
@@ -1038,9 +1044,10 @@ void uct_iface_progress_disable(uct_iface_h iface);
  * By default, progress is enabled when the interface is created.
  *
  * @param [in]  iface    The interface to enable progress.
+ * @param [in]  flags    What kind progress to enable. See @ref uct_progress_types 
  *
  */
-void uct_iface_progress_enable(uct_iface_h iface);
+void uct_iface_progress_enable(uct_iface_h iface, unsigned flags);
 
 
 /**
