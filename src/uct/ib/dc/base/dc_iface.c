@@ -139,11 +139,7 @@ ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface,
     struct ibv_exp_qp_attr attr;
 
     memset(&attr, 0, sizeof(attr));
-    attr.qp_state        = IBV_QPS_RESET;
-    attr.pkey_index      = 0;
-    attr.qp_access_flags = 0;
-    attr.port_num        = 0;
-    attr.dct_key         = 0;
+    attr.qp_state = IBV_QPS_RESET;
 
     if (ibv_exp_modify_qp(dci->qp, &attr, IBV_EXP_QP_STATE)) {
         ucs_error("error modifying QP to RESET : %m");
