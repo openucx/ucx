@@ -70,6 +70,27 @@ void uct_dc_ep_release(uct_dc_ep_t *ep)
     ucs_free(ep);
 }
 
+void uct_dc_ep_set_failed(ucs_class_t *ep_cls, uct_dc_iface_t *iface,
+                          uint32_t qp_num)
+{
+    uint8_t dci = uct_dc_iface_dci_find(iface, qp_num);
+    uct_dc_ep_t *ep = iface->tx.dcis[dci].ep;
+    ucs_status_t status;
+
+    if (ep) {
+        uct_rc_txqp_purge_outstanding(&iface->tx.dcis[dci].txqp,
+                                      UCS_ERR_ENDPOINT_TIMEOUT, 0);
+        uct_set_ep_failed(ep_cls, &ep->super.super,
+                          &iface->super.super.super.super);
+        status = uct_dc_iface_dci_reconnect(iface, &iface->tx.dcis[dci].txqp);
+        if (status != UCS_OK) {
+            ucs_fatal("Unsuccessful DC QP reconnect");
+        }
+        uct_rc_txqp_available_set(&iface->tx.dcis[dci].txqp,
+                                  iface->super.config.tx_qp_len);
+    }
+}
+
 /* TODO:
    currently pending code supports only dcs policy
    support hash/random policies

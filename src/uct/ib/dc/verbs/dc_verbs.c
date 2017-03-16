@@ -96,7 +96,8 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32|
                                       UCT_IFACE_FLAG_ATOMIC_DEVICE |
                                       UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE|
+                                      UCT_IFACE_FLAG_AM_CB_SYNC|
+                                      UCT_IFACE_FLAG_CONNECT_TO_IFACE|
                                       UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     return UCS_OK;
@@ -608,22 +609,14 @@ static UCS_F_NOINLINE void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface,
                                                        void *arg)
 {
     struct ibv_wc   *wc     = arg;
-    uct_dc_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_iface_t);
-    uint8_t         dci     = uct_dc_iface_dci_find(iface, wc->qp_num);
-    uct_dc_ep_t     *ep     = iface->tx.dcis[dci].ep;
 
-    if (ep != NULL) {
-        ucs_log(ib_iface->super.config.failure_level,
-                "Send completion with error: %s",
-                ibv_wc_status_str(wc->status));
+    uct_dc_ep_set_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t),
+                         ucs_derived_of(ib_iface, uct_dc_iface_t),
+                         wc->qp_num);
 
-        uct_rc_txqp_purge_outstanding(&iface->tx.dcis[dci].txqp,
-                                      UCS_ERR_ENDPOINT_TIMEOUT, 0);
-
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t),
-                          &ep->super.super,
-                          &ib_iface->super.super);
-    }
+    ucs_log(ib_iface->super.config.failure_level,
+            "Send completion with error: %s",
+            ibv_wc_status_str(wc->status));
 }
 
 /* Send either request for grants or grant message. Request includes ep
@@ -705,6 +698,7 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
             iface->super.super.super.ops->handle_failure(&iface->super.super.super,
                                                          &wc[i]);
+            continue;
         }
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ucs_assert(count == 1);

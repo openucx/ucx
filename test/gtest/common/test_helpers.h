@@ -235,8 +235,8 @@ public:
                                                          this->m_vec.end(),
                                                          value),
                                              this->m_vec.end());
-        this->m_vec.resize(this->m_vec.size() - removed);
         if (removed) {
+            this->m_vec.resize(this->m_vec.size() - removed);
             this->release(value);
         }
         return removed;

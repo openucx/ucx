@@ -59,6 +59,8 @@ void uct_dc_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
 
 void uct_dc_ep_release(uct_dc_ep_t *ep);
 
+void uct_dc_ep_set_failed(ucs_class_t *ep_cls, uct_dc_iface_t *iface, uint32_t qp_num);
+
 static inline void uct_dc_iface_dci_sched_tx(uct_dc_iface_t *iface, uct_dc_ep_t *ep)
 {
     /* TODO: other policies have to add group always */

@@ -243,7 +243,7 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
     case MLX5_CQE_REQ_ERR:
         iface->ops->handle_failure(iface, cqe);
         ++cq->cq_ci;
-        return cqe;
+        return NULL;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
         uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_FATAL);
