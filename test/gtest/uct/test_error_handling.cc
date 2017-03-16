@@ -76,7 +76,8 @@ UCS_TEST_P(test_error_handling, peer_failure)
 
     m_e1->flush();
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
+    UCT_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1,
+                            m_e1->iface_attr().cap.am.max_bcopy);
 
     /* Check that all ep operations return pre-defined error code */
     EXPECT_EQ(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0),

@@ -169,13 +169,28 @@ uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const uct_iov_t *iov,
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_dc_verbs_iface_t);
-    struct ibv_exp_send_wr wr;
+    unsigned copy_used          = 0;
+    unsigned is_rdma_read       = (IBV_EXP_WR_RDMA_READ == opcode);
+    void *iov_buf_desc          = NULL;
+    void *desc_iov_t            = NULL; /* avoid break strict-aliasing rules */
+    uct_rc_iface_send_desc_t *desc_iov;
     struct ibv_sge sge[UCT_IB_MAX_IOV];
+    struct ibv_exp_send_wr wr;
+    ucs_status_t status;
     size_t sge_cnt;
 
     UCT_DC_CHECK_RES(&iface->super, &ep->super);
 
-    sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
+    status = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt,
+                                       &iface->super.super.super,
+                                       &iface->super.super.tx.mp,
+                                       &desc_iov_t, sizeof(*desc_iov),
+                                       &iov_buf_desc,
+                                       ucs_offsetof(uct_rc_iface_send_desc_t, lkey),
+                                       is_rdma_read, &copy_used, &sge_cnt);
+    if (UCS_OK != status) {
+        return status;
+    }
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
     UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.exp_opcode, opcode, sge, sge_cnt,
                                   remote_addr, rkey);
@@ -183,6 +198,21 @@ uct_dc_verbs_ep_rdma_zcopy(uct_dc_verbs_ep_t *ep, const uct_iov_t *iov,
 
     uct_dc_verbs_iface_post_send(iface, ep, &wr, IBV_SEND_SIGNALED);
     uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
+    /* TODO if copy_used == sge_cnt the UCS_OK could be returned */
+    if (copy_used) {
+        ucs_assert(NULL != desc_iov_t);
+        desc_iov = desc_iov_t;
+        if (is_rdma_read) {
+            /* schedule a callback to copy payload to the user buffer at completion */
+            desc_iov->super.handler = uct_rc_ep_get_zcopy_handler;
+            desc_iov->super.buffer  = iov_buf_desc;
+        } else {
+            desc_iov->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+        }
+        uct_rc_txqp_add_send_op_sn(&iface->super.tx.dcis[ep->super.dci].txqp,
+                                   &desc_iov->super,
+                                   iface->dcis_txcnt[ep->super.dci].pi);
+    }
     return UCS_INPROGRESS;
 }
 
@@ -219,10 +249,8 @@ ucs_status_t uct_dc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
     uct_ib_iface_t  *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
-                       "uct_dc_verbs_ep_get_zcopy");
-    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), UCT_IB_MAX_MESSAGE_SIZE,
-                     "get_zcopy");
+    UCT_CHECK_IOV_PARAM(iov, iovcnt, iface, UCT_IB_MAX_MESSAGE_SIZE,
+                        iface->config.seg_size, "get_zcopy");
 
     status = uct_dc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp,
                                         IBV_WR_RDMA_READ);
@@ -280,10 +308,8 @@ ucs_status_t uct_dc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
     uct_ib_iface_t  *iface = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(iface),
-                       "uct_dc_verbs_ep_put_zcopy");
-    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), UCT_IB_MAX_MESSAGE_SIZE,
-                     "put_zcopy");
+    UCT_CHECK_IOV_PARAM(iov, iovcnt, iface, UCT_IB_MAX_MESSAGE_SIZE,
+                        iface->config.seg_size, "put_zcopy");
 
     status = uct_dc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp,
                                         IBV_WR_RDMA_WRITE);
@@ -340,15 +366,21 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
 {
     uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_verbs_iface_t);
     uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
+    unsigned copy_used          = 0;
+    void *desc_iov_t            = NULL;
     uct_rc_iface_send_desc_t *desc;
+    uct_rc_iface_send_desc_t *desc_iov;
     struct ibv_exp_send_wr wr;
     struct ibv_sge sge[UCT_IB_MAX_IOV]; /* The first sge is reserved for the header */
+    ucs_status_t status;
     int send_flags;
     size_t sge_cnt;
 
     UCT_CHECK_IOV_SIZE(iovcnt,
                        uct_ib_iface_get_max_iov(&iface->super.super.super) - 1,
                        "uct_dc_verbs_ep_am_zcopy");
+    UCT_CHECK_LENGTH(uct_iov_total_copy_length(iov, iovcnt),
+                     iface->super.super.super.config.seg_size, "am_zcopy lazy_mem");
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
                           iface->verbs_common.config.short_desc_size,
                           iface->super.super.super.config.seg_size);
@@ -357,11 +389,28 @@ ucs_status_t uct_dc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
                                       desc, id, header, header_length, comp, &send_flags);
 
     sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
-    sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
+    status = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt,
+                                       &iface->super.super.super,
+                                       &iface->super.super.tx.mp,
+                                       &desc_iov_t, sizeof(*desc_iov), NULL,
+                                       ucs_offsetof(uct_rc_iface_send_desc_t, lkey),
+                                       0, &copy_used, &sge_cnt);
+    if (UCS_OK != status) {
+        return status;
+    }
     UCT_RC_VERBS_FILL_AM_ZCOPY_WR_IOV(wr, sge, sge_cnt + 1, wr.exp_opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                       header_length + uct_iov_total_length(iov, iovcnt));
     uct_dc_verbs_iface_post_send_desc(iface, ep, &wr, desc, send_flags);
+    /* TODO if copy_used == sge_cnt the UCS_OK could be returned */
+    if (copy_used) {
+        ucs_assert(NULL != desc_iov_t);
+        desc_iov = desc_iov_t;
+        desc_iov->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+        uct_rc_txqp_add_send_op_sn(&iface->super.tx.dcis[ep->super.dci].txqp,
+                                   &desc_iov->super,
+                                   iface->dcis_txcnt[ep->super.dci].pi);
+    }
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->super.fc);
 
     return UCS_INPROGRESS;

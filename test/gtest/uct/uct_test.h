@@ -241,4 +241,65 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
 
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 
+/**
+ * Make @a iovcnt items in the uct_iov_t @a iov buffer from continuous memory
+ * @a buffer with @a length length.
+ *
+ * Length of each @a iov entry is average and the last item contains reminder.
+ *
+ * Memory registration key in uct_iot_t::memh must be defined. It randomized
+ * between @a memh and UCT_MEM_HANDLE_COPY definitions. Total length of
+ * the @a iov buffers with UCT_MEM_HANDLE_COPY memory registration key limited
+ * by @a max_lazy_mem length.
+ *
+ * Some transports don't support UCT_MEM_HANDLE_COPY and @a memh must be used
+ * in this case indicated by @a is_supported parameter.
+ */
+static inline
+void ucs_test_get_buffer_iov_impl(uct_iov_t *iov, size_t iovcnt, void *buffer,
+                                  size_t length, void *memh, size_t max_lazy_mem,
+                                  unsigned is_supported)
+{
+    size_t buffer_iov_length        = length / iovcnt;
+    size_t buffer_iov_length_it     = 0;
+    size_t max_lazy_memh_size       = 0;
+    for (size_t iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        iov[iov_it].buffer          = (char *)(buffer) + buffer_iov_length_it;
+        iov[iov_it].count           = 1;
+        iov[iov_it].stride          = 0;
+        /* Set IOVs buffer length */
+        if (iov_it == (iovcnt - 1)) { /* Last iteration */
+            iov[iov_it].length      = length - buffer_iov_length_it;
+        } else {
+            iov[iov_it].length      = buffer_iov_length;
+            buffer_iov_length_it   += buffer_iov_length;
+        }
+        /* Set IOVs buffer memory registration key or postpone it by LAZY mode */
+        if ((iov[iov_it].length + max_lazy_memh_size) <= max_lazy_mem) {
+            if ((ucs::rand() % 2) || !is_supported) {
+                iov[iov_it].memh    = (uct_mem_h)memh;
+            } else {
+                iov[iov_it].memh    = UCT_MEM_HANDLE_COPY;
+                max_lazy_memh_size += iov[iov_it].length;
+            }
+        } else {
+            iov[iov_it].memh        = (uct_mem_h)memh;
+        }
+    }
+}
+
+/**
+ * Make uct_iov_t iov[iovcnt] array with pointer elements to original buffer
+ */
+#define UCT_TEST_GET_BUFFER_IOV(_name_iov, _name_iovcnt, _buffer_ptr, \
+                                _buffer_length, _memh, _iovcnt, _max_lazy_mem) \
+        uct_iov_t _name_iov[_iovcnt]; \
+        size_t _name_iovcnt = _iovcnt; \
+        unsigned _name_iov_is_copy_supported = \
+            ((GetParam()->tl_name.find("mlx5") == std::string::npos) && \
+             (GetParam()->tl_name.find("ugni") == std::string::npos)); \
+        ucs_test_get_buffer_iov_impl(_name_iov, _name_iovcnt, _buffer_ptr, \
+                                     _buffer_length, _memh, _max_lazy_mem, \
+                                     _name_iov_is_copy_supported);
+
 #endif

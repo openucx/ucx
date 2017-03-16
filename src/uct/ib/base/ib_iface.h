@@ -20,7 +20,7 @@
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;
-typedef struct uct_ib_iface         uct_ib_iface_t;
+typedef struct uct_ib_iface          uct_ib_iface_t;
 
 
 /**
@@ -166,6 +166,12 @@ typedef struct uct_ib_iface_recv_desc {
 } UCS_S_PACKED uct_ib_iface_recv_desc_t;
 
 
+typedef struct uct_ib_iface_iov_desc {
+    uint16_t                iovcnt;              /* number of elements in the buffer */
+    void                   *buffer[UCT_IB_MAX_IOV];
+    uint16_t                length[UCT_IB_MAX_IOV];
+} uct_ib_iface_iov_desc_t;
+
 
 extern ucs_config_field_t uct_ib_iface_config_table[];
 extern const char *uct_ib_mtu_values[];
@@ -305,31 +311,84 @@ static inline uint8_t uct_ib_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
  * Fill ibv_sge data structure by data provided in uct_iov_t
  * The function avoids copying IOVs with zero length
  *
- * @return Number of elements in sge[]
+ * if uct_iov_t::memh is UCT_MEM_HANDLE_COPY the function copy the data into
+ * the local memory pool and uses its local key
  */
 static UCS_F_ALWAYS_INLINE
-size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
-                                 size_t iovcnt)
+ucs_status_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge,
+                                       const uct_iov_t *iov, size_t iovcnt,
+                                       uct_ib_iface_t *iface, ucs_mpool_t *mp,
+                                       void **desc_p, size_t desc_size,
+                                       void **desc_rdma_read_p, unsigned lkey_offset,
+                                       unsigned is_rdma_read, unsigned *copy_used,
+                                       size_t *sge_cnt)
 {
     size_t iov_it, sge_it = 0;
+    size_t desc_offset    = 0;
+    uct_ib_mem_t *mem_h;
+    uint32_t length;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-        sge[sge_it].length = uct_iov_get_length(&iov[iov_it]);
-        if (sge[sge_it].length > 0) {
+        length = uct_iov_get_length(&iov[iov_it]);
+
+        if (length > 0) {
             sge[sge_it].addr   = (uintptr_t)(iov[iov_it].buffer);
+            sge[sge_it].length = length;
         } else {
             continue; /* to avoid zero length elements in sge */
         }
 
-        if (iov[sge_it].memh == UCT_MEM_HANDLE_NULL) {
+        mem_h = (uct_ib_mem_t *) iov[iov_it].memh;
+        if (mem_h == UCT_MEM_HANDLE_NULL) {
             sge[sge_it].lkey = 0;
+        } else if (mem_h == UCT_MEM_HANDLE_COPY) {
+            char *desc_buffer;
+            uint32_t lkey;
+            if (ucs_unlikely(NULL == *desc_p)) {
+                /* get the mpool descriptor for IOV buffers with UCT_MEM_HANDLE_COPY */
+                UCT_TL_IFACE_GET_TX_DESC_SIZE(&iface->super, mp, *desc_p, desc_size,
+                                              return UCS_ERR_NO_RESOURCE);
+                VALGRIND_MAKE_MEM_DEFINED(*desc_p, desc_size + iface->config.seg_size);
+            }
+            desc_buffer = ((char *) *desc_p) + desc_size;
+            lkey        = *((uint32_t *)(((char *) *desc_p) + lkey_offset));
+            if (is_rdma_read) {
+                uct_ib_iface_iov_desc_t *iov_desc;
+                if (ucs_unlikely(NULL == *desc_rdma_read_p)) {
+                    /* get the mpool descriptor for IOV buffers with UCT_MEM_HANDLE_COPY */
+                    UCT_TL_IFACE_GET_TX_DESC_SIZE(&iface->super, mp,
+                                                  *desc_rdma_read_p, desc_size,
+                                                  return UCS_ERR_NO_RESOURCE);
+                    iov_desc = (uct_ib_iface_iov_desc_t *)
+                               (((char *) *desc_rdma_read_p) + desc_size);
+                    VALGRIND_MAKE_MEM_DEFINED(iov_desc, sizeof(*iov_desc));
+                    iov_desc->iovcnt = 0;
+                }
+                iov_desc = (uct_ib_iface_iov_desc_t *)
+                           (((char *) *desc_rdma_read_p) + desc_size);
+                ucs_assert(iov_desc->iovcnt < UCT_IB_MAX_IOV);
+
+                /* save offset to extract payload from descriptor later */
+                iov_desc->buffer[iov_desc->iovcnt] = iov[iov_it].buffer;
+                iov_desc->length[iov_desc->iovcnt] = length;
+                iov_desc->iovcnt                  += 1;
+            } else {
+                /* copy payload from user buffer to the descriptor */
+                memcpy(desc_buffer + desc_offset, iov[iov_it].buffer, length);
+            }
+            *copy_used      += 1; /* count the number of iov_copy operations */
+            sge[sge_it].addr = (uintptr_t)(desc_buffer + desc_offset);
+            sge[sge_it].lkey = lkey;
+            desc_offset     += length;
         } else {
-            sge[sge_it].lkey = ((uct_ib_mem_t *)(iov[iov_it].memh))->lkey;
+            sge[sge_it].lkey = mem_h->lkey;
         }
+
         ++sge_it;
     }
 
-    return sge_it;
+    *sge_cnt = sge_it;
+    return UCS_OK;
 }
 
 

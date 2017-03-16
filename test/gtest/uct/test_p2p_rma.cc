@@ -41,8 +41,9 @@ public:
     ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.put.max_iov);
+        UCT_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), sender().iface_attr().cap.put.max_iov,
+                                sender().iface_attr().cap.put.max_bcopy);
 
         return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }
@@ -58,8 +59,9 @@ public:
     ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
                            const mapped_buffer &recvbuf)
     {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.get.max_iov);
+        UCT_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), sender().iface_attr().cap.get.max_iov,
+                                sender().iface_attr().cap.get.max_bcopy);
 
         return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }

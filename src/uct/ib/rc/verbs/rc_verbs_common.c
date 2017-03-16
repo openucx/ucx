@@ -138,3 +138,26 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
     txcnt->pi = txcnt->ci = 0;
 }
 
+void uct_rc_ep_get_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    char *payload_ptr              = (char *)(desc + 1);
+    size_t desc_offset             = 0;
+    uct_ib_iface_iov_desc_t *iov_desc;
+    size_t iov_it, iovcnt, length;
+
+    ucs_assert(NULL != desc->super.buffer);
+    iov_desc = (uct_ib_iface_iov_desc_t *)
+               ((uct_rc_iface_send_desc_t *)desc->super.buffer + 1);
+    iovcnt   = iov_desc->iovcnt;
+
+    /* copy the payload arrived to the mpool descriptor to the user buffers */
+    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        length = iov_desc->length[iov_it];
+        memcpy(iov_desc->buffer[iov_it], payload_ptr + desc_offset, length);
+        desc_offset += length;
+    }
+
+    ucs_mpool_put(desc->super.buffer);
+    ucs_mpool_put(desc);
+}
