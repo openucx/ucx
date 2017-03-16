@@ -188,9 +188,32 @@ static void ucp_worker_wakeup_context_cleanup(ucp_worker_wakeup_t *wakeup)
     close(wakeup->wakeup_pipe[1]);
 }
 
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_to_uct_wakeup_events(ucp_wakeup_event_t ucp_events)
+{
+    unsigned uct_events = 0;
+
+    /* FIXME: any TAG flag initializes all types of completion because of
+     *        possible issues in RNDV protocol. The optimization may be
+     *        implemented with using of separated UCP descriptors or manual
+     *        signaling in RNDV and similar cases, see conversation in PR #1277
+     */
+    if (ucp_events & (UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV)) {
+        uct_events |= UCT_WAKEUP_TX_COMPLETION|
+                      UCT_WAKEUP_RX_AM|UCT_WAKEUP_RX_SIGNALED_AM;
+    }
+
+    if (ucp_events & (UCP_WAKEUP_RMA | UCP_WAKEUP_AMO)) {
+        uct_events |= UCT_WAKEUP_TX_COMPLETION;
+    }
+
+    return uct_events;
+}
+
 static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
                                          ucp_rsc_index_t tl_id,
-                                         ucs_cpu_set_t const * cpu_mask_param)
+                                         ucs_cpu_set_t const * cpu_mask_param,
+                                         ucp_wakeup_event_t events)
 {
     ucp_context_h context = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
@@ -246,10 +269,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
 
     /* Set wake-up handlers */
     if (attr->cap.flags & UCT_IFACE_FLAG_WAKEUP) {
-        status = uct_wakeup_open(iface,
-                                 UCT_WAKEUP_TX_COMPLETION |
-                                 UCT_WAKEUP_RX_AM |
-                                 UCT_WAKEUP_RX_SIGNALED_AM,
+        status = uct_wakeup_open(iface, ucp_to_uct_wakeup_events(events),
                                  &wakeup);
         if (status != UCS_OK) {
             goto out_close_iface;
@@ -469,6 +489,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucs_cpu_set_t empty_cpu_mask;
     ucs_thread_mode_t thread_mode;
+    ucp_wakeup_event_t events;
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -556,13 +577,20 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_destroy_uct_worker;
     }
 
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENTS) {
+        events = params->events;
+    } else {
+        events = UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TAG_SEND |
+                 UCP_WAKEUP_TAG_RECV;
+    }
     /* Open all resources as interfaces on this worker */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
-            status = ucp_worker_add_iface(worker, tl_id, &params->cpu_mask);
+            status = ucp_worker_add_iface(worker, tl_id, &params->cpu_mask,
+                                          events);
         } else {
             UCS_CPU_ZERO(&empty_cpu_mask);
-            status = ucp_worker_add_iface(worker, tl_id, &empty_cpu_mask);
+            status = ucp_worker_add_iface(worker, tl_id, &empty_cpu_mask, events);
         }
         if (status != UCS_OK) {
             goto err_close_ifaces;

@@ -272,5 +272,18 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
                                         ucp_tag_recv_info_t *info);
 
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker wakeup events mask.
+ *
+ * The enumeration allows specifying which events are expected on wakeup, though
+ * empty events are possible.
+ */
+typedef enum ucp_wakeup_event_types {
+    UCP_WAKEUP_RMA         = UCS_BIT(0), /**< Remote memory access send completion */
+    UCP_WAKEUP_AMO         = UCS_BIT(1), /**< Atomic operation send completion */
+    UCP_WAKEUP_TAG_SEND    = UCS_BIT(2), /**< Tag send completion  */
+    UCP_WAKEUP_TAG_RECV    = UCS_BIT(3)  /**< Tag receive completion */
+} ucp_wakeup_event_t;
 
 #endif
