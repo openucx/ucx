@@ -97,6 +97,7 @@ typedef struct ucp_worker {
     khash_t(ucp_worker_ep_hash)   ep_hash;       /* Hash table of all endpoints */
     uct_iface_h                   *ifaces;       /* Array of interfaces, one for each resource */
     uct_iface_attr_t              *iface_attrs;  /* Array of interface attributes */
+    ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     UCS_STATS_NODE_DECLARE(stats);
     unsigned                      ep_config_max; /* Maximal number of configurations */
     unsigned                      ep_config_count; /* Current number of configurations */

@@ -13,6 +13,30 @@
 #include <ucp/core/ucp_request.inl>
 
 
+static UCS_F_ALWAYS_INLINE void
+ucp_eager_sync_send_handler(void *arg, void *data, uint16_t flags)
+{
+    ucp_eager_sync_hdr_t        *eagers_hdr;
+    ucp_eager_sync_first_hdr_t  *eagers_first_hdr;
+
+    if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
+                                  UCP_RECV_DESC_FLAG_FIRST|
+                                  UCP_RECV_DESC_FLAG_LAST|
+                                  UCP_RECV_DESC_FLAG_SYNC)) {
+        eagers_hdr = data;
+        ucp_tag_eager_sync_send_ack(arg, eagers_hdr->req.sender_uuid,
+                                    eagers_hdr->req.reqptr);
+    } else if (ucs_test_all_flags(flags, UCP_RECV_DESC_FLAG_EAGER|
+                                         UCP_RECV_DESC_FLAG_FIRST|
+                                         UCP_RECV_DESC_FLAG_SYNC)) {
+        eagers_first_hdr = data;
+        ucp_tag_eager_sync_send_ack(arg, eagers_first_hdr->req.sender_uuid,
+                                    eagers_first_hdr->req.reqptr);
+    } else {
+        ucs_fatal("wrong UCP_RECV_DESC_FLAG bit mask");
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
                   uint16_t flags, uint16_t hdr_len)
@@ -21,7 +45,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     ucp_eager_hdr_t *eager_hdr = data;
     ucp_eager_first_hdr_t *eager_first_hdr = data;
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc = desc;
+    ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_queue_iter_t iter;
     ucs_status_t status;
@@ -70,8 +94,19 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
             /* TODO In case an error status is returned from ucp_tag_process_recv,
              * need to discard the rest of the messages */
             status = UCS_OK;
+
+            if (flags & UCP_RECV_DESC_FLAG_SYNC) {
+                ucp_eager_sync_send_handler(arg, data, flags);
+            }
+
             goto out;
         }
+    }
+
+    rdesc = ucp_recv_desc_get(worker, data, desc, length, hdr_len, flags);
+    if (!rdesc) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     ucs_trace_req("unexp recv %c%c%c tag %"PRIx64" length %zu desc %p",
@@ -80,16 +115,10 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
                   (flags & UCP_RECV_DESC_FLAG_EAGER) ? 'e' : '-',
                   recv_tag, length, rdesc);
 
-    if (data != rdesc + 1) {
-        memcpy(rdesc + 1, data, length);
-    }
-
-    rdesc->length  = length;
-    rdesc->hdr_len = hdr_len;
-    rdesc->flags   = flags;
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
 
-    status = UCS_INPROGRESS;
+    status = (data == rdesc + 1) ? UCS_INPROGRESS : UCS_OK;
+
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
@@ -134,40 +163,22 @@ static ucs_status_t ucp_eager_last_handler(void *arg, void *data, size_t length,
 static ucs_status_t ucp_eager_sync_only_handler(void *arg, void *data,
                                                 size_t length, void *desc)
 {
-    ucp_eager_sync_hdr_t *eagers_hdr;
-    ucs_status_t status;
-
-    status = ucp_eager_handler(arg, data, length, desc,
-                               UCP_RECV_DESC_FLAG_EAGER|
-                               UCP_RECV_DESC_FLAG_FIRST|
-                               UCP_RECV_DESC_FLAG_LAST|
-                               UCP_RECV_DESC_FLAG_SYNC,
-                               sizeof(ucp_eager_sync_hdr_t));
-    if (status == UCS_OK) {
-        eagers_hdr = data;
-        ucp_tag_eager_sync_send_ack(arg, eagers_hdr->req.sender_uuid,
-                                    eagers_hdr->req.reqptr);
-    }
-    return status;
+    return ucp_eager_handler(arg, data, length, desc,
+                             UCP_RECV_DESC_FLAG_EAGER|
+                             UCP_RECV_DESC_FLAG_FIRST|
+                             UCP_RECV_DESC_FLAG_LAST|
+                             UCP_RECV_DESC_FLAG_SYNC,
+                             sizeof(ucp_eager_sync_hdr_t));
 }
 
 static ucs_status_t ucp_eager_sync_first_handler(void *arg, void *data,
                                                  size_t length, void *desc)
 {
-    ucp_eager_sync_first_hdr_t *eagers_first_hdr;
-    ucs_status_t status;
-
-    status = ucp_eager_handler(arg, data, length, desc,
-                               UCP_RECV_DESC_FLAG_EAGER|
-                               UCP_RECV_DESC_FLAG_FIRST|
-                               UCP_RECV_DESC_FLAG_SYNC,
-                               sizeof(ucp_eager_sync_first_hdr_t));
-    if (status == UCS_OK) {
-        eagers_first_hdr = data;
-        ucp_tag_eager_sync_send_ack(arg, eagers_first_hdr->req.sender_uuid,
-                                    eagers_first_hdr->req.reqptr);
-    }
-    return status;
+    return ucp_eager_handler(arg, data, length, desc,
+                             UCP_RECV_DESC_FLAG_EAGER|
+                             UCP_RECV_DESC_FLAG_FIRST|
+                             UCP_RECV_DESC_FLAG_SYNC,
+                             sizeof(ucp_eager_sync_first_hdr_t));
 }
 
 static ucs_status_t ucp_eager_sync_ack_handler(void *arg, void *data,

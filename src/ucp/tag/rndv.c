@@ -416,7 +416,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     ucp_worker_h worker = arg;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc = desc;
+    ucp_recv_desc_t *rdesc;
     ucp_tag_t recv_tag = rndv_rts_hdr->super.tag;
     ucp_request_t *rreq;
     ucs_queue_iter_t iter;
@@ -442,19 +442,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
         }
     }
 
-    ucs_trace_req("unexp rndv recv tag %"PRIx64" length %zu desc %p",
-                  recv_tag, length, rdesc);
-    if (data != rdesc + 1) {
-        memcpy(rdesc + 1, data, length);
+    rdesc = ucp_recv_desc_get(worker, data, desc, length, sizeof(*rndv_rts_hdr),
+                              (UCP_RECV_DESC_FLAG_FIRST | UCP_RECV_DESC_FLAG_LAST |
+                               UCP_RECV_DESC_FLAG_RNDV));
+    if (!rdesc) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
-    rdesc->length  = length;
-    rdesc->hdr_len = sizeof(*rndv_rts_hdr);
-    rdesc->flags   = UCP_RECV_DESC_FLAG_FIRST | UCP_RECV_DESC_FLAG_LAST |
-                     UCP_RECV_DESC_FLAG_RNDV;
+    ucs_trace_req("unexp rndv recv tag %"PRIx64" length %zu desc %p",
+                  recv_tag, length, rdesc);
+
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
 
-    status = UCS_INPROGRESS;
+    status = (data == rdesc + 1) ? UCS_INPROGRESS : UCS_OK;
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;

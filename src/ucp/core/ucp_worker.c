@@ -32,6 +32,13 @@ static ucs_stats_class_t ucp_worker_stats_class = {
 #endif
 
 
+ucs_mpool_ops_t ucp_am_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_hugetlb_malloc,
+    .chunk_release = ucs_mpool_hugetlb_free,
+    .obj_init      = ucs_empty_function,
+    .obj_cleanup   = ucs_empty_function
+};
+
 static void ucp_worker_close_ifaces(ucp_worker_h worker)
 {
     ucp_rsc_index_t rsc_index;
@@ -212,6 +219,7 @@ ucp_to_uct_wakeup_events(ucp_wakeup_event_t ucp_events)
 
 static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
                                          ucp_rsc_index_t tl_id,
+                                         size_t rx_headroom,
                                          ucs_cpu_set_t const * cpu_mask_param,
                                          ucp_wakeup_event_t events)
 {
@@ -235,7 +243,7 @@ static ucs_status_t ucp_worker_add_iface(ucp_worker_h worker,
     iface_params.tl_name     = resource->tl_rsc.tl_name;
     iface_params.dev_name    = resource->tl_rsc.dev_name;
     iface_params.stats_root  = UCS_STATS_RVAL(worker->stats);
-    iface_params.rx_headroom = sizeof(ucp_recv_desc_t);
+    iface_params.rx_headroom = rx_headroom;
     iface_params.cpu_mask    = *cpu_mask_param;
 
     /* Open UCT interface */
@@ -442,6 +450,32 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
     }
 }
 
+static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
+                                             size_t rx_headroom)
+{
+    uct_iface_attr_t *if_attr;
+    size_t           tl_id;
+    ucs_status_t     status               = UCS_OK;
+    size_t           max_am_mp_entry_size = 0;
+
+    for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
+        if_attr = &worker->iface_attrs[tl_id];
+        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
+                                       if_attr->cap.am.max_short);
+        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
+                                       if_attr->cap.am.max_bcopy);
+        max_am_mp_entry_size = ucs_max(max_am_mp_entry_size,
+                                       if_attr->cap.am.max_zcopy);
+    }
+
+    max_am_mp_entry_size += rx_headroom;
+    status = ucs_mpool_init(&worker->am_mp, 0,
+                            max_am_mp_entry_size,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_am_mpool_ops, "ucp_am_bufs");
+    return status;
+}
+
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have it's own configuration (to save memory footprint). Same config can be used
  * by different eps.
@@ -490,6 +524,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_cpu_set_t empty_cpu_mask;
     ucs_thread_mode_t thread_mode;
     ucp_wakeup_event_t events;
+    const size_t rx_headroom = sizeof(ucp_recv_desc_t);
 
     config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
                            UINT8_MAX);
@@ -586,15 +621,22 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* Open all resources as interfaces on this worker */
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         if (params->field_mask & UCP_WORKER_PARAM_FIELD_CPU_MASK) {
-            status = ucp_worker_add_iface(worker, tl_id, &params->cpu_mask,
-                                          events);
+            status = ucp_worker_add_iface(worker, tl_id, rx_headroom,
+                                          &params->cpu_mask, events);
         } else {
             UCS_CPU_ZERO(&empty_cpu_mask);
-            status = ucp_worker_add_iface(worker, tl_id, &empty_cpu_mask, events);
+            status = ucp_worker_add_iface(worker, tl_id, rx_headroom,
+                                          &empty_cpu_mask, events);
         }
         if (status != UCS_OK) {
             goto err_close_ifaces;
         }
+    }
+
+    /* Init AM memory pool */
+    status = ucp_worker_init_am_mpool(worker, rx_headroom);
+    if (status != UCS_OK) {
+        goto err_close_ifaces;
     }
 
     /* Select atomic resources */
@@ -638,6 +680,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
     ucp_worker_remove_am_handlers(worker);
     ucp_worker_destroy_eps(worker);
+    ucs_mpool_cleanup(&worker->am_mp, 1);
     ucp_worker_close_ifaces(worker);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
