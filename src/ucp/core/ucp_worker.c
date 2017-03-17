@@ -468,13 +468,11 @@ static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
                                        if_attr->cap.am.max_zcopy);
     }
 
-    if (max_am_mp_entry_size > 0) {
-        max_am_mp_entry_size += rx_headroom;
-        status = ucs_mpool_init(&worker->am_mp, 0,
-                                max_am_mp_entry_size,
-                                0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                                &ucp_am_mpool_ops, "ucp_am_bufs");
-    }
+    max_am_mp_entry_size += rx_headroom;
+    status = ucs_mpool_init(&worker->am_mp, 0,
+                            max_am_mp_entry_size,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_am_mpool_ops, "ucp_am_bufs");
     return status;
 }
 

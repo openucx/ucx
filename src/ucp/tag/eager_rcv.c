@@ -45,7 +45,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     ucp_eager_hdr_t *eager_hdr = data;
     ucp_eager_first_hdr_t *eager_first_hdr = data;
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc = NULL;
+    ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_queue_iter_t iter;
     ucs_status_t status;
@@ -106,7 +106,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
     rdesc = ucp_recv_desc_get(worker, data, desc, length, hdr_len, flags);
     if (!rdesc) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto out;
     }
 
     ucs_trace_req("unexp recv %c%c%c tag %"PRIx64" length %zu desc %p",
@@ -117,10 +117,9 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
 
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
 
-out:
-    status = (rdesc && (data == rdesc + 1)) ? UCS_INPROGRESS : UCS_OK;
+    status = (data == rdesc + 1) ? UCS_INPROGRESS : UCS_OK;
 
-err:
+out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
 }
