@@ -101,7 +101,8 @@ ucs_status_t uct_dc_device_query_tl_resources(uct_ib_device_t *dev,
 
 ucs_status_t uct_dc_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp);
 
-ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci);
+ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci,
+                                        ucs_class_t *ep_cls);
 
 void uct_dc_iface_set_quota(uct_dc_iface_t *iface, uct_dc_iface_config_t *config);
 

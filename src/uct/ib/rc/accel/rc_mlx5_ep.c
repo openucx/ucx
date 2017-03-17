@@ -426,6 +426,20 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
+ucs_status_t uct_rc_mlx5_ep_reset_qp(uct_rc_mlx5_iface_t *iface,
+                                     uct_rc_txqp_t *txqp)
+{
+    ucs_status_t status;
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->mlx5_common.tx.cq.cq_ci);
+    uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->mlx5_common.rx.cq.cq_ci);
+    status = uct_rc_ep_reset_qp(txqp);
+    iface->mlx5_common.tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.send_cq);
+    iface->mlx5_common.rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.recv_cq);
+    return status;
+}
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, uct_iface_h tl_iface)
 {
@@ -457,19 +471,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    uct_rc_mlx5_iface_progress, iface);
     uct_ib_mlx5_txwq_cleanup(iface->super.super.super.worker, &self->tx.wq);
-
-    /* Synchronize CQ index with the driver, since it would remove pending
-     * completions for this QP (both send and receive) during ibv_destroy_qp().
-     */
-    uct_ib_mlx5_update_cq_ci(iface->super.super.send_cq, iface->mlx5_common.tx.cq.cq_ci);
-    uct_ib_mlx5_update_cq_ci(iface->super.super.recv_cq, iface->mlx5_common.rx.cq.cq_ci);
-    uct_rc_ep_reset_qp(&self->super);
+    uct_rc_mlx5_ep_reset_qp(iface, &self->super.txqp);
     uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq.srq);
-    iface->mlx5_common.tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.send_cq);
-    iface->mlx5_common.rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(iface->super.super.recv_cq);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
-

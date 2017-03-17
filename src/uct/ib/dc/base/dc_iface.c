@@ -7,6 +7,8 @@
 #include "dc_iface.h"
 #include "dc_ep.h"
 
+#include <uct/ib/rc/accel/rc_mlx5.h> /* Definition of uct_rc_mlx5_iface_t */
+
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
@@ -134,19 +136,29 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
 
 /* restore dc qp from error to rts state */
 ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface,
-                                        uct_rc_txqp_t *dci)
+                                        uct_rc_txqp_t *txqp,
+                                        ucs_class_t *ep_cls)
 {
-    struct ibv_exp_qp_attr attr;
+    uct_rc_mlx5_iface_t *mlx5_iface;
+    ucs_status_t        status;
 
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state = IBV_QPS_RESET;
+    extern ucs_class_t UCS_CLASS_NAME(uct_dc_mlx5_ep_t);
+    extern ucs_class_t UCS_CLASS_NAME(uct_dc_verbs_ep_t);
 
-    if (ibv_exp_modify_qp(dci->qp, &attr, IBV_EXP_QP_STATE)) {
-        ucs_error("error modifying QP to RESET : %m");
-        return UCS_ERR_IO_ERROR;
+    if (ep_cls == &UCS_CLASS_NAME(uct_dc_mlx5_ep_t)) {
+        mlx5_iface = ucs_derived_of(iface, uct_rc_mlx5_iface_t);
+        status = uct_rc_mlx5_ep_reset_qp(mlx5_iface, txqp);
+    } else if (ep_cls == &UCS_CLASS_NAME(uct_dc_verbs_ep_t)){
+        status = uct_rc_ep_reset_qp(txqp);
+    } else {
+        ucs_fatal("unsupported class");
     }
 
-    return uct_dc_iface_dci_connect(iface, dci);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_dc_iface_dci_connect(iface, txqp);
 }
 
 static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)

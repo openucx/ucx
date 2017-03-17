@@ -605,10 +605,9 @@ ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid
     return UCS_OK;
 }
 
-static UCS_F_NOINLINE void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface,
-                                                       void *arg)
+static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
 {
-    struct ibv_wc   *wc     = arg;
+    struct ibv_wc *wc = arg;
 
     uct_dc_ep_set_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t),
                          ucs_derived_of(ib_iface, uct_dc_iface_t),

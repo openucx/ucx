@@ -75,20 +75,21 @@ void uct_dc_ep_set_failed(ucs_class_t *ep_cls, uct_dc_iface_t *iface,
 {
     uint8_t dci = uct_dc_iface_dci_find(iface, qp_num);
     uct_dc_ep_t *ep = iface->tx.dcis[dci].ep;
-    ucs_status_t status;
 
-    if (ep) {
-        uct_rc_txqp_purge_outstanding(&iface->tx.dcis[dci].txqp,
-                                      UCS_ERR_ENDPOINT_TIMEOUT, 0);
-        uct_set_ep_failed(ep_cls, &ep->super.super,
-                          &iface->super.super.super.super);
-        status = uct_dc_iface_dci_reconnect(iface, &iface->tx.dcis[dci].txqp);
-        if (status != UCS_OK) {
-            ucs_fatal("Unsuccessful reconnect of DC QP #%u", qp_num);
-        }
-        uct_rc_txqp_available_set(&iface->tx.dcis[dci].txqp,
-                                  iface->super.config.tx_qp_len);
+    if (!ep) {
+        return;
     }
+
+    uct_rc_txqp_purge_outstanding(&iface->tx.dcis[dci].txqp,
+                                  UCS_ERR_ENDPOINT_TIMEOUT, 0);
+    uct_set_ep_failed(ep_cls, &ep->super.super,
+                      &iface->super.super.super.super);
+    if (UCS_OK != uct_dc_iface_dci_reconnect(iface, &iface->tx.dcis[dci].txqp,
+                                             ep_cls)) {
+        ucs_fatal("Unsuccessful reconnect of DC QP #%u", qp_num);
+    }
+    uct_rc_txqp_available_set(&iface->tx.dcis[dci].txqp,
+                              iface->super.config.tx_qp_len);
 }
 
 /* TODO:
