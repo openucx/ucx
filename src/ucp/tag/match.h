@@ -10,6 +10,8 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/dt/dt.h>
 #include <ucs/debug/log.h>
+#include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/mpool.inl>
 #include <ucs/sys/compiler.h>
 
 #include <inttypes.h>
@@ -59,5 +61,82 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
               (recv_tag == curr_tag)));
 }
 
+static UCS_F_ALWAYS_INLINE ucp_request_t *
+ucp_tag_search_exp(ucp_context_h context, ucp_tag_t recv_tag, size_t recv_len,
+                   unsigned recv_flags)
+{
+    ucs_queue_iter_t iter;
+    ucp_request_t *req;
+
+    ucs_queue_for_each_safe(req, iter, &context->tag.expected, recv.queue) {
+        req = ucs_container_of(*iter, ucp_request_t, recv.queue);
+        if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
+                                  req->recv.tag_mask, req->recv.state.offset,
+                                  req->recv.info.sender_tag))
+        {
+            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
+                              req->recv.tag_mask, req->recv.state.offset, "expected");
+            if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
+                ucs_queue_del_iter(&context->tag.expected, iter);
+            }
+            return req;
+        }
+    }
+
+    return NULL;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_tag_t ucp_rdesc_get_tag(ucp_recv_desc_t *rdesc)
+{
+    return ((ucp_tag_hdr_t*)(rdesc + 1))->tag;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_tag_unexp_recv(ucp_context_h context, ucp_worker_h worker, void *data,
+                   size_t length, unsigned am_flags, uint16_t hdr_len,
+                   uint16_t flags)
+{
+    ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
+    ucs_status_t status;
+
+    if (ucs_unlikely(am_flags & UCT_CB_FLAG_DESC)) {
+        /* desc==data is slowpath */
+        rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        status = UCS_INPROGRESS;
+    } else {
+        rdesc = ucs_mpool_get_inline(&worker->am_mp);
+        if (rdesc == NULL) {
+            ucs_error("ucp recv descriptor is not allocated");
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        rdesc->flags = flags;
+        memcpy(rdesc + 1, data, length);
+        status = UCS_OK;
+    }
+
+    ucs_trace_req("unexp recv %c%c%c%c%c tag %"PRIx64" length %zu desc %p",
+                  (flags & UCP_RECV_DESC_FLAG_FIRST) ? 'f' : '-',
+                  (flags & UCP_RECV_DESC_FLAG_LAST)  ? 'l' : '-',
+                  (flags & UCP_RECV_DESC_FLAG_EAGER) ? 'e' : '-',
+                  (flags & UCP_RECV_DESC_FLAG_SYNC)  ? 's' : '-',
+                  (flags & UCP_RECV_DESC_FLAG_RNDV)  ? 'r' : '-',
+                  ucp_rdesc_get_tag(rdesc), length - hdr_len, rdesc);
+
+    rdesc->length  = length;
+    rdesc->hdr_len = hdr_len;
+    ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
+    return status;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_unexp_desc_release(ucp_recv_desc_t *rdesc)
+{
+    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
+        uct_iface_release_desc(rdesc); /* uct desc is slowpath */
+    } else {
+        ucs_mpool_put_inline(rdesc);
+    }
+}
 
 #endif

@@ -22,15 +22,13 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
 {
     ucp_context_h context = worker->context;
     ucp_recv_desc_t *rdesc;
-    ucp_tag_hdr_t *hdr;
     ucs_queue_iter_t iter;
     ucs_status_t status;
     ucp_tag_t recv_tag;
     unsigned flags;
 
     ucs_queue_for_each_safe(rdesc, iter, &context->tag.unexpected, queue) {
-        hdr      = (void*)(rdesc + 1);
-        recv_tag = hdr->tag;
+        recv_tag = ucp_rdesc_get_tag(rdesc);
         flags    = rdesc->flags;
         ucs_trace_req("searching for %"PRIx64"/%"PRIx64"/%"PRIx64" offset %zu, "
                       "checking desc %p %"PRIx64" %c%c%c%c%c",
@@ -53,7 +51,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                                                buffer, buffer_size, datatype,
                                                &req->recv.state, info);
                 ucs_trace_req("release receive descriptor %p", rdesc);
-                ucp_recv_desc_release(rdesc);
+                ucp_tag_unexp_desc_release(rdesc);
                 if (status != UCS_INPROGRESS) {
                     return status;
                 }
@@ -64,7 +62,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
                 req->recv.datatype = datatype;
                 req->recv.cb       = cb;
                 ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
-                ucp_recv_desc_release(rdesc);
+                ucp_tag_unexp_desc_release(rdesc);
                 UCP_WORKER_STAT_RNDV(worker, UNEXP);
                 return UCS_INPROGRESS;
             }
@@ -275,14 +273,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
                                        buffer, buffer_size, datatype,
                                        &req->recv.state, &req->recv.info);
         ucs_trace_req("release receive descriptor %p", rdesc);
-        ucp_recv_desc_release(rdesc);
+        ucp_tag_unexp_desc_release(rdesc);
     } else if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
         req->recv.buffer   = buffer;
         req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
         req->recv.cb       = cb;
         ucp_rndv_matched(worker, req, (void*)(rdesc + 1));
-        ucp_recv_desc_release(rdesc);
+        ucp_tag_unexp_desc_release(rdesc);
         status = UCS_INPROGRESS;
         save_rreq = 0;
         UCP_WORKER_STAT_RNDV(worker, UNEXP);

@@ -45,9 +45,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
     ucp_eager_hdr_t *eager_hdr = data;
     ucp_eager_first_hdr_t *eager_first_hdr = data;
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
-    ucs_queue_iter_t iter;
     ucs_status_t status;
     size_t recv_len;
     ucp_tag_t recv_tag;
@@ -56,70 +54,49 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
 
     ucs_assert(length >= hdr_len);
     recv_tag = eager_hdr->super.tag;
+    recv_len = length - hdr_len;
 
-    /* Search in expected queue */
-    ucs_queue_for_each_safe(req, iter, &context->tag.expected, recv.queue) {
-        req = ucs_container_of(*iter, ucp_request_t, recv.queue);
-        if (ucp_tag_recv_is_match(recv_tag, flags, req->recv.tag, req->recv.tag_mask,
-                                  req->recv.state.offset, req->recv.info.sender_tag))
-        {
-            recv_len = length - hdr_len;
-            ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
-                              req->recv.tag_mask, req->recv.state.offset, "expected");
-            UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
-            status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer,
-                                   req->recv.length, &req->recv.state,
-                                   data + hdr_len, recv_len,
-                                   flags & UCP_RECV_DESC_FLAG_LAST);
+    req = ucp_tag_search_exp(context, recv_tag, recv_len, flags);
+    if (req != NULL) {
+        UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
 
-            /* First fragment fills the receive information */
-            if (flags & UCP_RECV_DESC_FLAG_FIRST) {
-                UCP_WORKER_STAT_EAGER_MSG(worker, flags);
-                req->recv.info.sender_tag = recv_tag;
-                if (flags & UCP_RECV_DESC_FLAG_LAST) {
-                    req->recv.info.length = recv_len;
-                } else {
-                    req->recv.info.length = eager_first_hdr->total_len;
-                }
-            }
+        status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer,
+                               req->recv.length, &req->recv.state,
+                               data + hdr_len, recv_len,
+                               flags & UCP_RECV_DESC_FLAG_LAST);
 
-            /* Last fragment completes the request */
+        /* First fragment fills the receive information */
+        if (flags & UCP_RECV_DESC_FLAG_FIRST) {
+            UCP_WORKER_STAT_EAGER_MSG(worker, flags);
+            req->recv.info.sender_tag = recv_tag;
             if (flags & UCP_RECV_DESC_FLAG_LAST) {
-                ucs_queue_del_iter(&context->tag.expected, iter);
-                ucp_request_complete_recv(req, status);
+                req->recv.info.length = recv_len;
             } else {
-                req->recv.state.offset += recv_len;
+                req->recv.info.length = eager_first_hdr->total_len;
             }
-            UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
-            /* TODO In case an error status is returned from ucp_tag_process_recv,
-             * need to discard the rest of the messages */
-            status = UCS_OK;
-
-            if (flags & UCP_RECV_DESC_FLAG_SYNC) {
-                ucp_eager_sync_send_handler(arg, data, flags);
-            }
-
-            goto out;
         }
+
+        /* Last fragment completes the request */
+        if (flags & UCP_RECV_DESC_FLAG_LAST) {
+            ucp_request_complete_recv(req, status);
+        } else {
+            req->recv.state.offset += recv_len;
+        }
+
+        UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);
+        /* TODO In case an error status is returned from ucp_tag_process_recv,
+         * need to discard the rest of the messages */
+
+        if (flags & UCP_RECV_DESC_FLAG_SYNC) {
+            ucp_eager_sync_send_handler(arg, data, flags);
+        }
+
+        status = UCS_OK;
+    } else {
+        status = ucp_tag_unexp_recv(context, worker, data, length, am_flags,
+                                    hdr_len, flags);
     }
 
-    rdesc = ucp_recv_desc_get(worker, data, length, hdr_len, am_flags, flags);
-    if (!rdesc) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
-
-    ucs_trace_req("unexp recv %c%c%c tag %"PRIx64" length %zu desc %p",
-                  (flags & UCP_RECV_DESC_FLAG_FIRST) ? 'f' : '-',
-                  (flags & UCP_RECV_DESC_FLAG_LAST)  ? 'l' : '-',
-                  (flags & UCP_RECV_DESC_FLAG_EAGER) ? 'e' : '-',
-                  recv_tag, length, rdesc);
-
-    ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
-
-    status = (am_flags & UCT_CB_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
-
-out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
 }
