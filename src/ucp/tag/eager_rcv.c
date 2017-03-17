@@ -67,10 +67,10 @@ ucp_eager_handler(void *arg, void *data, size_t length, void *desc,
             ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
                               req->recv.tag_mask, req->recv.state.offset, "expected");
             UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
-            status = ucp_tag_process_recv(req->recv.buffer, req->recv.length,
-                                          req->recv.datatype, &req->recv.state,
-                                          data + hdr_len, recv_len,
-                                          flags & UCP_RECV_DESC_FLAG_LAST);
+            status = ucp_dt_unpack(req->recv.datatype, req->recv.buffer,
+                                   req->recv.length, &req->recv.state,
+                                   data + hdr_len, recv_len,
+                                   flags & UCP_RECV_DESC_FLAG_LAST);
 
             /* First fragment fills the receive information */
             if (flags & UCP_RECV_DESC_FLAG_FIRST) {

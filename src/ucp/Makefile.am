@@ -53,6 +53,7 @@ libucp_la_SOURCES = \
 	dt/dt_contig.c \
 	dt/dt_iov.c \
 	dt/dt_generic.c \
+	dt/dt.c \
 	proto/proto_am.c \
 	rma/basic_rma.c \
 	tag/eager_rcv.c \

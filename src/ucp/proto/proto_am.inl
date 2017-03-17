@@ -5,6 +5,7 @@
  */
 
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 #include <ucs/debug/profile.h>
@@ -43,7 +44,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ssize_t packed_len;
     uct_ep_h uct_ep;
     size_t offset;
-    ucp_frag_state_t saved_state;
+    ucp_dt_state_t saved_state;
 
     saved_state    = req->send.state;
     offset         = req->send.state.offset;
@@ -89,7 +90,7 @@ err:
 
 static UCS_F_ALWAYS_INLINE
 size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
-                           ucp_frag_state_t *state, const ucp_dt_iov_t *src_iov,
+                           ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
                            ucp_datatype_t datatype, size_t length_max)
 {
     size_t iov_offset, max_src_iov, src_it, dst_it;
@@ -155,7 +156,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     size_t max_iov     = ucp_ep_config(ep)->am.max_iovcnt;
     uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t iovcnt      = 0;
-    ucp_frag_state_t saved_state;
+    ucp_dt_state_t saved_state;
     ucs_status_t status;
 
     saved_state    = req->send.state;
@@ -190,10 +191,10 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     const size_t max_middle = ucp_ep_config(ep)->am.max_zcopy - hdr_size_middle;
     const size_t max_iov    = ucp_ep_config(ep)->am.max_iovcnt;
     uct_iov_t *iov          = ucs_alloca(max_iov * sizeof(uct_iov_t));
-    ucp_frag_state_t *state = &req->send.state;
+    ucp_dt_state_t *state = &req->send.state;
     unsigned flag_iov_mid   = 0;
     size_t iovcnt           = 0;
-    ucp_frag_state_t saved_state;
+    ucp_dt_state_t saved_state;
     size_t offset, length_it;
     ucs_status_t status;
     uct_ep_h uct_ep;

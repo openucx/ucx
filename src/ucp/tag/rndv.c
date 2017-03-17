@@ -485,9 +485,8 @@ static size_t ucp_rndv_pack_single_data(void *dest, void *arg)
     ucs_assert(sreq->send.state.offset == 0);
 
     hdr->rreq_ptr = sreq->send.proto.rreq_ptr;
-    length = ucp_tag_pack_dt_copy(hdr + 1, sreq->send.buffer,
-                                  &sreq->send.state, sreq->send.length,
-                                  sreq->send.datatype);
+    length = ucp_dt_pack(sreq->send.datatype, hdr + 1, sreq->send.buffer,
+                         &sreq->send.state, sreq->send.length);
     ucs_assert(length == sreq->send.length);
     return sizeof(*hdr) + length;
 }
@@ -501,9 +500,9 @@ static size_t ucp_rndv_pack_multi_data(void *dest, void *arg)
     hdr->rreq_ptr = sreq->send.proto.rreq_ptr;
     length        = ucp_ep_config(sreq->send.ep)->am.max_bcopy - sizeof(*hdr);
 
-    return sizeof(*hdr) + ucp_tag_pack_dt_copy(hdr + 1, sreq->send.buffer,
-                                               &sreq->send.state, length,
-                                               sreq->send.datatype);
+    return sizeof(*hdr) + ucp_dt_pack(sreq->send.datatype, hdr + 1,
+                                      sreq->send.buffer, &sreq->send.state,
+                                      length);
 }
 
 static size_t ucp_rndv_pack_multi_data_last(void *dest, void *arg)
@@ -515,9 +514,9 @@ static size_t ucp_rndv_pack_multi_data_last(void *dest, void *arg)
     hdr->rreq_ptr = sreq->send.proto.rreq_ptr;
     length        = sreq->send.length - sreq->send.state.offset;
 
-    return sizeof(*hdr) + ucp_tag_pack_dt_copy(hdr + 1, sreq->send.buffer,
-                                               &sreq->send.state, length,
-                                               sreq->send.datatype);
+    return sizeof(*hdr) + ucp_dt_pack(sreq->send.datatype, hdr + 1,
+                                      sreq->send.buffer, &sreq->send.state,
+                                      length);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_bcopy_send, (self),
@@ -681,9 +680,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
-    status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.length,
-                                  rreq->recv.datatype, &rreq->recv.state,
-                                  data + hdr_len, recv_len, 0);
+    status = ucp_dt_unpack(rreq->recv.datatype, rreq->recv.buffer,
+                           rreq->recv.length, &rreq->recv.state,
+                           data + hdr_len, recv_len, 0);
     if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
         rreq->recv.state.offset += recv_len;
         return status;
@@ -713,9 +712,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_last_handler,
     ucs_assert(length >= hdr_len);
     recv_len = length - hdr_len;
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_last_recv", recv_len);
-    status = ucp_tag_process_recv(rreq->recv.buffer, rreq->recv.length,
-                                  rreq->recv.datatype, &rreq->recv.state,
-                                  data + hdr_len, recv_len, 1);
+    status = ucp_dt_unpack(rreq->recv.datatype, rreq->recv.buffer,
+                           rreq->recv.length, &rreq->recv.state,
+                           data + hdr_len, recv_len, 1);
 
     ucp_request_complete_recv(rreq, status);
 

@@ -169,8 +169,8 @@ void ucp_iov_buffer_memh_dereg(uct_md_h uct_md, uct_mem_h *memh,
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_send_buffer_reg, (req, lane),
                  ucp_request_t *req, ucp_lane_index_t lane)
 {
-    uct_md_h uct_md         = ucp_ep_md(req->send.ep, lane);
-    ucp_frag_state_t *state = &req->send.state;
+    uct_md_h uct_md       = ucp_ep_md(req->send.ep, lane);
+    ucp_dt_state_t *state = &req->send.state;
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
     uct_mem_h *memh;
@@ -225,8 +225,8 @@ err:
 UCS_PROFILE_FUNC_VOID(ucp_request_send_buffer_dereg, (req, lane),
                       ucp_request_t *req, ucp_lane_index_t lane)
 {
-    uct_md_h uct_md         = ucp_ep_md(req->send.ep, lane);
-    ucp_frag_state_t *state = &req->send.state;
+    uct_md_h uct_md       = ucp_ep_md(req->send.ep, lane);
+    ucp_dt_state_t *state = &req->send.state;
     uct_mem_h *memh;
     size_t iov_it;
 
