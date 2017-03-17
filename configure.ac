@@ -116,6 +116,7 @@ AS_IF([test "x$with_docs_only" == xyes],
      AM_CONDITIONAL([HAVE_TL_DC], [false])
      AM_CONDITIONAL([HAVE_TL_UD], [false])
      AM_CONDITIONAL([HAVE_TL_CM], [false])
+     AM_CONDITIONAL([HAVE_IBV_EX_HW_TM], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
      AM_CONDITIONAL([HAVE_XPMEM], [false])

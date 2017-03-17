@@ -27,7 +27,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
     uct_ib_log_post_send(&iface->super.super, ep->super.txqp.qp, wr,
-                         (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+                         (wr->opcode == IBV_WR_SEND) ? uct_rc_verbs_ep_am_packet_dump : NULL);
 
     ret = ibv_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -55,7 +55,8 @@ uct_rc_verbs_exp_post_send(uct_rc_verbs_ep_t *ep, struct ibv_exp_send_wr *wr,
     wr->wr_id          = uct_rc_txqp_unsignaled(&ep->super.txqp);
 
     uct_ib_log_exp_post_send(&iface->super.super, ep->super.txqp.qp, wr,
-                             (wr->exp_opcode == IBV_EXP_WR_SEND) ? uct_rc_ep_am_packet_dump : NULL);
+                             (wr->exp_opcode == IBV_EXP_WR_SEND) ?
+                             uct_rc_verbs_ep_am_packet_dump : NULL);
 
     ret = ibv_exp_post_send(ep->super.txqp.qp, wr, &bad_wr);
     if (ret != 0) {
@@ -281,13 +282,13 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_am_short_hdr_t am;
 
-    UCT_RC_CHECK_AM_SHORT(id, length, iface->verbs_common.config.max_inline);
+    UCT_RC_VERBS_CHECK_AM_SHORT(iface, id, length,
+                                iface->verbs_common.config.max_inline);
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, &am, id, hdr, buffer, length);
+    uct_rc_verbs_iface_fill_inl_am_sge(&iface->verbs_common, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
@@ -304,19 +305,20 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     struct ibv_send_wr wr;
     struct ibv_sge sge;
     size_t length;
+    size_t data_length;
 
     UCT_CHECK_AM_ID(id);
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
-                                      id, pack_cb, arg, &length);
+    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(iface, &iface->super.tx.mp, desc,
+                                      id, pack_cb, arg, length, data_length);
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.opcode);
-    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, data_length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
 
-    return length;
+    return data_length;
 }
 
 ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
@@ -333,15 +335,16 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
 
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super) - 1,
                        "uct_rc_verbs_ep_am_zcopy");
-    UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
-                          iface->verbs_common.config.short_desc_size,
-                          iface->super.super.config.seg_size);
+    UCT_RC_VERBS_CHECK_AM_ZCOPY(iface, id, header_length,
+                                uct_iov_total_length(iov, iovcnt),
+                                iface->verbs_common.config.short_desc_size,
+                                iface->super.super.config.seg_size);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super, &iface->verbs_common.short_desc_mp,
-                                      desc, id, header, header_length, comp, &send_flags);
+    UCT_RC_VERBS_GET_TX_AM_ZCOPY_DESC(iface, &iface->verbs_common.short_desc_mp,
+                                      desc, id, header, header_length, comp,
+                                      &send_flags, sge[0]);
 
-    sge[0].length = sizeof(uct_rc_hdr_t) + header_length;
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
     UCT_RC_VERBS_FILL_AM_ZCOPY_WR_IOV(wr, sge, (sge_cnt + 1), wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
@@ -478,7 +481,6 @@ static ucs_status_t uct_rc_verbs_ep_nop(uct_rc_verbs_ep_t *ep)
     wr.exp_opcode     = IBV_EXP_WR_NOP;
     wr.exp_send_flags = IBV_EXP_SEND_FENCE;
     wr.comp_mask      = 0;
-
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     uct_rc_verbs_exp_post_send(ep, &wr, IBV_EXP_SEND_SIGNALED);
     return UCS_OK;
@@ -524,11 +526,12 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_fc_request_t *req)
 {
+    struct ibv_send_wr fc_wr;
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_hdr_t hdr;
-    struct ibv_send_wr fc_wr;
+    size_t notag_hdr_size = iface->verbs_common.config.notag_hdr_size;
+    uct_rc_hdr_t *hdr     = iface->verbs_common.am_inl_hdr + notag_hdr_size;
 
     /* In RC only PURE grant is sent as a separate message. Other FC
      * messages are bundled with AM. */
@@ -536,18 +539,18 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     /* Do not check FC WND here to avoid head-to-head deadlock.
      * Credits grant should be sent regardless of FC wnd state. */
-    ucs_assert(sizeof(hdr) <= iface->verbs_common.config.max_inline);
+    ucs_assert(sizeof(hdr) + notag_hdr_size <=
+               iface->verbs_common.config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
-    hdr.am_id                     = UCT_RC_EP_FC_PURE_GRANT;
+    hdr->am_id    = UCT_RC_EP_FC_PURE_GRANT;
+    fc_wr.sg_list = iface->verbs_common.inl_sge;
+    fc_wr.opcode  = IBV_WR_SEND;
+    fc_wr.next    = NULL;
+    fc_wr.num_sge = 1;
 
-    fc_wr.sg_list                 = iface->verbs_common.inl_sge;
-    fc_wr.num_sge                 = 1;
-    fc_wr.opcode                  = IBV_WR_SEND;
-    fc_wr.next                    = NULL;
-
-    iface->verbs_common.inl_sge[0].addr        = (uintptr_t)&hdr;
-    iface->verbs_common.inl_sge[0].length      = sizeof(hdr);
+    iface->verbs_common.inl_sge[0].addr    = (uintptr_t)iface->verbs_common.am_inl_hdr;
+    iface->verbs_common.inl_sge[0].length  = sizeof(hdr) + notag_hdr_size;
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, IBV_SEND_INLINE);
     return UCS_OK;
@@ -563,7 +566,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
     uct_rc_verbs_txcnt_init(&self->txcnt);
 
     uct_worker_progress_register(iface->super.super.super.worker,
-                                 uct_rc_verbs_iface_progress, iface);
+                                 iface->progress, iface);
     return UCS_OK;
 }
 
@@ -572,7 +575,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     uct_worker_progress_unregister(iface->super.super.super.worker,
-                                   uct_rc_verbs_iface_progress, iface);
+                                   iface->progress, iface);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

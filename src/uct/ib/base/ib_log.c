@@ -195,19 +195,19 @@ void __uct_ib_log_post_send(const char *file, int line, const char *function,
 
 void __uct_ib_log_recv_completion(const char *file, int line, const char *function,
                                   uct_ib_iface_t *iface, enum ibv_qp_type qp_type,
-                                  struct ibv_wc *wc, void *data,
+                                  struct ibv_wc *wc, void *data, size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb)
 {
     char buf[256] = {0};
-    size_t length;
+    size_t len;
 
-    length = wc->byte_len;
+    len = length;
     if (qp_type == IBV_QPT_UD) {
-        length -= UCT_IB_GRH_LEN;
-        data   += UCT_IB_GRH_LEN;
+        len  -= UCT_IB_GRH_LEN;
+        data += UCT_IB_GRH_LEN;
     }
     uct_ib_log_dump_recv_completion(iface, qp_type, wc->qp_num, wc->src_qp,
-                                    wc->slid, data, length, packet_dump_cb,
+                                    wc->slid, data, len, packet_dump_cb,
                                     buf, sizeof(buf) - 1);
     uct_log_data(file, line, function, buf);
 }

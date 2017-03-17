@@ -27,12 +27,14 @@
      UCT_CHECK_AM_ID(_am_id); \
      UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, _max_inline, "am_short");
 
-
-#define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \
+#define UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_length, _length, _seg_size) \
     UCT_CHECK_AM_ID(_id); \
-    UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, _desc_size, "am_zcopy header"); \
     UCT_CHECK_LENGTH(_header_length + _length, _seg_size, "am_zcopy payload"); \
     UCT_CHECK_LENGTH(_header_length + _length, UCT_IB_MAX_MESSAGE_SIZE, "am_zcopy ib max message");
+
+#define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \
+    UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_length, _length, _seg_size) \
+    UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, _desc_size, "am_zcopy header");
 
 
 #define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
@@ -41,13 +43,14 @@
 
 #define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pack_cb, _arg, _length) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-    uct_rc_bcopy_desc_fill(_desc, _id, _pack_cb, _arg, _length);
+    (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+    uct_rc_bcopy_desc_fill((uct_rc_hdr_t*)(_desc + 1), _id, _pack_cb, _arg, _length);
 
 #define UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, \
                                           _id, _header, _header_length, _comp, _send_flags) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc); \
     uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
-    uct_rc_zcopy_desc_set_header(_desc, _id, _header, _header_length);
+    uct_rc_zcopy_desc_set_header((uct_rc_hdr_t*)(_desc + 1), _id, _header, _header_length);
 
 #define UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(_iface, _mp, _desc, _pack_cb, _arg, _length) \
     UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
@@ -305,20 +308,16 @@ uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
 
 
 static inline void
-uct_rc_bcopy_desc_fill(uct_rc_iface_send_desc_t *desc, uint8_t id,
+uct_rc_bcopy_desc_fill(uct_rc_hdr_t *rch, uint8_t id,
                        uct_pack_callback_t pack_cb, void *arg, size_t *length)
 {
-    uct_rc_hdr_t *rch;
-
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
-    rch = (uct_rc_hdr_t *)(desc + 1);
     rch->am_id = id;
     *length = pack_cb(rch + 1, arg);
 }
 
 static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
-                                                    uct_completion_t *comp,
-                                                    int *send_flags)
+                                              uct_completion_t *comp,
+                                              int *send_flags)
 {
     if (comp == NULL) {
         desc->super.handler   = (uct_rc_send_handler_t)ucs_mpool_put;
@@ -330,18 +329,13 @@ static inline void uct_rc_zcopy_desc_set_comp(uct_rc_iface_send_desc_t *desc,
     }
 }
 
-static inline void uct_rc_zcopy_desc_set_header(uct_rc_iface_send_desc_t *desc,
+static inline void uct_rc_zcopy_desc_set_header(uct_rc_hdr_t *rch,
                                                 uint8_t id, const void *header,
                                                 unsigned header_length)
 {
-    uct_rc_hdr_t *rch;
-
-    /* Header buffer: active message ID + user header */
-    rch = (uct_rc_hdr_t *)(desc + 1);
     rch->am_id = id;
     memcpy(rch + 1, header, header_length);
 }
-
 
 static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {

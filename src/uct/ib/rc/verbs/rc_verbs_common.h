@@ -33,12 +33,15 @@ typedef struct uct_rc_verbs_iface_common_config {
 
 typedef struct uct_rc_verbs_iface_common {
     struct ibv_sge         inl_sge[2];
+    void                   *am_inl_hdr;
     ucs_mpool_t            short_desc_mp;
+
 
     /* TODO: make a separate datatype */
     struct {
-        size_t                 short_desc_size;
-        size_t                 max_inline;
+        size_t             notag_hdr_size;
+        size_t             short_desc_size;
+        size_t             max_inline;
     } config;
 } uct_rc_verbs_iface_common_t;
 
@@ -64,7 +67,8 @@ uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, ui
 ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
-                                            uct_rc_iface_config_t *rc_config);
+                                            uct_rc_iface_config_t *rc_config,
+                                            size_t am_hdr_size);
 
 void uct_rc_verbs_iface_common_cleanup(uct_rc_verbs_iface_common_t *iface);
 
@@ -119,7 +123,8 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
     uct_rc_iface_ops_t *rc_ops;
     void *udesc;
     ucs_status_t status;
-    uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr,
+
+    uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr, length,
                                uct_rc_ep_am_packet_dump);
     desc = (uct_ib_iface_recv_desc_t *)wc->wr_id;
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
@@ -166,18 +171,24 @@ out:
 
 static inline void
 uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
-                                       uct_rc_am_short_hdr_t *am,
-                                       uint8_t id, uint64_t hdr,
-                                       const void *buffer, unsigned length)
+                                   uint8_t id, uint64_t hdr,
+                                   const void *buffer, unsigned length)
 {
+    uct_rc_am_short_hdr_t *am = (uct_rc_am_short_hdr_t*)((char*)iface->am_inl_hdr +
+                                iface->config.notag_hdr_size);
     am->rc_hdr.am_id = id;
     am->am_hdr       = hdr;
 
-    iface->inl_sge[0].addr      = (uintptr_t)am;
-    iface->inl_sge[0].length    = sizeof(*am);
+    iface->inl_sge[0].addr      = (uintptr_t)iface->am_inl_hdr;
+    iface->inl_sge[0].length    = sizeof(*am) + iface->config.notag_hdr_size;
     iface->inl_sge[1].addr      = (uintptr_t)buffer;
     iface->inl_sge[1].length    = length;
 }
+
+#define UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
+    _wr.sg_list = &_sge; \
+    _wr.num_sge = 1; \
+    _sge.length = _length;
 
 #define UCT_RC_VERBS_FILL_INL_PUT_WR(_iface, _raddr, _rkey, _buf, _len) \
     _iface->inl_rwrite_wr.wr.rdma.remote_addr = _raddr; \
@@ -185,11 +196,8 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
     _iface->verbs_common.inl_sge[0].addr      = (uintptr_t)_buf; \
     _iface->verbs_common.inl_sge[0].length    = _len;
 
-
 #define UCT_RC_VERBS_FILL_AM_BCOPY_WR(_wr, _sge, _length, _wr_opcode) \
-    _wr.sg_list = &_sge; \
-    _wr.num_sge = 1; \
-    _sge.length = sizeof(uct_rc_hdr_t) + _length; \
+    UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
     _wr_opcode = IBV_WR_SEND;
 
 #define UCT_RC_VERBS_FILL_AM_ZCOPY_WR_IOV(_wr, _sge, _iovlen, _wr_opcode) \
@@ -199,12 +207,10 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
 
 #define UCT_RC_VERBS_FILL_RDMA_WR(_wr, _wr_opcode, _opcode, \
                                   _sge, _length, _raddr, _rkey) \
+    UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \
     _wr.wr.rdma.remote_addr = _raddr; \
     _wr.wr.rdma.rkey        = uct_ib_md_direct_rkey(_rkey); \
-    _wr.sg_list             = &_sge; \
-    _wr.num_sge             = 1; \
     _wr_opcode              = _opcode; \
-    _sge.length             = _length;
 
 #define UCT_RC_VERBS_FILL_RDMA_WR_IOV(_wr, _wr_opcode, _opcode, _sge, _sgelen, \
                                       _raddr, _rkey) \
@@ -225,14 +231,12 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_common_t *iface,
 
 #define UCT_RC_VERBS_FILL_ATOMIC_WR(_wr, _wr_opcode, _sge, _opcode, \
                                     _compare_add, _swap, _remote_addr, _rkey) \
-    _wr.sg_list               = &_sge; \
-    _wr.num_sge               = 1; \
+    UCT_RC_VERBS_FILL_SGE(_wr, _sge, sizeof(uint64_t)) \
     _wr_opcode                = _opcode; \
     _wr.wr.atomic.compare_add = _compare_add; \
     _wr.wr.atomic.swap        = _swap; \
     _wr.wr.atomic.remote_addr = _remote_addr; \
     _wr.wr.atomic.rkey        = _rkey;  \
-    _sge.length               = sizeof(uint64_t);
 
 
 #if HAVE_IB_EXT_ATOMICS

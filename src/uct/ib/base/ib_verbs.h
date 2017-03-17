@@ -167,6 +167,17 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #endif
 
 
+/*
+ * HW tag matching
+ */
+#if HAVE_IBV_EX_HW_TM
+   /* TM (eager) is supported if tm_caps.max_num_tags is not 0. */
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr_ex.tm_caps._field)
+#else
+#  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
+#endif
+
+
 typedef uint8_t uct_ib_uint24_t[3];
 
 static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, const uint32_t qp_num)

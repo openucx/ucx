@@ -401,18 +401,22 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_tx_mp;
     }
 
-    /* Create SRQ */
-    srq_init_attr.attr.max_sge   = 1;
-    srq_init_attr.attr.max_wr    = srq_size;
-    srq_init_attr.attr.srq_limit = 0;
-    srq_init_attr.srq_context    = self;
-    self->rx.srq.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
-    if (self->rx.srq.srq == NULL) {
-        ucs_error("failed to create SRQ: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_free_tx_ops;
+    if (srq_size > 0) {
+        /* Create SRQ */
+        srq_init_attr.attr.max_sge   = 1;
+        srq_init_attr.attr.max_wr    = srq_size;
+        srq_init_attr.attr.srq_limit = 0;
+        srq_init_attr.srq_context    = self;
+        self->rx.srq.srq = ibv_create_srq(uct_ib_iface_md(&self->super)->pd, &srq_init_attr);
+        if (self->rx.srq.srq == NULL) {
+            ucs_error("failed to create SRQ: %m");
+            status = UCS_ERR_IO_ERROR;
+            goto err_free_tx_ops;
+        }
+        self->rx.srq.available       = srq_init_attr.attr.max_wr;
+    } else {
+        self->rx.srq.srq             = NULL;
     }
-    self->rx.srq.available       = srq_init_attr.attr.max_wr;
 
     /* Set atomic handlers according to atomic reply endianness */
     self->config.atomic64_handler = uct_ib_atomic_is_be_reply(dev, 0, sizeof(uint64_t)) ?
@@ -439,7 +443,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
          * TODO: Make wnd size to be a property of the particular interface.
          * We could distribute it via rc address then.*/
         self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
-                                               srq_init_attr.attr.max_wr);
+                                               config->super.rx.queue_len);
         self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
                                                config->fc.hard_thresh), 1);
 
@@ -466,7 +470,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err_destroy_srq:
-    ibv_destroy_srq(self->rx.srq.srq);
+    if (self->rx.srq.srq != NULL) {
+        ibv_destroy_srq(self->rx.srq.srq);
+    }
 err_free_tx_ops:
     ucs_free(self->tx.ops);
 err_destroy_tx_mp:
@@ -495,12 +501,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
     UCS_STATS_NODE_FREE(self->stats);
 
-    /* TODO flush RX buffers */
-    ret = ibv_destroy_srq(self->rx.srq.srq);
-    if (ret) {
-        ucs_warn("failed to destroy SRQ: %m");
+    if (self->rx.srq.srq != NULL) {
+        /* TODO flush RX buffers */
+        ret = ibv_destroy_srq(self->rx.srq.srq);
+        if (ret) {
+            ucs_warn("failed to destroy SRQ: %m");
+        }
     }
-
     ucs_free(self->tx.ops);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */

@@ -256,7 +256,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, enum ibv_qp_type qp_type
             uct_ib_log_dump_atomic_fadd(be64toh(atomic->swap_add), s, ends - s);
         } else if (opcode == MLX5_OPCODE_ATOMIC_CS) {
             uct_ib_log_dump_atomic_cswap(be64toh(atomic->compare),
-                                     be64toh(atomic->swap_add), s, ends - s);
+                                         be64toh(atomic->swap_add), s, ends - s);
         }
         s += strlen(s);
 
