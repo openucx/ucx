@@ -344,7 +344,7 @@ run_mpi_tests() {
 				-x UCX_ERROR_SIGNALS \
 				-x UCX_HANDLE_ERRORS \
 				-mca pml ob1 \
-				-mca btl sm,self \
+				-mca btl vader,self \
 				-mca coll ^hcoll,ml"
 
 		run_ucx_perftest_mpi
