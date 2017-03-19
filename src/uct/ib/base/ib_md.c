@@ -125,6 +125,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
    "  <priority>  - (optional) device priority, integer.\n",
    ucs_offsetof(uct_ib_md_config_t, custom_devices), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"PREFER_NEAREST_DEVICE", "y",
+   "Prefer nearest device to cpu when selecting a device from NET_DEVICES list.\n",
+   ucs_offsetof(uct_ib_md_config_t, prefer_nearest_device), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -1123,6 +1127,7 @@ uct_ib_md_open(const char *md_name, const uct_md_config_t *uct_md_config, uct_md
     md->rcache          = NULL;
     md->reg_cost        = md_config->uc_reg_cost;
     md->odp             = md_config->odp;
+    md->prefer_nearest_device = md_config->prefer_nearest_device;
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class, NULL,
