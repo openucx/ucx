@@ -8,7 +8,6 @@
 #include "test_ucp_tag.h"
 
 extern "C" {
-#include <ucp/dt/dt.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
 }

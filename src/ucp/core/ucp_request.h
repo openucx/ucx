@@ -15,6 +15,7 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
+#include <ucp/dt/dt.h>
 #include <ucp/wireup/wireup.h>
 
 
@@ -56,25 +57,6 @@ enum {
 
 /* Callback for UCP requests */
 typedef void (*ucp_request_callback_t)(ucp_request_t *req);
-
-
-typedef struct ucp_frag_state {
-    size_t                        offset;  /* Total offset in overall payload. */
-    union {
-        struct {
-            uct_mem_h             memh;
-        } contig;
-        struct {
-            size_t                iov_offset;     /* Offset in the IOV item */
-            size_t                iovcnt_offset;  /* The IOV item to start copy */
-            size_t                iovcnt;         /* Number of IOV buffers */
-            uct_mem_h             *memh;          /* Pointer to IOV memh[iovcnt] */
-        } iov;
-        struct {
-            void                  *state;
-        } generic;
-    } dt;
-} ucp_frag_state_t;
 
 
 /**
@@ -136,7 +118,7 @@ struct ucp_request {
             };
 
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
-            ucp_frag_state_t      state;    /* Position in the send buffer */
+            ucp_dt_state_t        state;    /* Position in the send buffer */
             uct_pending_req_t     uct;      /* UCT pending request */
             uct_completion_t      uct_comp; /* UCT completion */
         } send;
@@ -150,7 +132,7 @@ struct ucp_request {
             ucp_tag_t             tag_mask; /* Expected tag mask */
             ucp_tag_recv_callback_t cb;     /* Completion callback */
             ucp_tag_recv_info_t   info;     /* Completion info to fill */
-            ucp_frag_state_t      state;
+            ucp_dt_state_t        state;
         } recv;
     };
 };

@@ -8,7 +8,6 @@
 #define UCP_PROTO_H_
 
 #include <ucp/core/ucp_ep.h>
-#include <ucp/core/ucp_request.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
