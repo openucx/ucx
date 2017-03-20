@@ -28,6 +28,7 @@
 
 /* Default huge page size is 2 MBytes */
 #define UCS_DEFAULT_HUGEPAGE_SIZE  (2 * UCS_MBYTE)
+#define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_MAPS_FILE      "/proc/self/maps"
 
 
@@ -330,26 +331,51 @@ size_t ucs_get_page_size()
     return page_size;
 }
 
+size_t ucs_get_meminfo_entry(const char* pattern)
+{
+    char buf[256];
+    char final_pattern[80];
+    int val = 0;
+    size_t val_b = 0;
+    FILE *f;
+
+    f = fopen("/proc/meminfo", "r");
+    if (f != NULL) {
+        snprintf(final_pattern, sizeof(final_pattern), "%s: %s", pattern,
+                 "%d kB");
+        while (fgets(buf, sizeof(buf), f)) {
+            if (sscanf(buf, final_pattern, &val) == 1) {
+                val_b = val * 1024ull;
+                break;
+            }
+        }
+        fclose(f);
+    }
+
+    return val_b;
+}
+
+size_t ucs_get_memfree_size()
+{
+    size_t mem_free;
+
+    mem_free = ucs_get_meminfo_entry("MemFree");
+    if (mem_free == 0) {
+        mem_free = UCS_DEFAULT_MEM_FREE;
+        ucs_info("cannot determine free mem size, using default: %zu",
+                  mem_free);
+    }
+
+    return mem_free;
+}
+
 size_t ucs_get_huge_page_size()
 {
     static size_t huge_page_size = 0;
-    char buf[256];
-    int size_kb;
-    FILE *f;
 
     /* Cache the huge page size value */
     if (huge_page_size == 0) {
-        f = fopen("/proc/meminfo", "r");
-        if (f != NULL) {
-            while (fgets(buf, sizeof(buf), f)) {
-                if (sscanf(buf, "Hugepagesize:       %d kB", &size_kb) == 1) {
-                    huge_page_size = size_kb * 1024;
-                    break;
-                }
-            }
-            fclose(f);
-        }
-
+        huge_page_size = ucs_get_meminfo_entry("Hugepagesize");
         if (huge_page_size == 0) {
             huge_page_size = UCS_DEFAULT_HUGEPAGE_SIZE;
             ucs_warn("cannot determine huge page size, using default: %zu",
