@@ -374,15 +374,12 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     uct_rc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_t);
+    ucs_status_t status;
     uint16_t sn;
 
-    if (!uct_rc_iface_has_tx_resources(&iface->super)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    if (uct_rc_txqp_available(&ep->super.txqp) == ep->tx.wq.bb_max) {
-        UCT_TL_EP_STAT_FLUSH(&ep->super.super);
-        return UCS_OK;
+    status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max);
+    if (status != UCS_INPROGRESS) {
+        return status;
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
@@ -394,8 +391,6 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                      0, 0, 0,
                                      0, 0,
                                      NULL, 0);
-    } else if (!uct_rc_ep_has_tx_resources(&ep->super)) {
-        return UCS_ERR_NO_RESOURCE;
     } else {
         sn = ep->tx.wq.sig_pi;
     }

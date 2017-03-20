@@ -243,15 +243,11 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
      * segfault when we will try to access the ep by address from the grant
      * message. */
     if (!uct_rc_iface_has_tx_resources(&iface->super)) {
-        ucs_trace("no tx res cqeav=%d mpe=%d",
-                  uct_rc_iface_have_tx_cqe_avail(&iface->super),
-                  ucs_mpool_is_empty(&iface->super.tx.mp));
         return UCS_ERR_NO_RESOURCE;
     }
 
     if (ep->dci == UCT_DC_EP_NO_DCI) {
         if (!uct_dc_iface_dci_can_alloc(iface)) {
-            ucs_trace("no dci");
             return UCS_ERR_NO_RESOURCE; /* waiting for dci */
         } else {
             UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
@@ -260,7 +256,6 @@ ucs_status_t uct_dc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *c
     }
 
     if (!uct_dc_iface_dci_ep_can_send(ep)) {
-        ucs_trace("no can send");
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 

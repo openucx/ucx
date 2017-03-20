@@ -391,6 +391,22 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
     }
 }
 
+ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+
+    if (!uct_rc_iface_has_tx_resources(iface) || !uct_rc_ep_has_tx_resources(ep)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (uct_rc_txqp_available(&ep->txqp) == max_available) {
+        UCT_TL_EP_STAT_FLUSH(&ep->super);
+        return UCS_OK;
+    }
+
+    return UCS_INPROGRESS;
+}
+
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
             (uct_rc_iface_send_op_t *op, const void *resp) \
