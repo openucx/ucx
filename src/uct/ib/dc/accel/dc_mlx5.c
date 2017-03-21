@@ -630,6 +630,22 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
+static ucs_status_t uct_dc_mlx5_reset_qp(uct_rc_iface_t *iface,
+                                         uct_rc_txqp_t *txqp)
+{
+    ucs_status_t status;
+    uct_dc_mlx5_iface_t *mlx5_iface = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_rc_mlx5_iface_common_update_cqs_ci(&mlx5_iface->mlx5_common,
+                                           &mlx5_iface->super.super.super);
+    status = uct_rc_reset_qp(iface, txqp);
+    uct_rc_mlx5_iface_common_sync_cqs_ci(&mlx5_iface->mlx5_common,
+                                         &mlx5_iface->super.super.super);
+    return status;
+}
+
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
         {
@@ -676,7 +692,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
         .handle_failure           = uct_dc_mlx5_iface_handle_failure
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_dc_iface_fc_handler
+    .fc_handler               = uct_dc_iface_fc_handler,
+    .reset_qp                 = uct_dc_mlx5_reset_qp
 };
 
 

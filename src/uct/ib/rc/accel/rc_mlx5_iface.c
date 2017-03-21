@@ -102,7 +102,7 @@ static ucs_status_t uct_rc_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
 }
 
-static UCS_F_NOINLINE void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+static void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                                             void *arg)
 {
     struct mlx5_cqe64 *cqe = arg;
@@ -121,6 +121,22 @@ static UCS_F_NOINLINE void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_i
                           &ep->super.super.super,
                           &iface->super.super.super);
     }
+}
+
+static ucs_status_t uct_rc_mlx5_reset_qp(uct_rc_iface_t *iface,
+                                         uct_rc_txqp_t *txqp)
+{
+    ucs_status_t status;
+    uct_rc_mlx5_iface_t *mlx5_iface = ucs_derived_of(iface, uct_rc_mlx5_iface_t);
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_rc_mlx5_iface_common_update_cqs_ci(&mlx5_iface->mlx5_common,
+                                           &mlx5_iface->super.super);
+    status = uct_rc_reset_qp(iface, txqp);
+    uct_rc_mlx5_iface_common_sync_cqs_ci(&mlx5_iface->mlx5_common,
+                                         &mlx5_iface->super.super);
+    return status;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker,
@@ -213,7 +229,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .handle_failure           = uct_rc_mlx5_iface_handle_failure
     },
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler
+    .fc_handler               = uct_rc_iface_fc_handler,
+    .reset_qp                 = uct_rc_mlx5_reset_qp
 };
 
 

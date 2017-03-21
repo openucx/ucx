@@ -777,7 +777,8 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
         .handle_failure           = uct_dc_verbs_handle_failure
     },
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
-    .fc_handler               = uct_dc_iface_fc_handler
+    .fc_handler               = uct_dc_iface_fc_handler,
+    .reset_qp                 = uct_rc_reset_qp
 };
 
 void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)

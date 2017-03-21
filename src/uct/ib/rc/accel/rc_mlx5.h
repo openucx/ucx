@@ -120,9 +120,6 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                     uct_rc_fc_request_t *req);
 
-ucs_status_t uct_rc_mlx5_ep_reset_qp(uct_rc_mlx5_iface_t *iface,
-                                     uct_rc_txqp_t *txqp);
-
 void uct_rc_mlx5_iface_progress(void *arg);
 
 #endif

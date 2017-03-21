@@ -200,7 +200,7 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     return status;
 }
 
-ucs_status_t uct_rc_ep_reset_qp(uct_rc_txqp_t *txqp)
+ucs_status_t uct_rc_reset_qp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp)
 {
     struct ibv_qp_attr qp_attr;
     ucs_status_t status = UCS_OK;

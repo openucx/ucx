@@ -76,7 +76,8 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 }
 
 /* take dc qp to rts state */
-static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci)
+static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
+                                             uct_rc_txqp_t *dci)
 {
     struct ibv_exp_qp_attr attr;
 
@@ -136,23 +137,11 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
 
 /* restore dc qp from error to rts state */
 ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface,
-                                        uct_rc_txqp_t *txqp,
-                                        ucs_class_t *ep_cls)
+                                        uct_rc_txqp_t *txqp)
 {
-    uct_rc_mlx5_iface_t *mlx5_iface;
-    ucs_status_t        status;
-
-    extern ucs_class_t UCS_CLASS_NAME(uct_dc_mlx5_ep_t);
-    extern ucs_class_t UCS_CLASS_NAME(uct_dc_verbs_ep_t);
-
-    if (ep_cls == &UCS_CLASS_NAME(uct_dc_mlx5_ep_t)) {
-        mlx5_iface = ucs_derived_of(iface, uct_rc_mlx5_iface_t);
-        status = uct_rc_mlx5_ep_reset_qp(mlx5_iface, txqp);
-    } else if (ep_cls == &UCS_CLASS_NAME(uct_dc_verbs_ep_t)){
-        status = uct_rc_ep_reset_qp(txqp);
-    } else {
-        ucs_fatal("unsupported class");
-    }
+    uct_rc_iface_ops_t *rc_ops = ucs_derived_of(iface->super.super.ops,
+                                                uct_rc_iface_ops_t);
+    ucs_status_t       status  = rc_ops->reset_qp(&iface->super, txqp);
 
     if (status != UCS_OK) {
         return status;

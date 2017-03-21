@@ -207,3 +207,18 @@ void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
     iface_attr->overhead          = 40e-9;
 
 }
+
+void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
+                                            uct_ib_iface_t *ib_iface)
+{
+    uct_ib_mlx5_update_cq_ci(ib_iface->send_cq, iface->tx.cq.cq_ci);
+    uct_ib_mlx5_update_cq_ci(ib_iface->recv_cq, iface->rx.cq.cq_ci);
+}
+
+void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_ib_iface_t *ib_iface)
+{
+    iface->tx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->send_cq);
+    iface->rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->recv_cq);
+}
+
