@@ -7,8 +7,6 @@
 #include "dc_iface.h"
 #include "dc_ep.h"
 
-#include <uct/ib/rc/accel/rc_mlx5.h> /* Definition of uct_rc_mlx5_iface_t */
-
 const static char *uct_dc_tx_policy_names[] = {
     [UCT_DC_TX_POLICY_DCS]           = "dcs",
     [UCT_DC_TX_POLICY_DCS_QUOTA]     = "dcs_quota",
