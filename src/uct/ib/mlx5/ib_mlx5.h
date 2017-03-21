@@ -105,6 +105,7 @@ typedef struct uct_ib_mlx5_bf {
         void                    *ptr;
         uintptr_t               addr;
     } reg;
+    unsigned                    size;       /* BlueFlame register size */
 } uct_ib_mlx5_bf_t;
 
 
