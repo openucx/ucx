@@ -14,6 +14,7 @@ extern "C" {
 
 #define MB                        pow(1024, -2)
 #define UCT_PERF_TEST_MULTIPLIER  5
+#define UCT_ARM_PERF_TEST_MULTIPLIER  15
 
 class test_uct_perf : public uct_test, public test_perf {
 protected:
@@ -130,8 +131,13 @@ UCS_TEST_P(test_uct_perf, envelope) {
 
     /* Run all tests */
     for (test_spec *test = tests; test->title != NULL; ++test) {
-        test->max *= UCT_PERF_TEST_MULTIPLIER;
-        test->min /= UCT_PERF_TEST_MULTIPLIER;
+        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+            test->max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+            test->min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+        } else {
+            test->max *= UCT_PERF_TEST_MULTIPLIER;
+            test->min /= UCT_PERF_TEST_MULTIPLIER;
+        }
         run_test(*test, 0, check_perf, GetParam()->tl_name, GetParam()->dev_name);
     }
 }
