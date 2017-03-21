@@ -78,6 +78,8 @@ typedef struct uct_ib_md {
         uct_ib_device_spec_t *specs;    /* Custom device specifications */
         unsigned             count;     /* Number of custom devices */
     } custom_devices;
+    int                      prefer_nearest_device; /**< Give priority for near
+                                                         device */
 } uct_ib_md_t;
 
 
@@ -102,6 +104,9 @@ typedef struct uct_ib_md_config {
     uct_ib_odp_config_t      odp;          /**< ODP configuration */
 
     UCS_CONFIG_STRING_ARRAY_FIELD(spec) custom_devices; /**< Custom device specifications */
+
+    int                      prefer_nearest_device; /**< Give priority for near
+                                                         device */
 
 } uct_ib_md_config_t;
 

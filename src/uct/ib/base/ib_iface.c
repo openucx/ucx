@@ -646,7 +646,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     uint8_t active_width, active_speed, active_mtu;
     double encoding, signal_rate, wire_speed;
     size_t mtu, width, extra_pkt_len;
-
+    cpu_set_t temp_cpu_mask, process_affinity;
+    int ret;
+    uct_ib_md_t *md = uct_ib_iface_md(iface);
+    
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
@@ -701,6 +704,20 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         return UCS_ERR_IO_ERROR;
     }
 
+    if (md->prefer_nearest_device) {
+        ret = sched_getaffinity(0, sizeof(process_affinity), &process_affinity);
+        if (ret) {
+            ucs_error("sched_getaffinity() failed: %m");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        /* update latency for remote device */
+        CPU_AND(&temp_cpu_mask, &dev->local_cpus, &process_affinity);
+        if (!CPU_EQUAL(&process_affinity, &temp_cpu_mask)) {
+            iface_attr->latency.overhead += 200e-9;
+        }
+    }
+    
     iface_attr->latency.growth = 0;
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
