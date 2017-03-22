@@ -284,8 +284,8 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
     }
 
     if ((qp_info.sq.stride != MLX5_SEND_WQE_BB) || !ucs_is_pow2(qp_info.sq.wqe_cnt) ||
-        ((qp_info.bf.size != 0) && (!ucs_is_pow2(qp_info.bf.size) ||
-        (qp_info.bf.size != UCT_IB_MLX5_BF_REG_SIZE)))) {
+        ((qp_info.bf.size != 0) && (qp_info.bf.size != UCT_IB_MLX5_BF_REG_SIZE)))
+    {
         ucs_error("mlx5 device parameters not suitable for transport "
                   "bf.size(%d) %d, sq.stride(%d) %d, wqe_cnt %d",
                   UCT_IB_MLX5_BF_REG_SIZE, qp_info.bf.size,

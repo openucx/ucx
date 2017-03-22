@@ -378,7 +378,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
-    if (wq->bf->size) {
+    if (ucs_likely(wq->bf->size)) {
         /* BF copy */
         for (n = 0; n < num_bb; ++n) {
             uct_ib_mlx5_bf_copy_bb(dst, src);
@@ -392,8 +392,7 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
         /* DB copy */
         *(volatile uint64_t *)dst = *(volatile uint64_t *)src;
         ucs_memory_bus_store_fence();
-        src += num_bb * MLX5_SEND_WQE_BB;
-        src = uct_ib_mlx5_txwq_wrap_any(wq, src);
+        src = uct_ib_mlx5_txwq_wrap_any(wq, src + (num_bb * MLX5_SEND_WQE_BB));
     }
 
     /* We don't want the compiler to reorder instructions and hurt latency */
