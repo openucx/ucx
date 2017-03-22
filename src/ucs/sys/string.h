@@ -7,8 +7,9 @@
 #ifndef UCS_STRING_H_
 #define UCS_STRING_H_
 
-#include "compiler.h"
+#include "compiler_def.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 

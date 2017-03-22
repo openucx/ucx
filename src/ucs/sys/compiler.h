@@ -49,14 +49,6 @@
 /* Avoid inlining the function */
 #define UCS_F_NOINLINE __attribute__ ((noinline))
 
-/*
- * Enable compiler checks for printf-like formatting.
- *
- * @param fmtargN number of formatting argument
- * @param vargN   number of variadic argument
- */
-#define UCS_F_PRINTF(fmtargN, vargN) __attribute__((format(printf, fmtargN, vargN)))
-
 /* Shared library constructor and destructor */
 #define UCS_F_CTOR __attribute__((constructor))
 #define UCS_F_DTOR __attribute__((destructor))
