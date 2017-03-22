@@ -1,6 +1,7 @@
 /*
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -1132,6 +1133,26 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_worker_wait(ucp_worker_h worker);
+
+
+/**
+ * @ingroup UCP_WAKEUP
+ * @brief Wait for memory update on the address
+ *
+ * This routine waits for a memory update at the local memory @a address.  This
+ * is a blocking routine. The routine returns when the memory address is
+ * updated ("write") or an event occurs in the system.
+ *
+ * @note This routine can be used by an application that executes busy-waiting
+ * loop checking for a memory update. Instead of continuous busy-waiting on an
+ * address the application can use @a ucp_worker_wait_mem, which may suspend
+ * execution until the memory is updated. The goal of the routine is to provide
+ * an opportunity for energy savings for architectures that support this
+ * functionality.
+ *
+ * @param [in] address          Local memory address
+ */
+void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
 
 
 /**

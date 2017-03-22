@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +9,7 @@
 #define UCS_ASM_X86_64_H_
 
 #include <ucs/sys/compiler.h>
+#include <ucs/arch/generic/cpu.h>
 #include <stdint.h>
 
 #ifdef __SSE4_1__
@@ -44,6 +45,8 @@ double ucs_arch_get_clocks_per_sec();
 
 ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
 ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
+
+#define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
 
 #endif
