@@ -74,7 +74,8 @@ static ucs_status_t uct_dc_iface_create_dct(uct_dc_iface_t *iface)
 }
 
 /* take dc qp to rts state */
-static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_t *dci)
+static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface,
+                                             uct_rc_txqp_t *dci)
 {
     struct ibv_exp_qp_attr attr;
 
@@ -130,6 +131,21 @@ static ucs_status_t uct_dc_iface_dci_connect(uct_dc_iface_t *iface, uct_rc_txqp_
     }
 
     return UCS_OK;
+}
+
+/* restore dc qp from error to rts state */
+ucs_status_t uct_dc_iface_dci_reconnect(uct_dc_iface_t *iface,
+                                        uct_rc_txqp_t *txqp)
+{
+    uct_rc_iface_ops_t *rc_ops = ucs_derived_of(iface->super.super.ops,
+                                                uct_rc_iface_ops_t);
+    ucs_status_t       status  = rc_ops->reset_qp(&iface->super, txqp);
+
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_dc_iface_dci_connect(iface, txqp);
 }
 
 static void uct_dc_iface_dcis_destroy(uct_dc_iface_t *iface, int max)
@@ -466,4 +482,3 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
     return UCS_OK;
 }
-

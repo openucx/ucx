@@ -424,4 +424,3 @@ void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
     }
     srq->tail = index;
 }
-

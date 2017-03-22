@@ -18,6 +18,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 
 namespace ucs {
@@ -212,7 +213,6 @@ protected:
     ptr_vector_base(const ptr_vector_base&);
     vec_type m_vec;
 
-private:
     void release(T *ptr) {
         delete ptr;
     }
@@ -228,6 +228,18 @@ class ptr_vector : public ptr_vector_base<T> {
 public:
     T& at(size_t index) const {
         return *ptr_vector_base<T>::m_vec.at(index);
+    }
+
+    size_t remove(T *value) {
+        const size_t removed = std::distance(std::remove(this->m_vec.begin(),
+                                                         this->m_vec.end(),
+                                                         value),
+                                             this->m_vec.end());
+        if (removed) {
+            this->m_vec.resize(this->m_vec.size() - removed);
+            this->release(value);
+        }
+        return removed;
     }
 };
 

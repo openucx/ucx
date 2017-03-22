@@ -143,13 +143,13 @@ enum {
     UCT_RC_CHECK_TXQP(_iface, (_ep), &(_ep)->txqp);
 
 /* this is a common type for all rc and dc transports */
-typedef struct uct_rc_txqp {
+struct uct_rc_txqp {
     struct ibv_qp       *qp;
     ucs_queue_head_t    outstanding;
     uint16_t            unsignaled;
     int16_t             available;
     UCS_STATS_NODE_DECLARE(stats);
-} uct_rc_txqp_t;
+};
 
 typedef struct uct_rc_fc {
     /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
@@ -184,7 +184,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
                                      const uct_ep_addr_t *ep_addr);
 
-void uct_rc_ep_reset_qp(uct_rc_ep_t *ep);
+ucs_status_t uct_rc_reset_qp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp);
 
 void uct_rc_ep_am_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                               void *data, size_t length, size_t valid_length,

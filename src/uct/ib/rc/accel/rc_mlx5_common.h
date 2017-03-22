@@ -75,6 +75,12 @@ void uct_rc_mlx5_iface_common_cleanup(uct_rc_mlx5_iface_common_t *iface);
 void uct_rc_mlx5_iface_common_query(uct_rc_iface_t *iface,
                                     uct_iface_attr_t *iface_attr, size_t av_size);
 
+void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
+                                            uct_ib_iface_t *ib_iface);
+
+void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_ib_iface_t *ib_iface);
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe,
                                 uint16_t hw_ci)

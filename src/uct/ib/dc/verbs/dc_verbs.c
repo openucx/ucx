@@ -96,7 +96,9 @@ static ucs_status_t uct_dc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32|
                                       UCT_IFACE_FLAG_ATOMIC_DEVICE |
                                       UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+                                      UCT_IFACE_FLAG_AM_CB_SYNC|
+                                      UCT_IFACE_FLAG_CONNECT_TO_IFACE|
+                                      UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     return UCS_OK;
 }
@@ -602,6 +604,18 @@ ucs_status_t uct_dc_verbs_iface_create_ah(uct_dc_iface_t *dc_iface, uint16_t lid
     return UCS_OK;
 }
 
+static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
+{
+    struct ibv_wc *wc = arg;
+
+    uct_dc_ep_set_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t),
+                         ucs_derived_of(ib_iface, uct_dc_iface_t),
+                         wc->qp_num);
+
+    ucs_log(ib_iface->super.config.failure_level,
+            "Send completion with error: %s",
+            ibv_wc_status_str(wc->status));
+}
 
 /* Send either request for grants or grant message. Request includes ep
  * structure address, which will be received back in a grant message.
@@ -680,9 +694,9 @@ uct_dc_verbs_poll_tx(uct_dc_verbs_iface_t *iface)
 
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super.super, i, wc, num_wcs) {
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            ucs_fatal("iface=%p: send completion %d with error: %s wqe: %p wr_id: %llu",
-                      iface, i, ibv_wc_status_str(wc[i].status),
-                      &wc[i], (unsigned long long)wc[i].wr_id);
+            iface->super.super.super.ops->handle_failure(&iface->super.super.super,
+                                                         &wc[i]);
+            continue;
         }
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i]);
         ucs_assert(count == 1);
@@ -758,10 +772,12 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
             .ep_pending_purge         = uct_dc_ep_pending_purge
         },
         .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
-        .arm_rx_cq                = uct_ib_iface_arm_rx_cq
+        .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+        .handle_failure           = uct_dc_verbs_handle_failure
     },
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
-    .fc_handler               = uct_dc_iface_fc_handler
+    .fc_handler               = uct_dc_iface_fc_handler,
+    .reset_qp                 = uct_rc_reset_qp
 };
 
 void uct_dc_verbs_iface_init_wrs(uct_dc_verbs_iface_t *self)
@@ -879,4 +895,3 @@ UCT_TL_COMPONENT_DEFINE(uct_dc_verbs_tl,
                         uct_dc_verbs_iface_config_table,
                         uct_dc_verbs_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_dc_verbs_tl);
-

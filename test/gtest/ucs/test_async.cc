@@ -424,7 +424,7 @@ UCS_TEST_P(test_async, ctx_event) {
 UCS_TEST_P(test_async, ctx_timer) {
     local_timer lt(GetParam());
     suspend_and_poll(&lt, COUNT * 4);
-    EXPECT_GE(lt.count(), COUNT / 2);
+    EXPECT_GE(lt.count(), COUNT / 4);
 }
 
 UCS_TEST_P(test_async, two_timers) {

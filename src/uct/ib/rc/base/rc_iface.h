@@ -141,6 +141,7 @@ typedef struct uct_rc_iface_ops {
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
                                        void *desc);
+    ucs_status_t         (*reset_qp)(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp);
 } uct_rc_iface_ops_t;
 
 

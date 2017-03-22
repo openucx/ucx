@@ -485,7 +485,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .handle_failure           = uct_rc_verbs_handle_failure
     },
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler
+    .fc_handler               = uct_rc_iface_fc_handler,
+    .reset_qp                 = uct_rc_reset_qp
 };
 
 static ucs_status_t uct_rc_verbs_query_resources(uct_md_h md,

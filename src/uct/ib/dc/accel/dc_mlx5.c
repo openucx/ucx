@@ -102,7 +102,9 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                       UCT_IFACE_FLAG_ATOMIC_CSWAP32|
                                       UCT_IFACE_FLAG_ATOMIC_DEVICE |
                                       UCT_IFACE_FLAG_PENDING|
-                                      UCT_IFACE_FLAG_AM_CB_SYNC|UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+                                      UCT_IFACE_FLAG_AM_CB_SYNC|
+                                      UCT_IFACE_FLAG_CONNECT_TO_IFACE|
+                                      UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     return UCS_OK;
 }
@@ -553,8 +555,14 @@ static void uct_dc_mlx5_iface_progress(void *arg)
 static UCS_F_NOINLINE void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                                             void *arg)
 {
-    struct mlx5_cqe64 *cqe = arg;
-    uct_ib_mlx5_completion_with_err((void*)cqe, 0);
+    struct mlx5_cqe64   *cqe    = arg;
+    uint32_t            qp_num  = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_dc_mlx5_iface_t *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+
+    uct_dc_ep_set_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t),
+                         &iface->super, qp_num);
+
+    uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_ERROR);
 }
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -622,6 +630,22 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
+static ucs_status_t uct_dc_mlx5_reset_qp(uct_rc_iface_t *iface,
+                                         uct_rc_txqp_t *txqp)
+{
+    ucs_status_t status;
+    uct_dc_mlx5_iface_t *mlx5_iface = ucs_derived_of(iface, uct_dc_mlx5_iface_t);
+    /* Synchronize CQ index with the driver, since it would remove pending
+     * completions for this QP (both send and receive) during ibv_destroy_qp().
+     */
+    uct_rc_mlx5_iface_common_update_cqs_ci(&mlx5_iface->mlx5_common,
+                                           &mlx5_iface->super.super.super);
+    status = uct_rc_reset_qp(iface, txqp);
+    uct_rc_mlx5_iface_common_sync_cqs_ci(&mlx5_iface->mlx5_common,
+                                         &mlx5_iface->super.super.super);
+    return status;
+}
+
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
         {
@@ -668,7 +692,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
         .handle_failure           = uct_dc_mlx5_iface_handle_failure
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_dc_iface_fc_handler
+    .fc_handler               = uct_dc_iface_fc_handler,
+    .reset_qp                 = uct_dc_mlx5_reset_qp
 };
 
 
@@ -783,4 +808,3 @@ UCT_TL_COMPONENT_DEFINE(uct_dc_mlx5_tl,
                         uct_dc_mlx5_iface_config_table,
                         uct_dc_mlx5_iface_config_t);
 UCT_MD_REGISTER_TL(&uct_ib_mdc, &uct_dc_mlx5_tl);
-
