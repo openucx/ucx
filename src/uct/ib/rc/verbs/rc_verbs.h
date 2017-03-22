@@ -74,13 +74,13 @@ typedef struct uct_rc_verbs_iface {
      UCT_CHECK_AM_ID(_id); \
      UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length + \
                       (_iface)->verbs_common.config.notag_hdr_size, \
-                      _max_inline, "am_short");
+                      0, _max_inline, "am_short");
 
 #define UCT_RC_VERBS_CHECK_AM_ZCOPY(_iface, _id, _header_len, _len, _desc_size, _seg_size) \
      UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_len, _len, _seg_size) \
      UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_len + \
                       (_iface)->verbs_common.config.notag_hdr_size, \
-                      _desc_size, "am_zcopy header");
+                      0, _desc_size, "am_zcopy header");
 
 #define UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _hdr, _len) \
      { \

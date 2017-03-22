@@ -10,6 +10,7 @@
 #include "rc_iface.h"
 
 #include <uct/api/uct.h>
+#include <ucs/debug/debug.h>
 
 
 enum {

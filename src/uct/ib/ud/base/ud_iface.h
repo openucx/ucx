@@ -389,7 +389,7 @@ uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
          int mtu; \
          mtu =  uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super)->active_mtu); \
          UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + payload_len + header_len, \
-                          mtu, msg); \
+                          0, mtu, msg); \
      } while(0);
 
 #define UCT_UD_CHECK_BCOPY_LENGTH(iface, len) \

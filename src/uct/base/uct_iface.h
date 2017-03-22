@@ -101,10 +101,16 @@ enum {
 /**
  * In debug mode, if _condition is not true, generate 'Invalid length' error.
  */
-#define UCT_CHECK_LENGTH(_length, _max_length, _name) \
-    UCT_CHECK_PARAM((_length) <= (_max_length), \
-                    "Invalid %s length: %zu (expected: <= %zu)", \
-                    _name, (size_t)(_length), (size_t)(_max_length))
+#define UCT_CHECK_LENGTH(_length, _min_length, _max_length, _name) \
+    { \
+        typeof(_length) __length = _length; \
+        UCT_CHECK_PARAM((_length) <= (_max_length), \
+                        "Invalid %s length: %zu (expected: <= %zu)", \
+                        _name, (size_t)(__length), (size_t)(_max_length)); \
+        UCT_CHECK_PARAM((ssize_t)(_length) >= (_min_length), \
+                        "Invalid %s length: %zu (expected: >= %zu)", \
+                        _name, (size_t)(__length), (size_t)(_min_length)); \
+    }
 
 /**
  * Skip if this is a zero-length operation.

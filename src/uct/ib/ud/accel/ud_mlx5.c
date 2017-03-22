@@ -181,7 +181,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
      */
     UCT_CHECK_AM_ID(id);
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + sizeof(hdr) + length,
-                    iface->super.config.max_inline, "am_short");
+                    0, iface->super.config.max_inline, "am_short");
 
     uct_ud_enter(&iface->super);
     uct_ud_iface_progress_pending_tx(&iface->super);
@@ -207,7 +207,7 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_ib_mlx5_inline_copy(am + 1, buffer, length, &iface->tx.wq);
 
     wqe_size += ctrl_av_size + sizeof(*inl);
-    UCT_CHECK_LENGTH(wqe_size, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
+    UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
                      "am_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);
@@ -267,7 +267,7 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     UCT_CHECK_IOV_SIZE(iovcnt, uct_ib_iface_get_max_iov(&iface->super.super),
                        "uct_ud_mlx5_ep_am_zcopy");
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length,
-                     iface->super.config.max_inline, "am_zcopy header");
+                     0, iface->super.config.max_inline, "am_zcopy header");
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_length,
                               uct_iov_total_length(iov, iovcnt));
 
@@ -355,7 +355,7 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     uct_ib_mlx5_inline_copy(put_hdr + 1, buffer, length, &iface->tx.wq);
 
     wqe_size += ctrl_av_size + sizeof(*inl);
-    UCT_CHECK_LENGTH(wqe_size, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
+    UCT_CHECK_LENGTH(wqe_size, 0, UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB,
                      "put_short");
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, neth);
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size);

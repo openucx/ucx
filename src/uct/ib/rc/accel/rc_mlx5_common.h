@@ -42,7 +42,7 @@
  * case wqe size is valid: inl + raddr + dgram + ctrl fit in 2 WQ BB
  */
 #define UCT_RC_MLX5_CHECK_PUT_SHORT(_length, _av_size) \
-    UCT_CHECK_LENGTH(_length, UCT_RC_MLX5_PUT_MAX_SHORT(_av_size), "put_short")
+    UCT_CHECK_LENGTH(_length, 0, UCT_RC_MLX5_PUT_MAX_SHORT(_av_size), "put_short")
 
 
 enum {

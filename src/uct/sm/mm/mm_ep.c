@@ -377,7 +377,7 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    UCT_CHECK_LENGTH(length + sizeof(header),
+    UCT_CHECK_LENGTH(length + sizeof(header), 0,
                      iface->config.fifo_elem_size - sizeof(uct_mm_fifo_element_t),
                      "am_short");
 
