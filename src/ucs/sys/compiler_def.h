@@ -34,5 +34,12 @@
 /* Mask of bits 0..i-1 */
 #define UCS_MASK(i)              (UCS_BIT(i) - 1)
 
+/*
+ * Enable compiler checks for printf-like formatting.
+ *
+ * @param fmtargN number of formatting argument
+ * @param vargN   number of variadic argument
+ */
+#define UCS_F_PRINTF(fmtargN, vargN) __attribute__((format(printf, fmtargN, vargN)))
 
 #endif /* UCS_COMPILER_DEF_H */
