@@ -154,6 +154,9 @@ void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
     /* Trim at max. shared memory */
     max_length = ucs_min(max_length, ucs_get_shmmax() * 0.8);
 
+    /* Trim when short of available memory */
+    max_length = ucs_min(max_length, ucs_get_memfree_size() / 4);
+
     /* For large size, slow down if needed */
     if (max_length > 1 * 1024 * 1024) {
         max_length = max_length / ucs::test_time_multiplier();
