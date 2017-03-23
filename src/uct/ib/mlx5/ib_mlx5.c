@@ -256,14 +256,15 @@ struct mlx5_cqe64* uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
     }
 }
 
-static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr)
+static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_size)
 {
     return ((bf->reg.addr & ~UCT_IB_MLX5_BF_REG_SIZE) == (addr & ~UCT_IB_MLX5_BF_REG_SIZE));
 }
 
-static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr)
+static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_size)
 {
-    bf->reg.addr = addr;
+    bf->reg.addr  = addr;
+    bf->enable_bf = bf_size;
 }
 
 static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)
@@ -282,10 +283,8 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
         return UCS_ERR_IO_ERROR;
     }
 
-    if ((qp_info.bf.size == 0) || !ucs_is_pow2(qp_info.bf.size) ||
-        (qp_info.sq.stride != MLX5_SEND_WQE_BB) ||
-        (qp_info.bf.size != UCT_IB_MLX5_BF_REG_SIZE) ||
-        !ucs_is_pow2(qp_info.sq.wqe_cnt))
+    if ((qp_info.sq.stride != MLX5_SEND_WQE_BB) || !ucs_is_pow2(qp_info.sq.wqe_cnt) ||
+        ((qp_info.bf.size != 0) && (qp_info.bf.size != UCT_IB_MLX5_BF_REG_SIZE)))
     {
         ucs_error("mlx5 device parameters not suitable for transport "
                   "bf.size(%d) %d, sq.stride(%d) %d, wqe_cnt %d",
@@ -307,13 +306,14 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_worker_h worker, uct_ib_mlx5_txwq_t *txwq
                                             uct_ib_mlx5_bf_t,
                                             uct_ib_mlx5_bf_cmp,
                                             uct_ib_mlx5_bf_init,
-                                            (uintptr_t)qp_info.bf.reg);
+                                            (uintptr_t)qp_info.bf.reg,
+                                            qp_info.bf.size);
     txwq->dbrec    = &qp_info.dbrec[MLX5_SND_DBR];
     /* need to reserve 2x because:
      *  - on completion we only get the index of last wqe and we do not
      *    really know how many bb is there (but no more than max bb
      *  - on send we check that there is at least one bb. We know
-     *  exact number of bbs once we acually are sending.
+     *  exact number of bbs once we actually are sending.
      */
     txwq->bb_max   = qp_info.sq.wqe_cnt - 2 * UCT_IB_MLX5_MAX_BB;
 #if ENABLE_ASSERT

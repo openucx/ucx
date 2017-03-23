@@ -376,17 +376,23 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     dst = wq->bf->reg.ptr;
     src = ctrl;
 
-    /* BF copy */
-    /* TODO support DB without BF */
     ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
     ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
-    for (n = 0; n < num_bb; ++n) {
-        uct_ib_mlx5_bf_copy_bb(dst, src);
-        dst += MLX5_SEND_WQE_BB;
-        src += MLX5_SEND_WQE_BB;
-        if (ucs_unlikely(src == wq->qend)) {
-            src = wq->qstart;
+    if (ucs_likely(wq->bf->enable_bf)) {
+        /* BF copy */
+        for (n = 0; n < num_bb; ++n) {
+            uct_ib_mlx5_bf_copy_bb(dst, src);
+            dst += MLX5_SEND_WQE_BB;
+            src += MLX5_SEND_WQE_BB;
+            if (ucs_unlikely(src == wq->qend)) {
+                src = wq->qstart;
+            }
         }
+    } else {
+        /* DB copy */
+        *(volatile uint64_t *)dst = *(volatile uint64_t *)src;
+        ucs_memory_bus_store_fence();
+        src = uct_ib_mlx5_txwq_wrap_any(wq, src + (num_bb * MLX5_SEND_WQE_BB));
     }
 
     /* We don't want the compiler to reorder instructions and hurt latency */
