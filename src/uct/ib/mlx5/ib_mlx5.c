@@ -264,7 +264,7 @@ static int uct_ib_mlx5_bf_cmp(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_
 static void uct_ib_mlx5_bf_init(uct_ib_mlx5_bf_t *bf, uintptr_t addr, unsigned bf_size)
 {
     bf->reg.addr  = addr;
-    bf->size      = bf_size;
+    bf->enable_bf = bf_size;
 }
 
 static void uct_ib_mlx5_bf_cleanup(uct_ib_mlx5_bf_t *bf)

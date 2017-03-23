@@ -105,7 +105,7 @@ typedef struct uct_ib_mlx5_bf {
         void                    *ptr;
         uintptr_t               addr;
     } reg;
-    unsigned                    size;       /* BlueFlame register size */
+    unsigned                    enable_bf;       /* BF/DB method selector. DB used if zero */
 } uct_ib_mlx5_bf_t;
 
 
