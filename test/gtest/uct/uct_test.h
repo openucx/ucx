@@ -53,6 +53,9 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                size_t rx_headroom, uct_md_config_t *md_config);
 
+        entity(const resource& resource, uct_iface_config_t *iface_config,
+               uct_iface_params_t *params, uct_md_config_t *md_config);
+
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
                        uct_rkey_bundle *rkey_bundle) const;
 
@@ -96,6 +99,11 @@ protected:
         typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const entity&);
+
+        void init_entity(const resource& resource,
+                         uct_iface_config_t *iface_config,
+                         uct_iface_params_t *params,
+                         uct_md_config_t *md_config);
 
         void reserve_ep(unsigned index);
 
@@ -177,6 +185,7 @@ protected:
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
 
     uct_test::entity* create_entity(size_t rx_headroom);
+    uct_test::entity* create_entity(uct_iface_params_t &params);
 
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;

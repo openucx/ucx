@@ -156,6 +156,12 @@ uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
     return new_ent;
 }
 
+uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
+    entity *new_ent = new entity(*GetParam(), m_iface_config, &params,
+                                 m_md_config);
+    return new_ent;
+}
+
 const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);
 }
@@ -227,15 +233,30 @@ void uct_test::twait(int delta_ms) const {
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          size_t rx_headroom, uct_md_config_t *md_config) {
-    ucs_status_t status;
 
     uct_iface_params_t iface_params;
 
-    iface_params.tl_name     = const_cast<char*>(resource.tl_name.c_str());
-    iface_params.dev_name    = const_cast<char*>(resource.dev_name.c_str());
-    iface_params.stats_root  = NULL;
     iface_params.rx_headroom = rx_headroom;
-    UCS_CPU_ZERO(&iface_params.cpu_mask);
+
+    init_entity(resource, iface_config, &iface_params, md_config);
+}
+
+uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
+                         uct_iface_params_t *params, uct_md_config_t *md_config) {
+
+    init_entity(resource, iface_config, params, md_config);
+}
+
+void uct_test::entity::init_entity(const resource& resource,
+                                   uct_iface_config_t *iface_config,
+                                   uct_iface_params_t *params,
+                                   uct_md_config_t *md_config) {
+    ucs_status_t status;
+
+    params->tl_name    = const_cast<char*>(resource.tl_name.c_str());
+    params->dev_name   = const_cast<char*>(resource.dev_name.c_str());
+    params->stats_root = NULL;
+    UCS_CPU_ZERO(&params->cpu_mask);
 
     UCS_TEST_CREATE_HANDLE(uct_worker_h, m_worker, uct_worker_destroy,
                            uct_worker_create, &m_async.m_async, UCS_THREAD_MODE_MULTI /* TODO */);
@@ -247,7 +268,7 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     ASSERT_UCS_OK(status);
 
     UCS_TEST_CREATE_HANDLE(uct_iface_h, m_iface, uct_iface_close,
-                           uct_iface_open, m_md, m_worker, &iface_params, iface_config);
+                           uct_iface_open, m_md, m_worker, params, iface_config);
 
     status = uct_iface_query(m_iface, &m_iface_attr);
     ASSERT_UCS_OK(status);
