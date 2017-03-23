@@ -11,7 +11,7 @@
 
 
 #define MB   pow(1024.0, -2)
-
+#define UCP_ARM_PERF_TEST_MULTIPLIER 2
 class test_ucp_perf : public ucp_test, public test_perf {
 public:
     using ucp_test::get_ctx_params;
@@ -93,6 +93,10 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     for (test_spec *test = tests; test->title != NULL; ++test) {
         unsigned flags = (test->command == UCX_PERF_CMD_TAG) ? 0 :
                                  UCX_PERF_TEST_FLAG_ONE_SIDED;
+        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+            test->max *= UCP_ARM_PERF_TEST_MULTIPLIER;
+            test->min /= UCP_ARM_PERF_TEST_MULTIPLIER;
+        }
         run_test(*test, flags, true, "", "");
     }
 }
