@@ -317,15 +317,19 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_iface_t)
         /* We done with release */
         return;
     }
-    ucs_debug("Cleaning up iface.");
-    ucs_async_remove_handler(ucs_async_pipe_rfd(&self->event_pipe),1);
+    uct_ugni_enter_async(&self->super);
     uct_ugni_udt_clean_wildcard(self);
-    uct_ugni_proccess_datagram_pipe(ucs_async_pipe_rfd(&self->event_pipe),self);
+    ucs_async_remove_handler(ucs_async_pipe_rfd(&self->event_pipe),1);
+    if (self->events_ready) {
+        uct_ugni_proccess_datagram_pipe(ucs_async_pipe_rfd(&self->event_pipe),self);
+    }
     uct_ugni_udt_terminate_thread(self);
     pthread_join(self->event_thread, &dummy);
     ucs_async_pipe_destroy(&self->event_pipe);
     ucs_mpool_put(self->desc_any);
     ucs_mpool_cleanup(&self->free_desc, 1);
+    pthread_mutex_destroy(&self->device_lock);
+    uct_ugni_leave_async(&self->super);
 }
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_udt_iface_t, uct_iface_t);
