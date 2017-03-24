@@ -111,7 +111,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_rdma_iface_t, uct_iface_t);
 
-uct_iface_ops_t uct_ugni_rdma_iface_ops = {
+static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .iface_query         = uct_ugni_rdma_iface_query,
     .iface_flush         = uct_ugni_iface_flush,
     .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
@@ -131,12 +131,34 @@ uct_iface_ops_t uct_ugni_rdma_iface_ops = {
     .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
     .ep_pending_add      = uct_ugni_ep_pending_add,
     .ep_pending_purge    = uct_ugni_ep_pending_purge,
-    /* Not supported on Gemini and we overlaod it for Aries */
-    .ep_atomic_swap64    = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic_add32     = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic_fadd32    = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic_cswap32   = (void*)ucs_empty_function_return_unsupported,
-    .ep_atomic_swap32    = (void*)ucs_empty_function_return_unsupported,
+    .ep_atomic_swap64    = uct_ugni_ep_atomic_swap64,
+    .ep_atomic_add32     = uct_ugni_ep_atomic_add32,
+    .ep_atomic_fadd32    = uct_ugni_ep_atomic_fadd32,
+    .ep_atomic_cswap32   = uct_ugni_ep_atomic_cswap32,
+    .ep_atomic_swap32    = uct_ugni_ep_atomic_swap32,
+    .ep_flush            = uct_ugni_ep_flush,
+};
+
+static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
+    .iface_query         = uct_ugni_rdma_iface_query,
+    .iface_flush         = uct_ugni_iface_flush,
+    .iface_close         = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_rdma_iface_t),
+    .iface_get_address   = uct_ugni_iface_get_address,
+    .iface_get_device_address = uct_ugni_iface_get_dev_address,
+    .iface_is_reachable  = uct_ugni_iface_is_reachable,
+    .ep_create_connected = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_ep_t),
+    .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_ep_t),
+    .ep_put_short        = uct_ugni_ep_put_short,
+    .ep_put_bcopy        = uct_ugni_ep_put_bcopy,
+    .ep_put_zcopy        = uct_ugni_ep_put_zcopy,
+    .ep_am_short         = uct_ugni_ep_am_short,
+    .ep_atomic_add64     = uct_ugni_ep_atomic_add64,
+    .ep_atomic_fadd64    = uct_ugni_ep_atomic_fadd64,
+    .ep_atomic_cswap64   = uct_ugni_ep_atomic_cswap64,
+    .ep_get_bcopy        = uct_ugni_ep_get_bcopy,
+    .ep_get_zcopy        = uct_ugni_ep_get_zcopy,
+    .ep_pending_add      = uct_ugni_ep_pending_add,
+    .ep_pending_purge    = uct_ugni_ep_pending_purge,
     .ep_flush            = uct_ugni_ep_flush,
 };
 
@@ -147,19 +169,39 @@ static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
+static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(int id)
+{
+    gni_nic_device_t device = uct_ugni_find_gni_device_type(id);
+    switch(device) {
+    case GNI_DEVICE_GEMINI:
+        return &uct_ugni_gemini_rdma_iface_ops;
+    case GNI_DEVICE_ARIES:
+        return &uct_ugni_aries_rdma_iface_ops;
+    default:
+        ucs_error("Unexpected device found in uct_ugni_rdma_choose_ops_by_device."
+                  "device id = %i unexpected device %i", id, device);
+        return NULL;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_ugni_rdma_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_rdma_iface_config_t);
     ucs_status_t status;
+    uct_ugni_device_t *dev = uct_ugni_device_by_name(params->dev_name);
+    uct_iface_ops_t *ops;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
-                              &uct_ugni_rdma_iface_ops,
+    ops = uct_ugni_rdma_choose_ops_by_device(dev->device_index);
+    if (NULL == ops) {
+        status = UCS_ERR_NO_DEVICE;
+        goto exit;
+    }
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops,
                               &config->super UCS_STATS_ARG(NULL));
-
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;
     self->config.rdma_max_size = UCT_UGNI_MAX_RDMA;
@@ -239,14 +281,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
     if (UCS_OK != status) {
         ucs_error("Failed to activate the interface");
         goto clean_get_buffer;
-    }
-
-    if(GNI_DEVICE_ARIES == self->super.dev->type) {
-        uct_ugni_rdma_iface_ops.ep_atomic_swap64    = uct_ugni_ep_atomic_swap64;
-        uct_ugni_rdma_iface_ops.ep_atomic_add32     = uct_ugni_ep_atomic_add32;
-        uct_ugni_rdma_iface_ops.ep_atomic_fadd32    = uct_ugni_ep_atomic_fadd32;
-        uct_ugni_rdma_iface_ops.ep_atomic_cswap32   = uct_ugni_ep_atomic_cswap32;
-        uct_ugni_rdma_iface_ops.ep_atomic_swap32    = uct_ugni_ep_atomic_swap32;
     }
 
     /* TBD: eventually the uct_ugni_progress has to be moved to

@@ -56,4 +56,10 @@ extern pthread_mutex_t uct_ugni_global_lock;
  * @brief Helper function to list UGNI resources
  */
 uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name);
+
+static inline gni_nic_device_t uct_ugni_find_gni_device_type(int dev_id)
+{
+    return job_info.devices[dev_id].type;
+}
+
 #endif
