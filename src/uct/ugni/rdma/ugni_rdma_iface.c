@@ -178,6 +178,7 @@ static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(int id)
     case GNI_DEVICE_ARIES:
         return &uct_ugni_aries_rdma_iface_ops;
     default:
+        ucs_error("Unexpected device found in uct_ugni_rdma_choose_ops_by_device!");
         return NULL;
     }
 }
@@ -189,11 +190,16 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_rdma_iface_t, uct_md_h md, uct_worker_h work
     uct_ugni_rdma_iface_config_t *config = ucs_derived_of(tl_config, uct_ugni_rdma_iface_config_t);
     ucs_status_t status;
     uct_ugni_device_t *dev = uct_ugni_device_by_name(params->dev_name);
+    uct_iface_ops_t *ops;
 
     pthread_mutex_lock(&uct_ugni_global_lock);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params,
-                              uct_ugni_rdma_choose_ops_by_device(dev->device_index),
+    ops = uct_ugni_rdma_choose_ops_by_device(dev->device_index);
+    if (NULL == ops) {
+        status = UCS_ERR_NO_DEVICE;
+        goto exit;
+    }
+    UCS_CLASS_CALL_SUPER_INIT(uct_ugni_iface_t, md, worker, params, ops,
                               &config->super UCS_STATS_ARG(NULL));
     /* Setting initial configuration */
     self->config.fma_seg_size  = UCT_UGNI_MAX_FMA;

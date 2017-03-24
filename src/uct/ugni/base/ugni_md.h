@@ -57,7 +57,7 @@ extern pthread_mutex_t uct_ugni_global_lock;
  */
 uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name);
 
-static UCS_F_ALWAYS_INLINE gni_nic_device_t uct_ugni_find_gni_device_type(int dev_id)
+static inline gni_nic_device_t uct_ugni_find_gni_device_type(int dev_id)
 {
     return job_info.devices[dev_id].type;
 }
