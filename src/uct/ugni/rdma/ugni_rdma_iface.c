@@ -178,7 +178,8 @@ static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(int id)
     case GNI_DEVICE_ARIES:
         return &uct_ugni_aries_rdma_iface_ops;
     default:
-        ucs_error("Unexpected device found in uct_ugni_rdma_choose_ops_by_device!");
+        ucs_error("Unexpected device found in uct_ugni_rdma_choose_ops_by_device."
+                  "device id = %i unexpected device %i", id, device);
         return NULL;
     }
 }
