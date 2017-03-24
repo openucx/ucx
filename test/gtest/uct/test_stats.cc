@@ -26,9 +26,14 @@ public:
     virtual void init() {
         stats_activate();
         uct_p2p_test::init();
-        lbuf = new mapped_buffer(64, 0, sender());
-        rbuf = new mapped_buffer(64, 0, receiver());
         m_comp.count = 0;
+    }
+
+    void init_bufs(size_t min, size_t max)
+    {
+        size_t size = ucs_max(min, ucs_min(64ul, max));
+        lbuf = new mapped_buffer(size, 0, sender());
+        rbuf = new mapped_buffer(size, 0, receiver());
     }
 
     virtual void cleanup() {
@@ -121,6 +126,8 @@ UCS_TEST_P(test_uct_stats, am_short)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_SHORT);
+    init_bufs(0, sender().iface_attr().cap.am.max_short);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -139,6 +146,8 @@ UCS_TEST_P(test_uct_stats, am_bcopy)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -154,6 +163,8 @@ UCS_TEST_P(test_uct_stats, am_zcopy)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_ZCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_zcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -174,6 +185,7 @@ UCS_TEST_P(test_uct_stats, put_short)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_PUT_SHORT);
+    init_bufs(0, sender().iface_attr().cap.put.max_short);
 
     status = uct_ep_put_short(sender_ep(), &send_data, sizeof(send_data),
                               rbuf->addr(), rbuf->rkey());
@@ -188,6 +200,7 @@ UCS_TEST_P(test_uct_stats, put_bcopy)
     uint64_t v;
 
     check_caps(UCT_IFACE_FLAG_PUT_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.put.max_bcopy);
 
     v = uct_ep_put_bcopy(sender_ep(), mapped_buffer::pack, lbuf,
                          rbuf->addr(), rbuf->rkey());
@@ -202,6 +215,7 @@ UCS_TEST_P(test_uct_stats, put_zcopy)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_PUT_ZCOPY);
+    init_bufs(0, sender().iface_attr().cap.put.max_zcopy);
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.put.max_iov);
@@ -219,6 +233,7 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_GET_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.get.max_bcopy);
 
     m_comp.count = 2;
     m_comp.func  = NULL;
@@ -226,12 +241,17 @@ UCS_TEST_P(test_uct_stats, get_bcopy)
                               lbuf->ptr(), lbuf->length(),
                               rbuf->addr(), rbuf->rkey(), &m_comp);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
+    if (status == UCS_OK) {
+        --m_comp.count;
+    }
 
     ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
     do {
         short_progress_loop();
     } while ((ucs_get_time() < timeout) && (m_comp.count != 1));
 
+    EXPECT_EQ(1, m_comp.count);
+    short_progress_loop();
     check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_BCOPY,
                       lbuf->length());
 }
@@ -241,20 +261,27 @@ UCS_TEST_P(test_uct_stats, get_zcopy)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_GET_ZCOPY);
+    init_bufs(sender().iface_attr().cap.get.min_zcopy,
+              sender().iface_attr().cap.get.max_zcopy);
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
                             sender().iface_attr().cap.get.max_iov);
 
     m_comp.count = 2;
     m_comp.func  = NULL;
-    status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(), 0);
+    status = uct_ep_get_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(), rbuf->rkey(),
+                              &m_comp);
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
+    if (status == UCS_OK) {
+        --m_comp.count;
+    }
 
     ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(UCT_TEST_TIMEOUT_IN_SEC);
     do {
         short_progress_loop();
     } while ((ucs_get_time() < timeout) && (m_comp.count != 1));
 
+    EXPECT_EQ(1, m_comp.count);
     short_progress_loop();
     check_tx_counters(UCT_EP_STAT_GET, UCT_EP_STAT_BYTES_ZCOPY,
                       lbuf->length());
@@ -266,6 +293,7 @@ UCS_TEST_P(test_uct_stats, atomic_add ## val) \
     ucs_status_t status; \
 \
     check_caps(UCT_IFACE_FLAG_ATOMIC_ADD ## val); \
+    init_bufs(sizeof(uint##val##_t), sizeof(uint##val##_t)); \
     status = uct_ep_atomic_add ## val (sender_ep(), 1, rbuf->addr(), rbuf->rkey()); \
     EXPECT_UCS_OK(status); \
     check_atomic_counters(); \
@@ -282,6 +310,7 @@ UCS_TEST_P(test_uct_stats, atomic_##func##val) \
     uint##val##_t result; \
 \
     check_caps(UCT_IFACE_FLAG_ATOMIC_ ## flag ## val); \
+    init_bufs(sizeof(result), sizeof(result)); \
 \
     status = uct_ep_atomic_##func##val (sender_ep(), 1, rbuf->addr(), rbuf->rkey(), &result, &m_comp); \
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status); \
@@ -302,6 +331,7 @@ UCS_TEST_P(test_uct_stats, atomic_cswap##val) \
     uint##val##_t result; \
 \
     check_caps(UCT_IFACE_FLAG_ATOMIC_CSWAP ## val); \
+    init_bufs(sizeof(result), sizeof(result)); \
 \
     status = uct_ep_atomic_cswap##val (sender_ep(), 1, 2, rbuf->addr(), rbuf->rkey(), &result, &m_comp); \
     EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status); \
@@ -362,6 +392,8 @@ UCS_TEST_P(test_uct_stats, flush_wait_iface)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -388,6 +420,8 @@ UCS_TEST_P(test_uct_stats, flush_wait_ep)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -416,6 +450,8 @@ UCS_TEST_P(test_uct_stats, fence_iface)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -436,6 +472,8 @@ UCS_TEST_P(test_uct_stats, fence_ep)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
@@ -456,6 +494,8 @@ UCS_TEST_P(test_uct_stats, tx_no_res)
     ucs_status_t status;
 
     check_caps(UCT_IFACE_FLAG_AM_BCOPY);
+    init_bufs(0, sender().iface_attr().cap.am.max_bcopy);
+
     status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0, UCT_AM_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
     count = fill_tx_q(1024);
