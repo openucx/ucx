@@ -286,7 +286,7 @@ static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
     }
 
     config_bundle->table = config_table;
-    config_bundle->table_prefix = strdup(cfg_prefix);
+    config_bundle->table_prefix = ucs_strdup(cfg_prefix);
     if (config_bundle->table_prefix == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_bundle;

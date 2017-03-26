@@ -377,6 +377,9 @@ test_profiling() {
 	echo "==== Running dlopen test ===="
 	strace ./test/apps/test_profiling &> strace.log
 	! grep '^socket' strace.log
+
+	echo "==== Running memtrack test ===="
+	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
 }
 
 #
