@@ -19,14 +19,6 @@ public:
     static const uint64_t MASK       = 0xfffffffffffffffful;
 
     struct recv_ctx {
-        recv_ctx(mapped_buffer *b, uct_tag_t t, uct_tag_t m = MASK) :
-                 mbuf(b), tag(t), tmask(m) {
-
-            uct_ctx.completed_cb    = completed;
-            uct_ctx.tag_consumed_cb = tag_consumed;
-            comp = unexp = consumed = false;
-        }
-
         mapped_buffer     *mbuf;
         uct_tag_t         tag;
         uct_tag_t         tmask;
@@ -79,6 +71,16 @@ public:
 
             m_sender->connect(0, *m_receiver, 0);
         }
+    }
+
+    void init_recv_ctx(recv_ctx &r,  mapped_buffer *b, uct_tag_t t,
+                       uct_tag_t m = MASK) {
+        r.mbuf                    = b;
+        r.tag                     = t;
+        r.tmask                   = m;
+        r.uct_ctx.completed_cb    = completed;
+        r.uct_ctx.tag_consumed_cb = tag_consumed;
+        r.comp = r.unexp = r.consumed = false;
     }
 
     void wait_completion (bool *event) {
@@ -161,12 +163,12 @@ public:
       ctx.mbuf->pattern_check(seed);
     }
 
-    void test_eager_expected(send_func sfunc) {
-        const size_t length = 1024;
+    void test_eager_expected(send_func sfunc, size_t length = 75) {
         uct_tag_t    tag    = 11;
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
-        recv_ctx r_ctx(&recvbuf, tag);
+        recv_ctx r_ctx;
+        init_recv_ctx(r_ctx, &recvbuf, tag);
         ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
 
         short_progress_loop();
@@ -179,16 +181,16 @@ public:
 
         check_completion(r_ctx, true, SEND_SEED);
 
-        short_progress_loop();
+        flush();
     }
 
-    void test_eager_unexpected(send_func sfunc) {
-        const size_t length = 65;
-        uct_tag_t    tag    = 11;
+    void test_eager_unexpected(send_func sfunc, size_t length = 75) {
+        uct_tag_t tag = 11;
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
         mapped_buffer sendbuf(length, SEND_SEED, sender());
-        recv_ctx r_ctx(&recvbuf, tag);
+        recv_ctx r_ctx;
+        init_recv_ctx(r_ctx, &recvbuf, tag);
         send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
@@ -197,6 +199,7 @@ public:
         wait_completion(&r_ctx.unexp);
 
         check_completion(r_ctx, false, SEND_SEED);
+        flush();
     }
 
     void test_eager_wrong_tag(send_func sfunc) {
@@ -208,7 +211,8 @@ public:
 
         // Post modified tag for incoming message to be reported as unexpected
         // and not to be macthed.
-        recv_ctx r_ctx(&recvbuf, tag + 1);
+        recv_ctx r_ctx;
+        init_recv_ctx(r_ctx, &recvbuf, tag + 1);
         send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
 
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
@@ -222,6 +226,7 @@ public:
         // Message should be reported as unexpected and filled with
         // recv seed (unchanged), as the incoming tag does not match the expected
         check_completion(r_ctx, false, RECV_SEED);
+        flush();
     }
 
     void test_eager_tag_mask(send_func sfunc) {
@@ -231,7 +236,8 @@ public:
 
         // Post tag and tag mask in a way that it matches sender tag with
         // tag_mask applied, but is not exactly the same.
-        recv_ctx r_ctx(&recvbuf, 0xff, 0xff);
+        recv_ctx r_ctx;
+        init_recv_ctx(r_ctx, &recvbuf, 0xff, 0xff);
         ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
 
         short_progress_loop();
@@ -243,6 +249,7 @@ public:
 
         // Should be matched because tags are equal with tag mask applied.
         check_completion(r_ctx, true, SEND_SEED);
+        flush();
     }
 
     static void tag_consumed(uct_tag_context_t *self)
@@ -315,19 +322,22 @@ bool test_tag::is_am_received = false;
 UCS_TEST_P(test_tag, tag_eager_short_expected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_SHORT);
-    test_eager_expected(static_cast<send_func>(&test_tag::tag_eager_short));
+    test_eager_expected(static_cast<send_func>(&test_tag::tag_eager_short),
+                        sender().iface_attr().cap.tag.eager.max_short);
 }
 
 UCS_TEST_P(test_tag, tag_eager_bcopy_expected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
-    test_eager_expected(static_cast<send_func>(&test_tag::tag_eager_bcopy));
+    test_eager_expected(static_cast<send_func>(&test_tag::tag_eager_bcopy),
+                        sender().iface_attr().cap.tag.eager.max_bcopy);
 }
 
 UCS_TEST_P(test_tag, tag_eager_zcopy_expected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY);
-    test_eager_expected(static_cast<send_func>(&test_tag::tag_eager_zcopy));
+    test_eager_expected(static_cast<send_func>(&test_tag::tag_eager_zcopy),
+                        sender().iface_attr().cap.tag.eager.max_zcopy);
 }
 
 UCS_TEST_P(test_tag, tag_rndv_zcopy_expected)
@@ -339,13 +349,15 @@ UCS_TEST_P(test_tag, tag_rndv_zcopy_expected)
 UCS_TEST_P(test_tag, tag_eager_bcopy_unexpected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
-    test_eager_unexpected(static_cast<send_func>(&test_tag::tag_eager_bcopy));
+    test_eager_unexpected(static_cast<send_func>(&test_tag::tag_eager_bcopy),
+                         sender().iface_attr().cap.tag.eager.max_bcopy);
 }
 
 UCS_TEST_P(test_tag, tag_eager_zcopy_unexpected)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY);
-    test_eager_unexpected(static_cast<send_func>(&test_tag::tag_eager_zcopy));
+    test_eager_unexpected(static_cast<send_func>(&test_tag::tag_eager_zcopy),
+                         sender().iface_attr().cap.tag.eager.max_bcopy);
 }
 
 UCS_TEST_P(test_tag, tag_rndv_zcopy_unexpected)
@@ -399,7 +411,7 @@ UCS_TEST_P(test_tag, tag_send_no_tag)
   mapped_buffer lbuf(200, SEND_SEED, sender());
   ssize_t len = uct_ep_am_bcopy(sender().ep(0), 0, mapped_buffer::pack,
                                 reinterpret_cast<void*>(&lbuf));
-  EXPECT_EQ(lbuf.length(), len);
+  EXPECT_EQ(lbuf.length(), static_cast<size_t>(len));
   short_progress_loop();
   EXPECT_TRUE(is_am_received);
 }
@@ -410,7 +422,8 @@ UCS_TEST_P(test_tag, tag_cancel_force)
 
     const size_t length = 128;
     mapped_buffer recvbuf(length, RECV_SEED, receiver());
-    recv_ctx r_ctx(&recvbuf, 1);
+    recv_ctx r_ctx;
+    init_recv_ctx(r_ctx, &recvbuf, 1);
 
     ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
     short_progress_loop(200);
@@ -431,9 +444,11 @@ UCS_TEST_P(test_tag, tag_cancel_force)
 UCS_TEST_P(test_tag, tag_cancel_noforce)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
+
     const size_t length = 128;
     mapped_buffer recvbuf(length, RECV_SEED, receiver());
-    recv_ctx r_ctx(&recvbuf, 1);
+    recv_ctx r_ctx;
+    init_recv_ctx(r_ctx, &recvbuf, 1);
 
     ASSERT_UCS_OK(tag_post(receiver(), r_ctx));
     short_progress_loop(200);
@@ -450,6 +465,7 @@ UCS_TEST_P(test_tag, tag_cancel_noforce)
 UCS_TEST_P(test_tag, tag_limit)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
+
     const size_t length = 32;
     mapped_buffer recvbuf(length, RECV_SEED, receiver());
     ucs::ptr_vector<recv_ctx> rctxs;
@@ -458,7 +474,8 @@ UCS_TEST_P(test_tag, tag_limit)
 
     do {
         // Can use the same recv buffer, as no sends will be issued.
-        rctx_p = (new recv_ctx(&recvbuf, 1));
+        rctx_p = (new recv_ctx());
+        init_recv_ctx(*rctx_p, &recvbuf, 1);
         rctxs.push_back(rctx_p);
         status = tag_post(receiver(), *rctx_p);
         // Make sure send resources are acknowledged, as we
