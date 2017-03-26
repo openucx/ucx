@@ -146,9 +146,9 @@ void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
 }
 
-void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                         unsigned qp_num)
 {
-    unsigned qp_num = ep->txqp.qp->qp_num;
     uct_rc_ep_t ***ptr, **memb;
 
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
@@ -160,19 +160,16 @@ void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
     memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
-    ucs_list_add_head(&iface->ep_list, &ep->list);
 }
 
-void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, unsigned qp_num)
 {
-    unsigned qp_num = ep->txqp.qp->qp_num;
     uct_rc_ep_t **memb;
 
     memb = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
                       [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb != NULL);
     *memb = NULL;
-    ucs_list_del(&ep->list);
 }
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,

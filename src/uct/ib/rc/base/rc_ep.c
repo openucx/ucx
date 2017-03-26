@@ -144,7 +144,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface)
 
     ucs_arbiter_group_init(&self->arb_group);
 
-    uct_rc_iface_add_ep(iface, self);
+    uct_rc_iface_add_ep(iface, self, self->txqp.qp->qp_num);
+    ucs_list_add_head(&iface->ep_list, &self->list);
     return UCS_OK;
 
 err_txqp_cleanup:
@@ -159,7 +160,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
                                            uct_rc_iface_t);
     ucs_debug("destroy rc ep %p", self);
 
-    uct_rc_iface_remove_ep(iface, self);
+    uct_rc_iface_remove_ep(iface, self->txqp.qp->qp_num);
+    ucs_list_del(&self->list);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(&self->txqp);
@@ -175,6 +177,7 @@ ucs_status_t uct_rc_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->txqp.qp->qp_num);
     rc_addr->atomic_mr_id = uct_ib_iface_get_atomic_mr_id(iface);
+    rc_addr->type         = UCT_RC_EP_ADDR_TYPE_BASIC;
     return UCS_OK;
 }
 
@@ -187,6 +190,8 @@ ucs_status_t uct_rc_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *de
     const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
     struct ibv_ah_attr ah_attr;
     ucs_status_t status;
+
+    ucs_assert_always(rc_addr->type == UCT_RC_EP_ADDR_TYPE_BASIC);
 
     uct_ib_iface_fill_ah_attr(&iface->super, ib_addr, ep->path_bits, &ah_attr);
 

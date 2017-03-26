@@ -20,6 +20,9 @@
 typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
+#if HAVE_IBV_EX_HW_TM
+    struct ibv_qp          *tm_qp;
+#endif
 } uct_rc_verbs_ep_t;
 
 
@@ -34,6 +37,7 @@ typedef struct uct_rc_verbs_iface_config {
     struct {
         int                            enable;
         unsigned                       list_size;
+        unsigned                       rndv_queue_len;
     } tm;
 #endif
 } uct_rc_verbs_iface_config_t;
@@ -49,6 +53,7 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_verbs_iface_common_t verbs_common;
 #if HAVE_IBV_EX_HW_TM
     struct {
+        uct_rc_srq_t            xrq;       /* TM XRQ */
         unsigned                tag_available;
         uint8_t                 enabled;
         struct {
@@ -114,6 +119,15 @@ typedef struct uct_rc_verbs_iface {
 
 #if HAVE_IBV_EX_HW_TM
 
+/* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
+ * another one for HW (device will use it for RDMA reads and sending RNDV
+ * Complete messages).*/
+typedef struct uct_rc_verbs_ep_tm_address {
+    uct_rc_ep_address_t         super;
+    uct_ib_uint24_t             tm_qp_num;
+} UCS_S_PACKED uct_rc_verbs_ep_tm_address_t;
+
+
 #  define UCT_RC_VERBS_TAG_MIN_POSTED  33
 
 #  define UCT_RC_VERBS_TM_ENABLED(_iface) \
@@ -122,9 +136,24 @@ typedef struct uct_rc_verbs_iface {
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
 
+ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
+                                           uct_rc_verbs_ep_t *ep);
+
+ucs_status_t uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep);
+
+ucs_status_t uct_rc_verbs_ep_tag_get_address(uct_ep_h tl_ep,
+                                             uct_ep_addr_t *addr);
+
+ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
+                                               const uct_device_addr_t *dev_addr,
+                                               const uct_ep_addr_t *ep_addr);
 #else
 
-#  define UCT_RC_VERBS_TM_ENABLED(_iface)          0
+#  define UCT_RC_VERBS_TM_ENABLED(_iface)   0
+#  define uct_rc_verbs_ep_tag_qp_create     ucs_empty_function_return_unsupported
+#  define uct_rc_verbs_ep_tag_qp_destroy    ucs_empty_function_return_unsupported
+#  define uct_rc_verbs_ep_tag_get_address   ucs_empty_function_return_unsupported
+#  define uct_rc_verbs_ep_tag_connect_to_ep ucs_empty_function_return_unsupported
 
 #endif /* HAVE_IBV_EX_HW_TM */
 
@@ -154,7 +183,6 @@ void uct_rc_verbs_ep_am_packet_dump(uct_base_iface_t *iface,
                                     void *data, size_t length,
                                     size_t valid_length,
                                     char *buffer, size_t max);
-
 
 ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                        unsigned length, uint64_t remote_addr,

@@ -245,8 +245,10 @@ extern ucs_config_field_t uct_rc_fc_config_table[];
 
 void uct_rc_iface_query(uct_rc_iface_t *iface, uct_iface_attr_t *iface_attr);
 
-void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
-void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
+void uct_rc_iface_add_ep(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                         unsigned qp_num);
+
+void uct_rc_iface_remove_ep(uct_rc_iface_t *iface, unsigned qp_num);
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp);
