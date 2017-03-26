@@ -261,7 +261,6 @@ static ucs_status_t uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
     struct ibv_tm_info tm_info;
     uct_ib_md_t *ib_md   = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
-    void *tm_buf         = ucs_alloca(IBV_DEVICE_TM_CAPS(dev, max_header_size));
 
     iface->tm.enabled = UCT_RC_VERBS_TM_CONFIG(config, enable);
 
@@ -276,7 +275,7 @@ static ucs_status_t uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
                                              UCT_RC_VERBS_TM_CONFIG(config, list_size));
         /* Get NO_TAG header size */
         tm_info.op     = IBV_TM_OP_NO_TAG;
-        notag_hdr_size = ibv_pack_tm_info(dev->ibv_context, tm_buf, &tm_info);
+        notag_hdr_size = ibv_pack_tm_info(dev->ibv_context, NULL, &tm_info);
 
         ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.tag_available);
         *srq_size   = 0;
