@@ -325,17 +325,17 @@ int ucs_munmap(void *addr, size_t length)
                   length + sizeof(*buffer) + buffer->offset);
 }
 
-char *ucs_strdup(const char *src)
+char *ucs_strdup(const char *src, const char *name)
 {
-  char *str;
-  size_t len = strlen(src);
+    char *str;
+    size_t len = strlen(src);
 
-  str = ucs_malloc(len + 1, "ucs_strdup");
-  if (str) {
-    memcpy(str, src, len + 1);
-  }
+    str = ucs_malloc(len + 1, name);
+    if (str) {
+        memcpy(str, src, len + 1);
+    }
 
-  return str;
+    return str;
 }
 
 static unsigned ucs_memtrack_total_internal(ucs_memtrack_entry_t* total)
