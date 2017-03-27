@@ -473,7 +473,6 @@ static ucs_status_t uct_posix_detach(uct_mm_remote_seg_t *mm_desc)
 {
     int ret;
 
-    ucs_memtrack_releasing(&mm_desc->address);
     ret = ucs_munmap(mm_desc->address, mm_desc->length);
     if (ret != 0) {
         ucs_warn("Unable to unmap shared memory segment at %p: %m", mm_desc->address);
@@ -489,7 +488,6 @@ static ucs_status_t uct_posix_free(void *address, uct_mm_id_t mm_id, size_t leng
     int ret;
     ucs_status_t status = UCS_OK;
 
-    ucs_memtrack_releasing(&address);
     ret = ucs_munmap(address, length);
     if (ret != 0) {
         ucs_error("Unable to unmap shared memory segment at %p: %m", address);

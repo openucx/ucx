@@ -23,7 +23,7 @@ enum {
     UCS_MEMTRACK_STAT_LAST
 };
 
-#define UCS_MEMTRACK_NAME_MAX  20
+#define UCS_MEMTRACK_NAME_MAX  31
 
 /**
  * Allocation site entry.
@@ -126,6 +126,7 @@ void *ucs_mmap64(void *addr, size_t size, int prot, int flags, int fd,
                  off64_t offset, const char *name);
 #endif
 int ucs_munmap(void *addr, size_t length);
+char *ucs_strdup(const char *src, const char *name);
 
 #else
 
@@ -153,6 +154,7 @@ int ucs_munmap(void *addr, size_t length);
 #define ucs_mmap(_a, _l, _p, _fl, _fd, _o, ...)    mmap(_a, _l, _p, _fl, _fd, _o)
 #define ucs_mmap64(_a, _l, _p, _fl, _fd, _o, ...)  mmap64(_a, _l, _p, _fl, _fd, _o)
 #define ucs_munmap(_a, _l)                         munmap(_a, _l)
+#define ucs_strdup(_src, ...)                      strdup(_src)
 
 #endif /* ENABLE_MEMTRACK */
 
