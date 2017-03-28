@@ -30,7 +30,7 @@ public:
 
     struct send_ctx {
         send_ctx(mapped_buffer *b, uct_tag_t t, uint64_t i) :
-                 mbuf(b), tag(t), imm_data(i) {
+                 mbuf(b), rndv_op(NULL), tag(t), imm_data(i) {
 
             uct_comp.count = 2;
             uct_comp.func = NULL;
