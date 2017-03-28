@@ -322,7 +322,7 @@ UCS_TEST_P(test_ud, ack_req_single) {
     EXPECT_EQ(1, ack_req_tx_cnt);
     EXPECT_EQ(1, tx_ack_psn);
 
-    wait_for_flag(reinterpret_cast<unsigned*>(&rx_ack_count));
+    wait_for_flag(&rx_ack_count);
     EXPECT_EQ(2, ack_req_tx_cnt);
     EXPECT_EQ(1, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
@@ -349,7 +349,7 @@ UCS_TEST_P(test_ud, ack_req_window) {
     EXPECT_EQ(1, ack_req_tx_cnt);
     EXPECT_EQ(N/4, tx_ack_psn);
 
-    wait_for_flag(reinterpret_cast<unsigned*>(&rx_ack_count));
+    wait_for_flag(&rx_ack_count);
     EXPECT_EQ(2, ack_req_tx_cnt);
     EXPECT_EQ(N/4, tx_ack_psn);
     EXPECT_TRUE(ucs_queue_is_empty(&ep(m_e1)->tx.window));

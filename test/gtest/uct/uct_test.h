@@ -51,9 +51,6 @@ protected:
     class entity {
     public:
         entity(const resource& resource, uct_iface_config_t *iface_config,
-               size_t rx_headroom, uct_md_config_t *md_config);
-
-        entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
         void mem_alloc(size_t length, uct_allocated_memory_t *mem,
@@ -99,11 +96,6 @@ protected:
         typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const entity&);
-
-        void init_entity(const resource& resource,
-                         uct_iface_config_t *iface_config,
-                         uct_iface_params_t *params,
-                         uct_md_config_t *md_config);
 
         void reserve_ep(unsigned index);
 
@@ -163,6 +155,15 @@ protected:
         return result;
     }
 
+    template <typename T> void wait_for_flag(volatile T *flag,
+                                             double timeout = DEFAULT_TIMEOUT_SEC) const
+    {
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        while ((ucs_get_time() < deadline) && (!(*flag))) {
+            short_progress_loop();
+        }
+    }
+
     static const double DEFAULT_DELAY_MS    = 1.0;
     static const double DEFAULT_TIMEOUT_SEC = 10.0;
 
@@ -178,8 +179,6 @@ protected:
     void progress() const;
     void flush() const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
-    void wait_for_flag(volatile unsigned *flag,
-                       double timeout = DEFAULT_TIMEOUT_SEC) const;
     void wait_for_value(volatile unsigned *var, unsigned value,
                         bool progress, double timeout = DEFAULT_TIMEOUT_SEC) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;

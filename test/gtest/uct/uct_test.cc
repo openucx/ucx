@@ -151,7 +151,10 @@ void uct_test::stats_restore()
 }
 
 uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
-    entity *new_ent = new entity(*GetParam(), m_iface_config, rx_headroom,
+    uct_iface_params_t iface_params;
+
+    iface_params.rx_headroom = rx_headroom;
+    entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
     return new_ent;
 }
@@ -196,14 +199,6 @@ void uct_test::short_progress_loop(double delay_ms) const {
     }
 }
 
-void uct_test::wait_for_flag(volatile unsigned *flag, double timeout) const
-{
-    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
-    while ((ucs_get_time() < deadline) && (!(*flag))) {
-        short_progress_loop();
-    }
-}
-
 void uct_test::wait_for_value(volatile unsigned *var, unsigned value,
                               bool progress, double timeout) const
 {
@@ -232,25 +227,8 @@ void uct_test::twait(int delta_ms) const {
 }
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
-                         size_t rx_headroom, uct_md_config_t *md_config) {
-
-    uct_iface_params_t iface_params;
-
-    iface_params.rx_headroom = rx_headroom;
-
-    init_entity(resource, iface_config, &iface_params, md_config);
-}
-
-uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) {
 
-    init_entity(resource, iface_config, params, md_config);
-}
-
-void uct_test::entity::init_entity(const resource& resource,
-                                   uct_iface_config_t *iface_config,
-                                   uct_iface_params_t *params,
-                                   uct_md_config_t *md_config) {
     ucs_status_t status;
 
     params->tl_name    = const_cast<char*>(resource.tl_name.c_str());
