@@ -181,7 +181,7 @@ ssize_t uct_cm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t am_id,
     uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_SEND, hdr,
                             "TX: SIDR_REQ [id %p{%u} dlid %d svc 0x%"PRIx64"]",
                             op->id, op->id->handle, ntohs(path.dlid),
-                            req.service_id);
+                            (uint64_t)req.service_id);
     uct_cm_leave(iface);
     ucs_free(hdr);
     /* coverity[missing_unlock] */
