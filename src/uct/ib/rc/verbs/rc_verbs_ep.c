@@ -550,46 +550,52 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
-#if HAVE_IBV_EX_HW_TM
-ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
-                                           uct_rc_verbs_ep_t *ep)
+static ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
+                                                  uct_rc_verbs_ep_t *ep)
 {
+#if HAVE_IBV_EX_HW_TM
     struct ibv_qp_cap cap;
     ucs_status_t status;
     int ret;
 
-    /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
-     * such a QP to be initialized with zero send queue length. */
-    status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp,
-                                    &cap, iface->tm.xrq.srq, 0);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_rc_iface_qp_init(&iface->super, ep->tm_qp);
-    if (status != UCS_OK) {
-        ret = ibv_destroy_qp(ep->tm_qp);
-        if (ret) {
-            ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+        /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
+         * such a QP to be initialized with zero send queue length. */
+        status = uct_rc_iface_qp_create(&iface->super, IBV_QPT_RC, &ep->tm_qp,
+                                        &cap, iface->tm.xrq.srq, 0);
+        if (status != UCS_OK) {
+            return status;
         }
-        return status;
-    }
-    uct_rc_iface_add_ep(&iface->super, &ep->super, ep->tm_qp->qp_num);
 
+        status = uct_rc_iface_qp_init(&iface->super, ep->tm_qp);
+        if (status != UCS_OK) {
+            ret = ibv_destroy_qp(ep->tm_qp);
+            if (ret) {
+                ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
+            }
+            return status;
+        }
+        uct_rc_iface_add_ep(&iface->super, &ep->super, ep->tm_qp->qp_num);
+    }
+#endif
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
+static void uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                           uct_rc_iface_t);
-    if (ibv_destroy_qp(ep->tm_qp)) {
-        ucs_warn("failed to destroy TM RNDV QP: %m");
+#if HAVE_IBV_EX_HW_TM
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+        if (ibv_destroy_qp(ep->tm_qp)) {
+            ucs_warn("failed to destroy TM RNDV QP: %m");
+        }
+        uct_rc_iface_remove_ep(&iface->super, ep->tm_qp->qp_num);
     }
-    uct_rc_iface_remove_ep(iface, ep->tm_qp->qp_num);
-    return UCS_OK;
+#endif
 }
 
+#if HAVE_IBV_EX_HW_TM
 ucs_status_t uct_rc_verbs_ep_tag_get_address(uct_ep_h tl_ep,
                                              uct_ep_addr_t *addr)
 {
@@ -661,12 +667,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
     uct_worker_progress_register(iface->super.super.super.worker,
                                  iface->progress, iface);
 
-    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
-        /* Need to create QP bound to TM XRQ. This QP will be used by device
-         * for RNDV offload communications. */
-        return uct_rc_verbs_ep_tag_qp_create(iface, self);
-    }
-    return UCS_OK;
+    return uct_rc_verbs_ep_tag_qp_create(iface, self);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
@@ -676,9 +677,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    iface->progress, iface);
 
-    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
-        uct_rc_verbs_ep_tag_qp_destroy(self);
-    }
+    uct_rc_verbs_ep_tag_qp_destroy(self);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

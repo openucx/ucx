@@ -18,7 +18,10 @@
 #include <string.h>
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
+
+#if HAVE_IBV_EX_HW_TM
 static uct_rc_iface_ops_t uct_rc_verbs_tag_iface_ops;
+#endif
 
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"RC_", "", NULL,
@@ -511,6 +514,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .fc_handler               = uct_rc_iface_fc_handler
 };
 
+#if HAVE_IBV_EX_HW_TM
 static uct_rc_iface_ops_t UCS_F_MAYBE_UNUSED uct_rc_verbs_tag_iface_ops = {
     {
     {
@@ -526,6 +530,7 @@ static uct_rc_iface_ops_t UCS_F_MAYBE_UNUSED uct_rc_verbs_tag_iface_ops = {
     .fc_handler               = uct_rc_iface_fc_handler,
     .reset_qp                 = uct_rc_reset_qp
 };
+#endif
 
 static ucs_status_t uct_rc_verbs_query_resources(uct_md_h md,
                                                  uct_tl_resource_desc_t **resources_p,

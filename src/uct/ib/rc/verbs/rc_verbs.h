@@ -136,10 +136,6 @@ typedef struct uct_rc_verbs_ep_tm_address {
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
 
-ucs_status_t uct_rc_verbs_ep_tag_qp_create(uct_rc_verbs_iface_t *iface,
-                                           uct_rc_verbs_ep_t *ep);
-
-ucs_status_t uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep);
 
 ucs_status_t uct_rc_verbs_ep_tag_get_address(uct_ep_h tl_ep,
                                              uct_ep_addr_t *addr);
@@ -150,10 +146,6 @@ ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
 #else
 
 #  define UCT_RC_VERBS_TM_ENABLED(_iface)   0
-#  define uct_rc_verbs_ep_tag_qp_create     ucs_empty_function_return_unsupported
-#  define uct_rc_verbs_ep_tag_qp_destroy    ucs_empty_function_return_unsupported
-#  define uct_rc_verbs_ep_tag_get_address   ucs_empty_function_return_unsupported
-#  define uct_rc_verbs_ep_tag_connect_to_ep ucs_empty_function_return_unsupported
 
 #endif /* HAVE_IBV_EX_HW_TM */
 
