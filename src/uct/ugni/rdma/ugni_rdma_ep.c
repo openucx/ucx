@@ -3,10 +3,6 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
-#include <ucs/datastruct/sglib_wrapper.h>
-#include <ucs/debug/memtrack.h>
-#include <ucs/debug/log.h>
-#include <uct/base/uct_log.h>
 
 #include "ugni_rdma_ep.h"
 #include "ugni_rdma_iface.h"
@@ -237,9 +233,6 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     return uct_ugni_post_rdma(iface, ep, rdma);
 }
 
-#define LEN_64 (sizeof(uint64_t)) /* Length fetch and add for 64 bit */
-#define LEN_32 (sizeof(uint32_t)) /* Length fetch and add for 32 bit */
-
 static void uct_ugni_amo_unpack64(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
@@ -442,8 +435,6 @@ ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32
     return uct_ugni_post_fma(iface, ep, &fma->super, UCS_INPROGRESS);
 }
 
-/* Align to the next 4 bytes */
-
 static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, ucs_status_t status)
 {
     uct_ugni_rdma_fetch_desc_t *fma = (uct_ugni_rdma_fetch_desc_t *)
@@ -455,8 +446,6 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, ucs_status_t sta
 
     uct_ugni_invoke_orig_comp(fma, status);
 }
-
-#define UGNI_GET_ALIGN (4)
 
 static inline void uct_ugni_format_get_fma(uct_ugni_rdma_fetch_desc_t *fma,
                                            gni_post_type_t type, uint64_t

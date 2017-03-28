@@ -4,16 +4,10 @@
  * See file LICENSE for terms.
  */
 
-#include <pmi.h>
-
-#include "ucs/type/class.h"
-#include "uct/base/uct_md.h"
-
-#include <ucs/arch/cpu.h>
-#include <uct/ugni/base/ugni_iface.h>
-
-#include "ugni_rdma_iface.h"
 #include "ugni_rdma_ep.h"
+#include "ugni_rdma_iface.h"
+#include <uct/ugni/base/ugni_md.h>
+#include <uct/ugni/base/ugni_device.h>
 
 static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     /* This tuning controls the allocation priorities for bouncing buffers */

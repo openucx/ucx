@@ -4,17 +4,16 @@
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_UGNI_IFACE_H
-#define UCT_UGNI_IFACE_H
+#ifndef UCT_UGNI_SMSG_IFACE_H
+#define UCT_UGNI_SMSG_IFACE_H
 
-#include <gni_pub.h>
-#include <uct/ugni/base/ugni_md.h>
-#include <uct/ugni/base/ugni_device.h>
-#include <uct/ugni/base/ugni_iface.h>
 #include "ugni_smsg_ep.h"
+#include <uct/ugni/base/ugni_def.h>
+#include <uct/ugni/base/ugni_types.h>
+#include <uct/ugni/base/ugni_iface.h>
+#include <gni_pub.h>
 
 #define SMSG_MAX_SIZE 65535
-#define UCT_UGNI_LOCAL_CQ 8192
 
 typedef struct uct_ugni_smsg_iface {
     uct_ugni_iface_t        super;        /**< Super type */
@@ -29,7 +28,6 @@ typedef struct uct_ugni_smsg_iface {
         uint16_t            smsg_max_retransmit;
         uint16_t            smsg_max_credit; /**< Max credits for smsg boxes */
     } config;
-
     size_t bytes_per_mbox;
     uct_ugni_smsg_desc_t *       smsg_list[UCT_UGNI_HASH_SIZE]; /**< A list of descriptors currently outstanding */
 } uct_ugni_smsg_iface_t;

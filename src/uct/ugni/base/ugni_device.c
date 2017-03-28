@@ -10,13 +10,8 @@
 
 #include "ugni_device.h"
 #include "ugni_iface.h"
-
 #include <uct/base/uct_md.h>
-#include <ucs/debug/memtrack.h>
-#include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/sys.h>
-
 
 void uct_ugni_device_get_resource(const char *tl_name, uct_ugni_device_t *dev,
                                   uct_tl_resource_desc_t *resource)

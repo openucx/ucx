@@ -156,6 +156,8 @@ libuct_la_LDFLAGS  += $(CRAY_UGNI_LIBS)
 libuct_la_LIBS     += $(CRAY_UGNI_LIBS)
 
 noinst_HEADERS += \
+    ugni/base/ugni_def.h \
+    ugni/base/ugni_types.h \
     ugni/base/ugni_md.h \
     ugni/base/ugni_device.h \
     ugni/base/ugni_iface.h \

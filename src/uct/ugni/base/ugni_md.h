@@ -6,12 +6,9 @@
 #ifndef UCT_UGNI_CONTEXT_H
 #define UCT_UGNI_CONTEXT_H
 
-#include "ugni_device.h"
-
+#include "ugni_types.h"
+#include "ugni_def.h"
 #include <uct/base/uct_md.h>
-
-
-#define UCT_UGNI_MAX_DEVICES (2)
 
 /**
  * @breif Static information about UGNI job
@@ -33,29 +30,13 @@ typedef struct uct_ugni_job_info {
 extern uct_ugni_job_info_t job_info;
 extern uct_md_component_t uct_ugni_md_component;
 
-/**
- * @brief UGNI Memory domain
- *
- * Ugni does not define MD, instead I use
- * device handle that "simulates" the MD.
- * Memory that is registered with one device handle
- * can be accessed with any other.
- */
-typedef struct uct_ugni_md {
-    struct uct_md super;         /**< Domain info */
-    gni_cdm_handle_t cdm_handle; /**< Ugni communication domain */
-    gni_nic_handle_t nic_handle; /**< Ugni NIC handle */
-    uint32_t address;            /**< UGNI address */
-    int ref_count;               /**< UGNI Domain ref count */
-} uct_ugni_md_t;
-
 /** @brief Global lock for the component */
 extern pthread_mutex_t uct_ugni_global_lock;
 
 /**
  * @brief Helper function to list UGNI resources
  */
-uct_ugni_device_t * uct_ugni_device_by_name(const char *dev_name);
+uct_ugni_device_t *uct_ugni_device_by_name(const char *dev_name);
 
 static inline gni_nic_device_t uct_ugni_find_gni_device_type(int dev_id)
 {

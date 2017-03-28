@@ -7,11 +7,11 @@
 #ifndef UCT_UGNI_UDT_EP_H
 #define UCT_UGNI_UDT_EP_H
 
-#include <gni_pub.h>
+#include <uct/ugni/base/ugni_types.h>
+#include <uct/ugni/base/ugni_ep.h>
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
-#include <uct/ugni/base/ugni_ep.h>
 
 #define UCT_UGNI_UDT_ANY    0
 #define UCT_UGNI_UDT_CANCEL 1

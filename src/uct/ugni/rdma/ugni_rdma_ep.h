@@ -7,11 +7,10 @@
 #ifndef UCT_UGNI_RDMA_EP_H
 #define UCT_UGNI_RDMA_EP_H
 
-#include <gni_pub.h>
+#include <uct/ugni/base/ugni_ep.h>
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
-#include <uct/ugni/base/ugni_ep.h>
 
 
 ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,

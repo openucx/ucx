@@ -7,11 +7,13 @@
 #ifndef UCT_UGNI_SMSG_EP_H
 #define UCT_UGNI_SMSG_EP_H
 
-#include <gni_pub.h>
+#include <uct/ugni/base/ugni_types.h>
+#include <uct/ugni/base/ugni_ep.h>
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/type/class.h>
-#include <uct/ugni/base/ugni_ep.h>
+#include <ucs/datastruct/sglib_wrapper.h>
+#include <gni_pub.h>
 
 #define UCT_UGNI_SMSG_ANY 0
 
@@ -45,8 +47,17 @@ typedef struct uct_ugni_smsg_desc {
     struct uct_ugni_smsg_desc *next;
 } uct_ugni_smsg_desc_t;
 
-SGLIB_DEFINE_LIST_PROTOTYPES(uct_ugni_smsg_desc_t, uct_ugni_smsg_desc_compare, next);
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_smsg_desc_t, UCT_UGNI_HASH_SIZE, uct_ugni_smsg_desc_hash);
+UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, uct_iface_t*);
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
+
+ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                       const void *payload, unsigned length);
+ssize_t uct_ugni_smsg_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                                  uct_pack_callback_t pack_cb, void *arg);
+ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
+ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
+                                            const uct_device_addr_t *dev_addr,
+                                            const uct_ep_addr_t *ep_addr);
 
 static inline uint32_t uct_ugni_smsg_desc_compare(uct_ugni_smsg_desc_t *smsg1, uct_ugni_smsg_desc_t *smsg2)
 {
@@ -58,16 +69,7 @@ static inline unsigned uct_ugni_smsg_desc_hash(uct_ugni_smsg_desc_t *smsg)
     return smsg->msg_id;
 }
 
-ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
-                                       const void *payload, unsigned length);
-ssize_t uct_ugni_smsg_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
-                                  uct_pack_callback_t pack_cb, void *arg);
-ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
-ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
-                                            const uct_device_addr_t *dev_addr,
-                                            const uct_ep_addr_t *ep_addr);
-
-UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, uct_iface_t*);
-UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
+SGLIB_DEFINE_LIST_PROTOTYPES(uct_ugni_smsg_desc_t, uct_ugni_smsg_desc_compare, next);
+SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ugni_smsg_desc_t, UCT_UGNI_HASH_SIZE, uct_ugni_smsg_desc_hash);
 
 #endif

@@ -4,15 +4,10 @@
  * See file LICENSE for terms.
  */
 
-#include <pmi.h>
-#include "ucs/type/class.h"
-#include "uct/base/uct_md.h"
-
-#include <ucs/async/async.h>
-#include <ucs/arch/cpu.h>
-#include <uct/ugni/base/ugni_iface.h>
 #include "ugni_udt_iface.h"
 #include "ugni_udt_ep.h"
+#include <uct/ugni/base/ugni_device.h>
+#include <uct/ugni/base/ugni_md.h>
 #include <poll.h>
 
 #define UCT_UGNI_UDT_TL_NAME "ugni_udt"
