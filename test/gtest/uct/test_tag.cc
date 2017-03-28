@@ -191,8 +191,6 @@ public:
         send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
-        short_progress_loop();
-
         wait_for_flag(&r_ctx.unexp);
         if (static_cast<send_func>(&test_tag::tag_rndv_zcopy) == sfunc) {
             // Need to cancel origin RNDV operation, beacuse no RNDV_COMP
@@ -417,7 +415,7 @@ UCS_TEST_P(test_tag, tag_send_no_tag)
   ssize_t len = uct_ep_am_bcopy(sender().ep(0), 0, mapped_buffer::pack,
                                 reinterpret_cast<void*>(&lbuf));
   EXPECT_EQ(lbuf.length(), static_cast<size_t>(len));
-  short_progress_loop();
+  wait_for_flag(&is_am_received);
   EXPECT_TRUE(is_am_received);
 }
 
