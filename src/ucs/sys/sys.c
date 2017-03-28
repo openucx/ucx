@@ -69,14 +69,20 @@ void ucs_expand_path(const char *path, char *fullpath, size_t max)
 
 const char *ucs_get_exe()
 {
-    static char exe[1024];
     int ret;
 
+#if defined(__linux__)
+    static char exe[1024];
+
     ret = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
-    if (ret < 0) {
+#elif defined(__APPLE__)
+    static char exe[PROC_PIDPATHINFO_MAXSIZE];
+
+    ret = proc_pidpath(getpid(), exe, sizeof(exe) - 1);
+#endif /* OS check */
+
+    if (ret <= 0) {
         exe[0] = '\0';
-    } else {
-        exe[ret] = '\0';
     }
 
     return exe;
