@@ -169,7 +169,7 @@ UCS_TEST_P(test_rc_flow_control, general_enabled)
 
 UCS_TEST_P(test_rc_flow_control, general_disabled)
 {
-    test_general(8, 4, 2, true);
+    test_general(8, 4, 2, false);
 }
 
 /* Test the scenario when ep is being destroyed while there is
