@@ -85,6 +85,7 @@ gtest_SOURCES = \
 	uct/test_stats.cc \
 	uct/test_wakeup.cc \
 	uct/test_error_handling.cc \
+	uct/test_tag.cc \
 	\
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_memheap.cc \
