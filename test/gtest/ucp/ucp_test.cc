@@ -105,17 +105,6 @@ void ucp_test::short_progress_loop(int worker_index) const {
     }
 }
 
-void ucp_test::wait_for_flag(volatile size_t *flag, double timeout)
-{
-    ucs_time_t loop_end_limit;
-
-    loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
-
-    while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
-        short_progress_loop();
-    }
-}
-
 void ucp_test::disconnect(const entity& entity) {
     for (int i = 0; i < entity.get_num_workers(); i++) {
         entity.flush_worker(i);

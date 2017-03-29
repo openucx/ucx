@@ -421,7 +421,7 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
     EXPECT_EQ(sendbuf, recvbuf);
 
     /* sender - get the ATS and set send request to completed */
-    ucp_worker_progress(sender().worker());
+    wait_for_flag(&my_send_req->completed);
 
     EXPECT_TRUE(my_send_req->completed);
     EXPECT_EQ(UCS_OK, my_send_req->status);
