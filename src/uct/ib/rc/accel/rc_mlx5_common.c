@@ -125,7 +125,10 @@ ucs_status_t uct_rc_mlx5_iface_common_init(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    rc_iface->rx.srq.available = iface->rx.srq.mask + 1;
+    rc_iface->rx.srq.available  = ucs_min(iface->rx.srq.mask + 1,
+                                          config->super.rx.queue_init_len);
+    rc_iface->rx.srq.reserved   = iface->rx.srq.mask + 1 -
+                                  rc_iface->rx.srq.available;
     if (uct_rc_mlx5_iface_srq_post_recv(rc_iface, &iface->rx.srq) == 0) {
         ucs_error("Failed to post receives");
         return UCS_ERR_NO_MEMORY;
