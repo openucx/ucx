@@ -163,6 +163,16 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
     iface->rx.srq.available += num_wcs;
+    /* increase the limit of pre-posted RX requests if "DDoS" detected */
+    if ((num_wcs == iface->super.config.rx_max_poll) && iface->rx.srq.reserved) {
+        if (iface->rx.srq.reserved < num_wcs) {
+            iface->rx.srq.available += iface->rx.srq.reserved;
+            iface->rx.srq.reserved   = 0;
+        } else {
+            iface->rx.srq.available += num_wcs;
+            iface->rx.srq.reserved  -= num_wcs;
+        }
+    }
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
