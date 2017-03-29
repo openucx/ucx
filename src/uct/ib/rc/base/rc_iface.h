@@ -158,7 +158,8 @@ typedef struct uct_rc_iface_ops {
 
 typedef struct uct_rc_srq {
     struct ibv_srq           *srq;
-    unsigned                 available;
+    unsigned                 available; /* Requested number of RX requests */
+    unsigned                 reserved;  /* Reserved number of pre-posted RX requests */
 } uct_rc_srq_t;
 
 
