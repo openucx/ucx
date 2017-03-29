@@ -370,13 +370,6 @@ UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 class test_dc_flow_control : public test_rc_flow_control {
 public:
 
-    void init() {
-        if (UCS_OK != uct_config_modify(m_iface_config, "RC_FC_ENABLE", "y")) {
-            UCS_TEST_ABORT("Error: cannot enable flow control");
-        }
-        test_rc_flow_control::init();
-    }
-
     /* virtual */
     uct_rc_fc_t* get_fc_ptr(entity *e) {
         return &ucs_derived_of(e->ep(0), uct_dc_ep_t)->fc;

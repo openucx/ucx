@@ -55,6 +55,14 @@ public:
         uct_pending_req_t uct;
     } pending_send_request_t;
 
+    void init() {
+        /* For correct testing FC needs to be initialized during interface creation */
+        if (UCS_OK != uct_config_modify(m_iface_config, "RC_FC_ENABLE", "y")) {
+            UCS_TEST_ABORT("Error: cannot enable flow control");
+        }
+        test_rc::init();
+    }
+
     virtual uct_rc_fc_t* get_fc_ptr(entity *e) {
         return &rc_ep(e)->fc;
     }
