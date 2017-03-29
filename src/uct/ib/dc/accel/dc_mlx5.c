@@ -511,8 +511,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->super.super.super, &iface->mlx5_common.tx.cq,
-                              iface->mlx5_common.tx.cq.cqe_size_log);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super, &iface->mlx5_common.tx.cq);
     if (cqe == NULL) {
         return;
     }

@@ -384,8 +384,7 @@ ucs_status_t uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     ucs_prefetch(packet + UCT_IB_GRH_LEN);
     desc   = (uct_ib_iface_recv_desc_t *)(packet - iface->super.super.config.rx_hdr_offset);
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->rx.cq,
-                              iface->rx.cq.cqe_size_log);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->rx.cq);
     if (cqe == NULL) {
         status = UCS_ERR_NO_PROGRESS;
         goto out;
@@ -424,8 +423,7 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface)
 {
     struct mlx5_cqe64 *cqe;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->tx.cq,
-                              iface->rx.cq.cqe_size_log);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->tx.cq);
     if (cqe == NULL) {
         return;
     }

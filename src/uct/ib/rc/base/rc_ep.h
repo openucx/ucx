@@ -356,12 +356,4 @@ uct_rc_fc_req_moderation(uct_rc_fc_t *fc, uct_rc_iface_t *iface)
             UCT_RC_EP_FC_FLAG_SOFT_REQ : 0;
 }
 
-static inline void uct_rc_ep_process_tx_completion(uct_rc_iface_t *iface,
-                                                   uct_rc_ep_t *ep,
-                                                   const void *resp,
-                                                   uint16_t sn)
-{
- }
-
-
 #endif

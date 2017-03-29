@@ -31,6 +31,9 @@ protected:
 
     void disconnect() {
         flush();
+        if (m_receiver->iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+            m_receiver->destroy_ep(0);
+        }
         m_sender->destroy_ep(0);
     }
 
@@ -50,7 +53,7 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
                             buffer.memh(),
                             m_sender->iface_attr().cap.am.max_iov);
 
-    for (int i = 0; i < 100 / ucs::test_time_multiplier(); ++i) {
+    for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
         connect();
         count = 0;
         for (;;) {

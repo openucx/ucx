@@ -42,8 +42,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_t *iface)
     unsigned qp_num;
     uint16_t hw_ci;
 
-    cqe = uct_ib_mlx5_get_cqe(&iface->super.super, &iface->mlx5_common.tx.cq,
-                              iface->mlx5_common.tx.cq.cqe_size_log);
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->mlx5_common.tx.cq);
     if (cqe == NULL) {
         return;
     }

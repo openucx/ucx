@@ -396,7 +396,7 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
 
     for (i = srq_info.head; i <= srq_info.tail; ++i) {
         seg = uct_ib_mlx5_srq_get_wqe(srq, i);
-        seg->srq.ooo         = 0;
+        seg->srq.free        = 0;
         seg->srq.desc        = NULL;
         seg->dptr.byte_count = htonl(sg_byte_count);
     }
@@ -407,20 +407,9 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
 void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
 {
     uct_ib_mlx5_srq_info_t srq_info;
-    uct_ib_mlx5_srq_seg_t *seg;
     ucs_status_t status;
-    unsigned index, next;
 
     status = uct_ib_mlx5_get_srq_info(verbs_srq, &srq_info);
     ucs_assert_always(status == UCS_OK);
-
-    /* Restore order of all segments which the driver has put on its free list */
-    index = srq->tail;
-    while (index != srq_info.tail) {
-        seg = uct_ib_mlx5_srq_get_wqe(srq, index);
-        next = ntohs(seg->srq.next_wqe_index);
-        seg->srq.next_wqe_index = htons((index + 1) & srq->mask);
-        index = next;
-    }
-    srq->tail = index;
+    ucs_assert_always(srq->tail == srq_info.tail);
 }
