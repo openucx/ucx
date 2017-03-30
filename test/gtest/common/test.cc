@@ -71,12 +71,14 @@ void test_base::modify_config(const std::string& name, const std::string& value)
 
 void test_base::push_config()
 {
+    ucs_global_opts_t new_opts;
     /* save current options to the vector
      * it is important to keep the first original global options at the first
      * vector element to release it at the end. Otherwise, memtrack will not work
      */
     m_config_stack.push_back(ucs_global_opts);
-    ucs_global_opts_clone(&ucs_global_opts);
+    ucs_global_opts_clone(&new_opts);
+    ucs_global_opts = new_opts;
 }
 
 void test_base::pop_config()
