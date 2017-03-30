@@ -30,6 +30,7 @@ static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
 static void uct_ud_iface_event(int fd, void *arg);
 
+static void uct_ud_iface_slow_progress(ucs_callbackq_slow_elem_t *self);
 
 void uct_ud_iface_cep_init(uct_ud_iface_t *iface)
 {
@@ -469,6 +470,11 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.in_pending = 0;
 
     ucs_queue_head_init(&self->rx.pending_q);
+    self->ep_count = 0;
+
+    self->async.progress_enabled = 1;
+    self->async.slow_cbq_on      = 0;
+    self->async.slow_cb.cb       = uct_ud_iface_slow_progress;
 
     return UCS_OK;
 
@@ -487,6 +493,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     /* TODO: proper flush and connection termination */
     uct_ud_enter(self);
     ucs_debug("iface(%p): cep cleanup", self);
+    if (self->async.slow_cbq_on) {
+        uct_worker_slowpath_progress_unregister(self->super.super.worker,
+                                                &self->async.slow_cb);
+    }
     uct_ud_iface_cep_cleanup(self);
     uct_ud_iface_free_res_skbs(self);
     uct_ud_iface_free_async_comps(self);
@@ -597,14 +607,35 @@ void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     uint32_t prev_gen;
     ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep, &prev_gen);
+    if ((iface->ep_count == 0) && iface->async.progress_enabled) {
+        uct_worker_progress_register(iface->super.super.worker,
+                                     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                                     iface);
+        /* need to remove handler from the async */
+        ucs_debug("worker=%p iface=%p remove async handler fd=%d",
+                  iface->super.super.worker, iface, 
+                  iface->super.comp_channel->fd);
+        ucs_async_remove_handler(iface->super.comp_channel->fd, 0);
+    }
+    iface->ep_count++;
 }
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    if (ep->ep_id != UCT_UD_EP_NULL_ID) {
-        ucs_trace("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
-        ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
+    if (ep->ep_id == UCT_UD_EP_NULL_ID) {
+        return;
     }
+    ucs_trace("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
+    ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
+    iface->ep_count--;
+    if (iface->ep_count > 0) {
+        return;
+    }
+
+    uct_worker_progress_unregister(iface->super.super.worker,
+                                   ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                                   iface);
+    /* TODO: restart the async handler once we really destroy ud eps */
 }
 
 void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
@@ -724,11 +755,47 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->async_progress(iface);
 }
 
+static void uct_ud_iface_slow_progress(ucs_callbackq_slow_elem_t *self)
+{
+    uct_ud_iface_t *iface = ucs_container_of(self, uct_ud_iface_t, async.slow_cb);
+
+    uct_ud_enter(iface);
+
+    ucs_assert(iface->async.slow_cbq_on && !iface->async.progress_enabled);
+
+    uct_ud_iface_dispatch_zcopy_comps(iface);
+    uct_ud_iface_dispatch_pending_rx(iface);
+    uct_ud_iface_progress_pending(iface, 0);
+    uct_worker_slowpath_progress_unregister(iface->super.super.worker,
+                                            &iface->async.slow_cb);
+    iface->async.slow_cbq_on = 0;
+    uct_ud_leave(iface);
+}
+
 static void uct_ud_iface_event(int fd, void *arg)
 {
+    uct_ud_iface_t *iface = arg;
+
     uct_ud_enter(arg);
     ucs_trace_async("iface(%p) uct_ud_iface_event", arg);
     uct_ud_iface_async_progress(arg);
+
+    if (!iface->async.progress_enabled) {
+        uct_ib_iface_arm_tx_cq(&iface->super);
+        uct_ib_iface_arm_rx_cq(&iface->super, 0);
+        /* scedule sync progress call to deal with
+         * pending and sync AM.
+         * TODO: schedule only if there are sync am/pending
+         */
+        if (!iface->async.slow_cbq_on) {
+            uct_worker_slowpath_progress_register(iface->super.super.worker,
+                                                  &iface->async.slow_cb);
+            iface->async.slow_cbq_on = 1;
+        }
+    } else if (iface->ep_count == 0) {
+        uct_ib_iface_arm_rx_cq(&iface->super, 1);
+    }
+
     uct_ud_leave(arg);
 }
 
@@ -752,5 +819,71 @@ void uct_ud_iface_release_desc(uct_iface_t *tl_iface, void *desc)
     uct_ud_enter(iface);
     uct_ib_iface_release_desc(tl_iface, desc);
     uct_ud_leave(iface);
+}
+
+ucs_status_t 
+uct_ud_iface_progress_disable(uct_iface_t *tl_iface, uint32_t flags)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_async_context_t *async = iface->super.super.worker->async;
+    ucs_async_mode_t async_mode = async->mode;
+    ucs_status_t status;
+
+    uct_ud_enter(iface);
+    if (!iface->async.progress_enabled) {
+        status = UCS_OK;
+        goto out;
+    }
+    status = uct_ib_iface_arm_tx_cq(&iface->super);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    uct_ib_iface_arm_rx_cq(&iface->super, 0);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucs_async_set_event_handler(async_mode, iface->super.comp_channel->fd,
+                                         POLLIN, uct_ud_iface_event, iface, async);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    uct_worker_progress_unregister(iface->super.super.worker,
+                                   ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                                   iface);
+    iface->async.progress_enabled = 0;
+out:
+    uct_ud_leave(iface);
+    return status;
+}
+
+
+ucs_status_t 
+uct_ud_iface_progress_enable(uct_iface_t *tl_iface, uint32_t flags)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+
+    uct_ud_enter(iface);
+    if (iface->async.progress_enabled) {
+        uct_ud_leave(iface);
+        return UCS_OK;
+    }
+    if (iface->ep_count > 0) {
+        uct_worker_progress_register(iface->super.super.worker,
+                                     ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
+                                     iface);
+        ucs_async_remove_handler(iface->super.comp_channel->fd, 0);
+    }
+    if (iface->async.slow_cbq_on) {
+        uct_worker_slowpath_progress_unregister(iface->super.super.worker,
+                &iface->async.slow_cb);
+        iface->async.slow_cbq_on = 0;
+    }
+    iface->async.progress_enabled = 1;
+    uct_ud_leave(iface);
+
+    return UCS_OK;
 }
 

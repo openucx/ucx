@@ -26,6 +26,11 @@ public:
         unsigned        count;
     } tracer_ctx_t;
 
+    static std::vector<const resource*> enum_resources(const std::string& tl_name);
+    struct am_resource : public p2p_resource {
+        bool enable_progress;
+    };
+
     uct_p2p_am_test() :
         uct_p2p_test(sizeof(receive_desc_t)),
         m_am_count(0),
@@ -37,8 +42,18 @@ public:
     }
 
     virtual void init() {
+
         uct_p2p_test::init();
         m_am_count = 0;
+
+        const am_resource *r = dynamic_cast<const am_resource*>(GetParam());
+        if (!r->enable_progress) {
+            if ((uct_iface_progress_disable(sender().iface(), 0) != UCS_OK) &&
+                (uct_iface_progress_disable(receiver().iface(), 0) != UCS_OK)) {
+                UCS_TEST_SKIP_R("progress can not be disabled on " + r->tl_name);
+            }
+        }
+
         uct_iface_set_am_tracer(sender().iface(),   am_tracer, &m_send_tracer);
         if (&sender() != &receiver()) {
             uct_iface_set_am_tracer(receiver().iface(), am_tracer, &m_recv_tracer);
@@ -228,6 +243,37 @@ private:
     tracer_ctx_t                 m_send_tracer;
     tracer_ctx_t                 m_recv_tracer;
 };
+
+std::vector<const resource*> uct_p2p_am_test::enum_resources(const std::string& tl_name)
+{
+    static std::vector<am_resource> all_resources;
+
+    if (all_resources.empty()) {
+        std::vector<const resource*> r = uct_p2p_test::enum_resources("");
+        for (std::vector<const resource*>::iterator iter = r.begin(); iter != r.end(); ++iter) {
+            am_resource res;
+            const p2p_resource *p2p_res;
+
+            p2p_res = dynamic_cast<const p2p_resource *>(*iter); 
+
+            res.md_name    = p2p_res->md_name;
+            res.local_cpus = p2p_res->local_cpus;
+            res.tl_name    = p2p_res->tl_name;
+            res.dev_name   = p2p_res->dev_name;
+            res.dev_type   = p2p_res->dev_type;
+            res.loopback   = p2p_res->loopback;
+
+            res.enable_progress = false;
+            all_resources.push_back(res);
+
+            res.enable_progress = true;
+            all_resources.push_back(res);
+        }
+    }
+
+    return filter_resources(all_resources, tl_name);
+}
+
 
 UCS_TEST_P(uct_p2p_am_test, am_sync) {
 

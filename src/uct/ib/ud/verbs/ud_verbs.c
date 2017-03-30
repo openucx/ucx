@@ -348,6 +348,7 @@ static void uct_ud_verbs_iface_progress(void *arg)
     ucs_status_t status;
 
     uct_ud_enter(&iface->super);
+    ucs_assert(iface->super.async.progress_enabled);
     uct_ud_iface_dispatch_zcopy_comps(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (status == UCS_OK) {
@@ -465,6 +466,9 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable,
     .iface_query              = uct_ud_verbs_iface_query,
+
+    .iface_progress_enable    = uct_ud_iface_progress_enable,
+    .iface_progress_disable   = uct_ud_iface_progress_disable,
 
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_ud_verbs_ep_t),
     .ep_destroy               = uct_ud_ep_disconnect,

@@ -121,10 +121,14 @@ struct uct_ud_iface {
         unsigned             max_inline;
     } config;
     ucs_ptr_array_t       eps;
+    uint32_t              ep_count;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
         ucs_twheel_t              slow_timer;
         int                       timer_id;
+        ucs_callbackq_slow_elem_t slow_cb;
+        uint8_t                   progress_enabled;
+        uint8_t                   slow_cbq_on;
     } async;
 };
 
@@ -167,6 +171,9 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface);
 
 void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface);
+
+ucs_status_t uct_ud_iface_progress_disable(uct_iface_t *iface, uint32_t flags);
+ucs_status_t uct_ud_iface_progress_enable(uct_iface_t *iface, uint32_t flags);
 
 void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
                         void *data, size_t length, size_t valid_length,

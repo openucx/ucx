@@ -158,15 +158,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
 
     self->path_bits = iface->super.path_bits[0]; /* TODO multi-rail */
 
-    uct_worker_progress_register(iface->super.super.worker,
-                                 ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
-                                 iface);
-
-    /* need to remove handler from the async */
-    ucs_debug("worker=%p iface=%p remove async handler fd=%d",
-              iface->super.super.worker, iface, iface->super.comp_channel->fd);
-    ucs_async_remove_handler(iface->super.comp_channel->fd, 0);
-
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("NEW EP: iface=%p ep=%p id=%d src_path_bits=%d",
               iface, self, self->ep_id, self->path_bits);
@@ -202,10 +193,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
     uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
-
-    uct_worker_progress_unregister(iface->super.super.worker,
-                                   ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->progress,
-                                   iface);
 
     ucs_wtimer_remove(&self->slow_timer);
     uct_ud_iface_remove_ep(iface, self);

@@ -1078,6 +1078,43 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Disable synchronous progress for the interface
+ *
+ * Notify the transport that it should avoid doing anything
+ * during uct_worker_progress() and try to progress asynchronously. 
+ * Thus the polling latency of other transports can be reduced.
+ * 
+ * By default the progress is enabled when interface is created.
+ *
+ * @param [in]  iface    Interface to disable progress.
+ * @param [in]  flags    TODO: separately control tx/rx progress 
+ *
+ * @return error code if the progress can not be disabled
+ */
+ucs_status_t uct_iface_progress_disable(uct_iface_h iface, uint32_t flags);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Enable synchronous progress for the interface
+ *
+ * Notify the transport that it should do as much work as possible
+ * during uct_worker_progree(). 
+ * Thus the polling latency of the transport may be reduced at 
+ * the expense of other transports.
+ *
+ * By default the progress is enabled when interface is created.
+ *
+ * @param [in]  iface    Interface to enable progress.
+ * @param [in]  flags    TODO: separately control tx/rx progress 
+ *
+ * @return error code if the progress can not be enabled
+ */
+ucs_status_t uct_iface_progress_enable(uct_iface_h iface, uint32_t flags);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
  * @param [in]  iface   Interface to create the endpoint on.
