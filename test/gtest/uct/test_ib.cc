@@ -339,7 +339,7 @@ public:
         status = uct_wakeup_efd_get(wakeup_handle, &wakeup_fd.fd);
         ASSERT_EQ(status, UCS_OK);
 
-        EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
+        EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
         m_buf1 = new mapped_buffer(length, 0x1, *m_e1);
         m_buf2 = new mapped_buffer(length, 0x2, *m_e2);
@@ -434,7 +434,7 @@ UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
     ASSERT_EQ(status, UCS_OK);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
+    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
     check_send_cq(m_e1->iface(), 0);
     check_recv_cq(m_e1->iface(), 0);
 
@@ -442,7 +442,7 @@ UCS_TEST_P(test_uct_wakeup_ib, tx_cq)
     send_msg_e1_e2();
 
     /* make sure the file descriptor is signaled once */
-    ASSERT_EQ(poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()), 1);
+    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
     status = uct_wakeup_efd_arm(wakeup_handle);
     ASSERT_EQ(status, UCS_ERR_BUSY);
@@ -464,7 +464,7 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
     ASSERT_EQ(status, UCS_OK);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_EQ(poll(&wakeup_fd, 1, 0), 0);
+    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
     check_send_cq(m_e1->iface(), 0);
     check_recv_cq(m_e1->iface(), 0);
 
@@ -481,7 +481,7 @@ UCS_TEST_P(test_uct_wakeup_ib, txrx_cq)
     }
 
     /* make sure the file descriptor is signaled */
-    ASSERT_EQ(poll(&wakeup_fd, 1, 1), 1);
+    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
     status = uct_wakeup_wait(wakeup_handle);

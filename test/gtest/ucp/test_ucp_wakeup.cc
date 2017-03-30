@@ -71,7 +71,7 @@ UCS_TEST_P(test_ucp_wakeup, efd)
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
 
-    ASSERT_EQ(poll(&polled, 1, 1), 1);
+    ASSERT_EQ(1, poll(&polled, 1, 1000*ucs::test_time_multiplier()));
     EXPECT_EQ(ucp_worker_arm(recv_worker), UCS_ERR_BUSY);
 
     uint64_t recv_data = 0;
@@ -96,18 +96,18 @@ UCS_TEST_P(test_ucp_wakeup, signal)
     ASSERT_UCS_OK(ucp_worker_get_efd(worker, &efd));
 
     polled.fd = efd;
-    EXPECT_EQ(poll(&polled, 1, 0), 0);
+    EXPECT_EQ(0, poll(&polled, 1, 0));
     ASSERT_UCS_OK(ucp_worker_arm(worker));
     ASSERT_UCS_OK(ucp_worker_signal(worker));
-    EXPECT_EQ(poll(&polled, 1, 0), 1);
+    EXPECT_EQ(1, poll(&polled, 1, 0));
     ASSERT_UCS_OK(ucp_worker_arm(worker));
-    EXPECT_EQ(poll(&polled, 1, 0), 0);
+    EXPECT_EQ(0, poll(&polled, 1, 0));
 
     ASSERT_UCS_OK(ucp_worker_signal(worker));
     ASSERT_UCS_OK(ucp_worker_signal(worker));
-    EXPECT_EQ(poll(&polled, 1, 0), 1);
+    EXPECT_EQ(1, poll(&polled, 1, 0));
     ASSERT_UCS_OK(ucp_worker_arm(worker));
-    EXPECT_EQ(poll(&polled, 1, 0), 0);
+    EXPECT_EQ(0, poll(&polled, 1, 0));
 
     close(efd);
 }
