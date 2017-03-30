@@ -668,7 +668,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->device_addr_len = iface->addr_size;
 
     switch (active_speed) {
-    case 1: /* QDR/40G Eth  */
+    case 1: /* SDR */
         iface_attr->latency.overhead = 5000e-9;
         signal_rate                  = 2.5e9;
         encoding                     = 8.0/10.0;
@@ -678,14 +678,16 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         signal_rate                  = 5.0e9;
         encoding                     = 8.0/10.0;
         break;
-    case 4: /* QDR/40G Eth  */
+    case 4:
         iface_attr->latency.overhead = 1300e-9;
         if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
-            signal_rate                  = 10.3125e9;
-            encoding                     = 64.0/66.0;
+            /* 10/40g Eth  */
+            signal_rate              = 10.3125e9;
+            encoding                 = 64.0/66.0;
         } else {
-            signal_rate                  = 10.0e9;
-            encoding                     = 8.0/10.0;
+            /* QDR */
+            signal_rate              = 10.0e9;
+            encoding                 = 8.0/10.0;
         }
         break;
     case 8: /* FDR10 */
@@ -698,7 +700,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         signal_rate                  = 14.0625e9;
         encoding                     = 64.0/66.0;
         break;
-    case 32: /* QDR/40G Eth  */
+    case 32: /* EDR */
         iface_attr->latency.overhead = 600e-9;
         signal_rate                  = 25.78125e9;
         encoding                     = 64.0/66.0;
