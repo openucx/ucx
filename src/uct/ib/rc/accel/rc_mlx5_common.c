@@ -42,12 +42,12 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
         next_index = index + 1;
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index & srq->mask);
         if (UCS_CIRCULAR_COMPARE16(next_index, >, srq->free_idx)) {
-            if (!seg->srq.ooo) {
+            if (!seg->srq.free) {
                 break;
             }
 
             ucs_assert(next_index == (uint16_t)(srq->free_idx + 1));
-            seg->srq.ooo   = 0;
+            seg->srq.free  = 0;
             srq->free_idx  = next_index;
         }
 
@@ -222,3 +222,48 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
     iface->rx.cq.cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->recv_cq);
 }
 
+void uct_rc_mlx5_iface_commom_clean_srq(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
+                                        uct_rc_iface_t *rc_iface, uint32_t qpn)
+{
+    uct_ib_mlx5_cq_t *mlx5_cq = &mlx5_common_iface->rx.cq;
+    const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
+    struct mlx5_cqe64 *cqe, *dest;
+    uct_ib_mlx5_srq_seg_t *seg;
+    unsigned ci, pi, idx;
+    uint8_t owner_bit;
+    int nfreed;
+
+    pi = ci = mlx5_cq->cq_ci;
+    while (uct_ib_mlx5_poll_cq(&rc_iface->super, mlx5_cq)) {
+        if (pi == ci + mlx5_cq->cq_length - 1) {
+            break;
+        }
+        ++pi;
+    }
+    ucs_assert(pi == mlx5_cq->cq_ci);
+
+    /* Remove CQEs of the destroyed QP, so the drive would not see them and try
+     * to remove them itself, creating a mess with the free-list.
+     */
+    nfreed = 0;
+    while ((int)--pi - (int)ci >= 0) {
+        cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
+        if ((ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)) == qpn) {
+            idx = ntohs(cqe->wqe_counter);
+            seg = uct_ib_mlx5_srq_get_wqe(&mlx5_common_iface->rx.srq, idx);
+            seg->srq.free = 1;
+            ucs_trace("iface %p: freed srq seg[%d] of qpn 0x%x",
+                      mlx5_common_iface, idx, qpn);
+            ++nfreed;
+        } else if (nfreed) {
+            /* push the CQEs we want to keep to cq_ci, and move cq_ci backwards */
+            dest = uct_ib_mlx5_get_cqe(mlx5_cq, mlx5_cq->cq_ci);
+            owner_bit = dest->op_own & MLX5_CQE_OWNER_MASK;
+            memcpy((void*)(dest + 1) - cqe_sz, (void*)(cqe + 1) - cqe_sz, cqe_sz);
+            dest->op_own = (dest->op_own & ~MLX5_CQE_OWNER_MASK) | owner_bit;
+            --mlx5_cq->cq_ci;
+        }
+    }
+
+    rc_iface->rx.srq.available += nfreed;
+}

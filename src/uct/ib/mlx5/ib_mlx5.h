@@ -165,7 +165,7 @@ typedef struct uct_rc_mlx5_srq_seg {
             uint16_t                   next_wqe_index; /* Network byte order */
             uint8_t                    signature;
             uint8_t                    rsvd1[2];
-            uint8_t                    ooo;
+            uint8_t                    free;           /* Released but not posted */
             uct_ib_iface_recv_desc_t   *desc;          /* Host byte order */
         } srq;
     };

@@ -454,6 +454,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    uct_rc_mlx5_iface_progress, iface);
     uct_ib_mlx5_txwq_cleanup(iface->super.super.super.worker, &self->tx.wq);
+    uct_rc_mlx5_iface_commom_clean_srq(&iface->mlx5_common, &iface->super,
+                                       self->super.txqp.qp->qp_num);
     rc_ops->reset_qp(&iface->super, &self->super.txqp);
     uct_ib_mlx5_srq_cleanup(&iface->mlx5_common.rx.srq, iface->super.rx.srq.srq);
 }

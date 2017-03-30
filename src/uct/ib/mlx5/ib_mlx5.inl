@@ -7,20 +7,21 @@
 #include "ib_mlx5.h"
 
 
-static inline unsigned uct_ib_mlx5_cqe_size(uct_ib_mlx5_cq_t *cq)
+static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
+uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
 {
-    return 1<<cq->cqe_size_log;
+    return cq->cq_buf + ((index & (cq->cq_length - 1)) << cq->cqe_size_log);
 }
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
-uct_ib_mlx5_get_cqe(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int cqe_size_log)
+uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
     struct mlx5_cqe64 *cqe;
     unsigned index;
     uint8_t op_own;
 
     index  = cq->cq_ci;
-    cqe    = cq->cq_buf + ((index & (cq->cq_length - 1)) << cqe_size_log);
+    cqe    = uct_ib_mlx5_get_cqe(cq, index);
     op_own = cqe->op_own;
 
     if (ucs_unlikely((op_own & MLX5_CQE_OWNER_MASK) == !(index & cq->cq_length))) {
