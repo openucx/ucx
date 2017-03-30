@@ -125,11 +125,18 @@ protected:
 
     void progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
-    void wait_for_flag(volatile size_t *flag, double timeout = 10.0);
     void disconnect(const entity& entity);
     void wait(void *req, int worker_index = 0);
     static void disable_errors();
     static void restore_errors();
+
+    template <typename T>
+    void wait_for_flag(volatile T *flag, double timeout = 10.0) {
+        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+        while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
+            short_progress_loop();
+        }
+    }
 
 private:
     static void set_ucp_config(ucp_config_t *config,
