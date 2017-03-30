@@ -678,10 +678,17 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         signal_rate                  = 5.0e9;
         encoding                     = 8.0/10.0;
         break;
-    case 4: /* QDR */
+    case 4:
         iface_attr->latency.overhead = 1300e-9;
-        signal_rate                  = 10.0e9;
-        encoding                     = 8.0/10.0;
+        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_iface_port_attr(iface))) {
+            /* 10/40g Eth  */
+            signal_rate              = 10.3125e9;
+            encoding                 = 64.0/66.0;
+        } else {
+            /* QDR */
+            signal_rate              = 10.0e9;
+            encoding                 = 8.0/10.0;
+        }
         break;
     case 8: /* FDR10 */
         iface_attr->latency.overhead = 700e-9;
