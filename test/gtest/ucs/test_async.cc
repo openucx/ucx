@@ -441,9 +441,9 @@ UCS_TEST_P(test_async, ctx_event_block) {
     le.block();
     le.push_event();
     suspend_and_poll(&le, COUNT);
+    EXPECT_EQ(0, le.count());
     le.unblock();
 
-    EXPECT_EQ(0, le.count());
     le.check_miss();
     EXPECT_GE(le.count(), 1);
 }
