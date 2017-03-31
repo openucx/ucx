@@ -90,21 +90,14 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
 
         header = (uct_ugni_smsg_header_t *)data_ptr;
         user_data = (void *)(header + 1);
-        void *user_desc = iface->user_desc+1;
 
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                            tag, user_data, header->length, "RX: AM");
 
         pthread_mutex_unlock(&uct_ugni_global_lock);
         status = uct_iface_invoke_am(&iface->super.super, tag, user_data,
-                                     header->length, user_desc);
+                                     header->length, 0);
         pthread_mutex_lock(&uct_ugni_global_lock);
-
-        if(status != UCS_OK){
-            uct_recv_desc_iface(user_desc) = &iface->super.super.super;
-            UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
-                                     iface->user_desc, iface->user_desc = NULL);
-        }
 
         ugni_rc = GNI_SmsgRelease(ep->super.ep);
         if(GNI_RC_SUCCESS != ugni_rc){
@@ -237,7 +230,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
     if (!self->super.activated) {
         return;
     }
-    ucs_mpool_put(self->user_desc);
 
     ucs_mpool_cleanup(&self->free_desc, 1);
     ucs_mpool_cleanup(&self->free_mbox, 1);
@@ -465,9 +457,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
         goto clean_desc;
     }
 
-    UCT_TL_IFACE_GET_TX_DESC(&self->super.super, &self->free_desc,
-                             self->user_desc, self->user_desc = NULL);
-
     status = ugni_smsg_activate_iface(self);
     if (UCS_OK != status) {
         ucs_error("Failed to activate the interface");
@@ -491,7 +480,6 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
  clean_iface:
     ugni_smsg_deactivate_iface(self);
  clean_desc:
-    ucs_mpool_put(self->user_desc);
     ucs_mpool_cleanup(&self->free_desc, 1);
  clean_mbox:
     ucs_mpool_cleanup(&self->free_mbox, 1);

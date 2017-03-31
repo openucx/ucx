@@ -34,15 +34,14 @@ static ucs_status_t processs_datagram(uct_ugni_udt_iface_t *iface, uct_ugni_udt_
 {
     ucs_status_t status;
     uct_ugni_udt_header_t *header;
-    void *payload, *user_desc;
+    void *payload;
 
     header = uct_ugni_udt_get_rheader(desc, iface);
     payload = uct_ugni_udt_get_rpayload(desc, iface);
-    user_desc = uct_ugni_udt_get_user_desc(desc, iface);
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                        header->am_id, payload, header->length, "RX: AM");
     status = uct_iface_invoke_am(&iface->super.super, header->am_id, payload,
-                                 header->length, user_desc);
+                                 header->length, UCT_AM_FLAG_DESC);
     return status;
 }
 

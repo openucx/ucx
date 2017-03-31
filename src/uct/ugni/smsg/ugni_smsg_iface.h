@@ -31,8 +31,6 @@ typedef struct uct_ugni_smsg_iface {
     } config;
 
     size_t bytes_per_mbox;
-    uct_ugni_smsg_desc_t *user_desc;
-
     uct_ugni_smsg_desc_t *       smsg_list[UCT_UGNI_HASH_SIZE]; /**< A list of descriptors currently outstanding */
 } uct_ugni_smsg_iface_t;
 
