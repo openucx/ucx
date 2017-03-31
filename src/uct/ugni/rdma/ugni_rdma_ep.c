@@ -162,7 +162,7 @@ ucs_status_t uct_ugni_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_ugni_base_desc_t *fma;
 
     UCT_SKIP_ZERO_LENGTH(length);
-    UCT_CHECK_LENGTH(length, iface->config.fma_seg_size, "put_short");
+    UCT_CHECK_LENGTH(length, 0, iface->config.fma_seg_size, "put_short");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
                              fma, return UCS_ERR_NO_RESOURCE);
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, buffer,
@@ -196,7 +196,7 @@ ssize_t uct_ugni_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 
     length = pack_cb(fma + 1, arg);
     UCT_SKIP_ZERO_LENGTH(length, fma);
-
+    UCT_CHECK_LENGTH(length, 0, iface->config.fma_seg_size, "put_bcopy");
     uct_ugni_format_fma(fma, GNI_POST_FMA_PUT, fma + 1,
                         remote_addr, rkey, length, ep, NULL, NULL);
     ucs_trace_data("Posting PUT BCOPY, GNI_PostFma of size %"PRIx64" from %p to "
@@ -220,7 +220,7 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
 
     UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
     UCT_SKIP_ZERO_LENGTH(length);
-    UCT_CHECK_LENGTH(length, iface->config.rdma_max_size, "put_zcopy");
+    UCT_CHECK_LENGTH(length, 0, iface->config.rdma_max_size, "put_zcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc, rdma,
                              return UCS_ERR_NO_RESOURCE);
     /* Setup Callback */
@@ -535,7 +535,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     uct_ugni_rdma_fetch_desc_t *fma;
 
     UCT_SKIP_ZERO_LENGTH(length);
-    UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
+    UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN), 0,
                      iface->config.fma_seg_size, "get_bcopy");
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc_get_buffer,
                              fma, return UCS_ERR_NO_RESOURCE);
@@ -720,7 +720,7 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
 
     UCT_CHECK_PARAM_IOV(iov, iovcnt, buffer, length, memh);
     UCT_SKIP_ZERO_LENGTH(length);
-    UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN),
+    UCT_CHECK_LENGTH(ucs_align_up_pow2(length, UGNI_GET_ALIGN), 0,
                      iface->config.rdma_max_size, "get_zcopy");
 
     /* Special flow for an unalign data */

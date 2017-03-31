@@ -246,7 +246,7 @@ ucs_status_t uct_ugni_smsg_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t head
     ucs_status_t rc;
 
     UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(length, iface->config.smsg_seg_size -
+    UCT_CHECK_LENGTH(length, 0, iface->config.smsg_seg_size -
                      (sizeof(smsg_header) + sizeof(header)), "am_short");
 
     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
@@ -299,6 +299,9 @@ ssize_t uct_ugni_smsg_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     packed = pack_cb(smsg_data, arg);
 
     smsg_header->length = packed;
+
+    UCT_CHECK_LENGTH(packed, 0, iface->config.smsg_seg_size -
+                     0, "am_bcopy");    
 
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND,
                        id, smsg_data, packed, "TX: AM_BCOPY");
