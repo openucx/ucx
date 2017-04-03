@@ -11,7 +11,6 @@ extern "C" {
 #include <ucs/stats/stats.h>
 }
 
-
 std::string ucp_test::m_last_err_msg;
 
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
@@ -31,6 +30,15 @@ ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
     ASSERT_UCS_OK(status);
+
+    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
+        m_mt_num_threads = m_mt_num_workers = MT_NUM_THREADS;
+    } else if (GetParam().thread_type == MULTI_THREAD_WORKER) {
+        m_mt_num_workers = 1;
+        m_mt_num_threads = MT_NUM_THREADS;
+    } else {
+        m_mt_num_threads = m_mt_num_workers = 1;
+    }
 }
 
 ucp_test::~ucp_test() {
@@ -66,7 +74,7 @@ void ucp_test::init() {
 }
 
 ucp_test_base::entity* ucp_test::create_entity(bool add_in_front) {
-    entity *e = new entity(GetParam(), m_ucp_config);
+    entity *e = new entity(GetParam(), mt_num_workers(), m_ucp_config);
     if (add_in_front) {
         m_entities.push_front(e);
     } else {
@@ -106,7 +114,7 @@ void ucp_test::short_progress_loop(int worker_index) const {
 }
 
 void ucp_test::disconnect(const entity& entity) {
-    for (int i = 0; i < entity.get_num_workers(); i++) {
+    for (int i = 0; i < mt_num_workers(); i++) {
         entity.flush_worker(i);
         void *dreq = entity.disconnect_nb(i);
         if (!UCS_PTR_IS_PTR(dreq)) {
@@ -167,7 +175,7 @@ void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
                                             const std::string& tls,
                                             int variant,
                                             std::vector<ucp_test_param>& test_params,
-                                            int thread_type)
+                                            bool multi_thread)
 {
     std::vector<ucp_test_param> tmp_test_params, result;
 
@@ -177,8 +185,16 @@ void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
          iter != tmp_test_params.end(); ++iter)
     {
         iter->variant = variant;
-        iter->thread_type = thread_type;
-        test_params.push_back(*iter);
+        if (multi_thread) {
+            for (int thread_type = SINGLE_THREAD;
+                 thread_type <= MULTI_THREAD_WORKER; thread_type++) {
+                iter->thread_type = thread_type;
+                test_params.push_back(*iter);
+            }
+        } else {
+            iter->thread_type = SINGLE_THREAD;
+            test_params.push_back(*iter);
+        }
     }
 }
 
@@ -298,19 +314,27 @@ void ucp_test::restore_errors()
     ucs_log_pop_handler();
 }
 
-ucp_test_base::entity::entity(const ucp_test_param& test_param, ucp_config_t* ucp_config) {
+int ucp_test::mt_num_workers() const {
+    return m_mt_num_workers;
+}
+
+int ucp_test::mt_num_threads() const {
+    return m_mt_num_threads;
+}
+
+ucp_test_base::entity::entity(const ucp_test_param& test_param,
+                              int num_workers, ucp_config_t* ucp_config) :
+    m_thread_type(test_param.thread_type)
+{
     ucp_test_param entity_param = test_param;
 
-    if (test_param.thread_type == MULTI_THREAD_CONTEXT) {
-        num_workers = MT_TEST_NUM_THREADS;
+    if (m_thread_type == MULTI_THREAD_CONTEXT) {
         entity_param.ctx_params.mt_workers_shared = 1;
         entity_param.worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
-    } else if (test_param.thread_type == MULTI_THREAD_WORKER) {
-        num_workers = 1;
+    } else if (m_thread_type == MULTI_THREAD_WORKER) {
         entity_param.ctx_params.mt_workers_shared = 0;
         entity_param.worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
     } else {
-        num_workers = 1;
         entity_param.ctx_params.mt_workers_shared = 0;
         entity_param.worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
     }
@@ -337,8 +361,7 @@ ucp_test_base::entity::~entity() {
 }
 
 void ucp_test_base::entity::connect(const entity* other) {
-    assert(num_workers == other->get_num_workers());
-    for (int i = 0; i < num_workers; i++) {
+    for (size_t i = 0; i < m_workers.size(); i++) {
         ucs_status_t status;
         ucp_address_t *address;
         size_t address_length;
@@ -352,7 +375,7 @@ void ucp_test_base::entity::connect(const entity* other) {
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = address;
 
-        status = ucp_ep_create(m_workers.at(i), &ep_params, &ep);
+        status = ucp_ep_create(worker(i), &ep_params, &ep);
         ucp_test::restore_errors();
 
         if (status == UCS_ERR_UNREACHABLE) {
@@ -381,18 +404,30 @@ void ucp_test_base::entity::flush_ep(int ep_index) const {
     ASSERT_UCS_OK(status);
 }
 
+void ucp_test_base::entity::flush_all_eps() const {
+    for (std::vector<ucs::handle<ucp_ep_h> >::const_iterator iter = m_eps.begin();
+         iter != m_eps.end(); ++iter)
+    {
+        ucs_status_t status = ucp_ep_flush(*iter);
+        ASSERT_UCS_OK(status);
+    }
+}
+
 void ucp_test_base::entity::fence(int worker_index) const {
     ucs_status_t status = ucp_worker_fence(worker(worker_index));
     ASSERT_UCS_OK(status);
 }
 
 void ucp_test_base::entity::disconnect(int ep_index) {
+    if (ep_index == default_ep) {
+        ep_index = get_worker_index();
+    }
     flush_ep(ep_index);
     m_eps.at(ep_index).reset();
 }
 
 void* ucp_test_base::entity::disconnect_nb(int ep_index) const {
-    ucp_ep_h ep = revoke_ep(ep_index);
+    ucp_ep_h ep = revoke_ep((ep_index == default_ep) ? get_worker_index() : ep_index);
     if (ep == NULL) {
         return NULL;
     }
@@ -400,22 +435,33 @@ void* ucp_test_base::entity::disconnect_nb(int ep_index) const {
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
+    if (worker_index == default_worker) {
+        worker_index = get_worker_index();
+    }
     m_eps.at(worker_index).revoke();
     m_workers.at(worker_index).reset();
 }
 
 ucp_ep_h ucp_test_base::entity::ep(int ep_index) const {
-    return m_eps.at(ep_index);
+    return m_eps.at((ep_index == default_ep) ? get_worker_index() : ep_index);
 }
 
 ucp_ep_h ucp_test_base::entity::revoke_ep(int ep_index) const {
+    if (ep_index == default_ep) {
+        ep_index = get_worker_index();
+    }
     ucp_ep_h ep = m_eps.at(ep_index);
     m_eps.at(ep_index).revoke();
     return ep;
 }
 
 ucp_worker_h ucp_test_base::entity::worker(int worker_index) const {
-    return m_workers.at(worker_index);
+    return m_workers.at((worker_index == default_worker) ? get_worker_index() :
+                        worker_index);
+}
+
+int ucp_test_base::entity::get_worker_index() const {
+    return (m_thread_type == MULTI_THREAD_CONTEXT) ? UCS_GET_THREAD_ID : 0;
 }
 
 ucp_context_h ucp_test_base::entity::ucph() const {
@@ -424,11 +470,23 @@ ucp_context_h ucp_test_base::entity::ucph() const {
 
 void ucp_test_base::entity::progress(int worker_index)
 {
-    ucp_worker_progress(m_workers.at(worker_index));
+    ucp_worker_progress(worker(worker_index));
 }
 
-int ucp_test_base::entity::get_num_workers() const {
-    return num_workers;
+void ucp_test_base::entity::create_rkeys(void *rkey_buffer, std::vector<ucp_rkey_h> *rkeys) {
+    ucs_status_t status;
+    for (size_t i = 0; i < m_eps.size(); i++) {
+        ucp_rkey_h rkey;
+        status = ucp_ep_rkey_unpack(ep(i), rkey_buffer, &rkey);
+        ASSERT_UCS_OK(status);
+        (*rkeys).push_back(rkey);
+    }
+}
+
+void ucp_test_base::entity::destroy_rkeys(std::vector<ucp_rkey_h> *rkeys){
+    for (size_t i = 0; i < m_eps.size(); i++) {
+        ucp_rkey_destroy((*rkeys)[i]);
+    }
 }
 
 void ucp_test_base::entity::cleanup() {

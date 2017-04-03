@@ -30,29 +30,71 @@ public:
     {
         std::vector<ucp_test_param> result;
         generate_test_params_variant(ctx_params, worker_params, name, test_case_name, tls,
-                                     RECV_REQ_INTERNAL, result);
+                                     RECV_REQ_INTERNAL, result, true);
         generate_test_params_variant(ctx_params, worker_params, name, test_case_name, tls,
-                                     RECV_REQ_EXTERNAL, result);
+                                     RECV_REQ_EXTERNAL, result, true);
         return result;
     }
+    void do_send_recv_unexp();
+    void do_send_recv_unexp_rqfree();
+    void do_send_recv_exp_medium();
+    void do_send2_nb_recv_exp_medium();
+    void do_send_recv_nb_partial_exp_medium();
+    void do_send_nb_recv_unexp();
+    void do_send_recv_truncated();
+    void do_send_recv_nb_exp();
+    void do_send_nb_multiple_recv_unexp();
+    void do_sync_send_unexp();
+    void do_sync_send_unexp_rndv();
+    void do_rndv_req_exp();
+    void do_rndv_rts_unexp();
+    void do_rndv_truncated();
+    void do_rndv_req_exp_auto_thresh();
 };
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
+void test_ucp_tag_match::do_send_recv_unexp() {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
-    uint64_t send_data = 0xdeadbeefdeadbeef;
+    int thread_id = UCS_GET_THREAD_ID;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef + thread_id;
     uint64_t recv_data = 0;
 
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337 + thread_id);
 
     short_progress_loop(); /* Receive messages as unexpected */
 
-    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(sizeof(send_data),   info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sizeof(send_data),                 info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
+    EXPECT_EQ(send_data, recv_data);
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_recv_unexp();
+    }
+}
+
+void test_ucp_tag_match::do_send_recv_unexp_rqfree() {
+    request *my_recv_req;
+
+    int thread_id = UCS_GET_THREAD_ID;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef + thread_id;
+    uint64_t recv_data = 0;
+
+    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337 + thread_id, 0xffff);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+
+    request_free(my_recv_req);
+
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x1337 + thread_id);
+
+    wait_for_flag(&recv_data, 10.0);
     EXPECT_EQ(send_data, recv_data);
 }
 
@@ -61,58 +103,58 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_unexp_rqfree) {
         UCS_TEST_SKIP_R("request free cannot be used for external requests");
     }
 
-    request *my_recv_req;
-    uint64_t send_data = 0xdeadbeefdeadbeef;
-    uint64_t recv_data = 0;
-
-    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
-
-    request_free(my_recv_req);
-
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x1337);
-
-    wait_for_flag(&recv_data);
-    EXPECT_EQ(send_data, recv_data);
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_recv_unexp_rqfree();
+    }
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_exp_medium) {
+void test_ucp_tag_match::do_send_recv_exp_medium() {
     static const size_t size = 50000;
     request *my_recv_req;
+
+    int thread_id = UCS_GET_THREAD_ID;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
     ucs::fill_random(sendbuf);
 
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
 
-    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
 
     wait(my_recv_req);
 
-    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
+UCS_TEST_P(test_ucp_tag_match, send_recv_exp_medium) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_recv_exp_medium();
+    }
+}
+
+void test_ucp_tag_match::do_send2_nb_recv_exp_medium() {
     static const size_t size = 50000;
     request *my_recv_req;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
+    int thread_id = UCS_GET_THREAD_ID;
+
     /* 1st send */
 
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
 
-    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
 
     wait(my_recv_req);
     request_release(my_recv_req);
@@ -121,18 +163,18 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
 
     ucs::fill_random(sendbuf);
 
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
 
     request *my_send_req;
-    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     wait(my_recv_req);
 
-    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
     short_progress_loop();
@@ -145,7 +187,19 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
     request_release(my_recv_req);
 }
 
+UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send2_nb_recv_exp_medium();
+    }
+}
+
 UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") {
+    if (GetParam().thread_type != SINGLE_THREAD) {
+        /* TODO: wildcard test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("multithreading test is not supported.");
+    }
+
     static const size_t size = 3000000;
 
     entity &sender2 = sender();
@@ -234,50 +288,60 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=-1") 
     }
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
+void test_ucp_tag_match::do_send_recv_nb_partial_exp_medium() {
     static const size_t size = 50000;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
+    int thread_id = UCS_GET_THREAD_ID;
+
     ucs::fill_random(sendbuf);
 
     request *my_recv_req;
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
 
-    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
 
     usleep(1000);
     progress();
 
     wait(my_recv_req);
 
-    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
+UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_recv_nb_partial_exp_medium();
+    }
+}
+
+void test_ucp_tag_match::do_send_nb_recv_unexp() {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
-    uint64_t send_data = 0xdeadbeefdeadbeef;
+    int thread_id = UCS_GET_THREAD_ID;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef + thread_id;
     uint64_t recv_data = 0;
 
     request *my_send_req;
-    my_send_req = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+    my_send_req = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337 + thread_id);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     ucp_worker_progress(receiver().worker());
 
-    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(sizeof(send_data),   info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sizeof(send_data),                 info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
 
     if (my_send_req != NULL) {
@@ -287,70 +351,92 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
     }
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_truncated) {
+UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_nb_recv_unexp();
+    }
+}
+
+void test_ucp_tag_match::do_send_recv_truncated() {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
-    uint64_t send_data = 0xdeadbeefdeadbeef;
+    int thread_id = UCS_GET_THREAD_ID;
 
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+    uint64_t send_data = 0xdeadbeefdeadbeef + thread_id;
+
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337 + thread_id);
 
     short_progress_loop(); /* Receive messages as unexpected */
 
-    status = recv_b(NULL, 0, DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(NULL, 0, DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_recv_nb_exp) {
+UCS_TEST_P(test_ucp_tag_match, send_recv_truncated) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_recv_truncated();
+    }
+}
 
-    uint64_t send_data = 0xdeadbeefdeadbeef;
+void test_ucp_tag_match::do_send_recv_nb_exp() {
+    int thread_id = UCS_GET_THREAD_ID;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef + thread_id;
     uint64_t recv_data = 0;
 
     request *my_recv_req;
-    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff);
+
+    my_recv_req = recv_nb(&recv_data, sizeof(recv_data), DATATYPE, 0x1337 + thread_id, 0xffff);
 
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
 
-    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+    send_b(&send_data, sizeof(send_data), DATATYPE, 0x111337 + thread_id);
 
     wait(my_recv_req);
 
     EXPECT_TRUE(my_recv_req->completed);
-    EXPECT_EQ(UCS_OK,              my_recv_req->status);
-    EXPECT_EQ(sizeof(send_data),   my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(UCS_OK,                            my_recv_req->status);
+    EXPECT_EQ(sizeof(send_data),                 my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), my_recv_req->info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
-    const unsigned num_requests = 1000;
+UCS_TEST_P(test_ucp_tag_match, send_recv_nb_exp) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_recv_nb_exp();
+    }
+}
+
+void test_ucp_tag_match::do_send_nb_multiple_recv_unexp() {
+    const unsigned num_requests = 1000 / mt_num_threads();
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
-    uint64_t send_data = 0xdeadbeefdeadbeef;
+    int thread_id = UCS_GET_THREAD_ID;
+
+    uint64_t send_data = 0xdeadbeefdeadbeef + thread_id;
     uint64_t recv_data = 0;
 
     std::vector<request*> send_reqs(num_requests);
 
-    skip_loopback();
-
     for (unsigned i = 0; i < num_requests; ++i) {
-        send_reqs[i] = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337);
+        send_reqs[i] = send_nb(&send_data, sizeof(send_data), DATATYPE, 0x111337 + thread_id);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(send_reqs[i]));
     }
 
     ucp_worker_progress(receiver().worker());
 
     for (unsigned i = 0; i < num_requests; ++i) {
-        status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff,
+        status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337 + thread_id, 0xffff,
                         &info);
         ASSERT_UCS_OK(status);
         ASSERT_EQ(num_requests, send_reqs.size());
 
-        EXPECT_EQ(sizeof(send_data),   info.length);
-        EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+        EXPECT_EQ(sizeof(send_data),                 info.length);
+        EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
         EXPECT_EQ(send_data, recv_data);
     }
 
@@ -363,15 +449,24 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
     }
 }
 
-UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
+UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
+    skip_loopback();
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_send_nb_multiple_recv_unexp();
+    }
+}
+
+void test_ucp_tag_match::do_sync_send_unexp() {
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
-    uint64_t send_data = 0x0102030405060708;
+    int thread_id = UCS_GET_THREAD_ID;
+
+    uint64_t send_data = 0x0102030405060708 + thread_id;
     uint64_t recv_data = 0;
 
     request *my_send_req = send_sync_nb(&send_data, sizeof(send_data), DATATYPE,
-                                        0x111337);
+                                        0x111337 + thread_id);
     short_progress_loop();
 
     ASSERT_TRUE(my_send_req != NULL);
@@ -379,11 +474,11 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
 
     ucp_worker_progress(receiver().worker());
 
-    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recv_data, sizeof(recv_data), DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(sizeof(send_data),   info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sizeof(send_data),                 info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
 
     short_progress_loop();
@@ -393,11 +488,19 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
     request_release(my_send_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_sync_send_unexp();
+    }
+}
+
+void test_ucp_tag_match::do_sync_send_unexp_rndv() {
     static const size_t size = 1148576;
     request *my_send_req;
     ucp_tag_recv_info_t info;
     ucs_status_t status;
+
+    int thread_id = UCS_GET_THREAD_ID;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
@@ -405,7 +508,7 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
     ucs::fill_random(sendbuf);
 
     /* sender - send the rts*/
-    my_send_req = send_sync_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    my_send_req = send_sync_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
     /* receiver - get the rts and put in unexpected */
     short_progress_loop();
 
@@ -413,39 +516,51 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
     EXPECT_FALSE(my_send_req->completed);
 
     /* receiver - issue a recv req, match the rts, perform rndv-get and send ats to sender */
-    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(sendbuf.size(), info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
     /* sender - get the ATS and set send request to completed */
-    wait_for_flag(&my_send_req->completed);
+    wait_for_flag(&my_send_req->completed, 10.0);
 
     EXPECT_TRUE(my_send_req->completed);
     EXPECT_EQ(UCS_OK, my_send_req->status);
     request_release(my_send_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match, sync_send_unexp_rndv, "RNDV_THRESH=1048576") {
+    if (GetParam().thread_type != SINGLE_THREAD) {
+        /* TODO: rndv test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("multithreading test is not supported.");
+    }
+
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_sync_send_unexp_rndv();
+    }
+}
+
+void test_ucp_tag_match::do_rndv_req_exp() {
     static const size_t size = 1148576;
     request *my_send_req, *my_recv_req;
+
+    int thread_id = UCS_GET_THREAD_ID;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    skip_loopback();
-
     ucs::fill_random(sendbuf);
 
     /* receiver - put the receive request into expected */
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     EXPECT_FALSE(my_recv_req->completed);
 
     /* sender - send the RTS */
-    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     /* receiver - match the rts, perform rndv get and send an ack upon finishing */
@@ -453,8 +568,8 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
     /* for UCTs that cannot perform real rndv and may do eager send-recv bcopy instead */
     wait(my_recv_req);
 
-    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), my_recv_req->info.sender_tag);
     EXPECT_TRUE(my_recv_req->completed);
     EXPECT_EQ(sendbuf, recvbuf);
 
@@ -462,84 +577,126 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
     request_release(my_recv_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match, rndv_req_exp, "RNDV_THRESH=1048576") {
+    if (GetParam().thread_type == MULTI_THREAD_WORKER) {
+        /* TODO: rndv test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("worker-level multithreading test is not supported.");
+    }
+
+    skip_loopback();
+
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_rndv_req_exp();
+    }
+}
+
+void test_ucp_tag_match::do_rndv_rts_unexp(){
     static const size_t size = 1148576;
     request *my_send_req;
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
+    int thread_id = UCS_GET_THREAD_ID;
+
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
-
-    skip_loopback();
 
     ucs::fill_random(sendbuf);
 
     /* sender - send the RTS */
-    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     /* receiver - get the RTS and put it into unexpected */
     short_progress_loop();
 
     /* receiver - issue a receive request, match it with the RTS and perform rndv get */
-    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     ASSERT_UCS_OK(status);
 
     /* sender - get the ATS and set send request to completed */
     wait_and_validate(my_send_req);
 
-    EXPECT_EQ(sendbuf.size()     , info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
+UCS_TEST_P(test_ucp_tag_match, rndv_rts_unexp, "RNDV_THRESH=1048576") {
+    if (GetParam().thread_type == MULTI_THREAD_WORKER) {
+        /* TODO: rndv test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("worker-level multithreading test is not supported.");
+    }
+
+    skip_loopback();
+
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_rndv_rts_unexp();
+    }
+}
+
+void test_ucp_tag_match::do_rndv_truncated() {
     static const size_t size = 1148576;
     request *my_send_req;
     ucp_tag_recv_info_t info;
     ucs_status_t status;
 
+    int thread_id = UCS_GET_THREAD_ID;
+
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
-
-    skip_loopback();
 
     ucs::fill_random(sendbuf);
 
     /* sender - send the RTS */
-    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     /* receiver - get the RTS and put it into unexpected */
     short_progress_loop();
 
     /* receiver - issue a receive request, match it with the RTS and perform rndv get */
-    status = recv_b(&recvbuf[0], (recvbuf.size())/2, DATATYPE, 0x1337, 0xffff, &info);
+    status = recv_b(&recvbuf[0], (recvbuf.size())/2, DATATYPE, 0x1337 + thread_id, 0xffff, &info);
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, status);
 
     /* sender - get the ATS and set send request to completed */
     wait_and_validate(my_send_req);
 }
 
-UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
+UCS_TEST_P(test_ucp_tag_match, rndv_truncated, "RNDV_THRESH=1048576") {
+    if (GetParam().thread_type == MULTI_THREAD_WORKER) {
+        /* TODO: rndv test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("worker-level multithreading test is not supported.");
+    }
+
+    skip_loopback();
+
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_rndv_truncated();
+    }
+}
+
+void test_ucp_tag_match::do_rndv_req_exp_auto_thresh() {
     static const size_t size = 1148576;
     request *my_send_req, *my_recv_req;
+
+    int thread_id = UCS_GET_THREAD_ID;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
-    skip_loopback();
-
     ucs::fill_random(sendbuf);
 
     /* receiver - put the receive request into expected */
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
+    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337 + thread_id, 0xffff);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
     EXPECT_FALSE(my_recv_req->completed);
 
     /* sender - send the RTS */
-    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
+    my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337 + thread_id);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
     /* receiver - match the rts, perform rndv get and send an ack upon finishing */
@@ -547,14 +704,28 @@ UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
     /* for UCTs that cannot perform real rndv and may do eager send-recv bcopy instead */
     wait(my_recv_req);
 
-    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),                    my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)(0x111337 + thread_id), my_recv_req->info.sender_tag);
     EXPECT_TRUE(my_recv_req->completed);
     EXPECT_EQ(sendbuf, recvbuf);
 
     /* sender - get the ATS and set send request to completed */
     wait_and_validate(my_send_req);
     request_release(my_recv_req);
+}
+
+UCS_TEST_P(test_ucp_tag_match, rndv_req_exp_auto_thresh, "RNDV_THRESH=auto") {
+    if (GetParam().thread_type == MULTI_THREAD_WORKER) {
+        /* TODO: rndv test needs to be modified in order to accomodate
+         * multithreading test. */
+        UCS_TEST_SKIP_R("worker-level multithreading test is not supported.");
+    }
+
+    skip_loopback();
+
+    UCS_OMP_PARALLEL_FOR(thread_id) {
+        do_rndv_req_exp_auto_thresh();
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)

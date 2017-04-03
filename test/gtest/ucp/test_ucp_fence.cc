@@ -5,12 +5,29 @@
 */
 
 #include "test_ucp_atomic.h"
+extern "C" {
+#include <ucp/core/ucp_context.h>
+}
 
 class test_ucp_fence : public test_ucp_atomic {
 public:
     typedef void (test_ucp_fence::* send_func_t)(entity *e, uint64_t *initial_buf,
                                                  uint64_t *result_buf, void *memheap_addr,
                                                  ucp_rkey_h rkey);
+
+    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
+                                                        const ucp_worker_params_t& worker_params,
+                                                        const std::string& name,
+                                                        const std::string& test_case_name,
+                                                        const std::string& tls) {
+        std::vector<ucp_test_param> result;
+        for (int variant = UCP_ATOMIC_MODE_CPU; variant < UCP_ATOMIC_MODE_LAST; variant++) {
+            generate_test_params_variant(ctx_params, worker_params, name, test_case_name,
+                                         tls, variant, result, true);
+        }
+        return result;
+    }
+
 
     template <typename T>
     void blocking_add(entity *e, uint64_t *initial_buf, uint64_t *result_buf,
@@ -61,7 +78,7 @@ public:
             test(test), value(initial_value), result(0), error(error),
             running(true), m_rkey(rkey), m_memheap(memheap_ptr),
             m_send_1(send1), m_send_2(send2), m_entity(entity) {
-            pthread_create(&m_thread, NULL, run, reinterpret_cast<void*>(this));
+            run();
         }
 
         ~worker() {
@@ -75,8 +92,6 @@ public:
         }
 
         void join() {
-            void *retval;
-            pthread_join(m_thread, &retval);
             running = false;
         }
 
@@ -88,7 +103,6 @@ public:
     private:
         void run() {
             uint64_t zero = 0;
-
             for (int i = 0; i < 500 / ucs::test_time_multiplier(); i++) {
                 (test->*m_send_1)(m_entity, &value, &result,
                                   m_memheap, m_rkey);
@@ -111,7 +125,6 @@ public:
         void *m_memheap;
         send_func_t m_send_1, m_send_2;
         entity* m_entity;
-        pthread_t m_thread;
     };
 
     void run_workers(send_func_t send1, send_func_t send2, entity* sender,
@@ -127,7 +140,7 @@ public:
 
 protected:
     void test_fence(send_func_t send1, send_func_t send2, size_t alignment) {
-        static const size_t memheap_size = sizeof(uint64_t);
+        size_t memheap_size = sizeof(uint64_t) * mt_num_threads();
         ucs_status_t status;
 
         ucp_mem_map_params_t params;
@@ -137,9 +150,6 @@ protected:
 
         void *rkey_buffer;
         size_t rkey_buffer_size;
-        ucp_rkey_h rkey;
-
-        uint32_t error = 0;
 
         sender().connect(&receiver());
         if (&sender() != &receiver()) {
@@ -176,16 +186,20 @@ protected:
         status = ucp_rkey_pack(receiver().ucph(), memh, &rkey_buffer, &rkey_buffer_size);
         ASSERT_UCS_OK(status);
 
-        status = ucp_ep_rkey_unpack(sender().ep(), rkey_buffer, &rkey);
-        ASSERT_UCS_OK(status);
+        std::vector<ucp_rkey_h> rkeys;
+        sender().create_rkeys(rkey_buffer, &rkeys);
 
         ucp_rkey_buffer_release(rkey_buffer);
 
-        run_workers(send1, send2, &sender(), rkey, memheap, 1, &error);
+        UCS_OMP_PARALLEL_FOR(thread_id) {
+            uint32_t error = 0;
+            run_workers(send1, send2, &sender(), rkeys[sender().get_worker_index()],
+                        (void *)((uintptr_t)memheap + thread_id * sizeof(uint64_t)),
+                        1, &error);
+            EXPECT_EQ(error, (uint32_t)0);
+        }
 
-        EXPECT_EQ(error, (uint32_t)0);
-
-        ucp_rkey_destroy(rkey);
+        sender().destroy_rkeys(&rkeys);
         status = ucp_mem_unmap(receiver().ucph(), memh);
         ASSERT_UCS_OK(status);
 

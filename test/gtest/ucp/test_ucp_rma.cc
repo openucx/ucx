@@ -26,10 +26,10 @@ public:
     {
         std::vector<ucp_test_param> result;
         generate_test_params_variant(ctx_params, worker_params, name, test_case_name,
-                                     tls, 0, result);
+                                     tls, 0, result, true);
         generate_test_params_variant(ctx_params, worker_params, name,
                                      test_case_name + "/map_nb",
-                                     tls, UCP_MEM_MAP_NONBLOCK, result);
+                                     tls, UCP_MEM_MAP_NONBLOCK, result, true);
         return result;
     }
 
