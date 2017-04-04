@@ -271,81 +271,44 @@ typedef struct uct_linear_growth {
 } uct_linear_growth_t;
 
 
+/*
+ * @ingroup UCT_RESOURCE
+ * @brief UCT protocol attributes
+ *
+ * This structure specifies common attributes of UCT protocols.
+ */
+typedef struct uct_proto_attr  {
+    size_t           max_short;  /**< Maximal size for short protocol */
+    size_t           max_bcopy;  /**< Maximal size for bcopy protocol */
+    size_t           min_zcopy;  /**< Minimal size for zcopy */
+    size_t           max_zcopy;  /**< Maximal size for zcopy protocol */
+    size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
+                                      buffer address */
+    size_t           align_mtu;       /**< MTU used for alignment */
+    size_t           max_hdr;    /**< Maximal header size for zcopy */
+    size_t           max_iov;    /**< Maximal @a iovcnt parameter */
+} uct_proto_attr_t;
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface attributes: capabilities and limitations.
  */
 struct uct_iface_attr {
     struct {
-        struct {
-            size_t           max_short;  /**< Maximal size for put_short */
-            size_t           max_bcopy;  /**< Maximal size for put_bcopy */
-            size_t           min_zcopy;  /**< Minimal size for put_zcopy (total
-                                              of @ref uct_iov_t::length of the
-                                              @a iov parameter) */
-            size_t           max_zcopy;  /**< Maximal size for put_zcopy (total
-                                              of @ref uct_iov_t::length of the
-                                              @a iov parameter) */
-            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
-                                              buffer address */
-            size_t           align_mtu;       /**< MTU used for alignment */
-            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
-                                              @ref ::uct_ep_put_zcopy
-                                              @anchor uct_iface_attr_cap_put_max_iov */
-        } put;                           /**< Attributes for PUT operations */
+        uct_proto_attr_t     put; /**< Protocol attributes for PUT operations */
+        uct_proto_attr_t     get; /**< Protocol attributes for GET operations */
+        uct_proto_attr_t     am;  /**< Protocol attributes for AM operations */
 
         struct {
-            size_t           max_bcopy;  /**< Maximal size for get_bcopy */
-            size_t           min_zcopy;  /**< Minimal size for get_zcopy (total
-                                              of @ref uct_iov_t::length of the
-                                              @a iov parameter) */
-            size_t           max_zcopy;  /**< Maximal size for get_zcopy (total
-                                              of @ref uct_iov_t::length of the
-                                              @a iov parameter) */
-            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
-                                              buffer address */
-            size_t           align_mtu;       /**< MTU used for alignment */
-            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
-                                              @ref uct_ep_get_zcopy
-                                              @anchor uct_iface_attr_cap_get_max_iov */
-        } get;                           /**< Attributes for GET operations */
+            uct_proto_attr_t eager; /**< Protocol attributes for eager operations */
 
-        struct {
-            size_t           max_short;  /**< Total max. size (incl. the header) */
-            size_t           max_bcopy;  /**< Total max. size (incl. the header) */
-            size_t           min_zcopy;  /**< Minimal size for am_zcopy (incl. the
-                                              header and total of @ref uct_iov_t::length
-                                              of the @a iov parameter) */
-            size_t           max_zcopy;  /**< Total max. size (incl. the header
-                                              and total of @ref uct_iov_t::length
-                                              of the @a iov parameter) */
-            size_t           opt_zcopy_align; /**< Optimal alignment for zero-copy
-                                              buffer address */
-            size_t           align_mtu;       /**< MTU used for alignment */
-            size_t           max_hdr;    /**< Max. header size for zcopy */
-            size_t           max_iov;    /**< Maximal @a iovcnt parameter in
-                                              @ref ::uct_ep_am_zcopy
-                                              @anchor uct_iface_attr_cap_am_max_iov */
-        } am;                            /**< Attributes for AM operations */
-
-        struct {
             struct {
                 size_t       min_recv;   /**< Minimal allowed length of posted receive buffer */
                 size_t       max_iov;    /**< Maximal @a iovcnt parameter in
                                               @ref uct_iface_tag_recv_zcopy
                                               @anchor uct_iface_attr_cap_tag_recv_iov */
             } recv;
-
-            struct {
-                  size_t     max_short;  /**< Maximal allowed data length in
-                                              @ref uct_ep_tag_eager_short */
-                  size_t     max_bcopy;  /**< Maximal allowed data length in
-                                              @ref uct_ep_tag_eager_bcopy */
-                  size_t     max_zcopy;  /**< Maximal allowed data length in
-                                              @ref uct_ep_tag_eager_zcopy */
-                  size_t     max_iov;    /**< Maximal @a iovcnt parameter in
-                                              @ref uct_ep_tag_eager_zcopy */
-            } eager;                     /**< Attributes related to eager protocol */
 
             struct {
                   size_t     max_zcopy;  /**< Maximal allowed data length in
