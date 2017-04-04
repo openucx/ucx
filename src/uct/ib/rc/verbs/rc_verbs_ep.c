@@ -595,30 +595,35 @@ static void uct_rc_verbs_ep_tag_qp_destroy(uct_rc_verbs_ep_t *ep)
 #endif
 }
 
-#if HAVE_IBV_EX_HW_TM
-ucs_status_t uct_rc_verbs_ep_tag_get_address(uct_ep_h tl_ep,
-                                             uct_ep_addr_t *addr)
+static ucs_status_t uct_rc_verbs_ep_tag_get_address(uct_ep_h tl_ep,
+                                                    uct_ep_addr_t *addr)
 {
+#if HAVE_IBV_EX_HW_TM
     ucs_status_t status;
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_verbs_ep_tm_address_t *tm_addr = (uct_rc_verbs_ep_tm_address_t*)addr;
 
+
     status = uct_rc_ep_get_address(tl_ep, (uct_ep_addr_t*)&tm_addr->super);
-    if (status == UCS_OK) {
-        uct_ib_pack_uint24(tm_addr->tm_qp_num, ep->tm_qp->qp_num);
-        /* Redefine address type */
-        tm_addr->super.type = UCT_RC_EP_ADDR_TYPE_TM;
+    if (status != UCS_OK) {
+        return status;
     }
-    return status;
+
+    uct_ib_pack_uint24(tm_addr->tm_qp_num, ep->tm_qp->qp_num);
+    /* Redefine address type */
+    tm_addr->super.type = UCT_RC_EP_ADDR_TYPE_TM;
+#endif
+    return UCS_OK;
 }
 
 /* For HW TM we need 2 QPs, one of which will be used by the device for
  * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs should
  * be posted to the send side of the QP which is owned by device. */
-ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
-                                               const uct_device_addr_t *dev_addr,
-                                               const uct_ep_addr_t *ep_addr)
+static ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
+                                                      const uct_device_addr_t *dev_addr,
+                                                      const uct_ep_addr_t *ep_addr)
 {
+#if HAVE_IBV_EX_HW_TM
     ucs_status_t status;
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
@@ -635,7 +640,7 @@ ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
      * on the peer. */
     status = uct_rc_iface_qp_connect(iface, ep->super.txqp.qp,
                                      uct_ib_unpack_uint24(tm_addr->tm_qp_num),
-                                     &ah_attr, tm_addr->super.atomic_mr_id);
+                                     &ah_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -643,16 +648,46 @@ ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
     /* Connect local QP owned by device (and bound to XRQ) to peer's ep QP */
     status = uct_rc_iface_qp_connect(iface, ep->tm_qp,
                                      uct_ib_unpack_uint24(tm_addr->super.qp_num),
-                                     &ah_attr, tm_addr->super.atomic_mr_id);
+                                     &ah_attr);
     if (status != UCS_OK) {
         return status;
     }
 
     ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(tm_addr->super.atomic_mr_id);
+#endif
 
     return UCS_OK;
 }
-#endif /* HAVE_IBV_HW_TM */
+
+ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
+{
+    ucs_status_t status;
+    uct_rc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                              uct_rc_verbs_iface_t);
+    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+        status = uct_rc_verbs_ep_tag_get_address(tl_ep, addr);
+    } else {
+        status = uct_rc_ep_get_address(tl_ep, addr);
+    }
+
+    return status;
+}
+
+ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                                           const uct_device_addr_t *dev_addr,
+                                           const uct_ep_addr_t *ep_addr)
+{
+    ucs_status_t status;
+    uct_rc_verbs_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
+                                                              uct_rc_verbs_iface_t);
+    if (UCT_RC_VERBS_TM_ENABLED(iface)) {
+        status = uct_rc_verbs_ep_tag_connect_to_ep(tl_ep, dev_addr, ep_addr);
+    } else {
+        status = uct_rc_ep_connect_to_ep(tl_ep, dev_addr, ep_addr);
+    }
+
+    return status;
+}
 
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)

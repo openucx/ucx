@@ -136,13 +136,6 @@ typedef struct uct_rc_verbs_ep_tm_address {
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
 
-
-ucs_status_t uct_rc_verbs_ep_tag_get_address(uct_ep_h tl_ep,
-                                             uct_ep_addr_t *addr);
-
-ucs_status_t uct_rc_verbs_ep_tag_connect_to_ep(uct_ep_h tl_ep,
-                                               const uct_device_addr_t *dev_addr,
-                                               const uct_ep_addr_t *ep_addr);
 #else
 
 #  define UCT_RC_VERBS_TM_ENABLED(_iface)   0
@@ -242,6 +235,12 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, ui
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp);
+
+ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                                           const uct_device_addr_t *dev_addr,
+                                           const uct_ep_addr_t *ep_addr);
+
+ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 void uct_rc_verbs_iface_progress(void *arg);
 

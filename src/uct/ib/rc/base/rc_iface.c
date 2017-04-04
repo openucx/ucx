@@ -626,8 +626,7 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
-                                     struct ibv_ah_attr *ah_attr,
-                                     uint8_t atomic_mr_id)
+                                     struct ibv_ah_attr *ah_attr)
 {
     struct ibv_qp_attr qp_attr;
     int ret;
@@ -674,13 +673,12 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     }
 
     ucs_debug("connected rc qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
-              "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d "
-              "atomic_mr_offset 0x%0x", qp->qp_num,
-              UCT_IB_IFACE_ARG(&iface->super), ah_attr->dlid,
+              "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
+              qp->qp_num, UCT_IB_IFACE_ARG(&iface->super), ah_attr->dlid,
               ah_attr->src_path_bits, ah_attr->sl, qp_attr.dest_qp_num,
               uct_ib_mtu_value(qp_attr.path_mtu), qp_attr.timeout,
               qp_attr.retry_cnt, qp_attr.min_rnr_timer, qp_attr.rnr_retry,
-              qp_attr.max_rd_atomic, uct_ib_md_atomic_offset(atomic_mr_id));
+              qp_attr.max_rd_atomic);
 
     return UCS_OK;
 }
