@@ -175,8 +175,8 @@ ucs_status_t uct_ugni_udt_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t heade
 
     UCS_ASYNC_BLOCK(iface->super.super.worker->async);
 
-    UCT_CHECK_LENGTH(length, iface->config.udt_seg_size - sizeof(header) -
-                     sizeof(uct_ugni_udt_header_t), "am_short");
+    UCT_CHECK_LENGTH(length, 0,
+                     iface->config.udt_seg_size - sizeof(header) - sizeof(uct_ugni_udt_header_t), "am_short");
     ucs_trace_data("AM_SHORT [%p] am_id: %d buf=%p length=%u",
                    iface, id, payload, length);
     ucs_status_t status = uct_ugni_udt_ep_am_common_send(UCT_UGNI_UDT_AM_SHORT, ep, iface, id, length,
