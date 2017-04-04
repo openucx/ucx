@@ -14,7 +14,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
 #include <ucs/time/time.h>
-
+#include <fnmatch.h>
 
 typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
@@ -1139,3 +1139,18 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
         return ucs_min(config_size, max_size);
     }
 }
+
+int ucs_config_names_search(ucs_config_names_array_t config_names,
+                            const char *str)
+{
+    unsigned i;
+
+    for (i = 0; i < config_names.count; ++i) {
+        if (!fnmatch(config_names.names[i], str, 0)) {
+           return i;
+        }
+    }
+
+    return -1;
+}
+
