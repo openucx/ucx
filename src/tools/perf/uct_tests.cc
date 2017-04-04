@@ -132,7 +132,8 @@ public:
         }
     }
 
-   static ucs_status_t am_hander(void *arg, void *data, size_t length, void *desc)
+    static ucs_status_t am_hander(void *arg, void *data, size_t length,
+                                  unsigned flags)
     {
         ucs_assert(UCS_CIRCULAR_COMPARE8(*(psn_t*)arg, <=, *(psn_t*)data));
         *(psn_t*)arg = *(psn_t*)data;

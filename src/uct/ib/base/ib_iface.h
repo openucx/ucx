@@ -182,13 +182,14 @@ void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc);
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_ib_iface_invoke_am(uct_ib_iface_t *iface, uint8_t am_id, void *data,
-                       unsigned length, uct_ib_iface_recv_desc_t *ib_desc)
+uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
+                            unsigned length, uct_ib_iface_recv_desc_t *ib_desc)
 {
     void *desc = (char*)ib_desc + iface->config.rx_headroom_offset;
     ucs_status_t status;
 
-    status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
+    status = uct_iface_invoke_am(&iface->super, am_id, data, length,
+                                 UCT_AM_FLAG_DESC);
     if (status == UCS_OK) {
         ucs_mpool_put_inline(ib_desc);
     } else {

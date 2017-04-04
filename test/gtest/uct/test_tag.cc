@@ -302,7 +302,8 @@ public:
         return UCS_OK;
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length, void *desc) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags) {
         is_am_received = true;
         return UCS_OK;
     }
@@ -497,5 +498,3 @@ UCS_TEST_P(test_tag, tag_limit)
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_tag, rc)
-
-

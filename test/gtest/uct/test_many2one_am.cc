@@ -13,7 +13,8 @@ extern "C" {
 class test_many2one_am : public uct_test {
 public:
     static const uint8_t  AM_ID = 15;
-    static const uint64_t MAGIC = 0xdeadbeef12345678ul;
+    static const uint64_t MAGIC_DESC  = 0xdeadbeef12345678ul;
+    static const uint64_t MAGIC_ALLOC = 0xbaadf00d12345678ul;
 
     typedef struct {
         uint64_t magic;
@@ -23,22 +24,30 @@ public:
     test_many2one_am() : m_am_count(0) {
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length, void *desc) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags) {
         test_many2one_am *self = reinterpret_cast<test_many2one_am*>(arg);
-        return self->am_handler(data, length, desc);
+        return self->am_handler(data, length, flags);
     }
 
-    ucs_status_t am_handler(void *data, size_t length, void *desc) {
+    ucs_status_t am_handler(void *data, size_t length, unsigned flags) {
         if (ucs::rand() % 4 == 0) {
-            receive_desc_t *my_desc = (receive_desc_t *)desc;
-            my_desc->magic  = MAGIC;
+            receive_desc_t *my_desc;
+            if (flags & UCT_AM_FLAG_DESC) {
+                my_desc = (receive_desc_t *)data - 1;
+                my_desc->magic  = MAGIC_DESC;
+            } else {
+                my_desc = (receive_desc_t *)ucs_malloc(sizeof(*my_desc) + length,
+                                                       "TODO: remove allocation");
+                my_desc->magic  = MAGIC_ALLOC;
+            }
             my_desc->length = length;
             if (data != my_desc + 1) {
                 memcpy(my_desc + 1, data, length);
             }
             m_backlog.push_back(my_desc);
             ucs_atomic_add32(&m_am_count, 1);
-            return UCS_INPROGRESS;
+            return (flags & UCT_AM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
         }
         mapped_buffer::pattern_check(data, length);
         ucs_atomic_add32(&m_am_count, 1);
@@ -49,9 +58,13 @@ public:
         while (!m_backlog.empty()) {
             receive_desc_t *my_desc = m_backlog.back();
             m_backlog.pop_back();
-            EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length);
-            uct_iface_release_desc(my_desc);
+            if (my_desc->magic == MAGIC_DESC) {
+                uct_iface_release_desc(my_desc);
+            } else {
+                EXPECT_EQ(uint64_t(MAGIC_ALLOC), my_desc->magic);
+                ucs_free(my_desc);
+            }
         }
     }
 

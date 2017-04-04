@@ -113,7 +113,7 @@ ucs_status_t uct_dc_iface_fc_grant(uct_pending_req_t *self);
 
 ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
-                                     uint32_t imm_data, uint16_t lid, void *desc);
+                                     uint32_t imm_data, uint16_t lid, unsigned flags);
 
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???

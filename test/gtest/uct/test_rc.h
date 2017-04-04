@@ -38,7 +38,8 @@ public:
         uct_test::short_progress_loop(delta_ms);
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length, void *desc) {
+    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
+                                         unsigned flags) {
         return UCS_OK;
     }
 

@@ -112,22 +112,12 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
 {
     uct_cm_hdr_t *hdr = event->private_data;
     struct ib_cm_sidr_rep_param rep;
-    ucs_status_t status;
-    void *cm_desc, *desc;
     int ret;
 
     VALGRIND_MAKE_MEM_DEFINED(hdr, sizeof(hdr));
     VALGRIND_MAKE_MEM_DEFINED(hdr + 1, hdr->length);
 
     uct_cm_iface_trace_data(iface, UCT_AM_TRACE_TYPE_RECV, hdr, "RX: SIDR_REQ");
-
-    /* Allocate temporary buffer to serve as receive descriptor */
-    cm_desc = ucs_malloc(iface->super.config.rx_payload_offset + hdr->length,
-                         "cm_recv_desc");
-    if (cm_desc == NULL) {
-        ucs_error("failed to allocate cm receive descriptor");
-        return;
-    }
 
     /* Send reply */
     ucs_trace_data("TX: SIDR_REP [id %p{%u}]", event->cm_id,
@@ -139,14 +129,7 @@ static void uct_cm_iface_handle_sidr_req(uct_cm_iface_t *iface,
         ucs_error("ib_cm_send_sidr_rep() failed: %m");
     }
 
-    /* Call active message handler */
-    desc = cm_desc + iface->super.config.rx_headroom_offset;
-    uct_recv_desc_iface(desc) = &iface->super.super.super;
-    status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
-                                 hdr->length, desc);
-    if (status == UCS_OK) {
-        ucs_free(cm_desc);
-    }
+    uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1, hdr->length, 0);
 }
 
 static void uct_cm_iface_outstanding_remove(uct_cm_iface_t* iface,

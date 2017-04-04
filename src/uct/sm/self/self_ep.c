@@ -72,7 +72,9 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     /* Receive part */
     uct_iface_trace_am(&self_iface->super, UCT_AM_TRACE_TYPE_RECV, id, p_data,
                        total_length, "RX: AM_SHORT");
-    status = uct_iface_invoke_am(&self_iface->super, id, p_data, total_length, desc);
+    status = uct_iface_invoke_am(&self_iface->super, id, p_data, total_length,
+                                 UCT_AM_FLAG_DESC);
+
     if (ucs_unlikely(UCS_INPROGRESS == status)) {
         uct_self_ep_am_reserve_buffer(self_iface, desc);
         /**
@@ -118,12 +120,14 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     /* Receive part */
     uct_iface_trace_am(&self_iface->super, UCT_AM_TRACE_TYPE_RECV, id, payload,
                        length, "RX: AM_BCOPY");
-    status = uct_iface_invoke_am(&self_iface->super, id, payload, length, desc);
+    status = uct_iface_invoke_am(&self_iface->super, id, payload, length,
+                                 UCT_AM_FLAG_DESC);
+
     if (ucs_unlikely(UCS_INPROGRESS == status)) {
         uct_self_ep_am_reserve_buffer(self_iface, desc);
         /**
          * Try to get new buffer from memory pool and
-         * ignore UCS_ERR_NO_MEMORY to resolve it later
+         * ignore UCS_ERR_NO_RESOURCE to resolve it later
          */
         UCT_TL_IFACE_GET_RX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
                                  self_iface->msg_cur_desc, );

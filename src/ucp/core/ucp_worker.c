@@ -90,7 +90,8 @@ static ucs_status_t ucp_worker_set_am_handlers(ucp_worker_h worker,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_stub_am_handler(void *arg, void *data, size_t length, void *desc)
+static ucs_status_t ucp_stub_am_handler(void *arg, void *data, size_t length,
+                                        unsigned flags)
 {
     ucp_worker_h worker = arg;
     ucs_trace("worker %p: drop message", worker);
@@ -455,7 +456,6 @@ static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
 {
     uct_iface_attr_t *if_attr;
     size_t           tl_id;
-    ucs_status_t     status               = UCS_OK;
     size_t           max_am_mp_entry_size = 0;
 
     for (tl_id = 0; tl_id < worker->context->num_tls; ++tl_id) {
@@ -469,11 +469,11 @@ static ucs_status_t ucp_worker_init_am_mpool(ucp_worker_h worker,
     }
 
     max_am_mp_entry_size += rx_headroom;
-    status = ucs_mpool_init(&worker->am_mp, 0,
-                            max_am_mp_entry_size,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_am_mpool_ops, "ucp_am_bufs");
-    return status;
+
+    return ucs_mpool_init(&worker->am_mp, 0,
+                          max_am_mp_entry_size,
+                          0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                          &ucp_am_mpool_ops, "ucp_am_bufs");
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to

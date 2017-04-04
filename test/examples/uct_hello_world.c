@@ -17,6 +17,10 @@ typedef enum {
 } func_am_t;
 
 typedef struct {
+    int  is_uct_desc;
+} recv_desc_t;
+
+typedef struct {
     char               *server_name;
     uint16_t            server_port;
     func_am_t           func_am_type;
@@ -179,14 +183,27 @@ static void print_strings(const char *label, const char *local_str,
 }
 
 /* Callback to handle receive active message */
-static ucs_status_t hello_world(void *arg, void *data, size_t length, void *desc)
+static ucs_status_t hello_world(void *arg, void *data, size_t length, unsigned flags)
 {
+    recv_desc_t *rdesc;
     func_am_t func_am_type = *(func_am_t *)arg;
     print_strings("callback", func_am_t_str(func_am_type), data);
 
-    /* Hold descriptor to release later and return UCS_INPROGRESS */
-    desc_holder = desc;
-    return UCS_INPROGRESS;
+    if (flags & UCT_AM_FLAG_DESC) {
+        rdesc = (recv_desc_t *)data - 1;
+        /* Hold descriptor to release later and return UCS_INPROGRESS */
+        rdesc->is_uct_desc = 1;
+        desc_holder = rdesc;
+        return UCS_INPROGRESS;
+    }
+
+    /* We need to copy-out data and return UCS_OK if want to use the data
+     * outside the callback */
+    rdesc = malloc(sizeof(*rdesc) + length);
+    rdesc->is_uct_desc = 0;
+    memcpy(rdesc + 1, data, length);
+    desc_holder = rdesc;
+    return UCS_OK;
 }
 
 /* init the transport  by its name */
@@ -201,7 +218,7 @@ static ucs_status_t init_iface(char *dev_name, char *tl_name,
     params.tl_name     = tl_name;
     params.dev_name    = dev_name;
     params.stats_root  = NULL;
-    params.rx_headroom = 0;
+    params.rx_headroom = sizeof(recv_desc_t);
 
     UCS_CPU_ZERO(&params.cpu_mask);
     /* Read transport-specific interface configuration */
@@ -584,14 +601,22 @@ int main(int argc, char **argv)
         free(str);
         CHKERR_JUMP(UCS_OK != status, "send active msg", out_free_ep);
     } else {
+        recv_desc_t *rdesc;
+
         while (!desc_holder) {
             /* Explicitly progress any outstanding active message requests */
             uct_worker_progress(if_info.worker);
         }
 
-        print_strings("main", func_am_t_str(cmd_args.func_am_type), desc_holder);
-        /* Release descriptor because callback returns UCS_INPROGRESS */
-        uct_iface_release_desc(desc_holder);
+        rdesc = desc_holder;
+        print_strings("main", func_am_t_str(cmd_args.func_am_type),
+                                            (char *)(rdesc + 1));
+        if (rdesc->is_uct_desc) {
+            /* Release descriptor because callback returns UCS_INPROGRESS */
+            uct_iface_release_desc(rdesc);
+        } else {
+            free(rdesc);
+        }
     }
 
     barrier(oob_sock);

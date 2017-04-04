@@ -45,7 +45,8 @@ public:
         return ucs_derived_of(e->ep(idx), uct_dc_ep_t);
     }
 
-    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length, void *desc) {
+    static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
+                                         unsigned flags) {
         return UCS_OK;
     }
 
@@ -535,4 +536,3 @@ UCS_TEST_P(test_dc_flow_control_stats, fc_ep)
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc_flow_control_stats)
 
 #endif
-

@@ -126,16 +126,19 @@ struct uct_mm_recv_desc {
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
-                       unsigned length, uct_mm_recv_desc_t *mm_desc)
+                       unsigned length, unsigned flags)
 {
     ucs_status_t status;
-    void *desc = mm_desc + 1;    /* point the desc to the user's headroom */
+    void         *desc;
 
-    status = uct_iface_invoke_am(&iface->super, am_id, data, length, desc);
-    if (status != UCS_OK) {
+    status = uct_iface_invoke_am(&iface->super, am_id, data, length, flags);
+
+    if (status == UCS_INPROGRESS) {
+        desc = (void *)((uintptr_t)data - iface->rx_headroom);
         /* save the iface of this desc for its later release */
         uct_recv_desc_iface(desc) = &iface->super.super;
     }
+
     return status;
 }
 

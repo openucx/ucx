@@ -44,7 +44,8 @@ public:
 #endif
     } ib_port_desc_t;
 
-    static ucs_status_t ib_am_handler(void *arg, void *data, size_t length, void *desc) {
+    static ucs_status_t ib_am_handler(void *arg, void *data, size_t length,
+                                      unsigned flags) {
         recv_desc_t *my_desc  = (recv_desc_t *) arg;
         uint64_t *test_ib_hdr = (uint64_t *) data;
         uint64_t *actual_data = (uint64_t *) test_ib_hdr + 1;

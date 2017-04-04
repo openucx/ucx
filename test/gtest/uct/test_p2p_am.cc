@@ -7,6 +7,7 @@
 #include "uct_p2p_test.h"
 
 #include <string>
+#include <vector>
 
 class uct_p2p_am_test : public uct_p2p_test
 {
@@ -14,7 +15,8 @@ public:
     static const uint8_t AM_ID = 11;
     static const uint64_t SEED1 = 0xa1a1a1a1a1a1a1a1ul;
     static const uint64_t SEED2 = 0xa2a2a2a2a2a2a2a2ul;
-    static const uint64_t MAGIC = 0xdeadbeef12345678ul;
+    static const uint64_t MAGIC_DESC  = 0xdeadbeef12345678ul;
+    static const uint64_t MAGIC_ALLOC = 0xbaadf00d12345678ul;
 
     typedef struct {
         uint64_t magic;
@@ -51,9 +53,10 @@ public:
         uct_p2p_test::cleanup();
     }
 
-    static ucs_status_t am_handler(void *arg, void *data, size_t length, void *desc) {
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags) {
         uct_p2p_am_test *self = reinterpret_cast<uct_p2p_am_test*>(arg);
-        return self->am_handler(data, length, desc);
+        return self->am_handler(data, length, flags);
     }
 
     static void am_tracer(void *arg, uct_am_trace_type_t type, uint8_t id,
@@ -68,22 +71,27 @@ public:
         ++ctx->count;
     }
 
-    ucs_status_t am_handler(void *data, size_t length, void *desc) {
+    ucs_status_t am_handler(void *data, size_t length, unsigned flags) {
         pthread_mutex_lock(&m_lock);
         ++m_am_count;
         pthread_mutex_unlock(&m_lock);
 
         if (m_keep_data) {
-            receive_desc_t *my_desc = (receive_desc_t *)desc;
-            my_desc->magic  = MAGIC;
-            my_desc->length = length;
-            if (data != my_desc + 1) {
+            receive_desc_t *my_desc;
+            if (flags & UCT_AM_FLAG_DESC) {
+                my_desc = (receive_desc_t *)data - 1;
+                my_desc->magic  = MAGIC_DESC;
+            } else {
+                my_desc = (receive_desc_t *)ucs_malloc(sizeof(*my_desc) + length,
+                                                       "TODO: remove allocation");
                 memcpy(my_desc + 1, data, length);
+                my_desc->magic  = MAGIC_ALLOC;
             }
+            my_desc->length = length;
             pthread_mutex_lock(&m_lock);
             m_backlog.push_back(my_desc);
             pthread_mutex_unlock(&m_lock);
-            return UCS_INPROGRESS;
+            return (my_desc->magic == MAGIC_DESC) ? UCS_INPROGRESS : UCS_OK;
         }
         mapped_buffer::pattern_check(data, length, SEED1);
         return UCS_OK;
@@ -94,10 +102,14 @@ public:
         while (!m_backlog.empty()) {
             receive_desc_t *my_desc = m_backlog.back();
             m_backlog.pop_back();
-            EXPECT_EQ(uint64_t(MAGIC), my_desc->magic);
             mapped_buffer::pattern_check(my_desc + 1, my_desc->length, SEED1);
             pthread_mutex_unlock(&m_lock);
-            uct_iface_release_desc(my_desc);
+            if (my_desc->magic == MAGIC_DESC) {
+                uct_iface_release_desc(my_desc);
+            } else {
+                EXPECT_EQ(uint64_t(MAGIC_ALLOC), my_desc->magic);
+                ucs_free(my_desc);
+            }
             pthread_mutex_lock(&m_lock);
         }
         pthread_mutex_unlock(&m_lock);
@@ -217,6 +229,11 @@ public:
          * progress is not called */
         wait_for_value(&m_am_count, prev_am_count + 1, false);
         EXPECT_EQ(prev_am_count+1, m_am_count);
+    }
+
+protected:
+    inline size_t backlog_size() const {
+        return m_backlog.size();
     }
 
 protected:
@@ -358,7 +375,8 @@ public:
 
         loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
 
-        while ((ucs_get_time() < loop_end_limit) && (status != UCS_OK)) {
+        while ((ucs_get_time() < loop_end_limit) && (status != UCS_OK) &&
+               (backlog_size() < 1000000)) {
             status = am_short(sender_ep(), sendbuf, recvbuf);
             progress();
         }
@@ -585,4 +603,3 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_tx_bufs)
-
