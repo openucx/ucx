@@ -222,7 +222,7 @@ static inline ucs_status_t uct_mm_iface_process_recv(uct_mm_iface_t *iface,
                            data, elem->length, "RX: AM_BCOPY");
 
         status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
-                                        UCT_AM_FLAG_DESC);
+                                        UCT_CB_FLAG_DESC);
         if (status != UCS_OK) {
             /* assign a new receive descriptor to this FIFO element.*/
             uct_mm_assign_desc_to_fifo_elem(iface, elem, 0);

@@ -41,7 +41,7 @@ static ucs_status_t processs_datagram(uct_ugni_udt_iface_t *iface, uct_ugni_udt_
     uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
                        header->am_id, payload, header->length, "RX: AM");
     status = uct_iface_invoke_am(&iface->super.super, header->am_id, payload,
-                                 header->length, UCT_AM_FLAG_DESC);
+                                 header->length, UCT_CB_FLAG_DESC);
     return status;
 }
 

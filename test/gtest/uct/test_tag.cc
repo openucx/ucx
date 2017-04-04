@@ -129,7 +129,7 @@ public:
 
     ucs_status_t tag_rndv_cancel(entity &e, void *op)
     {
-        return uct_ep_tag_rdnv_cancel(e.ep(0), op);
+        return uct_ep_tag_rndv_cancel(e.ep(0), op);
     }
 
     ucs_status_t tag_post(entity &e, recv_ctx &ctx)
@@ -270,7 +270,7 @@ public:
     }
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
-                                    void *desc, uct_tag_t stag, uint64_t imm)
+                                    unsigned flags, uct_tag_t stag, uint64_t imm)
     {
         recv_ctx *user_ctx = reinterpret_cast<recv_ctx*>(imm);
         user_ctx->unexp    = true;
@@ -283,7 +283,7 @@ public:
         return UCS_OK;
     }
 
-    static ucs_status_t unexp_rndv(void *arg, void *desc, uint64_t stag,
+    static ucs_status_t unexp_rndv(void *arg, unsigned flags, uint64_t stag,
                                    const void *header, unsigned header_length,
                                    uint64_t remote_addr, size_t length,
                                    const void *rkey_buf)
