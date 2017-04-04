@@ -25,16 +25,16 @@
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
-     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, _max_inline, "am_short");
+     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, 0, _max_inline, "am_short");
 
 #define UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_length, _length, _seg_size) \
     UCT_CHECK_AM_ID(_id); \
-    UCT_CHECK_LENGTH(_header_length + _length, _seg_size, "am_zcopy payload"); \
-    UCT_CHECK_LENGTH(_header_length + _length, UCT_IB_MAX_MESSAGE_SIZE, "am_zcopy ib max message");
+    UCT_CHECK_LENGTH(_header_length + _length, 0, _seg_size, "am_zcopy payload"); \
+    UCT_CHECK_LENGTH(_header_length + _length, 0, UCT_IB_MAX_MESSAGE_SIZE, "am_zcopy ib max message");
 
 #define UCT_RC_CHECK_AM_ZCOPY(_id, _header_length, _length, _desc_size, _seg_size) \
     UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_length, _length, _seg_size) \
-    UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, _desc_size, "am_zcopy header");
+    UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, 0, _desc_size, "am_zcopy header");
 
 
 #define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \

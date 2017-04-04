@@ -54,7 +54,7 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     /* Send part */
     UCT_CHECK_AM_ID(id);
-    UCT_CHECK_LENGTH(total_length, self_iface->data_length, "am_short");
+    UCT_CHECK_LENGTH(total_length, 0, self_iface->data_length, "am_short");
     if (ucs_unlikely(NULL == self_iface->msg_cur_desc)) {
         UCT_TL_IFACE_GET_TX_DESC(&self_iface->super, &self_iface->msg_desc_mp,
                                  self_iface->msg_cur_desc, return UCS_ERR_NO_MEMORY);
@@ -112,7 +112,7 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     payload = desc + self_iface->rx_headroom;
     length = pack_cb(payload, arg);
 
-    UCT_CHECK_LENGTH(length, self_iface->data_length, "am_bcopy");
+    UCT_CHECK_LENGTH(length, 0, self_iface->data_length, "am_bcopy");
     UCT_TL_EP_STAT_OP(&self_ep->super, AM, BCOPY, length);
     uct_iface_trace_am(&self_iface->super, UCT_AM_TRACE_TYPE_SEND, id, payload,
                        length, "TX: AM_BCOPY");
