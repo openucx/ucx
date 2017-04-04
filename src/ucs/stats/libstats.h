@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 
 /*
@@ -56,14 +57,29 @@ struct ucs_stats_class {
 
 /* In-memory statistics node */
 struct ucs_stats_node {
-    ucs_stats_class_t    *cls;
-    ucs_stats_node_t     *parent;
-    char                 name[UCS_STAT_NAME_MAX + 1];
-    ucs_list_link_t      list;
-    ucs_list_link_t      children[UCS_STATS_CHILDREN_LAST];
-    ucs_stats_counter_t  counters[];
+    ucs_stats_class_t        *cls;
+    ucs_stats_node_t         *parent;
+    char                     name[UCS_STAT_NAME_MAX + 1];
+    ucs_list_link_t          list;
+    ucs_list_link_t          children[UCS_STATS_CHILDREN_LAST];
+    ucs_stats_counter_list_t **counters_sum;
+    ucs_stats_counter_t      counters[];
 };
 
+/* Statistic counters list. used to sum all counters of a type.*/
+struct ucs_stats_counter_list {
+    ucs_stats_counter_t *counter;
+    ucs_list_link_t     list;
+};
+
+/* Statistics summary record */
+struct ucs_stats_summary {
+    char                 class_name[80];
+    char                 counter_name[80];
+    uint64_t             counter_sum;
+    ucs_list_link_t      list;
+    ucs_list_link_t      counter_list;
+};
 
 /**
  * Initialize statistics node.
@@ -130,7 +146,7 @@ void ucs_stats_client_cleanup(ucs_stats_client_h client);
  * @param timestamp  Current statistics timestamp, identifies every "snapshot".
  */
 ucs_status_t ucs_stats_client_send(ucs_stats_client_h client, ucs_stats_node_t *root,
-                                  uint64_t timestamp);
+                                   uint64_t timestamp);
 
 
 /**
