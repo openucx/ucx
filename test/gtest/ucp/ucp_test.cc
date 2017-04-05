@@ -32,10 +32,10 @@ ucp_test::ucp_test() {
     ASSERT_UCS_OK(status);
 
     if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
-        m_mt_num_threads = m_mt_num_workers = MT_NUM_THREADS;
+        m_mt_num_threads = m_mt_num_workers = ucs::gtest_threads_num;
     } else if (GetParam().thread_type == MULTI_THREAD_WORKER) {
         m_mt_num_workers = 1;
-        m_mt_num_threads = MT_NUM_THREADS;
+        m_mt_num_threads = ucs::gtest_threads_num;
     } else {
         m_mt_num_threads = m_mt_num_workers = 1;
     }

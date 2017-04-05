@@ -14,7 +14,7 @@ extern "C" {
 
 namespace ucs {
 
-int gtest_threads_num = 1;
+int gtest_threads_num = 2;
 
 
 int test_time_multiplier()

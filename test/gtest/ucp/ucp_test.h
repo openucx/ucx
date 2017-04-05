@@ -96,8 +96,7 @@ class ucp_test : public ucp_test_base,
 
 public:
     enum {
-        DEFAULT_PARAM_VARIANT = 0,
-        MT_NUM_THREADS        = 2
+        DEFAULT_PARAM_VARIANT = 0
     };
 
     UCS_TEST_BASE_IMPL;
