@@ -21,10 +21,8 @@ public:
                                                         const std::string& test_case_name,
                                                         const std::string& tls) {
         std::vector<ucp_test_param> result;
-        for (int variant = UCP_ATOMIC_MODE_CPU; variant < UCP_ATOMIC_MODE_LAST; variant++) {
-            generate_test_params_variant(ctx_params, worker_params, name, test_case_name,
-                                         tls, variant, result, true);
-        }
+        generate_test_params_variant(ctx_params, worker_params, name, test_case_name,
+                                     tls, DEFAULT_PARAM_VARIANT, result, true);
         return result;
     }
 
