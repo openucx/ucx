@@ -56,7 +56,7 @@ enum uct_am_trace_type {
  * @ingroup UCT_AM
  * @brief Flags for uct_am_callback.
  */
-enum uct_am_cb_flags {
+enum uct_cb_flags {
 
     /**
      * If this flag is enabled, then data is part of a descriptor which includes
@@ -73,7 +73,7 @@ enum uct_am_cb_flags {
        @endverbatim
      *
      */
-    UCT_AM_FLAG_DESC = UCS_BIT(0)
+    UCT_CB_FLAG_DESC = UCS_BIT(0)
 };
 
 /**
@@ -151,15 +151,15 @@ typedef struct uct_iov {
  * @brief Callback to process incoming active message
  *
  * When the callback is called, @a flags indicates how @a data should be handled.
- * If @a flags contain @ref UCT_AM_FLAG_DESC value, it means @a data is part of
+ * If @a flags contain @ref UCT_CB_FLAG_DESC value, it means @a data is part of
  * a descriptor which must be released later by @ref uct_iface_release_desc by
  * the user if the callback returns @ref UCS_INPROGRESS.
- * 
+ *
  * @param [in]  arg      User-defined argument.
  * @param [in]  data     Points to the received data. This may be a part of
  *                       a descriptor which may be released later.
  * @param [in]  length   Length of data.
- * @param [in]  flags    Mask with @ref uct_am_cb_flags
+ * @param [in]  flags    Mask with @ref uct_cb_flags
  *
  * @note This callback could be set and released
  *       by @ref uct_iface_set_am_handler function.
@@ -168,7 +168,7 @@ typedef struct uct_iov {
  *                          by the caller.
  * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
  *                          released later. Supported only if @a flags contain
- *                          @ref UCT_AM_FLAG_DESC value. Otherwise, this is
+ *                          @ref UCT_CB_FLAG_DESC value. Otherwise, this is
  *                          an error.
  *
  */
@@ -289,8 +289,8 @@ typedef void (*uct_unpack_callback_t)(void *arg, const void *data, size_t length
  *                          released later.
  */
 typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
-                                                 size_t length, void *desc,
-                                                 uct_tag_t stag,  uint64_t imm);
+                                                 size_t length, unsigned flags,
+                                                 uct_tag_t stag, uint64_t imm);
 
 
 /**
@@ -306,8 +306,7 @@ typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
  * @note It is allowed to call other communication routines from the callback.
  *
  * @param [in]  arg           User-defined argument
- * @param [in]  desc          Points to the received descriptor, at the
- *                            beginning of the user-defined rx_headroom.
+ * @param [in]  flags         Mask with @ref uct_cb_flags
  * @param [in]  stag          Tag from sender.
  * @param [in]  header        User defined header.
  * @param [in]  header_length User defined header length in bytes.
@@ -325,7 +324,7 @@ typedef ucs_status_t (*uct_tag_unexp_eager_cb_t)(void *arg, void *data,
  * @retval UCS_INPROGRESS - descriptor is owned by the callee, and would be
  *                          released later.
  */
-typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, void *desc,
+typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
                                                 uint64_t stag, const void *header,
                                                 unsigned header_length,
                                                 uint64_t remote_addr, size_t length,

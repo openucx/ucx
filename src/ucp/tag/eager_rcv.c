@@ -117,7 +117,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
 
     ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
 
-    status = (am_flags & UCT_AM_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
+    status = (am_flags & UCT_CB_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
 
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);

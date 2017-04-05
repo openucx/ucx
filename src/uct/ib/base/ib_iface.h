@@ -189,7 +189,7 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
     ucs_status_t status;
 
     status = uct_iface_invoke_am(&iface->super, am_id, data, length,
-                                 UCT_AM_FLAG_DESC);
+                                 UCT_CB_FLAG_DESC);
     if (status == UCS_OK) {
         ucs_mpool_put_inline(ib_desc);
     } else {

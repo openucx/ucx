@@ -68,7 +68,7 @@ ucp_recv_desc_get(ucp_worker_t *worker, void *data, size_t length,
                   uint16_t hdr_len, unsigned am_flags, uint16_t flags)
 {
     ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
-    if (am_flags & UCT_AM_FLAG_DESC) {
+    if (am_flags & UCT_CB_FLAG_DESC) {
         rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
     } else {
         rdesc = ucs_mpool_get_inline(&worker->am_mp);

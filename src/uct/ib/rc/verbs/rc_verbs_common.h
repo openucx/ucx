@@ -122,20 +122,17 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
     uct_ib_iface_recv_desc_t *desc;
     uct_rc_iface_ops_t *rc_ops;
     void *udesc;
-    unsigned data_len;
     ucs_status_t status;
 
     desc = (uct_ib_iface_recv_desc_t *)wc->wr_id;
-    data_len = length - sizeof(*hdr);
 
     uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr, wc->byte_len,
                                uct_rc_ep_am_packet_dump);
 
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
         rc_ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-        status = rc_ops->fc_handler(iface, wc->qp_num, hdr, data_len,
-                                    wc->imm_data, wc->slid,
-                                    UCT_AM_FLAG_DESC);
+        status = rc_ops->fc_handler(iface, wc->qp_num, hdr, length - sizeof(*hdr),
+                                    wc->imm_data, wc->slid, UCT_CB_FLAG_DESC);
         if (status == UCS_OK) {
             ucs_mpool_put_inline(desc);
         } else {
@@ -143,8 +140,8 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
             uct_recv_desc_iface(udesc) = &iface->super.super.super;
         }
     } else {
-        uct_ib_iface_invoke_am_desc(&iface->super, hdr->am_id, hdr + 1, data_len,
-                                    desc);
+        uct_ib_iface_invoke_am_desc(&iface->super, hdr->am_id, hdr + 1,
+                                    length - sizeof(*hdr), desc);
     }
 }
 

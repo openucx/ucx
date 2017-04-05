@@ -1951,7 +1951,7 @@ UCT_INLINE_API ucs_status_ptr_t uct_ep_tag_rndv_zcopy(uct_ep_h ep, uct_tag_t tag
  *
  * @return UCS_OK - The operation has been canceled.
  */
-UCT_INLINE_API ucs_status_t uct_ep_tag_rdnv_cancel(uct_ep_h ep, void *op)
+UCT_INLINE_API ucs_status_t uct_ep_tag_rndv_cancel(uct_ep_h ep, void *op)
 {
     return ep->iface->ops.ep_tag_rndv_cancel(ep, op);
 }
