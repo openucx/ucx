@@ -18,22 +18,30 @@
 
 size_t ucm_get_shm_seg_size(const void *shmaddr)
 {
-    unsigned long start_addr, end_addr;
-    char *ptr, *newline;
-    size_t read_offset;
-    char buffer[1024];
     size_t seg_size;
-    ssize_t nread;
-    int fd;
-    int ret;
-
-    seg_size = 0;
+    int    fd;
 
     fd = open(UCM_PROCESS_MAPS_FILE, O_RDONLY);
     if (fd < 0) {
         ucm_debug("cannot open %s for reading: %m", UCM_PROCESS_MAPS_FILE);
-        goto out;
+        return 0;
     }
+
+    seg_size = ucm_get_shm_seg_size_fd(shmaddr, fd);
+
+    close(fd);
+
+    return seg_size;
+}
+
+size_t ucm_get_shm_seg_size_fd(const void *shmaddr, int fd)
+{
+    char          buffer[1024];
+    unsigned long start_addr, end_addr;
+    char          *ptr, *newline;
+    size_t        read_offset;
+    ssize_t       nread;
+    int           ret;
 
     read_offset = 0;
     for (;;) {
@@ -43,10 +51,10 @@ size_t ucm_get_shm_seg_size(const void *shmaddr)
                 continue;
             } else {
                 ucm_debug("failed to read from %s: %m", UCM_PROCESS_MAPS_FILE);
-                goto out_close;
+                return 0;
             }
         } else if (nread == 0) {
-            goto out_close;
+            return 0;
         } else {
             buffer[nread + read_offset] = '\0';
         }
@@ -61,8 +69,7 @@ size_t ucm_get_shm_seg_size(const void *shmaddr)
             }
 
             if (start_addr == (uintptr_t)shmaddr) {
-                seg_size = end_addr - start_addr;
-                goto out_close;
+                return end_addr - start_addr;
             }
 
             newline = strchr(ptr, '\n');
@@ -77,9 +84,5 @@ size_t ucm_get_shm_seg_size(const void *shmaddr)
         memmove(buffer, ptr, read_offset);
     }
 
-out_close:
-    close(fd);
-out:
-    return seg_size;
+    return 0;
 }
-
