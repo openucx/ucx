@@ -105,7 +105,7 @@ ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
     } else if (status == UCS_INPROGRESS){
         UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
     }
-    uct_cm_enter(iface);
+    uct_cm_leave(iface);
 
     return status;
 }
