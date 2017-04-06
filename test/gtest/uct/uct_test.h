@@ -158,7 +158,8 @@ protected:
     template <typename T>
     void wait_for_flag(volatile T *flag, double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (!(*flag))) {
             short_progress_loop();
         }
@@ -168,7 +169,8 @@ protected:
     void wait_for_value(volatile T *var, T value, bool progress,
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
-        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (*var != value)) {
             if (progress) {
                 short_progress_loop();
