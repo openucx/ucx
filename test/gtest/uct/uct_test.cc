@@ -199,19 +199,6 @@ void uct_test::short_progress_loop(double delay_ms) const {
     }
 }
 
-void uct_test::wait_for_value(volatile unsigned *var, unsigned value,
-                              bool progress, double timeout) const
-{
-    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(timeout);
-    while ((ucs_get_time() < deadline) && (*var != value)) {
-        if (progress) {
-            short_progress_loop();
-        } else {
-            twait();
-        }
-    }
-}
-
 void uct_test::twait(int delta_ms) const {
     ucs_time_t now, t1, t2;
     int left;

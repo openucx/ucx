@@ -7,6 +7,7 @@
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
+#include <ucs/arch/atomic.h>
 }
 #include <common/test.h>
 #include "uct_test.h"
@@ -38,12 +39,12 @@ public:
     static ucs_status_t am_handler(void *arg, void *data, size_t length,
                                    unsigned flags) {
 
-        unsigned *counter = (unsigned *) arg;
+        volatile unsigned *counter = (volatile unsigned*) arg;
         uint64_t test_hdr = *(uint64_t *) data;
         uint64_t actual_data = *(unsigned*)((char*)data + sizeof(test_hdr));
 
         if ((test_hdr == 0xabcd) && (actual_data == (0xdeadbeef + *counter))) {
-            (*counter)++;
+            ucs_atomic_add32(counter, 1);
         } else {
             UCS_TEST_ABORT("Error in comparison in pending_am_handler. Counter: " << counter);
         }
@@ -213,10 +214,12 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
                 delete req;
             } else {
                 /* coverity[leaked_storage] */
+                ++send_data;
                 break;
             }
         } else {
-            send_data += 1;
+            ASSERT_UCS_OK(status_send);
+            ++send_data;
         }
     } while (ucs_get_time() < loop_end_limit);
 
@@ -236,16 +239,19 @@ UCS_TEST_P(test_uct_pending, send_ooo_with_pending)
 
     /* send a new message. the transport should make sure that this new message
      * isn't sent before the one in pending, thus preventing out-of-order in sending. */
-    send_data += 1;
     do {
         status_send = uct_ep_am_short(m_e1->ep(0), 0, test_pending_hdr,
                                       &send_data, sizeof(send_data));
         short_progress_loop();
     } while (status_send == UCS_ERR_NO_RESOURCE);
+    ASSERT_UCS_OK(status_send);
+    ++send_data;
 
     /* the receive side checks that the messages were received in order.
      * check the last message here. (counter was raised by one for next iteration) */
-    EXPECT_EQ(send_data, 0xdeadbeef + counter - 1);
+    unsigned exp_counter = send_data - 0xdeadbeefUL;
+    wait_for_value(&counter, exp_counter, true);
+    EXPECT_EQ(exp_counter, counter);
 }
 
 UCS_TEST_P(test_uct_pending, pending_fairness)
