@@ -25,7 +25,7 @@ static ucs_config_field_t uct_cm_iface_config_table[] = {
   {"TIMEOUT", "300ms", "Timeout for MAD layer",
    ucs_offsetof(uct_cm_iface_config_t, timeout), UCS_CONFIG_TYPE_TIME},
 
-  {"RETRY_COUNT", "20", "Number of retries for MAD layer",
+  {"RETRY_COUNT", "100", "Number of retries for MAD layer",
    ucs_offsetof(uct_cm_iface_config_t, retry_count), UCS_CONFIG_TYPE_UINT},
 
   {"MAX_OP", "1024", "Maximal number of outstanding SIDR operations",
@@ -65,9 +65,8 @@ static void uct_cm_iface_progress(ucs_callbackq_slow_elem_t *arg)
     uct_cm_leave(iface);
 }
 
-ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface, uct_completion_t *comp)
+ucs_status_t uct_cm_iface_flush_do(uct_cm_iface_t *iface, uct_completion_t *comp)
 {
-    uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
     uct_cm_iface_op_t *op;
 
     if (iface->num_outstanding == 0) {
@@ -96,14 +95,18 @@ ucs_status_t uct_cm_iface_flush_do(uct_iface_h tl_iface, uct_completion_t *comp)
 ucs_status_t uct_cm_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp)
 {
+    uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
     ucs_status_t status;
 
-    status = uct_cm_iface_flush_do(tl_iface, comp);
+    uct_cm_enter(iface);
+    status = uct_cm_iface_flush_do(iface, comp);
     if (status == UCS_OK) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     } else if (status == UCS_INPROGRESS){
         UCT_TL_IFACE_STAT_FLUSH_WAIT(ucs_derived_of(tl_iface, uct_base_iface_t));
     }
+    uct_cm_leave(iface);
+
     return status;
 }
 

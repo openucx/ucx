@@ -465,7 +465,7 @@ void uct_test::entity::connect(unsigned index, entity& other,
 void uct_test::entity::flush() const {
     ucs_status_t status;
     do {
-        uct_worker_progress(m_worker);
+        progress();
         status = uct_iface_flush(m_iface, 0, NULL);
     } while (status == UCS_INPROGRESS);
     ASSERT_UCS_OK(status);
