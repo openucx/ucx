@@ -302,8 +302,9 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
                 /* The generated service id is already in use - try to
                  * generate another one.
                  */
-                ucs_debug("ib_cm_listen(service_id=0x%x) failed: %m",
-                          self->service_id);
+                ucs_debug("ib_cm service id 0x%x already in use, "
+                          "trying another one", self->service_id);
+                continue;
             } else {
                 ucs_error("ib_cm_listen(service_id=0x%x) failed: %m",
                           self->service_id);
