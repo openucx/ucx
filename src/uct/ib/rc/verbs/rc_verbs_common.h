@@ -126,7 +126,7 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
 
     desc = (uct_ib_iface_recv_desc_t *)wc->wr_id;
 
-    uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr, wc->byte_len,
+    uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr, length,
                                uct_rc_ep_am_packet_dump);
 
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
