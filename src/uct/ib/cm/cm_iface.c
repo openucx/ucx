@@ -263,10 +263,8 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->service_id          = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
-                                             (~IB_CM_ASSIGN_SERVICE_ID_MASK));
     self->num_outstanding     = 0;
-
+    self->service_id          = 0;
     self->config.timeout_ms   = (int)(config->timeout * 1e3 + 0.5);
     self->config.max_outstanding = config->max_outstanding;
     self->config.retry_count  = ucs_min(config->retry_count, UINT8_MAX);
@@ -295,12 +293,25 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_close_device;
     }
 
-    ret = ib_cm_listen(self->listen_id, self->service_id, 0);
-    if (ret) {
-        ucs_error("ib_cm_listen() failed: %m");
-        status = UCS_ERR_INVALID_ADDR;
-        goto err_destroy_id;
-    }
+    do {
+        self->service_id = (uint32_t)(ucs_generate_uuid((uintptr_t)self) &
+                                      (~IB_CM_ASSIGN_SERVICE_ID_MASK));
+        ret = ib_cm_listen(self->listen_id, self->service_id, 0);
+        if (ret) {
+            if (errno == EBUSY) {
+                /* The generated service id is already in use - try to
+                 * generate another one.
+                 */
+                ucs_debug("ib_cm_listen(service_id=0x%x) failed: %m",
+                          self->service_id);
+            } else {
+                ucs_error("ib_cm_listen(service_id=0x%x) failed: %m",
+                          self->service_id);
+                status = UCS_ERR_INVALID_ADDR;
+                goto err_destroy_id;
+            }
+        }
+    } while (ret);
 
     if (config->async_mode == UCS_ASYNC_MODE_SIGNAL) {
         ucs_warn("ib_cm fd does not support SIGIO");
