@@ -97,8 +97,7 @@ private:
         bool res = false;
         pthread_mutex_lock(&m_stats_lock);
         for (std::vector<range>::const_iterator iter = ranges.begin(); iter != ranges.end(); ++iter) {
-            /* unmapped range with 0-length is OK */
-            if ((ptr >= iter->first) && ((char*)ptr <= iter->second)) {
+            if ((ptr >= iter->first) && ((char*)ptr < iter->second)) {
                 res = true;
                 break;
             }
@@ -137,12 +136,13 @@ void test_thread::mem_event(ucm_event_type_t event_type, ucm_event_t *event)
         m_map_ranges.push_back(range(event->vm_mapped.address,
                                      (char*)event->vm_mapped.address + event->vm_mapped.size));
         m_map_size += event->vm_mapped.size;
-        EXPECT_NE(0, event->vm_mapped.size);
+        EXPECT_NE(0ul, event->vm_mapped.size);
         break;
     case UCM_EVENT_VM_UNMAPPED:
         m_unmap_ranges.push_back(range(event->vm_unmapped.address,
                                        (char*)event->vm_unmapped.address + event->vm_unmapped.size));
         m_unmap_size += event->vm_unmapped.size;
+        EXPECT_NE(0ul, event->vm_unmapped.size);
         break;
     default:
         break;

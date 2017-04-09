@@ -18,18 +18,26 @@
 
 size_t ucm_get_shm_seg_size(const void *shmaddr)
 {
-    size_t seg_size;
-    int    fd;
+    size_t    seg_size  = 0;
+    const int max_retry = 5;
+    int       i         = 0;
+    int       fd;
 
-    fd = open(UCM_PROCESS_MAPS_FILE, O_RDONLY);
-    if (fd < 0) {
-        ucm_debug("cannot open %s for reading: %m", UCM_PROCESS_MAPS_FILE);
-        return 0;
-    }
+    /* NOTE: It looks like UCM_PROCESS_MAPS_FILE is updated asynchronously,
+     *       then the file may be not updated after one-by-one shmat/shmdt calls
+     *       from many threads
+     */
+    do {
+        fd = open(UCM_PROCESS_MAPS_FILE, O_RDONLY);
+        if (fd < 0) {
+            ucm_debug("cannot open %s for reading: %m", UCM_PROCESS_MAPS_FILE);
+            return 0;
+        }
 
-    seg_size = ucm_get_shm_seg_size_fd(shmaddr, fd);
+        seg_size = ucm_get_shm_seg_size_fd(shmaddr, fd);
 
-    close(fd);
+        close(fd);
+    } while ((seg_size == 0) && (++i < max_retry));
 
     return seg_size;
 }
