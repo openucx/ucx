@@ -413,51 +413,28 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
+    const unsigned recv_flags = UCP_RECV_DESC_FLAG_FIRST |
+                                UCP_RECV_DESC_FLAG_LAST |
+                                UCP_RECV_DESC_FLAG_RNDV;
     ucp_worker_h worker = arg;
     ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
     ucp_context_h context = worker->context;
-    ucp_recv_desc_t *rdesc;
-    ucp_tag_t recv_tag = rndv_rts_hdr->super.tag;
     ucp_request_t *rreq;
-    ucs_queue_iter_t iter;
     ucs_status_t status;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
 
-    /* Search in expected queue */
-    ucs_queue_for_each_safe(rreq, iter, &context->tag.expected, recv.queue) {
-        rreq = ucs_container_of(*iter, ucp_request_t, recv.queue);
-        if (ucp_tag_recv_is_match(recv_tag, UCP_RECV_DESC_FLAG_FIRST, rreq->recv.tag,
-                                  rreq->recv.tag_mask, rreq->recv.state.offset,
-                                  rreq->recv.info.sender_tag))
-        {
-            ucp_tag_log_match(recv_tag, rndv_rts_hdr->size, rreq, rreq->recv.tag,
-                              rreq->recv.tag_mask, rreq->recv.state.offset,
-                              "expected-rndv");
-            ucs_queue_del_iter(&context->tag.expected, iter);
-            ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
-            status = UCS_OK;
-            UCP_WORKER_STAT_RNDV(worker, EXP);
-            goto out;
-        }
+    rreq = ucp_tag_search_exp(context, rndv_rts_hdr->super.tag,
+                              rndv_rts_hdr->size, recv_flags);
+    if (rreq != NULL) {
+        ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
+        UCP_WORKER_STAT_RNDV(worker, EXP);
+        status = UCS_OK;
+    } else {
+        status = ucp_tag_unexp_recv(context, worker, data, length, am_flags,
+                                    sizeof(*rndv_rts_hdr), recv_flags);
     }
 
-    rdesc = ucp_recv_desc_get(worker, data, length, sizeof(*rndv_rts_hdr), am_flags,
-                              UCP_RECV_DESC_FLAG_FIRST|UCP_RECV_DESC_FLAG_LAST|
-                              UCP_RECV_DESC_FLAG_RNDV);
-    if (!rdesc) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
-
-    ucs_trace_req("unexp rndv recv tag %"PRIx64" length %zu desc %p",
-                  recv_tag, length, rdesc);
-
-    ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
-
-    status = (am_flags & UCT_CB_FLAG_DESC) ? UCS_INPROGRESS : UCS_OK;
-
-out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&context->mt_lock);
     return status;
 }
