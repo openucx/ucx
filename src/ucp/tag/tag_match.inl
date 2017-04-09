@@ -1,19 +1,19 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
-#ifndef UCP_TAG_MATCH_H_
-#define UCP_TAG_MATCH_H_
+#ifndef UCP_TAG_MATCH_INL_
+#define UCP_TAG_MATCH_INL_
+
+#include "tag_match.h"
 
 #include <ucp/core/ucp_request.h>
 #include <ucp/dt/dt.h>
 #include <ucs/debug/log.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/sys/compiler.h>
-
 #include <inttypes.h>
 
 
@@ -24,17 +24,6 @@
                   (_title), (_req), (size_t)(_offset), (_exp_tag), (_exp_tag_mask))
 
 
-/**
- * Tag-match header
- */
-typedef struct {
-    ucp_tag_t                 tag;
-} UCS_S_PACKED ucp_tag_hdr_t;
-
-
-void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req);
-
-
 static UCS_F_ALWAYS_INLINE
 int ucp_tag_is_match(ucp_tag_t tag, ucp_tag_t exp_tag, ucp_tag_t tag_mask)
 {
@@ -43,7 +32,6 @@ int ucp_tag_is_match(ucp_tag_t tag, ucp_tag_t exp_tag, ucp_tag_t tag_mask)
      */
     return ((tag ^ exp_tag) & tag_mask) == 0;
 }
-
 
 static UCS_F_ALWAYS_INLINE
 int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
@@ -61,14 +49,20 @@ int ucp_tag_recv_is_match(ucp_tag_t recv_tag, unsigned recv_flags,
               (recv_tag == curr_tag)));
 }
 
+static UCS_F_ALWAYS_INLINE
+void ucp_tag_exp_add(ucp_tag_match_t *tm, ucp_request_t *req)
+{
+    ucs_queue_push(&tm->expected, &req->recv.queue);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_request_t *
-ucp_tag_search_exp(ucp_context_h context, ucp_tag_t recv_tag, size_t recv_len,
+ucp_tag_exp_search(ucp_tag_match_t *tm, ucp_tag_t recv_tag, size_t recv_len,
                    unsigned recv_flags)
 {
     ucs_queue_iter_t iter;
     ucp_request_t *req;
 
-    ucs_queue_for_each_safe(req, iter, &context->tag.expected, recv.queue) {
+    ucs_queue_for_each_safe(req, iter, &tm->expected, recv.queue) {
         req = ucs_container_of(*iter, ucp_request_t, recv.queue);
         if (ucp_tag_recv_is_match(recv_tag, recv_flags, req->recv.tag,
                                   req->recv.tag_mask, req->recv.state.offset,
@@ -77,7 +71,7 @@ ucp_tag_search_exp(ucp_context_h context, ucp_tag_t recv_tag, size_t recv_len,
             ucp_tag_log_match(recv_tag, recv_len, req, req->recv.tag,
                               req->recv.tag_mask, req->recv.state.offset, "expected");
             if (recv_flags & UCP_RECV_DESC_FLAG_LAST) {
-                ucs_queue_del_iter(&context->tag.expected, iter);
+                ucs_queue_del_iter(&tm->expected, iter);
             }
             return req;
         }
@@ -92,7 +86,7 @@ static UCS_F_ALWAYS_INLINE ucp_tag_t ucp_rdesc_get_tag(ucp_recv_desc_t *rdesc)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_tag_unexp_recv(ucp_context_h context, ucp_worker_h worker, void *data,
+ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_worker_h worker, void *data,
                    size_t length, unsigned am_flags, uint16_t hdr_len,
                    uint16_t flags)
 {
@@ -104,7 +98,7 @@ ucp_tag_unexp_recv(ucp_context_h context, ucp_worker_h worker, void *data,
         rdesc->flags = flags | UCP_RECV_DESC_FLAG_UCT_DESC;
         status = UCS_INPROGRESS;
     } else {
-        rdesc = ucs_mpool_get_inline(&worker->am_mp);
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         if (rdesc == NULL) {
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;
@@ -125,7 +119,7 @@ ucp_tag_unexp_recv(ucp_context_h context, ucp_worker_h worker, void *data,
 
     rdesc->length  = length;
     rdesc->hdr_len = hdr_len;
-    ucs_queue_push(&context->tag.unexpected, &rdesc->queue);
+    ucs_queue_push(&tm->unexpected, &rdesc->queue);
     return status;
 }
 

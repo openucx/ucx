@@ -4,9 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#include "match.h"
 #include "eager.h"
 #include "rndv.h"
+#include "tag_match.inl"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_request.inl>
@@ -27,7 +27,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
     ucp_tag_t recv_tag;
     unsigned flags;
 
-    ucs_queue_for_each_safe(rdesc, iter, &context->tag.unexpected, queue) {
+    ucs_queue_for_each_safe(rdesc, iter, &context->tm.unexpected, queue) {
         recv_tag = ucp_rdesc_get_tag(rdesc);
         flags    = rdesc->flags;
         ucs_trace_req("searching for %"PRIx64"/%"PRIx64"/%"PRIx64" offset %zu, "
@@ -44,7 +44,7 @@ ucp_tag_search_unexp(ucp_worker_h worker, void *buffer, size_t buffer_size,
         {
             ucp_tag_log_match(recv_tag, rdesc->length - rdesc->hdr_len, req, tag,
                               tag_mask, req->recv.state.offset, "unexpected");
-            ucs_queue_del_iter(&context->tag.unexpected, iter);
+            ucs_queue_del_iter(&context->tm.unexpected, iter);
             if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER) {
                 UCS_PROFILE_REQUEST_EVENT(req, "eager_match", 0);
                 status = ucp_eager_unexp_match(worker, rdesc, recv_tag, flags,
@@ -163,7 +163,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t buffer_size,
         req->recv.tag      = tag;
         req->recv.tag_mask = tag_mask;
         req->recv.cb       = cb;
-        ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
+        ucp_tag_exp_add(&worker->context->tm, req);
         ucs_trace_req("%s returning expected request %p (%p)", debug_name,
                       req, req + 1);
     }
@@ -312,7 +312,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
         req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
         req->recv.cb       = cb;
-        ucs_queue_push(&worker->context->tag.expected, &req->recv.queue);
+        ucp_tag_exp_add(&worker->context->tm, req);
     }
 
     ret = req + 1;
@@ -320,19 +320,4 @@ out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);
     UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->mt_lock);
     return ret;
-}
-
-void ucp_tag_cancel_expected(ucp_context_h context, ucp_request_t *req)
-{
-    ucs_queue_iter_t iter;
-    ucp_request_t *qreq;
-
-    ucs_queue_for_each_safe(qreq, iter, &context->tag.expected, recv.queue) {
-        if (qreq == req) {
-            ucs_queue_del_iter(&context->tag.expected, iter);
-            return;
-        }
-    }
-
-    ucs_bug("expected request not found");
 }

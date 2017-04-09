@@ -550,7 +550,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->mt_lock.mt_type = UCP_MT_TYPE_SPINLOCK;
     }
 
-    UCP_THREAD_LOCK_INIT_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_LOCK_INIT(&worker->mt_lock);
 
     worker->context         = context;
     worker->uuid            = ucs_generate_uuid((uintptr_t)worker);
@@ -661,7 +661,7 @@ err_free_attrs:
 err_free_ifaces:
     ucs_free(worker->ifaces);
 err_free:
-    UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     ucs_free(worker);
     return status;
 }
@@ -689,7 +689,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker->iface_attrs);
     ucs_free(worker->ifaces);
     kh_destroy_inplace(ucp_worker_ep_hash, &worker->ep_hash);
-    UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(&worker->mt_lock);
+    UCP_THREAD_LOCK_FINALIZE(&worker->mt_lock);
     UCS_STATS_NODE_FREE(worker->stats);
     ucs_free(worker);
 }
