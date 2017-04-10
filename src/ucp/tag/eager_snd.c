@@ -205,6 +205,8 @@ static void ucp_tag_eager_zcopy_completion(uct_completion_t *self,
     ucp_tag_eager_zcopy_req_complete(req);
 }
 
+ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
+
 const ucp_proto_t ucp_tag_eager_proto = {
     .contig_short            = ucp_tag_eager_contig_short,
     .bcopy_single            = ucp_tag_eager_bcopy_single,
@@ -212,6 +214,7 @@ const ucp_proto_t ucp_tag_eager_proto = {
     .zcopy_single            = ucp_tag_eager_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_zcopy_multi,
     .zcopy_completion        = ucp_tag_eager_zcopy_completion,
+    .start_rndv              = ucp_tag_send_start_rndv,
     .only_hdr_size           = sizeof(ucp_eager_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
@@ -230,6 +233,26 @@ void ucp_tag_eager_sync_completion(ucp_request_t *req, uint16_t flag)
         ucp_request_complete_send(req, UCS_OK);
     }
 }
+
+static ucs_status_t ucp_tag_eager_sync_unsupported(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    req->flags |= UCP_REQUEST_FLAG_COMPLETED;
+    return UCS_ERR_UNSUPPORTED;
+}
+
+const ucp_proto_t ucp_tag_eager_sync_unsupport_proto = {
+    .contig_short            = ucp_tag_eager_sync_unsupported,
+    .bcopy_single            = ucp_tag_eager_sync_unsupported,
+    .bcopy_multi             = ucp_tag_eager_sync_unsupported,
+    .zcopy_single            = ucp_tag_eager_sync_unsupported,
+    .zcopy_multi             = ucp_tag_eager_sync_unsupported,
+    .zcopy_completion        = NULL,
+    .start_rndv              = ucp_tag_eager_sync_unsupported,
+    .only_hdr_size           = 0ul,
+    .first_hdr_size          = 0ul,
+    .mid_hdr_size            = 0ul
+};
 
 static ucs_status_t ucp_tag_eager_sync_bcopy_single(uct_pending_req_t *self)
 {
@@ -312,7 +335,10 @@ const ucp_proto_t ucp_tag_eager_sync_proto = {
     .zcopy_single            = ucp_tag_eager_sync_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_sync_zcopy_multi,
     .zcopy_completion        = ucp_tag_eager_sync_zcopy_completion,
+    .start_rndv              = ucp_tag_send_start_rndv,
     .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_sync_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
 };
+
+const ucp_proto_t *ucp_tag_eager_sync_proto_p = NULL;

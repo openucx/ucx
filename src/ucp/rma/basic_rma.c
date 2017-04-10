@@ -423,11 +423,16 @@ out:
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 {
     unsigned rsc_index;
+    unsigned flags = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
 
     while (worker->stub_pend_count > 0) {
         ucp_worker_progress(worker);
+    }
+
+    if (worker->context->config.features & UCP_FEATURE_FAULT_TOLERANCE) {
+        flags |= UCT_FLUSH_FLAG_ACTIVE;
     }
 
     /* TODO flush in parallel */
@@ -436,7 +441,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
             continue;
         }
 
-        while (uct_iface_flush(worker->ifaces[rsc_index], 0, NULL) != UCS_OK) {
+        while (uct_iface_flush(worker->ifaces[rsc_index], flags, NULL) != UCS_OK) {
             ucp_worker_progress(worker);
         }
     }
@@ -449,13 +454,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_flush, (worker), ucp_worker_h worker)
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
-    ucs_status_t status;
+    ucs_status_t     status;
+    unsigned         flags = 0;
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&ep->worker->mt_lock);
 
+    if (ep->worker->context->config.features & UCP_FEATURE_FAULT_TOLERANCE) {
+        flags |= UCT_FLUSH_FLAG_ACTIVE;
+    }
+
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         for (;;) {
-            status = uct_ep_flush(ep->uct_eps[lane], 0, NULL);
+            status = uct_ep_flush(ep->uct_eps[lane], flags, NULL);
             if (status == UCS_OK) {
                 break;
             } else if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
@@ -470,4 +480,3 @@ out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return status;
 }
-

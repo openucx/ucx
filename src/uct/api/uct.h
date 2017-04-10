@@ -437,6 +437,19 @@ enum {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief   @anchor UCT_FLUSH_FLAGS Flags that control completion semantic.
+ */
+enum {
+    UCT_FLUSH_FLAG_LOCAL = 0,           /**< Guarantees flush of local
+                                             outstanding operations */
+    UCT_FLUSH_FLAG_ACTIVE  = UCS_BIT(0) /**< Requires remote side to acknowledge
+                                             (currently unsupported, will be
+                                             ignored) */
+};
+
+
+/**
  * @ingroup UCT_MD
  * @brief  Memory domain attributes.
  *
@@ -1357,8 +1370,8 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    iface  Interface to flush communications from.
- * @param [in]    flags  Flags that control completion semantic (currently
- *                        unsupported - set to 0).
+ * @param [in]    flags  @ref UCT_FLUSH_FLAGS "Flags" that control completion
+ *                       semantic.
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
@@ -1736,8 +1749,8 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    ep     Endpoint to flush communications from.
- * @param [in]    flags  Flags that control completion semantic (currently
- *                        unsupported - set to 0).
+ * @param [in]    flags  @ref UCT_FLUSH_FLAGS "Flags" that control completion
+ *                       semantic.
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the endpoint and no completion will

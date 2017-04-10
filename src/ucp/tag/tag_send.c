@@ -78,7 +78,7 @@ static ucs_status_t ucp_tag_req_start(ucp_request_t *req, size_t count,
                (length >= rndv_rma_thresh)) ||
                (length >= rndv_am_thresh)) && !is_iov) {
         /* RMA/AM rendezvous */
-        ucp_tag_send_start_rndv(req);
+        req->send.uct.func = proto->start_rndv;
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else if (length < zcopy_thresh) {
         /* bcopy */
@@ -128,7 +128,7 @@ static void ucp_tag_req_start_generic(ucp_request_t *req, size_t count,
 
     if (length >= rndv_am_thresh) {
         /* rendezvous */
-        ucp_tag_send_start_rndv(req);
+        req->send.uct.func = proto->start_rndv;
         UCS_PROFILE_REQUEST_EVENT(req, "start_rndv", req->send.length);
     } else if (length <= config->am.max_bcopy - proto->only_hdr_size) {
         /* bcopy single */
@@ -179,14 +179,15 @@ ucp_tag_send_req(ucp_request_t *req, size_t count, ssize_t max_short,
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
-    ucp_send_req_stat(req);
-
     /*
      * Start the request.
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
     status = ucp_request_start_send(req);
+
+    ucp_send_req_stat(req);
+
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
                       ucs_status_string(status));
@@ -290,7 +291,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
                            ucp_ep_config(ep)->am.sync_zcopy_thresh,
                            ucp_ep_config(ep)->rndv.rma_thresh,
                            ucp_ep_config(ep)->rndv.am_thresh,
-                           cb, &ucp_tag_eager_sync_proto);
+                           cb, ucp_tag_eager_sync_proto_p);
 out:
     UCP_THREAD_CS_EXIT_CONDITIONAL(&ep->worker->mt_lock);
     return ret;

@@ -43,6 +43,7 @@ typedef struct ucp_proto {
     uct_pending_callback_t     zcopy_single;     /**< Progress zcopy single fragment */
     uct_pending_callback_t     zcopy_multi;      /**< Progress zcopy multi-fragment */
     uct_completion_callback_t  zcopy_completion; /**< Callback for UCT zcopy completion */
+    uct_pending_callback_t     start_rndv;       /**< Initiates RNDV protocol */
     size_t                     only_hdr_size;    /**< Header size for single / short */
     size_t                     first_hdr_size;   /**< Header size for first of multi */
     size_t                     mid_hdr_size;     /**< Header size for rest of multi */
