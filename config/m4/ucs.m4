@@ -42,7 +42,7 @@ AS_IF([test "x$enable_backtrace_detail" == xyes],
 	if test "x$ac_cv_header_libiberty_h" == "x" && test "x$ac_cv_header_libiberty_libiberty_h" == "x"; then
 	    AC_MSG_WARN([binutils headers not found]); BT=0
 	fi
-	AC_CHECK_LIB(bfd, bfd_init,  LIBS="$LIBS -lbfd", [AC_MSG_WARN([bfd library not found])];BT=0)
+	AC_CHECK_LIB(bfd, bfd_openr,  LIBS="$LIBS -lbfd", [AC_MSG_WARN([bfd library not found])];BT=0)
 	AC_CHECK_LIB(iberty, xstrerror, LIBS="$LIBS -liberty", [AC_MSG_WARN([iberty library not found])];BT=0)
 	AC_CHECK_LIB(dl, dlopen, LIBS="$LIBS -ldl", [AC_MSG_WARN([dl library not found])];BT=0)
 	AC_CHECK_LIB(intl, main, LIBS="$LIBS -lintl", [AC_MSG_WARN([intl library not found])])
