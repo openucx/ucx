@@ -60,31 +60,9 @@ AC_CHECK_HEADERS([sys/platform/ppc.h])
 
 
 #
-# Zlib
-#
-AC_CHECK_LIB(z, compress2,, AC_MSG_WARN([zlib library not found]))
-
-
-#
 # Google Testing framework
 #
 GTEST_LIB_CHECK([1.5.0], [true], [true])
-
-
-#
-# Zlib
-#
-AC_ARG_WITH([zlib],
-            [AC_HELP_STRING([--with-zlib=DIR],
-                            [Specify path to external zlib library.])],
-            [if test "$withval" != no; then
-               if test "$withval" != yes; then
-                 ZLIB_DIR=$withval
-               fi
-             fi])
-if test -n "$ZLIB_DIR"; then
-  LDFLAGS="$LDFLAGS -L$ZLIB_DIR"
-fi
 
 
 #
