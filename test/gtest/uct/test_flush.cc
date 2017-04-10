@@ -358,18 +358,24 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
      flush_req.comp.count = 2;
      flush_req.comp.func  = NULL;
 
-     status = uct_ep_flush(sender().ep(0), 0, &flush_req.comp);
-     if (status == UCS_OK) {
-         --flush_req.comp.count;
-     } else if (status == UCS_ERR_NO_RESOURCE) {
-         /* If flush returned NO_RESOURCE, add to pending must succeed */
-         flush_req.test      = this;
-         flush_req.uct.func  = flush_progress;
-         status = uct_ep_pending_add(sender().ep(0), &flush_req.uct);
-         EXPECT_EQ(UCS_OK, status);
-     } else if (status == UCS_INPROGRESS) {
-     } else {
-         ASSERT_UCS_OK(status);
+     for (;;) {
+         status = uct_ep_flush(sender().ep(0), 0, &flush_req.comp);
+         if (status == UCS_OK) {
+             --flush_req.comp.count;
+         } else if (status == UCS_ERR_NO_RESOURCE) {
+             /* If flush returned NO_RESOURCE, add to pending must succeed */
+             flush_req.test      = this;
+             flush_req.uct.func  = flush_progress;
+             status = uct_ep_pending_add(sender().ep(0), &flush_req.uct);
+             if (status == UCS_ERR_BUSY) {
+                 continue;
+             }
+             EXPECT_EQ(UCS_OK, status);
+         } else if (status == UCS_INPROGRESS) {
+         } else {
+             UCS_TEST_ABORT("failed to flush ep: " << ucs_status_string(status));
+         }
+         break;
      }
 
      /* timeout used to prevent test hung */
@@ -383,7 +389,7 @@ UCS_TEST_P(uct_flush_test, am_pending_flush_nb) {
          progress();
      }
 
-     EXPECT_TRUE(flush_req.comp.count == 1);
+     EXPECT_EQ(1, flush_req.comp.count);
 
      while (!reqs.empty()) {
          EXPECT_EQ(1, reqs.back().comp.count);
