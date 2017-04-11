@@ -66,16 +66,12 @@ static ucs_status_t recieve_datagram(uct_ugni_udt_iface_t *iface, uint64_t id, u
     ugni_rc = GNI_EpPostDataWaitById(gni_ep, id, -1, &post_state, &rem_addr, &rem_id);
     pthread_mutex_unlock(&uct_ugni_global_lock);
     if (ucs_unlikely(GNI_RC_SUCCESS != ugni_rc)) {
-        ucs_error("GNI_EpPostDataWaitById, Error status: %s %d",
-                  gni_err_str[ugni_rc], ugni_rc);
+        ucs_error("GNI_EpPostDataWaitById, id=%lu Error status: %s %d",
+                  id, gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_IO_ERROR;
     }
     if (GNI_POST_TERMINATED == post_state) {
-        if(UCT_UGNI_UDT_ANY == id) {
-            return UCS_ERR_CANCELED;
-        } else {
-            return UCS_OK;
-        }
+        return UCS_ERR_CANCELED;
     }
 
     if (GNI_POST_COMPLETED != post_state) {
@@ -257,11 +253,36 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
 static void uct_ugni_udt_clean_wildcard(uct_ugni_udt_iface_t *iface)
 {
     gni_return_t ugni_rc;
+    uint32_t rem_addr, rem_id;
+    gni_post_state_t post_state;
+    pthread_mutex_lock(&uct_ugni_global_lock);
+    ugni_rc = GNI_EpPostDataCancelById(iface->ep_any, UCT_UGNI_UDT_ANY);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        pthread_mutex_unlock(&uct_ugni_global_lock);
+        ucs_error("GNI_EpPostDataCancel failed, Error status: %s %d",
+                  gni_err_str[ugni_rc], ugni_rc);
+        return;
+    }
+    ugni_rc = GNI_EpPostDataTestById(iface->ep_any, UCT_UGNI_UDT_ANY, &post_state, &rem_addr, &rem_id);
+    if (GNI_RC_SUCCESS != ugni_rc) {
+        if (GNI_RC_NO_MATCH != ugni_rc) {
+            pthread_mutex_unlock(&uct_ugni_global_lock);
+            ucs_error("GNI_EpPostDataTestById failed, Error status: %s %d",
+                      gni_err_str[ugni_rc], ugni_rc);
+            return;
+        }
+    } else {
+        if (GNI_POST_PENDING == post_state) {
+            ugni_rc = GNI_EpPostDataWaitById(iface->ep_any, UCT_UGNI_UDT_ANY, -1, &post_state, &rem_addr, &rem_id);
+        }
+    }
     ugni_rc = GNI_EpDestroy(iface->ep_any);
     if (GNI_RC_SUCCESS != ugni_rc) {
+        pthread_mutex_unlock(&uct_ugni_global_lock);
         ucs_error("GNI_EpDestroy failed, Error status: %s %d\n",
                   gni_err_str[ugni_rc], ugni_rc);
     }
+    pthread_mutex_unlock(&uct_ugni_global_lock);
 }
 
 /* Before this function is called, you MUST
@@ -339,7 +360,7 @@ uct_iface_ops_t uct_ugni_udt_iface_ops = {
     .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_udt_ep_t),
     .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_udt_ep_t),
     .ep_pending_add        = uct_ugni_udt_ep_pending_add,
-    .ep_pending_purge      = uct_ugni_ep_pending_purge,
+    .ep_pending_purge      = uct_ugni_udt_ep_pending_purge,
     .ep_am_short           = uct_ugni_udt_ep_am_short,
     .ep_am_bcopy           = uct_ugni_udt_ep_am_bcopy,
     .ep_flush              = uct_ugni_ep_flush,

@@ -58,9 +58,10 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
     }
 }
 
-static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
-                                                            ucs_arbiter_elem_t *elem,
-                                                            void *arg){
+ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                     ucs_arbiter_elem_t *elem,
+                                                     void *arg)
+{
     uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_purge_cb_args_t *cb_args = arg;

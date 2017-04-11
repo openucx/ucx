@@ -31,6 +31,9 @@ ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
 ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
                                                         ucs_arbiter_elem_t *elem,
                                                         void *arg);
+void uct_ugni_udt_ep_pending_purge(uct_ep_h tl_ep,
+                                   uct_pending_purge_callback_t cb,
+                                   void *arg);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_ugni_udt_ep_t, uct_ep_t, uct_iface_t*,
                            const uct_device_addr_t *, const uct_iface_addr_t*);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_ugni_udt_ep_t, uct_ep_t);
