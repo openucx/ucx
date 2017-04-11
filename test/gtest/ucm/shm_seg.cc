@@ -132,7 +132,7 @@ static const char test_file_01[] =
 "ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]\n";
 
 
-class smb_seg_test : public ucs::test {
+class shm_seg_test : public ucs::test {
 public:
     UCS_TEST_BASE_IMPL;
 
@@ -142,20 +142,20 @@ public:
     typedef std::list<test_case_t>            test_case_arr_t;
     typedef test_case_arr_t::const_iterator   test_case_iter_t;
 
-    smb_seg_test() {
+    shm_seg_test() {
         test_case_arr.push_back(test_case_t(test_file_01,
-                                            build_val_arr(3,
+                                            build_val_arr(3ul,
                                                           0x00400000,
                                                           0x7ffff7ff2000,
                                                           0xffffffffff600000)));
     };
 
-    virtual ~smb_seg_test() {};
 protected:
     void write2pipe(const std::string& str) {
-        ASSERT_EQ(0, pipe(fd));
+        ASSERT_EQ(int(0), pipe(fd));
         ASSERT_TRUE(fd[0] && fd[1]);
-        EXPECT_EQ(str.length() + 1, write(fd[1], str.c_str(), str.length() + 1));
+        EXPECT_EQ(ssize_t(str.length() + 1),
+                  write(fd[1], str.c_str(), str.length() + 1));
         close(fd[1]);
     }
 
@@ -182,7 +182,7 @@ protected:
     int fd[2];
 };
 
-UCS_TEST_F(smb_seg_test, parse) {
+UCS_TEST_F(shm_seg_test, parse) {
     size_t test_counter = 0;
     for (test_case_iter_t i = test_case_arr.begin(); i != test_case_arr.end(); ++i) {
         for (val_iter_t j = i->second.begin(); j != i->second.end(); ++j) {
