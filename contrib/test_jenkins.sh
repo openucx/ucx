@@ -35,8 +35,8 @@ else
 fi
 
 #
-# Set up parallel test execution - "worker" and "nworkers" should be set by jenki
-#
+# Set up parallel test execution - "worker" and "nworkers" should be set by jenkins
+
 if [ -z "$worker" ] || [ -z "$nworkers" ]
 then
 	worker=0
