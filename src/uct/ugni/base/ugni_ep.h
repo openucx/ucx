@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
 #ifndef UCT_UGNI_EP_H
 #define UCT_UGNI_EP_H
 

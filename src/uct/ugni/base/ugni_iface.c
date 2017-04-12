@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
 #include "ugni_types.h"
 #include "ugni_md.h"
 #include "ugni_device.h"
