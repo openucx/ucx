@@ -2,7 +2,7 @@
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -35,7 +35,7 @@ else
 fi
 
 #
-# Set up parallel test execution - "worker" and "nworkers" should be set by jenki
+# Set up parallel test execution - "worker" and "nworkers" should be set by jenkins
 #
 if [ -z "$worker" ] || [ -z "$nworkers" ]
 then
