@@ -439,11 +439,17 @@ enum {
 /**
  * @ingroup UCT_RESOURCE
  * @brief   @anchor UCT_FLUSH_FLAGS Flags that control completion semantic.
+ * 
+ * These flags control completion semantic for @ref uct_ep_flush and
+ * @ref uct_iface_flush functions.
  */
 enum {
-    UCT_FLUSH_FLAG_LOCAL = 0,           /**< Guarantees flush of local
-                                             outstanding operations */
-    UCT_FLUSH_FLAG_ACTIVE  = UCS_BIT(0) /**< Requires remote side to acknowledge
+    UCT_FLUSH_FLAG_LOCAL   = 0,         /**< Guarantees flush of local
+                                             outstanding operations, the buffers
+                                             may be reused. */
+    UCT_FLUSH_FLAG_ACTIVE  = UCS_BIT(0) /**< All outstanding operations are
+                                             competed at least on network level
+                                             and remote peer is alive.
                                              (currently unsupported, will be
                                              ignored) */
 };
