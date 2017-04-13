@@ -243,10 +243,10 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
     }
 }
 
-static void uct_cm_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_cm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
-    uct_cm_iface_t *iface = ucs_derived_of(tl_iface, uct_cm_iface_t);
-    ucs_free(desc - iface->super.config.rx_headroom_offset);
+    uct_ib_iface_t *iface = ucs_container_of(self, uct_ib_iface_t, release_desc);
+    ucs_free(desc - iface->config.rx_headroom_offset);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -281,6 +281,9 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
     self->cbq_elem.cb         = uct_cm_iface_progress;
     ucs_queue_head_init(&self->notify_q);
     ucs_queue_head_init(&self->outstanding_q);
+
+    /* Redefine receive desc release callback */
+    self->super.release_desc.cb = uct_cm_iface_release_desc;
 
     self->cmdev = ib_cm_open_device(uct_ib_iface_device(&self->super)->ibv_context);
     if (self->cmdev == NULL) {
@@ -415,7 +418,6 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable,
     .ep_create_connected      = UCS_CLASS_NEW_FUNC_NAME(uct_cm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cm_ep_t),
-    .iface_release_desc       = uct_cm_iface_release_desc,
     .ep_am_bcopy              = uct_cm_ep_am_bcopy,
     .ep_pending_add           = uct_cm_ep_pending_add,
     .ep_pending_purge         = uct_cm_ep_pending_purge,

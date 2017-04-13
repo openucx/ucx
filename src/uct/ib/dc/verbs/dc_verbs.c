@@ -738,7 +738,6 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
             .iface_query              = uct_dc_verbs_iface_query,
             .iface_get_device_address = uct_ib_iface_get_device_address,
             .iface_is_reachable       = uct_ib_iface_is_reachable,
-            .iface_release_desc       = uct_ib_iface_release_desc,
             .iface_get_address        = uct_dc_iface_get_address,
 
             .iface_flush              = uct_dc_iface_flush,

@@ -1408,8 +1408,8 @@ UCT_INLINE_API ucs_status_t uct_iface_fence(uct_iface_h iface, unsigned flags)
  */
 UCT_INLINE_API void uct_iface_release_desc(void *desc)
 {
-    uct_iface_h iface = uct_recv_desc_iface(desc);
-    iface->ops.iface_release_desc(iface, desc);
+    uct_recv_desc_t *release_desc = uct_recv_desc(desc);
+    release_desc->cb(release_desc, desc);
 }
 
 

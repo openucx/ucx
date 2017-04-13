@@ -87,6 +87,7 @@ struct uct_mm_iface {
     size_t                  rx_headroom;
     ucs_arbiter_t           arbiter;
     const char              *path;            /* path to the backing file (for 'posix') */
+    uct_recv_desc_t         release_desc;
 
     uct_mm_fifo_ctl_t       dummy_fifo_ctl;   /* a dummy fifo_ctl to be used until
                                                * connection is established */
@@ -135,8 +136,8 @@ uct_mm_iface_invoke_am(uct_mm_iface_t *iface, uint8_t am_id, void *data,
 
     if (status == UCS_INPROGRESS) {
         desc = (void *)((uintptr_t)data - iface->rx_headroom);
-        /* save the iface of this desc for its later release */
-        uct_recv_desc_iface(desc) = &iface->super.super;
+        /* save the release_desc for later release of this desc */
+        uct_recv_desc(desc) = &iface->release_desc;
     }
 
     return status;
@@ -167,7 +168,7 @@ static inline void uct_mm_set_fifo_elems_ptr(void *mem_region, void **fifo_elems
    *fifo_elems = (void*) fifo_ctl + UCT_MM_FIFO_CTL_SIZE_ALIGNED;
 }
 
-void uct_mm_iface_release_desc(uct_iface_t *tl_iface, void *desc);
+void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc);
 ucs_status_t uct_mm_flush();
 
 void uct_mm_iface_progress(void *arg);

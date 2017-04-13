@@ -33,8 +33,6 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*iface_fence)(uct_iface_h iface, unsigned flags);
 
-    void         (*iface_release_desc)(uct_iface_h iface, void *desc);
-
     ucs_status_t (*iface_wakeup_open)(uct_iface_h iface, unsigned events,
                                      uct_wakeup_h wakeup);
 
@@ -211,17 +209,20 @@ typedef struct uct_ep {
 } uct_ep_t;
 
 
+typedef struct uct_recv_desc uct_recv_desc_t;
+typedef void (*uct_desc_release_callback_t)(uct_recv_desc_t *self, void * desc);
+
+
 /**
  * Receive descriptor
  */
-typedef struct uct_recv_desc {
-    uct_iface_h              iface;
-} uct_recv_desc_t;
+struct uct_recv_desc {
+    uct_desc_release_callback_t cb;
+};
 
 
-#define uct_recv_desc_iface(_desc) \
-    ((((uct_recv_desc_t*)(_desc)) - 1)->iface)
-
+#define uct_recv_desc(_desc) \
+   *((uct_recv_desc_t**)(((uct_recv_desc_t*)(_desc)) - 1))
 
 
 #endif

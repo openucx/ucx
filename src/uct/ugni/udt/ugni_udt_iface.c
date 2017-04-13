@@ -146,10 +146,11 @@ void uct_ugni_udt_progress(void *arg)
     uct_ugni_leave_async(&iface->super);
 }
 
-static void uct_ugni_udt_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+static void uct_ugni_udt_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_ugni_udt_desc_t *ugni_desc;
-    uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_iface, uct_ugni_udt_iface_t);
+    uct_ugni_udt_iface_t *iface = ucs_container_of(self, uct_ugni_udt_iface_t,
+                                                   release_desc);
 
     ugni_desc = (uct_ugni_udt_desc_t *)((uct_recv_desc_t *)desc - 1);
     ucs_assert_always(NULL != ugni_desc);
@@ -214,7 +215,7 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
                 status = processs_datagram(iface, datagram);
                 if (UCS_OK != status) {
                     user_desc = uct_ugni_udt_get_user_desc(datagram, iface);
-                    uct_recv_desc_iface(user_desc) = &iface->super.super.super;
+                    uct_recv_desc(user_desc) = &iface->release_desc;
                 } else {
                     ucs_mpool_put(datagram);
                 }
@@ -228,7 +229,7 @@ void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
                     UCT_TL_IFACE_GET_TX_DESC(&iface->super.super, &iface->free_desc,
                                              iface->desc_any, iface->desc_any=NULL);
                     user_desc = uct_ugni_udt_get_user_desc(datagram, iface);
-                    uct_recv_desc_iface(user_desc) = &iface->super.super.super;
+                    uct_recv_desc(user_desc) = &iface->release_desc;
                 }
                 pthread_mutex_lock(&uct_ugni_global_lock);
                 status = uct_ugni_udt_ep_any_post(iface);
@@ -335,7 +336,6 @@ uct_iface_ops_t uct_ugni_udt_iface_ops = {
     .iface_get_address     = uct_ugni_iface_get_address,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_is_reachable    = uct_ugni_iface_is_reachable,
-    .iface_release_desc    = uct_ugni_udt_iface_release_desc,
     .ep_create_connected   = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_udt_ep_t),
     .ep_destroy            = UCS_CLASS_DELETE_FUNC_NAME(uct_ugni_udt_ep_t),
     .ep_pending_add        = uct_ugni_udt_ep_pending_add,
@@ -369,6 +369,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_udt_iface_t, uct_md_h md, uct_worker_h worke
     /* Setting initial configuration */
     self->config.udt_seg_size = GNI_DATAGRAM_MAXSIZE;
     self->config.rx_headroom  = params->rx_headroom;
+    self->release_desc.cb     = uct_ugni_udt_iface_release_desc;
 
     status = ucs_async_pipe_create(&self->event_pipe);
     if (UCS_OK != status) {
