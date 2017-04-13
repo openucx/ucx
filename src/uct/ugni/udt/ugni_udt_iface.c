@@ -1,18 +1,13 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#include <pmi.h>
-#include "ucs/type/class.h"
-#include "uct/base/uct_md.h"
-
-#include <ucs/async/async.h>
-#include <ucs/arch/cpu.h>
-#include <uct/ugni/base/ugni_iface.h>
 #include "ugni_udt_iface.h"
 #include "ugni_udt_ep.h"
+#include <uct/ugni/base/ugni_device.h>
+#include <uct/ugni/base/ugni_md.h>
 #include <poll.h>
 
 #define UCT_UGNI_UDT_TL_NAME "ugni_udt"

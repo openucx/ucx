@@ -1,16 +1,14 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#include <pmi.h>
-#include "ucs/type/class.h"
-
-#include <ucs/arch/cpu.h>
-#include <uct/ugni/base/ugni_iface.h>
 #include "ugni_smsg_iface.h"
 #include "ugni_smsg_ep.h"
+#include <uct/ugni/base/ugni_md.h>
+#include <uct/ugni/base/ugni_device.h>
+#include <ucs/arch/cpu.h>
 
 #define UCT_UGNI_SMSG_TL_NAME "ugni_smsg"
 

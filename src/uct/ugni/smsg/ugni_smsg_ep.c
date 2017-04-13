@@ -1,17 +1,13 @@
 /**
- * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+ * Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
-#include <ucs/datastruct/sglib_wrapper.h>
-#include <ucs/debug/memtrack.h>
-#include <ucs/debug/log.h>
-#include <uct/base/uct_log.h>
 
 #include "ugni_smsg_ep.h"
 #include "ugni_smsg_iface.h"
 #include <uct/ugni/base/ugni_device.h>
-#include <uct/ugni/base/ugni_ep.h>
+#include <uct/ugni/base/ugni_md.h>
 
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ugni_smsg_desc_t, uct_ugni_smsg_desc_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_smsg_desc_t, UCT_UGNI_HASH_SIZE, uct_ugni_smsg_desc_hash);
@@ -119,7 +115,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_ep_t)
     } while(UCS_OK != status);
 
     progress_remote_cq(iface);
-
     uct_ugni_smsg_mbox_dereg(iface, self->smsg_attr);
     ucs_mpool_put(self->smsg_attr);
 }

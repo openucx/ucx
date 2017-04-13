@@ -1,17 +1,13 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
-#include <ucs/datastruct/sglib_wrapper.h>
-#include <ucs/debug/memtrack.h>
-#include <ucs/debug/log.h>
-#include <uct/base/uct_log.h>
 
 #include "ugni_udt_ep.h"
 #include "ugni_udt_iface.h"
 #include <uct/ugni/base/ugni_device.h>
-#include <uct/ugni/base/ugni_ep.h>
+#include <uct/ugni/base/ugni_md.h>
 
 #define uct_ugni_udt_can_send(_ep) ((uct_ugni_can_send(&_ep->super)) && (_ep->posted_desc == NULL))
 
