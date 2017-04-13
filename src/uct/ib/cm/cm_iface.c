@@ -58,9 +58,16 @@ static void uct_cm_iface_progress(ucs_callbackq_slow_elem_t *arg)
     uct_pending_queue_dispatch(priv, &iface->notify_q,
                                iface->num_outstanding < iface->config.max_outstanding);
 
-    uct_worker_slowpath_progress_unregister(uct_cm_iface_worker(iface), 
-                                            &iface->cbq_elem);
-    iface->cbq_elem_on = 0;
+    /* Remove the progress callback only if there is no user completion at the
+     * head of the queue. It could be added by the progress callback.
+     */
+    if (ucs_queue_is_empty(&iface->outstanding_q) ||
+        ucs_queue_head_elem_non_empty(&iface->outstanding_q, uct_cm_iface_op_t, queue)->is_id)
+    {
+        uct_worker_slowpath_progress_unregister(uct_cm_iface_worker(iface),
+                                                &iface->cbq_elem);
+        iface->cbq_elem_on = 0;
+    }
 
     uct_cm_leave(iface);
 }
@@ -228,13 +235,11 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
             }
         }
 
-        uct_cm_enter(iface);
         if (!iface->cbq_elem_on) {
             uct_worker_slowpath_progress_register(uct_cm_iface_worker(iface), 
                                                   &iface->cbq_elem);
             iface->cbq_elem_on = 1;
         }
-        uct_cm_leave(iface);
     }
 }
 
