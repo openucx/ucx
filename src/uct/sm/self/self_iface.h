@@ -18,6 +18,7 @@ typedef struct uct_self_iface {
     size_t                rx_headroom;  /* User data size precedes payload */
     unsigned              data_length;  /* Maximum size for payload */
     uct_recv_desc_t       *msg_cur_desc; /* Current message descriptor to use */
+    uct_recv_desc_t       release_desc; /* Callback to desc release func */
     ucs_mpool_t           msg_desc_mp;  /* Messages memory pool */
 } UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_self_iface_t;
 

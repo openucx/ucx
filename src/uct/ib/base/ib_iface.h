@@ -90,6 +90,7 @@ struct uct_ib_iface {
     struct ibv_cq           *send_cq;
     struct ibv_cq           *recv_cq;
     struct ibv_comp_channel *comp_channel;
+    uct_recv_desc_t         release_desc;
 
     uint8_t                 *path_bits;
     unsigned                path_bits_count;
@@ -178,7 +179,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp);
 
-void uct_ib_iface_release_desc(uct_iface_t *tl_iface, void *desc);
+void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -193,7 +194,7 @@ uct_ib_iface_invoke_am_desc(uct_ib_iface_t *iface, uint8_t am_id, void *data,
     if (status == UCS_OK) {
         ucs_mpool_put_inline(ib_desc);
     } else {
-        uct_recv_desc_iface(desc) = &iface->super.super;
+        uct_recv_desc(desc) = &iface->release_desc;
     }
 }
 

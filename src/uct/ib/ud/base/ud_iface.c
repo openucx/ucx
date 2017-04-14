@@ -431,6 +431,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
+
+    /* Redefine receive desc release callback */
+    self->super.release_desc.cb  = uct_ud_iface_release_desc;
+
     UCT_UD_IFACE_HOOK_INIT(self);
 
     if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
@@ -745,11 +749,12 @@ static void uct_ud_iface_timer(int timer_id, void *arg)
     uct_ud_leave(iface);
 }
 
-void uct_ud_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface = ucs_container_of(self,
+                                             uct_ud_iface_t, super.release_desc);
 
     uct_ud_enter(iface);
-    uct_ib_iface_release_desc(tl_iface, desc);
+    uct_ib_iface_release_desc(self, desc);
     uct_ud_leave(iface);
 }

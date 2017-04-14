@@ -35,7 +35,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_ep_t, uct_ep_t);
 static void UCS_F_ALWAYS_INLINE uct_self_ep_am_reserve_buffer(uct_self_iface_t *self_iface,
                                                               void *desc)
 {
-    uct_recv_desc_iface(desc) = &self_iface->super.super;
+    uct_recv_desc(desc)      = &self_iface->release_desc;
     self_iface->msg_cur_desc = NULL;
 }
 

@@ -190,7 +190,6 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_query              = uct_rc_mlx5_iface_query,
     .iface_flush              = uct_rc_iface_flush,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .iface_release_desc       = uct_ib_iface_release_desc,
     .iface_wakeup_open        = uct_ib_iface_wakeup_open,
     .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
     .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,

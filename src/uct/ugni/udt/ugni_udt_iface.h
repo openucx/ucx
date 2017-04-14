@@ -24,6 +24,7 @@ typedef struct uct_ugni_udt_iface {
     gni_ep_handle_t         ep_any;       /**< Unbound endpoint that accept any datagram
                                                messages */
     uct_ugni_udt_desc_t     *desc_any;    /**< Segment that accepts datagram from any source */
+    uct_recv_desc_t         release_desc; /**< Callback for receive desc release */
     struct {
         unsigned            udt_seg_size; /**< Max UDT size */
         size_t              rx_headroom;  /**< The size of user defined header for am */
