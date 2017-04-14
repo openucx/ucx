@@ -222,7 +222,7 @@ struct uct_recv_desc {
 
 
 #define uct_recv_desc(_desc) \
-   *((uct_recv_desc_t**)(((uct_recv_desc_t*)(_desc)) - 1))
+    ( *( ( (uct_recv_desc_t**)(_desc) ) - 1) )
 
 
 #endif
