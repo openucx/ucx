@@ -437,25 +437,6 @@ enum {
 
 
 /**
- * @ingroup UCT_RESOURCE
- * @brief   @anchor UCT_FLUSH_FLAGS Flags that control completion semantic.
- * 
- * These flags control completion semantic for @ref uct_ep_flush and
- * @ref uct_iface_flush functions.
- */
-enum {
-    UCT_FLUSH_FLAG_LOCAL   = 0,         /**< Guarantees flush of local
-                                             outstanding operations, the buffers
-                                             may be reused. */
-    UCT_FLUSH_FLAG_ACTIVE  = UCS_BIT(0) /**< All outstanding operations are
-                                             competed at least on network level
-                                             and remote peer is alive.
-                                             (currently unsupported, will be
-                                             ignored) */
-};
-
-
-/**
  * @ingroup UCT_MD
  * @brief  Memory domain attributes.
  *
@@ -1376,8 +1357,8 @@ ucs_status_t uct_rkey_release(const uct_rkey_bundle_t *rkey_ob);
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    iface  Interface to flush communications from.
- * @param [in]    flags  @ref UCT_FLUSH_FLAGS "Flags" that control completion
- *                       semantic.
+ * @param [in]    flags  Flags that control completion semantic (currently
+ *                        unsupported - set to 0).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the interface and no completion will
@@ -1755,8 +1736,8 @@ UCT_INLINE_API void uct_ep_pending_purge(uct_ep_h ep,
  * the data transfer is completed but the target buffer may not be updated yet.
  *
  * @param [in]    ep     Endpoint to flush communications from.
- * @param [in]    flags  @ref UCT_FLUSH_FLAGS "Flags" that control completion
- *                       semantic.
+ * @param [in]    flags  Flags that control completion semantic (currently
+ *                        unsupported - set to 0).
  * @param [inout] comp   Completion handle as defined by @ref uct_completion_t.
  *                        Can be NULL, which means that the call will return the
  *                        current state of the endpoint and no completion will
