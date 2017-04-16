@@ -45,7 +45,7 @@ typedef struct {
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
-ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
+void ucp_tag_send_start_rndv(ucp_request_t *sreq);
 
 void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
                       ucp_rndv_rts_hdr_t *rndv_rts_hdr);

@@ -20,10 +20,6 @@
 #include <string.h>
 
 
-extern const ucp_proto_t ucp_tag_eager_sync_proto;
-extern const ucp_proto_t ucp_tag_eager_sync_unsupport_proto;
-extern const ucp_proto_t *ucp_tag_eager_sync_proto_p;
-
 ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
 
 static const char *ucp_atomic_modes[] = {
@@ -825,12 +821,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     /* initialize tag matching */
     ucs_queue_head_init(&context->tag.expected);
     ucs_queue_head_init(&context->tag.unexpected);
-
-    if (context->config.features & UCP_FEATURE_FAULT_TOLERANCE) {
-        ucp_tag_eager_sync_proto_p = &ucp_tag_eager_sync_unsupport_proto;
-    } else {
-        ucp_tag_eager_sync_proto_p = &ucp_tag_eager_sync_proto;
-    }
 
     ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
               context->num_mds, context->num_tls, context->config.features);

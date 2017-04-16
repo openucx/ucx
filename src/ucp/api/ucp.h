@@ -143,7 +143,7 @@ enum ucp_feature {
     UCP_FEATURE_FAULT_TOLERANCE = UCS_BIT(5)  /**< Request fault tolerance support,
                                                    may disable some API returning
                                                    \ref UCS_ERR_UNSUPPORTED
-                                                   and affect performance. Foult
+                                                   and affect performance. Fault
                                                    tolerance assumes correct
                                                    network and/or peer failures
                                                    with corresponding error

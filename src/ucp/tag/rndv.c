@@ -117,10 +117,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     return status;
 }
 
-ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self)
+void ucp_tag_send_start_rndv(ucp_request_t *sreq)
 {
-    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
-
     ucs_trace_req("starting rndv. sreq: %p. buffer: %p, length: %zu",
                   sreq, sreq->send.buffer, sreq->send.length);
     sreq->flags |= UCP_REQUEST_FLAG_RNDV;
@@ -131,7 +129,7 @@ ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self)
         sreq->send.state.dt.contig.memh = UCT_MEM_HANDLE_NULL;
     }
 
-    return ucp_proto_progress_rndv_rts(self);
+    sreq->send.uct.func = ucp_proto_progress_rndv_rts;
 }
 
 static void ucp_rndv_send_ats(ucp_request_t *rndv_req, uintptr_t remote_request)
