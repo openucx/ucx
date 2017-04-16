@@ -5,6 +5,7 @@
  */
 
 #include "eager.h"
+#include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_request.inl>
@@ -212,6 +213,7 @@ const ucp_proto_t ucp_tag_eager_proto = {
     .zcopy_single            = ucp_tag_eager_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_zcopy_multi,
     .zcopy_completion        = ucp_tag_eager_zcopy_completion,
+    .start_rndv              = ucp_proto_start_rndv,
     .only_hdr_size           = sizeof(ucp_eager_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
@@ -312,6 +314,7 @@ const ucp_proto_t ucp_tag_eager_sync_proto = {
     .zcopy_single            = ucp_tag_eager_sync_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_sync_zcopy_multi,
     .zcopy_completion        = ucp_tag_eager_sync_zcopy_completion,
+    .start_rndv              = ucp_proto_start_rndv,
     .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t),
     .first_hdr_size          = sizeof(ucp_eager_sync_first_hdr_t),
     .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
