@@ -9,9 +9,10 @@
 
 class test_ucp_error_handling : public test_ucp_tag {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_tag::get_ctx_params();
-        params.features |= UCP_FEATURE_FAULT_TOLERANCE;
+    static ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t params = test_ucp_tag::get_ep_params();
+        params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
         return params;
     }
 };

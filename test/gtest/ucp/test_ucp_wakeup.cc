@@ -120,6 +120,7 @@ public:
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
                      const ucp_worker_params_t& worker_params,
+                     const ucp_ep_params_t& ep_params,
                      const std::string& name,
                      const std::string& test_case_name,
                      const std::string& tls);
@@ -135,6 +136,7 @@ private:
 std::vector<ucp_test_param>
 test_ucp_wakeup_events::enum_test_params(const ucp_params_t& ctx_params,
                                          const ucp_worker_params_t& worker_params,
+                                         const ucp_ep_params_t& ep_params,
                                          const std::string& name,
                                          const std::string& test_case_name,
                                          const std::string& tls)
@@ -144,16 +146,16 @@ test_ucp_wakeup_events::enum_test_params(const ucp_params_t& ctx_params,
 
     /* TODO: add RMA and AMO after required optimizations */
     setup_worker_param_events(worker_params_tmp, UCP_WAKEUP_TAG_SEND);
-    generate_test_params_variant(ctx_params, worker_params_tmp, name,
+    generate_test_params_variant(ctx_params, worker_params_tmp, ep_params, name,
                                  test_case_name + "/tag_send", tls, 0, result);
 
     setup_worker_param_events(worker_params_tmp, UCP_WAKEUP_TAG_RECV);
-    generate_test_params_variant(ctx_params, worker_params_tmp, name,
+    generate_test_params_variant(ctx_params, worker_params_tmp, ep_params, name,
                                  test_case_name + "/tag_recv", tls, 0, result);
 
     setup_worker_param_events(worker_params_tmp,
                               UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV);
-    generate_test_params_variant(ctx_params, worker_params_tmp, name,
+    generate_test_params_variant(ctx_params, worker_params_tmp, ep_params, name,
                                  test_case_name + "/all", tls, 0, result);
     return result;
 }

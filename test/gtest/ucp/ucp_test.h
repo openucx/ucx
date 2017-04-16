@@ -17,6 +17,7 @@ extern "C" {
 struct ucp_test_param {
     ucp_params_t              ctx_params;
     ucp_worker_params_t       worker_params;
+    ucp_ep_params_t           ep_params_cmn;
     std::vector<std::string>  transports;
     int                       variant;
     int                       thread_type;
@@ -36,7 +37,7 @@ public:
 
         ~entity();
 
-        void connect(const entity* other);
+        void connect(const entity* other, const ucp_ep_params_t* ep_params_cmn = NULL);
 
         void flush_ep(int ep_index = 0) const;
 
@@ -97,16 +98,19 @@ public:
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
                      const ucp_worker_params_t& worker_params,
+                     const ucp_ep_params_t& ep_params,
                      const std::string& name,
                      const std::string& test_case_name,
                      const std::string& tls);
 
     static ucp_params_t get_ctx_params();
     static ucp_worker_params_t get_worker_params();
+    static ucp_ep_params_t get_ep_params();
 
     static void
     generate_test_params_variant(const ucp_params_t& ctx_params,
                                  const ucp_worker_params_t& worker_params,
+                                 const ucp_ep_params_t& ep_params,
                                  const std::string& name,
                                  const std::string& test_case_name,
                                  const std::string& tls,
@@ -167,6 +171,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
                             testing::ValuesIn(_test_case::enum_test_params(_test_case::get_ctx_params(), \
                                                                            _test_case::get_worker_params(), \
+                                                                           _test_case::get_ep_params(), \
                                                                            #_name, \
                                                                            #_test_case, \
                                                                            _tls)));

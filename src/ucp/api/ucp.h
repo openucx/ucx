@@ -131,23 +131,15 @@ enum ucp_params_field {
  * during @ref ucp_init "UCP initialization" process.
  */
 enum ucp_feature {
-    UCP_FEATURE_TAG             = UCS_BIT(0), /**< Request tag matching support */
-    UCP_FEATURE_RMA             = UCS_BIT(1), /**< Request remote memory
-                                                   access support */
-    UCP_FEATURE_AMO32           = UCS_BIT(2), /**< Request 32-bit atomic
-                                                   operations support */
-    UCP_FEATURE_AMO64           = UCS_BIT(3), /**< Request 64-bit atomic
-                                                   operations support */
-    UCP_FEATURE_WAKEUP          = UCS_BIT(4), /**< Request interrupt notification
-                                                   support */
-    UCP_FEATURE_FAULT_TOLERANCE = UCS_BIT(5)  /**< Request fault tolerance support,
-                                                   may disable some API returning
-                                                   \ref UCS_ERR_UNSUPPORTED
-                                                   and affect performance. Fault
-                                                   tolerance assumes correct
-                                                   network and/or peer failures
-                                                   with corresponding error
-                                                   propagation */
+    UCP_FEATURE_TAG    = UCS_BIT(0),  /**< Request tag matching support */
+    UCP_FEATURE_RMA    = UCS_BIT(1),  /**< Request remote memory
+                                           access support */
+    UCP_FEATURE_AMO32  = UCS_BIT(2),  /**< Request 32-bit atomic
+                                           operations support */
+    UCP_FEATURE_AMO64  = UCS_BIT(3),  /**< Request 64-bit atomic
+                                           operations support */
+    UCP_FEATURE_WAKEUP = UCS_BIT(4)   /**< Request interrupt notification
+                                           support */
 };
 
 
@@ -173,7 +165,10 @@ enum ucp_worker_params_field {
  * present. It is used for the enablement of backward compatibility support.
  */
 enum ucp_ep_params_field {
-    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS  = UCS_BIT(0)  /**< Address of remote peer */
+    UCP_EP_PARAM_FIELD_REMOTE_ADDRESS    = UCS_BIT(0), /**< Address of remote
+                                                        *   peer */
+    UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1)  /**< Error handling mode.
+                                                        *   @ref ucp_err_handling_mode_t */
 };
 
 
@@ -671,6 +666,12 @@ typedef struct ucp_ep_params {
      * specified.
      */
     const ucp_address_t     *address;
+
+    /**
+     * Desired error handling mode, optional parameter. Default value is
+     * @ref UCP_ERR_HANDLING_MODE_DEFAULT
+     */
+    ucp_err_handling_mode_t err_mode;
 } ucp_ep_params_t;
 
 

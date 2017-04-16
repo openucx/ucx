@@ -212,6 +212,17 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
         goto err_destroy_ep;
     }
 
+    if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
+        ucp_ep_config(ep)->err_mode = params->err_mode;
+        if (params->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+            /* Disable RNDV
+             * TODO: check if non-contig data types may be affected */
+            ucp_ep_config(ep)->rndv.am_thresh = -1;
+        }
+    } else {
+        ucp_ep_config(ep)->err_mode = UCP_ERR_HANDLING_MODE_DEFAULT;
+    }
+
     /* send initial wireup message */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
         status = ucp_wireup_send_request(ep);

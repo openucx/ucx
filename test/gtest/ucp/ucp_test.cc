@@ -90,6 +90,12 @@ ucp_worker_params_t ucp_test::get_worker_params() {
     return params;
 }
 
+ucp_ep_params_t ucp_test::get_ep_params() {
+    ucp_ep_params_t params;
+    memset(&params, 0, sizeof(params));
+    return params;
+}
+
 void ucp_test::progress(int worker_index) const {
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
@@ -135,6 +141,7 @@ void ucp_test::wait(void *req, int worker_index)
 std::vector<ucp_test_param>
 ucp_test::enum_test_params(const ucp_params_t& ctx_params,
                            const ucp_worker_params_t& worker_params,
+                           const ucp_ep_params_t& ep_params,
                            const std::string& name,
                            const std::string& test_case_name,
                            const std::string& tls)
@@ -146,7 +153,8 @@ ucp_test::enum_test_params(const ucp_params_t& ctx_params,
     test_param.variant       = DEFAULT_PARAM_VARIANT;
     test_param.thread_type   = SINGLE_THREAD;
     test_param.worker_params = worker_params;
-    
+    test_param.ep_params_cmn = ep_params;
+
     while (ss.good()) {
         std::string tl_name;
         std::getline(ss, tl_name, ',');
@@ -162,6 +170,7 @@ ucp_test::enum_test_params(const ucp_params_t& ctx_params,
 
 void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
                                             const ucp_worker_params_t& worker_params,
+                                            const ucp_ep_params_t& ep_params,
                                             const std::string& name,
                                             const std::string& test_case_name,
                                             const std::string& tls,
@@ -171,8 +180,9 @@ void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
 {
     std::vector<ucp_test_param> tmp_test_params, result;
 
-    tmp_test_params = ucp_test::enum_test_params(ctx_params, worker_params, name,
-                                                 test_case_name, tls);
+    tmp_test_params = ucp_test::enum_test_params(ctx_params, worker_params,
+                                                 ep_params, name, test_case_name,
+                                                 tls);
     for (std::vector<ucp_test_param>::iterator iter = tmp_test_params.begin();
          iter != tmp_test_params.end(); ++iter)
     {
@@ -336,7 +346,8 @@ ucp_test_base::entity::~entity() {
     m_eps.clear();
 }
 
-void ucp_test_base::entity::connect(const entity* other) {
+void ucp_test_base::entity::connect(const entity* other,
+                                    const ucp_ep_params_t* ep_params_cmn) {
     assert(num_workers == other->get_num_workers());
     for (int i = 0; i < num_workers; i++) {
         ucs_status_t status;
@@ -345,12 +356,18 @@ void ucp_test_base::entity::connect(const entity* other) {
         ucp_ep_h ep;
         ucp_ep_params_t ep_params;
 
+        if (ep_params_cmn) {
+            ep_params = *ep_params_cmn;
+        } else {
+            memset(&ep_params, 0, sizeof(ep_params));
+        }
+
         status = ucp_worker_get_address(other->worker(i), &address, &address_length);
         ASSERT_UCS_OK(status);
 
         ucp_test::disable_errors();
-        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-        ep_params.address    = address;
+        ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+        ep_params.address     = address;
 
         status = ucp_ep_create(m_workers.at(i), &ep_params, &ep);
         ucp_test::restore_errors();

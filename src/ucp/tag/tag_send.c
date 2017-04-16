@@ -274,7 +274,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
     ucs_trace_req("send_sync_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    if (ep->worker->context->config.features & UCP_FEATURE_FAULT_TOLERANCE) {
+    if (ucp_ep_config(ep)->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
         goto out;
     }

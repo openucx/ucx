@@ -87,6 +87,35 @@ typedef struct ucp_address               ucp_address_t;
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief Error handling mode for the UCP endpoint.
+ * 
+ * Specifies error handling mode for the UCP endpoint.
+ */
+typedef enum {
+    UCP_ERR_HANDLING_MODE_DEFAULT,          /**< Propagates only locally
+                                             *   detected errors, provides
+                                             *   minimal overhead from
+                                             *   perfromance perspective */
+    UCP_ERR_HANDLING_MODE_PEER,             /**< In addition to @ref
+                                             *   UCP_ERR_HANDLING_MODE_DEFAULT
+                                             *   propagates errors also related
+                                             *   with peer failures, disables
+                                             *   protocols and APIs which may
+                                             *   cause a hang or undefined
+                                             *   behaviour in case of peer failure,
+                                             *   may affect performance and
+                                             *   memory footprint */
+    UCP_ERR_HANDLING_MODE_PEER_KEEP_ALIVE   /**< Provides similar with @ref 
+                                             *   UCP_ERR_HANDLING_MODE_PEER
+                                             *   error handling level but
+                                             *   provides full functionality with
+                                             *   lower overhead (currently
+                                             *   unsupported, ignored) */
+} ucp_err_handling_mode_t;
+
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP Remote memory handle
  *
