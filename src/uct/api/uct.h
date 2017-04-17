@@ -1078,6 +1078,22 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h iface, uct_am_tracer_t tracer,
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Set error handler for the interface.
+ *
+ * The callback @a err_handler is called when transport level error is detected.
+ *
+ * @param [in]  iface           Interface to set the error handler for.
+ * @param [in]  error_handler   Callback to handle transport level error.
+ *                              NULL to clear.
+ * @param [in]  arg             Custom argument.
+ */
+ucs_status_t uct_iface_set_err_handler(uct_iface_h iface,
+                                       uct_error_handler_t err_handler,
+                                       void *arg);
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Create new endpoint.
  *
  * @param [in]  iface   Interface to create the endpoint on.

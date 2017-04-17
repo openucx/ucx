@@ -54,6 +54,13 @@ public:
         req_count++;
     }
 
+    static void err_cb(uct_ep_h ep, void *arg)
+    {
+        uct_ep_h ep_arg = reinterpret_cast<uct_ep_h>(arg);
+        EXPECT_EQ(ep, ep_arg);
+        err_count++;
+    }
+
     static void connect(entity *e1, entity *e2) {
         e1->connect(0, *e2, 0);
         e2->connect(0, *e1, 0);
@@ -62,6 +69,8 @@ public:
                                  NULL, UCT_AM_CB_FLAG_ASYNC);
         uct_iface_set_am_handler(e2->iface(), 0, am_dummy_handler,
                                  NULL, UCT_AM_CB_FLAG_ASYNC);
+        uct_iface_set_err_handler(e1->iface(), err_cb, e1->ep(0));
+        uct_iface_set_err_handler(e2->iface(), err_cb, e2->ep(0));
     }
 
     void close_peer() {
@@ -87,14 +96,18 @@ protected:
     }
 
 protected:
+    static int err_count;
     static int req_count;
 };
 
 int test_error_handling::req_count = 0;
+int test_error_handling::err_count = 0;
 
 UCS_TEST_P(test_error_handling, peer_failure)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+
+    err_count = 0;
 
     close_peer();
     EXPECT_EQ(uct_ep_put_short(ep(), NULL, 0, 0, 0), UCS_OK);
@@ -134,6 +147,8 @@ UCS_TEST_P(test_error_handling, peer_failure)
     EXPECT_EQ(uct_ep_get_address(ep(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_pending_add(ep(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_connect_to_ep(ep(), NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
+
+    EXPECT_LT(0ul, err_count);
 }
 
 UCS_TEST_P(test_error_handling, purge_failed_peer)
@@ -145,6 +160,7 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
     uct_pending_req_t reqs[num_pend_sends];
 
     req_count = 0;
+    err_count = 0;
 
     close_peer();
 
@@ -163,6 +179,7 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
 
     uct_ep_pending_purge(ep(), purge_cb, NULL);
     EXPECT_EQ(num_pend_sends, req_count);
+    EXPECT_LT(0ul, err_count);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_error_handling)

@@ -180,6 +180,9 @@ typedef struct uct_base_iface {
         ucs_log_level_t     failure_level;
     } config;
 
+    uct_error_handler_t err_handler;         /* Error handler */
+    void                *err_handler_arg;    /* Error handler argument */
+
 } uct_base_iface_t;
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
                   const uct_iface_config_t* UCS_STATS_ARG(ucs_stats_node_t*)

@@ -223,6 +223,18 @@ typedef void (*uct_completion_callback_t)(uct_completion_t *self,
  */
 typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process peer failure.
+ *
+ * @param [in]  ep       Endpoint to handle peer failure error,
+ *                       @a ep becomes unusable.
+ * @param [in]  arg      User argument to be passed to the callback.
+ */
+typedef void (*uct_error_handler_t)(uct_ep_h ep, void *arg);
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback to purge pending requests.
