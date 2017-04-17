@@ -55,7 +55,6 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
 }
 
 static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
-    ucs_status_t status;
     uint8_t tag;
     void *data_ptr;
     gni_return_t ugni_rc;
@@ -93,8 +92,8 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
                            tag, user_data, header->length, "RX: AM");
 
         pthread_mutex_unlock(&uct_ugni_global_lock);
-        status = uct_iface_invoke_am(&iface->super.super, tag, user_data,
-                                     header->length, 0);
+        uct_iface_invoke_am(&iface->super.super, tag, user_data,
+                            header->length, 0);
         pthread_mutex_lock(&uct_ugni_global_lock);
 
         ugni_rc = GNI_SmsgRelease(ep->super.ep);
