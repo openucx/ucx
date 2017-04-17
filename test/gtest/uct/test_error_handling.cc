@@ -96,18 +96,18 @@ protected:
     }
 
 protected:
-    static int err_count;
-    static int req_count;
+    static size_t err_count;
+    static size_t req_count;
 };
 
-int test_error_handling::req_count = 0;
-int test_error_handling::err_count = 0;
+size_t test_error_handling::req_count = 0ul;
+size_t test_error_handling::err_count = 0ul;
 
 UCS_TEST_P(test_error_handling, peer_failure)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
-    err_count = 0;
+    err_count = 0ul;
 
     close_peer();
     EXPECT_EQ(uct_ep_put_short(ep(), NULL, 0, 0, 0), UCS_OK);
@@ -155,12 +155,12 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
-    ucs_status_t status;
-    int num_pend_sends = 3;
+    ucs_status_t      status;
+    const size_t      num_pend_sends = 3ul;
     uct_pending_req_t reqs[num_pend_sends];
 
-    req_count = 0;
-    err_count = 0;
+    req_count = 0ul;
+    err_count = 0ul;
 
     close_peer();
 
@@ -168,7 +168,7 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
           status = uct_ep_put_short(ep(), NULL, 0, 0, 0);
     } while (status == UCS_OK);
 
-    for (int i = 0; i < num_pend_sends; i ++) {
+    for (size_t i = 0; i < num_pend_sends; i ++) {
         reqs[i].func = pending_cb;
         EXPECT_EQ(uct_ep_pending_add(ep(), &reqs[i]), UCS_OK);
     }
