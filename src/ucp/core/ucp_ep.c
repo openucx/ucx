@@ -215,9 +215,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
         ucp_ep_config(ep)->err_mode = params->err_mode;
         if (params->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-            /* Disable RNDV
-             * TODO: check if non-contig data types may be affected */
-            ucp_ep_config(ep)->rndv.am_thresh = -1;
+            /* Disable RNDV */
+            ucp_ep_config(ep)->rndv.am_thresh = SIZE_MAX;
         }
     } else {
         ucp_ep_config(ep)->err_mode = UCP_ERR_HANDLING_MODE_DEFAULT;

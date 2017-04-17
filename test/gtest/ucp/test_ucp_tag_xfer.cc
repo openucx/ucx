@@ -20,6 +20,40 @@ class test_ucp_tag_xfer : public test_ucp_tag {
 public:
     using test_ucp_tag::get_ctx_params;
 
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                    const ucp_worker_params_t& worker_params,
+                    const ucp_ep_params_t& ep_params,
+                    const std::string& name,
+                    const std::string& test_case_name,
+                    const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, worker_params, ep_params, name,
+                                     test_case_name, tls, 0, result);
+
+        ucp_ep_params_t ep_params_err_handling = ep_params;
+        ep_params_err_handling.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params_err_handling.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
+        generate_test_params_variant(ctx_params, worker_params, ep_params_err_handling,
+                                     name,
+                                     test_case_name + "/err_handling_mode_peer",
+                                     tls, 0, result);
+        return result;
+    }
+
+    bool is_err_handling() const {
+        const ucp_ep_params_t& ep_params = GetParam().ep_params_cmn;
+        return ((ep_params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) &&
+                (ep_params.err_mode == UCP_ERR_HANDLING_MODE_PEER));
+    }
+
+    void skip_err_handling() const {
+        if (is_err_handling()) {
+            UCS_TEST_SKIP_R("err_handling");
+        }
+    }
+
     void test_xfer_contig(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_generic(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_iov(size_t size, bool expected, bool sync, bool truncated);
@@ -80,6 +114,10 @@ int check_buffers(const std::vector<char> &sendbuf, const std::vector<char> &rec
 void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync,
                                   bool truncated)
 {
+    if (sync) {
+        skip_err_handling();
+    }
+
     ucs::detail::message_stream ms("INFO");
 
     ms << "0 " << std::flush;
@@ -140,6 +178,10 @@ void test_ucp_tag_xfer::test_run_xfer(bool send_contig, bool recv_contig,
     uint8_t *sendbuf = NULL, *recvbuf = NULL;
     ucp_datatype_t send_dt, recv_dt;
     size_t recvd;
+
+    if (sync) {
+        skip_err_handling();
+    }
 
     dt_gen_start_count  = 0;
     dt_gen_finish_count = 0;
@@ -881,12 +923,14 @@ UCS_TEST_P(test_ucp_tag_stats, sync_unexpected, "RNDV_THRESH=1248576") {
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000") {
+    skip_err_handling();
     test_run_xfer(true, true, true, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
+    skip_err_handling();
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
@@ -895,4 +939,3 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)
 
 #endif
-
