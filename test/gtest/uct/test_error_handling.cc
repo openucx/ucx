@@ -16,6 +16,7 @@ class test_error_handling : public uct_test {
 public:
     virtual void init() {
         entity *e1, *e2;
+        uct_iface_params_t iface_params;
 
         uct_test::init();
 
@@ -29,10 +30,14 @@ public:
             set_config("RC_RETRY_COUNT=2");
         }
 
-        e1 = uct_test::create_entity(0);
+        memset(&iface_params, 0, sizeof(iface_params));
+        iface_params.err_handler     = err_cb;
+        iface_params.err_handler_arg = err_handler_arg;
+
+        e1 = uct_test::create_entity(iface_params);
         m_entities.push_back(e1);
 
-        e2 = uct_test::create_entity(0);
+        e2 = uct_test::create_entity(iface_params);
         m_entities.push_back(e2);
 
         connect(e1, e2);
@@ -54,10 +59,10 @@ public:
         req_count++;
     }
 
-    static void err_cb(uct_ep_h ep, void *arg)
+    static void err_cb(void *arg, uct_ep_h ep, ucs_status_t status)
     {
-        uct_ep_h ep_arg = reinterpret_cast<uct_ep_h>(arg);
-        EXPECT_EQ(ep, ep_arg);
+        EXPECT_EQ(err_handler_arg,          arg);
+        EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
         err_count++;
     }
 
@@ -69,8 +74,6 @@ public:
                                  NULL, UCT_AM_CB_FLAG_ASYNC);
         uct_iface_set_am_handler(e2->iface(), 0, am_dummy_handler,
                                  NULL, UCT_AM_CB_FLAG_ASYNC);
-        uct_iface_set_err_handler(e1->iface(), err_cb, e1->ep(0));
-        uct_iface_set_err_handler(e2->iface(), err_cb, e2->ep(0));
     }
 
     void close_peer() {
@@ -98,10 +101,12 @@ protected:
 protected:
     static size_t err_count;
     static size_t req_count;
+    static void* err_handler_arg;
 };
 
-size_t test_error_handling::req_count = 0ul;
-size_t test_error_handling::err_count = 0ul;
+void  *test_error_handling::err_handler_arg = (void *)0xdeadbeaf;
+size_t test_error_handling::req_count       = 0ul;
+size_t test_error_handling::err_count       = 0ul;
 
 UCS_TEST_P(test_error_handling, peer_failure)
 {

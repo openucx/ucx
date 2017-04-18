@@ -228,11 +228,12 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  * @ingroup UCT_RESOURCE
  * @brief Callback to process peer failure.
  *
+ * @param [in]  arg      User argument to be passed to the callback.
  * @param [in]  ep       Endpoint to handle peer failure error,
  *                       @a ep becomes unusable.
- * @param [in]  arg      User argument to be passed to the callback.
+ * @param [in]  status   Status indicating error.
  */
-typedef void (*uct_error_handler_t)(uct_ep_h ep, void *arg);
+typedef void (*uct_error_handler_t)(void *arg, uct_ep_h ep, ucs_status_t status);
 
 
 /**

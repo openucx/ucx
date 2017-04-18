@@ -114,17 +114,6 @@ ucs_status_t uct_iface_set_am_tracer(uct_iface_h tl_iface, uct_am_tracer_t trace
     return UCS_OK;
 }
 
-ucs_status_t uct_iface_set_err_handler(uct_iface_h iface,
-                                       uct_error_handler_t err_handler,
-                                       void *arg)
-{
-    uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
-
-    base_iface->err_handler     = err_handler;
-    base_iface->err_handler_arg = arg;
-    return UCS_OK;
-}
-
 void uct_iface_dump_am(uct_base_iface_t *iface, uct_am_trace_type_t type,
                        uint8_t id, const void *data, size_t length,
                        char *buffer, size_t max)
@@ -299,7 +288,8 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
 
     if (iface->err_handler) {
-        iface->err_handler(tl_ep, iface->err_handler_arg);
+        iface->err_handler(iface->err_handler_arg, tl_ep,
+                           UCS_ERR_ENDPOINT_TIMEOUT);
     }
 
     ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
