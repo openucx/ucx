@@ -97,7 +97,7 @@ typedef enum {
                                              *   detected errors, provides
                                              *   minimal overhead from
                                              *   perfromance perspective */
-    UCP_ERR_HANDLING_MODE_PEER,             /**< In addition to @ref
+    UCP_ERR_HANDLING_MODE_PEER              /**< In addition to @ref
                                              *   UCP_ERR_HANDLING_MODE_DEFAULT
                                              *   propagates errors also related
                                              *   with peer failures, disables
@@ -106,12 +106,6 @@ typedef enum {
                                              *   behaviour in case of peer failure,
                                              *   may affect performance and
                                              *   memory footprint */
-    UCP_ERR_HANDLING_MODE_PEER_KEEP_ALIVE   /**< Provides similar with @ref 
-                                             *   UCP_ERR_HANDLING_MODE_PEER
-                                             *   error handling level but
-                                             *   provides full functionality with
-                                             *   lower overhead (currently
-                                             *   unsupported, ignored) */
 } ucp_err_handling_mode_t;
 
 
