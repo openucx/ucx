@@ -269,6 +269,10 @@ uct_test::entity& uct_p2p_test::receiver() {
     return **(m_entities.end() - 1);
 }
 
+uct_ep_h uct_p2p_test::receiver_ep() {
+    return receiver().ep(0);
+}
+
 uct_completion_t *uct_p2p_test::comp() {
     if (m_null_completion) {
         return NULL;

@@ -35,6 +35,7 @@
 #  define IBV_EXP_ACCESS_REMOTE_WRITE      IBV_ACCESS_REMOTE_WRITE
 #  define IBV_EXP_ACCESS_REMOTE_READ       IBV_ACCESS_REMOTE_READ
 #  define IBV_EXP_ACCESS_REMOTE_ATOMIC     IBV_ACCESS_REMOTE_ATOMIC
+#  define IBV_EXP_ACCESS_MW_BIND           IBV_ACCESS_MW_BIND
 #  define ibv_exp_reg_shared_mr            ibv_reg_shared_mr_ex
 #  define ibv_exp_reg_shared_mr_in         ibv_reg_shared_mr_in
 #  define ibv_exp_query_device             ibv_query_device
@@ -191,6 +192,18 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_DEVICE_MAX_UNEXP_COUNT        UCS_BIT(14)
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
+#endif
+
+
+/*
+ * Fast memory registration (UMR) support
+ */
+#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_UMR_CAPS
+#  define IBV_EXP_HAVE_UMR(_attr)                   ((_attr)->exp_device_cap_flags & IBV_EXP_DEVICE_UMR)
+#  define IBV_DEVICE_UMR_CAPS(_attr, _field)        ((_attr)->umr_caps._field)
+#else
+#  define IBV_EXP_HAVE_UMR(_attr)                   0
+#  define IBV_DEVICE_UMR_CAPS(_attr, _field)        0
 #endif
 
 

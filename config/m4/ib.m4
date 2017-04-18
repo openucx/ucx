@@ -190,8 +190,8 @@ AS_IF([test "x$with_ib" == xyes],
                      [],
                      [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_MEMBERS([struct ibv_exp_qp_init_attr.umr_caps],
-                        [AC_DEFINE([HAVE_IBV_EXP_QP_CREATE_UMR_CAPS], 1, [Support UMR max caps v2])],
+       AC_CHECK_MEMBERS([struct ibv_exp_device_attr.umr_caps],
+                        [AC_DEFINE([HAVE_IBV_EXP_QP_CREATE_UMR_CAPS], 1, [Support UMR max caps])],
                         [],
                         [[#include <infiniband/verbs.h>]])
 

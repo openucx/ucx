@@ -10,6 +10,8 @@
 #include <uct/api/uct.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
+#include <uct/ib/base/ib_umr.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
@@ -724,6 +726,51 @@ static void uct_dc_verbs_iface_progress(void *arg)
     }
 }
 
+static void uct_dc_ep_dereg_nc(uct_ep_h tl_ep, struct ibv_exp_send_wr *wr,
+                               uct_completion_t *comp)
+{
+    uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_dc_verbs_iface_t);
+
+    uct_dc_verbs_iface_post_send(iface, ep, wr, 0);
+    uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
+}
+
+static ucs_status_t uct_dc_ep_reg_nc(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                     size_t iovcnt, uct_md_h *md_p,
+                                     uct_mem_h *memh_p, uct_completion_t *comp)
+{
+    uct_ib_mem_t *memh;
+    ucs_status_t status;
+    struct ibv_exp_send_wr *wr;
+    uct_dc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_verbs_ep_t);
+    uct_dc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_dc_verbs_iface_t);
+
+    uct_md_h md = iface->super.super.super.super.md;
+    if (*memh_p == NULL) {
+        status = md->ops->mem_reg(md, NULL, 0, UCT_MD_MEM_FLAG_EMPTY, (void**)&memh);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+    }
+
+    status = uct_ib_umr_reg_nc(md, iov, iovcnt, tl_ep,
+                               uct_dc_ep_dereg_nc, memh, &wr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    /* TODO: prevent DCI switch between UMR and its data send */
+    uct_dc_verbs_iface_post_send(iface, ep, wr, wr->exp_send_flags);
+    uct_dc_verbs_iface_add_send_comp(iface, ep, comp);
+
+    *md_p = md;
+    *memh_p = memh;
+    return UCS_INPROGRESS;
+}
+
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_verbs_iface_t)(uct_iface_t*);
 
 static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
@@ -746,6 +793,7 @@ static uct_dc_iface_ops_t uct_dc_verbs_iface_ops = {
     .ep_atomic_fadd32         = uct_dc_verbs_ep_atomic_fadd32,
     .ep_atomic_swap32         = uct_dc_verbs_ep_atomic_swap32,
     .ep_atomic_cswap32        = uct_dc_verbs_ep_atomic_cswap32,
+    .ep_mem_reg_nc            = uct_dc_ep_reg_nc,
     .ep_pending_add           = uct_dc_ep_pending_add,
     .ep_pending_purge         = uct_dc_ep_pending_purge,
     .ep_flush                 = uct_dc_verbs_ep_flush,

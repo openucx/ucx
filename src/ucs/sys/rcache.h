@@ -44,7 +44,7 @@ struct ucs_rcache_ops {
      *
      * @param [in]  context    User context, as passed to @ref ucs_rcache_create
      * @param [in]  rcache     Pointer to the registration cache.
-     * @param [in]  arg        Custom argument passed to @ref ucs_rcache_get().
+     * @param [in]  flags      Registration flags passed to @ref ucs_rcache_get().
      * @param [in]  region     Memory region to register. This may point to a larger
      *                          user-defined structure, as specified by the field
      *                          `region_struct_size' in @ref ucs_rcache_params.
@@ -58,7 +58,7 @@ struct ucs_rcache_ops {
      *       such as error messages or fatal failure.
      */
     ucs_status_t           (*mem_reg)(void *context, ucs_rcache_t *rcache,
-                                      void *arg, ucs_rcache_region_t *region);
+                                      unsigned flags, ucs_rcache_region_t *region);
    /**
     * Deregister a memory region.
     *
@@ -158,7 +158,7 @@ void ucs_rcache_destroy(ucs_rcache_t *rcache);
  * @param [in]  address     Address to register or resolve.
  * @param [in]  length      Length of buffer to register or resolve.
  * @param [in]  prot        Requested access flags, PROT_xx (same as passed to mmap).
- * @param [in]  arg         Custom argument passed down to memory registration
+ * @param [in]  flags       Registration flags passed down to memory registration
  *                          callback, if a memory registration happens during
  *                          this call.
  * @param [out] region_p    On success, filled with a pointer to the memory
@@ -170,7 +170,7 @@ void ucs_rcache_destroy(ucs_rcache_t *rcache);
  * @return Error code.
  */
 ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                            int prot, void *arg, ucs_rcache_region_t **region_p);
+                            int prot, unsigned flags, ucs_rcache_region_t **region_p);
 
 
 /**

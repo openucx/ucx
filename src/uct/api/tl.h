@@ -163,6 +163,12 @@ typedef struct uct_iface_ops {
                                      const uct_device_addr_t *dev_addr,
                                      const uct_ep_addr_t *ep_addr);
 
+    /* endpoint - memory registration */
+
+    ucs_status_t (*ep_mem_reg_nc)(uct_ep_h ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uct_md_h *md_p,
+                                  uct_mem_h *memh_p, uct_completion_t *comp);
+
     /* interface - synchronization */
 
     ucs_status_t (*iface_flush)(uct_iface_h iface, unsigned flags,

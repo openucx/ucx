@@ -620,6 +620,21 @@ ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, int qp_type,
     qp_init_attr.max_inl_recv         = iface->config.rx_inline;
 #  endif
 
+#  if HAVE_EXP_UMR
+#    if (HAVE_IBV_EXP_QP_CREATE_UMR_CAPS || HAVE_EXP_UMR_NEW_API)
+    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_MAX_INL_KLMS;
+    qp_init_attr.max_inl_send_klms    = dev->dev_attr.umr_caps.max_send_wqe_inline_klms;
+#    else
+    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_MAX_INL_KLMS;
+    qp_init_attr.max_inl_send_klms    = dev->dev_attr.max_send_wqe_inline_klms;
+#    endif
+
+#    if HAVE_IBV_EXP_QP_CREATE_UMR
+    qp_init_attr.comp_mask           |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
+    qp_init_attr.exp_create_flags    |= IBV_EXP_QP_CREATE_UMR;
+#    endif
+#  endif
+
     qp = ibv_exp_create_qp(dev->ibv_context, &qp_init_attr);
 #else
     qp = ibv_create_qp(uct_ib_iface_md(&iface->super)->pd, &qp_init_attr);
@@ -654,10 +669,11 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
     qp_attr.qp_state              = IBV_QPS_INIT;
     qp_attr.pkey_index            = iface->super.pkey_index;
     qp_attr.port_num              = iface->super.config.port_num;
-    qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE  |
-                                    IBV_ACCESS_REMOTE_WRITE |
-                                    IBV_ACCESS_REMOTE_READ  |
-                                    IBV_ACCESS_REMOTE_ATOMIC;
+    qp_attr.qp_access_flags       = IBV_ACCESS_LOCAL_WRITE   |
+                                    IBV_ACCESS_REMOTE_WRITE  |
+                                    IBV_ACCESS_REMOTE_READ   |
+                                    IBV_ACCESS_REMOTE_ATOMIC |
+                                    IBV_ACCESS_MW_BIND;
     ret = ibv_modify_qp(qp, &qp_attr,
                         IBV_QP_STATE      |
                         IBV_QP_PKEY_INDEX |

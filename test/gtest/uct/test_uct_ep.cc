@@ -51,7 +51,7 @@ UCS_TEST_P(test_uct_ep, disconnect_after_send) {
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer.ptr(),
                             (ucs_min(buffer.length(), m_sender->iface_attr().cap.am.max_zcopy)),
                             buffer.memh(),
-                            m_sender->iface_attr().cap.am.max_iov);
+                            m_sender->iface_attr().cap.am.max_iov, 0);
 
     for (int i = 0; i < 300 / ucs::test_time_multiplier(); ++i) {
         connect();

@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
+#include <ucp/dt/dt.h>
 
 
 /**
@@ -63,5 +64,18 @@ static inline void ucp_ep_connect_remote(ucp_ep_h ep)
     }
 }
 
+size_t ucp_dt_stride_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
+                              ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
+                              ucp_datatype_t datatype, size_t length_max);
+
+size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
+                           ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
+                           ucp_datatype_t datatype, size_t length_max);
+
+ucs_status_t ucp_dt_reusable_create(uct_ep_h ep, void *buffer, size_t length,
+                                    ucp_datatype_t datatype, ucp_dt_state_t *state);
+
+ucs_status_t ucp_dt_reusable_update(uct_ep_h ep, void *buffer, size_t length,
+                                    ucp_datatype_t datatype, ucp_dt_state_t *state);
 
 #endif

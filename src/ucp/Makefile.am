@@ -33,6 +33,8 @@ noinst_HEADERS = \
 	dt/dt.h \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
+	dt/dt_stride.h \
+	dt/dt_reusable.h \
 	dt/dt_generic.h \
 	proto/proto.h \
 	proto/proto_am.inl \
@@ -57,9 +59,12 @@ libucp_la_SOURCES = \
 	core/ucp_worker.c \
 	dt/dt_contig.c \
 	dt/dt_iov.c \
+	dt/dt_stride.c \
+	dt/dt_reusable.c \
 	dt/dt_generic.c \
 	dt/dt.c \
 	proto/proto_am.c \
+	proto/proto_dt.c \
 	rma/basic_rma.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \

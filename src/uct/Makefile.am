@@ -53,6 +53,7 @@ libuct_la_SOURCES += \
 	ib/base/ib_device.c \
 	ib/base/ib_iface.c \
 	ib/base/ib_log.c \
+	ib/base/ib_umr.c \
 	ib/base/ib_md.c
 
 if HAVE_MLX5_HW

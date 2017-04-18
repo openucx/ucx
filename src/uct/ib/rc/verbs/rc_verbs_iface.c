@@ -11,6 +11,7 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
@@ -67,6 +68,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
     ucs_log(iface->super.super.config.failure_level,
             "Send completion with error: %s",
             ibv_wc_status_str(wc->status));
+    printf("error happended on ep=%p WR_id=%lu\n", ep, wc->wr_id);
 
     uct_rc_ep_failed_purge_outstanding(&ep->super.super.super, ib_iface,
                                        &ep->super.txqp);
@@ -643,6 +645,10 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
         iface_attr->cap.tag.recv.min_recv   = 0;
     }
 #endif
+
+#if (HAVE_IBV_EXP_QP_CREATE_UMR_CAPS || HAVE_EXP_UMR_NEW_API)
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_MEM_NC;
+#endif
 }
 
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -772,6 +778,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
     .ep_get_address           = uct_rc_verbs_ep_get_address,
     .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
+    .ep_mem_reg_nc            = uct_rc_ep_reg_nc,
     .iface_flush              = uct_rc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,

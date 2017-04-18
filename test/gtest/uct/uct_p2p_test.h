@@ -51,6 +51,7 @@ protected:
     entity& sender();
     uct_ep_h sender_ep();
     entity& receiver();
+    uct_ep_h receiver_ep();
     uct_completion_t *comp();
 
 private:

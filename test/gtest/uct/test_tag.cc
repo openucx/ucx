@@ -108,7 +108,7 @@ public:
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ctx.mbuf->ptr(),
                                 ctx.mbuf->length(), ctx.mbuf->memh(),
-                                sender().iface_attr().cap.tag.eager.max_iov);
+                                sender().iface_attr().cap.tag.eager.max_iov, 0);
 
         ucs_status_t status = uct_ep_tag_eager_zcopy(e.ep(0), ctx.tag, ctx.imm_data,
                                                      iov, iovcnt, &ctx.uct_comp);
@@ -123,7 +123,7 @@ public:
          uint64_t ctxs[2] = {ctx.imm_data, reinterpret_cast<uint64_t>(&ctx)};
 
          UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ctx.mbuf->ptr(),
-                                 ctx.mbuf->length(), ctx.mbuf->memh(), 1);
+                                 ctx.mbuf->length(), ctx.mbuf->memh(), 1, 0);
 
          ctx.rndv_op = uct_ep_tag_rndv_zcopy(e.ep(0), ctx.tag, &ctxs,
                                              sizeof(ctxs), iov, iovcnt,
@@ -149,7 +149,7 @@ public:
     ucs_status_t tag_post(entity &e, recv_ctx &ctx)
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, ctx.mbuf->ptr(),
-                                ctx.mbuf->length(), ctx.mbuf->memh(), 1);
+                                ctx.mbuf->length(), ctx.mbuf->memh(), 1, 0);
         return uct_iface_tag_recv_zcopy(e.iface(), ctx.tag, ctx.tmask,
                                         iov, iovcnt, &ctx.uct_ctx);
     }

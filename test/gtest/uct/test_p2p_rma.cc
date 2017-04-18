@@ -42,7 +42,7 @@ public:
                            const mapped_buffer &recvbuf)
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.put.max_iov);
+                                sendbuf.memh(), sender().iface_attr().cap.put.max_iov, 0);
 
         return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }
@@ -59,12 +59,13 @@ public:
                            const mapped_buffer &recvbuf)
     {
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.get.max_iov);
+                                sendbuf.memh(), sender().iface_attr().cap.get.max_iov, 0);
 
         return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
     }
 
-    virtual void test_xfer(send_func_t send, size_t length, direction_t direction) {
+    virtual void test_xfer(send_func_t send, size_t length,
+                           direction_t direction) {
         mapped_buffer sendbuf(length, SEED1, sender(), 1);
         mapped_buffer recvbuf(length, SEED2, receiver(), 3);
 
@@ -137,3 +138,68 @@ UCS_TEST_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp64, "IB_TX_INLINE_RESP=64"
 
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_inlresp)
 
+class uct_p2p_rma_nc_test : public uct_p2p_rma_test {
+public:
+    uct_p2p_rma_nc_test() : uct_p2p_rma_test() {
+    }
+
+    ucs_status_t put_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
+                           const mapped_buffer &recvbuf)
+    {
+        ucs_status_t status;
+        uct_iov_t iov = {0};
+        iov.buffer = sendbuf.ptr();
+        iov.length = sendbuf.nc_length();
+        iov.memh = sendbuf.nc_memh();
+        iov.count = 1;
+
+        return uct_ep_put_zcopy(ep, &iov, 1, recvbuf.addr(), recvbuf.nc_rkey(), comp());
+    }
+
+    ucs_status_t get_zcopy(uct_ep_h ep, const mapped_buffer &sendbuf,
+                           const mapped_buffer &recvbuf)
+    {
+        ucs_status_t status;
+        uct_iov_t iov = {0};
+        iov.buffer = sendbuf.ptr();
+        iov.length = sendbuf.nc_length();
+        iov.memh = sendbuf.nc_memh();
+        iov.count = 1;
+
+        return uct_ep_get_zcopy(ep, &iov, 1, recvbuf.addr(), recvbuf.nc_rkey(), comp());
+    }
+
+    virtual void test_xfer(send_func_t send, size_t length,
+                           direction_t direction) {
+        mapped_buffer sendbuf(length, SEED1, sender(), 2, 0, sender_ep());
+        mapped_buffer recvbuf(length, SEED2, receiver(), 3, 1, receiver_ep());
+
+        blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+        if (direction == DIRECTION_SEND_TO_RECV) {
+            sendbuf.pattern_fill(SEED3);
+            wait_for_remote();
+            recvbuf.pattern_check(SEED1);
+        } else if (direction == DIRECTION_RECV_TO_SEND) {
+            recvbuf.pattern_fill(SEED3);
+            sendbuf.pattern_check(SEED2);
+            wait_for_remote();
+        }
+    }
+};
+
+UCS_TEST_P(uct_p2p_rma_nc_test, put_zcopy) {
+    check_caps(UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_MEM_NC);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_nc_test::put_zcopy),
+                    0ul, sender().iface_attr().cap.put.max_zcopy,
+                    DIRECTION_SEND_TO_RECV);
+}
+
+UCS_TEST_P(uct_p2p_rma_nc_test, get_zcopy) {
+    check_caps(UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_MEM_NC);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_nc_test::get_zcopy),
+                    ucs_max(1ull, sender().iface_attr().cap.get.min_zcopy),
+                    sender().iface_attr().cap.get.max_zcopy,
+                    DIRECTION_RECV_TO_SEND);
+}
+
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_nc_test)

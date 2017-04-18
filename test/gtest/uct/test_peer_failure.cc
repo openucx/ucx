@@ -165,7 +165,7 @@ UCS_TEST_P(test_uct_peer_failure, peer_failure)
 
     restore_errors();
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1, 0);
 
     /* Check that all ep operations return pre-defined error code */
     EXPECT_EQ(uct_ep_am_short(ep0(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);

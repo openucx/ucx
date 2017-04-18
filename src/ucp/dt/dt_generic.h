@@ -20,12 +20,11 @@ typedef struct ucp_dt_generic {
 } ucp_dt_generic_t;
 
 
-static inline ucp_dt_generic_t* ucp_dt_generic(ucp_datatype_t datatype)
-{
-    return (ucp_dt_generic_t*)(void*)(datatype & ~UCP_DATATYPE_CLASS_MASK);
-}
-
 #define UCP_DT_IS_GENERIC(_datatype) \
           (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_GENERIC)
+
+void ucp_dt_generic_create(ucp_dt_generic_t *dt,
+                           const ucp_generic_dt_ops_t *ops,
+                           void *context);
 
 #endif

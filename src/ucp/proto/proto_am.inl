@@ -90,12 +90,10 @@ err:
 }
 
 static UCS_F_ALWAYS_INLINE
-size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
-                           ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
-                           ucp_datatype_t datatype, size_t length_max)
+size_t ucp_dt_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
+                       ucp_dt_state_t *state, const ucp_dt_iov_t *src_iov,
+                       ucp_datatype_t datatype, size_t length_max)
 {
-    size_t iov_offset, max_src_iov, src_it, dst_it;
-    const uct_mem_h *memh;
     size_t length_it = 0;
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
@@ -109,36 +107,17 @@ size_t ucp_dt_iov_copy_uct(uct_iov_t *iov, size_t *iovcnt, size_t max_dst_iov,
         *iovcnt   = 1;
         length_it = iov[0].length;
         break;
+        
+    case UCP_DATATYPE_STRIDE_R:
+    case UCP_DATATYPE_STRIDE:
+        length_it = ucp_dt_stride_copy_uct(iov, iovcnt, max_dst_iov, state,
+                                           src_iov, datatype, length_max);
+        break;
+        
+    case UCP_DATATYPE_IOV_R:
     case UCP_DATATYPE_IOV:
-        memh                        = state->dt.iov.memh;
-        iov_offset                  = state->dt.iov.iov_offset;
-        max_src_iov                 = state->dt.iov.iovcnt;
-        src_it                      = state->dt.iov.iovcnt_offset;
-        dst_it                      = 0;
-        state->dt.iov.iov_offset    = 0;
-        while ((dst_it < max_dst_iov) && (src_it < max_src_iov)) {
-            if (src_iov[src_it].length) {
-                iov[dst_it].buffer  = src_iov[src_it].buffer + iov_offset;
-                iov[dst_it].length  = src_iov[src_it].length - iov_offset;
-                iov[dst_it].memh    = memh[src_it];
-                iov[dst_it].stride  = 0;
-                iov[dst_it].count   = 1;
-                length_it          += iov[dst_it].length;
-
-                ++dst_it;
-                if (length_it >= length_max) {
-                    iov[dst_it - 1].length      -= (length_it - length_max);
-                    length_it                    = length_max;
-                    state->dt.iov.iov_offset     = iov_offset + iov[dst_it - 1].length;
-                    break;
-                }
-            }
-            iov_offset = 0;
-            ++src_it;
-        }
-
-        state->dt.iov.iovcnt_offset = src_it;
-        *iovcnt                     = dst_it;
+        length_it = ucp_dt_iov_copy_uct(iov, iovcnt, max_dst_iov, state,
+                                        src_iov, datatype, length_max);
         break;
     default:
         ucs_error("Invalid data type");
@@ -163,8 +142,8 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     saved_state    = req->send.state;
     req->send.lane = ucp_ep_get_am_lane(ep);
 
-    ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, &req->send.state, req->send.buffer,
-                        req->send.datatype, req->send.length);
+    ucp_dt_copy_uct(iov, &iovcnt, max_iov, &req->send.state, req->send.buffer,
+                    req->send.datatype, req->send.length);
 
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
                              hdr_size, iov, iovcnt, &req->send.uct_comp);
@@ -214,9 +193,9 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
     if (offset == 0) {
         /* First stage */
-        length_it = ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, state,
-                                        req->send.buffer,  req->send.datatype,
-                                        max_middle - hdr_size_first + hdr_size_middle);
+        length_it = ucp_dt_copy_uct(iov, &iovcnt, max_iov, state,
+                                    req->send.buffer,  req->send.datatype,
+                                    max_middle - hdr_size_first + hdr_size_middle);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_first, (void*)hdr_first,
                                  hdr_size_first, iov, iovcnt, &req->send.uct_comp);
@@ -230,8 +209,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else if ((offset + max_middle < req->send.length) || flag_iov_mid) {
         /* Middle stage */
-        length_it = ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, state,
-                                        req->send.buffer, req->send.datatype, max_middle);
+        length_it = ucp_dt_copy_uct(iov, &iovcnt, max_iov, state,
+                                    req->send.buffer, req->send.datatype, max_middle);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
                                  hdr_size_middle, iov, iovcnt, &req->send.uct_comp);
@@ -245,9 +224,9 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         return UCS_INPROGRESS;
     } else {
         /* Last stage */
-        length_it = ucp_dt_iov_copy_uct(iov, &iovcnt, max_iov, state,
-                                        req->send.buffer, req->send.datatype,
-                                        req->send.length - offset);
+        length_it = ucp_dt_copy_uct(iov, &iovcnt, max_iov, state,
+                                    req->send.buffer, req->send.datatype,
+                                    req->send.length - offset);
 
         status = uct_ep_am_zcopy(uct_ep, am_id_last, (void*)hdr_middle,
                                  hdr_size_middle, iov, iovcnt, &req->send.uct_comp);

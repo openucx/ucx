@@ -82,9 +82,15 @@ static size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     if (UCP_DT_IS_CONTIG(sreq->send.datatype)) {
         rndv_rts_hdr->address = (uintptr_t) sreq->send.buffer;
         packed_len += ucp_tag_rndv_pack_rkey(sreq, rndv_rts_hdr);
-    } else if (UCP_DT_IS_GENERIC(sreq->send.datatype) ||
-               UCP_DT_IS_IOV(sreq->send.datatype)) {
-        rndv_rts_hdr->address = 0;
+    } else {
+        enum ucp_dt_type type = (sreq->send.datatype) & UCP_DATATYPE_CLASS_MASK;
+        if ((type == UCP_DATATYPE_IOV) ||
+            (type == UCP_DATATYPE_IOV_R) ||
+            (type == UCP_DATATYPE_STRIDE) ||
+            (type == UCP_DATATYPE_STRIDE_R) ||
+            (type == UCP_DATATYPE_GENERIC)) {
+            rndv_rts_hdr->address = 0;
+        }
     }
 
     /* For rndv emulation based on AM rndv (send-recv), only the size of the rts
@@ -411,7 +417,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
                   ucp_ep_get_am_lane(ep));
     }
 
-    if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
+    switch ((rreq->recv.datatype) & UCP_DATATYPE_CLASS_MASK) {
+    case UCP_DATATYPE_CONTIG:
         if ((rndv_rts_hdr->address != 0) && (ucp_ep_is_rndv_lane_present(ep) ||
             (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_OFFLOAD))) {
             /* read the data from the sender with a get_zcopy operation on the
@@ -423,13 +430,21 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
              * with AM messages */
             ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
         }
-    } else if (UCP_DT_IS_GENERIC(rreq->recv.datatype) ||
-               UCP_DT_IS_IOV(rreq->recv.datatype)) {
+        break;
+
+    case UCP_DATATYPE_IOV:
+    case UCP_DATATYPE_IOV_R:
+    case UCP_DATATYPE_STRIDE:
+    case UCP_DATATYPE_STRIDE_R:
+    case UCP_DATATYPE_GENERIC:
         /* if the recv side has a generic datatype,
          * send an RTR and the sender will send the data with AM messages */
         ucp_rndv_handle_recv_am(rndv_req, rreq, rndv_rts_hdr);
-    } else {
+        break;
+
+    default:
         ucs_fatal("datatype isn't implemented");
+        break;
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

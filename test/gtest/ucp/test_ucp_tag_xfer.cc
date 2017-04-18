@@ -56,6 +56,7 @@ public:
 
     void test_xfer_contig(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_generic(size_t size, bool expected, bool sync, bool truncated);
+    void test_xfer_stride(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_iov(size_t size, bool expected, bool sync, bool truncated);
     void test_xfer_generic_err(size_t size, bool expected, bool sync, bool truncated);
 
@@ -72,6 +73,8 @@ protected:
                                 ucp_datatype_t *recv_dt);
     void test_xfer_probe(bool send_contig, bool recv_contig,
                          bool expected, bool sync);
+    void test_xfer_stride_internal(size_t size, bool expected, bool sync, bool truncated, bool reusable);
+    void test_xfer_iov_internal(size_t size, bool expected, bool sync, bool truncated, bool stride, bool reusable);
 
 private:
     size_t do_xfer(const void *sendbuf, void *recvbuf, size_t count,
@@ -97,6 +100,8 @@ int check_buffers(const std::vector<char> &sendbuf, const std::vector<char> &rec
         for (size_t it = 0; it < recvd; ++it) {
             if (sendbuf[it] != recvbuf[it]) {
                 ms << datatype << ':'
+                   << " send_buff=" << (void*)sendbuf.data()
+                   << " recv_buff=" << (void*)recvbuf.data()
                    << " send_iovcnt=" << std::dec << send_iovcnt
                    << " recv_iovcnt=" << recv_iovcnt << " size=" << size
                    << " expected=" << expected << " sync=" << sync
@@ -111,8 +116,7 @@ int check_buffers(const std::vector<char> &sendbuf, const std::vector<char> &rec
     return buffers_equal;
 }
 
-void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync,
-                                  bool truncated)
+void test_ucp_tag_xfer::test_xfer(xfer_func_t func, bool expected, bool sync, bool truncated)
 {
     if (sync) {
         skip_err_handling();
@@ -152,7 +156,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
         for (unsigned i = 0; i < count; ++i) {
              sendbuf[i] = i % 256;
         }
-        *send_dt = DATATYPE;
+        *send_dt = ucp_dt_make_contig(1);
     } else {
         /* the sender has a generic datatype */
         status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, send_dt);
@@ -161,7 +165,7 @@ void test_ucp_tag_xfer::test_xfer_prepare_bufs(uint8_t *sendbuf, uint8_t *recvbu
 
     if (recv_contig) {
         /* the recv has a contig datatype for the data buffer */
-        *recv_dt = DATATYPE;
+        *recv_dt = ucp_dt_make_contig(1);
     } else {
         /* the receiver has a generic datatype */
         status = ucp_dt_create_generic(&test_dt_uint8_ops, NULL, recv_dt);
@@ -328,25 +332,88 @@ void test_ucp_tag_xfer::test_xfer_generic(size_t size, bool expected, bool sync,
     ucp_dt_destroy(dt);
 }
 
+void test_ucp_tag_xfer::test_xfer_stride(size_t size, bool expected, bool sync,
+                                         bool truncated)
+{
+    test_xfer_stride_internal(size, expected, sync, truncated, false);
+    test_xfer_stride_internal(size, expected, sync, truncated, true);
+}
+
+void test_ucp_tag_xfer::test_xfer_stride_internal(size_t size, bool expected,
+                                                  bool sync, bool truncated,
+                                                  bool reusable)
+{
+    std::vector<char> sendbuf(size, 0);
+    std::vector<char> recvbuf(size, 0);
+    ucp_datatype_t send_dt;
+    ucp_datatype_t recv_dt;
+    if (reusable) {
+        send_dt = ucp_dt_make_stride_reusable(ucp_dt_make_contig(1), 1, size);
+        recv_dt = ucp_dt_make_stride_reusable(ucp_dt_make_contig(size), size, 1);
+    } else {
+        send_dt = ucp_dt_make_stride(ucp_dt_make_contig(size), size, 1);
+        recv_dt = ucp_dt_make_stride(ucp_dt_make_contig(1), 1, size);
+    }
+
+    ucs::fill_random(sendbuf.begin(), sendbuf.end());
+
+    size_t recvd = do_xfer(sendbuf.data(), recvbuf.data(), 1, send_dt, recv_dt,
+                           expected, sync, truncated);
+    if (!truncated) {
+        ASSERT_EQ(sendbuf.size(), recvd);
+    }
+    EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, 1, 1,
+                               size, expected, sync, "STRIDE"));
+
+    if (reusable) {
+        ucp_dt_destroy(send_dt);
+        ucp_dt_destroy(recv_dt);
+    }
+}
+
 void test_ucp_tag_xfer::test_xfer_iov(size_t size, bool expected, bool sync,
                                       bool truncated)
+{
+    test_xfer_iov_internal(size, expected, sync, truncated, false, false);
+    test_xfer_iov_internal(size, expected, sync, truncated, true,  false);
+    test_xfer_iov_internal(size, expected, sync, truncated, false, true);
+    test_xfer_iov_internal(size, expected, sync, truncated, true,  true);
+}
+
+void test_ucp_tag_xfer::test_xfer_iov_internal(size_t size, bool expected,
+                                               bool sync, bool truncated,
+                                               bool stride, bool reusable)
 {
     const size_t iovcnt = 20;
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
+    ucp_datatype_t send_dt;
+    ucp_datatype_t recv_dt;
+    if (reusable) {
+        send_dt = ucp_dt_make_iov_reusable();
+        recv_dt = ucp_dt_make_iov_reusable();
+    } else {
+        send_dt = ucp_dt_make_iov();
+        recv_dt = ucp_dt_make_iov();
+    }
 
     ucs::fill_random(sendbuf.begin(), sendbuf.end());
 
-    UCS_TEST_GET_BUFFER_DT_IOV(send_iov, send_iovcnt, sendbuf.data(), sendbuf.size(), iovcnt);
-    UCS_TEST_GET_BUFFER_DT_IOV(recv_iov, recv_iovcnt, recvbuf.data(), recvbuf.size(), iovcnt);
+    UCS_TEST_GET_BUFFER_DT_IOV(send_iov, send_iovcnt, sendbuf.data(), sendbuf.size(), iovcnt, stride);
+    UCS_TEST_GET_BUFFER_DT_IOV(recv_iov, recv_iovcnt, recvbuf.data(), recvbuf.size(), iovcnt, stride);
 
-    size_t recvd = do_xfer(&send_iov, &recv_iov, iovcnt, DATATYPE_IOV, DATATYPE_IOV,
+    size_t recvd = do_xfer(&send_iov, &recv_iov, iovcnt, send_dt, recv_dt,
                            expected, sync, truncated);
     if (!truncated) {
         ASSERT_EQ(sendbuf.size(), recvd);
     }
     EXPECT_TRUE(!check_buffers(sendbuf, recvbuf, recvd, send_iovcnt, recv_iovcnt,
                                size, expected, sync, "IOV"));
+
+    if (reusable) {
+        ucp_dt_destroy(send_dt);
+        ucp_dt_destroy(recv_dt);
+    }
 }
 
 void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
@@ -483,6 +550,18 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_unexp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, false, false);
 }
 
+UCS_TEST_P(test_ucp_tag_xfer, stride_exp) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_stride, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, stride_exp_truncated) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_stride, true, false, true);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, stride_unexp) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_stride, false, false, false);
+}
+
 UCS_TEST_P(test_ucp_tag_xfer, generic_err_exp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic_err, true, false, false);
 }
@@ -533,6 +612,17 @@ UCS_TEST_P(test_ucp_tag_xfer, iov_exp_sync) {
 
 UCS_TEST_P(test_ucp_tag_xfer, iov_unexp_sync) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, false, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, stride_exp_sync) {
+    /* because ucp_tag_send_req return status (instead request) if send operation
+     * completed immediately */
+    skip_loopback();
+    test_xfer(&test_ucp_tag_xfer::test_xfer_stride, true, true, false);
+}
+
+UCS_TEST_P(test_ucp_tag_xfer, stride_unexp_sync) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_stride, false, true, false);
 }
 
 /* send_contig_recv_contig */

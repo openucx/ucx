@@ -13,6 +13,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
+#include <uct/api/uct.h>
 
 
 #define ucs_rcache_region_log(_level, _message, ...) \
@@ -58,7 +59,8 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
     vsnprintf(message, sizeof(message), fmt, ap);
     va_end(ap);
 
-    if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
+    if ((region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) &&
+        (!(region->flags & UCS_RCACHE_REGION_FLAG_INVALID))) {
         rcache->params.ops->dump_region(rcache->params.context, rcache, region,
                                         region_desc, sizeof(region_desc));
     } else {
@@ -380,7 +382,7 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
 
 static ucs_status_t
 ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
-                         int prot, void *arg, ucs_rcache_region_t **region_p)
+                         int prot, unsigned flags, ucs_rcache_region_t **region_p)
 {
     ucs_rcache_region_t *region;
     ucs_pgt_addr_t start, end;
@@ -426,6 +428,10 @@ retry:
     }
 
     memset(region, 0, rcache->params.region_struct_size);
+    if (flags & UCT_MD_MEM_FLAG_EMPTY) {
+        region->flags = UCS_RCACHE_REGION_FLAG_INVALID;
+        goto skip_registration;
+    }
 
     region->super.start = start;
     region->super.end   = end;
@@ -445,7 +451,7 @@ retry:
     region->refcount = 0;
     region->status = status =
         UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
-                               rcache->params.context, rcache, arg, region);
+                               rcache->params.context, rcache, flags, region);
     if (status != UCS_OK) {
         if (merged) {
             /* failure may be due to merge, retry with original address */
@@ -462,6 +468,7 @@ retry:
         }
     }
 
+skip_registration:
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     region->refcount = 1;
 
@@ -481,7 +488,7 @@ void ucs_rcache_region_hold(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 }
 
 ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
-                            int prot, void *arg, ucs_rcache_region_t **region_p)
+                            int prot, unsigned flags, ucs_rcache_region_t **region_p)
 {
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_pgt_region_t *pgt_region;
@@ -513,7 +520,7 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
      * - found unregistered region
      */
     return UCS_PROFILE_CALL(ucs_rcache_create_region, rcache, address, length,
-                            prot, arg, region_p);
+                            prot, flags, region_p);
 }
 
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)

@@ -215,6 +215,10 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n);
 void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
 
+ucs_status_t uct_rc_ep_reg_nc(uct_ep_h tl_ep, const uct_iov_t *iov,
+                              size_t iovcnt, uct_md_h *md_p,
+                              uct_mem_h *memh_p, uct_completion_t *comp);
+
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg);
