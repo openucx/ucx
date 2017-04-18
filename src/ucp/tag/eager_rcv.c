@@ -5,7 +5,7 @@
  */
 
 #include "eager.h"
-#include "match.h"
+#include "tag_match.inl"
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
@@ -56,7 +56,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
     recv_tag = eager_hdr->super.tag;
     recv_len = length - hdr_len;
 
-    req = ucp_tag_search_exp(context, recv_tag, recv_len, flags);
+    req = ucp_tag_exp_search(&context->tm, recv_tag, recv_len, flags);
     if (req != NULL) {
         UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
 
@@ -93,7 +93,7 @@ ucp_eager_handler(void *arg, void *data, size_t length, unsigned am_flags,
 
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(context, worker, data, length, am_flags,
+        status = ucp_tag_unexp_recv(&context->tm, worker, data, length, am_flags,
                                     hdr_len, flags);
     }
 

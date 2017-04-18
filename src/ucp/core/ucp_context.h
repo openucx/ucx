@@ -9,181 +9,15 @@
 #ifndef UCP_CONTEXT_H_
 #define UCP_CONTEXT_H_
 
+#include "ucp_types.h"
+#include "ucp_thread.h"
+
 #include <ucp/api/ucp.h>
+#include <ucp/tag/tag_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/type/component.h>
 #include <ucs/type/spinlock.h>
-#include "config.h"
-
-typedef enum ucp_mt_type {
-    UCP_MT_TYPE_NONE = 0,
-    UCP_MT_TYPE_SPINLOCK,
-    UCP_MT_TYPE_MUTEX
-} ucp_mt_type_t;
-
-typedef struct ucp_mt_lock {
-    ucp_mt_type_t                 mt_type;
-    union {
-        /* Lock for multithreading support. Either spinlock or mutex is used at
-           at one time. Spinlock is the default option. */
-        pthread_mutex_t           mt_mutex;
-        ucs_spinlock_t            mt_spinlock;
-    } lock;
-} ucp_mt_lock_t;
-
-#if ENABLE_MT
-#define UCP_THREAD_IS_REQUIRED(_lock_ptr) ((_lock_ptr)->mt_type)
-#define UCP_THREAD_LOCK_INIT(_lock_ptr)                                 \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_init(&((_lock_ptr)->lock.mt_mutex), NULL);    \
-        } else {                                                        \
-            ucs_spinlock_init(&((_lock_ptr)->lock.mt_spinlock));        \
-        }                                                               \
-    }
-#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                             \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_destroy(&((_lock_ptr)->lock.mt_mutex));       \
-        } else {                                                        \
-            ucs_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock));     \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_ENTER(_lock_ptr)                                  \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_lock(&((_lock_ptr)->lock.mt_mutex));          \
-        } else {                                                        \
-            ucs_spin_lock(&((_lock_ptr)->lock.mt_spinlock));            \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_EXIT(_lock_ptr)                                   \
-    {                                                                   \
-        if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) {                \
-            pthread_mutex_unlock(&((_lock_ptr)->lock.mt_mutex));        \
-        } else {                                                        \
-            ucs_spin_unlock(&((_lock_ptr)->lock.mt_spinlock));          \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_YIELD(_lock_ptr)                                  \
-    {                                                                   \
-        UCP_THREAD_CS_EXIT(_lock_ptr);                                  \
-        sched_yield();                                                  \
-        UCP_THREAD_CS_ENTER(_lock_ptr);                                 \
-    }
-#define UCP_THREAD_LOCK_INIT_CONDITIONAL(_lock_ptr)                     \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_LOCK_INIT(_lock_ptr);                            \
-        }                                                               \
-    }
-#define UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(_lock_ptr)                 \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_LOCK_FINALIZE(_lock_ptr);                        \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr)                      \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_ENTER(_lock_ptr);                             \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr)                       \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_EXIT(_lock_ptr);                              \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_YIELD_CONDITIONAL(_lock_ptr)                      \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr);                  \
-            sched_yield();                                              \
-            UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr);                 \
-        }                                                               \
-    }
-#else
-#define UCP_THREAD_IS_REQUIRED(_lock_ptr)                0
-#define UCP_THREAD_LOCK_INIT(_lock_ptr)                  {}
-#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)              {}
-#define UCP_THREAD_CS_ENTER(_lock_ptr)                   {}
-#define UCP_THREAD_CS_EXIT(_lock_ptr)                    {}
-#define UCP_THREAD_CS_YIELD(_lock_ptr)                   {}
-#define UCP_THREAD_LOCK_INIT_CONDITIONAL(_lock_ptr)      {}
-#define UCP_THREAD_LOCK_FINALIZE_CONDITIONAL(_lock_ptr)  {}
-#define UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr)       {}
-#define UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr)        {}
-#define UCP_THREAD_CS_YIELD_CONDITIONAL(_lock_ptr)       {}
-#endif
-
-#define UCP_WORKER_NAME_MAX          32   /* Worker name for debugging */
-#define UCP_MIN_BCOPY                64   /* Minimal size for bcopy */
-
-/* Resources */
-#define UCP_MAX_RESOURCES            UINT8_MAX
-#define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
-typedef uint8_t                      ucp_rsc_index_t;
-
-/* MDs */
-#define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE(UCS_PP_TOKENPASTE(uint, _bits), _t)
-#define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
-typedef ucp_rsc_index_t              ucp_md_index_t;
-#define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
-UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
-
-/* Lanes */
-#define UCP_MAX_LANES                8
-#define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
-typedef uint8_t                      ucp_lane_index_t;
-UCP_UINT_TYPE(UCP_MAX_LANES)         ucp_lane_map_t;
-
-
-/* Forward declarations */
-typedef struct ucp_request              ucp_request_t;
-typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
-typedef struct ucp_address_entry        ucp_address_entry_t;
-typedef struct ucp_stub_ep              ucp_stub_ep_t;
-
-
-/**
- * Active message codes
- */
-enum {
-    UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
-
-    UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager */
-    UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
-    UCP_AM_ID_EAGER_MIDDLE      =  4, /* Middle eager fragment */
-    UCP_AM_ID_EAGER_LAST        =  5, /* Last eager fragment */
-
-    UCP_AM_ID_EAGER_SYNC_ONLY   =  6, /* Single packet eager-sync */
-    UCP_AM_ID_EAGER_SYNC_FIRST  =  7, /* First eager-sync fragment */
-    UCP_AM_ID_EAGER_SYNC_ACK    =  8, /* Eager-sync acknowledge */
-
-    UCP_AM_ID_RNDV_RTS          =  9, /* Ready-to-Send to init rendezvous */
-    UCP_AM_ID_RNDV_ATS          =  10, /* Ack-to-Send after finishing a get operation */
-    UCP_AM_ID_RNDV_RTR          =  11, /* Ready-to-Receive rendezvous for a receiver
-                                          with a generic datatype */
-    UCP_AM_ID_RNDV_DATA         =  12, /* Rndv data fragments when using software
-                                          rndv (bcopy) */
-    UCP_AM_ID_RNDV_DATA_LAST    =  13, /* The last rndv data fragment when using
-                                          software rndv (bcopy) */
-    UCP_AM_ID_LAST
-};
-
-
-/**
- * Atomic operations mode.
- */
-typedef enum {
-    UCP_ATOMIC_MODE_CPU,     /* Use CPU-based atomics */
-    UCP_ATOMIC_MODE_DEVICE,  /* Use device-based atomics */
-    UCP_ATOMIC_MODE_GUESS,   /* If all transports support CPU AMOs only (no DEVICE),
-                              * the CPU is selected, otherwise DEVICE is selected */
-    UCP_ATOMIC_MODE_LAST
-} ucp_atomic_mode_t;
 
 
 typedef struct ucp_context_config {
@@ -227,14 +61,6 @@ struct ucp_config {
 
 
 /**
- * Active message tracer.
- */
-typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
-                                uint8_t id, const void *data, size_t length,
-                                char *buffer, size_t max);
-
-
-/**
  * UCP communication resource descriptor
  */
 typedef struct ucp_tl_resource_desc {
@@ -273,10 +99,7 @@ typedef struct ucp_context {
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array*/
 
-    struct {
-        ucs_queue_head_t          expected;   /* Expected requests */
-        ucs_queue_head_t          unexpected; /* Unexpected received descriptors */
-    } tag;
+    ucp_tag_match_t               tm;         /* Tag-matching queues */
 
     struct {
 

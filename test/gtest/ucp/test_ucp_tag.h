@@ -9,10 +9,6 @@
 #define TEST_UCP_TAG_H_
 
 #include "ucp_test.h"
-extern "C" {
-#include <ucp/core/ucp_context.h>
-#include <ucs/datastruct/queue.h>
-}
 
 
 class test_ucp_tag : public ucp_test {
@@ -86,7 +82,7 @@ protected:
 
     void wait_and_validate(request *req);
 
-    void wait_for_unexpected_msg(ucs_queue_head_t *unexpected_q, double sec);
+    void wait_for_unexpected_msg(ucp_context_h context, double sec);
 
     static void* dt_common_start(size_t count);
 

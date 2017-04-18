@@ -378,7 +378,7 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
     } else {
         sreq = do_send(sendbuf, count, send_dt, sync);
 
-        wait_for_unexpected_msg(&receiver().ucph()->tag.unexpected, 10.0);
+        wait_for_unexpected_msg(receiver().ucph(), 10.0);
 
         if (sync) {
             EXPECT_FALSE(sreq->completed);

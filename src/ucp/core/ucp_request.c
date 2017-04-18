@@ -8,7 +8,7 @@
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 
-#include <ucp/tag/match.h>
+#include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
@@ -85,7 +85,7 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->mt_lock);
         UCP_THREAD_CS_ENTER_CONDITIONAL(&worker->context->mt_lock);
 
-        ucp_tag_cancel_expected(worker->context, req);
+        ucp_tag_exp_remove(&worker->context->tm, req);
         ucp_request_complete_recv(req, UCS_ERR_CANCELED);
 
         UCP_THREAD_CS_EXIT_CONDITIONAL(&worker->context->mt_lock);

@@ -10,6 +10,7 @@
 
 #include "ucp_ep.h"
 #include "ucp_worker.h"
+#include "ucp_context.h"
 
 #include <ucs/arch/bitops.h>
 
