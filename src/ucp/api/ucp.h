@@ -1696,8 +1696,9 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  *
  * @note The user should not modify any part of the @a buffer after this
  *       operation is called, until the operation completes.
- * @note Returns @ref UCS_ERR_UNSUPPORTED if @ref UCP_FEATURE_FAULT_TOLERANCE is
- *       enabled.
+ * @note Returns @ref UCS_ERR_UNSUPPORTED if @ref UCP_ERR_HANDLING_MODE_PEER is
+ *       enabled. This is a temporary implementation related constrain that will
+ *       be addressed in future releases.
  *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).
