@@ -107,13 +107,13 @@ ucs_status_t uct_rc_verbs_iface_common_init(uct_rc_verbs_iface_common_t *iface,
                                             uct_rc_iface_t *rc_iface,
                                             uct_rc_verbs_iface_common_config_t *config,
                                             uct_rc_iface_config_t *rc_config,
-                                            size_t am_hdr_size)
+                                            size_t max_hdr_size)
 {
     memset(iface->inl_sge, 0, sizeof(iface->inl_sge));
     ucs_status_t status;
 
     /* Configuration */
-    iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, am_hdr_size);
+    iface->config.short_desc_size = ucs_max(UCT_RC_MAX_ATOMIC_SIZE, max_hdr_size);
 
     /* Create AM headers and Atomic mempool */
     status = uct_iface_mpool_init(&rc_iface->super.super,

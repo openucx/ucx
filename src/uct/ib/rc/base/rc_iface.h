@@ -207,8 +207,8 @@ struct uct_rc_iface {
 };
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_rc_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
-                  const uct_rc_iface_config_t*, unsigned,
-                  unsigned, unsigned, unsigned, unsigned)
+                  const uct_rc_iface_config_t*, unsigned, unsigned,
+                  int, unsigned, unsigned, unsigned)
 
 
 struct uct_rc_iface_send_op {

@@ -315,8 +315,9 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
-        uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_UD, &wc[i],
-                                   packet, wc[i].byte_len, uct_ud_dump_packet);
+        uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_UD, wc[i].qp_num,
+                                   wc[i].src_qp, wc[i].slid, packet,
+                                   wc[i].byte_len, uct_ud_dump_packet);
         uct_ud_ep_process_rx(&iface->super,
                              (uct_ud_neth_t *)(packet + UCT_IB_GRH_LEN),
                              wc[i].byte_len - UCT_IB_GRH_LEN,

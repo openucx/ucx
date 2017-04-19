@@ -21,6 +21,7 @@ public:
         mapped_buffer     *mbuf;
         uct_tag_t         tag;
         uct_tag_t         tmask;
+        bool              take_uct_desc;
         bool              comp;
         bool              unexp;
         bool              consumed;
@@ -53,9 +54,9 @@ public:
         // to fill it here
         params.rx_headroom = 0;
         params.eager_cb    = unexp_eager;
-        params.eager_arg   = NULL;
+        params.eager_arg   = reinterpret_cast<void*>(this);
         params.rndv_cb     = unexp_rndv;
-        params.rndv_arg    = NULL;
+        params.rndv_arg    = reinterpret_cast<void*>(this);
 
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
             entity *e = uct_test::create_entity(params);
@@ -74,12 +75,13 @@ public:
     }
 
     void init_recv_ctx(recv_ctx &r,  mapped_buffer *b, uct_tag_t t,
-                       uct_tag_t m = MASK) {
+                       uct_tag_t m = MASK, bool uct_d = false) {
         r.mbuf                    = b;
         r.tag                     = t;
         r.tmask                   = m;
         r.uct_ctx.completed_cb    = completed;
         r.uct_ctx.tag_consumed_cb = tag_consumed;
+        r.take_uct_desc           = uct_d;
         r.comp = r.unexp = r.consumed = false;
     }
 
@@ -181,13 +183,14 @@ public:
         flush();
     }
 
-    void test_tag_unexpected(send_func sfunc, size_t length = 75) {
+    void test_tag_unexpected(send_func sfunc, size_t length = 75,
+                             bool take_uct_desc = false) {
         uct_tag_t tag = 11;
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
         mapped_buffer sendbuf(length, SEND_SEED, sender());
         recv_ctx r_ctx;
-        init_recv_ctx(r_ctx, &recvbuf, tag);
+        init_recv_ctx(r_ctx, &recvbuf, tag, MASK, take_uct_desc);
         send_ctx s_ctx(&sendbuf, tag, reinterpret_cast<uint64_t>(&r_ctx));
         ASSERT_UCS_OK((this->*sfunc)(sender(), s_ctx));
 
@@ -203,7 +206,7 @@ public:
         flush();
     }
 
-    void test_eager_wrong_tag(send_func sfunc) {
+    void test_tag_wrong_tag(send_func sfunc) {
         const size_t length = 65;
         uct_tag_t    tag    = 11;
 
@@ -230,7 +233,7 @@ public:
         flush();
     }
 
-    void test_eager_tag_mask(send_func sfunc) {
+    void test_tag_mask(send_func sfunc) {
         const size_t length = 65;
 
         mapped_buffer recvbuf(length, RECV_SEED, receiver());
@@ -251,6 +254,17 @@ public:
         // Should be matched because tags are equal with tag mask applied.
         check_completion(r_ctx, true, SEND_SEED);
         flush();
+    }
+
+    ucs_status_t unexpected_handler(recv_ctx *ctx, void *data, size_t length,
+                                    unsigned flags)
+    {
+        if (ctx->take_uct_desc && (flags & UCT_CB_FLAG_DESC)) {
+            m_uct_descs.push_back(data);
+            return UCS_INPROGRESS;
+        } else {
+            return UCS_OK;
+        }
     }
 
     static void tag_consumed(uct_tag_context_t *self)
@@ -280,7 +294,9 @@ public:
                    user_ctx->mbuf->length()));
             user_ctx->mbuf->pattern_check(SEND_SEED);
         }
-        return UCS_OK;
+
+        test_tag *self = reinterpret_cast<test_tag*>(arg);
+        return self->unexpected_handler(user_ctx, data, length, flags);
     }
 
     static ucs_status_t unexp_rndv(void *arg, unsigned flags, uint64_t stag,
@@ -316,6 +332,8 @@ protected:
     uct_test::entity& receiver() {
         return **(m_entities.end() - 1);
     }
+
+    ucs::ptr_vector<void> m_uct_descs;
 
     static bool is_am_received;
 };
@@ -370,40 +388,58 @@ UCS_TEST_P(test_tag, tag_rndv_zcopy_unexpected)
     test_tag_unexpected(static_cast<send_func>(&test_tag::tag_rndv_zcopy));
 }
 
+UCS_TEST_P(test_tag, tag_eager_bcopy_hold_uct_desc)
+{
+    check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
+
+    int n_msg = 10;
+    for (int i = 0; i < n_msg; ++i) {
+        test_tag_unexpected(static_cast<send_func>(&test_tag::tag_eager_bcopy),
+                            sender().iface_attr().cap.tag.eager.max_bcopy, true);
+    }
+
+    for (ucs::ptr_vector<void>::const_iterator iter = m_uct_descs.begin();
+         iter != m_uct_descs.end(); ++iter)
+    {
+        uct_iface_release_desc(*iter);
+    }
+
+}
+
 UCS_TEST_P(test_tag, tag_eager_bcopy_wrong_tag)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
-    test_eager_wrong_tag(static_cast<send_func>(&test_tag::tag_eager_bcopy));
+    test_tag_wrong_tag(static_cast<send_func>(&test_tag::tag_eager_bcopy));
 }
 
 UCS_TEST_P(test_tag, tag_eager_zcopy_wrong_tag)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY);
-    test_eager_wrong_tag(static_cast<send_func>(&test_tag::tag_eager_zcopy));
+    test_tag_wrong_tag(static_cast<send_func>(&test_tag::tag_eager_zcopy));
 }
 
 UCS_TEST_P(test_tag, tag_eager_short_tag_mask)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_SHORT);
-    test_eager_tag_mask(static_cast<send_func>(&test_tag::tag_eager_short));
+    test_tag_mask(static_cast<send_func>(&test_tag::tag_eager_short));
 }
 
 UCS_TEST_P(test_tag, tag_eager_bcopy_tag_mask)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY);
-    test_eager_tag_mask(static_cast<send_func>(&test_tag::tag_eager_bcopy));
+    test_tag_mask(static_cast<send_func>(&test_tag::tag_eager_bcopy));
 }
 
 UCS_TEST_P(test_tag, tag_eager_zcopy_tag_mask)
 {
     check_caps(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY);
-    test_eager_tag_mask(static_cast<send_func>(&test_tag::tag_eager_zcopy));
+    test_tag_mask(static_cast<send_func>(&test_tag::tag_eager_zcopy));
 }
 
 UCS_TEST_P(test_tag, tag_rndv_zcopy_tag_mask)
 {
     check_caps(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY);
-    test_eager_tag_mask(static_cast<send_func>(&test_tag::tag_rndv_zcopy));
+    test_tag_mask(static_cast<send_func>(&test_tag::tag_rndv_zcopy));
 }
 
 UCS_TEST_P(test_tag, tag_send_no_tag)
