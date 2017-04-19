@@ -478,11 +478,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     if (params->stats_root == NULL) {
         UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                                  &config->super UCS_STATS_ARG(dev->stats)
+                                  params, &config->super
+                                  UCS_STATS_ARG(dev->stats)
                                   UCS_STATS_ARG(params->dev_name));
     } else {
         UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                                  &config->super UCS_STATS_ARG(params->stats_root)
+                                  params, &config->super
+                                  UCS_STATS_ARG(params->stats_root)
                                   UCS_STATS_ARG(params->dev_name));
     }
 

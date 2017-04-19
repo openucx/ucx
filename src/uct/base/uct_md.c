@@ -360,8 +360,6 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             uct_iface_h *iface_p)
 {
     uct_tl_component_t *tlc;
-    uct_base_iface_t   *base_iface;
-    ucs_status_t       status;
 
     tlc = uct_find_tl_on_md(md->component, params->tl_name);
     if (tlc == NULL) {
@@ -369,15 +367,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_DEVICE;
     }
 
-    status = tlc->iface_open(md, worker, params, config, iface_p);
-    if (status == UCS_OK) {
-        base_iface = ucs_derived_of((*iface_p), uct_base_iface_t);
-
-        base_iface->err_handler_arg = params->err_handler_arg;
-        base_iface->err_handler     = params->err_handler;
-    }
-
-    return status;
+    return tlc->iface_open(md, worker, params, config, iface_p);
 }
 
 static uct_md_component_t *uct_find_mdc(const char *name)

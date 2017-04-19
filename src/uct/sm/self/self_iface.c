@@ -159,7 +159,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_self_iface_ops, md, worker,
-                              tl_config UCS_STATS_ARG(params->stats_root)
+                              params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_SELF_NAME));
 
     self_config = ucs_derived_of(tl_config, uct_self_iface_config_t);

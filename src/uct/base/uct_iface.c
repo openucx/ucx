@@ -351,7 +351,8 @@ UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
 UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const uct_iface_config_t *config
+                    uct_worker_h worker, const uct_iface_params_t *params,
+                    const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent)
                     UCS_STATS_ARG(const char *iface_name))
 {
@@ -366,8 +367,8 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
     self->worker          = worker;
     self->am_tracer       = NULL;
     self->am_tracer_arg   = NULL;
-    self->err_handler     = NULL;
-    self->err_handler_arg = NULL;
+    self->err_handler     = params->err_handler;
+    self->err_handler_arg = params->err_handler_arg;
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         uct_iface_set_stub_am_handler(self, id);

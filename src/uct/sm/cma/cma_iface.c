@@ -87,7 +87,7 @@ static UCS_CLASS_INIT_FUNC(uct_cma_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_config_t *tl_config)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cma_iface_ops, md, worker,
-                              tl_config UCS_STATS_ARG(params->stats_root)
+                              params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_CMA_TL_NAME));
     uct_sm_get_max_iov(); /* to initialize ucs_get_max_iov static variable */
 
