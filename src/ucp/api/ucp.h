@@ -166,9 +166,11 @@ enum ucp_worker_params_field {
  */
 enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_REMOTE_ADDRESS    = UCS_BIT(0), /**< Address of remote
-                                                        *   peer */
-    UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1)  /**< Error handling mode.
-                                                        *   @ref ucp_err_handling_mode_t */
+                                                            peer */
+    UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
+                                                            @ref ucp_err_handling_mode_t */
+    UCP_EP_PARAM_FIELD_ERR_HANDLE        = UCS_BIT(2)  /**< Handle to process
+                                                            transport level errors */
 };
 
 
@@ -672,6 +674,11 @@ typedef struct ucp_ep_params {
      * @ref UCP_ERR_HANDLING_MODE_DEFAULT
      */
     ucp_err_handling_mode_t err_mode;
+
+    /**
+     * Handle to process transport level failure.
+     */
+    ucp_err_handle_t        err_handle;
 } ucp_ep_params_t;
 
 

@@ -273,6 +273,32 @@ typedef void (*ucp_request_cleanup_callback_t)(void *request);
 typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 
 
+ /**
+ * @ingroup UCP_COMM
+ * @brief Callback to process peer failure.
+ *
+ * This callback routine is invoked when transport level error detected.
+ *
+ * @param [in]  arg      User argument to be passed to the callback.
+ * @param [in]  ep       Endpoint to handle transport level error,
+ *                       @a ep becomes unusable.
+ * @param [in]  status   @ref ucs_status_t "error status" 
+ */
+typedef void (*ucp_err_handler_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
+
+
+ /**
+ * @ingroup UCP_COMM
+ * @brief UCP endpoint error handling context.
+ * 
+ * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
+ */
+typedef struct ucp_err_handle {
+    ucp_err_handler_t err_handler;        /**< Error handler callback */
+    void              *err_handler_arg;   /**< User defined argument */
+} ucp_err_handle_t;
+
+
 /**
  * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking tag receives.
