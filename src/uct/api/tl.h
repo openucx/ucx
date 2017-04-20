@@ -166,6 +166,8 @@ typedef struct uct_iface_ops {
 
     ucs_status_t (*ep_fence)(uct_ep_h ep, unsigned flags);
 
+    ucs_status_t (*ep_check)(uct_ep_h ep, unsigned flags, uct_completion_t *comp);
+
     /* Tagged operations */
 
     ucs_status_t (*ep_tag_eager_short)(uct_ep_h ep, uct_tag_t tag,

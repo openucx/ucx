@@ -199,6 +199,8 @@ typedef struct uct_tl_resource_desc {
 #define UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN    UCS_BIT(37) /**< Invalid length for buffered operation */
 #define UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE UCS_BIT(38) /**< Remote peer failures/outage */
 
+#define UCT_IFACE_FLAG_EP_CHECK               UCS_BIT(39) /**< Endpoint check */
+
         /* Connection establishment */
 #define UCT_IFACE_FLAG_CONNECT_TO_IFACE       UCS_BIT(40) /**< Supports connecting to interface */
 #define UCT_IFACE_FLAG_CONNECT_TO_EP          UCS_BIT(41) /**< Supports connecting to specific endpoint */
@@ -926,6 +928,25 @@ ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
  */
 int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev_addr,
                            const uct_iface_addr_t *iface_addr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief check if remote side is alive
+ *
+ * This function checks if remote side is alive or not. It returns error
+ * immediately if it is known that @a ep is failed or @ref UCS_OK if
+ * synchronization is needed, then status will be propagated by @a comp callback
+ *
+ * @param [in]  ep      Endpoint to check
+ * @param [in]  flags   Flags that define level of check
+ *                      (currently unsupported - set to 0).
+ * @param [in]  comp    Handler to process status of @a ep
+ *
+ * @return UCS_OK or error if it is known that @a ep is failed.
+ */
+ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
+                          uct_completion_t *comp);
 
 
 /**

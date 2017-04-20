@@ -160,6 +160,12 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
+ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
+                          uct_completion_t *comp)
+{
+    return ep->iface->ops.ep_check(ep, flags, comp);
+}
+
 ucs_status_t uct_wakeup_open(uct_iface_h iface, unsigned events,
                              uct_wakeup_h *wakeup_p)
 {
