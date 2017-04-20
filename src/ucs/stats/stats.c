@@ -493,6 +493,9 @@ ucs_stats_traverse_sum_counters()
         ucs_list_for_each(counter_item, &sum_item->counter_list, list) {
             sum_item->counter_sum += *counter_item->counter;
         }
+        if (sum_item->counter_sum < ucs_global_opts.stats_threshold) {
+            continue;
+        }
         if (strcmp(current_class, sum_item->class_name)) {
             if (current_class[0]) {
                 first_item = 1;
