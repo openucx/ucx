@@ -160,6 +160,7 @@ uct_rc_verbs_notag_header_fill(uct_rc_verbs_iface_t *iface, void *hdr)
 }
 
 
+UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
 

@@ -482,3 +482,24 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
 
     return UCS_OK;
 }
+
+void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num)
+{
+    uct_dc_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_iface_t);
+    uint8_t         dci     = uct_dc_iface_dci_find(iface, qp_num);
+    uct_dc_ep_t     *ep     = iface->tx.dcis[dci].ep;
+
+    if (!ep) {
+        return;
+    }
+
+    uct_rc_ep_failed_purge_outstanding(&ep->super.super, ib_iface,
+                                       &iface->tx.dcis[dci].txqp);
+
+    if (UCS_OK != uct_dc_iface_dci_reconnect(iface, &iface->tx.dcis[dci].txqp)) {
+        ucs_fatal("Unsuccessful reconnect of DC QP #%u", qp_num);
+    }
+
+    uct_rc_txqp_available_set(&iface->tx.dcis[dci].txqp,
+                              iface->super.config.tx_qp_len);
+}
