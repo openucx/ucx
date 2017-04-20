@@ -2,7 +2,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.All rights reserved.
+* Copyright (C) ARM Ltd. 2016-2017. All rights reserved.
 * See file LICENSE for terms.
 */
 
@@ -69,7 +69,7 @@ public:
             m_entities.back()->destroy_ep(0);
         } else {
             size_t n = m_entities.remove(m_entities.back());
-            ucs_assert(n == 1);
+            ucs_assert_always(n == 1);
         }
     }
 
