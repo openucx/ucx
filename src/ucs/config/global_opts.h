@@ -97,6 +97,9 @@ typedef struct {
     /* statistics format options */
     ucs_stats_formats_t      stats_format;
 
+    /* statistics summary threshold */
+    size_t                   stats_threshold;
+
 } ucs_global_opts_t;
 
 

@@ -37,6 +37,7 @@ ucs_global_opts_t ucs_global_opts = {
     .profile_file          = "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
+    .stats_threshold       = 0,
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -154,6 +155,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    "FULL - each counter will be displayed in a separate line \n"
    "SUMMARY - all counters will be printed in the same line.\n",
    ucs_offsetof(ucs_global_opts_t, stats_format), UCS_CONFIG_TYPE_ENUM(ucs_stats_formats_names)},
+
+  {"STATS_THRESH", "0",
+   "Only counters above this threshold will be displayed in the summary report.\n",
+   ucs_offsetof(ucs_global_opts_t, stats_threshold), UCS_CONFIG_TYPE_UINT},
 
 #endif
 
