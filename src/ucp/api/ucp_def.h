@@ -284,7 +284,7 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  *                       will return @a status error.
  * @param [in]  status   @ref ucs_status_t "error status".
  */
-typedef void (*ucp_err_handler_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
+typedef void (*ucp_err_handler_cb_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
 
 
  /**
@@ -293,10 +293,10 @@ typedef void (*ucp_err_handler_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
  * 
  * This structure should be initialized in @ref ucp_ep_params_t to handle peer failure
  */
-typedef struct ucp_err_handle {
-    ucp_err_handler_t err_handler;        /**< Error handler callback */
-    void              *err_handler_arg;   /**< User defined argument */
-} ucp_err_handle_t;
+typedef struct ucp_err_handler {
+    ucp_err_handler_cb_t cb;       /**< Error handler callback */
+    void                 *arg;     /**< User defined argument */
+} ucp_err_handler_t;
 
 
 /**

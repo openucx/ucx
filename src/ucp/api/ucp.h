@@ -169,7 +169,7 @@ enum ucp_ep_params_field {
                                                             peer */
     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
                                                             @ref ucp_err_handling_mode_t */
-    UCP_EP_PARAM_FIELD_ERR_HANDLE        = UCS_BIT(2)  /**< Handle to process
+    UCP_EP_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(2)  /**< Handler to process
                                                             transport level errors */
 };
 
@@ -671,14 +671,14 @@ typedef struct ucp_ep_params {
 
     /**
      * Desired error handling mode, optional parameter. Default value is
-     * @ref UCP_ERR_HANDLING_MODE_DEFAULT
+     * @ref UCP_ERR_HANDLING_MODE_NONE
      */
     ucp_err_handling_mode_t err_mode;
 
     /**
-     * Handle to process transport level failure.
+     * Handler to process transport level failure.
      */
-    ucp_err_handle_t        err_handle;
+    ucp_err_handler_t       err_handler;
 } ucp_ep_params_t;
 
 
