@@ -431,8 +431,8 @@ UCS_TEST_P(test_async, two_timers) {
     local_timer lt1(GetParam());
     local_timer lt2(GetParam());
     suspend_and_poll2(&lt1, &lt2, COUNT * 4);
-    EXPECT_GE(lt1.count(), COUNT / 2);
-    EXPECT_GE(lt2.count(), COUNT / 2);
+    EXPECT_GE(lt1.count(), COUNT / 4);
+    EXPECT_GE(lt2.count(), COUNT / 4);
 }
 
 UCS_TEST_P(test_async, ctx_event_block) {
