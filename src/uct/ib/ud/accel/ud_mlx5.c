@@ -587,12 +587,10 @@ static ucs_status_t uct_ud_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
 }
 
-static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
+static void uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
 {
-    /* Send completion with error is a local failure (thus fatal) in UD case.
-     * arg is struct mlx5_cqe64*. Pass it as it is, because struct mlx5_err_cqe*
-     * is expected in uct_ib_mlx5_completion_with_err */
-    uct_ib_mlx5_completion_with_err(arg, UCS_LOG_LEVEL_FATAL);
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_mlx5_ep_t), ep,
+                      &iface->super.super);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
@@ -632,7 +630,8 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     },
     .arm_tx_cq                = uct_ud_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ud_mlx5_iface_arm_rx_cq,
-    .handle_failure           = uct_ud_mlx5_iface_handle_failure
+    .handle_failure           = uct_ud_iface_handle_failure,
+    .set_ep_failed            = uct_ud_mlx5_ep_set_failed
     },
     .progress                 = uct_ud_mlx5_iface_progress,
     .async_progress           = uct_ud_mlx5_iface_async_progress,

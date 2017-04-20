@@ -552,17 +552,19 @@ static void uct_dc_mlx5_iface_progress(void *arg)
     }
 }
 
-static UCS_F_NOINLINE void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
-                                                            void *arg)
+static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
 {
-    struct mlx5_cqe64   *cqe    = arg;
-    uint32_t            qp_num  = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    uct_dc_mlx5_iface_t *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+    struct mlx5_cqe64 *cqe   = arg;
+    uint32_t          qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
 
-    uct_dc_ep_set_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t),
-                         &iface->super, qp_num);
+    uct_dc_handle_failure(ib_iface, qp_num);
+    uct_ib_mlx5_completion_with_err(arg, UCS_LOG_LEVEL_ERROR);
+}
 
-    uct_ib_mlx5_completion_with_err((void*)cqe, UCS_LOG_LEVEL_ERROR);
+static void uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface, uct_ep_h ep)
+{
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t), ep,
+                      &ib_iface->super.super);
 }
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -688,7 +690,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
         },
         .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
         .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
-        .handle_failure           = uct_dc_mlx5_iface_handle_failure
+        .handle_failure           = uct_dc_mlx5_iface_handle_failure,
+        .set_ep_failed            = uct_dc_mlx5_ep_set_failed
     },
     .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,

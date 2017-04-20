@@ -431,6 +431,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->rx.available           = config->super.rx.queue_len;
     self->config.tx_qp_len       = config->super.tx.queue_len;
+    self->config.peer_timout     = ucs_time_from_sec(config->peer_timeout);
 
     /* Redefine receive desc release callback */
     self->super.release_desc.cb  = uct_ud_iface_release_desc;
@@ -511,6 +512,8 @@ UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 ucs_config_field_t uct_ud_iface_config_table[] = {
     {"IB_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
+    {"TIMEOUT", "1.0m", "Transport timeout",
+     ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
     {NULL}
 };
 
@@ -528,7 +531,8 @@ void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
                                          UCT_IFACE_FLAG_PENDING          |
                                          UCT_IFACE_FLAG_AM_CB_SYNC       |
                                          UCT_IFACE_FLAG_AM_CB_ASYNC      |
-                                         UCT_IFACE_FLAG_WAKEUP;
+                                         UCT_IFACE_FLAG_WAKEUP           |
+                                         UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
 
     iface_attr->cap.am.max_short       = iface->config.max_inline - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.max_bcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
@@ -662,13 +666,26 @@ static void uct_ud_iface_free_res_skbs(uct_ud_iface_t *iface)
 void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
     uct_ud_comp_desc_t *cdesc;
-    uct_ud_send_skb_t *skb;
+    uct_ud_send_skb_t  *skb;
 
     do {
         skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
                                             uct_ud_send_skb_t, queue);
         cdesc = uct_ud_comp_desc(skb);
-        uct_invoke_completion(cdesc->comp, UCS_OK);
+
+        if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
+            if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
+                uct_invoke_completion(cdesc->comp, skb->status);
+            }
+
+            if (!(cdesc->ep->flags & UCT_UD_EP_FLAG_FAILED)) {
+                cdesc->ep->flags |= UCT_UD_EP_FLAG_FAILED;
+                iface->super.ops->set_ep_failed(&iface->super,
+                                                &cdesc->ep->super.super);
+            }
+        } else {
+            uct_invoke_completion(cdesc->comp, UCS_OK);
+        }
         cdesc->ep->flags &= ~UCT_UD_EP_FLAG_ASYNC_COMPS;
         skb->flags = 0;
         ucs_mpool_put(skb);
@@ -757,4 +774,32 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ud_enter(iface);
     uct_ib_iface_release_desc(self, desc);
     uct_ud_leave(iface);
+}
+
+static void
+uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep)
+{
+    uct_ud_comp_desc_t *cdesc;
+    uct_ud_send_skb_t  *skb;
+
+    ucs_queue_for_each_extract(skb, &ud_ep->tx.window, queue, 1) {
+        skb->flags |= UCT_UD_SEND_SKB_FLAG_ERR;
+        skb->status = UCS_ERR_ENDPOINT_TIMEOUT;
+        if (ucs_likely(!(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP))) {
+            skb->len = 0;
+        }
+        cdesc = uct_ud_comp_desc(skb);
+        /* don't call user completion from async context. instead, put
+         * it on a queue which will be progresed from main thread.
+         */
+        ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
+        ud_ep->flags |= UCT_UD_EP_FLAG_ASYNC_COMPS;
+        cdesc->ep = ud_ep;
+    }
+}
+
+void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg)
+{
+    uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
+                                    (uct_ud_ep_t *)arg);
 }

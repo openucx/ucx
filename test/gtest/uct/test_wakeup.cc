@@ -98,8 +98,15 @@ UCS_TEST_P(test_uct_wakeup, am)
     wakeup_fd.revents = 0;
     EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
-    /* re-arm before expect any messages */
-    ASSERT_EQ(UCS_OK, uct_wakeup_efd_arm(wakeup_handle));
+    /* re-arm before expect any messages but ud transport MAY do extra messaging */
+    if ((GetParam()->tl_name).substr(0, 2) == "ud") {
+        do {
+            status = uct_wakeup_efd_arm(wakeup_handle);
+        } while (UCS_ERR_BUSY == status);
+    } else {
+        status = uct_wakeup_efd_arm(wakeup_handle);
+    }
+    ASSERT_EQ(UCS_OK, status);
 
     /* send the data again */
     uct_ep_am_short(m_e1->ep(0), 0, test_ib_hdr, &send_data, sizeof(send_data));

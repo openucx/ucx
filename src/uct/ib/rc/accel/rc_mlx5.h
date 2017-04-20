@@ -52,6 +52,7 @@ typedef struct {
 } uct_rc_mlx5_iface_t;
 
 
+UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 

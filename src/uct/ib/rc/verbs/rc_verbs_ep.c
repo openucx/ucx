@@ -671,7 +671,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
+UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
 
@@ -699,4 +699,3 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, uct_iface_h);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_ep_t, uct_ep_t);
-

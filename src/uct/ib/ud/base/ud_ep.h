@@ -187,13 +187,14 @@ enum {
 enum {
     UCT_UD_EP_FLAG_ASYNC_COMPS       = UCS_BIT(0), /* set if there are completions that
                                                     * were picked by async thread and queued */
+    UCT_UD_EP_FLAG_FAILED            = UCS_BIT(1), /* EP is in failed state */
     /* debug flags */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1), /* EP is was created as internal */
-    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(2), /* CREQ message was received */
-    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(3), /* CREP message was received */
-    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(4), /* CREQ message was sent */
-    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(5), /* CREP message was sent */
-    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(6)  /* CREQ message is NOT sent, because
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(2), /* EP is was created as internal */
+    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(3), /* CREQ message was received */
+    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(4), /* CREP message was received */
+    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(5), /* CREQ message was sent */
+    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(6), /* CREP message was sent */
+    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(7)  /* CREQ message is NOT sent, because
                                                       connection establishment process
                                                       is driven by remote side. */
 };
@@ -408,4 +409,3 @@ uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 }
 
 #endif
-

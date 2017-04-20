@@ -111,30 +111,31 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
     ucs_time_t now;
+    ucs_time_t diff;
 
     UCT_UD_EP_HOOK_CALL_TIMER(ep);
     now = ucs_twheel_get_time(&iface->async.slow_timer);
+    diff = now - ep->tx.send_time;
 
     if (ucs_queue_is_empty(&ep->tx.window)) {
         return;
     }
 
-    /* It is possible that the sender is slow.
-     * Try to flush the window twice before going into
-     * full resend mode.
-     */
-    if (now - ep->tx.send_time > uct_ud_slow_tick() &&
-        uct_ud_ep_is_connected(ep)) {
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
-    }
-
-    if (now - ep->tx.send_time > 3*uct_ud_slow_tick()) {
+    if (diff > iface->config.peer_timout) {
+        iface->super.ops->handle_failure(&iface->super, ep);
+        return;
+    } else if (diff > 3*uct_ud_slow_tick()) {
         ucs_trace("sceduling resend now: %lu send_time: %lu diff: %lu tick: %lu",
                    now, ep->tx.send_time, now - ep->tx.send_time, uct_ud_slow_tick());
-        ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
+    } else if (diff > uct_ud_slow_tick() && uct_ud_ep_is_connected(ep)) {
+        /* It is possible that the sender is slow.
+         * Try to flush the window twice before going into
+         * full resend mode.
+         */
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     }
 
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
@@ -712,7 +713,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
             /* Add dummy skb to the window, which would call user completion
              * callback when getting ACK.
              */
-            skb->flags                 |= UCT_UD_SEND_SKB_FLAG_COMP;
+            skb->flags                  = UCT_UD_SEND_SKB_FLAG_COMP;
             skb->len                    = sizeof(skb->neth[0]);
             skb->neth->packet_type      = 0;
             skb->neth->psn              = psn;

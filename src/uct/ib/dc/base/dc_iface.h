@@ -115,6 +115,8 @@ ucs_status_t uct_dc_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
                                      uint32_t imm_data, uint16_t lid, unsigned flags);
 
+void uct_dc_handle_failure(uct_ib_iface_t *ib_iface, uint32_t qp_num);
+
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
  *
