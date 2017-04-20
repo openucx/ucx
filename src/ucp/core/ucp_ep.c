@@ -219,7 +219,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker,
             ucp_ep_config(ep)->rndv.am_thresh = SIZE_MAX;
         }
     } else {
-        ucp_ep_config(ep)->err_mode = UCP_ERR_HANDLING_MODE_DEFAULT;
+        ucp_ep_config(ep)->err_mode = UCP_ERR_HANDLING_MODE_NONE;
     }
 
     /* send initial wireup message */

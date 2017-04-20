@@ -93,17 +93,16 @@ typedef struct ucp_address               ucp_address_t;
  * Specifies error handling mode for the UCP endpoint.
  */
 typedef enum {
-    UCP_ERR_HANDLING_MODE_DEFAULT,          /**< Propagates only locally
-                                             *   detected errors, provides
-                                             *   minimal overhead from
-                                             *   perfromance perspective */
-    UCP_ERR_HANDLING_MODE_PEER              /**< In addition to @ref
-                                             *   UCP_ERR_HANDLING_MODE_DEFAULT
-                                             *   propagates errors also related
-                                             *   with peer failures, disables
+    UCP_ERR_HANDLING_MODE_NONE,             /**< No guarantees about error
+                                             *   reporting, imposes minimal
+                                             *   overhead from a performance
+                                             *   perspective */
+    UCP_ERR_HANDLING_MODE_PEER              /**< Guarantees that send requests
+                                             *   are always completed even in
+                                             *   case of remote failure, disables
                                              *   protocols and APIs which may
                                              *   cause a hang or undefined
-                                             *   behaviour in case of peer failure,
+                                             *   behavior in case of peer failure,
                                              *   may affect performance and
                                              *   memory footprint */
 } ucp_err_handling_mode_t;
@@ -281,8 +280,9 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
  *
  * @param [in]  arg      User argument to be passed to the callback.
  * @param [in]  ep       Endpoint to handle transport level error,
- *                       @a ep becomes unusable.
- * @param [in]  status   @ref ucs_status_t "error status" 
+ *                       @a ep becomes unusable. All following operation on @a ep
+ *                       will return @a status error.
+ * @param [in]  status   @ref ucs_status_t "error status".
  */
 typedef void (*ucp_err_handler_t)(void *arg, ucp_ep_h ep, ucs_status_t status);
 
