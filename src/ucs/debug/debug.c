@@ -1007,6 +1007,70 @@ void ucs_handle_error(const char *error_type, const char *message, ...)
     }
 }
 
+static int ucs_debug_is_error_signal(int signum)
+{
+    int i;
+
+    if (!ucs_global_opts.handle_errors) {
+        return 0;
+    }
+
+    for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
+        if (signum == ucs_global_opts.error_signals.signals[i]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
+{
+    void *func_ptr;
+
+    func_ptr = dlsym(RTLD_NEXT, symbol);
+    if (func_ptr == NULL) {
+        func_ptr = dlsym(RTLD_DEFAULT, symbol);
+    }
+    return func_ptr;
+}
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    static sighandler_t (*orig)(int, sighandler_t) = NULL;
+
+    if (ucs_debug_is_error_signal(signum)) {
+        return SIG_DFL;
+    }
+
+    if (orig == NULL) {
+        orig = ucs_debug_get_orig_func("signal", signal);
+    }
+
+    return orig(signum, handler);
+}
+
+static int orig_sigaction(int signum, const struct sigaction *act,
+                          struct sigaction *oact)
+{
+    static int (*orig)(int, const struct sigaction*, struct sigaction*) = NULL;
+
+    if (orig == NULL) {
+        orig = ucs_debug_get_orig_func("sigaction", sigaction);
+    }
+
+    return orig(signum, act, oact);
+}
+
+int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
+{
+    if (ucs_debug_is_error_signal(signum)) {
+        return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
+    }
+
+    return orig_sigaction(signum, act, oact);
+}
+
 static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
@@ -1030,7 +1094,8 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
     sigemptyset(&sigact.sa_mask);
 
     for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
-        ret = sigaction(ucs_global_opts.error_signals.signals[i], &sigact, &old_action);
+        ret = orig_sigaction(ucs_global_opts.error_signals.signals[i], &sigact,
+                             &old_action);
         if (ret < 0) {
             ucs_warn("failed to set signal handler for sig %d : %m",
                      ucs_global_opts.error_signals.signals[i]);
