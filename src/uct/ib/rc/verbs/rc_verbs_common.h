@@ -157,9 +157,8 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, hdr, wc, num_wcs) {
-        uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc[i].qp_num,
-                                   wc[i].src_qp, wc[i].slid, hdr, wc[i].byte_len,
-                                   uct_rc_ep_am_packet_dump);
+        uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, &wc[i], hdr,
+                                   wc[i].byte_len, uct_rc_ep_am_packet_dump);
         uct_rc_verbs_iface_handle_am(iface, hdr, wc[i].wr_id, wc[i].qp_num,
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }

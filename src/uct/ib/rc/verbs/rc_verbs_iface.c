@@ -153,7 +153,7 @@ uct_rc_verbs_iface_post_op(uct_rc_verbs_iface_t *iface, struct ibv_ops_wr *wr,
 
     ret = ibv_post_srq_ops(iface->tm.xrq.srq, wr, &bad_wr);
     if (ret) {
-        ucs_error("Failed to post op: %d, result: %d %m", op, ret);
+        ucs_error("ibv_post_srq_ops(op=%d) failed: %m (%d)", op, ret);
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;
@@ -197,12 +197,9 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
 
     switch (tm_info.op) {
     case IBV_TM_OP_EAGER:
-        if (cqe->flags & IBV_WC_WITH_IMM) {
-            imm_data = uct_rc_verbs_tag_imm_data_unpack(cqe->imm_data,
-                                                        tm_info.priv.data);
-        } else {
-            imm_data = 0;
-        }
+        imm_data = uct_rc_verbs_tag_imm_data_unpack(cqe->imm_data,
+                                                    tm_info.priv.data,
+                                                    cqe->flags);
 
         status = iface->tm.eager_unexp.cb(iface->tm.eager_unexp.arg,
                                           desc + tm_info_len,
@@ -212,7 +209,7 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
         if (status == UCS_OK) {
             ucs_mpool_put_inline(ib_desc);
         } else {
-            udesc = (char*)ib_desc + iface->tm.eager_desc.shift;
+            udesc = (char*)ib_desc + iface->tm.eager_desc.offset;
             uct_recv_desc(udesc) = &iface->tm.eager_desc.super;
         }
         if (ucs_unlikely(!(++iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
@@ -222,10 +219,10 @@ uct_rc_verbs_iface_tag_handle_unexp(uct_rc_verbs_iface_t *iface,
         break;
 
     case IBV_TM_OP_NO_TAG:
-        uct_ib_log_recv_completion(&iface->super.super, IBV_QPT_RC, cqe->qp_num,
-                                   cqe->src_qp, cqe->slid, desc + tm_info_len,
-                                   cqe->byte_len - tm_info_len,
-                                   uct_rc_ep_am_packet_dump);
+        uct_ib_log_recv_completion_ex(&iface->super.super, IBV_QPT_RC, cqe->qp_num,
+                                      cqe->src_qp, cqe->slid, desc + tm_info_len,
+                                      cqe->byte_len - tm_info_len,
+                                      uct_rc_ep_am_packet_dump);
         uct_rc_verbs_iface_handle_am(&iface->super, desc + tm_info_len, cqe->wr_id,
                                      cqe->qp_num, cqe->byte_len - tm_info_len,
                                      cqe->imm_data, cqe->slid);
@@ -254,7 +251,7 @@ uct_rc_verbs_iface_poll_cq_ex(uct_rc_verbs_iface_t *iface,
         if (ucs_likely(ret == ENOENT)) {
             return UCS_ERR_NO_PROGRESS;
         } else {
-            ucs_fatal("Failed to poll receive CQ %d", ret);
+            ucs_fatal("ibv_start_poll(cq=%p) failed: %m(%d)", cq_ex, ret);
         }
     }
 
@@ -344,7 +341,7 @@ uct_rc_verbs_iface_poll_rx_tm(uct_rc_verbs_iface_t *iface)
             break;
 
         case IBV_WC_TM_ADD:
-            ++iface->tm.tag_ops;
+            ++iface->tm.num_outstanding;
             break;
 
         default:
@@ -400,7 +397,7 @@ static ucs_status_t uct_rc_verbs_iface_tag_recv_zcopy(uct_iface_h tl_iface,
     }
 
     --iface->tm.tag_available;
-    --iface->tm.tag_ops;
+    --iface->tm.num_outstanding;
 
     /* Save tag index in the device tags list returned by ibv_post_srq_ops.
      * It may be needed for cancelling this posted tag. */
@@ -437,7 +434,7 @@ static void uct_rc_verbs_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_rc_verbs_release_desc_t *release = ucs_derived_of(self,
                                                           uct_rc_verbs_release_desc_t);
-    void *ib_desc = desc - release->shift;
+    void *ib_desc = desc - release->offset;
     ucs_mpool_put_inline(ib_desc);
 }
 #endif /* HAVE_IBV_EX_HW_TM */
@@ -463,10 +460,13 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
         srq_init_attr.cq                  = iface->super.super.recv_cq;
         srq_init_attr.tm_cap.max_num_tags = iface->tm.tag_available;
 
-        /* 2 ops for each tag (ADD + DEL) and extra 8 tags for SYNC ops.
+        /* 2 ops for each tag (ADD + DEL) and extra tag for SYNC ops.
          * Do not rely on max_tag_ops device capability, so that XRQ creation
-         * would fail if such # of ops is not supported (which is not expected). */
-        srq_init_attr.tm_cap.max_tm_ops   = 2 * iface->tm.tag_available + 8;
+         * would fail if such # of ops is not supported (which is not expected).
+         * TODO: Check that we have only outstanding sync operation at time.
+         * We should stop preposting new unexp buffers if need to post SYNC and
+         * the previous one is not completed yet. */
+        srq_init_attr.tm_cap.max_tm_ops   = 2 * iface->tm.tag_available + 1;
         srq_init_attr.comp_mask           = IBV_SRQ_INIT_ATTR_TYPE |
                                             IBV_SRQ_INIT_ATTR_PD |
                                             IBV_SRQ_INIT_ATTR_CQ |
@@ -478,9 +478,9 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
             return UCS_ERR_IO_ERROR;
         }
 
-        /* Only ADD operations decrease tag_ops counter. So, limit # of tag_ops to the
-         * number of tags. DEL and SYNC operations should be always successful. */
-        iface->tm.tag_ops = iface->tm.tag_available;
+        /* Only ADD operations decrease num_outstanding counter. So, limit num_outstanding
+         * to the number of tags, DEL and SYNC operations should be always successful. */
+        iface->tm.num_outstanding = iface->tm.tag_available;
 
         iface->tm.xrq.available = srq_init_attr.attr.max_wr;
         --iface->tm.tag_available; /* 1 tag should be always available in HW match list */
@@ -546,7 +546,7 @@ static void uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
          * consumed by unexpected eager messages. */
         ucs_assert_always(iface->tm.eager_hdr_size >= *rx_hdr_len);
         iface->tm.eager_desc.super.cb = uct_rc_verbs_iface_release_desc;
-        iface->tm.eager_desc.shift    = iface->tm.eager_hdr_size - *rx_hdr_len +
+        iface->tm.eager_desc.offset   = iface->tm.eager_hdr_size - *rx_hdr_len +
                                         iface->super.super.config.rx_headroom_offset;
 
         ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.tag_available);

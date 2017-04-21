@@ -16,8 +16,8 @@
 #if HAVE_IBV_EX_HW_TM
 typedef struct uct_rc_verbs_release_desc {
     uct_recv_desc_t             super;
-    unsigned                    shift;
-}uct_rc_verbs_release_desc_t;
+    unsigned                    offset;
+} uct_rc_verbs_release_desc_t;
 #endif
 
 /**
@@ -61,7 +61,7 @@ typedef struct uct_rc_verbs_iface {
     struct {
         uct_rc_srq_t            xrq;       /* TM XRQ */
         unsigned                tag_available;
-        int                     tag_ops;
+        int                     num_outstanding;
         unsigned                eager_hdr_size;
         uint16_t                unexpected_cnt;
         uint8_t                 enabled;
@@ -178,21 +178,18 @@ typedef struct uct_rc_verbs_tm_cqe {
        if (!iface->tm.tag_available) {  \
            return UCS_ERR_EXCEEDS_LIMIT; \
        } \
-       if (iface->tm.tag_ops <= 0) { \
+       if (iface->tm.num_outstanding <= 0) { \
            return UCS_ERR_NO_RESOURCE; \
        }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_tag_imm_data_pack(uint32_t *to1, uint32_t *to2, uint64_t from)
-{
-    *to1 = (uint32_t)(from & 0xFFFFFFFF);
-    *to2 = (uint32_t)(from >> 32);
-}
-
 static UCS_F_ALWAYS_INLINE uint64_t
-uct_rc_verbs_tag_imm_data_unpack(uint32_t from1, uint32_t from2)
+uct_rc_verbs_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int flags)
 {
-    return ((uint64_t)from2 << 32) | from1;
+    if (flags & IBV_WC_WITH_IMM) {
+        return ((uint64_t)app_ctx << 32) | ib_imm;
+    } else {
+        return 0ul;
+    }
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_verbs_ctx_priv_t*
@@ -205,13 +202,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_save_tmh(struct ibv_cq_ex *cqe, uct_rc_verbs_ctx_priv_t *priv,
                             int flags, struct ibv_wc_tm_info *tm_info)
 {
-    if (flags & IBV_WC_WITH_IMM) {
-        priv->imm_data = uct_rc_verbs_tag_imm_data_unpack(ibv_wc_read_imm_data(cqe),
-                                                          tm_info->priv.data);
-    } else {
-        priv->imm_data = 0;
-    }
-    priv->tag = tm_info->tag.tag;
+    priv->tag      = tm_info->tag.tag;
+    priv->imm_data = uct_rc_verbs_tag_imm_data_unpack(ibv_wc_read_imm_data(cqe),
+                                                      tm_info->priv.data, flags);
 }
 
 #else

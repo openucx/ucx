@@ -389,10 +389,10 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_set_cqe_size_var(uct_ib_iface_t *iface,
-                                                  const char *env_var,
                                                   size_t *inl,
                                                   int *env_var_added)
 {
+    const char *cqe_size_env_var = "MLX5_CQE_SIZE";
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     const char *cqe_size_env_value;
     size_t cqe_size_min, cqe_size;
@@ -400,13 +400,13 @@ static ucs_status_t uct_ib_iface_set_cqe_size_var(uct_ib_iface_t *iface,
     int ret;
 
     cqe_size_min       = (*inl > 32) ? 128 : 64;
-    cqe_size_env_value = getenv(env_var);
+    cqe_size_env_value = getenv(cqe_size_env_var);
 
     if (cqe_size_env_value != NULL) {
         cqe_size = atol(cqe_size_env_value);
         if (cqe_size < cqe_size_min) {
             ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
-                      env_var, cqe_size, cqe_size_min, *inl);
+                      cqe_size_env_var, cqe_size, cqe_size_min, *inl);
             return UCS_ERR_INVALID_PARAM;
         }
         *env_var_added = 0;
@@ -418,11 +418,11 @@ static ucs_status_t uct_ib_iface_set_cqe_size_var(uct_ib_iface_t *iface,
         cqe_size = ucs_max(cqe_size, 64);  /* at least 64 */
         cqe_size = ucs_min(cqe_size, 128); /* at most 128 */
         snprintf(cqe_size_buf, sizeof(cqe_size_buf),"%zu", cqe_size);
-        ucs_debug("%s: setting %s=%s", uct_ib_device_name(dev), env_var,
+        ucs_debug("%s: setting %s=%s", uct_ib_device_name(dev), cqe_size_env_var,
                   cqe_size_buf);
-        ret = ibv_exp_setenv(dev->ibv_context, env_var, cqe_size_buf, 1);
+        ret = ibv_exp_setenv(dev->ibv_context, cqe_size_env_var, cqe_size_buf, 1);
         if (ret) {
-            ucs_error("ibv_exp_setenv(%s=%s) failed: %m", env_var,
+            ucs_error("ibv_exp_setenv(%s=%s) failed: %m", cqe_size_env_var,
                       cqe_size_buf);
             return UCS_ERR_INVALID_PARAM;
         }
@@ -433,13 +433,14 @@ static ucs_status_t uct_ib_iface_set_cqe_size_var(uct_ib_iface_t *iface,
 }
 
 static void uct_ib_iface_unset_cqe_size_var(uct_ib_device_t *dev,
-                                            const char *env_var,
                                             int env_var_added)
 {
+    const char *cqe_size_env_var = "MLX5_CQE_SIZE";
+
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
-        if (ibv_exp_unsetenv(dev->ibv_context, env_var)) {
-            ucs_warn("unsetenv(%s) failed: %m", env_var);
+        if (ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var)) {
+            ucs_warn("unsetenv(%s) failed: %m", cqe_size_env_var);
         }
     }
 }
@@ -448,14 +449,12 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
                                            size_t *inl, int preferred_cpu,
                                            struct ibv_cq **cq_p)
 {
-    const char *cqe_size_env_var = "MLX5_CQE_SIZE";
-    uct_ib_device_t *dev         = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_status_t status;
     struct ibv_cq *cq;
     int env_var_added;
 
-    status = uct_ib_iface_set_cqe_size_var(iface, cqe_size_env_var, inl,
-                                           &env_var_added);
+    status = uct_ib_iface_set_cqe_size_var(iface, inl, &env_var_added);
     if (status != UCS_OK) {
         goto out;
     }
@@ -472,7 +471,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
     status = UCS_OK;
 
 out_unsetenv:
-    uct_ib_iface_unset_cqe_size_var(dev, cqe_size_env_var, env_var_added);
+    uct_ib_iface_unset_cqe_size_var(dev, env_var_added);
 out:
     return status;
 }
@@ -482,28 +481,26 @@ static ucs_status_t uct_ib_iface_create_cq_ex(uct_ib_iface_t *iface, int cq_leng
                                               size_t *inl, int preferred_cpu,
                                               struct ibv_cq **cq_p)
 {
-    static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
-    uct_ib_device_t *dev                = uct_ib_iface_device(iface);
-    struct ibv_cq_init_attr_ex cq_attr  = {};
+    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    struct ibv_cq_init_attr_ex cq_attr = {};
     struct ibv_cq_ex *cq;
     ucs_status_t status;
     int env_var_added;
 
-    status = uct_ib_iface_set_cqe_size_var(iface, cqe_size_env_var, inl,
-                                           &env_var_added);
+    status = uct_ib_iface_set_cqe_size_var(iface, inl, &env_var_added);
     if (status != UCS_OK) {
         goto out;
     }
     cq_attr.channel     = iface->comp_channel;
     cq_attr.cqe         = cq_length;
     cq_attr.comp_vector = preferred_cpu;
+    cq_attr.cq_context  = NULL;
     cq_attr.wc_flags    = IBV_WC_EX_WITH_TM_INFO  |
                           IBV_WC_EX_WITH_BYTE_LEN |
                           IBV_WC_EX_WITH_SRC_QP   |
                           IBV_WC_EX_WITH_QP_NUM   |
                           IBV_WC_EX_WITH_SLID     |
                           IBV_WC_EX_WITH_IMM;
-    cq_attr.cq_context  = NULL;
 
     cq = ibv_create_cq_ex(dev->ibv_context, &cq_attr);
     if (cq == NULL) {
@@ -516,7 +513,7 @@ static ucs_status_t uct_ib_iface_create_cq_ex(uct_ib_iface_t *iface, int cq_leng
     status = UCS_OK;
 
 out_unsetenv:
-    uct_ib_iface_unset_cqe_size_var(dev, cqe_size_env_var, env_var_added);
+    uct_ib_iface_unset_cqe_size_var(dev, env_var_added);
 out:
     return status;
 }

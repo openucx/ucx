@@ -177,7 +177,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
    /* If the gap between SW and HW counters is more than 32K, all messages will
     * be dropped and RNR ACK will be returned. Set threshold to 16K to avoid
     * hitting this gap at all. */
-#  define IBV_DEVICE_MAX_UNEXP_COUNT        UCS_MASK(14)
+#  define IBV_DEVICE_MAX_UNEXP_COUNT        UCS_BIT(14)
 #else
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #endif
