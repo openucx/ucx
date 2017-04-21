@@ -113,7 +113,8 @@ const char *ucs_signal_names[] = {
     [SIGSYS + 1] = NULL
 };
 
-static void *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
 khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 
@@ -613,6 +614,11 @@ static void *ucs_debug_alloc_mem(size_t length)
     return ptr;
 }
 
+static void ucs_debug_free_mem(void *ptr, size_t length)
+{
+    munmap(ptr, ucs_align_up_pow2(length, ucs_get_page_size()));
+}
+
 static char *ucs_debug_strdup(const char *str)
 {
     size_t length;
@@ -1078,6 +1084,35 @@ static void ucs_debug_signal_handler(int signo)
     ucs_profile_dump();
 }
 
+static void ucs_debug_set_signal_alt_stack()
+{
+    int ret;
+
+    ucs_debug_signal_stack.ss_size = SIGSTKSZ +
+                                     (2 * ucs_global_opts.log_buffer_size) +
+                                     (sizeof(void*) * BACKTRACE_MAX) +
+                                     (128 * UCS_KBYTE);
+    ucs_debug_signal_stack.ss_sp =
+                    ucs_debug_alloc_mem(ucs_debug_signal_stack.ss_size);
+    if (ucs_debug_signal_stack.ss_sp == NULL) {
+        return;
+    }
+
+    ucs_debug_signal_stack.ss_flags = 0;
+    ret = sigaltstack(&ucs_debug_signal_stack, NULL);
+    if (ret) {
+        ucs_warn("sigaltstack(ss_sp=%p, ss_size=%zu) failed: %m",
+                 ucs_debug_signal_stack.ss_sp, ucs_debug_signal_stack.ss_size);
+        ucs_debug_free_mem(ucs_debug_signal_stack.ss_sp,
+                           ucs_debug_signal_stack.ss_size);
+        ucs_debug_signal_stack.ss_sp = NULL;
+        return;
+    }
+
+    ucs_debug("using signal stack %p size %zu", ucs_debug_signal_stack.ss_sp,
+              ucs_debug_signal_stack.ss_size);
+}
+
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
 {
     struct sigaction sigact, old_action;
@@ -1090,6 +1125,9 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
     } else {
         sigact.sa_sigaction = handler;
         sigact.sa_flags     = SA_SIGINFO;
+        if (ucs_debug_signal_stack.ss_sp != NULL) {
+            sigact.sa_flags |= SA_ONSTACK;
+        }
     }
     sigemptyset(&sigact.sa_mask);
 
@@ -1161,6 +1199,7 @@ void ucs_debug_init()
 {
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     if (ucs_global_opts.handle_errors) {
+        ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
     }
     if (ucs_global_opts.debug_signo > 0) {
