@@ -22,4 +22,6 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              uct_pack_callback_t pack_cb, void *arg);
 
+ucs_status_t uct_self_ep_check(uct_ep_h ep, unsigned flags, uct_completion_t *comp);
+
 #endif

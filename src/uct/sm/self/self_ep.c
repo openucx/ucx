@@ -136,3 +136,11 @@ ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     return length;
 }
+
+ucs_status_t uct_self_ep_check(uct_ep_h ep, unsigned flags, uct_completion_t *comp)
+{
+    comp->count++;
+    comp->func(comp, UCS_OK);
+
+    return UCS_OK;
+}
