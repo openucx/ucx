@@ -148,7 +148,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t, uct_md_h md, uct_worker_h worker
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_mlx5_iface_ops, md, worker,
                               params, &config->super, 0,
-                              config->super.super.rx.queue_len,
+                              config->super.super.rx.queue_len, 0,
                               sizeof(uct_rc_hdr_t),
                               config->super.super.rx.queue_len,
                               sizeof(uct_rc_fc_request_t));

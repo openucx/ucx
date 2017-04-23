@@ -13,6 +13,12 @@
 
 #include "rc_verbs_common.h"
 
+#if HAVE_IBV_EX_HW_TM
+typedef struct uct_rc_verbs_release_desc {
+    uct_recv_desc_t             super;
+    unsigned                    offset;
+} uct_rc_verbs_release_desc_t;
+#endif
 
 /**
  * RC verbs communication context.
@@ -55,6 +61,9 @@ typedef struct uct_rc_verbs_iface {
     struct {
         uct_rc_srq_t            xrq;       /* TM XRQ */
         unsigned                tag_available;
+        int                     num_outstanding;
+        unsigned                eager_hdr_size;
+        uint16_t                unexpected_cnt;
         uint8_t                 enabled;
         struct {
             void                     *arg; /* User defined arg */
@@ -65,6 +74,7 @@ typedef struct uct_rc_verbs_iface {
             void                     *arg; /* User defined arg */
             uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
         } rndv_unexp;
+        uct_rc_verbs_release_desc_t  eager_desc;
     } tm;
 #endif
     struct {
@@ -127,6 +137,23 @@ typedef struct uct_rc_verbs_ep_tm_address {
     uct_ib_uint24_t             tm_qp_num;
 } UCS_S_PACKED uct_rc_verbs_ep_tm_address_t;
 
+typedef struct uct_rc_verbs_ctx_priv {
+    uint64_t                    tag;
+    uint64_t                    imm_data;
+    size_t                      length;
+    uint32_t                    tag_handle;
+} uct_rc_verbs_ctx_priv_t;
+
+typedef struct uct_rc_verbs_tm_cqe {
+    uint64_t                    wr_id;
+    enum ibv_wc_opcode          opcode;
+    int                         flags;
+    uint32_t                    byte_len;
+    uint32_t                    imm_data;
+    uint32_t                    qp_num;
+    uint32_t                    src_qp;
+    uint32_t                    slid;
+} uct_rc_verbs_tm_cqe_t;
 
 #  define UCT_RC_VERBS_TAG_MIN_POSTED  33
 
@@ -135,6 +162,50 @@ typedef struct uct_rc_verbs_ep_tm_address {
         (_iface)->tm.enabled)
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
+
+#  define UCT_RC_VERBS_FILL_TM_OP_WR(_iface, _wr, _sge, _iovlen, _opcode, _ctx, _flags) \
+       { \
+           (_wr)->sg_list = _sge; \
+           (_wr)->num_sge = _iovlen; \
+           (_wr)->opcode  = _opcode; \
+           (_wr)->flags   = _flags | IBV_OPS_TM_SYNC; \
+           (_wr)->next    = NULL; \
+           (_wr)->wr_id   = (uint64_t)_ctx; \
+           (_wr)->tm.unexpected_cnt = (_iface)->tm.unexpected_cnt; \
+       }
+
+#  define UCT_RC_VERBS_CHECK_TAG(iface) \
+       if (!iface->tm.tag_available) {  \
+           return UCS_ERR_EXCEEDS_LIMIT; \
+       } \
+       if (iface->tm.num_outstanding <= 0) { \
+           return UCS_ERR_NO_RESOURCE; \
+       }
+
+static UCS_F_ALWAYS_INLINE uint64_t
+uct_rc_verbs_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int flags)
+{
+    if (flags & IBV_WC_WITH_IMM) {
+        return ((uint64_t)app_ctx << 32) | ib_imm;
+    } else {
+        return 0ul;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE uct_rc_verbs_ctx_priv_t*
+uct_rc_verbs_iface_ctx_priv(uct_tag_context_t *ctx)
+{
+    return (uct_rc_verbs_ctx_priv_t*)ctx->priv;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_save_tmh(struct ibv_cq_ex *cqe, uct_rc_verbs_ctx_priv_t *priv,
+                            int flags, struct ibv_wc_tm_info *tm_info)
+{
+    priv->tag      = tm_info->tag.tag;
+    priv->imm_data = uct_rc_verbs_tag_imm_data_unpack(ibv_wc_read_imm_data(cqe),
+                                                      tm_info->priv.data, flags);
+}
 
 #else
 

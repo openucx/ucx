@@ -116,23 +116,20 @@ static inline int uct_rc_verbs_txcq_get_comp_count(struct ibv_wc *wc)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
-                             uct_rc_hdr_t *hdr, uint32_t length)
+uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
+                             uint64_t wr_id, uint32_t qp_num, uint32_t length,
+                             uint32_t imm_data, uint32_t slid)
 {
     uct_ib_iface_recv_desc_t *desc;
     uct_rc_iface_ops_t *rc_ops;
     void *udesc;
     ucs_status_t status;
 
-    desc = (uct_ib_iface_recv_desc_t *)wc->wr_id;
-
-    uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, wc, hdr, length,
-                               uct_rc_ep_am_packet_dump);
-
+    desc = (uct_ib_iface_recv_desc_t *)wr_id;
     if (ucs_unlikely(hdr->am_id & UCT_RC_EP_FC_MASK)) {
         rc_ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-        status = rc_ops->fc_handler(iface, wc->qp_num, hdr, length - sizeof(*hdr),
-                                    wc->imm_data, wc->slid, UCT_CB_FLAG_DESC);
+        status = rc_ops->fc_handler(iface, qp_num, hdr, length - sizeof(*hdr),
+                                    imm_data, slid, UCT_CB_FLAG_DESC);
         if (status == UCS_OK) {
             ucs_mpool_put_inline(desc);
         } else {
@@ -160,7 +157,10 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_iface_t *iface)
     }
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super, i, hdr, wc, num_wcs) {
-        uct_rc_verbs_iface_handle_am(iface, &wc[i], hdr, wc[i].byte_len);
+        uct_ib_log_recv_completion(&iface->super, IBV_QPT_RC, &wc[i], hdr,
+                                   wc[i].byte_len, uct_rc_ep_am_packet_dump);
+        uct_rc_verbs_iface_handle_am(iface, hdr, wc[i].wr_id, wc[i].qp_num,
+                                     wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
     iface->rx.srq.available += num_wcs;
     UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
