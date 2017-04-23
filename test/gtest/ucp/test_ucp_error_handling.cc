@@ -18,8 +18,9 @@ public:
 };
 
 UCS_TEST_P(test_ucp_error_handling, disable_sync_send) {
-
-    const size_t        max_size = 1024 * 1024 * 1024;
+    /* 1GB memory markup takes too long time with valgrind, reduce to 1MB */
+    const size_t        max_size = RUNNING_ON_VALGRIND ? (1024 * 1024) :
+                                   (1024 * 1024 * 1024);
     std::vector<char>   buf(max_size, 0);
     request             *req;
 
