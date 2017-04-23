@@ -4,9 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#include "match.h"
 #include "eager.h"
 #include "rndv.h"
+#include "tag_match.inl"
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_worker.h>
@@ -23,7 +23,7 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
     ucp_tag_t recv_tag;
     unsigned flags;
 
-    ucs_queue_for_each_safe(rdesc, iter, &context->tag.unexpected, queue) {
+    ucs_queue_for_each_safe(rdesc, iter, &context->tm.unexpected, queue) {
         hdr      = (void*)(rdesc + 1);
         recv_tag = hdr->tag;
         flags    = rdesc->flags;
@@ -44,7 +44,7 @@ ucp_tag_probe_search(ucp_context_h context, ucp_tag_t tag, uint64_t tag_mask,
             }
 
             if (remove) {
-                ucs_queue_del_iter(&context->tag.unexpected, iter);
+                ucs_queue_del_iter(&context->tm.unexpected, iter);
             }
             return rdesc;
         }

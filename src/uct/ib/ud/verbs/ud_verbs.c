@@ -30,7 +30,7 @@ uct_ud_verbs_iface_post_recv_always(uct_ud_verbs_iface_t *iface, int max);
 static inline void
 uct_ud_verbs_iface_post_recv(uct_ud_verbs_iface_t *iface);
 
-static UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
+UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, uct_iface_h tl_iface)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_verbs_iface_t);
     ucs_trace_func("");
@@ -330,6 +330,12 @@ out:
     return status;
 }
 
+static void uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+{
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_verbs_ep_t), ep,
+                      &iface->super.super);
+}
+
 static void uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_verbs_iface_t);
@@ -454,7 +460,6 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
     .iface_flush              = uct_ud_iface_flush,
-    .iface_release_desc       = uct_ud_iface_release_desc,
     .iface_wakeup_open        = uct_ib_iface_wakeup_open,
     .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
     .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
@@ -485,6 +490,8 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     },
     .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
     .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
+    .handle_failure           = uct_ud_iface_handle_failure,
+    .set_ep_failed            = uct_ud_verbs_ep_set_failed
     },
     .progress                 = uct_ud_verbs_iface_progress,
     .async_progress           = uct_ud_verbs_iface_async_progress,

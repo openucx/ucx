@@ -9,7 +9,7 @@
 
 #include <common/test_helpers.h>
 extern "C" {
-#include <ucs/debug/debug.h>
+#include <ucp/core/ucp_context.h>
 }
 
 
@@ -136,16 +136,14 @@ void test_ucp_tag::wait_and_validate(request *req)
     request_release(req);
 }
 
-void test_ucp_tag::wait_for_unexpected_msg(ucs_queue_head_t *unexpected_q,
-                                           double sec)
+void test_ucp_tag::wait_for_unexpected_msg(ucp_context_h context, double sec)
 {
     /* Wait for some message to be added to unexpected queue */
     ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(sec);
 
     do {
         short_progress_loop();
-    } while (ucs_queue_is_empty(unexpected_q) &&
-            (ucs_get_time() < timeout));
+    } while (ucp_tag_unexp_is_empty(&context->tm) && (ucs_get_time() < timeout));
 }
 
 test_ucp_tag::request *

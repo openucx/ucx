@@ -55,7 +55,7 @@ static ucs_status_t uct_mm_iface_get_address(uct_iface_t *tl_iface,
     return UCS_OK;
 }
 
-void uct_mm_iface_release_desc(uct_iface_t *tl_iface, void *desc)
+void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     void *mm_desc;
 
@@ -143,7 +143,6 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_get_address   = uct_mm_iface_get_address,
     .iface_get_device_address = uct_sm_iface_get_device_address,
     .iface_is_reachable  = uct_sm_iface_is_reachable,
-    .iface_release_desc  = uct_mm_iface_release_desc,
     .iface_flush         = uct_mm_iface_flush,
     .iface_fence         = uct_sm_iface_fence,
     .ep_put_short        = uct_sm_ep_put_short,
@@ -477,6 +476,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     self->fifo_mask                = mm_config->fifo_size - 1;
     self->fifo_shift               = ucs_count_zero_bits(mm_config->fifo_size);
     self->rx_headroom              = params->rx_headroom;
+    self->release_desc.cb          = uct_mm_iface_release_desc;
 
     /* create the receive FIFO */
     /* use specific allocator to allocate and attach memory and check the

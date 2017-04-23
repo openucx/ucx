@@ -27,6 +27,10 @@ public:
             GetParam()->tl_name == "dc" || GetParam()->tl_name == "dc_mlx5") {
             set_config("RC_TIMEOUT=0.0001"); /* 100 us should be enough */
             set_config("RC_RETRY_COUNT=2");
+        } else if (GetParam()->tl_name == "ud") {
+            set_config("TIMEOUT=1s");
+        } else if (GetParam()->tl_name == "ud_mlx5") {
+            set_config("UD_TIMEOUT=1s");
         }
 
         e1 = uct_test::create_entity(0);
@@ -68,8 +72,8 @@ public:
         if (is_ep2ep_tl()) {
             m_entities.back()->destroy_ep(0);
         } else {
-            size_t n = m_entities.remove(m_entities.back());
-            ucs_assert(n == 1);
+            m_entities.remove(m_entities.back());
+            ucs_assert(m_entities.size() == 1);
         }
     }
 

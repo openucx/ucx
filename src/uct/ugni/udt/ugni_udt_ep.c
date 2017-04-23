@@ -1,17 +1,13 @@
 /**
-* Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
-#include <ucs/datastruct/sglib_wrapper.h>
-#include <ucs/debug/memtrack.h>
-#include <ucs/debug/log.h>
-#include <uct/base/uct_log.h>
 
 #include "ugni_udt_ep.h"
 #include "ugni_udt_iface.h"
 #include <uct/ugni/base/ugni_device.h>
-#include <uct/ugni/base/ugni_ep.h>
+#include <uct/ugni/base/ugni_md.h>
 
 #define uct_ugni_udt_can_send(_ep) ((uct_ugni_can_send(&_ep->super)) && (_ep->posted_desc == NULL))
 
@@ -39,6 +35,33 @@ ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
         uct_worker_progress_unregister(iface->super.worker, uct_ugni_udt_progress, iface);
     }
     return result;
+}
+
+static ucs_arbiter_cb_result_t uct_ugni_udt_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                                ucs_arbiter_elem_t *elem,
+                                                                void *arg)
+{
+    uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
+    uct_ugni_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ugni_iface_t);
+    ucs_arbiter_cb_result_t result;
+
+    result = uct_ugni_ep_abriter_purge_cb(arbiter, elem, arg);
+    if (UCS_ARBITER_CB_RESULT_REMOVE_ELEM == result) {
+        uct_worker_progress_unregister(iface->super.worker, uct_ugni_udt_progress, iface);
+    }
+    return result;
+}
+
+void uct_ugni_udt_ep_pending_purge(uct_ep_h tl_ep,
+                                   uct_pending_purge_callback_t cb,
+                                   void *arg)
+{
+    uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);
+    uct_ugni_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_ep_t);
+    uct_purge_cb_args_t args = {cb, arg};
+
+    ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
+                            uct_ugni_udt_ep_abriter_purge_cb, &args);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_udt_ep_t, uct_iface_t *tl_iface,

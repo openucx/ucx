@@ -1,19 +1,13 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#include <pmi.h>
-
-#include "ucs/type/class.h"
-#include "uct/base/uct_md.h"
-
-#include <ucs/arch/cpu.h>
-#include <uct/ugni/base/ugni_iface.h>
-
-#include "ugni_rdma_iface.h"
 #include "ugni_rdma_ep.h"
+#include "ugni_rdma_iface.h"
+#include <uct/ugni/base/ugni_md.h>
+#include <uct/ugni/base/ugni_device.h>
 
 static ucs_config_field_t uct_ugni_rdma_iface_config_table[] = {
     /* This tuning controls the allocation priorities for bouncing buffers */

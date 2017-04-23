@@ -1,19 +1,16 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_UGNI_IFACE_H
-#define UCT_UGNI_IFACE_H
+#ifndef UCT_UGNI_UDT_IFACE_H
+#define UCT_UGNI_UDT_IFACE_H
 
-#include <gni_pub.h>
-#include <uct/ugni/base/ugni_md.h>
-#include <uct/ugni/base/ugni_device.h>
+#include "ugni_udt_ep.h"
+#include <uct/ugni/base/ugni_types.h>
 #include <uct/ugni/base/ugni_iface.h>
 #include <ucs/datastruct/list.h>
-#include "ugni_udt_ep.h"
-
 #include <uct/base/uct_md.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>
@@ -27,6 +24,7 @@ typedef struct uct_ugni_udt_iface {
     gni_ep_handle_t         ep_any;       /**< Unbound endpoint that accept any datagram
                                                messages */
     uct_ugni_udt_desc_t     *desc_any;    /**< Segment that accepts datagram from any source */
+    uct_recv_desc_t         release_desc; /**< Callback for receive desc release */
     struct {
         unsigned            udt_seg_size; /**< Max UDT size */
         size_t              rx_headroom;  /**< The size of user defined header for am */
@@ -51,6 +49,7 @@ typedef struct uct_ugni_udt_header {
 } uct_ugni_udt_header_t;
 
 void uct_ugni_udt_progress(void *arg);
+
 #define uct_ugni_udt_get_offset(i) ((size_t)(ucs_max(sizeof(uct_ugni_udt_header_t), ((i)->config.rx_headroom  + \
                  sizeof(uct_recv_desc_t)))))
 

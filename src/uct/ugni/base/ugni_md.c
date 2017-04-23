@@ -1,13 +1,10 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#include "ucs/debug/memtrack.h"
-#include "ucs/type/class.h"
-
-#include "uct/base/uct_md.h"
+#include "ugni_device.h"
 #include "ugni_iface.h"
 #include "ugni_md.h"
 
@@ -39,8 +36,6 @@ uct_ugni_job_info_t job_info = {
     .num_devices        = -1,
     .initialized        = false,
 };
-
-#define UCT_UGNI_RKEY_MAGIC  0xdeadbeefLL
 
 static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {

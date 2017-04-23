@@ -5,9 +5,12 @@
  */
 
 #include "rndv.h"
+#include "tag_match.inl"
+
 #include <ucp/proto/proto_am.inl>
 #include <ucp/core/ucp_request.inl>
 #include <ucs/datastruct/queue.h>
+
 
 static int ucp_tag_rndv_is_get_op_possible(ucp_ep_h ep, uct_rkey_t rkey)
 {
@@ -424,14 +427,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 
     UCP_THREAD_CS_ENTER_CONDITIONAL(&context->mt_lock);
 
-    rreq = ucp_tag_search_exp(context, rndv_rts_hdr->super.tag,
+    rreq = ucp_tag_exp_search(&context->tm, rndv_rts_hdr->super.tag,
                               rndv_rts_hdr->size, recv_flags);
     if (rreq != NULL) {
         ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
         UCP_WORKER_STAT_RNDV(worker, EXP);
         status = UCS_OK;
     } else {
-        status = ucp_tag_unexp_recv(context, worker, data, length, am_flags,
+        status = ucp_tag_unexp_recv(&context->tm, worker, data, length, am_flags,
                                     sizeof(*rndv_rts_hdr), recv_flags);
     }
 

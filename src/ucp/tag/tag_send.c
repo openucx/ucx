@@ -4,7 +4,7 @@
  * See file LICENSE for terms.
  */
 
-#include "match.h"
+#include "tag_match.h"
 #include "eager.h"
 #include "rndv.h"
 

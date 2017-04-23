@@ -1,23 +1,19 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#ifndef UCT_UGNI_IFACE_H
-#define UCT_UGNI_IFACE_H
+#ifndef UCT_UGNI_RDMA_IFACE_H
+#define UCT_UGNI_RDMA_IFACE_H
 
-#include <uct/ugni/base/ugni_md.h>
-#include <uct/ugni/base/ugni_device.h>
+#include <uct/ugni/base/ugni_types.h>
 #include <uct/ugni/base/ugni_iface.h>
-#include "ugni_rdma_ep.h"
-
 #include <uct/base/uct_iface.h>
 
-#define UCT_UGNI_MAX_FMA     (2048)
-#define UCT_UGNI_MAX_RDMA    (512*1024*1024);
-
-struct uct_ugni_iface;
+#define UCT_UGNI_RDMA_TL_NAME  "ugni_rdma"
+#define UCT_UGNI_MAX_FMA       2048
+#define UCT_UGNI_MAX_RDMA      (512*1024*1024);
 
 typedef struct uct_ugni_rdma_iface {
     uct_ugni_iface_t        super;                       /**< Super type */

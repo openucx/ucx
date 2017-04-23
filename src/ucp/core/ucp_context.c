@@ -818,8 +818,10 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     }
 
     /* initialize tag matching */
-    ucs_queue_head_init(&context->tag.expected);
-    ucs_queue_head_init(&context->tag.unexpected);
+    status = ucp_tag_match_init(&context->tm);
+    if (status != UCS_OK) {
+        goto err_free_resources;
+    }
 
     ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx", context,
               context->num_mds, context->num_tls, context->config.features);
@@ -827,6 +829,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
+err_free_resources:
+    ucp_free_resources(context);
 err_free_config:
     ucp_free_config(context);
 err_free_ctx:
@@ -837,6 +841,7 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
+    ucp_tag_match_cleanup(&context->tm);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);

@@ -101,25 +101,26 @@ static ucs_status_t uct_rc_mlx5_iface_arm_rx_cq(uct_ib_iface_t *ib_iface,
     return uct_ib_iface_arm_rx_cq(ib_iface, solicited);
 }
 
-static void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
-                                                            void *arg)
+static void
+uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
 {
-    struct mlx5_cqe64 *cqe = arg;
-    uct_rc_iface_t *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
-    extern ucs_class_t UCS_CLASS_NAME(uct_rc_mlx5_ep_t);
-    unsigned  qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    uct_rc_mlx5_ep_t *ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, qp_num),
-                                          uct_rc_mlx5_ep_t);
-
-    if (ep != NULL) {
-        uct_ib_mlx5_completion_with_err((void*)cqe,
-                                        iface->super.super.config.failure_level);
-        uct_rc_txqp_purge_outstanding(&ep->super.txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
-
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t),
-                          &ep->super.super.super,
-                          &iface->super.super.super);
+    struct mlx5_cqe64 *cqe   = arg;
+    uct_rc_iface_t    *iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    unsigned          qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    uct_rc_mlx5_ep_t  *ep    = ucs_derived_of(uct_rc_iface_lookup_ep(iface, qp_num),
+                                              uct_rc_mlx5_ep_t);
+    if (!ep) {
+        return;
     }
+
+    uct_ib_mlx5_completion_with_err(arg, ib_iface->super.config.failure_level);
+    uct_rc_ep_failed_purge_outstanding(&ep->super.super.super, ib_iface,
+                                       &ep->super.txqp);
+}
+
+static void uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+{
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t), ep, &iface->super.super);
 }
 
 static ucs_status_t uct_rc_mlx5_reset_qp(uct_rc_iface_t *iface,
@@ -190,7 +191,6 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_query              = uct_rc_mlx5_iface_query,
     .iface_flush              = uct_rc_iface_flush,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_iface_t),
-    .iface_release_desc       = uct_ib_iface_release_desc,
     .iface_wakeup_open        = uct_ib_iface_wakeup_open,
     .iface_wakeup_get_fd      = uct_ib_iface_wakeup_get_fd,
     .iface_wakeup_arm         = uct_ib_iface_wakeup_arm,
@@ -225,7 +225,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     },
     .arm_tx_cq                = uct_rc_mlx5_iface_arm_tx_cq,
     .arm_rx_cq                = uct_rc_mlx5_iface_arm_rx_cq,
-    .handle_failure           = uct_rc_mlx5_iface_handle_failure
+    .handle_failure           = uct_rc_mlx5_iface_handle_failure,
+    .set_ep_failed            = uct_rc_mlx5_ep_set_failed
     },
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler,

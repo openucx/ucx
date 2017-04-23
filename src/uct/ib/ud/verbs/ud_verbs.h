@@ -29,6 +29,6 @@ typedef struct {
     } tx;
 } uct_ud_verbs_iface_t;
 
+UCS_CLASS_DECLARE(uct_ud_verbs_ep_t, uct_iface_h)
 
 #endif
-

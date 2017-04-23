@@ -113,7 +113,8 @@ const char *ucs_signal_names[] = {
     [SIGSYS + 1] = NULL
 };
 
-static void *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+static void    *ucs_debug_signal_restorer = &ucs_debug_signal_restorer;
+static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 
 khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 
@@ -613,6 +614,11 @@ static void *ucs_debug_alloc_mem(size_t length)
     return ptr;
 }
 
+static void ucs_debug_free_mem(void *ptr, size_t length)
+{
+    munmap(ptr, ucs_align_up_pow2(length, ucs_get_page_size()));
+}
+
 static char *ucs_debug_strdup(const char *str)
 {
     size_t length;
@@ -1007,11 +1013,104 @@ void ucs_handle_error(const char *error_type, const char *message, ...)
     }
 }
 
+static int ucs_debug_is_error_signal(int signum)
+{
+    int i;
+
+    if (!ucs_global_opts.handle_errors) {
+        return 0;
+    }
+
+    for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
+        if (signum == ucs_global_opts.error_signals.signals[i]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
+{
+    void *func_ptr;
+
+    func_ptr = dlsym(RTLD_NEXT, symbol);
+    if (func_ptr == NULL) {
+        func_ptr = dlsym(RTLD_DEFAULT, symbol);
+    }
+    return func_ptr;
+}
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    static sighandler_t (*orig)(int, sighandler_t) = NULL;
+
+    if (ucs_debug_is_error_signal(signum)) {
+        return SIG_DFL;
+    }
+
+    if (orig == NULL) {
+        orig = ucs_debug_get_orig_func("signal", signal);
+    }
+
+    return orig(signum, handler);
+}
+
+static int orig_sigaction(int signum, const struct sigaction *act,
+                          struct sigaction *oact)
+{
+    static int (*orig)(int, const struct sigaction*, struct sigaction*) = NULL;
+
+    if (orig == NULL) {
+        orig = ucs_debug_get_orig_func("sigaction", sigaction);
+    }
+
+    return orig(signum, act, oact);
+}
+
+int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
+{
+    if (ucs_debug_is_error_signal(signum)) {
+        return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
+    }
+
+    return orig_sigaction(signum, act, oact);
+}
+
 static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
     ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
     ucs_profile_dump();
+}
+
+static void ucs_debug_set_signal_alt_stack()
+{
+    int ret;
+
+    ucs_debug_signal_stack.ss_size = SIGSTKSZ +
+                                     (2 * ucs_global_opts.log_buffer_size) +
+                                     (sizeof(void*) * BACKTRACE_MAX) +
+                                     (128 * UCS_KBYTE);
+    ucs_debug_signal_stack.ss_sp =
+                    ucs_debug_alloc_mem(ucs_debug_signal_stack.ss_size);
+    if (ucs_debug_signal_stack.ss_sp == NULL) {
+        return;
+    }
+
+    ucs_debug_signal_stack.ss_flags = 0;
+    ret = sigaltstack(&ucs_debug_signal_stack, NULL);
+    if (ret) {
+        ucs_warn("sigaltstack(ss_sp=%p, ss_size=%zu) failed: %m",
+                 ucs_debug_signal_stack.ss_sp, ucs_debug_signal_stack.ss_size);
+        ucs_debug_free_mem(ucs_debug_signal_stack.ss_sp,
+                           ucs_debug_signal_stack.ss_size);
+        ucs_debug_signal_stack.ss_sp = NULL;
+        return;
+    }
+
+    ucs_debug("using signal stack %p size %zu", ucs_debug_signal_stack.ss_sp,
+              ucs_debug_signal_stack.ss_size);
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
@@ -1026,11 +1125,15 @@ static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
     } else {
         sigact.sa_sigaction = handler;
         sigact.sa_flags     = SA_SIGINFO;
+        if (ucs_debug_signal_stack.ss_sp != NULL) {
+            sigact.sa_flags |= SA_ONSTACK;
+        }
     }
     sigemptyset(&sigact.sa_mask);
 
     for (i = 0; i < ucs_global_opts.error_signals.count; ++i) {
-        ret = sigaction(ucs_global_opts.error_signals.signals[i], &sigact, &old_action);
+        ret = orig_sigaction(ucs_global_opts.error_signals.signals[i], &sigact,
+                             &old_action);
         if (ret < 0) {
             ucs_warn("failed to set signal handler for sig %d : %m",
                      ucs_global_opts.error_signals.signals[i]);
@@ -1096,6 +1199,7 @@ void ucs_debug_init()
 {
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
     if (ucs_global_opts.handle_errors) {
+        ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
     }
     if (ucs_global_opts.debug_signo > 0) {

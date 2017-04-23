@@ -1,10 +1,11 @@
 /**
- * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+ * Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
-#include <uct/ugni/base/ugni_ep.h>
-#include <uct/ugni/base/ugni_iface.h>
+
+#include "ugni_ep.h"
+#include "ugni_iface.h"
 
 SGLIB_DEFINE_LIST_FUNCTIONS(uct_ugni_ep_t, uct_ugni_ep_compare, next);
 SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ugni_ep_t, UCT_UGNI_HASH_SIZE, uct_ugni_ep_hash);
@@ -57,9 +58,10 @@ ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
     }
 }
 
-static ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
-                                                            ucs_arbiter_elem_t *elem,
-                                                            void *arg){
+ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                     ucs_arbiter_elem_t *elem,
+                                                     void *arg)
+{
     uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_purge_cb_args_t *cb_args = arg;

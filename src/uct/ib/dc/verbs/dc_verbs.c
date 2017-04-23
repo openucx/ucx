@@ -609,13 +609,16 @@ static void uct_dc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg)
 {
     struct ibv_wc *wc = arg;
 
-    uct_dc_ep_set_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t),
-                         ucs_derived_of(ib_iface, uct_dc_iface_t),
-                         wc->qp_num);
-
+    uct_dc_handle_failure(ib_iface, wc->qp_num);
     ucs_log(ib_iface->super.config.failure_level,
             "Send completion with error: %s",
             ibv_wc_status_str(wc->status));
+}
+
+static void uct_dc_verbs_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep)
+{
+    uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_verbs_ep_t), ep,
+                      &iface->super.super);
 }
 
 /* Send either request for grants or grant message. Request includes ep
@@ -738,7 +741,6 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
             .iface_query              = uct_dc_verbs_iface_query,
             .iface_get_device_address = uct_ib_iface_get_device_address,
             .iface_is_reachable       = uct_ib_iface_is_reachable,
-            .iface_release_desc       = uct_ib_iface_release_desc,
             .iface_get_address        = uct_dc_iface_get_address,
 
             .iface_flush              = uct_dc_iface_flush,
@@ -774,7 +776,8 @@ static uct_rc_iface_ops_t uct_dc_verbs_iface_ops = {
         },
         .arm_tx_cq                = uct_ib_iface_arm_tx_cq,
         .arm_rx_cq                = uct_ib_iface_arm_rx_cq,
-        .handle_failure           = uct_dc_verbs_handle_failure
+        .handle_failure           = uct_dc_verbs_handle_failure,
+        .set_ep_failed            = uct_dc_verbs_ep_set_failed
     },
     .fc_ctrl                  = uct_dc_verbs_ep_fc_ctrl,
     .fc_handler               = uct_dc_iface_fc_handler,

@@ -27,6 +27,8 @@ noinst_HEADERS = \
 	core/ucp_request.h \
 	core/ucp_request.inl \
 	core/ucp_worker.h \
+	core/ucp_thread.h \
+	core/ucp_types.h \
 	dt/dt.h \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
@@ -34,8 +36,9 @@ noinst_HEADERS = \
 	proto/proto.h \
 	proto/proto_am.inl \
 	tag/eager.h \
-	tag/match.h \
 	tag/rndv.h \
+	tag/tag_match.h \
+	tag/tag_match.inl \
 	wireup/address.h \
 	wireup/stub_ep.h \
 	wireup/wireup.h
@@ -60,6 +63,7 @@ libucp_la_SOURCES = \
 	tag/eager_snd.c \
 	tag/probe.c \
 	tag/rndv.c \
+	tag/tag_match.c \
 	tag/tag_recv.c \
 	tag/tag_send.c \
 	wireup/address.c \

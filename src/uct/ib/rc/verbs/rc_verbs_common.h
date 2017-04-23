@@ -137,7 +137,7 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, struct ibv_wc *wc,
             ucs_mpool_put_inline(desc);
         } else {
             udesc = (char*)desc + iface->super.config.rx_headroom_offset;
-            uct_recv_desc_iface(udesc) = &iface->super.super.super;
+            uct_recv_desc(udesc) = &iface->super.release_desc;
         }
     } else {
         uct_ib_iface_invoke_am_desc(&iface->super, hdr->am_id, hdr + 1,

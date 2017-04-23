@@ -398,6 +398,13 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
     }
 }
 
+void uct_rc_ep_failed_purge_outstanding(uct_ep_t *ep, uct_ib_iface_t *iface,
+                                        uct_rc_txqp_t *txqp)
+{
+    uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_ENDPOINT_TIMEOUT, 0);
+    iface->ops->set_ep_failed(iface, ep);
+}
+
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);

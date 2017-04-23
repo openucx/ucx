@@ -9,6 +9,7 @@
 #define UCP_WORKER_H_
 
 #include "ucp_ep.h"
+#include "ucp_thread.h"
 
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/khash.h>

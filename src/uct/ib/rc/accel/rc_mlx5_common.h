@@ -192,8 +192,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
    } else {
         if (status != UCS_OK) {
             udesc = (char*)desc + rc_iface->super.config.rx_headroom_offset;
-            uct_recv_desc_iface(udesc) = &rc_iface->super.super.super;
-            seg->srq.desc              = NULL;
+            uct_recv_desc(udesc) = &rc_iface->super.release_desc;
+            seg->srq.desc        = NULL;
         }
         if (wqe_ctr == ((mlx5_common_iface->rx.srq.free_idx + 1) & mlx5_common_iface->rx.srq.mask)) {
             ++mlx5_common_iface->rx.srq.free_idx;

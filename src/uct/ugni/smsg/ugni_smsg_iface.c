@@ -1,16 +1,14 @@
 /**
- * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
-#include <pmi.h>
-#include "ucs/type/class.h"
-
-#include <ucs/arch/cpu.h>
-#include <uct/ugni/base/ugni_iface.h>
 #include "ugni_smsg_iface.h"
 #include "ugni_smsg_ep.h"
+#include <uct/ugni/base/ugni_md.h>
+#include <uct/ugni/base/ugni_device.h>
+#include <ucs/arch/cpu.h>
 
 #define UCT_UGNI_SMSG_TL_NAME "ugni_smsg"
 
@@ -57,7 +55,6 @@ static ucs_status_t progress_local_cq(uct_ugni_smsg_iface_t *iface){
 }
 
 static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
-    ucs_status_t status;
     uint8_t tag;
     void *data_ptr;
     gni_return_t ugni_rc;
@@ -95,8 +92,8 @@ static void process_mbox(uct_ugni_smsg_iface_t *iface, uct_ugni_smsg_ep_t *ep){
                            tag, user_data, header->length, "RX: AM");
 
         pthread_mutex_unlock(&uct_ugni_global_lock);
-        status = uct_iface_invoke_am(&iface->super.super, tag, user_data,
-                                     header->length, 0);
+        uct_iface_invoke_am(&iface->super.super, tag, user_data,
+                            header->length, 0);
         pthread_mutex_lock(&uct_ugni_global_lock);
 
         ugni_rc = GNI_SmsgRelease(ep->super.ep);
@@ -180,12 +177,6 @@ static void uct_ugni_smsg_progress(void *arg)
 
     ucs_arbiter_dispatch(&iface->super.arbiter, iface->config.smsg_max_credit,
                          uct_ugni_ep_process_pending, NULL);
-}
-
-static void uct_ugni_smsg_iface_release_desc(uct_iface_t *tl_iface, void *desc)
-{
-    uct_ugni_smsg_desc_t *ugni_desc = ((uct_ugni_smsg_desc_t *)desc)-1;
-    ucs_mpool_put(ugni_desc);
 }
 
 static ucs_status_t uct_ugni_smsg_query_tl_resources(uct_md_h md,
@@ -289,7 +280,6 @@ uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .iface_get_address     = uct_ugni_iface_get_address,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_is_reachable    = uct_ugni_iface_is_reachable,
-    .iface_release_desc    = uct_ugni_smsg_iface_release_desc,
     .ep_create             = UCS_CLASS_NEW_FUNC_NAME(uct_ugni_smsg_ep_t),
     .ep_get_address        = uct_ugni_smsg_ep_get_address,
     .ep_connect_to_ep      = uct_ugni_smsg_ep_connect_to_ep,

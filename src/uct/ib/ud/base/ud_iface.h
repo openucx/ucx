@@ -27,6 +27,7 @@
 
 typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t    super;
+    double                   peer_timeout;
 } uct_ud_iface_config_t;
 
 struct uct_ud_iface_peer {
@@ -117,6 +118,7 @@ struct uct_ud_iface {
         ucs_queue_head_t       async_comp_q;
     } tx;
     struct {
+        ucs_time_t           peer_timout;
         unsigned             tx_qp_len;
         unsigned             max_inline;
     } config;
@@ -153,7 +155,7 @@ struct uct_ud_ctl_hdr {
 extern ucs_config_field_t uct_ud_iface_config_table[];
 
 void uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr);
-void uct_ud_iface_release_desc(uct_iface_t *tl_iface, void *desc);
+void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
 
@@ -362,6 +364,8 @@ uct_ud_iface_progress_pending_tx(uct_ud_iface_t *iface)
     }
 
 ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
+
+void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)

@@ -7,7 +7,7 @@
 #ifndef UCP_EP_H_
 #define UCP_EP_H_
 
-#include "ucp_context.h"
+#include "ucp_types.h"
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
