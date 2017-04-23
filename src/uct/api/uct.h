@@ -934,8 +934,8 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
  * @ingroup UCT_RESOURCE
  * @brief check if remote side is alive
  *
- * This function checks if remote side is alive or not. It returns error
- * immediately if it is known that @a ep is failed or @ref UCS_OK if
+ * This function checks if remote side is alive or not. It returns @ref UCS_OK
+ * or error immediately if status of @a ep is known or @ref UCS_INPROGRESS if
  * synchronization is needed, then status will be propagated by @a comp callback
  *
  * @param [in]  ep      Endpoint to check
@@ -943,7 +943,7 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
  *                      (currently unsupported - set to 0).
  * @param [in]  comp    Handler to process status of @a ep
  *
- * @return UCS_OK or error if it is known that @a ep is failed.
+ * @return              Error code.
  */
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
                           uct_completion_t *comp);

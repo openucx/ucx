@@ -142,7 +142,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic_swap32         = uct_sm_ep_atomic_swap32,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
-    .ep_check                 = uct_self_ep_check
+    .ep_check                 = ucs_empty_function_return_success
 };
 
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
