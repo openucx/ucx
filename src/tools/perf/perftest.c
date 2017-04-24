@@ -1131,7 +1131,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     rte_group_t group;
 
     rte_init(NULL, NULL, &group);
-    if (0 == rte_group_rank(group)) {
+    if (1 == rte_group_rank(group)) {
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
