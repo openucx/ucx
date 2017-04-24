@@ -236,7 +236,7 @@ static void ucp_address_pack_iface_attr(ucp_address_packed_iface_attr_t *packed,
     packed->bandwidth      = iface_attr->bandwidth;
 
     /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
-    packed_flag = 8;
+    packed_flag = UCS_BIT(8);
     bit         = 1;
     while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
         if (UCP_ADDRESS_IFACE_FLAGS & bit) {
@@ -261,7 +261,7 @@ ucp_address_unpack_iface_attr(ucp_address_iface_attr_t *iface_attr,
     iface_attr->overhead  = packed->overhead;
     iface_attr->bandwidth = packed->bandwidth;
 
-    packed_flag = 8;
+    packed_flag = UCS_BIT(8);
     bit         = 1;
     while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
         if (UCP_ADDRESS_IFACE_FLAGS & bit) {
