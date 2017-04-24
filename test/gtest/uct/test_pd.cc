@@ -183,7 +183,10 @@ UCS_TEST_P(test_pd, reg_perf) {
         memset(ptr, 0xBB, size);
 
         ucs_time_t start_time = ucs_get_time();
-        for (unsigned i = 0; i < count; ++i) {
+        ucs_time_t end_time = start_time;
+
+        unsigned n = 0;
+        while (n < count) {
             uct_mem_h memh;
             status = uct_md_mem_reg(pd(), ptr, size, 0, &memh);
             ASSERT_UCS_OK(status);
@@ -191,12 +194,18 @@ UCS_TEST_P(test_pd, reg_perf) {
 
             status = uct_md_mem_dereg(pd(), memh);
             ASSERT_UCS_OK(status);
+
+            ++n;
+            end_time = ucs_get_time();
+
+            if (end_time - start_time > ucs_time_from_sec(1.0)) {
+                break;
+            }
         }
-        ucs_time_t end_time = ucs_get_time();
 
         UCS_TEST_MESSAGE << GetParam() << ": Registration time for " <<
                         size << " bytes: " <<
-                        long(ucs_time_to_nsec(end_time - start_time) / count) << " ns";
+                        long(ucs_time_to_nsec(end_time - start_time) / n) << " ns";
 
         free(ptr);
     }
