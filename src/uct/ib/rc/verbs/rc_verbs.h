@@ -92,12 +92,13 @@ typedef struct uct_rc_verbs_iface {
                       0, _max_inline, "am_short");
 
 #define UCT_RC_VERBS_CHECK_AM_ZCOPY(_iface, _id, _header_len, _len, _desc_size, _seg_size) \
-     UCT_RC_CHECK_AM_ZCOPY_DATA(_id, _header_len, _len, _seg_size) \
+     UCT_CHECK_AM_ID(_id); \
+     UCT_RC_CHECK_ZCOPY_DATA(_header_len, _len, _seg_size) \
      UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_len + \
                       (_iface)->verbs_common.config.notag_hdr_size, \
                       0, _desc_size, "am_zcopy header");
 
-#define UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _hdr, _len) \
+#define UCT_RC_VERBS_GET_TX_DESC(_iface, _mp, _desc, _hdr, _len) \
      { \
          UCT_RC_IFACE_GET_TX_DESC(&(_iface)->super, _mp, _desc) \
          hdr = _desc + 1; \
@@ -109,7 +110,7 @@ typedef struct uct_rc_verbs_iface {
      { \
          void *hdr; \
          size_t len; \
-         UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, hdr, len) \
+         UCT_RC_VERBS_GET_TX_DESC(_iface, _mp, _desc, hdr, len) \
          (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
          uct_rc_bcopy_desc_fill(hdr + len, _id, _pack_cb, _arg, &(_data_length)); \
          _length = _data_length + len + sizeof(uct_rc_hdr_t); \
@@ -120,7 +121,7 @@ typedef struct uct_rc_verbs_iface {
      { \
          void *hdr; \
          size_t len; \
-         UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, hdr, len) \
+         UCT_RC_VERBS_GET_TX_DESC(_iface, _mp, _desc, hdr, len) \
          uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
          uct_rc_zcopy_desc_set_header(hdr + len, _id, _header, _header_length); \
          _sge.length = sizeof(uct_rc_hdr_t) + header_length + len; \
@@ -163,6 +164,42 @@ typedef struct uct_rc_verbs_tm_cqe {
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
 
+#  define UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr, _len) \
+       { \
+           UCT_RC_IFACE_GET_TX_DESC(&(_iface)->super, _mp, _desc) \
+           hdr = _desc + 1; \
+           len = uct_rc_verbs_eager_header_fill(_iface, _hdr, _tag, _app_ctx); \
+       }
+
+#  define UCT_RC_VERBS_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
+                                         _pack_cb, _arg, _length) \
+       { \
+           void *hdr; \
+           size_t len; \
+           UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr, len) \
+           (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
+           _length = pack_cb(hdr + len, arg); \
+       }
+
+#  define UCT_RC_VERBS_GET_TM_ZCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
+                                         _comp, _send_flags, _sge) \
+       { \
+           void *hdr; \
+           size_t len; \
+           UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr, len) \
+           uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
+           _sge.length = len; \
+       }
+
+#  define UCT_RC_VERBS_FILL_TM_IMM(_wr, _imm_data, _priv) \
+       if (_imm_data == 0) { \
+           _wr.opcode = IBV_WR_SEND; \
+           _priv = 0; \
+       } else { \
+           _wr.opcode = IBV_WR_SEND_WITH_IMM; \
+           uct_rc_verbs_tag_imm_data_pack(&(_wr.imm_data), &_priv, _imm_data); \
+       }
+
 #  define UCT_RC_VERBS_FILL_TM_OP_WR(_iface, _wr, _sge, _iovlen, _opcode, _ctx, _flags) \
        { \
            (_wr)->sg_list = _sge; \
@@ -181,6 +218,40 @@ typedef struct uct_rc_verbs_tm_cqe {
        if (iface->tm.num_outstanding <= 0) { \
            return UCS_ERR_NO_RESOURCE; \
        }
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_rc_verbs_eager_header_fill(uct_rc_verbs_iface_t *iface, void *hdr,
+                               uct_tag_t tag, uint32_t app_ctx)
+{
+    struct ibv_tm_info tm_info;
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
+
+    tm_info.op        = IBV_TM_OP_EAGER;
+    tm_info.tag.tag   = tag;
+    tm_info.priv.data = app_ctx;
+    return ibv_pack_tm_info(dev->ibv_context, hdr, &tm_info);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_fill_inl_tag_sge(uct_rc_verbs_iface_t *iface,
+                                    void *tm_hdr, uct_tag_t tag,
+                                    const void *buffer, unsigned length)
+{
+    struct ibv_sge *sge = iface->verbs_common.inl_sge;
+
+    sge[0].length = uct_rc_verbs_eager_header_fill(iface, tm_hdr, tag, 0);
+    sge[0].addr   = (uintptr_t)tm_hdr;
+    sge[1].length = length;
+    sge[1].addr   = (uintptr_t)buffer;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_tag_imm_data_pack(uint32_t *ib_imm, uint32_t *app_ctx,
+                               uint64_t imm_val)
+{
+    *ib_imm  = (uint32_t)(imm_val & 0xFFFFFFFF);
+    *app_ctx = (uint32_t)(imm_val >> 32);
+}
 
 static UCS_F_ALWAYS_INLINE uint64_t
 uct_rc_verbs_tag_imm_data_unpack(uint32_t ib_imm, uint32_t app_ctx, int flags)
@@ -207,6 +278,17 @@ uct_rc_verbs_iface_save_tmh(struct ibv_cq_ex *cqe, uct_rc_verbs_ctx_priv_t *priv
                                                       tm_info->priv.data, flags);
 }
 
+ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
+                                             const void *data, size_t length);
+
+ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                        uint64_t imm,
+                                        uct_pack_callback_t pack_cb,
+                                        void *arg);
+
+ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                             uint64_t imm, const uct_iov_t *iov,
+                                             size_t iovcnt, uct_completion_t *comp);
 #else
 
 #  define UCT_RC_VERBS_TM_ENABLED(_iface)   0

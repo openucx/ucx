@@ -311,8 +311,8 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
-    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(iface, &iface->super.tx.mp, desc,
-                                      id, pack_cb, arg, length, data_length);
+    UCT_RC_VERBS_GET_TX_AM_BCOPY_DESC(iface, &iface->super.tx.mp, desc, id,
+                                      pack_cb, arg, length, data_length);
     UCT_RC_VERBS_FILL_AM_BCOPY_WR(wr, sge, length, wr.opcode);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, data_length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
@@ -533,7 +533,7 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     /* Do not check FC WND here to avoid head-to-head deadlock.
      * Credits grant should be sent regardless of FC wnd state. */
-    ucs_assert(sizeof(hdr) + notag_hdr_size <=
+    ucs_assert(sizeof(*hdr) + notag_hdr_size <=
                iface->verbs_common.config.max_inline);
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
@@ -544,7 +544,7 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     fc_wr.num_sge = 1;
 
     iface->verbs_common.inl_sge[0].addr    = (uintptr_t)iface->verbs_common.am_inl_hdr;
-    iface->verbs_common.inl_sge[0].length  = sizeof(hdr) + notag_hdr_size;
+    iface->verbs_common.inl_sge[0].length  = sizeof(*hdr) + notag_hdr_size;
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, IBV_SEND_INLINE);
     return UCS_OK;
@@ -671,6 +671,82 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
+#if HAVE_IBV_EX_HW_TM
+ucs_status_t uct_rc_verbs_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
+                                             const void *data, size_t length)
+{
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
+    void *tm_hdr                = ucs_alloca(iface->tm.eager_hdr_size);
+
+    UCT_CHECK_LENGTH(length + iface->tm.eager_hdr_size, 0,
+                     iface->verbs_common.config.max_inline, "tag_short");
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    uct_rc_verbs_iface_fill_inl_tag_sge(iface, tm_hdr, tag, data, length);
+
+    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr, IBV_SEND_INLINE);
+    return UCS_OK;
+}
+
+ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                        uint64_t imm,
+                                        uct_pack_callback_t pack_cb,
+                                        void *arg)
+{
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_rc_iface_send_desc_t *desc;
+    struct ibv_send_wr wr;
+    struct ibv_sge sge;
+    size_t length;
+    uint32_t app_ctx;
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx);
+    UCT_RC_VERBS_GET_TM_BCOPY_DESC(iface, &iface->super.tx.mp, desc, tag,
+                                   app_ctx, pack_cb, arg, length);
+    UCT_RC_VERBS_FILL_SGE(wr, sge, length + iface->tm.eager_hdr_size);
+    uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, 0);
+    return length;
+}
+
+ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                             uint64_t imm, const uct_iov_t *iov,
+                                             size_t iovcnt, uct_completion_t *comp)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_iface_send_desc_t *desc;
+    struct ibv_sge sge[UCT_IB_MAX_IOV];
+    struct ibv_send_wr wr;
+    int send_flags;
+    size_t sge_cnt;
+    uint32_t app_ctx;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, 1ul, "uct_rc_verbs_ep_tag_eager_zcopy");
+    UCT_RC_CHECK_ZCOPY_DATA(iface->tm.eager_hdr_size,
+                            uct_iov_total_length(iov, iovcnt),
+                            iface->super.super.config.seg_size);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    sge_cnt = uct_ib_verbs_sge_fill_iov(sge + 1, iov, iovcnt);
+
+    UCT_RC_VERBS_FILL_TM_IMM(wr, imm, app_ctx);
+    UCT_RC_VERBS_GET_TM_ZCOPY_DESC(iface, &iface->verbs_common.short_desc_mp,
+                                   desc, tag, app_ctx, comp, &send_flags, sge[0]);
+    wr.num_sge = sge_cnt + 1;
+    wr.sg_list = sge;
+
+    uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, send_flags);
+    return UCS_INPROGRESS;
+}
+
+#endif /* HAVE_IBV_EX_HW_TM */
+
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, uct_iface_h tl_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
@@ -692,7 +768,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
                                                  uct_rc_verbs_iface_t);
     uct_worker_progress_unregister(iface->super.super.super.worker,
                                    iface->progress, iface);
-
     uct_rc_verbs_ep_tag_qp_destroy(self);
 }
 

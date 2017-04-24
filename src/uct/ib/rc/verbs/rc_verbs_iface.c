@@ -448,6 +448,7 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
 #if HAVE_IBV_EX_HW_TM
     struct ibv_srq_init_attr_ex srq_init_attr;
     ucs_status_t status;
+    int rx_hdr_len;
     uct_ib_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_md_t);
 
     if (UCT_RC_VERBS_TM_ENABLED(iface)) {
@@ -488,6 +489,16 @@ static ucs_status_t uct_rc_verbs_iface_tag_init(uct_rc_verbs_iface_t *iface,
         iface->tm.xrq.available = srq_init_attr.attr.max_wr;
         --iface->tm.tag_available; /* 1 tag should be always available in HW match list */
 
+        /* AM (NO_TAG) and eager messages have different header sizes.
+         * Receive descriptor offsets are calculated based on AM hdr length.
+         * Need to store headers difference for correct release of descriptors
+         * consumed by unexpected eager messages. */
+        rx_hdr_len = iface->super.super.config.rx_payload_offset -
+                     iface->super.super.config.rx_hdr_offset;
+        ucs_assert_always(iface->tm.eager_hdr_size >= rx_hdr_len);
+        iface->tm.eager_desc.super.cb = uct_rc_verbs_iface_release_desc;
+        iface->tm.eager_desc.offset   = iface->tm.eager_hdr_size - rx_hdr_len +
+                                        iface->super.super.config.rx_headroom_offset;
 
         status = uct_rc_verbs_iface_prepost_recvs_common(&iface->super, &iface->tm.xrq);
         if (status != UCS_OK) {
@@ -542,15 +553,6 @@ static void uct_rc_verbs_iface_tag_preinit(uct_rc_verbs_iface_t *iface,
         *rx_hdr_len    = sizeof(uct_rc_hdr_t) + notag_hdr_size;
         *short_mp_size = ucs_max(*rx_hdr_len, iface->tm.eager_hdr_size);
         *is_ex_cq      = 1;
-
-        /* AM (NO_TAG) and eager messages have different header sizes.
-         * Receive descriptor offsets are calculated based on AM hdr length.
-         * Need to store headers difference for correct release of descriptors
-         * consumed by unexpected eager messages. */
-        ucs_assert_always(iface->tm.eager_hdr_size >= *rx_hdr_len);
-        iface->tm.eager_desc.super.cb = uct_rc_verbs_iface_release_desc;
-        iface->tm.eager_desc.offset   = iface->tm.eager_hdr_size - *rx_hdr_len +
-                                        iface->super.super.config.rx_headroom_offset;
 
         ucs_debug("Tag Matching enabled: tag list size %d", iface->tm.tag_available);
     } else
@@ -612,6 +614,22 @@ void uct_rc_verbs_iface_tag_query(uct_rc_verbs_iface_t *iface,
         iface_attr->cap.am.max_hdr   -= iface->verbs_common.config.notag_hdr_size;
 
         iface_attr->latency.growth   += 3e-9; /* + 3ns for TM QP */
+
+        iface_attr->cap.flags        |= UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                                        UCT_IFACE_FLAG_TAG_EAGER_ZCOPY;
+
+        iface_attr->cap.tag.eager.max_short =
+        ucs_max(0, iface->verbs_common.config.max_inline - iface->tm.eager_hdr_size);
+
+        if (iface_attr->cap.tag.eager.max_short > 0 ) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_TAG_EAGER_SHORT;
+        }
+
+        iface_attr->cap.tag.eager.max_bcopy = iface->super.super.config.seg_size -
+                                              iface->tm.eager_hdr_size;
+        iface_attr->cap.tag.eager.max_zcopy = iface->super.super.config.seg_size -
+                                              iface->tm.eager_hdr_size;
+        iface_attr->cap.tag.eager.max_iov   = 1;
 
         iface_attr->cap.tag.recv.max_iov    = 1;
     }
@@ -740,6 +758,9 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
 #if HAVE_IBV_EX_HW_TM
     .iface_tag_recv_zcopy     = uct_rc_verbs_iface_tag_recv_zcopy,
     .iface_tag_recv_cancel    = uct_rc_verbs_iface_tag_recv_cancel,
+    .ep_tag_eager_short       = uct_rc_verbs_ep_tag_eager_short,
+    .ep_tag_eager_bcopy       = uct_rc_verbs_ep_tag_eager_bcopy,
+    .ep_tag_eager_zcopy       = uct_rc_verbs_ep_tag_eager_zcopy,
 #endif
     .ep_am_short              = uct_rc_verbs_ep_am_short,
     .ep_am_bcopy              = uct_rc_verbs_ep_am_bcopy,
