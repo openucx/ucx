@@ -312,6 +312,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
         req->recv.length   = buffer_size;
         req->recv.datatype = datatype;
         req->recv.cb       = cb;
+        req->recv.tag      = req->recv.info.sender_tag;
+        req->recv.tag_mask = UCP_TAG_MASK_FULL;
         ucp_tag_exp_add(&worker->context->tm, req);
     }
 
