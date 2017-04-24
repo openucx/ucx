@@ -248,12 +248,20 @@ UCS_TEST_P(test_ucp_wireup, address) {
     size_t size;
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
+    const ucp_address_entry_t *ae;
+    int tl;
 
     status = ucp_address_pack(sender().worker(), NULL, -1, order, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 512ul); /* Expect a reasonable address size */
+    for (tl = 0; tl < sender().worker()->context->num_tls; tl++)
+    {
+        /* Make sure that the packed priority in the address is valid.
+         * 40 is the current highest value for a device priority */
+        EXPECT_LE(sender().worker()->iface_attrs[tl].priority, 40);
+    }
 
     char name[UCP_WORKER_NAME_MAX];
     uint64_t uuid;
@@ -265,6 +273,11 @@ UCS_TEST_P(test_ucp_wireup, address) {
     EXPECT_EQ(sender().worker()->uuid, uuid);
     EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
     EXPECT_LE(address_count, static_cast<unsigned>(sender().ucph()->num_tls));
+    for (ae = address_list; ae < address_list + address_count; ++ae) {
+        /* Make sure that the unpacked priority in the address is valid.
+         * 40 is the current highest value for a device priority */
+        EXPECT_LE(ae->iface_attr.priority, 40);
+    }
 
     /* TODO test addresses */
 
