@@ -16,6 +16,7 @@ class test_error_handling : public uct_test {
 public:
     virtual void init() {
         entity *e1, *e2;
+        uct_iface_params_t iface_params;
 
         uct_test::init();
 
@@ -33,10 +34,14 @@ public:
             set_config("UD_TIMEOUT=1s");
         }
 
-        e1 = uct_test::create_entity(0);
+        memset(&iface_params, 0, sizeof(iface_params));
+        iface_params.err_handler     = err_cb;
+        iface_params.err_handler_arg = err_handler_arg;
+
+        e1 = uct_test::create_entity(iface_params);
         m_entities.push_back(e1);
 
-        e2 = uct_test::create_entity(0);
+        e2 = uct_test::create_entity(iface_params);
         m_entities.push_back(e2);
 
         connect(e1, e2);
@@ -56,6 +61,13 @@ public:
     static void purge_cb(uct_pending_req_t *self, void *arg)
     {
         req_count++;
+    }
+
+    static void err_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        EXPECT_EQ(err_handler_arg,          arg);
+        EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
+        err_count++;
     }
 
     static void connect(entity *e1, entity *e2) {
@@ -91,14 +103,20 @@ protected:
     }
 
 protected:
-    static int req_count;
+    static size_t err_count;
+    static size_t req_count;
+    static void* err_handler_arg;
 };
 
-int test_error_handling::req_count = 0;
+void  *test_error_handling::err_handler_arg = (void *)0xdeadbeaf;
+size_t test_error_handling::req_count       = 0ul;
+size_t test_error_handling::err_count       = 0ul;
 
 UCS_TEST_P(test_error_handling, peer_failure)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+
+    err_count = 0ul;
 
     close_peer();
     EXPECT_EQ(uct_ep_put_short(ep(), NULL, 0, 0, 0), UCS_OK);
@@ -138,17 +156,20 @@ UCS_TEST_P(test_error_handling, peer_failure)
     EXPECT_EQ(uct_ep_get_address(ep(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_pending_add(ep(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_connect_to_ep(ep(), NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
+
+    EXPECT_LT(0ul, err_count);
 }
 
 UCS_TEST_P(test_error_handling, purge_failed_peer)
 {
     check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
 
-    ucs_status_t status;
-    int num_pend_sends = 3;
+    ucs_status_t      status;
+    const size_t      num_pend_sends = 3ul;
     uct_pending_req_t reqs[num_pend_sends];
 
-    req_count = 0;
+    req_count = 0ul;
+    err_count = 0ul;
 
     close_peer();
 
@@ -156,7 +177,7 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
           status = uct_ep_put_short(ep(), NULL, 0, 0, 0);
     } while (status == UCS_OK);
 
-    for (int i = 0; i < num_pend_sends; i ++) {
+    for (size_t i = 0; i < num_pend_sends; i ++) {
         reqs[i].func = pending_cb;
         EXPECT_EQ(uct_ep_pending_add(ep(), &reqs[i]), UCS_OK);
     }
@@ -167,6 +188,7 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
 
     uct_ep_pending_purge(ep(), purge_cb, NULL);
     EXPECT_EQ(num_pend_sends, req_count);
+    EXPECT_LT(0ul, err_count);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_error_handling)

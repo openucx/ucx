@@ -270,6 +270,7 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
 {
     uct_failed_iface_t *f_iface;
     uct_iface_ops_t    *ops;
+    uct_base_iface_t   *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
     /* TBD: consider allocating one instance per interface
      * rather than for each endpoint */
@@ -285,6 +286,11 @@ void uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep, uct_iface_h tl_iface)
     /* Move all pending requests to the queue.
      * Failed ep will use that queue for purge. */
     uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
+
+    if (iface->err_handler) {
+        iface->err_handler(iface->err_handler_arg, tl_ep,
+                           UCS_ERR_ENDPOINT_TIMEOUT);
+    }
 
     ops->ep_get_address     = (void*)ucs_empty_function_return_ep_timeout;
     ops->ep_connect_to_ep   = (void*)ucs_empty_function_return_ep_timeout;
@@ -345,7 +351,8 @@ UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
 UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const uct_iface_config_t *config
+                    uct_worker_h worker, const uct_iface_params_t *params,
+                    const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent)
                     UCS_STATS_ARG(const char *iface_name))
 {
@@ -356,10 +363,12 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
 
     UCS_CLASS_CALL_SUPER_INIT(uct_iface_t, ops);
 
-    self->md            = md;
-    self->worker        = worker;
-    self->am_tracer     = NULL;
-    self->am_tracer_arg = NULL;
+    self->md              = md;
+    self->worker          = worker;
+    self->am_tracer       = NULL;
+    self->am_tracer_arg   = NULL;
+    self->err_handler     = params->err_handler;
+    self->err_handler_arg = params->err_handler_arg;
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {
         uct_iface_set_stub_am_handler(self, id);

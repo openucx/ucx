@@ -395,6 +395,11 @@ struct uct_iface_params {
     size_t                   rx_headroom; /**< How much bytes to reserve before
                                                the receive segment.*/
 
+    void                     *err_handler_arg; /**< Custom argument of
+                                                   @a err_handler. */
+    uct_error_handler_t      err_handler;      /**< The callback to handle
+                                                    transport level error.*/
+
     /* These callbacks are only relevant for HW Tag Matching */
     void                     *eager_arg;
     uct_tag_unexp_eager_cb_t eager_cb;    /**< Callback for tag matching unexpected eager messages */

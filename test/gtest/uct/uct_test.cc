@@ -153,6 +153,7 @@ void uct_test::stats_restore()
 uct_test::entity* uct_test::create_entity(size_t rx_headroom) {
     uct_iface_params_t iface_params;
 
+    memset(&iface_params, 0, sizeof(iface_params));
     iface_params.rx_headroom = rx_headroom;
     entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
                                  m_md_config);
