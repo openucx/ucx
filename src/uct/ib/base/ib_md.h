@@ -141,6 +141,15 @@ static uint32_t uct_ib_md_indirect_rkey(uct_rkey_t uct_rkey)
 }
 
 
+static UCS_F_ALWAYS_INLINE void
+uct_ib_md_pack_rkey(uint32_t rkey, uint32_t atomic_rkey, void *rkey_buffer)
+{
+    uint64_t *rkey_p = (uint64_t*)rkey_buffer;
+    *rkey_p = (((uint64_t)atomic_rkey) << 32) | rkey;
+     ucs_trace("packed rkey: direct 0x%x indirect 0x%x", rkey, atomic_rkey);
+}
+
+
 /**
  * rkey is packed/unpacked is such a way that:
  * low  32 bits contain a direct key

@@ -10,6 +10,7 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
+#include <ucs/datastruct/ptr_array.h>
 
 #include "rc_verbs_common.h"
 
@@ -60,9 +61,11 @@ typedef struct uct_rc_verbs_iface {
 #if HAVE_IBV_EX_HW_TM
     struct {
         uct_rc_srq_t            xrq;       /* TM XRQ */
+        ucs_ptr_array_t         rndv_comps;
         unsigned                tag_available;
         int                     num_outstanding;
         unsigned                eager_hdr_size;
+        unsigned                rndv_hdr_size;
         uint16_t                unexpected_cnt;
         uint8_t                 enabled;
         struct {
@@ -75,6 +78,7 @@ typedef struct uct_rc_verbs_iface {
             uct_tag_unexp_rndv_cb_t  cb;   /* Callback for unexpected rndv messages */
         } rndv_unexp;
         uct_rc_verbs_release_desc_t  eager_desc;
+        uct_rc_verbs_release_desc_t  rndv_desc;
     } tm;
 #endif
     struct {
@@ -141,6 +145,7 @@ typedef struct uct_rc_verbs_ep_tm_address {
 typedef struct uct_rc_verbs_ctx_priv {
     uint64_t                    tag;
     uint64_t                    imm_data;
+    void                        *buffer;
     size_t                      length;
     uint32_t                    tag_handle;
 } uct_rc_verbs_ctx_priv_t;
@@ -163,6 +168,10 @@ typedef struct uct_rc_verbs_tm_cqe {
         (_iface)->tm.enabled)
 
 #  define UCT_RC_VERBS_TM_CONFIG(_config, _field)  (_config)->tm._field
+
+/* If message arrived with imm_data = 0 - it is SW RNDV request */
+#  define UCT_RC_VERBS_TM_IS_SW_RNDV(_flags, _imm_data) \
+       (ucs_unlikely(((_flags) & IBV_WC_WITH_IMM) && !(_imm_data)))
 
 #  define UCT_RC_VERBS_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr, _len) \
        { \
@@ -235,14 +244,49 @@ uct_rc_verbs_eager_header_fill(uct_rc_verbs_iface_t *iface, void *hdr,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_fill_inl_tag_sge(uct_rc_verbs_iface_t *iface,
                                     void *tm_hdr, uct_tag_t tag,
-                                    const void *buffer, unsigned length)
+                                    const void *buffer, unsigned length,
+                                    uint32_t app_ctx)
 {
     struct ibv_sge *sge = iface->verbs_common.inl_sge;
 
-    sge[0].length = uct_rc_verbs_eager_header_fill(iface, tm_hdr, tag, 0);
+    sge[0].length = uct_rc_verbs_eager_header_fill(iface, tm_hdr,
+                                                   tag, app_ctx);
     sge[0].addr   = (uintptr_t)tm_hdr;
     sge[1].length = length;
     sge[1].addr   = (uintptr_t)buffer;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_rc_verbs_rndv_header_fill(uct_rc_verbs_iface_t *iface, void *hdr,
+                              uct_tag_t tag, uint32_t app_ctx, uint32_t rkey,
+                              const void *vaddr, uint32_t len)
+{
+    struct ibv_tm_info tm_info;
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
+
+    tm_info.op         = IBV_TM_OP_RNDV;
+    tm_info.tag.tag    = tag;
+    tm_info.priv.data  = app_ctx;
+    tm_info.rndv.rkey  = rkey;
+    tm_info.rndv.vaddr = (uintptr_t)vaddr;
+    tm_info.rndv.len   = len;
+    return ibv_pack_tm_info(dev->ibv_context, hdr, &tm_info);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_fill_inl_rndv_sge(uct_rc_verbs_iface_t *iface,
+                                     void *tm_hdr, uct_tag_t tag,
+                                     uint32_t app_ctx, uint32_t rkey,
+                                     const void * vaddr, uint32_t len,
+                                     const void *hdr, unsigned hdr_len)
+{
+    struct ibv_sge *sge = iface->verbs_common.inl_sge;
+
+    sge[0].length = uct_rc_verbs_rndv_header_fill(iface, tm_hdr, tag, app_ctx,
+                                                  rkey, vaddr, len);
+    sge[0].addr   = (uintptr_t)tm_hdr;
+    sge[1].length = hdr_len;
+    sge[1].addr   = (uintptr_t)hdr;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -269,6 +313,14 @@ uct_rc_verbs_iface_ctx_priv(uct_tag_context_t *ctx)
     return (uct_rc_verbs_ctx_priv_t*)ctx->priv;
 }
 
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_verbs_iface_tag_get_op_id(uct_rc_verbs_iface_t *iface,
+                                 uct_completion_t *comp)
+{
+    uint32_t prev_ph;
+    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_save_tmh(struct ibv_cq_ex *cqe, uct_rc_verbs_ctx_priv_t *priv,
                             int flags, struct ibv_wc_tm_info *tm_info)
@@ -289,6 +341,19 @@ ssize_t uct_rc_verbs_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 ucs_status_t uct_rc_verbs_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                              uint64_t imm, const uct_iov_t *iov,
                                              size_t iovcnt, uct_completion_t *comp);
+
+ucs_status_ptr_t uct_rc_verbs_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
+                                                const void *header,
+                                                unsigned header_length,
+                                                const uct_iov_t *iov,
+                                                size_t iovcnt,
+                                                uct_completion_t *comp);
+
+ucs_status_t uct_rc_verbs_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op);
+
+ucs_status_t uct_rc_verbs_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
+                                              const void* header,
+                                              unsigned header_length);
 #else
 
 #  define UCT_RC_VERBS_TM_ENABLED(_iface)   0

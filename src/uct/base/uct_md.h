@@ -159,6 +159,13 @@ struct uct_worker {
     ucs_list_link_t        tl_data;
 };
 
+static UCS_F_ALWAYS_INLINE void*
+uct_md_fill_md_name(uct_md_h md, void *buffer)
+{
+    memcpy(buffer, md->component->name, UCT_MD_COMPONENT_NAME_MAX);
+    return (char*)buffer + UCT_MD_COMPONENT_NAME_MAX;
+}
+
 
 ucs_status_t uct_single_md_resource(uct_md_component_t *mdc,
                                     uct_md_resource_desc_t **resources_p,
