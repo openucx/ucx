@@ -180,7 +180,7 @@ extern const char *uct_ib_mtu_values[];
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp,
-                                          int is_accel);
+                                          int rx_mp_slow_start);
 
 void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc);
 

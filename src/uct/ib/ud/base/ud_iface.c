@@ -396,9 +396,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     ucs_status_t status;
     size_t data_size;
     int mtu;
-    int is_accel = 0;
 
-    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu ud_rx_priv_len=%u\n",
+    ucs_trace_func("%s: iface=%p ops=%p worker=%p rx_headroom=%zu ud_rx_priv_len=%u",
                    params->dev_name, self, ops, worker,
                    params->rx_headroom, ud_rx_priv_len);
 
@@ -456,13 +455,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     ucs_ptr_array_init(&self->eps, 0, "ud_eps");
     uct_ud_iface_cep_init(self);
 
-    if (!strcmp("ud_mlx5",params->tl_name)) {
-        is_accel = 1;
-    }
-
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
                                           "ud_recv_skb", &self->rx.mp,
-                                          is_accel);
+                                          0);
     if (status != UCS_OK) {
         goto err_qp;
     }

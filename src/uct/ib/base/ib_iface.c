@@ -149,7 +149,7 @@ static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
                                           const char *name, ucs_mpool_t *mp,
-                                          int is_accel)
+                                          int rx_mp_slow_start)
 {
     unsigned start_size;
     unsigned grow;
@@ -162,7 +162,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                         config->rx.mp.max_bufs);
     }
 
-    if (!is_accel) {
+    if (rx_mp_slow_start) {
         start_size = ucs_min(config->rx.queue_len, config->rx.queue_init_len);
         start_size = ucs_min(start_size, config->rx.mp.max_bufs);
     } else {
