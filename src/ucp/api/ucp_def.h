@@ -98,7 +98,8 @@ typedef enum {
                                              *   overhead from a performance
                                              *   perspective */
     UCP_ERR_HANDLING_MODE_PEER              /**< Guarantees that send requests
-                                             *   are always completed even in
+                                             *   are always completed
+                                             *   (successfully or error) even in
                                              *   case of remote failure, disables
                                              *   protocols and APIs which may
                                              *   cause a hang or undefined
