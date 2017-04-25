@@ -40,6 +40,9 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_iface_t *iface, uct_ib_mlx5_srq_
     index = srq->ready_idx;
     for (;;) {
         next_index = index + 1;
+        if (UCS_CIRCULAR_COMPARE16((index - srq->sw_pi), >=, iface->rx.srq.available)) {
+            break;
+        }
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index & srq->mask);
         if (UCS_CIRCULAR_COMPARE16(next_index, >, srq->free_idx)) {
             if (!seg->srq.free) {

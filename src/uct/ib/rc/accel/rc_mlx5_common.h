@@ -209,6 +209,10 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *mlx5_common_iface,
 done:
     max_batch = rc_iface->super.config.rx_max_batch;
     if (rc_iface->rx.srq.available >= max_batch) {
+        if (rc_iface->rx.srq.reserved) {
+            ++rc_iface->rx.srq.available;
+            --rc_iface->rx.srq.reserved;
+        }
         uct_rc_mlx5_iface_srq_post_recv(rc_iface, &mlx5_common_iface->rx.srq);
     }
     return status;
