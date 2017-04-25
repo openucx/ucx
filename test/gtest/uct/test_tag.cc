@@ -292,9 +292,9 @@ public:
     {
         recv_ctx *user_ctx = ucs_container_of(self, recv_ctx, uct_ctx);
         user_ctx->comp     = true;
+        user_ctx->status   = status;
         EXPECT_EQ(user_ctx->tag, (stag & user_ctx->tmask));
         EXPECT_EQ(user_ctx->mbuf->length(), length);
-        user_ctx->status = status;
     }
 
     static void sw_rndv_completed(uct_tag_context_t *self, uct_tag_t stag,
@@ -303,9 +303,9 @@ public:
     {
         recv_ctx *user_ctx = ucs_container_of(self, recv_ctx, uct_ctx);
         user_ctx->sw_rndv  = true;
+        user_ctx->status   = status;
         EXPECT_EQ(user_ctx->tag, (stag & user_ctx->tmask));
         EXPECT_EQ(user_ctx->mbuf->length(), header_length);
-        EXPECT_EQ(status, UCS_OK);
     }
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,
@@ -566,6 +566,8 @@ UCS_TEST_P(test_tag, tag_limit)
 
 UCS_TEST_P(test_tag, sw_rndv_expected)
 {
+    check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY | UCT_IFACE_FLAG_TAG_RNDV_ZCOPY);
+
     uct_tag_t    tag    = 11;
     const size_t length = sender().iface_attr().cap.tag.rndv.max_hdr;
 

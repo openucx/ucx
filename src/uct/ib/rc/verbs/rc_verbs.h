@@ -146,7 +146,7 @@ typedef struct uct_rc_verbs_ctx_priv {
     uint64_t                    tag;
     uint64_t                    imm_data;
     void                        *buffer;
-    size_t                      length;
+    uint32_t                    length;
     uint32_t                    tag_handle;
 } uct_rc_verbs_ctx_priv_t;
 
