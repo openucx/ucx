@@ -13,39 +13,11 @@ extern "C" {
 #include "uct_test.h"
 
 class test_error_handling : public uct_test {
+    friend class test_err_handling_destroy_ep_cb; /* Allow access to m_entities */
+
 public:
-    virtual void init() {
-        entity *e1, *e2;
-        uct_iface_params_t iface_params;
-
-        uct_test::init();
-
-        set_config("LOG_LEVEL=fatal");
-
-        /* To reduce test execution time decrease retransmition timeouts
-         * where it is relevant */
-        if (GetParam()->tl_name == "rc" || GetParam()->tl_name == "rc_mlx5" ||
-            GetParam()->tl_name == "dc" || GetParam()->tl_name == "dc_mlx5") {
-            set_config("RC_TIMEOUT=0.0001"); /* 100 us should be enough */
-            set_config("RC_RETRY_COUNT=2");
-        } else if (GetParam()->tl_name == "ud") {
-            set_config("TIMEOUT=1s");
-        } else if (GetParam()->tl_name == "ud_mlx5") {
-            set_config("UD_TIMEOUT=1s");
-        }
-
-        memset(&iface_params, 0, sizeof(iface_params));
-        iface_params.err_handler     = err_cb;
-        iface_params.err_handler_arg = err_handler_arg;
-
-        e1 = uct_test::create_entity(iface_params);
-        m_entities.push_back(e1);
-
-        e2 = uct_test::create_entity(iface_params);
-        m_entities.push_back(e2);
-
-        connect(e1, e2);
-    }
+    virtual void init();
+    virtual void init_iface_params(uct_iface_params_t& params) const;
 
     static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
                                          unsigned flags) {
@@ -111,6 +83,44 @@ protected:
 void  *test_error_handling::err_handler_arg = (void *)0xdeadbeaf;
 size_t test_error_handling::req_count       = 0ul;
 size_t test_error_handling::err_count       = 0ul;
+
+void test_error_handling::init()
+{
+    entity *e1, *e2;
+
+    uct_test::init();
+
+    set_config("LOG_LEVEL=fatal");
+
+    /* To reduce test execution time decrease retransmition timeouts
+     * where it is relevant */
+    if (GetParam()->tl_name == "rc" || GetParam()->tl_name == "rc_mlx5" ||
+        GetParam()->tl_name == "dc" || GetParam()->tl_name == "dc_mlx5") {
+        set_config("RC_TIMEOUT=0.0001"); /* 100 us should be enough */
+        set_config("RC_RETRY_COUNT=2");
+    } else if (GetParam()->tl_name == "ud") {
+        set_config("TIMEOUT=1s");
+    } else if (GetParam()->tl_name == "ud_mlx5") {
+        set_config("UD_TIMEOUT=1s");
+    }
+
+    uct_iface_params_t params;
+    init_iface_params(params);
+    e1 = uct_test::create_entity(params);
+    m_entities.push_back(e1);
+
+    e2 = uct_test::create_entity(params);
+    m_entities.push_back(e2);
+
+    connect(e1, e2);
+}
+
+void test_error_handling::init_iface_params(uct_iface_params_t& params) const
+{
+    memset(&params, 0, sizeof(params));
+    params.err_handler     = err_cb;
+    params.err_handler_arg = err_handler_arg;
+}
 
 UCS_TEST_P(test_error_handling, peer_failure)
 {
@@ -192,3 +202,32 @@ UCS_TEST_P(test_error_handling, purge_failed_peer)
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_error_handling)
+
+class test_err_handling_destroy_ep_cb : public test_error_handling
+{
+public:
+    virtual void init_iface_params(uct_iface_params_t& params) const {
+        memset(&params, 0, sizeof(params));
+        params.err_handler     = err_cb_ep_destroy;
+        params.err_handler_arg = const_cast<test_err_handling_destroy_ep_cb*>(this);
+    }
+
+    static void err_cb_ep_destroy(void *arg, uct_ep_h ep, ucs_status_t status) {
+        test_err_handling_destroy_ep_cb *self;
+        self = reinterpret_cast<test_err_handling_destroy_ep_cb*>(arg);
+        EXPECT_EQ(self->ep(), ep);
+        self->m_entities.front()->destroy_ep(0);
+    }
+};
+
+UCS_TEST_P(test_err_handling_destroy_ep_cb, desproy_ep_cb)
+{
+    check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE);
+
+    close_peer();
+    EXPECT_EQ(uct_ep_put_short(ep(), NULL, 0, 0, 0), UCS_OK);
+
+    flush();
+}
+
+UCT_INSTANTIATE_TEST_CASE(test_err_handling_destroy_ep_cb)
