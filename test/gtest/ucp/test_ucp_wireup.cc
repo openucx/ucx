@@ -9,6 +9,7 @@
 #include "ucp_test.h"
 
 #include <algorithm>
+#include <set>
 
 extern "C" {
 #include <ucp/wireup/address.h>
@@ -249,6 +250,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     void *buffer;
     unsigned order[UCP_MAX_RESOURCES];
     const ucp_address_entry_t *ae;
+    std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     int tl;
 
     status = ucp_address_pack(sender().worker(), NULL, -1, order, &size, &buffer);
@@ -258,9 +260,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     EXPECT_LE(size, 512ul); /* Expect a reasonable address size */
     for (tl = 0; tl < sender().worker()->context->num_tls; tl++)
     {
-        /* Make sure that the packed priority in the address is valid.
-         * 40 is the current highest value for a device priority */
-        EXPECT_LE(sender().worker()->iface_attrs[tl].priority, 40);
+        packed_dev_priorities.insert(sender().worker()->iface_attrs[tl].priority);
     }
 
     char name[UCP_WORKER_NAME_MAX];
@@ -274,10 +274,11 @@ UCS_TEST_P(test_ucp_wireup, address) {
     EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())), std::string(name));
     EXPECT_LE(address_count, static_cast<unsigned>(sender().ucph()->num_tls));
     for (ae = address_list; ae < address_list + address_count; ++ae) {
-        /* Make sure that the unpacked priority in the address is valid.
-         * 40 is the current highest value for a device priority */
-        EXPECT_LE(ae->iface_attr.priority, 40);
+        unpacked_dev_priorities.insert(ae->iface_attr.priority);
     }
+    /* Make sure that the packed device priorities are equal to the unpacked
+     * device priorities */
+    ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
 
     /* TODO test addresses */
 
