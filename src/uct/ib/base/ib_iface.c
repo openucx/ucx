@@ -90,7 +90,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Length of receive queue in the QPs.",
    ucs_offsetof(uct_ib_iface_config_t, rx.queue_len), UCS_CONFIG_TYPE_UINT},
 
-  {"RX_QUEUE_LEN_INIT", "256",
+  {"RX_QUEUE_LEN_INIT", "128",
    "Initial length of receive queue and pre-posted receive operations.",
    ucs_offsetof(uct_ib_iface_config_t, rx.queue_init_len), UCS_CONFIG_TYPE_UINT},
 
