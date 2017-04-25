@@ -258,8 +258,7 @@ UCS_TEST_P(test_ucp_wireup, address) {
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 512ul); /* Expect a reasonable address size */
-    for (tl = 0; tl < sender().worker()->context->num_tls; tl++)
-    {
+    for (tl = 0; tl < sender().worker()->context->num_tls; tl++) {
         packed_dev_priorities.insert(sender().worker()->iface_attrs[tl].priority);
     }
 
@@ -276,14 +275,14 @@ UCS_TEST_P(test_ucp_wireup, address) {
     for (ae = address_list; ae < address_list + address_count; ++ae) {
         unpacked_dev_priorities.insert(ae->iface_attr.priority);
     }
-    /* Make sure that the packed device priorities are equal to the unpacked
-     * device priorities */
-    ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
 
     /* TODO test addresses */
 
     ucs_free(address_list);
     ucs_free(buffer);
+    /* Make sure that the packed device priorities are equal to the unpacked
+     * device priorities */
+    ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
 }
 
 UCS_TEST_P(test_ucp_wireup, empty_address) {
